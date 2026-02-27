@@ -230,7 +230,7 @@ impl ProgressReporter {
             // Ignore spinners, such as for builds.
             if let ProgressBarKind::Numeric { progress, .. } = progress {
                 let template = format!(
-                    "{{msg:{max_len}.dim}} {{bar:30.green/dim}} {{binary_bytes:>7}}/{{binary_total_bytes:7}}"
+                    "{{msg:{max_len}.dim}} {{bar:30.green/black.dim}} {{binary_bytes:>7}}/{{binary_total_bytes:7}}"
                 );
                 progress.set_style(
                     ProgressStyle::with_template(&template)
@@ -252,7 +252,7 @@ impl ProgressReporter {
             progress.set_style(
                 ProgressStyle::with_template(
                     &format!(
-                        "{{msg:{}.dim}} {{bar:30.green/dim}} {{binary_bytes:>7}}/{{binary_total_bytes:7}}", state.max_len
+                        "{{msg:{}.dim}} {{bar:30.green/black.dim}} {{binary_bytes:>7}}/{{binary_total_bytes:7}}", state.max_len
                     ),
                 )
                     .unwrap()
@@ -265,13 +265,7 @@ impl ProgressReporter {
                 let _ = writeln!(
                     self.printer.stderr(),
                     "{} {} {}",
-                    match direction {
-                        Direction::Download => "Downloading",
-                        Direction::Upload => "Uploading",
-                        Direction::Extract => "Extracting",
-                    }
-                    .bold()
-                    .cyan(),
+                    direction.as_str().bold().cyan(),
                     name,
                     format!("({bytes:.1}{unit})").dimmed()
                 );
@@ -303,7 +297,13 @@ impl ProgressReporter {
             return;
         };
 
-        state.lock().unwrap().bars[&id].inc(bytes);
+        // Avoid panics due to reads on failed requests.
+        // https://github.com/astral-sh/uv/issues/17090
+        // TODO(konsti): Add a debug assert once https://github.com/seanmonstar/reqwest/issues/2884
+        // is fixed
+        if let Some(bar) = state.lock().unwrap().bars.get(&id) {
+            bar.inc(bytes);
+        }
     }
 
     fn on_request_complete(&self, direction: Direction, id: usize) {
@@ -324,7 +324,13 @@ impl ProgressReporter {
                 let _ = writeln!(
                     self.printer.stderr(),
                     " {} {}",
-                    direction.as_str().bold().green(),
+                    match direction {
+                        Direction::Download => "Downloaded",
+                        Direction::Upload => "Uploaded",
+                        Direction::Extract => "Extracted",
+                    }
+                    .bold()
+                    .cyan(),
                     progress.message()
                 );
             }
@@ -637,16 +643,13 @@ pub(crate) struct PythonDownloadReporter {
 impl PythonDownloadReporter {
     /// Initialize a [`PythonDownloadReporter`] for a single Python download.
     pub(crate) fn single(printer: Printer) -> Self {
-        Self::new(printer, 1)
+        Self::new(printer, None)
     }
 
     /// Initialize a [`PythonDownloadReporter`] for multiple Python downloads.
-    pub(crate) fn new(printer: Printer, length: u64) -> Self {
+    pub(crate) fn new(printer: Printer, length: Option<u64>) -> Self {
         let multi_progress = MultiProgress::with_draw_target(printer.target());
-        let root = multi_progress.add(ProgressBar::with_draw_target(
-            Some(length),
-            printer.target(),
-        ));
+        let root = multi_progress.add(ProgressBar::with_draw_target(length, printer.target()));
         let reporter = ProgressReporter::new(root, multi_progress, printer);
         Self { reporter }
     }
@@ -680,16 +683,13 @@ pub(crate) struct PublishReporter {
 impl PublishReporter {
     /// Initialize a [`PublishReporter`] for a single upload.
     pub(crate) fn single(printer: Printer) -> Self {
-        Self::new(printer, 1)
+        Self::new(printer, None)
     }
 
     /// Initialize a [`PublishReporter`] for multiple uploads.
-    pub(crate) fn new(printer: Printer, length: u64) -> Self {
+    pub(crate) fn new(printer: Printer, length: Option<u64>) -> Self {
         let multi_progress = MultiProgress::with_draw_target(printer.target());
-        let root = multi_progress.add(ProgressBar::with_draw_target(
-            Some(length),
-            printer.target(),
-        ));
+        let root = multi_progress.add(ProgressBar::with_draw_target(length, printer.target()));
         let reporter = ProgressReporter::new(root, multi_progress, printer);
         Self { reporter }
     }
@@ -758,8 +758,8 @@ pub(crate) struct CleaningDirectoryReporter {
 
 impl CleaningDirectoryReporter {
     /// Initialize a [`CleaningDirectoryReporter`] for cleaning the cache directory.
-    pub(crate) fn new(printer: Printer, max: usize) -> Self {
-        let bar = ProgressBar::with_draw_target(Some(max as u64), printer.target());
+    pub(crate) fn new(printer: Printer, max: Option<usize>) -> Self {
+        let bar = ProgressBar::with_draw_target(max.map(|m| m as u64), printer.target());
         bar.set_style(
             ProgressStyle::with_template("{prefix} [{bar:20}] {percent}%")
                 .unwrap()
@@ -787,8 +787,8 @@ pub(crate) struct CleaningPackageReporter {
 
 impl CleaningPackageReporter {
     /// Initialize a [`CleaningPackageReporter`] for cleaning packages from the cache.
-    pub(crate) fn new(printer: Printer, max: usize) -> Self {
-        let bar = ProgressBar::with_draw_target(Some(max as u64), printer.target());
+    pub(crate) fn new(printer: Printer, max: Option<usize>) -> Self {
+        let bar = ProgressBar::with_draw_target(max.map(|m| m as u64), printer.target());
         bar.set_style(
             ProgressStyle::with_template("{prefix} [{bar:20}] {pos}/{len}{msg}")
                 .unwrap()
@@ -841,7 +841,7 @@ impl BinaryDownloadReporter {
     /// Initialize a [`BinaryDownloadReporter`] for a single binary download.
     pub(crate) fn single(printer: Printer) -> Self {
         let multi_progress = MultiProgress::with_draw_target(printer.target());
-        let root = multi_progress.add(ProgressBar::with_draw_target(Some(1), printer.target()));
+        let root = multi_progress.add(ProgressBar::with_draw_target(None, printer.target()));
         let reporter = ProgressReporter::new(root, multi_progress, printer);
         Self { reporter }
     }

@@ -3,9 +3,11 @@ members = ["cargo:."]
 
 # Config for 'dist'
 [dist]
+# See: #16989
+allow-dirty = ["ci"]
 # The preferred dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.28.7"
-# make a package being included in our releases opt-in instead of opt-out
+cargo-dist-version = "0.31.0"
+# Whether to consider the binaries in a package for distribution (defaults true)
 dist = false
 # CI backends to support
 ci = "github"
@@ -41,29 +43,34 @@ auto-includes = false
 # Whether dist should create a Github Release or use an existing draft
 create-release = true
 # Which actions to run on pull requests
-pr-run-mode = "plan"
+pr-run-mode = "skip"
 # Whether CI should trigger releases with dispatches instead of tag pushes
 dispatch-releases = true
 # Which phase dist should use to create the GitHub release
 github-release = "announce"
+# Whether to enable GitHub Attestations
+github-attestations = true
+# When to generate GitHub Attestations
+github-attestations-phase = "announce"
+# Patterns to attest when creating attestations for release artifacts
+github-attestations-filters = ["*.json", "*.sh", "*.ps1", "*.zip", "*.tar.gz"]
 # Whether CI should include auto-generated code to build local artifacts
 build-local-artifacts = false
 # Local artifacts jobs to run in CI
-local-artifacts-jobs = ["./build-binaries", "./build-docker"]
+local-artifacts-jobs = ["./build-release-binaries", "./build-docker"]
 # Publish jobs to run in CI
-publish-jobs = ["./publish-pypi"]
+publish-jobs = ["./publish-pypi", "./publish-crates"]
 # Post-announce jobs to run in CI
-post-announce-jobs = ["./publish-docs"]
+post-announce-jobs = ["./publish-docs", "./publish-versions", "./publish-mirror"]
 # Custom permissions for GitHub Jobs
-github-custom-job-permissions = { "build-docker" = { packages = "write", contents = "read", id-token = "write", attestations = "write" } }
+github-custom-job-permissions = { "build-docker" = { packages = "write", contents = "read", id-token = "write", attestations = "write" }, "publish-crates" = { contents = "read" }, "publish-mirror" = { contents = "read" } }
 # Whether to install an updater program
 install-updater = false
 # Path that installers should place binaries in
-install-path = [
-    "$XDG_BIN_HOME/",
-    "$XDG_DATA_HOME/../bin",
-    "~/.local/bin"
-]
+install-path = ["$XDG_BIN_HOME/", "$XDG_DATA_HOME/../bin", "~/.local/bin"]
+# Prefer simple hosting for downloads, falling back to GitHub releases
+hosting = ["simple", "github"]
+simple-download-url = "https://releases.astral.sh/github/uv/releases/download/{tag}"
 
 [dist.github-custom-runners]
 global = "depot-ubuntu-latest-4"
@@ -79,7 +86,7 @@ riscv64gc-unknown-linux-gnu = "2.31"
 "actions/checkout" = "11bd71901bbe5b1630ceea73d27597364c9af683" # v4
 "actions/upload-artifact" = "6027e3dd177782cd8ab9af838c04fd81a07f1d47" # v4.6.2
 "actions/download-artifact" = "d3f86a106a0bac45b974a628896c90dbdf5c8093" # v4.3.0
-"actions/attest-build-provenance" = "c074443f1aee8d4aeeae555aebba3282517141b2" #v2.2.3
+"actions/attest-build-provenance" = "00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8" # v3.1.0
 
 [dist.binaries]
 "*" = ["uv", "uvx"]

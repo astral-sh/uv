@@ -3,6 +3,7 @@
 use std::cmp;
 use std::fmt;
 use std::str::FromStr;
+use target_lexicon::Architecture;
 use thiserror::Error;
 use tracing::trace;
 
@@ -91,13 +92,28 @@ impl Platform {
             return true;
         }
 
-        // Windows ARM64 runs emulated x86_64 binaries transparently
-        // Similarly, macOS aarch64 runs emulated x86_64 binaries transparently if you have Rosetta
-        // installed. We don't try to be clever and check if that's the case here, we just assume
-        // that if x86_64 distributions are available, they're usable.
-        if (self.os.is_windows() || self.os.is_macos())
-            && matches!(self.arch.family(), target_lexicon::Architecture::Aarch64(_))
-            && matches!(other.arch.family(), target_lexicon::Architecture::X86_64)
+        #[expect(clippy::unnested_or_patterns)]
+        if self.os.is_windows()
+            && matches!(
+                (self.arch.family(), other.arch.family()),
+                // 32-bit x86 binaries work fine on 64-bit x86 windows
+                (Architecture::X86_64, Architecture::X86_32(_)) |
+                // Both 32-bit and 64-bit binaries are transparently emulated on aarch64 windows
+                (Architecture::Aarch64(_), Architecture::X86_64) |
+                (Architecture::Aarch64(_), Architecture::X86_32(_))
+            )
+        {
+            return true;
+        }
+
+        if self.os.is_macos()
+            && matches!(
+                (self.arch.family(), other.arch.family()),
+                // macOS aarch64 runs emulated x86_64 binaries transparently if you have Rosetta
+                // installed. We don't try to be clever and check if that's the case here,
+                // we just assume that if x86_64 distributions are available, they're usable.
+                (Architecture::Aarch64(_), Architecture::X86_64)
+            )
         {
             return true;
         }

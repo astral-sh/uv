@@ -10,7 +10,7 @@ use indoc::indoc;
 use insta::{assert_json_snapshot, assert_snapshot};
 use serde::{Deserialize, Serialize};
 
-use crate::common::{TestContext, copy_dir_ignore, make_project, uv_snapshot};
+use uv_test::{copy_dir_ignore, make_project, uv_snapshot};
 
 fn workspaces_dir() -> PathBuf {
     env::current_dir()
@@ -19,14 +19,14 @@ fn workspaces_dir() -> PathBuf {
         .unwrap()
         .parent()
         .unwrap()
-        .join("scripts")
+        .join("test")
         .join("workspaces")
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn test_albatross_in_examples_bird_feeder() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let workspace = context.temp_dir.child("workspace");
 
     copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
@@ -36,7 +36,7 @@ fn test_albatross_in_examples_bird_feeder() {
         .join("examples")
         .join("bird-feeder");
 
-    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -53,7 +53,7 @@ fn test_albatross_in_examples_bird_feeder() {
     );
 
     context.assert_file(current_dir.join("check_installed_bird_feeder.py"));
-    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -68,16 +68,16 @@ fn test_albatross_in_examples_bird_feeder() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn test_albatross_in_examples() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let workspace = context.temp_dir.child("workspace");
 
     copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
 
     let current_dir = workspace.join("albatross-in-example");
 
-    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -94,7 +94,7 @@ fn test_albatross_in_examples() {
     );
 
     context.assert_file(current_dir.join("check_installed_albatross.py"));
-    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -109,16 +109,16 @@ fn test_albatross_in_examples() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn test_albatross_just_project() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let workspace = context.temp_dir.child("workspace");
 
     copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
 
     let current_dir = workspace.join("albatross-just-project");
 
-    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -135,7 +135,7 @@ fn test_albatross_just_project() {
     );
 
     context.assert_file(current_dir.join("check_installed_albatross.py"));
-    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -150,16 +150,16 @@ fn test_albatross_just_project() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn test_albatross_project_in_excluded() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let workspace = context.temp_dir.child("workspace");
 
     copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
 
     let current_dir = workspace.join("albatross-project-in-excluded");
 
-    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -180,7 +180,7 @@ fn test_albatross_project_in_excluded() {
         .join("excluded")
         .join("bird-feeder");
 
-    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -197,7 +197,7 @@ fn test_albatross_project_in_excluded() {
     );
 
     context.assert_file(current_dir.join("check_installed_bird_feeder.py"));
-    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -214,7 +214,7 @@ fn test_albatross_project_in_excluded() {
         .join("albatross-project-in-excluded")
         .join("packages")
         .join("seeds");
-    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -226,16 +226,16 @@ fn test_albatross_project_in_excluded() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn test_albatross_root_workspace() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let workspace = context.temp_dir.child("workspace");
 
     copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
 
     let current_dir = workspace.join("albatross-root-workspace");
 
-    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -255,7 +255,7 @@ fn test_albatross_root_workspace() {
     );
 
     context.assert_file(current_dir.join("check_installed_albatross.py"));
-    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -270,9 +270,9 @@ fn test_albatross_root_workspace() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn test_albatross_root_workspace_bird_feeder() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let workspace = context.temp_dir.child("workspace");
 
     copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
@@ -282,7 +282,7 @@ fn test_albatross_root_workspace_bird_feeder() {
         .join("packages")
         .join("bird-feeder");
 
-    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -301,7 +301,7 @@ fn test_albatross_root_workspace_bird_feeder() {
     );
 
     context.assert_file(current_dir.join("check_installed_bird_feeder.py"));
-    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -316,9 +316,9 @@ fn test_albatross_root_workspace_bird_feeder() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn test_albatross_root_workspace_albatross() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let workspace = context.temp_dir.child("workspace");
 
     copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
@@ -328,7 +328,7 @@ fn test_albatross_root_workspace_albatross() {
         .join("packages")
         .join("bird-feeder");
 
-    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -347,7 +347,7 @@ fn test_albatross_root_workspace_albatross() {
     );
 
     context.assert_file(current_dir.join("check_installed_albatross.py"));
-    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -362,9 +362,9 @@ fn test_albatross_root_workspace_albatross() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn test_albatross_virtual_workspace() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let workspace = context.temp_dir.child("workspace");
 
     copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
@@ -374,7 +374,7 @@ fn test_albatross_virtual_workspace() {
         .join("packages")
         .join("bird-feeder");
 
-    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -394,7 +394,7 @@ fn test_albatross_virtual_workspace() {
     );
 
     context.assert_file(current_dir.join("check_installed_bird_feeder.py"));
-    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -410,9 +410,9 @@ fn test_albatross_virtual_workspace() {
 
 /// Check that `uv run --package` works in a virtual workspace.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let work_dir = context.temp_dir.join("albatross-virtual-workspace");
 
     copy_dir_ignore(
@@ -432,7 +432,7 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
         .arg("--package")
         .arg("bird-feeder")
         .arg("packages/bird-feeder/check_installed_bird_feeder.py")
-        .current_dir(&work_dir), @r"
+        .current_dir(&work_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -458,7 +458,7 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
         .arg("--package")
         .arg("albatross")
         .arg("packages/albatross/check_installed_albatross.py")
-        .current_dir(&work_dir), @r"
+        .current_dir(&work_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -480,9 +480,9 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
 /// Check that `uv run` works from a virtual workspace root, which should sync all packages in the
 /// workspace.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn test_uv_run_virtual_workspace_root() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let work_dir = context.temp_dir.join("albatross-virtual-workspace");
 
     copy_dir_ignore(
@@ -493,7 +493,7 @@ fn test_uv_run_virtual_workspace_root() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .run()
         .arg("packages/albatross/check_installed_albatross.py")
-        .current_dir(&work_dir), @r"
+        .current_dir(&work_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -521,9 +521,9 @@ fn test_uv_run_virtual_workspace_root() -> Result<()> {
 
 /// Check that `uv run --package` works in a root workspace.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn test_uv_run_with_package_root_workspace() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let work_dir = context.temp_dir.join("albatross-root-workspace");
 
     copy_dir_ignore(workspaces_dir().join("albatross-root-workspace"), &work_dir)?;
@@ -539,7 +539,7 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
         .arg("--package")
         .arg("bird-feeder")
         .arg("packages/bird-feeder/check_installed_bird_feeder.py")
-        .current_dir(&work_dir), @r"
+        .current_dir(&work_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -564,7 +564,7 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
         .arg("--package")
         .arg("albatross")
         .arg("check_installed_albatross.py")
-        .current_dir(&work_dir), @r"
+        .current_dir(&work_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -584,9 +584,9 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
 
 /// Check that `uv run --isolated` creates isolated virtual environments.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn test_uv_run_isolate() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let work_dir = context.temp_dir.join("albatross-root-workspace");
 
     copy_dir_ignore(workspaces_dir().join("albatross-root-workspace"), &work_dir)?;
@@ -603,7 +603,7 @@ fn test_uv_run_isolate() -> Result<()> {
         .arg("--package")
         .arg("albatross")
         .arg("check_installed_albatross.py")
-        .current_dir(&work_dir), @r"
+        .current_dir(&work_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -632,7 +632,7 @@ fn test_uv_run_isolate() -> Result<()> {
         .arg("--package")
         .arg("bird-feeder")
         .arg("check_installed_albatross.py")
-        .current_dir(&work_dir), @r"
+        .current_dir(&work_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -682,7 +682,7 @@ fn workspace_lock_idempotence(workspace: &str, subdirectories: &[&str]) -> Resul
     let mut shared_lock = None;
 
     for dir in subdirectories {
-        let context = TestContext::new("3.12");
+        let context = uv_test::test_context!("3.12");
         let work_dir = context.temp_dir.join(workspace);
 
         copy_dir_ignore(workspaces_dir().join(workspace), &work_dir)?;
@@ -706,7 +706,7 @@ fn workspace_lock_idempotence(workspace: &str, subdirectories: &[&str]) -> Resul
 
 /// Check that the resolution is the same no matter where in the workspace we are.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn workspace_lock_idempotence_root_workspace() -> Result<()> {
     workspace_lock_idempotence(
         "albatross-root-workspace",
@@ -718,7 +718,7 @@ fn workspace_lock_idempotence_root_workspace() -> Result<()> {
 /// Check that the resolution is the same no matter where in the workspace we are, and that locking
 /// works even if there is no root project.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn workspace_lock_idempotence_virtual_workspace() -> Result<()> {
     workspace_lock_idempotence(
         "albatross-virtual-workspace",
@@ -759,7 +759,7 @@ struct Package {
 /// `e`. We have `a -> b`, `b -> c`, `c -> d`. `e` should not be installed.
 #[test]
 fn workspace_to_workspace_paths_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Build the main workspace ...
     let main_workspace = context.temp_dir.child("main-workspace");
@@ -818,7 +818,7 @@ fn workspace_to_workspace_paths_dependencies() -> Result<()> {
     "#};
     make_project(&other_workspace.join("packages").join("e"), "e", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&main_workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&main_workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -826,13 +826,13 @@ fn workspace_to_workspace_paths_dependencies() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
-    "###
+    "
     );
 
     let lock: SourceLock =
         toml::from_str(&fs_err::read_to_string(main_workspace.join("uv.lock"))?)?;
 
-    assert_json_snapshot!(lock.sources(), @r###"
+    assert_json_snapshot!(lock.sources(), @r#"
     {
       "a": {
         "editable": "packages/a"
@@ -847,15 +847,15 @@ fn workspace_to_workspace_paths_dependencies() -> Result<()> {
         "editable": "../other-workspace/packages/d"
       }
     }
-    "###);
+    "#);
 
     Ok(())
 }
 
-/// Ensure that workspace discovery errors if a member is missing a `pyproject.toml`.
+/// Ensure that workspace discovery skips an empty directory that matches a member glob.
 #[test]
 fn workspace_empty_member() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Build the main workspace ...
     let workspace = context.temp_dir.child("workspace");
@@ -881,14 +881,275 @@ fn workspace_empty_member() -> Result<()> {
     // ... and an empty c.
     fs_err::create_dir_all(workspace.join("packages").join("c"))?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    "
+    );
+
+    Ok(())
+}
+
+/// Ensure that workspace discovery skips directories that only contain gitignored files.
+#[test]
+fn workspace_gitignored_member() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Build the main workspace ...
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+
+    // ... with a `.gitignore` that ignores `__pycache__` ...
+    workspace.child(".gitignore").write_str("__pycache__/\n")?;
+
+    // ... with a  ...
+    let deps = indoc! {r#"
+        dependencies = ["b"]
+
+        [tool.uv.sources]
+        b = { workspace = true }
+    "#};
+    make_project(&workspace.join("packages").join("a"), "a", deps)?;
+
+    // ... and b.
+    let deps = indoc! {r"
+    "};
+    make_project(&workspace.join("packages").join("b"), "b", deps)?;
+
+    // ... and a c that only contains gitignored files.
+    fs_err::create_dir_all(workspace.join("packages").join("c").join("__pycache__"))?;
+    fs_err::write(
+        workspace
+            .join("packages")
+            .join("c")
+            .join("__pycache__")
+            .join("test.cpython-312.pyc"),
+        "fake",
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    "
+    );
+
+    let lock: SourceLock = toml::from_str(&fs_err::read_to_string(workspace.join("uv.lock"))?)?;
+
+    assert_json_snapshot!(lock.sources(), @r#"
+    {
+      "a": {
+        "editable": "packages/a"
+      },
+      "b": {
+        "editable": "packages/b"
+      }
+    }
+    "#);
+
+    Ok(())
+}
+
+/// Ensure that workspace discovery skips directories that only contain gitignored
+/// files even if they're nested inside non-ignored directories.
+#[test]
+fn workspace_gitignored_member_in_subdirectory() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Build the main workspace ...
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+
+    // ... with a `.gitignore` that ignores `__pycache__` ...
+    workspace.child(".gitignore").write_str("__pycache__/\n")?;
+
+    // ... with a  ...
+    let deps = indoc! {r#"
+        dependencies = ["b"]
+
+        [tool.uv.sources]
+        b = { workspace = true }
+    "#};
+    make_project(&workspace.join("packages").join("a"), "a", deps)?;
+
+    // ... and b.
+    let deps = indoc! {r"
+    "};
+    make_project(&workspace.join("packages").join("b"), "b", deps)?;
+
+    // ... and a c that only contains gitignored files.
+    fs_err::create_dir_all(
+        workspace
+            .join("packages")
+            .join("c")
+            .join("foo")
+            .join("__pycache__"),
+    )?;
+    fs_err::write(
+        workspace
+            .join("packages")
+            .join("c")
+            .join("foo")
+            .join("__pycache__")
+            .join("test.cpython-312.pyc"),
+        "fake",
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    "
+    );
+
+    let lock: SourceLock = toml::from_str(&fs_err::read_to_string(workspace.join("uv.lock"))?)?;
+
+    assert_json_snapshot!(lock.sources(), @r#"
+    {
+      "a": {
+        "editable": "packages/a"
+      },
+      "b": {
+        "editable": "packages/b"
+      }
+    }
+    "#);
+
+    Ok(())
+}
+
+/// Ensure that workspace discovery skips directories that only contain files ignored via
+/// `.ignore` (not just `.gitignore`).
+#[test]
+fn workspace_ignored_member() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Build the main workspace ...
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+
+    // ... with an `.ignore` file that ignores `__pycache__` ...
+    workspace.child(".ignore").write_str("__pycache__/\n")?;
+
+    // ... with a  ...
+    let deps = indoc! {r#"
+        dependencies = ["b"]
+
+        [tool.uv.sources]
+        b = { workspace = true }
+    "#};
+    make_project(&workspace.join("packages").join("a"), "a", deps)?;
+
+    // ... and b.
+    let deps = indoc! {r"
+    "};
+    make_project(&workspace.join("packages").join("b"), "b", deps)?;
+
+    // ... and a c that only contains ignored files.
+    fs_err::create_dir_all(workspace.join("packages").join("c").join("__pycache__"))?;
+    fs_err::write(
+        workspace
+            .join("packages")
+            .join("c")
+            .join("__pycache__")
+            .join("test.cpython-312.pyc"),
+        "fake",
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    "
+    );
+
+    let lock: SourceLock = toml::from_str(&fs_err::read_to_string(workspace.join("uv.lock"))?)?;
+
+    assert_json_snapshot!(lock.sources(), @r#"
+    {
+      "a": {
+        "editable": "packages/a"
+      },
+      "b": {
+        "editable": "packages/b"
+      }
+    }
+    "#);
+
+    Ok(())
+}
+
+/// Ensure that workspace discovery still errors for non-empty, non-gitignored directories
+/// missing a `pyproject.toml`.
+#[test]
+fn workspace_nonempty_member_no_pyproject() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Build the main workspace ...
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+
+    // ... with a `.gitignore` that ignores `__pycache__` ...
+    workspace.child(".gitignore").write_str("__pycache__/\n")?;
+
+    // ... with a  ...
+    let deps = indoc! {r#"
+        dependencies = ["b"]
+
+        [tool.uv.sources]
+        b = { workspace = true }
+    "#};
+    make_project(&workspace.join("packages").join("a"), "a", deps)?;
+
+    // ... and b.
+    let deps = indoc! {r"
+    "};
+    make_project(&workspace.join("packages").join("b"), "b", deps)?;
+
+    // ... and a c that contains non-gitignored files but no `pyproject.toml`.
+    fs_err::create_dir_all(workspace.join("packages").join("c"))?;
+    fs_err::write(
+        workspace.join("packages").join("c").join("README.md"),
+        "# Hello",
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Workspace member `[TEMP_DIR]/workspace/packages/c` is missing a `pyproject.toml` (matches: `packages/*`)
-    "###
+    "
     );
 
     Ok(())
@@ -897,7 +1158,7 @@ fn workspace_empty_member() -> Result<()> {
 /// Ensure that workspace discovery ignores hidden directories.
 #[test]
 fn workspace_hidden_files() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Build the main workspace ...
     let workspace = context.temp_dir.child("workspace");
@@ -923,7 +1184,7 @@ fn workspace_hidden_files() -> Result<()> {
     // ... and a hidden c.
     fs_err::create_dir_all(workspace.join("packages").join(".c"))?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -931,12 +1192,12 @@ fn workspace_hidden_files() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 2 packages in [TIME]
-    "###
+    "
     );
 
     let lock: SourceLock = toml::from_str(&fs_err::read_to_string(workspace.join("uv.lock"))?)?;
 
-    assert_json_snapshot!(lock.sources(), @r###"
+    assert_json_snapshot!(lock.sources(), @r#"
     {
       "a": {
         "editable": "packages/a"
@@ -945,7 +1206,7 @@ fn workspace_hidden_files() -> Result<()> {
         "editable": "packages/b"
       }
     }
-    "###);
+    "#);
 
     Ok(())
 }
@@ -953,7 +1214,7 @@ fn workspace_hidden_files() -> Result<()> {
 /// Ensure that workspace discovery accepts valid hidden directories.
 #[test]
 fn workspace_hidden_member() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Build the main workspace ...
     let workspace = context.temp_dir.child("workspace");
@@ -986,7 +1247,7 @@ fn workspace_hidden_member() -> Result<()> {
     "};
     make_project(&workspace.join("packages").join(".c"), "c", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -994,12 +1255,12 @@ fn workspace_hidden_member() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     let lock: SourceLock = toml::from_str(&fs_err::read_to_string(workspace.join("uv.lock"))?)?;
 
-    assert_json_snapshot!(lock.sources(), @r###"
+    assert_json_snapshot!(lock.sources(), @r#"
     {
       "a": {
         "editable": "packages/a"
@@ -1011,7 +1272,7 @@ fn workspace_hidden_member() -> Result<()> {
         "editable": "packages/.c"
       }
     }
-    "###);
+    "#);
 
     Ok(())
 }
@@ -1019,7 +1280,7 @@ fn workspace_hidden_member() -> Result<()> {
 /// Ensure that workspace discovery accepts valid hidden directories.
 #[test]
 fn workspace_non_included_member() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Build the main workspace ...
     let workspace = context.temp_dir.child("workspace");
@@ -1050,7 +1311,7 @@ fn workspace_non_included_member() -> Result<()> {
     make_project(&workspace.join("c"), "c", deps)?;
 
     // Locking from `c` should not include any workspace members.
-    uv_snapshot!(context.filters(), context.lock().current_dir(workspace.join("c")), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(workspace.join("c")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1058,20 +1319,20 @@ fn workspace_non_included_member() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     let lock: SourceLock = toml::from_str(&fs_err::read_to_string(
         workspace.join("c").join("uv.lock"),
     )?)?;
 
-    assert_json_snapshot!(lock.sources(), @r###"
+    assert_json_snapshot!(lock.sources(), @r#"
     {
       "c": {
         "editable": "."
       }
     }
-    "###);
+    "#);
 
     Ok(())
 }
@@ -1082,7 +1343,7 @@ fn workspace_non_included_member() -> Result<()> {
 /// relative to the member.
 #[test]
 fn workspace_inherit_sources() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create the workspace root.
     let workspace = context.temp_dir.child("workspace");
@@ -1094,8 +1355,8 @@ fn workspace_inherit_sources() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.workspace]
         members = ["packages/*"]
@@ -1111,8 +1372,8 @@ fn workspace_inherit_sources() -> Result<()> {
         dependencies = ["library"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     leaf.child("src/__init__.py").touch()?;
 
@@ -1125,13 +1386,13 @@ fn workspace_inherit_sources() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     library.child("src/__init__.py").touch()?;
 
     // As-is, resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&workspace), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1143,7 +1404,7 @@ fn workspace_inherit_sources() -> Result<()> {
           And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
 
           hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
-    "###
+    "
     );
 
     // Update the leaf to include the source.
@@ -1154,8 +1415,8 @@ fn workspace_inherit_sources() -> Result<()> {
         dependencies = ["library"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         library = { path = "../../../library", editable = true }
@@ -1163,7 +1424,7 @@ fn workspace_inherit_sources() -> Result<()> {
     leaf.child("src/__init__.py").touch()?;
 
     // Resolving should succeed.
-    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1171,7 +1432,7 @@ fn workspace_inherit_sources() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     // Revert that change.
@@ -1182,8 +1443,8 @@ fn workspace_inherit_sources() -> Result<()> {
         dependencies = ["library"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
 
     // Update the root to include the source.
@@ -1195,8 +1456,8 @@ fn workspace_inherit_sources() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         library = { path = "../library", editable = true }
@@ -1206,7 +1467,7 @@ fn workspace_inherit_sources() -> Result<()> {
     "#})?;
 
     // Resolving should succeed.
-    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1214,7 +1475,7 @@ fn workspace_inherit_sources() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     let lock = fs_err::read_to_string(workspace.join("uv.lock")).unwrap();
@@ -1271,8 +1532,8 @@ fn workspace_inherit_sources() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         library = { path = "../library", editable = true }
@@ -1289,8 +1550,8 @@ fn workspace_inherit_sources() -> Result<()> {
         dependencies = ["library"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         application = { path = "../application", editable = true }
@@ -1298,7 +1559,7 @@ fn workspace_inherit_sources() -> Result<()> {
 
     // Resolving should succeed; the member should still use the root's source, despite defining
     // some of its own
-    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1306,7 +1567,7 @@ fn workspace_inherit_sources() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -1314,9 +1575,9 @@ fn workspace_inherit_sources() -> Result<()> {
 
 /// Tests error messages when a workspace member's dependencies cannot be resolved.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn workspace_unsatisfiable_member_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create the workspace root.
     let workspace = context.temp_dir.child("workspace");
@@ -1328,8 +1589,8 @@ fn workspace_unsatisfiable_member_dependencies() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.workspace]
         members = ["packages/*"]
@@ -1345,13 +1606,13 @@ fn workspace_unsatisfiable_member_dependencies() -> Result<()> {
         dependencies = ["httpx>9999"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     leaf.child("src/__init__.py").touch()?;
 
     // Resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1370,9 +1631,9 @@ fn workspace_unsatisfiable_member_dependencies() -> Result<()> {
 /// Tests error messages when a workspace member's dependencies conflict with
 /// another member's.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn workspace_unsatisfiable_member_dependencies_conflicting() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create the workspace root.
     let workspace = context.temp_dir.child("workspace");
@@ -1384,8 +1645,8 @@ fn workspace_unsatisfiable_member_dependencies_conflicting() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.workspace]
         members = ["packages/*"]
@@ -1401,8 +1662,8 @@ fn workspace_unsatisfiable_member_dependencies_conflicting() -> Result<()> {
         dependencies = ["anyio==4.1.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     foo.child("src/__init__.py").touch()?;
     let bar = workspace.child("packages").child("bar");
@@ -1413,13 +1674,13 @@ fn workspace_unsatisfiable_member_dependencies_conflicting() -> Result<()> {
         dependencies = ["anyio==4.2.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     bar.child("src/__init__.py").touch()?;
 
     // Resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1429,7 +1690,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because bar depends on anyio==4.2.0 and foo depends on anyio==4.1.0, we can conclude that bar and foo are incompatible.
           And because your workspace requires bar and foo, we can conclude that your workspace's requirements are unsatisfiable.
-    "###
+    "
     );
 
     Ok(())
@@ -1438,9 +1699,9 @@ fn workspace_unsatisfiable_member_dependencies_conflicting() -> Result<()> {
 /// Tests error messages when a workspace member's dependencies conflict with
 /// two other member's.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create the workspace root.
     let workspace = context.temp_dir.child("workspace");
@@ -1452,8 +1713,8 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.workspace]
         members = ["packages/*"]
@@ -1469,8 +1730,8 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<
         dependencies = ["anyio==4.1.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     red.child("src/__init__.py").touch()?;
     let knot = workspace.child("packages").child("knot");
@@ -1481,8 +1742,8 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<
         dependencies = ["anyio==4.2.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     knot.child("src/__init__.py").touch()?;
 
@@ -1496,13 +1757,13 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<
         dependencies = ["anyio==4.3.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     bird.child("src/__init__.py").touch()?;
 
     // Resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1512,7 +1773,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<
       × No solution found when resolving dependencies:
       ╰─▶ Because bird depends on anyio==4.3.0 and knot depends on anyio==4.2.0, we can conclude that bird and knot are incompatible.
           And because your workspace requires bird and knot, we can conclude that your workspace's requirements are unsatisfiable.
-    "###
+    "
     );
 
     Ok(())
@@ -1521,9 +1782,9 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<
 /// Tests error messages when a workspace member's dependencies conflict with
 /// another member's optional dependencies.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn workspace_unsatisfiable_member_dependencies_conflicting_extra() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create the workspace root.
     let workspace = context.temp_dir.child("workspace");
@@ -1535,8 +1796,8 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_extra() -> Result<()>
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.workspace]
         members = ["packages/*"]
@@ -1552,8 +1813,8 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_extra() -> Result<()>
         dependencies = ["anyio==4.1.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     foo.child("src/__init__.py").touch()?;
     let bar = workspace.child("packages").child("bar");
@@ -1566,13 +1827,13 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_extra() -> Result<()>
         some_extra = ["anyio==4.2.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     bar.child("src/__init__.py").touch()?;
 
     // Resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1582,7 +1843,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_extra() -> Result<()>
       × No solution found when resolving dependencies:
       ╰─▶ Because bar[some-extra] depends on anyio==4.2.0 and foo depends on anyio==4.1.0, we can conclude that foo and bar[some-extra] are incompatible.
           And because your workspace requires bar[some-extra] and foo, we can conclude that your workspace's requirements are unsatisfiable.
-    "###
+    "
     );
 
     Ok(())
@@ -1591,9 +1852,9 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_extra() -> Result<()>
 /// Tests error messages when a workspace member's dependencies conflict with
 /// another member's development dependencies.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create the workspace root.
     let workspace = context.temp_dir.child("workspace");
@@ -1605,8 +1866,8 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.workspace]
         members = ["packages/*"]
@@ -1622,8 +1883,8 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
         dependencies = ["anyio==4.1.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     foo.child("src/__init__.py").touch()?;
     let bar = workspace.child("packages").child("bar");
@@ -1633,8 +1894,8 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
         version = "0.1.0"
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv]
         dev-dependencies = ["anyio==4.2.0"]
@@ -1642,7 +1903,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
     bar.child("src/__init__.py").touch()?;
 
     // Resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1662,9 +1923,9 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
 /// Tests error messages when a workspace member's name shadows a dependency of
 /// another member.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn workspace_member_name_shadows_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create the workspace root.
     let workspace = context.temp_dir.child("workspace");
@@ -1676,8 +1937,8 @@ fn workspace_member_name_shadows_dependencies() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.workspace]
         members = ["packages/*"]
@@ -1693,8 +1954,8 @@ fn workspace_member_name_shadows_dependencies() -> Result<()> {
         dependencies = ["anyio==4.1.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     foo.child("src/__init__.py").touch()?;
 
@@ -1707,14 +1968,14 @@ fn workspace_member_name_shadows_dependencies() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     anyio.child("src/__init__.py").touch()?;
 
     // We should fail
     // TODO(zanieb): This error message is bad?
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1724,7 +1985,7 @@ fn workspace_member_name_shadows_dependencies() -> Result<()> {
       × Failed to build `foo @ file://[TEMP_DIR]/workspace/packages/foo`
       ├─▶ Failed to parse entry: `anyio`
       ╰─▶ `anyio` is included as a workspace member, but is missing an entry in `tool.uv.sources` (e.g., `anyio = { workspace = true }`)
-    "###
+    "
     );
 
     Ok(())
@@ -1736,7 +1997,7 @@ fn workspace_member_name_shadows_dependencies() -> Result<()> {
 /// the paths don't line up by accident.
 #[test]
 fn test_path_hopping() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Build the main project ...
     let deps = indoc! {r#"
@@ -1758,7 +2019,7 @@ fn test_path_hopping() -> Result<()> {
     // ... that depends on bar, a stub project.
     make_project(&context.temp_dir.join("libs").join("bar"), "bar", "")?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&main_project_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&main_project_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1766,12 +2027,12 @@ fn test_path_hopping() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     let lock: SourceLock =
         toml::from_str(&fs_err::read_to_string(main_project_dir.join("uv.lock"))?)?;
-    assert_json_snapshot!(lock.sources(), @r###"
+    assert_json_snapshot!(lock.sources(), @r#"
     {
       "bar": {
         "editable": "../libs/bar"
@@ -1783,7 +2044,7 @@ fn test_path_hopping() -> Result<()> {
         "editable": "."
       }
     }
-    "###);
+    "#);
 
     Ok(())
 }
@@ -1792,9 +2053,9 @@ fn test_path_hopping() -> Result<()> {
 /// are correctly resolving `d` to a git dependency with a subdirectory and not relative to the
 /// checkout directory.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn transitive_dep_in_git_workspace_no_root() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1815,7 +2076,7 @@ fn transitive_dep_in_git_workspace_no_root() -> Result<()> {
     let lock1: SourceLock =
         toml::from_str(&fs_err::read_to_string(context.temp_dir.child("uv.lock"))?)?;
 
-    assert_json_snapshot!(lock1.sources(), @r###"
+    assert_json_snapshot!(lock1.sources(), @r#"
     {
       "a": {
         "virtual": "."
@@ -1836,7 +2097,7 @@ fn transitive_dep_in_git_workspace_no_root() -> Result<()> {
         "registry": "https://pypi.org/simple"
       }
     }
-    "###);
+    "#);
 
     // Check that we don't report a conflict here either.
     pyproject_toml.write_str(
@@ -1867,9 +2128,9 @@ fn transitive_dep_in_git_workspace_no_root() -> Result<()> {
 /// to `uv-git-workspace-in-root`. Check that we are correctly resolving `uv-git-workspace-in-root`
 /// to a git dependency without a subdirectory and not relative to the checkout directory.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn transitive_dep_in_git_workspace_with_root() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1891,7 +2152,7 @@ fn transitive_dep_in_git_workspace_with_root() -> Result<()> {
 
     let lock1: SourceLock =
         toml::from_str(&fs_err::read_to_string(context.temp_dir.child("uv.lock"))?)?;
-    assert_json_snapshot!(lock1.sources(), @r###"
+    assert_json_snapshot!(lock1.sources(), @r#"
     {
       "git-with-root": {
         "virtual": "."
@@ -1903,7 +2164,7 @@ fn transitive_dep_in_git_workspace_with_root() -> Result<()> {
         "git": "https://github.com/astral-sh/workspace-in-root-test?subdirectory=workspace-member-in-subdir&rev=d3ab48d2338296d47e28dbb2fb327c5e2ac4ac68#d3ab48d2338296d47e28dbb2fb327c5e2ac4ac68"
       }
     }
-    "###);
+    "#);
 
     // Check that we don't report a conflict here either
     pyproject_toml.write_str(
@@ -1928,6 +2189,213 @@ fn transitive_dep_in_git_workspace_with_root() -> Result<()> {
         toml::from_str(&fs_err::read_to_string(context.temp_dir.child("uv.lock"))?)?;
 
     assert_eq!(lock1, lock2, "sources changed");
+
+    Ok(())
+}
+
+#[test]
+fn workspace_members_with_leading_dot_slash() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Build the main workspace with leading `./` in member paths
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["./packages/foo", "./packages/bar"]
+    "#})?;
+
+    // Create package foo that depends on bar
+    let deps = indoc! {r#"
+        dependencies = ["bar"]
+
+        [tool.uv.sources]
+        bar = { workspace = true }
+    "#};
+    make_project(&workspace.join("packages").join("foo"), "foo", deps)?;
+
+    // Create package bar
+    let deps = indoc! {r"
+        dependencies = []
+    "};
+    make_project(&workspace.join("packages").join("bar"), "bar", deps)?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    "
+    );
+
+    let lock: SourceLock = toml::from_str(&fs_err::read_to_string(workspace.join("uv.lock"))?)?;
+
+    assert_json_snapshot!(lock.sources(), @r#"
+    {
+      "bar": {
+        "editable": "packages/bar"
+      },
+      "foo": {
+        "editable": "packages/foo"
+      }
+    }
+    "#);
+
+    // Test syncing from within foo works correctly
+    uv_snapshot!(context.filters(), context.sync().current_dir(workspace.join("packages").join("foo")), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: [TEMP_DIR]/workspace/.venv
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + bar==0.1.0 (from file://[TEMP_DIR]/workspace/packages/bar)
+     + foo==0.1.0 (from file://[TEMP_DIR]/workspace/packages/foo)
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn workspace_members_with_parent_directory() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Build a workspace with a member outside its directory using `../`
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["../external-package"]
+    "#})?;
+
+    // Create an external package
+    let deps = indoc! {r"
+        dependencies = []
+    "};
+    make_project(
+        &context.temp_dir.join("external-package"),
+        "external-package",
+        deps,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 1 package in [TIME]
+    "
+    );
+
+    let lock: SourceLock = toml::from_str(&fs_err::read_to_string(workspace.join("uv.lock"))?)?;
+
+    assert_json_snapshot!(lock.sources(), @r#"
+    {
+      "external-package": {
+        "editable": "../external-package"
+      }
+    }
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn workspace_members_with_complex_relative_paths() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Build a workspace with complex relative path normalization
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["./subdir/../../sibling-package"]
+    "#})?;
+
+    // Create a sibling package
+    let deps = indoc! {r"
+        dependencies = []
+    "};
+    make_project(
+        &context.temp_dir.join("sibling-package"),
+        "sibling-package",
+        deps,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 1 package in [TIME]
+    "
+    );
+
+    let lock: SourceLock = toml::from_str(&fs_err::read_to_string(workspace.join("uv.lock"))?)?;
+
+    assert_json_snapshot!(lock.sources(), @r#"
+    {
+      "sibling-package": {
+        "editable": "../sibling-package"
+      }
+    }
+    "#);
+
+    Ok(())
+}
+
+/// Ensure that an unmanaged workspace member without a `[project]` section doesn't panic.
+///
+/// Uses `--verbose` to exercise the `debug!` log path, which previously panicked on
+/// `.unwrap()` when the `[project]` section was missing.
+#[test]
+fn workspace_unmanaged_member_no_project() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [build-system]
+        requires = ["uv_build>=0.9.0,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+
+    fs_err::create_dir_all(workspace.join("src").join("root"))?;
+    fs_err::write(workspace.join("src").join("root").join("__init__.py"), "")?;
+
+    // Create a workspace member with `managed = false` but no `[project]` section.
+    let member = workspace.join("member");
+    fs_err::create_dir_all(&member)?;
+    fs_err::write(
+        member.join("pyproject.toml"),
+        indoc! {"
+            [tool.uv]
+            managed = false
+        "},
+    )?;
+
+    context
+        .lock()
+        .arg("--verbose")
+        .current_dir(&workspace)
+        .assert()
+        .success();
 
     Ok(())
 }

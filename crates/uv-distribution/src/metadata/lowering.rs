@@ -3,18 +3,19 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use either::Either;
+use owo_colors::OwoColorize;
 use thiserror::Error;
-
+use uv_auth::CredentialsCache;
 use uv_distribution_filename::DistExtension;
 use uv_distribution_types::{
     Index, IndexLocations, IndexMetadata, IndexName, Origin, Requirement, RequirementSource,
 };
-use uv_git_types::{GitReference, GitUrl, GitUrlParseError};
+use uv_git_types::{GitLfs, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerTree, VerbatimUrl, VersionOrUrl, looks_like_git_repository};
 use uv_pypi_types::{ConflictItem, ParsedGitUrl, ParsedUrlError, VerbatimParsedUrl};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_workspace::Workspace;
 use uv_workspace::pyproject::{PyProjectToml, Source, Sources};
 
@@ -44,6 +45,7 @@ impl LoweredRequirement {
         locations: &'data IndexLocations,
         workspace: &'data Workspace,
         git_member: Option<&'data GitWorkspaceMember<'data>>,
+        credentials_cache: &'data CredentialsCache,
     ) -> impl Iterator<Item = Result<Self, LoweringError>> + use<'data> + 'data {
         // Identify the source from the `tool.uv.sources` table.
         let (sources, origin) = if let Some(source) = project_sources.get(&requirement.name) {
@@ -166,6 +168,7 @@ impl LoweredRequirement {
                             rev,
                             tag,
                             branch,
+                            lfs,
                             marker,
                             ..
                         } => {
@@ -175,6 +178,7 @@ impl LoweredRequirement {
                                 rev,
                                 tag,
                                 branch,
+                                lfs,
                             )?;
                             (source, marker)
                         }
@@ -222,19 +226,20 @@ impl LoweredRequirement {
                                 .find(|Index { name, .. }| {
                                     name.as_ref().is_some_and(|name| *name == index)
                                 })
-                                .map(
-                                    |Index {
-                                         url, format: kind, ..
-                                     }| IndexMetadata {
-                                        url: url.clone(),
-                                        format: *kind,
-                                    },
-                                )
                             else {
-                                return Err(LoweringError::MissingIndex(
-                                    requirement.name.clone(),
+                                let hint = missing_index_hint(locations, &index);
+                                return Err(LoweringError::MissingIndex {
+                                    package: requirement.name.clone(),
                                     index,
-                                ));
+                                    hint,
+                                });
+                            };
+                            if let Some(credentials) = index.credentials() {
+                                credentials_cache.store_credentials(index.raw_url(), credentials);
+                            }
+                            let index = IndexMetadata {
+                                url: index.url.clone(),
+                                format: index.format,
                             };
                             let conflict = project_name.and_then(|project_name| {
                                 if let Some(extra) = extra {
@@ -357,6 +362,7 @@ impl LoweredRequirement {
         sources: &'data BTreeMap<PackageName, Sources>,
         indexes: &'data [Index],
         locations: &'data IndexLocations,
+        credentials_cache: &'data CredentialsCache,
     ) -> impl Iterator<Item = Result<Self, LoweringError>> + 'data {
         let source = sources.get(&requirement.name).cloned();
 
@@ -408,6 +414,7 @@ impl LoweredRequirement {
                             rev,
                             tag,
                             branch,
+                            lfs,
                             marker,
                             ..
                         } => {
@@ -417,6 +424,7 @@ impl LoweredRequirement {
                                 rev,
                                 tag,
                                 branch,
+                                lfs,
                             )?;
                             (source, marker)
                         }
@@ -456,19 +464,20 @@ impl LoweredRequirement {
                                 .find(|Index { name, .. }| {
                                     name.as_ref().is_some_and(|name| *name == index)
                                 })
-                                .map(
-                                    |Index {
-                                         url, format: kind, ..
-                                     }| IndexMetadata {
-                                        url: url.clone(),
-                                        format: *kind,
-                                    },
-                                )
                             else {
-                                return Err(LoweringError::MissingIndex(
-                                    requirement.name.clone(),
+                                let hint = missing_index_hint(locations, &index);
+                                return Err(LoweringError::MissingIndex {
+                                    package: requirement.name.clone(),
                                     index,
-                                ));
+                                    hint,
+                                });
+                            };
+                            if let Some(credentials) = index.credentials() {
+                                credentials_cache.store_credentials(index.raw_url(), credentials);
+                            }
+                            let index = IndexMetadata {
+                                url: index.url.clone(),
+                                format: index.format,
                             };
                             let conflict = None;
                             let source = registry_source(&requirement, index, conflict);
@@ -524,12 +533,16 @@ pub enum LoweringError {
     MoreThanOneGitRef,
     #[error(transparent)]
     GitUrlParse(#[from] GitUrlParseError),
-    #[error("Package `{0}` references an undeclared index: `{1}`")]
-    MissingIndex(PackageName, IndexName),
+    #[error("Package `{package}` references an undeclared index: `{index}`{}", if let Some(hint) = hint { format!("\n\n{}{} {hint}", "hint".bold().cyan(), ":".bold()) } else { String::new() })]
+    MissingIndex {
+        package: PackageName,
+        index: IndexName,
+        hint: Option<String>,
+    },
     #[error("Workspace members are not allowed in non-workspace contexts")]
     WorkspaceMember,
     #[error(transparent)]
-    InvalidUrl(#[from] url::ParseError),
+    InvalidUrl(#[from] DisplaySafeUrlError),
     #[error(transparent)]
     InvalidVerbatimUrl(#[from] uv_pep508::VerbatimUrlError),
     #[error("Fragments are not allowed in URLs: `{0}`")]
@@ -575,6 +588,29 @@ impl std::fmt::Display for SourceKind {
     }
 }
 
+/// Generate a hint for a missing index if the index name is found in a configuration file
+/// (e.g., `uv.toml`) rather than in the project's `pyproject.toml`.
+fn missing_index_hint(locations: &IndexLocations, index: &IndexName) -> Option<String> {
+    let config_index = locations
+        .simple_indexes()
+        .filter(|idx| !matches!(idx.origin, Some(Origin::Cli)))
+        .find(|idx| idx.name.as_ref().is_some_and(|name| *name == *index));
+
+    config_index.and_then(|idx| {
+        let source = match idx.origin {
+            Some(Origin::User) => "a user-level `uv.toml`",
+            Some(Origin::System) => "a system-level `uv.toml`",
+            Some(Origin::Project) => "a project-level `uv.toml`",
+            Some(Origin::Cli | Origin::RequirementsTxt) | None => return None,
+        };
+        Some(format!(
+            "Index `{index}` was found in {source}, but indexes \
+             referenced via `tool.uv.sources` must be defined in the project's \
+             `pyproject.toml`"
+        ))
+    })
+}
+
 /// Convert a Git source into a [`RequirementSource`].
 fn git_source(
     git: &DisplaySafeUrl,
@@ -582,6 +618,7 @@ fn git_source(
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
+    lfs: Option<bool>,
 ) -> Result<RequirementSource, LoweringError> {
     let reference = match (rev, tag, branch) {
         (None, None, None) => GitReference::DefaultBranch,
@@ -597,19 +634,32 @@ fn git_source(
         let path = format!("{}@{}", url.path(), rev);
         url.set_path(&path);
     }
+    let mut frags: Vec<String> = Vec::new();
     if let Some(subdirectory) = subdirectory.as_ref() {
         let subdirectory = subdirectory
             .to_str()
             .ok_or_else(|| LoweringError::NonUtf8Path(subdirectory.to_path_buf()))?;
-        url.set_fragment(Some(&format!("subdirectory={subdirectory}")));
+        frags.push(format!("subdirectory={subdirectory}"));
     }
+    // Loads Git LFS Enablement according to priority.
+    // First: lfs = true, lfs = false from pyproject.toml
+    // Second: UV_GIT_LFS from environment
+    let lfs = GitLfs::from(lfs);
+    // Preserve that we're using Git LFS in the Verbatim Url representations
+    if lfs.enabled() {
+        frags.push("lfs=true".to_string());
+    }
+    if !frags.is_empty() {
+        url.set_fragment(Some(&frags.join("&")));
+    }
+
     let url = VerbatimUrl::from_url(url);
 
     let repository = git.clone();
 
     Ok(RequirementSource::Git {
         url,
-        git: GitUrl::from_reference(repository, reference)?,
+        git: GitUrl::from_fields(repository, reference, None, lfs)?,
         subdirectory,
     })
 }

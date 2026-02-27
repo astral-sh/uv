@@ -1,0 +1,215 @@
+on:
+  workflow_call:
+    inputs:
+      save-rust-cache:
+        required: false
+        type: string
+        default: "true"
+      test-macos:
+        required: false
+        type: string
+        default: "false"
+
+permissions: {}
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  CARGO_TERM_COLOR: always
+  PYTHON_VERSION: "3.12"
+  RUSTUP_MAX_RETRIES: 10
+
+jobs:
+  # We use the large GitHub actions runners
+  # For Ubuntu and Windows, this requires Organization-level configuration
+  # See: https://docs.github.com/en/actions/using-github-hosted-runners/about-larger-runners/about-larger-runners#about-ubuntu-and-windows-larger-runners
+
+  cargo-test-linux:
+    timeout-minutes: 10
+    runs-on: depot-ubuntu-24.04-16
+    name: "cargo test on linux"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+
+      - name: "Install Rust toolchain"
+        run: rustup show
+
+      - uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
+        with:
+          version: "0.10.4"
+
+      - name: "Install required Python versions"
+        run: uv python install
+
+      - name: "Install secret service"
+        run: |
+          sudo apt update -y
+          sudo apt install -y gnome-keyring
+
+      - name: "Start gnome-keyring"
+        # run gnome-keyring with 'foobar' as password for the login keyring
+        # this will create a new login keyring and unlock it
+        # the login password doesn't matter, but the keyring must be unlocked for the tests to work
+        run: gnome-keyring-daemon --components=secrets --daemonize --unlock <<< 'foobar'
+
+      - name: "Create btrfs filesystem"
+        run: |
+          sudo apt-get install -y btrfs-progs
+          truncate -s 1G /tmp/btrfs.img
+          mkfs.btrfs /tmp/btrfs.img
+          sudo mkdir /btrfs
+          sudo mount -o loop /tmp/btrfs.img /btrfs
+          sudo chown "$(id -u):$(id -g)" /btrfs
+
+      - name: "Create tmpfs filesystem"
+        run: |
+          sudo mkdir /tmpfs
+          sudo mount -t tmpfs -o size=256m tmpfs /tmpfs
+          sudo chown "$(id -u):$(id -g)" /tmpfs
+
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@542cebaaed782771e619bd5609d97659d109c492 # v2.66.7
+        with:
+          tool: cargo-nextest
+
+      - name: "Cargo test"
+        env:
+          # Retry more than default to reduce flakes in CI
+          UV_HTTP_RETRIES: 5
+          RUST_BACKTRACE: 1
+          UV_INTERNAL__TEST_COW_FS: /btrfs
+          UV_INTERNAL__TEST_NOCOW_FS: /tmpfs
+          UV_INTERNAL__TEST_ALT_FS: /tmpfs
+        run: |
+          cargo nextest run \
+            --cargo-profile fast-build \
+            --features test-python-patch,native-auth,secret-service \
+            --workspace \
+            --profile ci-linux
+
+  cargo-test-macos:
+    timeout-minutes: 20
+    # Only run macOS tests on main without opt-in
+    if: ${{ inputs.test-macos == 'true' }}
+    runs-on: depot-macos-14
+    name: "cargo test on macos"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+
+      - name: "Install Rust toolchain"
+        run: rustup show
+
+      - name: "Create HFS+ disk image (no reflink support)"
+        run: |
+          hdiutil create -size 256m -fs HFS+ -volname NoReflink /tmp/noreflink.dmg
+          hdiutil attach /tmp/noreflink.dmg
+          echo "HFS_MOUNT=/Volumes/NoReflink" >> "$GITHUB_ENV"
+
+      - uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
+        with:
+          version: "0.10.4"
+
+      - name: "Install required Python versions"
+        run: uv python install
+
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@542cebaaed782771e619bd5609d97659d109c492 # v2.66.7
+        with:
+          tool: cargo-nextest
+
+      - name: "Cargo test"
+        env:
+          # Retry more than default to reduce flakes in CI
+          UV_HTTP_RETRIES: 5
+          RUST_BACKTRACE: 1
+          # macOS tmpdir is on APFS which supports reflink
+          UV_INTERNAL__TEST_COW_FS: ${{ runner.temp }}
+          # HFS+ RAM disk does not support copy-on-write and is on a different device
+          UV_INTERNAL__TEST_NOCOW_FS: ${{ env.HFS_MOUNT }}
+          UV_INTERNAL__TEST_ALT_FS: ${{ env.HFS_MOUNT }}
+        run: |
+          cargo nextest run \
+            --cargo-profile fast-build \
+            --no-default-features \
+            --features test-python,test-python-managed,test-pypi,test-git,test-git-lfs,performance,test-crates-io,native-auth,apple-native \
+            --workspace \
+            --profile ci-macos
+
+  cargo-test-windows:
+    timeout-minutes: 15
+    runs-on: github-windows-2025-x86_64-16
+    name: "cargo test on windows ${{ matrix.partition }} of 3"
+    strategy:
+      fail-fast: false
+      matrix:
+        partition: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Dev Drive
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+
+      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+      - name: Copy Git Repo to Dev Drive
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
+
+      - uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
+        with:
+          version: "0.10.4"
+
+      - name: "Install required Python versions"
+        run: uv python install
+
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          workspaces: ${{ env.UV_WORKSPACE }}
+          # Use the same cache entry across the partitions
+          add-job-id-key: false
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+
+      - name: "Install Rust toolchain"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: rustup show
+
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@542cebaaed782771e619bd5609d97659d109c492 # v2.66.7
+        with:
+          tool: cargo-nextest
+
+      - name: "Cargo test"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        env:
+          # Retry more than default to reduce flakes in CI
+          UV_HTTP_RETRIES: 5
+          # Avoid permission errors during concurrent tests
+          # See https://github.com/astral-sh/uv/issues/6940
+          UV_LINK_MODE: copy
+          RUST_BACKTRACE: 1
+        shell: bash
+        run: |
+          cargo nextest run \
+            --cargo-profile fast-build \
+            --no-default-features \
+            --features test-python,test-pypi,test-python-managed,native-auth,windows-native \
+            --workspace \
+            --profile ci-windows \
+            --partition hash:${{ matrix.partition }}/3

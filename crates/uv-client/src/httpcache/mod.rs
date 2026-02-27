@@ -963,7 +963,7 @@ impl ArchivedCachePolicy {
             // Expires also works too, as above).
             //
             // [1]: https://github.com/astral-sh/uv/issues/5351#issuecomment-2260588764
-            let duration = Duration::from_secs(600);
+            let duration = Duration::from_mins(10);
             tracing::trace!(
                 "Freshness lifetime heuristically assumed \
                  because of presence of last-modified header: {duration:?}"
@@ -992,7 +992,7 @@ impl ArchivedCachePolicy {
 /// This dictates what the caller should do next by indicating whether the
 /// cached response is stale or not.
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub enum BeforeRequest {
     /// The cached response is still fresh, and the caller may return the
     /// cached response without issuing an HTTP requests.

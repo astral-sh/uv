@@ -7,7 +7,9 @@ use tracing::trace;
 use uv_distribution_types::{RequiresPython, RequiresPythonRange};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerEnvironment, MarkerTree};
-use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKind, ResolverMarkerEnvironment};
+use uv_pypi_types::{
+    ConflictItem, ConflictItemRef, ConflictKind, ConflictKindRef, ResolverMarkerEnvironment,
+};
 
 use crate::pubgrub::{PubGrubDependency, PubGrubPackage};
 use crate::resolver::ForkState;
@@ -102,17 +104,19 @@ enum Kind {
         markers: MarkerTree,
         /// Conflicting group inclusions.
         ///
-        /// Note that inclusions don't play a role in predicates
-        /// like `ResolverEnvironment::included_by_group`. Instead,
-        /// only exclusions are considered.
+        /// Inclusions are checked in `included_by_group` only when
+        /// a project-level exclusion exists for the same package:
+        /// an explicit inclusion overrides the project-level
+        /// exclusion, allowing a specific extra/group to remain
+        /// active even when the project as a whole is excluded.
         ///
-        /// We record inclusions for two reasons. First is that if
-        /// we somehow wind up with an inclusion and exclusion rule
-        /// for the same conflict item, then we treat the resulting
-        /// fork as impossible. (You cannot require that an extra is
-        /// both included and excluded. Such a rule can never be
-        /// satisfied.) Second is that we use the inclusion rules to
-        /// write conflict markers after resolution is finished.
+        /// We also record inclusions because if we somehow wind up
+        /// with an inclusion and exclusion rule for the same conflict
+        /// item, then we treat the resulting fork as impossible.
+        /// (You cannot require that an extra is both included and
+        /// excluded. Such a rule can never be satisfied.) Finally,
+        /// we use the inclusion rules to write conflict markers
+        /// after resolution is finished.
         include: Arc<crate::FxHashbrownSet<ConflictItem>>,
         /// Conflicting group exclusions.
         exclude: Arc<crate::FxHashbrownSet<ConflictItem>>,
@@ -185,7 +189,35 @@ impl ResolverEnvironment {
     pub(crate) fn included_by_group(&self, group: ConflictItemRef<'_>) -> bool {
         match self.kind {
             Kind::Specific { .. } => true,
-            Kind::Universal { ref exclude, .. } => !exclude.contains(&group),
+            Kind::Universal {
+                ref include,
+                ref exclude,
+                ..
+            } => {
+                if exclude.contains(&group) {
+                    return false;
+                }
+                // When a project-level conflict item is excluded, the
+                // project's extras should be excluded too (unless they
+                // are explicitly included). This is because extras
+                // transitively depend on the base package, so leaving
+                // them in a fork that excludes the project would pull
+                // the project's dependencies back in.
+                //
+                // Groups, on the other hand, do NOT depend on the base
+                // package — they are independent dependency sets — so
+                // they can safely remain active even when the project
+                // itself is excluded.
+                if matches!(group.kind(), ConflictKindRef::Extra(_)) {
+                    if exclude.contains(&ConflictItemRef::from(group.package())) {
+                        // But if this specific extra is explicitly
+                        // included (e.g., in a conflict between a project
+                        // and one of its own extras), respect the inclusion.
+                        return include.contains(&group);
+                    }
+                }
+                true
+            }
         }
     }
 
@@ -252,9 +284,9 @@ impl ResolverEnvironment {
     /// When a group is excluded from a resolver environment,
     /// `ResolverEnvironment::included_by_group` will return false. The idea
     /// is that a dependency with a corresponding group should be excluded by
-    /// forks in the resolver with this environment. (Include rules have no
-    /// effect in `included_by_group` since, for the purposes of conflicts
-    /// during resolution, we only care about what *isn't* allowed.)
+    /// forks in the resolver with this environment. (Include rules also
+    /// affect `included_by_group`: when a project-level exclusion exists,
+    /// an explicit inclusion for a specific extra overrides it.)
     ///
     /// If calling this routine results in the same conflict item being both
     /// included and excluded, then this returns `None` (since it would

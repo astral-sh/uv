@@ -3,6 +3,7 @@
 use std::io;
 use std::path::PathBuf;
 
+use owo_colors::OwoColorize;
 use thiserror::Error;
 
 use uv_fs::Simplified;
@@ -11,7 +12,7 @@ use uv_pep440::Version;
 use uv_pypi_types::Scheme;
 
 pub use install::install_wheel;
-pub use linker::{LinkMode, Locks};
+pub use linker::{InstallState, LinkMode, link_wheel_files};
 pub use uninstall::{Uninstall, uninstall_egg, uninstall_legacy_editable, uninstall_wheel};
 pub use wheel::{LibKind, WheelFile, read_record_file};
 
@@ -40,14 +41,6 @@ pub struct Layout {
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
-    /// Custom error type to add a path to error reading a file from a zip
-    #[error("Failed to reflink {} to {}", from.user_display(), to.user_display())]
-    Reflink {
-        from: PathBuf,
-        to: PathBuf,
-        #[source]
-        err: io::Error,
-    },
     /// The wheel is broken
     #[error("The wheel is invalid: {0}")]
     InvalidWheel(String),
@@ -74,9 +67,9 @@ pub enum Error {
     MissingTopLevel(PathBuf),
     #[error("Invalid package version")]
     InvalidVersion(#[from] uv_pep440::VersionParseError),
-    #[error("Wheel package name does not match filename: {0} != {1}")]
+    #[error("Wheel package name does not match filename ({0} != {1}), which indicates a malformed wheel. If this is intentional, set `{env_var}`.", env_var = "UV_SKIP_WHEEL_FILENAME_CHECK=1".green())]
     MismatchedName(PackageName, PackageName),
-    #[error("Wheel version does not match filename: {0} != {1}")]
+    #[error("Wheel version does not match filename ({0} != {1}), which indicates a malformed wheel. If this is intentional, set `{env_var}`.", env_var = "UV_SKIP_WHEEL_FILENAME_CHECK=1".green())]
     MismatchedVersion(Version, Version),
     #[error("Invalid egg-link")]
     InvalidEggLink(PathBuf),
@@ -84,4 +77,6 @@ pub enum Error {
     LauncherError(#[from] uv_trampoline_builder::Error),
     #[error("Scripts must not use the reserved name {0}")]
     ReservedScriptName(String),
+    #[error(transparent)]
+    Copy(#[from] uv_fs::link::LinkError),
 }

@@ -11,11 +11,11 @@ use uv_fs::copy_dir_all;
 use uv_python::PYTHON_VERSION_FILENAME;
 use uv_static::EnvVars;
 
-use crate::common::{TestContext, uv_snapshot};
+use uv_test::{TestContext, uv_snapshot};
 
 #[test]
 fn run_with_python_version() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.12", "3.11", "3.9"]);
+    let context = uv_test::test_context_with_versions!(&["3.12", "3.11", "3.9"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -29,10 +29,16 @@ fn run_with_python_version() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
+    context
+        .temp_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r#"
         import importlib.metadata
@@ -47,7 +53,7 @@ fn run_with_python_version() -> Result<()> {
     // get stale files, see https://github.com/python/cpython/issues/75953.
     let mut command = context.run();
     let command_with_args = command.arg("python").arg("-B").arg("main.py");
-    uv_snapshot!(context.filters(), command_with_args, @r###"
+    uv_snapshot!(context.filters(), command_with_args, @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -64,7 +70,7 @@ fn run_with_python_version() -> Result<()> {
      + foo==1.0.0 (from file://[TEMP_DIR]/)
      + idna==3.6
      + sniffio==1.3.1
-    "###);
+    ");
 
     // This is the same Python, no reinstallation.
     let mut command = context.run();
@@ -74,7 +80,7 @@ fn run_with_python_version() -> Result<()> {
         .arg("python")
         .arg("-B")
         .arg("main.py");
-    uv_snapshot!(context.filters(), command_with_args, @r###"
+    uv_snapshot!(context.filters(), command_with_args, @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -84,7 +90,7 @@ fn run_with_python_version() -> Result<()> {
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Audited 4 packages in [TIME]
-    "###);
+    ");
 
     // This time, we target Python 3.11 instead.
     let mut command = context.run();
@@ -96,7 +102,7 @@ fn run_with_python_version() -> Result<()> {
         .arg("main.py")
         .env_remove(EnvVars::VIRTUAL_ENV);
 
-    uv_snapshot!(context.filters(), command_with_args, @r###"
+    uv_snapshot!(context.filters(), command_with_args, @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -114,7 +120,7 @@ fn run_with_python_version() -> Result<()> {
      + foo==1.0.0 (from file://[TEMP_DIR]/)
      + idna==3.6
      + sniffio==1.3.1
-    "###);
+    ");
 
     // This time, we target Python 3.9 instead.
     let mut command = context.run();
@@ -126,7 +132,7 @@ fn run_with_python_version() -> Result<()> {
         .arg("main.py")
         .env_remove(EnvVars::VIRTUAL_ENV);
 
-    uv_snapshot!(context.filters(), command_with_args, @r"
+    uv_snapshot!(context.filters(), command_with_args, @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -141,11 +147,11 @@ fn run_with_python_version() -> Result<()> {
 
 #[test]
 fn run_args() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
-    let mut filters = context.filters();
-    filters.push((r"Usage: (uv|\.exe) run \[OPTIONS\] (?s).*", "[UV RUN HELP]"));
-    filters.push((r"usage: .*(\n|.*)*", "usage: [PYTHON HELP]"));
+    let context = context
+        .with_filter((r"Usage: uv(\.exe)? run \[OPTIONS\] (?s).*", "[UV RUN HELP]"))
+        .with_filter((r"usage: .*(\n|.*)*", "usage: [PYTHON HELP]"));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -156,13 +162,19 @@ fn run_args() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
+    context
+        .temp_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
 
     // We treat arguments before the command as uv arguments
-    uv_snapshot!(filters, context.run().arg("--help").arg("python"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("--help").arg("python"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -172,7 +184,7 @@ fn run_args() -> Result<()> {
     ");
 
     // We don't treat arguments after the command as uv arguments
-    uv_snapshot!(filters, context.run().arg("python").arg("--help"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("--help"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -180,7 +192,7 @@ fn run_args() -> Result<()> {
     ");
 
     // Can use `--` to separate uv arguments from the command arguments.
-    uv_snapshot!(filters, context.run().arg("--").arg("python").arg("--version"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--").arg("python").arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -189,7 +201,7 @@ fn run_args() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Audited 1 package in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -199,7 +211,7 @@ fn run_args() -> Result<()> {
 /// This should list the available scripts.
 #[test]
 fn run_no_args() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -210,14 +222,20 @@ fn run_no_args() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
+    context
+        .temp_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
 
-    // Run without specifying any argunments.
+    // Run without specifying any arguments.
     #[cfg(not(windows))]
-    uv_snapshot!(context.filters(), context.run(), @r###"
+    uv_snapshot!(context.filters(), context.run(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -236,7 +254,7 @@ fn run_no_args() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + foo==1.0.0 (from file://[TEMP_DIR]/)
-    "###);
+    ");
 
     #[cfg(windows)]
     uv_snapshot!(context.filters(), context.run(), @r###"
@@ -267,7 +285,7 @@ fn run_no_args() -> Result<()> {
 /// dependencies.
 #[test]
 fn run_pep723_script() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -278,10 +296,16 @@ fn run_pep723_script() -> Result<()> {
         dependencies = ["anyio"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
+    context
+        .temp_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
 
     // If the script contains a PEP 723 tag, we should install its requirements.
     let test_script = context.temp_dir.child("main.py");
@@ -298,7 +322,7 @@ fn run_pep723_script() -> Result<()> {
     })?;
 
     // Running the script should install the requirements.
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -308,16 +332,16 @@ fn run_pep723_script() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     // Running again should use the existing environment.
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    "###);
+    ");
 
     // But neither invocation should create a lockfile.
     assert!(!context.temp_dir.child("main.py.lock").exists());
@@ -330,7 +354,7 @@ fn run_pep723_script() -> Result<()> {
        "
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -347,7 +371,7 @@ fn run_pep723_script() -> Result<()> {
       File "[TEMP_DIR]/main.py", line 1, in <module>
         import iniconfig
     ModuleNotFoundError: No module named 'iniconfig'
-    "###);
+    "#);
 
     // But the script should be runnable.
     let test_non_script = context.temp_dir.child("main.py");
@@ -358,7 +382,7 @@ fn run_pep723_script() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -367,7 +391,7 @@ fn run_pep723_script() -> Result<()> {
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Audited 4 packages in [TIME]
-    "###);
+    ");
 
     // If the script contains a PEP 723 tag, it can omit the dependencies field.
     let test_script = context.temp_dir.child("main.py");
@@ -381,17 +405,17 @@ fn run_pep723_script() -> Result<()> {
     })?;
 
     // Running the script should install the requirements.
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     Hello, world!
 
     ----- stderr -----
-    "###);
+    ");
 
     // Running a script with `--locked` should warn.
-    uv_snapshot!(context.filters(), context.run().arg("--locked").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--locked").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -399,7 +423,7 @@ fn run_pep723_script() -> Result<()> {
 
     ----- stderr -----
     warning: No lockfile found for Python script (ignoring `--locked`); run `uv lock --script` to generate a lockfile
-    "###);
+    ");
 
     // If the script can't be resolved, we should reference the script.
     let test_script = context.temp_dir.child("main.py");
@@ -414,7 +438,7 @@ fn run_pep723_script() -> Result<()> {
     })?;
 
     // Running a script with `--group` should warn.
-    uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("main.py"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -422,7 +446,7 @@ fn run_pep723_script() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving script dependencies:
       ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
-    "###);
+    ");
 
     // If the script can't be resolved, we should reference the script.
     let test_script = context.temp_dir.child("main.py");
@@ -436,7 +460,7 @@ fn run_pep723_script() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("main.py"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -444,7 +468,7 @@ fn run_pep723_script() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving script dependencies:
       ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
-    "###);
+    ");
 
     // If the script contains an unclosed PEP 723 tag, we should error.
     let test_script = context.temp_dir.child("main.py");
@@ -461,74 +485,126 @@ fn run_pep723_script() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("main.py"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: An opening tag (`# /// script`) was found without a closing tag (`# ///`). Ensure that every line between the opening and closing tags (including empty lines) starts with a leading `#`.
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
 fn run_pep723_script_requires_python() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.9", "3.11"]);
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
 
-    // If we have a `.python-version` that's incompatible with the script, we should error.
+    // If we have a `.python-version` that's incompatible with the script, we should use the
+    // script's `requires-python` for Python discovery instead.
     let python_version = context.temp_dir.child(PYTHON_VERSION_FILENAME);
-    python_version.write_str("3.9")?;
+    python_version.write_str("3.11")?;
 
-    // If the script contains a PEP 723 tag, we should install its requirements.
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # ///
+
+        import platform
+        print(platform.python_version())
+       "#
+    })?;
+
+    // The `.python-version` (3.11) is incompatible with the script's `requires-python` (>=3.12),
+    // so uv should ignore it and discover a compatible Python (3.12) instead.
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12.[X]
+
+    ----- stderr -----
+    ");
+
+    // Deleting the `.python-version` file should not change the behavior.
+    fs_err::remove_file(&python_version)?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12.[X]
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// When a `.python-version` is compatible with a script's `requires-python`, the `.python-version`
+/// should be used.
+#[test]
+fn run_pep723_script_requires_python_compatible() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
+
+    let python_version = context.temp_dir.child(PYTHON_VERSION_FILENAME);
+    python_version.write_str("3.11")?;
+
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r#"
         # /// script
         # requires-python = ">=3.11"
-        # dependencies = [
-        #   "iniconfig",
-        # ]
         # ///
 
-        import iniconfig
-
-        x: str | int = "hello"
-        print(x)
+        import platform
+        print(platform.python_version())
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
-    ----- stderr -----
-    warning: The Python request from `.python-version` resolved to Python 3.9.[X], which is incompatible with the script's Python requirement: `>=3.11`
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + iniconfig==2.0.0
-    Traceback (most recent call last):
-      File "[TEMP_DIR]/main.py", line 10, in <module>
-        x: str | int = "hello"
-    TypeError: unsupported operand type(s) for |: 'type' and 'type'
-    "#);
-
-    // Delete the `.python-version` file to allow the script to run.
-    fs_err::remove_file(&python_version)?;
-
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    // The `.python-version` (3.11) is compatible with the script's `requires-python` (>=3.11),
+    // so it should be used.
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    hello
+    3.11.[X]
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + iniconfig==2.0.0
-    "###);
+    ");
+
+    Ok(())
+}
+
+/// When `.python-version` specifies an incompatible range, script `requires-python` should be used
+/// for discovery.
+#[test]
+fn run_pep723_script_requires_python_incompatible_range() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
+
+    let python_version = context.temp_dir.child(PYTHON_VERSION_FILENAME);
+    python_version.write_str(">3.8,<3.12")?;
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # ///
+
+        import platform
+        print(platform.python_version())
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12.[X]
+
+    ----- stderr -----
+    ");
 
     Ok(())
 }
@@ -536,7 +612,7 @@ fn run_pep723_script_requires_python() -> Result<()> {
 /// Run a `.pyw` script. The script should be executed with `pythonw.exe`.
 #[test]
 fn run_pythonw_script() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -547,10 +623,16 @@ fn run_pythonw_script() -> Result<()> {
         dependencies = ["anyio"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
+    context
+        .temp_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
 
     let test_script = context.temp_dir.child("main.pyw");
     test_script.write_str(indoc! { r"
@@ -558,7 +640,7 @@ fn run_pythonw_script() -> Result<()> {
        "
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("main.pyw"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.pyw"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -571,16 +653,16 @@ fn run_pythonw_script() -> Result<()> {
      + foo==1.0.0 (from file://[TEMP_DIR]/)
      + idna==3.6
      + sniffio==1.3.1
-    "###);
+    ");
 
     Ok(())
 }
 
 /// Run a PEP 723-compatible script with `tool.uv` metadata.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn run_pep723_script_metadata() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // If the script contains a PEP 723 tag, we should install its requirements.
     let test_script = context.temp_dir.child("main.py");
@@ -600,7 +682,7 @@ fn run_pep723_script_metadata() -> Result<()> {
     })?;
 
     // Running the script should fail without network access.
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -610,7 +692,7 @@ fn run_pep723_script_metadata() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==1.0.1
-    "###);
+    ");
 
     // Respect `tool.uv.sources`.
     let test_script = context.temp_dir.child("main.py");
@@ -630,7 +712,7 @@ fn run_pep723_script_metadata() -> Result<()> {
     })?;
 
     // The script should succeed with the specified source.
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -640,7 +722,7 @@ fn run_pep723_script_metadata() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
-    "###);
+    ");
 
     Ok(())
 }
@@ -648,7 +730,7 @@ fn run_pep723_script_metadata() -> Result<()> {
 /// Run a PEP 723-compatible script with a `[[tool.uv.index]]`.
 #[test]
 fn run_pep723_script_index() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r#"
@@ -671,7 +753,7 @@ fn run_pep723_script_index() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -681,7 +763,7 @@ fn run_pep723_script_index() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + idna==2.7
-    "###);
+    ");
 
     Ok(())
 }
@@ -689,7 +771,7 @@ fn run_pep723_script_index() -> Result<()> {
 /// Run a PEP 723-compatible script with `tool.uv` constraints.
 #[test]
 fn run_pep723_script_constraints() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r#"
@@ -707,7 +789,7 @@ fn run_pep723_script_constraints() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -719,7 +801,7 @@ fn run_pep723_script_constraints() -> Result<()> {
      + anyio==4.3.0
      + idna==3.0
      + sniffio==1.3.1
-    "###);
+    ");
 
     Ok(())
 }
@@ -727,7 +809,7 @@ fn run_pep723_script_constraints() -> Result<()> {
 /// Run a PEP 723-compatible script with `tool.uv` overrides.
 #[test]
 fn run_pep723_script_overrides() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r#"
@@ -745,7 +827,7 @@ fn run_pep723_script_overrides() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -757,7 +839,7 @@ fn run_pep723_script_overrides() -> Result<()> {
      + anyio==4.3.0
      + idna==2.0
      + sniffio==1.3.1
-    "###);
+    ");
 
     Ok(())
 }
@@ -765,7 +847,7 @@ fn run_pep723_script_overrides() -> Result<()> {
 /// Run a PEP 723-compatible script with `tool.uv` build constraints.
 #[test]
 fn run_pep723_script_build_constraints() -> Result<()> {
-    let context = TestContext::new("3.9");
+    let context = uv_test::test_context!("3.9");
 
     let test_script = context.temp_dir.child("main.py");
 
@@ -786,7 +868,7 @@ fn run_pep723_script_build_constraints() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -796,7 +878,7 @@ fn run_pep723_script_build_constraints() -> Result<()> {
       ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
       ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
-    "###);
+    ");
 
     // Compatible build constraints.
     test_script.write_str(indoc! { r#"
@@ -815,7 +897,7 @@ fn run_pep723_script_build_constraints() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -830,7 +912,7 @@ fn run_pep723_script_build_constraints() -> Result<()> {
      + requests==1.2.0
      + sniffio==1.3.1
      + typing-extensions==4.10.0
-    "###);
+    ");
 
     Ok(())
 }
@@ -838,7 +920,7 @@ fn run_pep723_script_build_constraints() -> Result<()> {
 /// Run a PEP 723-compatible script with a lockfile.
 #[test]
 fn run_pep723_script_lock() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r#"
@@ -856,7 +938,7 @@ fn run_pep723_script_lock() -> Result<()> {
     })?;
 
     // Without a lockfile, running with `--locked` should warn.
-    uv_snapshot!(context.filters(), context.run().arg("--locked").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--locked").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -868,17 +950,17 @@ fn run_pep723_script_lock() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     // Explicitly lock the script.
-    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     let lock = context.read("main.py.lock");
 
@@ -910,7 +992,7 @@ fn run_pep723_script_lock() -> Result<()> {
     });
 
     // Run the script.
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -919,10 +1001,10 @@ fn run_pep723_script_lock() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Audited 1 package in [TIME]
-    "###);
+    ");
 
     // With a lockfile, running with `--locked` should not warn.
-    uv_snapshot!(context.filters(), context.run().arg("--locked").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--locked").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -931,7 +1013,7 @@ fn run_pep723_script_lock() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Audited 1 package in [TIME]
-    "###);
+    ");
 
     // Modify the metadata.
     test_script.write_str(indoc! { r#"
@@ -949,7 +1031,7 @@ fn run_pep723_script_lock() -> Result<()> {
     })?;
 
     // Re-running the script with `--locked` should error.
-    uv_snapshot!(context.filters(), context.run().arg("--locked").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--locked").arg("main.py"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -957,10 +1039,10 @@ fn run_pep723_script_lock() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
-    "###);
+    ");
 
     // Re-running the script with `--frozen` should also error, but at runtime.
-    uv_snapshot!(context.filters(), context.run().arg("--frozen").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--frozen").arg("main.py"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -971,10 +1053,10 @@ fn run_pep723_script_lock() -> Result<()> {
       File "[TEMP_DIR]/main.py", line 8, in <module>
         import anyio
     ModuleNotFoundError: No module named 'anyio'
-    "###);
+    "#);
 
     // Re-running the script should update the lockfile.
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -987,7 +1069,7 @@ fn run_pep723_script_lock() -> Result<()> {
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
-    "###);
+    ");
 
     let lock = context.read("main.py.lock");
 
@@ -1046,7 +1128,7 @@ fn run_pep723_script_lock() -> Result<()> {
 /// With `managed = false`, we should avoid installing the project itself.
 #[test]
 fn run_managed_false() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -1057,29 +1139,29 @@ fn run_managed_false() -> Result<()> {
         dependencies = ["anyio"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv]
         managed = false
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     Python 3.12.[X]
 
     ----- stderr -----
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
 fn run_exact() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -1091,7 +1173,7 @@ fn run_exact() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import iniconfig"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import iniconfig"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1101,7 +1183,7 @@ fn run_exact() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     // Remove `iniconfig`.
     pyproject_toml.write_str(indoc! { r#"
@@ -1114,7 +1196,7 @@ fn run_exact() -> Result<()> {
     })?;
 
     // By default, `uv run` uses inexact semantics, so both `iniconfig` and `anyio` should still be available.
-    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import iniconfig; import anyio"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import iniconfig; import anyio"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1126,10 +1208,10 @@ fn run_exact() -> Result<()> {
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
-    "###);
+    ");
 
     // But under `--exact`, `iniconfig` should not be available.
-    uv_snapshot!(context.filters(), context.run().arg("--exact").arg("python").arg("-c").arg("import iniconfig"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--exact").arg("python").arg("-c").arg("import iniconfig"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1141,14 +1223,14 @@ fn run_exact() -> Result<()> {
     Traceback (most recent call last):
       File "<string>", line 1, in <module>
     ModuleNotFoundError: No module named 'iniconfig'
-    "###);
+    "#);
 
     Ok(())
 }
 
 #[test]
 fn run_with() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -1159,10 +1241,16 @@ fn run_with() -> Result<()> {
         dependencies = ["sniffio==1.3.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
+    context
+        .temp_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
 
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r"
@@ -1173,7 +1261,7 @@ fn run_with() -> Result<()> {
     })?;
 
     // Requesting an unsatisfied requirement should install it.
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main.py"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1192,7 +1280,7 @@ fn run_with() -> Result<()> {
     ");
 
     // Requesting a satisfied requirement should use the base environment.
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("sniffio").arg("main.py"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("sniffio").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1204,7 +1292,7 @@ fn run_with() -> Result<()> {
     ");
 
     // Unless the user requests a different version.
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("sniffio<1.3.0").arg("main.py"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("sniffio<1.3.0").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1222,7 +1310,7 @@ fn run_with() -> Result<()> {
     // If we request a dependency that isn't in the base environment, we should still respect any
     // other dependencies. In this case, `sniffio==1.3.0` is not the latest-compatible version, but
     // we should use it anyway.
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("anyio").arg("main.py"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("anyio").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1240,7 +1328,7 @@ fn run_with() -> Result<()> {
     ");
 
     // Even if we run with` --no-sync`.
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("anyio==4.2.0").arg("--no-sync").arg("main.py"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("anyio==4.2.0").arg("--no-sync").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1256,7 +1344,7 @@ fn run_with() -> Result<()> {
     ");
 
     // If the dependencies can't be resolved, we should reference `--with`.
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("add").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("add").arg("main.py"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1266,7 +1354,7 @@ fn run_with() -> Result<()> {
     Audited 2 packages in [TIME]
       × No solution found when resolving `--with` dependencies:
       ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
-    "###);
+    ");
 
     Ok(())
 }
@@ -1276,7 +1364,7 @@ fn run_with() -> Result<()> {
 /// search paths are available in these ephemeral environments.
 #[test]
 fn run_with_pyvenv_cfg_file() -> Result<()> {
-    let context = TestContext::new("3.12").with_pyvenv_cfg_filters();
+    let context = uv_test::test_context!("3.12").with_pyvenv_cfg_filters();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -1286,10 +1374,16 @@ fn run_with_pyvenv_cfg_file() -> Result<()> {
         requires-python = ">=3.8"
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
+    context
+        .temp_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
 
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r#"
@@ -1300,7 +1394,7 @@ fn run_with_pyvenv_cfg_file() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main.py"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1328,7 +1422,7 @@ fn run_with_pyvenv_cfg_file() -> Result<()> {
 
 #[test]
 fn run_with_overlay_interpreter() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -1339,8 +1433,8 @@ fn run_with_overlay_interpreter() -> Result<()> {
         dependencies = ["anyio"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [project.scripts]
         main = "foo:main"
@@ -1382,7 +1476,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
     })?;
 
     // The project's entrypoint should be rewritten to use the overlay interpreter.
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main").arg(context.temp_dir.child("main").as_os_str()), @r"
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main").arg(context.temp_dir.child("main").as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1421,7 +1515,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
         filters => context.filters(),
     }, {
             assert_snapshot!(
-                context.read("main"), @r##"
+                context.read("main"), @r#"
             #![CACHE_DIR]/builds-v0/[TMP]/python
             # -*- coding: utf-8 -*-
             import sys
@@ -1432,7 +1526,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
                 elif sys.argv[0].endswith(".exe"):
                     sys.argv[0] = sys.argv[0][:-4]
                 sys.exit(main())
-            "##
+            "#
             );
         }
     );
@@ -1449,7 +1543,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
         .success();
 
     // When layering the project on top (via `--with`), the overlay interpreter also should be used.
-    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--with").arg(".").arg("main"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--with").arg(".").arg("main"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1478,7 +1572,12 @@ fn run_with_overlay_interpreter() -> Result<()> {
     ");
 
     // Switch to a relocatable virtual environment.
-    context.venv().arg("--relocatable").assert().success();
+    context
+        .venv()
+        .arg("--allow-existing")
+        .arg("--relocatable")
+        .assert()
+        .success();
 
     // Cleanup previous shutil
     fs_err::remove_file(context.temp_dir.child("main"))?;
@@ -1486,7 +1585,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
     fs_err::remove_file(context.temp_dir.child("main_gui"))?;
 
     // The project's entrypoint should be rewritten to use the overlay interpreter.
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main").arg(context.temp_dir.child("main").as_os_str()), @r"
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main").arg(context.temp_dir.child("main").as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1528,7 +1627,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
         filters => context.filters(),
     }, {
             assert_snapshot!(
-                context.read("main"), @r##"
+                context.read("main"), @r#"
             #![CACHE_DIR]/builds-v0/[TMP]/python
             # -*- coding: utf-8 -*-
             import sys
@@ -1539,13 +1638,13 @@ fn run_with_overlay_interpreter() -> Result<()> {
                 elif sys.argv[0].endswith(".exe"):
                     sys.argv[0] = sys.argv[0][:-4]
                 sys.exit(main())
-            "##
+            "#
             );
         }
     );
 
     // When layering the project on top (via `--with`), the overlay interpreter also should be used.
-    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--with").arg(".").arg("main"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--with").arg(".").arg("main"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1572,7 +1671,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
 
 #[test]
 fn run_with_build_constraints() -> Result<()> {
-    let context = TestContext::new("3.9");
+    let context = uv_test::test_context!("3.9");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -1594,7 +1693,7 @@ fn run_with_build_constraints() -> Result<()> {
     })?;
 
     // Installing requests with incompatible build constraints should fail.
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("requests==1.2").arg("main.py"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("requests==1.2").arg("main.py"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1627,7 +1726,7 @@ fn run_with_build_constraints() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("requests==1.2").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("requests==1.2").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1639,7 +1738,7 @@ fn run_with_build_constraints() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + requests==1.2.0
-    "###);
+    ");
 
     Ok(())
 }
@@ -1647,7 +1746,7 @@ fn run_with_build_constraints() -> Result<()> {
 /// Sync all members in a workspace.
 #[test]
 fn run_in_workspace() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1723,7 +1822,7 @@ fn run_in_workspace() -> Result<()> {
        "
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1736,7 +1835,7 @@ fn run_in_workspace() -> Result<()> {
      + idna==3.6
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
-    "###);
+    ");
 
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r"
@@ -1744,7 +1843,7 @@ fn run_in_workspace() -> Result<()> {
        "
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1756,9 +1855,9 @@ fn run_in_workspace() -> Result<()> {
       File "[TEMP_DIR]/main.py", line 1, in <module>
         import iniconfig
     ModuleNotFoundError: No module named 'iniconfig'
-    "###);
+    "#);
 
-    uv_snapshot!(context.filters(), context.run().arg("--package").arg("child1").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--package").arg("child1").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1769,7 +1868,7 @@ fn run_in_workspace() -> Result<()> {
     Installed 2 packages in [TIME]
      + child1==0.1.0 (from file://[TEMP_DIR]/child1)
      + iniconfig==2.0.0
-    "###);
+    ");
 
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r"
@@ -1777,7 +1876,7 @@ fn run_in_workspace() -> Result<()> {
        "
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1789,9 +1888,9 @@ fn run_in_workspace() -> Result<()> {
       File "[TEMP_DIR]/main.py", line 1, in <module>
         import typing_extensions
     ModuleNotFoundError: No module named 'typing_extensions'
-    "###);
+    "#);
 
-    uv_snapshot!(context.filters(), context.run().arg("--all-packages").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--all-packages").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1802,26 +1901,24 @@ fn run_in_workspace() -> Result<()> {
     Installed 2 packages in [TIME]
      + child2==0.1.0 (from file://[TEMP_DIR]/child2)
      + typing-extensions==4.10.0
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
 fn run_with_editable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
     copy_dir_all(
-        context.workspace_root.join("scripts/packages/anyio_local"),
+        context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
 
     let black_editable = context.temp_dir.child("src").child("black_editable");
     copy_dir_all(
-        context
-            .workspace_root
-            .join("scripts/packages/black_editable"),
+        context.workspace_root.join("test/packages/black_editable"),
         &black_editable,
     )?;
 
@@ -1853,7 +1950,7 @@ fn run_with_editable() -> Result<()> {
     })?;
 
     // Requesting an editable requirement should install it in a layer.
-    uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg("./src/black_editable").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg("./src/black_editable").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1870,10 +1967,10 @@ fn run_with_editable() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==0.1.0 (from file://[TEMP_DIR]/src/black_editable)
-    "###);
+    ");
 
     // Requesting an editable requirement should install it in a layer, even if it satisfied
-    uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg("./src/anyio_local").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg("./src/anyio_local").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1885,10 +1982,10 @@ fn run_with_editable() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + anyio==4.3.0+foo (from file://[TEMP_DIR]/src/anyio_local)
-    "###);
+    ");
 
     // Requesting the project itself should use the base environment.
-    uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg(".").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg(".").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1896,7 +1993,7 @@ fn run_with_editable() -> Result<()> {
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Audited 4 packages in [TIME]
-    "###);
+    ");
 
     // Similarly, an already editable requirement does not require a layer
     pyproject_toml.write_str(indoc! { r#"
@@ -1915,7 +2012,7 @@ fn run_with_editable() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1929,9 +2026,9 @@ fn run_with_editable() -> Result<()> {
      + anyio==4.3.0+foo (from file://[TEMP_DIR]/src/anyio_local)
      ~ foo==1.0.0 (from file://[TEMP_DIR]/)
      - idna==3.6
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg("./src/anyio_local").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg("./src/anyio_local").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1939,10 +2036,10 @@ fn run_with_editable() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Audited 3 packages in [TIME]
-    "###);
+    ");
 
     // If invalid, we should reference `--with-editable`.
-    uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg("./foo").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg("./foo").arg("main.py"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1952,14 +2049,14 @@ fn run_with_editable() -> Result<()> {
     Audited 3 packages in [TIME]
       × Failed to resolve `--with` requirement
       ╰─▶ Distribution not found at: file://[TEMP_DIR]/foo
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
 fn run_group() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2001,7 +2098,7 @@ fn run_group() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2015,9 +2112,9 @@ fn run_group() -> Result<()> {
     Installed 2 packages in [TIME]
      + sniffio==1.3.1
      + typing-extensions==4.10.0
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.run().arg("--only-group").arg("bar").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--only-group").arg("bar").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2030,9 +2127,9 @@ fn run_group() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2046,9 +2143,9 @@ fn run_group() -> Result<()> {
     Installed 2 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("--group").arg("bar").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("--group").arg("bar").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2059,9 +2156,9 @@ fn run_group() -> Result<()> {
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Audited 5 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.run().arg("--all-groups").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--all-groups").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2072,9 +2169,9 @@ fn run_group() -> Result<()> {
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Audited 5 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.run().arg("--all-groups").arg("--no-group").arg("bar").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--all-groups").arg("--no-group").arg("bar").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2085,9 +2182,9 @@ fn run_group() -> Result<()> {
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Audited 4 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("--no-project").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("--no-project").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2097,9 +2194,9 @@ fn run_group() -> Result<()> {
 
     ----- stderr -----
     warning: `--group foo` has no effect when used alongside `--no-project`
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("--group").arg("bar").arg("--no-project").arg("main.py"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("--group").arg("bar").arg("--no-project").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2111,7 +2208,7 @@ fn run_group() -> Result<()> {
     warning: `--group` has no effect when used alongside `--no-project`
     ");
 
-    uv_snapshot!(context.filters(), context.run().arg("--group").arg("dev").arg("--no-project").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--group").arg("dev").arg("--no-project").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2121,9 +2218,9 @@ fn run_group() -> Result<()> {
 
     ----- stderr -----
     warning: `--group dev` has no effect when used alongside `--no-project`
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.run().arg("--all-groups").arg("--no-project").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--all-groups").arg("--no-project").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2133,9 +2230,9 @@ fn run_group() -> Result<()> {
 
     ----- stderr -----
     warning: `--all-groups` has no effect when used alongside `--no-project`
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.run().arg("--dev").arg("--no-project").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--dev").arg("--no-project").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2145,14 +2242,14 @@ fn run_group() -> Result<()> {
 
     ----- stderr -----
     warning: `--dev` has no effect when used alongside `--no-project`
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
 fn run_locked() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2164,20 +2261,26 @@ fn run_locked() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
 
     // Running with `--locked` should error, if no lockfile is present.
-    uv_snapshot!(context.filters(), context.run().arg("--locked").arg("--").arg("python").arg("--version"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--locked").arg("--").arg("python").arg("--version"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`.
-    "###);
+    error: Unable to find lockfile at `uv.lock`, but `--locked` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    ");
 
     // Lock the initial requirements.
     context.lock().assert().success();
@@ -2251,13 +2354,13 @@ fn run_locked() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
     // Running with `--locked` should error.
-    uv_snapshot!(context.filters(), context.run().arg("--locked").arg("--").arg("python").arg("--version"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--locked").arg("--").arg("python").arg("--version"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2265,7 +2368,7 @@ fn run_locked() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
-    "###);
+    ");
 
     let updated = context.read("uv.lock");
 
@@ -2273,7 +2376,7 @@ fn run_locked() -> Result<()> {
     assert_eq!(existing, updated);
 
     // Lock the updated requirements.
-    uv_snapshot!(context.lock(), @r###"
+    uv_snapshot!(context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2284,20 +2387,20 @@ fn run_locked() -> Result<()> {
     Removed idna v3.6
     Added iniconfig v2.0.0
     Removed sniffio v1.3.1
-    "###);
+    ");
 
     // Lock the updated requirements.
-    uv_snapshot!(context.lock(), @r###"
+    uv_snapshot!(context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Running with `--locked` should succeed.
-    uv_snapshot!(context.filters(), context.run().arg("--locked").arg("--").arg("python").arg("--version"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--locked").arg("--").arg("python").arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2309,14 +2412,14 @@ fn run_locked() -> Result<()> {
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
      + project==0.1.0 (from file://[TEMP_DIR]/)
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
 fn run_frozen() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2328,20 +2431,26 @@ fn run_frozen() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
 
     // Running with `--frozen` should error, if no lockfile is present.
-    uv_snapshot!(context.filters(), context.run().arg("--frozen").arg("--").arg("python").arg("--version"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--frozen").arg("--").arg("python").arg("--version"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`.
-    "###);
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    ");
 
     context.lock().assert().success();
 
@@ -2355,13 +2464,13 @@ fn run_frozen() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
     // Running with `--frozen` should install the stale lockfile.
-    uv_snapshot!(context.filters(), context.run().arg("--frozen").arg("--").arg("python").arg("--version"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--frozen").arg("--").arg("python").arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2374,14 +2483,14 @@ fn run_frozen() -> Result<()> {
      + idna==3.6
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
 fn run_no_sync() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2393,51 +2502,122 @@ fn run_no_sync() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
 
     // Running with `--no-sync` should succeed error, even if the lockfile isn't present.
-    uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("--").arg("python").arg("--version"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("--").arg("python").arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     Python 3.12.[X]
 
     ----- stderr -----
-    "###);
+    ");
 
     context.lock().assert().success();
 
     // Running with `--no-sync` should not install any requirements.
-    uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("--").arg("python").arg("--version"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("--").arg("python").arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     Python 3.12.[X]
 
     ----- stderr -----
-    "###);
+    ");
 
     context.sync().assert().success();
 
     // But it should have access to the installed packages.
-    uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("--").arg("python").arg("-c").arg("import anyio; print(anyio.__name__)"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("--").arg("python").arg("-c").arg("import anyio; print(anyio.__name__)"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     anyio
 
     ----- stderr -----
-    "###);
+    ");
+
+    Ok(())
+}
+
+/// Test that `UV_NO_SYNC=1` environment variable works for `uv run`.
+///
+/// See: <https://github.com/astral-sh/uv/issues/17390>
+#[test]
+fn run_no_sync_env_var() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
+    // Running with `UV_NO_SYNC=1` should succeed, even if the lockfile isn't present.
+    uv_snapshot!(context.filters(), context.run().env(EnvVars::UV_NO_SYNC, "1").arg("--").arg("python").arg("--version"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    ");
+
+    context.lock().assert().success();
+
+    // Running with `UV_NO_SYNC=1` should not install any requirements.
+    uv_snapshot!(context.filters(), context.run().env(EnvVars::UV_NO_SYNC, "1").arg("--").arg("python").arg("--version"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    ");
+
+    context.sync().assert().success();
+
+    // But it should have access to the installed packages.
+    uv_snapshot!(context.filters(), context.run().env(EnvVars::UV_NO_SYNC, "1").arg("--").arg("python").arg("-c").arg("import anyio; print(anyio.__name__)"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    anyio
+
+    ----- stderr -----
+    ");
 
     Ok(())
 }
 
 #[test]
 fn run_empty_requirements_txt() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -2448,10 +2628,16 @@ fn run_empty_requirements_txt() -> Result<()> {
         dependencies = ["anyio", "sniffio==1.3.1"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
+    context
+        .temp_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
 
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r"
@@ -2464,7 +2650,7 @@ fn run_empty_requirements_txt() -> Result<()> {
     requirements_txt.touch()?;
 
     // The project environment is synced on the first invocation.
-    uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2478,10 +2664,10 @@ fn run_empty_requirements_txt() -> Result<()> {
      + idna==3.6
      + sniffio==1.3.1
     warning: Requirements file `requirements.txt` does not contain any dependencies
-    "###);
+    ");
 
     // Then reused in subsequent invocations
-    uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2490,14 +2676,14 @@ fn run_empty_requirements_txt() -> Result<()> {
     Resolved 6 packages in [TIME]
     Audited 4 packages in [TIME]
     warning: Requirements file `requirements.txt` does not contain any dependencies
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
 fn run_requirements_txt() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -2508,10 +2694,16 @@ fn run_requirements_txt() -> Result<()> {
         dependencies = ["anyio", "sniffio==1.3.1"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
+    context
+        .temp_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
 
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r"
@@ -2523,7 +2715,7 @@ fn run_requirements_txt() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("iniconfig")?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2540,12 +2732,12 @@ fn run_requirements_txt() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     // Requesting a satisfied requirement should use the base environment.
     requirements_txt.write_str("sniffio")?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2553,12 +2745,12 @@ fn run_requirements_txt() -> Result<()> {
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Audited 4 packages in [TIME]
-    "###);
+    ");
 
     // Unless the user requests a different version.
     requirements_txt.write_str("sniffio<1.3.1")?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2570,7 +2762,7 @@ fn run_requirements_txt() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + sniffio==1.3.0
-    "###);
+    ");
 
     // Or includes an unsatisfied requirement via `--with`.
     requirements_txt.write_str("sniffio")?;
@@ -2580,7 +2772,7 @@ fn run_requirements_txt() -> Result<()> {
         .arg(requirements_txt.as_os_str())
         .arg("--with")
         .arg("iniconfig")
-        .arg("main.py"), @r###"
+        .arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2592,7 +2784,7 @@ fn run_requirements_txt() -> Result<()> {
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
      + sniffio==1.3.1
-    "###);
+    ");
 
     // Allow `-` for stdin.
     uv_snapshot!(context.filters(), context.run()
@@ -2601,7 +2793,7 @@ fn run_requirements_txt() -> Result<()> {
         .arg("--with")
         .arg("iniconfig")
         .arg("main.py")
-        .stdin(std::fs::File::open(&requirements_txt)?), @r###"
+        .stdin(std::fs::File::open(&requirements_txt)?), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2610,7 +2802,7 @@ fn run_requirements_txt() -> Result<()> {
     Resolved 6 packages in [TIME]
     Audited 4 packages in [TIME]
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // But not in combination with reading the script from stdin
     uv_snapshot!(context.filters(), context.run()
@@ -2618,28 +2810,28 @@ fn run_requirements_txt() -> Result<()> {
         .arg("-")
         // The script to run
         .arg("-")
-        .stdin(std::fs::File::open(&requirements_txt)?), @r###"
+        .stdin(std::fs::File::open(&requirements_txt)?), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Cannot read both requirements file and script from stdin
-    "###);
+    ");
 
     uv_snapshot!(context.filters(), context.run()
         .arg("--with-requirements")
         .arg("-")
         .arg("--script")
         .arg("-")
-        .stdin(std::fs::File::open(&requirements_txt)?), @r###"
+        .stdin(std::fs::File::open(&requirements_txt)?), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Cannot read both requirements file and script from stdin
-    "###);
+    ");
 
     Ok(())
 }
@@ -2647,7 +2839,7 @@ fn run_requirements_txt() -> Result<()> {
 /// Ignore and warn when (e.g.) the `--index-url` argument is a provided `requirements.txt`.
 #[test]
 fn run_requirements_txt_arguments() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -2658,10 +2850,16 @@ fn run_requirements_txt_arguments() -> Result<()> {
         dependencies = ["typing_extensions"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
+    context
+        .temp_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
 
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r"
@@ -2677,7 +2875,7 @@ fn run_requirements_txt_arguments() -> Result<()> {
         "
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2693,7 +2891,7 @@ fn run_requirements_txt_arguments() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + idna==3.6
-    "###);
+    ");
 
     Ok(())
 }
@@ -2701,7 +2899,7 @@ fn run_requirements_txt_arguments() -> Result<()> {
 /// Ensure that we can import from the root project when layering `--with` requirements.
 #[test]
 fn run_editable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -2712,8 +2910,8 @@ fn run_editable() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
 
@@ -2731,7 +2929,7 @@ fn run_editable() -> Result<()> {
     })?;
 
     // We treat arguments before the command as uv arguments
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2746,7 +2944,7 @@ fn run_editable() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     Ok(())
 }
@@ -2754,7 +2952,7 @@ fn run_editable() -> Result<()> {
 #[test]
 fn run_from_directory() -> Result<()> {
     // Default to 3.11 so that the `.python-version` is meaningful.
-    let context = TestContext::new_with_versions(&["3.10", "3.11", "3.12"])
+    let context = uv_test::test_context_with_versions!(&["3.10", "3.11", "3.12"])
         .with_filtered_missing_file_error();
 
     let project_dir = context.temp_dir.child("project");
@@ -2804,7 +3002,7 @@ fn run_from_directory() -> Result<()> {
 
     // Use `--project`, which resolves configuration relative to the provided directory, but paths
     // relative to the current working directory.
-    uv_snapshot!(filters.clone(), context.run().arg("--project").arg("project").arg("main"), @r###"
+    uv_snapshot!(filters.clone(), context.run().arg("--project").arg("project").arg("main"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2818,10 +3016,10 @@ fn run_from_directory() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + foo==1.0.0 (from file://[TEMP_DIR]/project)
-    "###);
+    ");
 
     fs_err::remove_dir_all(context.temp_dir.join("project").join(".venv"))?;
-    uv_snapshot!(filters.clone(), context.run().arg("--project").arg("project").arg("./project/main.py"), @r###"
+    uv_snapshot!(filters.clone(), context.run().arg("--project").arg("project").arg("./project/main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2833,11 +3031,11 @@ fn run_from_directory() -> Result<()> {
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + foo==1.0.0 (from file://[TEMP_DIR]/project)
-    "###);
+    ");
 
     // Use `--directory`, which switches to the provided directory entirely.
     fs_err::remove_dir_all(context.temp_dir.join("project").join(".venv"))?;
-    uv_snapshot!(filters.clone(), context.run().arg("--directory").arg("project").arg("main"), @r###"
+    uv_snapshot!(filters.clone(), context.run().arg("--directory").arg("project").arg("main"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2850,10 +3048,10 @@ fn run_from_directory() -> Result<()> {
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + foo==1.0.0 (from file://[TEMP_DIR]/project)
-    "###);
+    ");
 
     fs_err::remove_dir_all(context.temp_dir.join("project").join(".venv"))?;
-    uv_snapshot!(filters.clone(), context.run().arg("--directory").arg("project").arg("./main.py"), @r###"
+    uv_snapshot!(filters.clone(), context.run().arg("--directory").arg("project").arg("./main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2865,10 +3063,10 @@ fn run_from_directory() -> Result<()> {
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + foo==1.0.0 (from file://[TEMP_DIR]/project)
-    "###);
+    ");
 
     fs_err::remove_dir_all(context.temp_dir.join("project").join(".venv"))?;
-    uv_snapshot!(filters.clone(), context.run().arg("--directory").arg("project").arg("./project/main.py"), @r###"
+    uv_snapshot!(filters.clone(), context.run().arg("--directory").arg("project").arg("./project/main.py"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2882,7 +3080,7 @@ fn run_from_directory() -> Result<()> {
      + foo==1.0.0 (from file://[TEMP_DIR]/project)
     error: Failed to spawn: `./project/main.py`
       Caused by: [OS ERROR 2]
-    "###);
+    ");
 
     // Even if we write a `.python-version` file in the current directory, we should prefer the
     // one in the project directory in both cases.
@@ -2896,7 +3094,7 @@ fn run_from_directory() -> Result<()> {
         .write_str("3.10")?;
 
     fs_err::remove_dir_all(context.temp_dir.join("project").join(".venv"))?;
-    uv_snapshot!(filters.clone(), context.run().arg("--project").arg("project").arg("main"), @r###"
+    uv_snapshot!(filters.clone(), context.run().arg("--project").arg("project").arg("main"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2909,10 +3107,10 @@ fn run_from_directory() -> Result<()> {
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + foo==1.0.0 (from file://[TEMP_DIR]/project)
-    "###);
+    ");
 
     fs_err::remove_dir_all(context.temp_dir.join("project").join(".venv"))?;
-    uv_snapshot!(filters.clone(), context.run().arg("--directory").arg("project").arg("main"), @r###"
+    uv_snapshot!(filters.clone(), context.run().arg("--directory").arg("project").arg("main"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2925,7 +3123,7 @@ fn run_from_directory() -> Result<()> {
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + foo==1.0.0 (from file://[TEMP_DIR]/project)
-    "###);
+    ");
 
     Ok(())
 }
@@ -2933,7 +3131,7 @@ fn run_from_directory() -> Result<()> {
 /// By default, omit resolver and installer output.
 #[test]
 fn run_without_output() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -2944,10 +3142,16 @@ fn run_without_output() -> Result<()> {
         dependencies = ["anyio", "sniffio==1.3.1"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
+    context
+        .temp_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
 
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r"
@@ -2956,7 +3160,7 @@ fn run_without_output() -> Result<()> {
     })?;
 
     // On the first run, we only show the summary line for each environment.
-    uv_snapshot!(context.filters(), context.run().env_remove(EnvVars::UV_SHOW_RESOLUTION).arg("--with").arg("iniconfig").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().env_remove(EnvVars::UV_SHOW_RESOLUTION).arg("--with").arg("iniconfig").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2964,16 +3168,16 @@ fn run_without_output() -> Result<()> {
     ----- stderr -----
     Installed 4 packages in [TIME]
     Installed 1 package in [TIME]
-    "###);
+    ");
 
     // Subsequent runs are quiet.
-    uv_snapshot!(context.filters(), context.run().env_remove(EnvVars::UV_SHOW_RESOLUTION).arg("--with").arg("iniconfig").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().env_remove(EnvVars::UV_SHOW_RESOLUTION).arg("--with").arg("iniconfig").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    "###);
+    ");
 
     Ok(())
 }
@@ -2981,7 +3185,7 @@ fn run_without_output() -> Result<()> {
 /// Ensure that we can import from the root project when layering `--with` requirements.
 #[test]
 fn run_isolated_python_version() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.9", "3.12"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -3011,7 +3215,7 @@ fn run_isolated_python_version() -> Result<()> {
        "
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3029,9 +3233,9 @@ fn run_isolated_python_version() -> Result<()> {
      + idna==3.6
      + sniffio==1.3.1
      + typing-extensions==4.10.0
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.run().arg("--isolated").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--isolated").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3046,7 +3250,7 @@ fn run_isolated_python_version() -> Result<()> {
      + idna==3.6
      + sniffio==1.3.1
      + typing-extensions==4.10.0
-    "###);
+    ");
 
     // Set the `.python-version` to `3.12`.
     context
@@ -3054,7 +3258,7 @@ fn run_isolated_python_version() -> Result<()> {
         .child(PYTHON_VERSION_FILENAME)
         .write_str("3.12")?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--isolated").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--isolated").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3067,7 +3271,7 @@ fn run_isolated_python_version() -> Result<()> {
      + foo==1.0.0 (from file://[TEMP_DIR]/)
      + idna==3.6
      + sniffio==1.3.1
-    "###);
+    ");
 
     Ok(())
 }
@@ -3075,7 +3279,7 @@ fn run_isolated_python_version() -> Result<()> {
 /// Ignore the existing project when executing with `--no-project`.
 #[test]
 fn run_no_project() -> Result<()> {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix();
@@ -3101,7 +3305,7 @@ fn run_no_project() -> Result<()> {
     init.touch()?;
 
     // `run` should run in the context of the project.
-    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import sys; print(sys.executable)"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3119,7 +3323,7 @@ fn run_no_project() -> Result<()> {
 
     // `run --no-project` should not (but it should still run in the same environment, as it would
     // if there were no project at all).
-    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3129,7 +3333,7 @@ fn run_no_project() -> Result<()> {
     ");
 
     // `run --no-project --isolated` should run in an entirely isolated environment.
-    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--isolated").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--isolated").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3140,7 +3344,7 @@ fn run_no_project() -> Result<()> {
 
     // `run --no-project` should not (but it should still run in the same environment, as it would
     // if there were no project at all).
-    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3150,7 +3354,7 @@ fn run_no_project() -> Result<()> {
     ");
 
     // `run --no-project --locked` should fail.
-    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--locked").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--locked").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3165,7 +3369,7 @@ fn run_no_project() -> Result<()> {
 
 #[test]
 fn run_stdin() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r#"
@@ -3175,21 +3379,21 @@ fn run_stdin() -> Result<()> {
 
     let mut command = context.run();
     let command_with_args = command.stdin(std::fs::File::open(test_script)?).arg("-");
-    uv_snapshot!(context.filters(), command_with_args, @r###"
+    uv_snapshot!(context.filters(), command_with_args, @"
     success: true
     exit_code: 0
     ----- stdout -----
     Hello, world!
 
     ----- stderr -----
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
 fn run_package() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let main_script = context.temp_dir.child("__main__.py");
     main_script.write_str(indoc! { r#"
@@ -3197,21 +3401,21 @@ fn run_package() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("."), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("."), @"
     success: true
     exit_code: 0
     ----- stdout -----
     Hello, world!
 
     ----- stderr -----
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
 fn run_zipapp() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create a zipapp.
     let child = context.temp_dir.child("app");
@@ -3236,47 +3440,47 @@ fn run_zipapp() -> Result<()> {
     assert!(status.success());
 
     // Run the zipapp.
-    uv_snapshot!(context.filters(), context.run().arg(zipapp.as_ref()), @r###"
+    uv_snapshot!(context.filters(), context.run().arg(zipapp.as_ref()), @"
     success: true
     exit_code: 0
     ----- stdout -----
     Hello, world!
 
     ----- stderr -----
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
 fn run_stdin_args() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
-    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import sys; print(sys.argv)").arg("foo").arg("bar"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import sys; print(sys.argv)").arg("foo").arg("bar"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     ['-c', 'foo', 'bar']
 
     ----- stderr -----
-    "###);
+    ");
 }
 
 /// Run a module equivalent to `python -m foo`.
 #[test]
 fn run_module() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
-    uv_snapshot!(context.filters(), context.run().arg("-m").arg("__hello__"), @r#"
+    uv_snapshot!(context.filters(), context.run().arg("-m").arg("__hello__"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     Hello world!
 
     ----- stderr -----
-    "#);
+    ");
 
-    uv_snapshot!(context.filters(), context.run().arg("-m").arg("http.server").arg("-h"), @r#"
+    uv_snapshot!(context.filters(), context.run().arg("-m").arg("http.server").arg("-h"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3296,27 +3500,27 @@ fn run_module() {
                             conform to this HTTP version (default: HTTP/1.0)
 
     ----- stderr -----
-    "#);
+    ");
 }
 
 #[test]
 fn run_module_stdin() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
-    uv_snapshot!(context.filters(), context.run().arg("-m").arg("-"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("-m").arg("-"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Cannot run a Python module from stdin
-    "###);
+    ");
 }
 
-/// When the `pyproject.toml` file is invalid.
+/// Test for how run reacts to a pyproject.toml without a `[project]`
 #[test]
-fn run_project_toml_error() -> Result<()> {
-    let context = TestContext::new("3.12")
+fn virtual_empty() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix();
@@ -3331,18 +3535,21 @@ fn run_project_toml_error() -> Result<()> {
     let init = src.child("__init__.py");
     init.touch()?;
 
-    // `run` should fail
-    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r"
-    success: false
-    exit_code: 2
+    // `run` should work fine
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import sys; print(sys.executable)"), @"
+    success: true
+    exit_code: 0
     ----- stdout -----
+    [VENV]/[BIN]/[PYTHON]
 
     ----- stderr -----
-    error: No `project` table found in: `[TEMP_DIR]/pyproject.toml`
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved in [TIME]
+    Audited in [TIME]
     ");
 
-    // `run --no-project` should not
-    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r"
+    // `run --no-project` should also work fine
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3356,7 +3563,7 @@ fn run_project_toml_error() -> Result<()> {
 
 #[test]
 fn run_isolated_incompatible_python() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.9", "3.11"]);
+    let context = uv_test::test_context_with_versions!(&["3.9", "3.11"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -3385,7 +3592,7 @@ fn run_isolated_incompatible_python() -> Result<()> {
     })?;
 
     // We should reject Python 3.9...
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3397,7 +3604,7 @@ fn run_isolated_incompatible_python() -> Result<()> {
     ");
 
     // ...even if `--isolated` is provided.
-    uv_snapshot!(context.filters(), context.run().arg("--isolated").arg("main.py"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("--isolated").arg("main.py"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3412,7 +3619,7 @@ fn run_isolated_incompatible_python() -> Result<()> {
 
 #[test]
 fn run_isolated_does_not_modify_lock() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -3425,10 +3632,16 @@ fn run_isolated_does_not_modify_lock() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
+    context
+        .temp_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r#"
         import importlib.metadata
@@ -3439,7 +3652,7 @@ fn run_isolated_does_not_modify_lock() -> Result<()> {
     // Run with --isolated
     uv_snapshot!(context.filters(), context.run()
         .arg("--isolated")
-        .arg("main.py"), @r"
+        .arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3462,7 +3675,7 @@ fn run_isolated_does_not_modify_lock() -> Result<()> {
         .assert(predicate::path::missing());
 
     // Create initial lock with default resolution
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3486,7 +3699,7 @@ fn run_isolated_does_not_modify_lock() -> Result<()> {
         .arg("--isolated")
         .arg("--resolution")
         .arg("lowest-direct")
-        .arg("main.py"), @r"
+        .arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3515,7 +3728,7 @@ fn run_isolated_does_not_modify_lock() -> Result<()> {
 
 #[test]
 fn run_isolated_with_frozen() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -3528,10 +3741,16 @@ fn run_isolated_with_frozen() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
+    context
+        .temp_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r#"
         import importlib.metadata
@@ -3543,7 +3762,7 @@ fn run_isolated_with_frozen() -> Result<()> {
     uv_snapshot!(context.filters(), context.run()
         .arg("--resolution")
         .arg("lowest-direct")
-        .arg("main.py"), @r"
+        .arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3564,7 +3783,7 @@ fn run_isolated_with_frozen() -> Result<()> {
     uv_snapshot!(context.filters(), context.run()
         .arg("--isolated")
         .arg("--frozen")
-        .arg("main.py"), @r"
+        .arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3583,7 +3802,7 @@ fn run_isolated_with_frozen() -> Result<()> {
 
 #[test]
 fn run_compiled_python_file() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Write a non-PEP 723 script.
     let test_non_script = context.temp_dir.child("main.py");
@@ -3593,14 +3812,14 @@ fn run_compiled_python_file() -> Result<()> {
     })?;
 
     // Run a non-PEP 723 script.
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     Hello, world!
 
     ----- stderr -----
-    "###);
+    ");
 
     let compile_output = context
         .run()
@@ -3617,14 +3836,14 @@ fn run_compiled_python_file() -> Result<()> {
 
     // Run the compiled non-PEP 723 script.
     let compiled_non_script = context.temp_dir.child("__pycache__/main.cpython-312.pyc");
-    uv_snapshot!(context.filters(), context.run().arg(compiled_non_script.path()), @r###"
+    uv_snapshot!(context.filters(), context.run().arg(compiled_non_script.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
     Hello, world!
 
     ----- stderr -----
-    "###);
+    ");
 
     // If the script contains a PEP 723 tag, we should install its requirements.
     let test_script = context.temp_dir.child("script.py");
@@ -3639,7 +3858,7 @@ fn run_compiled_python_file() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("script.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3649,7 +3868,7 @@ fn run_compiled_python_file() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     // Compile the PEP 723 script.
     let compile_output = context
@@ -3667,7 +3886,7 @@ fn run_compiled_python_file() -> Result<()> {
 
     // Run the compiled PEP 723 script. This fails, since we can't read the script tag.
     let compiled_script = context.temp_dir.child("__pycache__/script.cpython-312.pyc");
-    uv_snapshot!(context.filters(), context.run().arg(compiled_script.path()), @r###"
+    uv_snapshot!(context.filters(), context.run().arg(compiled_script.path()), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3677,14 +3896,14 @@ fn run_compiled_python_file() -> Result<()> {
       File "[TEMP_DIR]/script.py", line 7, in <module>
         import iniconfig
     ModuleNotFoundError: No module named 'iniconfig'
-    "###);
+    "#);
 
     Ok(())
 }
 
 #[test]
 fn run_exit_code() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let test_script = context.temp_dir.child("script.py");
     test_script.write_str(indoc! { r#"
@@ -3703,7 +3922,7 @@ fn run_exit_code() -> Result<()> {
 
 #[test]
 fn run_invalid_project_table() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -3711,8 +3930,8 @@ fn run_invalid_project_table() -> Result<()> {
         repository = 'https://github.com/octocat/octocat-python'
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
 
@@ -3722,7 +3941,7 @@ fn run_invalid_project_table() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3734,7 +3953,7 @@ fn run_invalid_project_table() -> Result<()> {
     1 | [project.urls]
       |  ^^^^^^^
     `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
-    "###);
+    ");
 
     Ok(())
 }
@@ -3742,7 +3961,7 @@ fn run_invalid_project_table() -> Result<()> {
 #[test]
 #[cfg(target_family = "unix")]
 fn run_script_without_build_system() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -3766,7 +3985,7 @@ fn run_script_without_build_system() -> Result<()> {
 
     // TODO(lucab): this should match `entry` and warn
     // <https://github.com/astral-sh/uv/issues/7428>
-    uv_snapshot!(context.filters(), context.run().arg("entry"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("entry"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3776,14 +3995,14 @@ fn run_script_without_build_system() -> Result<()> {
     Audited in [TIME]
     error: Failed to spawn: `entry`
       Caused by: No such file or directory (os error 2)
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
 fn run_script_module_conflict() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -3809,7 +4028,7 @@ fn run_script_module_conflict() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("foo"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3820,7 +4039,7 @@ fn run_script_module_conflict() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + foo==0.1.0 (from file://[TEMP_DIR]/)
-    "###);
+    ");
 
     // Creating `__main__` should not change the behavior, the entrypoint should take precedence
     let main = context.temp_dir.child("src/foo/__main__.py");
@@ -3829,7 +4048,7 @@ fn run_script_module_conflict() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("foo"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3838,10 +4057,10 @@ fn run_script_module_conflict() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Audited 1 package in [TIME]
-    "###);
+    ");
 
     // Even if the working directory is `src`
-    uv_snapshot!(context.filters(), context.run().arg("--directory").arg("src").arg("foo"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--directory").arg("src").arg("foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3850,10 +4069,10 @@ fn run_script_module_conflict() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Audited 1 package in [TIME]
-    "###);
+    ");
 
     // Unless the user opts-in to module running with `-m`
-    uv_snapshot!(context.filters(), context.run().arg("-m").arg("foo"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("-m").arg("foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3862,14 +4081,14 @@ fn run_script_module_conflict() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Audited 1 package in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
 fn run_script_explicit() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let test_script = context.temp_dir.child("script");
     test_script.write_str(indoc! { r#"
@@ -3884,7 +4103,7 @@ fn run_script_explicit() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--script").arg("script"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--script").arg("script"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3895,14 +4114,14 @@ fn run_script_explicit() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
 fn run_script_explicit_stdin() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let test_script = context.temp_dir.child("script");
     test_script.write_str(indoc! { r#"
@@ -3917,7 +4136,7 @@ fn run_script_explicit_stdin() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--script").arg("-").stdin(std::fs::File::open(test_script)?), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--script").arg("-").stdin(std::fs::File::open(test_script)?), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3928,14 +4147,14 @@ fn run_script_explicit_stdin() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
 fn run_script_explicit_no_file() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     context
         .run()
         .arg("--script")
@@ -3948,18 +4167,18 @@ fn run_script_explicit_no_file() {
 #[cfg(target_family = "unix")]
 #[test]
 fn run_script_explicit_directory() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     fs_err::create_dir(context.temp_dir.child("script"))?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--script").arg("script"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--script").arg("script"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: failed to read from file `script`: Is a directory (os error 21)
-    "###);
+    ");
 
     Ok(())
 }
@@ -3967,7 +4186,7 @@ fn run_script_explicit_directory() -> Result<()> {
 #[test]
 #[cfg(windows)]
 fn run_gui_script_explicit_windows() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let test_script = context.temp_dir.child("script");
     test_script.write_str(indoc! { r#"
@@ -4001,7 +4220,7 @@ fn run_gui_script_explicit_windows() -> Result<()> {
 #[test]
 #[cfg(windows)]
 fn run_gui_script_explicit_stdin_windows() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let test_script = context.temp_dir.child("script");
     test_script.write_str(indoc! { r#"
@@ -4035,7 +4254,7 @@ fn run_gui_script_explicit_stdin_windows() -> Result<()> {
 #[test]
 #[cfg(not(windows))]
 fn run_gui_script_explicit_unix() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let test_script = context.temp_dir.child("script");
     test_script.write_str(indoc! { r#"
         # /// script
@@ -4049,14 +4268,14 @@ fn run_gui_script_explicit_unix() -> Result<()> {
         print(f"Using executable: {executable}", file=sys.stderr)
     "#})?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--gui-script").arg("script"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--gui-script").arg("script"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Using executable: python
-    "###);
+    ");
 
     Ok(())
 }
@@ -4066,7 +4285,7 @@ fn run_gui_script_explicit_unix() -> Result<()> {
 fn run_linked_environment_path() -> Result<()> {
     use anyhow::Ok;
 
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_virtualenv_bin()
         .with_filtered_python_names();
 
@@ -4086,7 +4305,7 @@ fn run_linked_environment_path() -> Result<()> {
 
     // Running `uv sync` should use the environment at `target``
     uv_snapshot!(context.filters(), context.sync()
-        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "target"), @r"
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "target"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4107,7 +4326,7 @@ fn run_linked_environment_path() -> Result<()> {
     uv_snapshot!(context.filters(), context.run()
         .env_remove(EnvVars::VIRTUAL_ENV)  // Ignore the test context's active virtual environment
         .env(EnvVars::UV_PROJECT_ENVIRONMENT, "target")
-        .arg("python").arg("-c").arg("import sys; print(sys.prefix); print(sys.executable)"), @r"
+        .arg("python").arg("-c").arg("import sys; print(sys.prefix); print(sys.executable)"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4125,7 +4344,7 @@ fn run_linked_environment_path() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            black_entrypoint, @r##"
+            black_entrypoint, @r#"
         #![TEMP_DIR]/target/[BIN]/[PYTHON]
         # -*- coding: utf-8 -*-
         import sys
@@ -4136,7 +4355,7 @@ fn run_linked_environment_path() -> Result<()> {
             elif sys.argv[0].endswith(".exe"):
                 sys.argv[0] = sys.argv[0][:-4]
             sys.exit(patched_main())
-        "##
+        "#
         );
     });
 
@@ -4145,7 +4364,7 @@ fn run_linked_environment_path() -> Result<()> {
 
 #[test]
 fn run_active_project_environment() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.11", "3.12"])
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_virtualenv_bin()
         .with_filtered_python_names();
 
@@ -4163,7 +4382,7 @@ fn run_active_project_environment() -> Result<()> {
     // Running `uv run` with `VIRTUAL_ENV` should warn
     uv_snapshot!(context.filters(), context.run()
         .arg("python").arg("--version")
-        .env(EnvVars::VIRTUAL_ENV, "foo"), @r###"
+        .env(EnvVars::VIRTUAL_ENV, "foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4177,13 +4396,13 @@ fn run_active_project_environment() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     // Using `--no-active` should silence the warning
     uv_snapshot!(context.filters(), context.run()
         .arg("--no-active")
         .arg("python").arg("--version")
-        .env(EnvVars::VIRTUAL_ENV, "foo"), @r###"
+        .env(EnvVars::VIRTUAL_ENV, "foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4192,7 +4411,7 @@ fn run_active_project_environment() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Audited 1 package in [TIME]
-    "###);
+    ");
 
     context
         .temp_dir
@@ -4208,7 +4427,7 @@ fn run_active_project_environment() -> Result<()> {
     uv_snapshot!(context.filters(), context.run()
         .arg("--active")
         .arg("python").arg("--version")
-        .env(EnvVars::VIRTUAL_ENV, "foo"), @r###"
+        .env(EnvVars::VIRTUAL_ENV, "foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4220,7 +4439,7 @@ fn run_active_project_environment() -> Result<()> {
     Resolved 2 packages in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     context
         .temp_dir
@@ -4232,7 +4451,7 @@ fn run_active_project_environment() -> Result<()> {
         .arg("--active")
         .arg("-p").arg("3.12")
         .arg("python").arg("--version")
-        .env(EnvVars::VIRTUAL_ENV, "foo"), @r###"
+        .env(EnvVars::VIRTUAL_ENV, "foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4245,14 +4464,14 @@ fn run_active_project_environment() -> Result<()> {
     Resolved 2 packages in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
 fn run_active_script_environment() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.11", "3.12"])
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_virtualenv_bin()
         .with_filtered_python_names();
 
@@ -4275,7 +4494,7 @@ fn run_active_script_environment() -> Result<()> {
     uv_snapshot!(context.filters(), context.run()
         .arg("--script")
         .arg("main.py")
-        .env(EnvVars::VIRTUAL_ENV, "foo"), @r###"
+        .env(EnvVars::VIRTUAL_ENV, "foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4286,21 +4505,21 @@ fn run_active_script_environment() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     // Using `--no-active` should also _not_ warn.
     uv_snapshot!(context.filters(), context.run()
         .arg("--no-active")
         .arg("--script")
         .arg("main.py")
-        .env(EnvVars::VIRTUAL_ENV, "foo"), @r###"
+        .env(EnvVars::VIRTUAL_ENV, "foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     Hello, world!
 
     ----- stderr -----
-    "###);
+    ");
 
     context
         .temp_dir
@@ -4312,7 +4531,7 @@ fn run_active_script_environment() -> Result<()> {
         .arg("--active")
         .arg("--script")
         .arg("main.py")
-        .env(EnvVars::VIRTUAL_ENV, "foo"), @r###"
+        .env(EnvVars::VIRTUAL_ENV, "foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4322,7 +4541,7 @@ fn run_active_script_environment() -> Result<()> {
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     context
         .temp_dir
@@ -4335,7 +4554,7 @@ fn run_active_script_environment() -> Result<()> {
         .arg("-p").arg("3.12")
         .arg("--script")
         .arg("main.py")
-        .env(EnvVars::VIRTUAL_ENV, "foo"), @r###"
+        .env(EnvVars::VIRTUAL_ENV, "foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4345,7 +4564,7 @@ fn run_active_script_environment() -> Result<()> {
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     Ok(())
 }
@@ -4353,7 +4572,7 @@ fn run_active_script_environment() -> Result<()> {
 #[test]
 #[cfg(not(windows))]
 fn run_gui_script_explicit_stdin_unix() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let test_script = context.temp_dir.child("script");
     test_script.write_str(indoc! { r#"
@@ -4368,7 +4587,7 @@ fn run_gui_script_explicit_stdin_unix() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--gui-script").arg("-").stdin(std::fs::File::open(test_script)?), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--gui-script").arg("-").stdin(std::fs::File::open(test_script)?), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4379,20 +4598,19 @@ fn run_gui_script_explicit_stdin_unix() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
 fn run_remote_pep723_script() {
-    let context = TestContext::new("3.12").with_filtered_python_names();
-    let mut filters = context.filters();
-    filters.push((
+    let context = uv_test::test_context!("3.12").with_filtered_python_names();
+    let context = context.with_filter((
         r"(?m)^Downloaded remote script to:.*\.py$",
         "Downloaded remote script to: [TEMP_PATH].py",
     ));
-    uv_snapshot!(filters, context.run().arg("https://raw.githubusercontent.com/astral-sh/uv/df45b9ac2584824309ff29a6a09421055ad730f6/scripts/uv-run-remote-script-test.py").arg("CI"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("https://raw.githubusercontent.com/astral-sh/uv/df45b9ac2584824309ff29a6a09421055ad730f6/scripts/uv-run-remote-script-test.py").arg(EnvVars::CI), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4406,13 +4624,13 @@ fn run_remote_pep723_script() {
      + mdurl==0.1.2
      + pygments==2.17.2
      + rich==13.7.1
-    "###);
+    ");
 }
 
 #[cfg(unix)] // A URL could be a valid filepath on Unix but not on Windows
 #[test]
 fn run_url_like_with_local_file_priority() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let url = "https://example.com/path/to/main.py";
     let local_path: std::path::PathBuf = ["https:", "", "example.com", "path", "to", "main.py"]
@@ -4426,21 +4644,21 @@ fn run_url_like_with_local_file_priority() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg(url), @r###"
+    uv_snapshot!(context.filters(), context.run().arg(url), @"
     success: true
     exit_code: 0
     ----- stdout -----
     Hello, world!
 
     ----- stderr -----
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
 fn run_stdin_with_pep723() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r#"
@@ -4455,7 +4673,7 @@ fn run_stdin_with_pep723() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().stdin(std::fs::File::open(test_script)?).arg("-"), @r###"
+    uv_snapshot!(context.filters(), context.run().stdin(std::fs::File::open(test_script)?).arg("-"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4466,14 +4684,14 @@ fn run_stdin_with_pep723() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
 fn run_with_env() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     context.temp_dir.child("test.py").write_str(indoc! { "
         import os
@@ -4492,7 +4710,7 @@ fn run_with_env() -> Result<()> {
        "
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("test.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("test.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4502,9 +4720,9 @@ fn run_with_env() -> Result<()> {
     None
 
     ----- stderr -----
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env").arg("test.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env").arg("test.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4514,14 +4732,14 @@ fn run_with_env() -> Result<()> {
     C3PO
 
     ----- stderr -----
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
 fn run_with_env_file() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     context.temp_dir.child("test.py").write_str(indoc! { "
         import os
@@ -4540,7 +4758,7 @@ fn run_with_env_file() -> Result<()> {
        "
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".file").arg("test.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".file").arg("test.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4550,14 +4768,14 @@ fn run_with_env_file() -> Result<()> {
     C3PO
 
     ----- stderr -----
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
 fn run_with_multiple_env_files() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     context.temp_dir.child("test.py").write_str(indoc! { "
         import os
@@ -4580,7 +4798,7 @@ fn run_with_multiple_env_files() -> Result<()> {
        "
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env1").arg("--env-file").arg(".env2").arg("test.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env1").arg("--env-file").arg(".env2").arg("test.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4589,9 +4807,9 @@ fn run_with_multiple_env_files() -> Result<()> {
     C3PO
 
     ----- stderr -----
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.run().arg("test.py").env(EnvVars::UV_ENV_FILE, ".env1 .env2"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("test.py").env(EnvVars::UV_ENV_FILE, ".env1 .env2"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4600,14 +4818,14 @@ fn run_with_multiple_env_files() -> Result<()> {
     C3PO
 
     ----- stderr -----
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
 fn run_with_env_omitted() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     context.temp_dir.child("test.py").write_str(indoc! { "
         import os
@@ -4620,21 +4838,21 @@ fn run_with_env_omitted() -> Result<()> {
        "
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env").arg("--no-env-file").arg("test.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env").arg("--no-env-file").arg("test.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     None
 
     ----- stderr -----
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
 fn run_with_malformed_env() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     context.temp_dir.child("test.py").write_str(indoc! { "
         import os
@@ -4647,7 +4865,7 @@ fn run_with_malformed_env() -> Result<()> {
        "
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env").arg("test.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env").arg("test.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4655,14 +4873,14 @@ fn run_with_malformed_env() -> Result<()> {
 
     ----- stderr -----
     warning: Failed to parse environment file `.env` at position 4: THE_^EMPIRE_VARIABLE=darth_vader
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
 fn run_with_not_existing_env_file() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     context.temp_dir.child("test.py").write_str(indoc! { "
         import os
@@ -4670,27 +4888,26 @@ fn run_with_not_existing_env_file() -> Result<()> {
        "
     })?;
 
-    let mut filters = context.filters();
-    filters.push((
+    let context = context.with_filter((
         r"(?m)^error: Failed to read environment file `.env.development`: .*$",
         "error: Failed to read environment file `.env.development`: [ERR]",
     ));
 
-    uv_snapshot!(filters, context.run().arg("--env-file").arg(".env.development").arg("test.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env.development").arg("test.py"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No environment file found at: `.env.development`
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
 fn run_with_extra_conflict() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -4719,7 +4936,7 @@ fn run_with_extra_conflict() -> Result<()> {
         .arg("foo")
         .arg("python")
         .arg("-c")
-        .arg("import iniconfig"), @r###"
+        .arg("import iniconfig"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4729,14 +4946,14 @@ fn run_with_extra_conflict() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
 fn run_with_group_conflict() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -4765,7 +4982,7 @@ fn run_with_group_conflict() -> Result<()> {
         .arg("foo")
         .arg("python")
         .arg("-c")
-        .arg("import iniconfig"), @r###"
+        .arg("import iniconfig"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4775,14 +4992,14 @@ fn run_with_group_conflict() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
 fn run_default_groups() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4803,7 +5020,7 @@ fn run_default_groups() -> Result<()> {
     context.lock().assert().success();
 
     // Only the main dependencies and `dev` group should be installed.
-    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import typing_extensions"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import typing_extensions"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4839,7 +5056,7 @@ fn run_default_groups() -> Result<()> {
         .arg("--exact")
         .arg("python")
         .arg("-c")
-        .arg("import typing_extensions"), @r"
+        .arg("import typing_extensions"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4859,7 +5076,7 @@ fn run_default_groups() -> Result<()> {
         .arg("foo")
         .arg("python")
         .arg("-c")
-        .arg("import typing_extensions"), @r"
+        .arg("import typing_extensions"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4879,7 +5096,7 @@ fn run_default_groups() -> Result<()> {
         .arg("bar")
         .arg("python")
         .arg("-c")
-        .arg("import iniconfig"), @r"
+        .arg("import iniconfig"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4900,7 +5117,7 @@ fn run_default_groups() -> Result<()> {
         .arg("--all-groups")
         .arg("python")
         .arg("-c")
-        .arg("import iniconfig"), @r"
+        .arg("import iniconfig"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4917,7 +5134,7 @@ fn run_default_groups() -> Result<()> {
         .arg("bar")
         .arg("python")
         .arg("-c")
-        .arg("import iniconfig"), @r"
+        .arg("import iniconfig"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4936,7 +5153,7 @@ fn run_default_groups() -> Result<()> {
         .arg("--all-groups")
         .arg("python")
         .arg("-c")
-        .arg("import iniconfig"), @r"
+        .arg("import iniconfig"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4956,7 +5173,7 @@ fn run_default_groups() -> Result<()> {
         .arg("--no-default-groups")
         .arg("python")
         .arg("-c")
-        .arg("import typing_extensions"), @r"
+        .arg("import typing_extensions"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4974,7 +5191,7 @@ fn run_default_groups() -> Result<()> {
         .arg("--all-groups")
         .arg("python")
         .arg("-c")
-        .arg("import iniconfig"), @r"
+        .arg("import iniconfig"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4999,7 +5216,7 @@ fn run_default_groups() -> Result<()> {
         .arg("bar")
         .arg("python")
         .arg("-c")
-        .arg("import typing_extensions"), @r"
+        .arg("import typing_extensions"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5014,8 +5231,8 @@ fn run_default_groups() -> Result<()> {
 
 #[test]
 fn run_groups_requires_python() -> Result<()> {
-    let context =
-        TestContext::new_with_versions(&["3.11", "3.12", "3.13"]).with_filtered_python_sources();
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12", "3.13"])
+        .with_filtered_python_sources();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5032,7 +5249,7 @@ fn run_groups_requires_python() -> Result<()> {
         dev = ["sniffio"]
 
         [tool.uv.dependency-groups]
-        foo = {requires-python=">=3.14"}
+        foo = {requires-python=">=3.100"}
         bar = {requires-python=">=3.13"}
         dev = {requires-python=">=3.12"}
         "#,
@@ -5043,7 +5260,7 @@ fn run_groups_requires_python() -> Result<()> {
     // With --no-default-groups only the main requires-python should be consulted
     uv_snapshot!(context.filters(), context.run()
         .arg("--no-default-groups")
-        .arg("python").arg("-c").arg("import typing_extensions"), @r"
+        .arg("python").arg("-c").arg("import typing_extensions"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5060,7 +5277,7 @@ fn run_groups_requires_python() -> Result<()> {
     // The main requires-python and the default group's requires-python should be consulted
     // (This should trigger a version bump)
     uv_snapshot!(context.filters(), context.run()
-        .arg("python").arg("-c").arg("import typing_extensions"), @r"
+        .arg("python").arg("-c").arg("import typing_extensions"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5080,7 +5297,7 @@ fn run_groups_requires_python() -> Result<()> {
     // (This should trigger a version bump)
     uv_snapshot!(context.filters(), context.run()
         .arg("--group").arg("bar")
-        .arg("python").arg("-c").arg("import typing_extensions"), @r"
+        .arg("python").arg("-c").arg("import typing_extensions"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5101,10 +5318,10 @@ fn run_groups_requires_python() -> Result<()> {
     // See https://github.com/astral-sh/uv/issues/14160
     let output = context
         .run()
+        .arg("-vv")
         .arg("python")
         .arg("-c")
         .arg("import typing_extensions")
-        .arg("-vv")
         .output()?;
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
@@ -5115,7 +5332,7 @@ fn run_groups_requires_python() -> Result<()> {
 
     // Going back to just "dev" we shouldn't churn the venv needlessly
     uv_snapshot!(context.filters(), context.run()
-        .arg("python").arg("-c").arg("import typing_extensions"), @r"
+        .arg("python").arg("-c").arg("import typing_extensions"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5128,7 +5345,7 @@ fn run_groups_requires_python() -> Result<()> {
     // Explicitly requesting an in-range python can downgrade
     uv_snapshot!(context.filters(), context.run()
         .arg("-p").arg("3.12")
-        .arg("python").arg("-c").arg("import typing_extensions"), @r"
+        .arg("python").arg("-c").arg("import typing_extensions"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5146,7 +5363,7 @@ fn run_groups_requires_python() -> Result<()> {
     // Explicitly requesting an out-of-range python fails
     uv_snapshot!(context.filters(), context.run()
         .arg("-p").arg("3.11")
-        .arg("python").arg("-c").arg("import typing_extensions"), @r"
+        .arg("python").arg("-c").arg("import typing_extensions"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -5159,13 +5376,13 @@ fn run_groups_requires_python() -> Result<()> {
     // Enabling foo we can't find an interpreter
     uv_snapshot!(context.filters(), context.run()
         .arg("--group").arg("foo")
-        .arg("python").arg("-c").arg("import typing_extensions"), @r"
+        .arg("python").arg("-c").arg("import typing_extensions"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: No interpreter found for Python >=3.14 in [PYTHON SOURCES]
+    error: No interpreter found for Python >=3.100 in [PYTHON SOURCES]
     ");
 
     Ok(())
@@ -5173,7 +5390,7 @@ fn run_groups_requires_python() -> Result<()> {
 
 #[test]
 fn run_groups_include_requires_python() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.11", "3.12", "3.13"]);
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12", "3.13"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5202,7 +5419,7 @@ fn run_groups_include_requires_python() -> Result<()> {
     // With --no-default-groups only the main requires-python should be consulted
     uv_snapshot!(context.filters(), context.run()
         .arg("--no-default-groups")
-        .arg("python").arg("-c").arg("import typing_extensions"), @r"
+        .arg("python").arg("-c").arg("import typing_extensions"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5219,7 +5436,7 @@ fn run_groups_include_requires_python() -> Result<()> {
     // The main requires-python and the default group's requires-python should be consulted
     // (This should trigger a version bump)
     uv_snapshot!(context.filters(), context.run()
-        .arg("python").arg("-c").arg("import typing_extensions"), @r"
+        .arg("python").arg("-c").arg("import typing_extensions"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5242,7 +5459,7 @@ fn run_groups_include_requires_python() -> Result<()> {
     // (This should trigger a conflict)
     uv_snapshot!(context.filters(), context.run()
         .arg("--group").arg("bar")
-        .arg("python").arg("-c").arg("import typing_extensions"), @r"
+        .arg("python").arg("-c").arg("import typing_extensions"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -5257,7 +5474,7 @@ fn run_groups_include_requires_python() -> Result<()> {
     // Explicitly requesting an out-of-range python fails
     uv_snapshot!(context.filters(), context.run()
         .arg("-p").arg("3.13")
-        .arg("python").arg("-c").arg("import typing_extensions"), @r"
+        .arg("python").arg("-c").arg("import typing_extensions"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -5273,7 +5490,7 @@ fn run_groups_include_requires_python() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn exit_status_signal() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let script = context.temp_dir.child("segfault.py");
     script.write_str(indoc! {r"
@@ -5287,7 +5504,7 @@ fn exit_status_signal() -> Result<()> {
 
 #[test]
 fn run_repeated() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.13", "3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.13", "3.12"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -5302,7 +5519,7 @@ fn run_repeated() -> Result<()> {
     // Import `iniconfig` in the context of the project.
     uv_snapshot!(
         context.filters(),
-        context.run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @r###"
+        context.run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5318,12 +5535,12 @@ fn run_repeated() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + typing-extensions==4.10.0
-    "###);
+    ");
 
     // Re-running shouldn't require reinstalling `typing-extensions`, since the environment is cached.
     uv_snapshot!(
         context.filters(),
-        context.run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @r###"
+        context.run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5332,7 +5549,7 @@ fn run_repeated() -> Result<()> {
     Resolved 2 packages in [TIME]
     Audited 1 package in [TIME]
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     // Import `iniconfig` in the context of a `tool run` command, which should fail.
     uv_snapshot!(
@@ -5357,7 +5574,7 @@ fn run_repeated() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/11117>
 #[test]
 fn run_without_overlay() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.13"]);
+    let context = uv_test::test_context_with_versions!(&["3.13"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -5372,7 +5589,7 @@ fn run_without_overlay() -> Result<()> {
     // Import `iniconfig` in the context of the project.
     uv_snapshot!(
         context.filters(),
-        context.run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @r###"
+        context.run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5388,7 +5605,7 @@ fn run_without_overlay() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + typing-extensions==4.10.0
-    "###);
+    ");
 
     // Import `iniconfig` in the context of a `tool run` command, which should fail.
     uv_snapshot!(
@@ -5410,7 +5627,7 @@ fn run_without_overlay() -> Result<()> {
     // Re-running in the context of the project should reset the overlay.
     uv_snapshot!(
         context.filters(),
-        context.run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @r###"
+        context.run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5419,7 +5636,7 @@ fn run_without_overlay() -> Result<()> {
     Resolved 2 packages in [TIME]
     Audited 1 package in [TIME]
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -5428,18 +5645,18 @@ fn run_without_overlay() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn detect_infinite_recursion() -> Result<()> {
-    use crate::common::get_bin;
     use indoc::formatdoc;
     use std::os::unix::fs::PermissionsExt;
+    use uv_test::get_bin;
 
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let test_script = context.temp_dir.child("main");
     test_script.write_str(&formatdoc! { r#"
         #!{uv} run
 
         print("Hello, world!")
-    "#, uv = get_bin().display() })?;
+    "#, uv = get_bin!().display() })?;
 
     fs_err::set_permissions(test_script.path(), PermissionsExt::from_mode(0o0744))?;
 
@@ -5449,7 +5666,7 @@ fn detect_infinite_recursion() -> Result<()> {
     // Set the max recursion depth to a lower amount to speed up testing.
     cmd.env(EnvVars::UV_RUN_MAX_RECURSION_DEPTH, "5");
 
-    uv_snapshot!(context.filters(), cmd, @r###"
+    uv_snapshot!(context.filters(), cmd, @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -5458,26 +5675,26 @@ fn detect_infinite_recursion() -> Result<()> {
     error: `uv run` was recursively invoked 6 times which exceeds the limit of 5.
 
     hint: If you are running a script with `uv run` in the shebang, you may need to include the `--script` flag.
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
 fn run_uv_variable() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Display the `UV` variable
     uv_snapshot!(
         context.filters(),
-        context.run().arg("python").arg("-c").arg("import os; print(os.environ['UV'])"), @r###"
+        context.run().arg("python").arg("-c").arg("import os; print(os.environ['UV'])"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     [UV]
 
     ----- stderr -----
-    "###);
+    ");
 }
 
 /// Test legacy scripts <https://packaging.python.org/en/latest/guides/distributing-packages-using-setuptools/#scripts>.
@@ -5486,7 +5703,7 @@ fn run_uv_variable() {
 #[cfg(windows)]
 #[test]
 fn run_windows_legacy_scripts() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
 
@@ -5717,7 +5934,7 @@ fn run_windows_legacy_scripts() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/13173>
 #[test]
 fn run_pep723_script_with_constraints_lock() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r#"
@@ -5735,14 +5952,14 @@ fn run_pep723_script_with_constraints_lock() -> Result<()> {
     })?;
 
     // Explicitly lock the script.
-    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     let lock = context.read("main.py.lock");
 
@@ -5785,7 +6002,7 @@ fn run_pep723_script_with_constraints_lock() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg(".").arg("main.py"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg(".").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5812,7 +6029,7 @@ fn run_pep723_script_with_constraints_lock() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/13173>
 #[test]
 fn run_pep723_script_with_constraints() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r#"
@@ -5841,7 +6058,7 @@ fn run_pep723_script_with_constraints() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg(".").arg("main.py"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg(".").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5864,7 +6081,7 @@ fn run_pep723_script_with_constraints() -> Result<()> {
 
 #[test]
 fn run_no_sync_incompatible_python() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.12", "3.11", "3.9"]);
+    let context = uv_test::test_context_with_versions!(&["3.12", "3.11", "3.9"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -5885,7 +6102,7 @@ fn run_no_sync_incompatible_python() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5900,7 +6117,7 @@ fn run_no_sync_incompatible_python() -> Result<()> {
      + iniconfig==2.0.0
     ");
 
-    uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("--python").arg("3.9").arg("main.py"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("--python").arg("3.9").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5916,11 +6133,11 @@ fn run_no_sync_incompatible_python() -> Result<()> {
 #[test]
 fn run_python_preference_no_project() {
     let context =
-        TestContext::new_with_versions(&["3.12", "3.11"]).with_versions_as_managed(&["3.12"]);
+        uv_test::test_context_with_versions!(&["3.12", "3.11"]).with_versions_as_managed(&["3.12"]);
 
     context.venv().assert().success();
 
-    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5929,7 +6146,7 @@ fn run_python_preference_no_project() {
     ----- stderr -----
     ");
 
-    uv_snapshot!(context.filters(), context.run().arg("--managed-python").arg("python").arg("--version"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("--managed-python").arg("python").arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5939,7 +6156,7 @@ fn run_python_preference_no_project() {
     ");
 
     // `VIRTUAL_ENV` is set here, so we'll ignore the flag
-    uv_snapshot!(context.filters(), context.run().arg("--no-managed-python").arg("python").arg("--version"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("--no-managed-python").arg("python").arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5949,7 +6166,7 @@ fn run_python_preference_no_project() {
     ");
 
     // If we remove the `VIRTUAL_ENV` variable, we should get the unmanaged Python
-    uv_snapshot!(context.filters(), context.run().arg("--no-managed-python").arg("python").arg("--version").env_remove(EnvVars::VIRTUAL_ENV), @r"
+    uv_snapshot!(context.filters(), context.run().arg("--no-managed-python").arg("python").arg("--version").env_remove(EnvVars::VIRTUAL_ENV), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5962,7 +6179,7 @@ fn run_python_preference_no_project() {
 /// Regression test for: <https://github.com/astral-sh/uv/issues/15518>
 #[test]
 fn isolate_child_environment() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -5993,7 +6210,7 @@ fn isolate_child_environment() -> Result<()> {
         })?;
 
     // Sync the parent package.
-    uv_snapshot!(context.filters(), context.sync(), @r"
+    uv_snapshot!(context.filters(), context.sync(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6042,7 +6259,7 @@ fn isolate_child_environment() -> Result<()> {
 
 #[test]
 fn run_only_group_and_extra_conflict() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -6062,7 +6279,7 @@ fn run_only_group_and_extra_conflict() -> Result<()> {
     )?;
 
     // Using --only-group and --extra together should error.
-    uv_snapshot!(context.filters(), context.run().arg("--only-group").arg("dev").arg("--extra").arg("test").arg("python").arg("-c").arg("print('hello')"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--only-group").arg("dev").arg("--extra").arg("test").arg("python").arg("-c").arg("print('hello')"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -6073,10 +6290,10 @@ fn run_only_group_and_extra_conflict() -> Result<()> {
     Usage: uv run --cache-dir [CACHE_DIR] --only-group <ONLY_GROUP> --exclude-newer <EXCLUDE_NEWER>
 
     For more information, try '--help'.
-    "###);
+    ");
 
     // Using --only-group and --all-extras together should also error.
-    uv_snapshot!(context.filters(), context.run().arg("--only-group").arg("dev").arg("--all-extras").arg("python").arg("-c").arg("print('hello')"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--only-group").arg("dev").arg("--all-extras").arg("python").arg("-c").arg("print('hello')"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -6087,7 +6304,104 @@ fn run_only_group_and_extra_conflict() -> Result<()> {
     Usage: uv run --cache-dir [CACHE_DIR] --only-group <ONLY_GROUP> --exclude-newer <EXCLUDE_NEWER>
 
     For more information, try '--help'.
-    "###);
+    ");
+
+    Ok(())
+}
+
+/// Test that `--preview-features target-workspace-discovery` discovers the workspace
+/// from the target's directory rather than the current working directory.
+#[test]
+fn run_target_workspace_discovery() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Create a workspace in a subdirectory.
+    let workspace = context.temp_dir.child("project");
+    workspace.create_dir_all()?;
+
+    workspace.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#
+    })?;
+    workspace
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
+
+    // Create a script in the workspace that imports from the project.
+    workspace.child("script.py").write_str(indoc! { r"
+        import iniconfig
+        print('success')
+        "
+    })?;
+
+    // Without the preview feature, running from the parent directory fails to find the workspace,
+    // so the dependency is not installed.
+    uv_snapshot!(context.filters(), context.run().arg("project/script.py").env_remove(EnvVars::VIRTUAL_ENV), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Traceback (most recent call last):
+      File "[TEMP_DIR]/project/script.py", line 1, in <module>
+        import iniconfig
+    ModuleNotFoundError: No module named 'iniconfig'
+    "#);
+
+    // With the preview feature, the workspace is discovered from the target's directory.
+    uv_snapshot!(context.filters(), context.run().arg("--preview-features").arg("target-workspace-discovery").arg("project/script.py").env_remove(EnvVars::VIRTUAL_ENV), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    success
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: project/.venv
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/project)
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
+/// Test that `--preview-features target-workspace-discovery` works with a bare script
+/// filename (no directory component), which would otherwise cause `Path::parent()` to
+/// return an empty path.
+#[test]
+fn run_target_workspace_discovery_bare_script() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("script.py")
+        .write_str(r"print('success')")?;
+
+    // With the preview feature and a bare filename, the script should run without error.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--preview-features")
+        .arg("target-workspace-discovery")
+        .arg("script.py"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    success
+
+    ----- stderr -----
+    ");
 
     Ok(())
 }

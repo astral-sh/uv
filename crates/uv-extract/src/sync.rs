@@ -1,23 +1,24 @@
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
 
-use crate::Error;
-use crate::vendor::{CloneableSeekableReader, HasLength};
+use crate::vendor::CloneableSeekableReader;
+use crate::{CompressionMethod, Error, insecure_no_validate, validate_archive_member_name};
 use rayon::prelude::*;
 use rustc_hash::FxHashSet;
 use tracing::warn;
 use uv_configuration::RAYON_INITIALIZE;
+use uv_warnings::warn_user_once;
 use zip::ZipArchive;
 
 /// Unzip a `.zip` archive into the target directory.
-pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
-    reader: R,
-    target: &Path,
-) -> Result<(), Error> {
+pub fn unzip(reader: fs_err::File, target: &Path) -> Result<(), Error> {
+    let (reader, filename) = reader.into_parts();
+
     // Unzip in parallel.
     let reader = std::io::BufReader::new(reader);
     let archive = ZipArchive::new(CloneableSeekableReader::new(reader))?;
     let directories = Mutex::new(FxHashSet::default());
+    let skip_validation = insecure_no_validate();
     // Initialize the threadpool with the user settings.
     LazyLock::force(&RAYON_INITIALIZE);
     (0..archive.len())
@@ -25,6 +26,23 @@ pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
         .map(|file_number| {
             let mut archive = archive.clone();
             let mut file = archive.by_index(file_number)?;
+
+            let compression = CompressionMethod::from(file.compression());
+            if !compression.is_well_known() {
+                warn_user_once!(
+                    "One or more file entries in '{filename}' use the '{compression}' compression method, which is not widely supported. A future version of uv will reject ZIP archives containing entries compressed with this method. Entries must be compressed with the '{stored}', '{deflate}', or '{zstd}' compression methods.",
+                    filename = filename.display(),
+                    stored = CompressionMethod::Stored,
+                    deflate = CompressionMethod::Deflated,
+                    zstd = CompressionMethod::Zstd,
+                );
+            }
+
+            if let Err(e) = validate_archive_member_name(file.name()) {
+                if !skip_validation {
+                    return Err(e);
+                }
+            }
 
             // Determine the path of the file within the wheel.
             let Some(enclosed_name) = file.enclosed_name() else {

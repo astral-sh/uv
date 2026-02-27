@@ -115,7 +115,7 @@ fn generate() -> String {
     output
 }
 
-#[allow(clippy::format_push_string)]
+#[expect(clippy::format_push_string)]
 fn generate_command<'a>(output: &mut String, command: &'a Command, parents: &mut Vec<&'a Command>) {
     if command.is_hide_set() && !SHOW_HIDDEN_COMMANDS.contains(&command.get_name()) {
         return;
@@ -340,33 +340,5 @@ fn emit_possible_options(opt: &clap::Arg, output: &mut String) {
                 .join("\n"),
         );
         output.push_str(&markdown::to_html(&value));
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::env;
-
-    use anyhow::Result;
-
-    use uv_static::EnvVars;
-
-    use crate::generate_all::Mode;
-
-    use super::{Args, main};
-
-    #[test]
-    fn test_generate_cli_reference() -> Result<()> {
-        // Skip this test in CI to avoid redundancy with the dedicated CI job
-        if env::var_os(EnvVars::CI).is_some() {
-            return Ok(());
-        }
-
-        let mode = if env::var(EnvVars::UV_UPDATE_SCHEMA).as_deref() == Ok("1") {
-            Mode::Write
-        } else {
-            Mode::Check
-        };
-        main(&Args { mode })
     }
 }

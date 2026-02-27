@@ -1,14 +1,13 @@
 use std::cmp::max;
 use std::fmt::Write;
 
-use anstream::println;
 use anyhow::Result;
 use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use serde::Serialize;
-use tokio::sync::Semaphore;
+use tracing::debug;
 use unicode_width::UnicodeWidthStr;
 
 use uv_cache::{Cache, Refresh};
@@ -26,7 +25,7 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_preview::Preview;
 use uv_python::PythonRequest;
-use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference};
+use uv_python::{EnvironmentPreference, Prefix, PythonEnvironment, PythonPreference, Target};
 use uv_resolver::{ExcludeNewer, PrereleaseMode};
 
 use crate::commands::ExitStatus;
@@ -36,10 +35,9 @@ use crate::commands::reporters::LatestVersionReporter;
 use crate::printer::Printer;
 
 /// Enumerate the installed packages in the current environment.
-#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn pip_list(
     editable: Option<bool>,
-    exclude: &[PackageName],
+    exclude: &FxHashSet<PackageName>,
     format: &ListFormat,
     outdated: bool,
     prerelease: PrereleaseMode,
@@ -52,6 +50,8 @@ pub(crate) async fn pip_list(
     exclude_newer: ExcludeNewer,
     python: Option<&str>,
     system: bool,
+    target: Option<Target>,
+    prefix: Option<Prefix>,
     cache: &Cache,
     printer: Printer,
     preview: Preview,
@@ -69,6 +69,23 @@ pub(crate) async fn pip_list(
         cache,
         preview,
     )?;
+
+    // Apply any `--target` or `--prefix` directories.
+    let environment = if let Some(target) = target {
+        debug!(
+            "Using `--target` directory at {}",
+            target.root().user_display()
+        );
+        environment.with_target(target)?
+    } else if let Some(prefix) = prefix {
+        debug!(
+            "Using `--prefix` directory at {}",
+            prefix.root().user_display()
+        );
+        environment.with_prefix(prefix)?
+    } else {
+        environment
+    };
 
     report_target_environment(&environment, cache, printer)?;
 
@@ -99,7 +116,7 @@ pub(crate) async fn pip_list(
         .markers(environment.interpreter().markers())
         .platform(environment.interpreter().platform())
         .build();
-        let download_concurrency = Semaphore::new(concurrency.downloads);
+        let download_concurrency = concurrency.downloads_semaphore.clone();
 
         // Determine the platform tags.
         let interpreter = environment.interpreter();
@@ -112,9 +129,9 @@ pub(crate) async fn pip_list(
             client: &client,
             capabilities: &capabilities,
             prerelease,
-            exclude_newer,
+            exclude_newer: &exclude_newer,
             tags: Some(tags),
-            requires_python: &requires_python,
+            requires_python: Some(&requires_python),
         };
 
         let reporter = LatestVersionReporter::from(printer).with_length(results.len() as u64);
@@ -181,7 +198,7 @@ pub(crate) async fn pip_list(
                 })
                 .collect_vec();
             let output = serde_json::to_string(&rows)?;
-            println!("{output}");
+            writeln!(printer.stdout_important(), "{output}")?;
         }
         ListFormat::Columns if results.is_empty() => {}
         ListFormat::Columns => {
@@ -255,13 +272,18 @@ pub(crate) async fn pip_list(
             }
 
             for elems in MultiZip(columns.iter().map(Column::fmt).collect_vec()) {
-                println!("{}", elems.join(" ").trim_end());
+                writeln!(printer.stdout_important(), "{}", elems.join(" ").trim_end())?;
             }
         }
         ListFormat::Freeze if results.is_empty() => {}
         ListFormat::Freeze => {
             for dist in &results {
-                println!("{}=={}", dist.name().bold(), dist.version());
+                writeln!(
+                    printer.stdout_important(),
+                    "{}=={}",
+                    dist.name().bold(),
+                    dist.version()
+                )?;
             }
         }
     }

@@ -14,7 +14,6 @@ use tracing_tree::time::Uptime;
 
 use uv_cli::ColorChoice;
 use uv_logging::UvFormat;
-use uv_static::EnvVars;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Level {
@@ -35,6 +34,7 @@ pub(crate) fn setup_logging(
     level: Level,
     durations_layer: Option<impl Layer<Registry> + Send + Sync>,
     color: ColorChoice,
+    detailed_logging: bool,
 ) -> anyhow::Result<()> {
     // We use directives here to ensure `RUST_LOG` can override them
     let default_directive = match level {
@@ -87,7 +87,6 @@ pub(crate) fn setup_logging(
         };
     let writer = std::sync::Mutex::new(anstream::AutoStream::new(std::io::stderr(), color_choice));
 
-    let detailed_logging = std::env::var(EnvVars::UV_LOG_CONTEXT).is_ok();
     if detailed_logging {
         // Regardless of the tracing level, include the uptime and target for each message.
         tracing_subscriber::registry()
@@ -119,12 +118,13 @@ pub(crate) fn setup_logging(
 
 /// Setup the `TRACING_DURATIONS_FILE` environment variable to enable tracing durations.
 #[cfg(feature = "tracing-durations-export")]
-pub(crate) fn setup_durations() -> anyhow::Result<(
+pub(crate) fn setup_durations(
+    tracing_durations_file: Option<&std::path::PathBuf>,
+) -> anyhow::Result<(
     Option<DurationsLayer<Registry>>,
     Option<DurationsLayerDropGuard>,
 )> {
-    if let Ok(location) = std::env::var(EnvVars::TRACING_DURATIONS_FILE) {
-        let location = std::path::PathBuf::from(location);
+    if let Some(location) = tracing_durations_file {
         if let Some(parent) = location.parent() {
             fs_err::create_dir_all(parent)
                 .context("Failed to create parent of TRACING_DURATIONS_FILE")?;
@@ -140,7 +140,7 @@ pub(crate) fn setup_durations() -> anyhow::Result<(
             ..PlotConfig::default()
         };
         let (layer, guard) = DurationsLayerBuilder::default()
-            .durations_file(&location)
+            .durations_file(location)
             .plot_file(location.with_extension("svg"))
             .plot_config(plot_config)
             .build()

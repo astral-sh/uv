@@ -1,8 +1,5 @@
 #![allow(clippy::disallowed_types)]
-use std::ffi::{CString, c_void};
-use std::fs::File;
-use std::io::{Read, Seek, SeekFrom};
-use std::mem::size_of;
+use std::ffi::CString;
 use std::path::{Path, PathBuf};
 use std::vec::Vec;
 
@@ -11,15 +8,10 @@ use windows::Win32::{
     Foundation::{
         CloseHandle, HANDLE, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE, SetHandleInformation, TRUE,
     },
-    System::Console::{
-        GetStdHandle, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, SetConsoleCtrlHandler, SetStdHandle,
-    },
+    Storage::FileSystem::{FILE_TYPE_PIPE, GetFileType},
+    System::Console::{GetStdHandle, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, SetStdHandle},
     System::Environment::GetCommandLineA,
-    System::JobObjects::{
-        AssignProcessToJobObject, CreateJobObjectA, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
-        JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-        JobObjectExtendedLimitInformation, QueryInformationJobObject, SetInformationJobObject,
-    },
+    System::LibraryLoader::{FindResourceW, LoadResource, LockResource, SizeofResource},
     System::Threading::{
         CreateProcessA, GetExitCodeProcess, GetStartupInfoA, INFINITE, PROCESS_CREATION_FLAGS,
         PROCESS_INFORMATION, STARTF_USESTDHANDLES, STARTUPINFOA, WaitForInputIdle,
@@ -30,12 +22,20 @@ use windows::Win32::{
         PeekMessageA, PostMessageA, WINDOW_EX_STYLE, WINDOW_STYLE,
     },
 };
-use windows::core::{BOOL, PSTR, s};
+use windows::core::{PSTR, s};
+
+use uv_windows::{Job, install_ctrl_handler};
+
+use uv_static::EnvVars;
 
 use crate::{error, format, warn};
 
-const PATH_LEN_SIZE: usize = size_of::<u32>();
-const MAX_PATH_LEN: u32 = 32 * 1024;
+// https://learn.microsoft.com/en-us/windows/win32/menurc/resource-types
+const RT_RCDATA: u16 = 10;
+
+/// Resource IDs for the trampoline metadata
+const RESOURCE_TRAMPOLINE_KIND: windows::core::PCWSTR = windows::core::w!("UV_TRAMPOLINE_KIND");
+const RESOURCE_PYTHON_PATH: windows::core::PCWSTR = windows::core::w!("UV_PYTHON_PATH");
 
 /// The kind of trampoline.
 enum TrampolineKind {
@@ -46,21 +46,42 @@ enum TrampolineKind {
 }
 
 impl TrampolineKind {
-    const fn magic_number(&self) -> &'static [u8; 4] {
-        match self {
-            Self::Script => b"UVSC",
-            Self::Python => b"UVPY",
+    fn from_resource(data: &[u8]) -> Option<Self> {
+        match data.first() {
+            Some(1) => Some(Self::Script),
+            Some(2) => Some(Self::Python),
+            _ => None,
         }
     }
+}
 
-    fn from_buffer(buffer: &[u8]) -> Option<Self> {
-        if buffer.ends_with(Self::Script.magic_number()) {
-            Some(Self::Script)
-        } else if buffer.ends_with(Self::Python.magic_number()) {
-            Some(Self::Python)
-        } else {
-            None
+/// Safely loads a resource from the current module
+fn load_resource(resource_id: windows::core::PCWSTR) -> Option<Vec<u8>> {
+    // SAFETY: winapi calls; null-terminated strings; all pointers are checked.
+    unsafe {
+        // Find the resource
+        let resource = FindResourceW(
+            None,
+            resource_id,
+            windows::core::PCWSTR(RT_RCDATA as *const _),
+        );
+        if resource.is_invalid() {
+            return None;
         }
+
+        // Get resource size and data
+        let size = SizeofResource(None, resource);
+        if size == 0 {
+            return None;
+        }
+        let data = LoadResource(None, resource).ok();
+        let ptr = LockResource(data?) as *const u8;
+        if ptr.is_null() {
+            return None;
+        }
+
+        // Copy the resource data into a Vec
+        Some(std::slice::from_raw_parts(ptr, size as usize).to_vec())
     }
 }
 
@@ -68,16 +89,56 @@ impl TrampolineKind {
 /// depending on the [`TrampolineKind`].
 fn make_child_cmdline() -> CString {
     let executable_name = std::env::current_exe().unwrap_or_else(|_| {
-        error_and_exit("Failed to get executable name");
+        error_and_exit("uv trampoline failed to determine executable path");
     });
-    let (kind, python_exe) = read_trampoline_metadata(executable_name.as_ref());
-    let mut child_cmdline = Vec::<u8>::new();
 
+    // Load trampoline kind
+    let trampoline_kind = load_resource(RESOURCE_TRAMPOLINE_KIND)
+        .and_then(|data| TrampolineKind::from_resource(&data))
+        .unwrap_or_else(|| {
+            error_and_exit("uv trampoline failed to load trampoline kind from resources")
+        });
+
+    // Load Python path
+    let python_path = load_resource(RESOURCE_PYTHON_PATH)
+        .and_then(|data| String::from_utf8(data).ok())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            error_and_exit("uv trampoline failed to load Python path from resources")
+        });
+
+    let python_exe = if python_path.is_absolute() {
+        python_path
+    } else {
+        let parent_dir = match executable_name.parent() {
+            Some(parent) => parent,
+            None => {
+                error_and_exit("uv trampoline executable path has no parent directory");
+            }
+        };
+        parent_dir.join(python_path)
+    };
+
+    let python_exe =
+        if !python_exe.is_absolute() || matches!(trampoline_kind, TrampolineKind::Script) {
+            // NOTICE: dunce adds 5kb~
+            // TODO(john): In order to avoid resolving junctions and symlinks for relative paths and
+            // scripts, we can consider reverting https://github.com/astral-sh/uv/pull/5750/files#diff-969979506be03e89476feade2edebb4689a9c261f325988d3c7efc5e51de26d1L273-L277.
+            dunce::canonicalize(python_exe.as_path()).unwrap_or_else(|_| {
+                error_and_exit("uv trampoline failed to canonicalize script path");
+            })
+        } else {
+            // For Python trampolines with absolute paths, we skip `dunce::canonicalize` to
+            // avoid resolving junctions.
+            python_exe
+        };
+
+    let mut child_cmdline = Vec::<u8>::new();
     push_quoted_path(python_exe.as_ref(), &mut child_cmdline);
     child_cmdline.push(b' ');
 
     // Only execute the trampoline again if it's a script, otherwise, just invoke Python.
-    match kind {
+    match trampoline_kind {
         TrampolineKind::Python => {
             // SAFETY: `std::env::set_var` is safe to call on Windows, and
             // this code only ever runs on Windows.
@@ -87,22 +148,37 @@ fn make_child_cmdline() -> CString {
                 // the approach taken by CPython for Python Launchers
                 // (in `launcher.c`). This allows virtual environments to
                 // be correctly detected when using trampolines.
-                std::env::set_var("__PYVENV_LAUNCHER__", &executable_name);
+                std::env::set_var(EnvVars::PYVENV_LAUNCHER, &executable_name);
 
-                // If this is not a virtual environment and `PYTHONHOME` has
-                // not been set, then set `PYTHONHOME` to the parent directory of
-                // the executable. This ensures that the correct installation
-                // directories are added to `sys.path` when running with a junction
-                // trampoline.
-                let python_home_set =
-                    std::env::var("PYTHONHOME").is_ok_and(|home| !home.is_empty());
-                if !is_virtualenv(python_exe.as_path()) && !python_home_set {
-                    std::env::set_var(
-                        "PYTHONHOME",
-                        python_exe
+                // If this is not a virtual environment, set `PYTHONHOME` to
+                // the parent directory of the executable. This ensures that
+                // the correct installation directories are added to `sys.path`
+                // when running with a junction trampoline.
+                //
+                // We use a marker variable (`UV_INTERNAL__PYTHONHOME`) to track
+                // whether `PYTHONHOME` was set by uv. This allows us to:
+                // - Override inherited `PYTHONHOME` from parent Python processes
+                // - Preserve user-defined `PYTHONHOME` values
+                if !is_virtualenv(python_exe.as_path()) {
+                    let python_home = std::env::var(EnvVars::PYTHONHOME).ok();
+                    let marker = std::env::var(EnvVars::UV_INTERNAL__PYTHONHOME).ok();
+
+                    // Only set `PYTHONHOME` if:
+                    // - It's not set, OR
+                    // - It was set by uv (marker matches current `PYTHONHOME`)
+                    let should_override = match (&python_home, &marker) {
+                        (None, _) => true,
+                        (Some(home), Some(m)) if home == m => true,
+                        _ => false,
+                    };
+
+                    if should_override {
+                        let home = python_exe
                             .parent()
-                            .expect("Python executable should have a parent directory"),
-                    );
+                            .expect("Python executable should have a parent directory");
+                        std::env::set_var(EnvVars::PYTHONHOME, home);
+                        std::env::set_var(EnvVars::UV_INTERNAL__PYTHONHOME, home);
+                    }
                 }
             }
         }
@@ -127,7 +203,7 @@ fn make_child_cmdline() -> CString {
     // );
 
     CString::from_vec_with_nul(child_cmdline).unwrap_or_else(|_| {
-        error_and_exit("Child command line is not correctly null terminated");
+        error_and_exit("uv trampoline child command line is not correctly null terminated");
     })
 }
 
@@ -157,144 +233,6 @@ fn is_virtualenv(executable: &Path) -> bool {
         .and_then(Path::parent)
         .map(|path| path.join("pyvenv.cfg").is_file())
         .unwrap_or(false)
-}
-
-/// Reads the executable binary from the back to find:
-///
-/// * The path to the Python executable
-/// * The kind of trampoline we are executing
-///
-/// The executable is expected to have the following format:
-///
-/// * The file must end with the magic number 'UVPY' or 'UVSC' (identifying the trampoline kind)
-/// * The last 4 bytes (little endian) are the length of the path to the Python executable.
-/// * The path encoded as UTF-8 comes right before the length
-///
-/// # Panics
-///
-/// If there's any IO error, or the file does not conform to the specified format.
-fn read_trampoline_metadata(executable_name: &Path) -> (TrampolineKind, PathBuf) {
-    let mut file_handle = File::open(executable_name).unwrap_or_else(|_| {
-        print_last_error_and_exit(&format!(
-            "Failed to open executable '{}'",
-            &*executable_name.to_string_lossy(),
-        ));
-    });
-
-    let metadata = executable_name.metadata().unwrap_or_else(|_| {
-        print_last_error_and_exit(&format!(
-            "Failed to get the size of the executable '{}'",
-            &*executable_name.to_string_lossy(),
-        ));
-    });
-    let file_size = metadata.len();
-
-    // Start with a size of 1024 bytes which should be enough for most paths but avoids reading the
-    // entire file.
-    let mut buffer: Vec<u8> = Vec::new();
-    let mut bytes_to_read = 1024.min(u32::try_from(file_size).unwrap_or(u32::MAX));
-
-    let mut kind;
-    let path: String = loop {
-        // SAFETY: Casting to usize is safe because we only support 64bit systems where usize is guaranteed to be larger than u32.
-        buffer.resize(bytes_to_read as usize, 0);
-
-        file_handle
-            .seek(SeekFrom::Start(file_size - u64::from(bytes_to_read)))
-            .unwrap_or_else(|_| {
-                print_last_error_and_exit("Failed to set the file pointer to the end of the file");
-            });
-
-        // Pulls in core::fmt::{write, Write, getcount}
-        let read_bytes = file_handle.read(&mut buffer).unwrap_or_else(|_| {
-            print_last_error_and_exit("Failed to read the executable file");
-        });
-
-        // Truncate the buffer to the actual number of bytes read.
-        buffer.truncate(read_bytes);
-
-        let Some(inner_kind) = TrampolineKind::from_buffer(&buffer) else {
-            error_and_exit(
-                "Magic number 'UVSC' or 'UVPY' not found at the end of the file. Did you append the magic number, the length and the path to the python executable at the end of the file?",
-            );
-        };
-        kind = inner_kind;
-
-        // Remove the magic number
-        buffer.truncate(buffer.len() - kind.magic_number().len());
-
-        let path_len = match buffer.get(buffer.len() - PATH_LEN_SIZE..) {
-            Some(path_len) => {
-                let path_len = u32::from_le_bytes(path_len.try_into().unwrap_or_else(|_| {
-                    error_and_exit("Slice length is not equal to 4 bytes");
-                }));
-
-                if path_len > MAX_PATH_LEN {
-                    error_and_exit(&format!(
-                        "Only paths with a length up to 32KBs are supported but the python path has a length of {}",
-                        path_len
-                    ));
-                }
-
-                // SAFETY: path len is guaranteed to be less than 32KBs
-                path_len as usize
-            }
-            None => {
-                error_and_exit(
-                    "Python executable length missing. Did you write the length of the path to the Python executable before the Magic number?",
-                );
-            }
-        };
-
-        // Remove the path length
-        buffer.truncate(buffer.len() - PATH_LEN_SIZE);
-
-        if let Some(path_offset) = buffer.len().checked_sub(path_len) {
-            buffer.drain(..path_offset);
-
-            break String::from_utf8(buffer).unwrap_or_else(|_| {
-                error_and_exit("Python executable path is not a valid UTF-8 encoded path");
-            });
-        } else {
-            // SAFETY: Casting to u32 is safe because `path_len` is guaranteed to be less than 32KBs,
-            // MAGIC_NUMBER is 4 bytes and PATH_LEN_SIZE is 4 bytes.
-            bytes_to_read = (path_len + kind.magic_number().len() + PATH_LEN_SIZE) as u32;
-
-            if u64::from(bytes_to_read) > file_size {
-                error_and_exit(
-                    "The length of the python executable path exceeds the file size. Verify that the path length is appended to the end of the launcher script as a u32 in little endian",
-                );
-            }
-        }
-    };
-
-    let path = PathBuf::from(path);
-    let path = if path.is_absolute() {
-        path
-    } else {
-        let parent_dir = match executable_name.parent() {
-            Some(parent) => parent,
-            None => {
-                error_and_exit("Executable path has no parent directory");
-            }
-        };
-        parent_dir.join(path)
-    };
-
-    let path = if !path.is_absolute() || matches!(kind, TrampolineKind::Script) {
-        // NOTICE: dunce adds 5kb~
-        // TODO(john): In order to avoid resolving junctions and symlinks for relative paths and
-        // scripts, we can consider reverting https://github.com/astral-sh/uv/pull/5750/files#diff-969979506be03e89476feade2edebb4689a9c261f325988d3c7efc5e51de26d1L273-L277.
-        dunce::canonicalize(path.as_path()).unwrap_or_else(|_| {
-            error_and_exit("Failed to canonicalize script path");
-        })
-    } else {
-        // For Python trampolines with absolute paths, we skip `dunce::canonicalize` to
-        // avoid resolving junctions.
-        path
-    };
-
-    (kind, path)
 }
 
 fn push_arguments(output: &mut Vec<u8>) {
@@ -339,39 +277,24 @@ fn skip_one_argument(arguments: &[u8]) -> &[u8] {
     &arguments[offset..]
 }
 
-fn make_job_object() -> HANDLE {
-    let job = unsafe { CreateJobObjectA(None, None) }
-        .unwrap_or_else(|_| print_last_error_and_exit("Job creation failed"));
-    let mut job_info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
-    let mut retlen = 0u32;
-    if unsafe {
-        QueryInformationJobObject(
-            Some(job),
-            JobObjectExtendedLimitInformation,
-            &mut job_info as *mut _ as *mut c_void,
-            size_of_val(&job_info) as u32,
-            Some(&mut retlen),
-        )
-    }
-    .is_err()
-    {
-        print_last_error_and_exit("Job information querying failed");
-    }
-    job_info.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-    job_info.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK;
-    if unsafe {
-        SetInformationJobObject(
-            job,
-            JobObjectExtendedLimitInformation,
-            &job_info as *const _ as *const c_void,
-            size_of_val(&job_info) as u32,
-        )
-    }
-    .is_err()
-    {
-        print_last_error_and_exit("Job information setting failed");
-    }
-    job
+#[cold]
+fn print_job_error_and_exit(message: &str, err: uv_windows::JobError) -> ! {
+    error!(
+        "{}\n  Caused by: {} (os error {})",
+        message,
+        err.message(),
+        err.code()
+    );
+    exit_with_status(1);
+}
+
+#[cold]
+fn print_ctrl_handler_error_and_exit(err: uv_windows::CtrlHandlerError) -> ! {
+    error!(
+        "uv trampoline failed to set control handler\n  Caused by: os error {}",
+        err.code()
+    );
+    exit_with_status(1);
 }
 
 fn spawn_child(si: &STARTUPINFOA, child_cmdline: CString) -> HANDLE {
@@ -403,10 +326,12 @@ fn spawn_child(si: &STARTUPINFOA, child_cmdline: CString) -> HANDLE {
         )
     }
     .unwrap_or_else(|_| {
-        print_last_error_and_exit("Failed to spawn the python child process");
+        print_last_error_and_exit("uv trampoline failed to spawn Python child process");
     });
     unsafe { CloseHandle(child_process_info.hThread) }.unwrap_or_else(|_| {
-        print_last_error_and_exit("Failed to close handle to python child process main thread");
+        print_last_error_and_exit(
+            "uv trampoline failed to close Python child process thread handle",
+        );
     });
     // Return handle to child process.
     child_process_info.hProcess
@@ -416,12 +341,14 @@ fn spawn_child(si: &STARTUPINFOA, child_cmdline: CString) -> HANDLE {
 // processes, by using the .lpReserved2 field. We want to close those file descriptors too.
 // The UCRT source code has details on the memory layout (see also initialize_inherited_file_handles_nolock):
 // https://github.com/huangqinjin/ucrt/blob/10.0.19041.0/lowio/ioinit.cpp#L190-L223
-#[allow(clippy::ptr_eq)]
 fn close_handles(si: &STARTUPINFOA) {
     // See distlib/PC/launcher.c::cleanup_standard_io()
     // Unlike cleanup_standard_io(), we don't close STD_ERROR_HANDLE to retain warn!
     for std_handle in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE] {
         if let Ok(handle) = unsafe { GetStdHandle(std_handle) } {
+            if handle.is_invalid() || unsafe { GetFileType(handle) } != FILE_TYPE_PIPE {
+                continue;
+            }
             unsafe { CloseHandle(handle) }.unwrap_or_else(|_| {
                 warn!("Failed to close standard device handle {}", handle.0 as u32);
             });
@@ -508,7 +435,7 @@ fn clear_app_starting_state(child_handle: HANDLE) {
             // Process all sent messages and signal input idle.
             let _ = PeekMessageA(&mut msg, Some(hwnd), 0, 0, PEEK_MESSAGE_REMOVE_TYPE(0));
             DestroyWindow(hwnd).unwrap_or_else(|_| {
-                print_last_error_and_exit("Failed to destroy temporary window");
+                print_last_error_and_exit("uv trampoline failed to destroy temporary window");
             });
         }
     }
@@ -521,10 +448,16 @@ pub fn bounce(is_gui: bool) -> ! {
     unsafe { GetStartupInfoA(&mut si) }
 
     let child_handle = spawn_child(&si, child_cmdline);
-    let job = make_job_object();
+    let job = Job::new().unwrap_or_else(|e| {
+        print_job_error_and_exit("uv trampoline failed to create job object", e);
+    });
 
-    if unsafe { AssignProcessToJobObject(job, child_handle) }.is_err() {
-        print_last_error_and_exit("Failed to assign child process to the job")
+    // SAFETY: child_handle is a valid process handle returned by spawn_child.
+    if let Err(e) = unsafe { job.assign_process(child_handle) } {
+        print_job_error_and_exit(
+            "uv trampoline failed to assign child process to job object",
+            e,
+        );
     }
 
     // (best effort) Close all the handles that we can
@@ -538,13 +471,9 @@ pub fn bounce(is_gui: bool) -> ! {
 
     // We want to ignore control-C/control-Break/logout/etc.; the same event will
     // be delivered to the child, so we let them decide whether to exit or not.
-    unsafe extern "system" fn control_key_handler(_: u32) -> BOOL {
-        TRUE
+    if let Err(e) = install_ctrl_handler() {
+        print_ctrl_handler_error_and_exit(e);
     }
-    // See distlib/PC/launcher.c::control_key_handler
-    unsafe { SetConsoleCtrlHandler(Some(control_key_handler), true) }.unwrap_or_else(|_| {
-        print_last_error_and_exit("Control handler setting failed");
-    });
 
     if is_gui {
         clear_app_starting_state(child_handle);
@@ -553,7 +482,7 @@ pub fn bounce(is_gui: bool) -> ! {
     let _ = unsafe { WaitForSingleObject(child_handle, INFINITE) };
     let mut exit_code = 0u32;
     if unsafe { GetExitCodeProcess(child_handle, &mut exit_code) }.is_err() {
-        print_last_error_and_exit("Failed to get exit code of child process");
+        print_last_error_and_exit("uv trampoline failed to get exit code of child process");
     }
     exit_with_status(exit_code);
 }
@@ -573,13 +502,13 @@ fn print_last_error_and_exit(message: &str) -> ! {
         .unwrap_or_default();
     // we can't access sys::os::error_string directly so err.kind().to_string()
     // is the closest we can get to while avoiding bringing in a large chunk of core::fmt
-    let message = format!(
-        "(uv internal error) {}: {}.{}",
+    error!(
+        "{}\n  Caused by: {}{}",
         message,
         err.kind().to_string(),
         err_no_str
     );
-    error_and_exit(&message);
+    exit_with_status(1);
 }
 
 #[cold]

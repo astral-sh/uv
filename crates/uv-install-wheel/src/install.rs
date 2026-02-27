@@ -4,7 +4,6 @@
 use std::path::Path;
 use std::str::FromStr;
 
-use fs_err as fs;
 use fs_err::File;
 use tracing::{instrument, trace};
 
@@ -12,7 +11,7 @@ use uv_distribution_filename::WheelFilename;
 use uv_pep440::Version;
 use uv_pypi_types::{DirectUrl, Metadata10};
 
-use crate::linker::{LinkMode, Locks};
+use crate::linker::{InstallState, LinkMode, link_wheel_files};
 use crate::wheel::{
     LibKind, WheelFile, dist_info_metadata, find_dist_info, install_data, parse_scripts,
     read_record_file, write_installer_metadata, write_script_entrypoints,
@@ -38,7 +37,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
     installer: Option<&str>,
     installer_metadata: bool,
     link_mode: LinkMode,
-    locks: &Locks,
+    state: &InstallState,
 ) -> Result<(), Error> {
     let dist_info_prefix = find_dist_info(&wheel)?;
     let metadata = dist_info_metadata(&dist_info_prefix, &wheel)?;
@@ -48,7 +47,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
     let version = Version::from_str(&version)?;
 
     // Validate the wheel name and version.
-    {
+    if !uv_flags::contains(uv_flags::EnvironmentFlags::SKIP_WHEEL_FILENAME_CHECK) {
         if name != filename.name {
             return Err(Error::MismatchedName(name, filename.name.clone()));
         }
@@ -65,7 +64,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
     let wheel_file_path = wheel
         .as_ref()
         .join(format!("{dist_info_prefix}.dist-info/WHEEL"));
-    let wheel_text = fs::read_to_string(wheel_file_path)?;
+    let wheel_text = fs_err::read_to_string(wheel_file_path)?;
     let lib_kind = WheelFile::parse(&wheel_text)?.lib_kind();
 
     // > 1.c If Root-Is-Purelib == ‘true’, unpack archive into purelib (site-packages).
@@ -75,7 +74,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
         LibKind::Pure => &layout.scheme.purelib,
         LibKind::Plat => &layout.scheme.platlib,
     };
-    let num_unpacked = link_mode.link_wheel_files(site_packages, &wheel, locks, filename)?;
+    let num_unpacked = link_wheel_files(link_mode, site_packages, &wheel, state, filename)?;
     trace!(?name, "Extracted {num_unpacked} files");
 
     // Read the RECORD file.
@@ -130,7 +129,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
         // 2.c If applicable, update scripts starting with #!python to point to the correct interpreter.
         // Script are unsupported through data
         // 2.e Remove empty distribution-1.0.data directory.
-        fs::remove_dir_all(data_dir)?;
+        fs_err::remove_dir_all(data_dir)?;
     } else {
         trace!(?name, "No data");
     }

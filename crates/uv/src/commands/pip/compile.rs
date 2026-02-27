@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 use std::env;
 use std::ffi::OsStr;
+use std::io::Write;
 use std::path::Path;
 use std::str::FromStr;
 
@@ -13,8 +14,8 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildIsolation, BuildOptions, Concurrency, Constraints, ExportFormat, ExtrasSpecification,
-    IndexStrategy, NoBinary, NoBuild, Reinstall, SourceStrategy, Upgrade,
+    BuildIsolation, BuildOptions, Concurrency, Constraints, ExtrasSpecification, IndexStrategy,
+    NoBinary, NoBuild, NoSources, PipCompileFormat, Reinstall, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -28,11 +29,11 @@ use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::Preview;
 use uv_pypi_types::{Conflicts, SupportedEnvironments};
 use uv_python::{
-    EnvironmentPreference, PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest,
-    PythonVersion, VersionRequest,
+    EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
+    PythonPreference, PythonRequest, PythonVersion, VersionRequest,
 };
 use uv_requirements::upgrade::{LockedRequirements, read_pylock_toml_requirements};
 use uv_requirements::{
@@ -44,33 +45,37 @@ use uv_resolver::{
     InMemoryIndex, OptionsBuilder, PrereleaseMode, PylockToml, PythonRequirement, ResolutionMode,
     ResolverEnvironment,
 };
+use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_torch::{TorchMode, TorchSource, TorchStrategy};
 use uv_types::{EmptyInstalledPackages, HashStrategy};
-use uv_warnings::{warn_user, warn_user_once};
+use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
-use crate::commands::pip::{operations, resolution_environment};
+use crate::commands::pip::{operations, resolution_markers, resolution_tags};
+use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, OutputWriter, diagnostics};
 use crate::printer::Printer;
 
 /// Resolve a set of requirements into a set of pinned versions.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn pip_compile(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
+    excludes: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Requirement>,
+    excludes_from_workspace: Vec<uv_normalize::PackageName>,
     build_constraints_from_workspace: Vec<Requirement>,
     environments: SupportedEnvironments,
     extras: ExtrasSpecification,
     groups: GroupsSpecification,
     output_file: Option<&Path>,
-    format: Option<ExportFormat>,
+    format: Option<PipCompileFormat>,
     resolution_mode: ResolutionMode,
     prerelease_mode: PrereleaseMode,
     fork_strategy: ForkStrategy,
@@ -100,11 +105,13 @@ pub(crate) async fn pip_compile(
     extra_build_dependencies: &ExtraBuildDependencies,
     extra_build_variables: &ExtraBuildVariables,
     build_options: BuildOptions,
+    install_mirrors: PythonInstallMirrors,
     mut python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
+    python_downloads: PythonDownloads,
     universal: bool,
     exclude_newer: ExcludeNewer,
-    sources: SourceStrategy,
+    sources: NoSources,
     annotation_style: AnnotationStyle,
     link_mode: LinkMode,
     mut python: Option<String>,
@@ -116,15 +123,6 @@ pub(crate) async fn pip_compile(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    if !preview.is_enabled(PreviewFeatures::EXTRA_BUILD_DEPENDENCIES)
-        && !extra_build_dependencies.is_empty()
-    {
-        warn_user_once!(
-            "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeatures::EXTRA_BUILD_DEPENDENCIES
-        );
-    }
-
     // If the user provides a `pyproject.toml` or other TOML file as the output file, raise an
     // error.
     if output_file
@@ -141,16 +139,16 @@ pub(crate) async fn pip_compile(
     let format = format.unwrap_or_else(|| {
         let extension = output_file.and_then(Path::extension);
         if extension.is_some_and(|ext| ext.eq_ignore_ascii_case("txt")) {
-            ExportFormat::RequirementsTxt
+            PipCompileFormat::RequirementsTxt
         } else if extension.is_some_and(|ext| ext.eq_ignore_ascii_case("toml")) {
-            ExportFormat::PylockToml
+            PipCompileFormat::PylockToml
         } else {
-            ExportFormat::RequirementsTxt
+            PipCompileFormat::RequirementsTxt
         }
     });
 
     // If the user is exporting to PEP 751, ensure the filename matches the specification.
-    if matches!(format, ExportFormat::PylockToml) {
+    if matches!(format, PipCompileFormat::PylockToml) {
         if let Some(file_name) = output_file
             .and_then(Path::file_name)
             .and_then(OsStr::to_str)
@@ -202,6 +200,7 @@ pub(crate) async fn pip_compile(
         requirements,
         constraints,
         overrides,
+        excludes,
         pylock,
         source_trees,
         groups,
@@ -216,6 +215,7 @@ pub(crate) async fn pip_compile(
         requirements,
         constraints,
         overrides,
+        excludes,
         Some(&groups),
         &client_builder,
     )
@@ -246,6 +246,11 @@ pub(crate) async fn pip_compile(
                 .into_iter()
                 .map(UnresolvedRequirementSpecification::from),
         )
+        .collect();
+
+    let excludes: Vec<PackageName> = excludes
+        .into_iter()
+        .chain(excludes_from_workspace)
         .collect();
 
     // Read build constraints.
@@ -281,15 +286,23 @@ pub(crate) async fn pip_compile(
     // Find an interpreter to use for building distributions
     let environment_preference = EnvironmentPreference::from_system_flag(system, false);
     let python_preference = python_preference.with_system_flag(system);
+    let reporter = PythonDownloadReporter::single(printer);
     let interpreter = if let Some(python) = python.as_ref() {
         let request = PythonRequest::parse(python);
-        PythonInstallation::find(
-            &request,
+        PythonInstallation::find_or_download(
+            Some(&request),
             environment_preference,
             python_preference,
+            python_downloads,
+            &client_builder,
             &cache,
+            Some(&reporter),
+            install_mirrors.python_install_mirror.as_deref(),
+            install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.python_downloads_json_url.as_deref(),
             preview,
         )
+        .await
     } else {
         // TODO(zanieb): The split here hints at a problem with the request abstraction; we should
         // be able to use `PythonInstallation::find(...)` here.
@@ -303,9 +316,16 @@ pub(crate) async fn pip_compile(
             &request,
             environment_preference,
             python_preference,
+            python_downloads,
+            &client_builder,
             &cache,
+            Some(&reporter),
+            install_mirrors.python_install_mirror.as_deref(),
+            install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.python_downloads_json_url.as_deref(),
             preview,
         )
+        .await
     }?
     .into_interpreter();
 
@@ -370,14 +390,22 @@ pub(crate) async fn pip_compile(
             ResolverEnvironment::universal(environments.into_markers()),
         )
     } else {
-        let (tags, marker_env) =
-            resolution_environment(python_version, python_platform, &interpreter)?;
+        let tags = resolution_tags(
+            python_version.as_ref(),
+            python_platform.as_ref(),
+            &interpreter,
+        )?;
+        let marker_env = resolution_markers(
+            python_version.as_ref(),
+            python_platform.as_ref(),
+            &interpreter,
+        );
         (Some(tags), ResolverEnvironment::specific(marker_env))
     };
 
     // Generate, but don't enforce hashes for the requirements. PEP 751 _requires_ a hash to be
     // present, but otherwise, we omit them by default.
-    let hasher = if generate_hashes || matches!(format, ExportFormat::PylockToml) {
+    let hasher = if generate_hashes || matches!(format, PipCompileFormat::PylockToml) {
         HashStrategy::Generate(HashGeneration::All)
     } else {
         HashStrategy::None
@@ -434,10 +462,10 @@ pub(crate) async fn pip_compile(
     let LockedRequirements { preferences, git } =
         if let Some(output_file) = output_file.filter(|output_file| output_file.exists()) {
             match format {
-                ExportFormat::RequirementsTxt => LockedRequirements::from_preferences(
+                PipCompileFormat::RequirementsTxt => LockedRequirements::from_preferences(
                     read_requirements_txt(output_file, &upgrade).await?,
                 ),
-                ExportFormat::PylockToml => {
+                PipCompileFormat::PylockToml => {
                     read_pylock_toml_requirements(output_file, &upgrade).await?
                 }
             }
@@ -512,7 +540,7 @@ pub(crate) async fn pip_compile(
         exclude_newer.clone(),
         sources,
         WorkspaceCache::default(),
-        concurrency,
+        concurrency.clone(),
         preview,
     );
 
@@ -532,6 +560,7 @@ pub(crate) async fn pip_compile(
         requirements,
         constraints,
         overrides,
+        excludes,
         source_trees,
         project,
         BTreeSet::default(),
@@ -551,7 +580,7 @@ pub(crate) async fn pip_compile(
         &flat_index,
         &top_level_index,
         &build_dispatch,
-        concurrency,
+        &concurrency,
         options,
         Box::new(DefaultResolveLogger),
         printer,
@@ -591,7 +620,7 @@ pub(crate) async fn pip_compile(
     }
 
     match format {
-        ExportFormat::RequirementsTxt => {
+        PipCompileFormat::RequirementsTxt => {
             if include_marker_expression {
                 if let Some(marker_env) = resolver_env.marker_environment() {
                     let relevant_markers = resolution.marker_tree(&top_level_index, marker_env)?;
@@ -682,7 +711,7 @@ pub(crate) async fn pip_compile(
                 )
             )?;
         }
-        ExportFormat::PylockToml => {
+        PipCompileFormat::PylockToml => {
             if include_marker_expression {
                 warn_user!(
                     "The `--emit-marker-expression` option is not supported for `pylock.toml` output"
@@ -718,7 +747,13 @@ pub(crate) async fn pip_compile(
             };
 
             // Convert the resolution to a `pylock.toml` file.
-            let export = PylockToml::from_resolution(&resolution, &no_emit_packages, install_path)?;
+            let export = PylockToml::from_resolution(
+                &resolution,
+                &no_emit_packages,
+                install_path,
+                tags.as_deref(),
+                &build_options,
+            )?;
             write!(writer, "{}", export.to_toml()?)?;
         }
     }
@@ -750,7 +785,6 @@ pub(crate) async fn pip_compile(
 }
 
 /// Format the uv command used to generate the output file.
-#[allow(clippy::fn_params_excessive_bools)]
 fn cmd(
     include_index_url: bool,
     include_find_links: bool,

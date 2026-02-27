@@ -5,18 +5,22 @@ use jiff::Timestamp;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Deserializer, Serialize};
 
-use uv_normalize::ExtraName;
+use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers, VersionSpecifiersParseError};
 use uv_pep508::Requirement;
 use uv_small_str::SmallString;
 
-use crate::VerbatimParsedUrl;
 use crate::lenient_requirement::LenientVersionSpecifiers;
+use crate::{ProjectStatus, VerbatimParsedUrl};
 
 /// A collection of "files" from `PyPI`'s JSON API for a single package, as served by the
 /// `vnd.pypi.simple.v1` media type.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct PypiSimpleDetail {
+    /// PEP 792 project status information.
+    #[serde(default)]
+    pub project_status: ProjectStatus,
     /// The list of [`PypiFile`]s available for download sorted by filename.
     #[serde(deserialize_with = "sorted_simple_json_files")]
     pub files: Vec<PypiFile>,
@@ -81,8 +85,8 @@ impl<'de> Deserialize<'de> for PypiFile {
                 let mut url = None;
                 let mut yanked = None;
 
-                while let Some(key) = access.next_key::<String>()? {
-                    match key.as_str() {
+                while let Some(key) = access.next_key::<Cow<'_, str>>()? {
+                    match &*key {
                         "core-metadata" | "dist-info-metadata" | "data-dist-info-metadata" => {
                             if core_metadata.is_none() {
                                 core_metadata = access.next_value()?;
@@ -131,6 +135,9 @@ impl<'de> Deserialize<'de> for PypiFile {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct PyxSimpleDetail {
+    /// PEP 792 project status information.
+    #[serde(default)]
+    pub project_status: ProjectStatus,
     /// The list of [`PyxFile`]s available for download sorted by filename.
     pub files: Vec<PyxFile>,
     /// The core metadata for the project, keyed by version.
@@ -181,8 +188,8 @@ impl<'de> Deserialize<'de> for PyxFile {
                 let mut yanked = None;
                 let mut zstd = None;
 
-                while let Some(key) = access.next_key::<String>()? {
-                    match key.as_str() {
+                while let Some(key) = access.next_key::<Cow<'_, str>>()? {
+                    match &*key {
                         "core-metadata" | "dist-info-metadata" | "data-dist-info-metadata" => {
                             if core_metadata.is_none() {
                                 core_metadata = access.next_value()?;
@@ -199,7 +206,7 @@ impl<'de> Deserialize<'de> for PyxFile {
                                         .map(VersionSpecifiers::from)
                                 });
                         }
-                        "size" => size = Some(access.next_value()?),
+                        "size" => size = access.next_value()?,
                         "upload-time" => upload_time = Some(access.next_value()?),
                         "url" => url = Some(access.next_value()?),
                         "yanked" => yanked = Some(access.next_value()?),
@@ -237,8 +244,8 @@ pub struct CoreMetadatum {
     pub requires_python: Option<VersionSpecifiers>,
     #[serde(default)]
     pub requires_dist: Box<[Requirement<VerbatimParsedUrl>]>,
-    #[serde(default)]
-    pub provides_extras: Box<[ExtraName]>,
+    #[serde(default, alias = "provides-extras")]
+    pub provides_extra: Box<[ExtraName]>,
 }
 
 #[derive(Debug, Clone)]
@@ -826,4 +833,43 @@ mod tests {
 
         Ok(())
     }
+}
+
+/// Response from the Simple API root endpoint (index) listing all available projects,
+/// as served by the `vnd.pypi.simple.v1` media type.
+///
+/// <https://peps.python.org/pep-0691/#specification>
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct PypiSimpleIndex {
+    /// Metadata about the response.
+    pub meta: SimpleIndexMeta,
+    /// The list of projects available in the index.
+    pub projects: Vec<ProjectEntry>,
+}
+
+/// Response from the Pyx Simple API root endpoint listing all available projects,
+/// as served by the `vnd.pyx.simple.v1` media types.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct PyxSimpleIndex {
+    /// Metadata about the response.
+    pub meta: SimpleIndexMeta,
+    /// The list of projects available in the index.
+    pub projects: Vec<ProjectEntry>,
+}
+
+/// Metadata about a Simple API index response.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct SimpleIndexMeta {
+    /// The API version.
+    pub api_version: SmallString,
+}
+
+/// A single project entry in the Simple API index.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ProjectEntry {
+    /// The name of the project.
+    pub name: PackageName,
 }

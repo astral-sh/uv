@@ -1,12 +1,13 @@
+use indexmap::IndexMap;
+use itertools::Itertools;
+use serde::{Deserialize, Deserializer};
+use std::borrow::Cow;
 use std::collections::{BTreeMap, Bound};
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
-
-use itertools::Itertools;
-use serde::Deserialize;
+use std::str::{self, FromStr};
 use tracing::{debug, trace, warn};
 use version_ranges::Ranges;
 use walkdir::WalkDir;
@@ -18,7 +19,7 @@ use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{
     ExtraOperator, MarkerExpression, MarkerTree, MarkerValueExtra, Requirement, VersionOrUrl,
 };
-use uv_pypi_types::{Metadata23, VerbatimParsedUrl};
+use uv_pypi_types::{Keywords, Metadata23, ProjectUrls, VerbatimParsedUrl};
 
 use crate::serde_verbatim::SerdeVerbatim;
 use crate::{BuildBackendSettings, Error, error_on_venv};
@@ -60,10 +61,20 @@ pub enum ValidationError {
     ReservedGuiScripts,
     #[error("`project.license` is not a valid SPDX expression: {0}")]
     InvalidSpdx(String, #[source] spdx::error::ParseError),
+    #[error("`{field}` glob `{glob}` did not match any files")]
+    LicenseGlobNoMatches { field: String, glob: String },
+    #[error("License file `{}` must be UTF-8 encoded", _0)]
+    LicenseFileNotUtf8(String),
 }
 
 /// Check if the build backend is matching the currently running uv version.
 pub fn check_direct_build(source_tree: &Path, name: impl Display) -> bool {
+    #[derive(Deserialize)]
+    #[serde(rename_all = "kebab-case")]
+    struct PyProjectToml {
+        build_system: BuildSystem,
+    }
+
     let pyproject_toml: PyProjectToml =
         match fs_err::read_to_string(source_tree.join("pyproject.toml"))
             .map_err(|err| err.to_string())
@@ -73,12 +84,14 @@ pub fn check_direct_build(source_tree: &Path, name: impl Display) -> bool {
             Ok(pyproject_toml) => pyproject_toml,
             Err(err) => {
                 debug!(
-                    "Not using uv build backend direct build of {name}, no pyproject.toml: {err}"
+                    "Not using uv build backend direct build for source tree `{name}`, \
+                    failed to parse pyproject.toml: {err}"
                 );
                 return false;
             }
         };
     match pyproject_toml
+        .build_system
         .check_build_system(uv_version::version())
         .as_slice()
     {
@@ -87,13 +100,36 @@ pub fn check_direct_build(source_tree: &Path, name: impl Display) -> bool {
         // Any warning -> no match
         [first, others @ ..] => {
             debug!(
-                "Not using uv build backend direct build of {name}, pyproject.toml does not match: {first}"
+                "Not using uv build backend direct build of `{name}`, pyproject.toml does not match: {first}"
             );
             for other in others {
-                trace!("Further uv build backend direct build of {name} mismatch: {other}");
+                trace!("Further uv build backend direct build of `{name}` mismatch: {other}");
             }
             false
         }
+    }
+}
+
+/// A package name as provided in a `pyproject.toml`.
+#[derive(Debug, Clone)]
+struct VerbatimPackageName {
+    /// The package name as given in the `pyproject.toml`.
+    given: String,
+    /// The normalized package name.
+    normalized: PackageName,
+}
+
+impl<'de> Deserialize<'de> for VerbatimPackageName {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let given = <Cow<'_, str>>::deserialize(deserializer)?;
+        let normalized = PackageName::from_str(&given).map_err(serde::de::Error::custom)?;
+        Ok(Self {
+            given: given.to_string(),
+            normalized,
+        })
     }
 }
 
@@ -115,15 +151,18 @@ pub struct PyProjectToml {
 
 impl PyProjectToml {
     pub(crate) fn name(&self) -> &PackageName {
-        &self.project.name
+        &self.project.name.normalized
     }
 
     pub(crate) fn version(&self) -> &Version {
         &self.project.version
     }
 
-    pub(crate) fn parse(contents: &str) -> Result<Self, Error> {
-        Ok(toml::from_str(contents)?)
+    pub(crate) fn parse(path: &Path) -> Result<Self, Error> {
+        let contents = fs_err::read_to_string(path)?;
+        let pyproject_toml =
+            toml::from_str(&contents).map_err(|err| Error::Toml(path.to_path_buf(), err))?;
+        Ok(pyproject_toml)
     }
 
     pub(crate) fn readme(&self) -> Option<&Readme> {
@@ -161,83 +200,9 @@ impl PyProjectToml {
         self.tool.as_ref()?.uv.as_ref()?.build_backend.as_ref()
     }
 
-    /// Returns user-facing warnings if the `[build-system]` table looks suspicious.
-    ///
-    /// Example of a valid table:
-    ///
-    /// ```toml
-    /// [build-system]
-    /// requires = ["uv_build>=0.4.15,<0.5.0"]
-    /// build-backend = "uv_build"
-    /// ```
+    /// See [`BuildSystem::check_build_system`].
     pub fn check_build_system(&self, uv_version: &str) -> Vec<String> {
-        let mut warnings = Vec::new();
-        if self.build_system.build_backend.as_deref() != Some("uv_build") {
-            warnings.push(format!(
-                r#"The value for `build_system.build-backend` should be `"uv_build"`, not `"{}"`"#,
-                self.build_system.build_backend.clone().unwrap_or_default()
-            ));
-        }
-
-        let uv_version =
-            Version::from_str(uv_version).expect("uv's own version is not PEP 440 compliant");
-        let next_minor = uv_version.release().get(1).copied().unwrap_or_default() + 1;
-        let next_breaking = Version::new([0, next_minor]);
-
-        let expected = || {
-            format!(
-                "Expected a single uv requirement in `build-system.requires`, found `{}`",
-                toml::to_string(&self.build_system.requires).unwrap_or_default()
-            )
-        };
-
-        let [uv_requirement] = &self.build_system.requires.as_slice() else {
-            warnings.push(expected());
-            return warnings;
-        };
-        if uv_requirement.name.as_str() != "uv-build" {
-            warnings.push(expected());
-            return warnings;
-        }
-        let bounded = match &uv_requirement.version_or_url {
-            None => false,
-            Some(VersionOrUrl::Url(_)) => {
-                // We can't validate the url
-                true
-            }
-            Some(VersionOrUrl::VersionSpecifier(specifier)) => {
-                // We don't check how wide the range is (that's up to the user), we just
-                // check that the current version is compliant, to avoid accidentally using a
-                // too new or too old uv, and we check that an upper bound exists. The latter
-                // is very important to allow making breaking changes in uv without breaking
-                // the existing immutable source distributions on pypi.
-                if !specifier.contains(&uv_version) {
-                    // This is allowed to happen when testing prereleases, but we should still warn.
-                    warnings.push(format!(
-                        r#"`build_system.requires = ["{uv_requirement}"]` does not contain the
-                        current uv version {uv_version}"#,
-                    ));
-                }
-                Ranges::from(specifier.clone())
-                    .bounding_range()
-                    .map(|bounding_range| bounding_range.1 != Bound::Unbounded)
-                    .unwrap_or(false)
-            }
-        };
-
-        if !bounded {
-            warnings.push(format!(
-                "`build_system.requires = [\"{}\"]` is missing an \
-                upper bound on the `uv_build` version such as `<{next_breaking}`. \
-                Without bounding the `uv_build` version, the source distribution will break \
-                when a future, breaking version of `uv_build` is released.",
-                // Use an underscore consistently, to avoid confusing users between a package name with dash and a
-                // module name with underscore
-                uv_requirement.verbatim()
-            ));
-        }
-
-        warnings
+        self.build_system.check_build_system(uv_version)
     }
 
     /// Validate and convert a `pyproject.toml` to core metadata.
@@ -385,108 +350,10 @@ impl PyProjectToml {
             "2.3"
         };
 
-        // TODO(konsti): Issue a warning on old license metadata once PEP 639 is universal.
-        let (license, license_expression, license_files) =
-            if let Some(license_globs) = &self.project.license_files {
-                let license_expression = match &self.project.license {
-                    None => None,
-                    Some(License::Spdx(license_expression)) => Some(license_expression.clone()),
-                    Some(License::Text { .. } | License::File { .. }) => {
-                        return Err(ValidationError::MixedLicenseGenerations.into());
-                    }
-                };
-
-                let mut license_files = Vec::new();
-                let mut license_globs_parsed = Vec::new();
-                for license_glob in license_globs {
-                    let pep639_glob =
-                        PortableGlobParser::Pep639
-                            .parse(license_glob)
-                            .map_err(|err| Error::PortableGlob {
-                                field: license_glob.to_string(),
-                                source: err,
-                            })?;
-                    license_globs_parsed.push(pep639_glob);
-                }
-                let license_globs =
-                    GlobDirFilter::from_globs(&license_globs_parsed).map_err(|err| {
-                        Error::GlobSetTooLarge {
-                            field: "tool.uv.build-backend.source-include".to_string(),
-                            source: err,
-                        }
-                    })?;
-
-                for entry in WalkDir::new(root)
-                    .sort_by_file_name()
-                    .into_iter()
-                    .filter_entry(|entry| {
-                        license_globs.match_directory(
-                            entry
-                                .path()
-                                .strip_prefix(root)
-                                .expect("walkdir starts with root"),
-                        )
-                    })
-                {
-                    let entry = entry.map_err(|err| Error::WalkDir {
-                        root: root.to_path_buf(),
-                        err,
-                    })?;
-                    let relative = entry
-                        .path()
-                        .strip_prefix(root)
-                        .expect("walkdir starts with root");
-                    if !license_globs.match_path(relative) {
-                        trace!("Not a license files match: {}", relative.user_display());
-                        continue;
-                    }
-                    if !entry.file_type().is_file() {
-                        trace!(
-                            "Not a file in license files match: {}",
-                            relative.user_display()
-                        );
-                        continue;
-                    }
-
-                    error_on_venv(entry.file_name(), entry.path())?;
-
-                    debug!("License files match: {}", relative.user_display());
-                    license_files.push(relative.portable_display().to_string());
-                }
-
-                // The glob order may be unstable
-                license_files.sort();
-
-                (None, license_expression, license_files)
-            } else {
-                match &self.project.license {
-                    None => (None, None, Vec::new()),
-                    Some(License::Spdx(license_expression)) => {
-                        (None, Some(license_expression.clone()), Vec::new())
-                    }
-                    Some(License::Text { text }) => (Some(text.clone()), None, Vec::new()),
-                    Some(License::File { file }) => {
-                        let text = fs_err::read_to_string(root.join(file))?;
-                        (Some(text), None, Vec::new())
-                    }
-                }
-            };
-
-        // Check that the license expression is a valid SPDX identifier.
-        if let Some(license_expression) = &license_expression {
-            if let Err(err) = spdx::Expression::parse(license_expression) {
-                return Err(ValidationError::InvalidSpdx(license_expression.clone(), err).into());
-            }
-        }
+        let (license, license_expression, license_files) = self.license_metadata(root)?;
 
         // TODO(konsti): https://peps.python.org/pep-0753/#label-normalization (Draft)
-        let project_urls = self
-            .project
-            .urls
-            .iter()
-            .flatten()
-            .map(|(key, value)| format!("{key}, {value}"))
-            .collect();
+        let project_urls = ProjectUrls::new(self.project.urls.clone().unwrap_or_default());
 
         let extras = self
             .project
@@ -522,7 +389,7 @@ impl PyProjectToml {
 
         Ok(Metadata23 {
             metadata_version: metadata_version.to_string(),
-            name: self.project.name.to_string(),
+            name: self.project.name.given.clone(),
             version: self.project.version.to_string(),
             // Not supported.
             platforms: vec![],
@@ -531,11 +398,7 @@ impl PyProjectToml {
             summary,
             description,
             description_content_type,
-            keywords: self
-                .project
-                .keywords
-                .as_ref()
-                .map(|keywords| keywords.join(",")),
+            keywords: self.project.keywords.clone().map(Keywords::new),
             home_page: None,
             download_url: None,
             author,
@@ -547,7 +410,7 @@ impl PyProjectToml {
             license_files,
             classifiers: self.project.classifiers.clone().unwrap_or_default(),
             requires_dist: requires_dist.iter().map(ToString::to_string).collect(),
-            provides_extras: extras.iter().map(ToString::to_string).collect(),
+            provides_extra: extras.iter().map(ToString::to_string).collect(),
             // Not commonly set.
             provides_dist: vec![],
             // Not supported.
@@ -562,6 +425,156 @@ impl PyProjectToml {
             project_urls,
             dynamic: vec![],
         })
+    }
+
+    /// Parse and validate the old (PEP 621) and new (PEP 639) license files.
+    #[expect(clippy::type_complexity)]
+    fn license_metadata(
+        &self,
+        root: &Path,
+    ) -> Result<(Option<String>, Option<String>, Vec<String>), Error> {
+        // TODO(konsti): Issue a warning on old license metadata once PEP 639 is universal.
+        let (license, license_expression, license_files) = if let Some(license_globs) =
+            &self.project.license_files
+        {
+            let license_expression = match &self.project.license {
+                None => None,
+                Some(License::Spdx(license_expression)) => Some(license_expression.clone()),
+                Some(License::Text { .. } | License::File { .. }) => {
+                    return Err(ValidationError::MixedLicenseGenerations.into());
+                }
+            };
+
+            let mut license_files = Vec::new();
+            let mut license_globs_parsed = Vec::with_capacity(license_globs.len());
+            let mut license_glob_matchers = Vec::with_capacity(license_globs.len());
+
+            for license_glob in license_globs {
+                let pep639_glob =
+                    PortableGlobParser::Pep639
+                        .parse(license_glob)
+                        .map_err(|err| Error::PortableGlob {
+                            field: license_glob.to_owned(),
+                            source: err,
+                        })?;
+                license_glob_matchers.push(pep639_glob.compile_matcher());
+                license_globs_parsed.push(pep639_glob);
+            }
+
+            // Track whether each user-specified glob matched so we can flag the unmatched ones.
+            let mut license_globs_matched = vec![false; license_globs_parsed.len()];
+
+            let license_globs =
+                GlobDirFilter::from_globs(&license_globs_parsed).map_err(|err| {
+                    Error::GlobSetTooLarge {
+                        field: "project.license-files".to_string(),
+                        source: err,
+                    }
+                })?;
+
+            for entry in WalkDir::new(root)
+                .sort_by_file_name()
+                .into_iter()
+                .filter_entry(|entry| {
+                    license_globs.match_directory(
+                        entry
+                            .path()
+                            .strip_prefix(root)
+                            .expect("walkdir starts with root"),
+                    )
+                })
+            {
+                let entry = entry.map_err(|err| Error::WalkDir {
+                    root: root.to_path_buf(),
+                    err,
+                })?;
+
+                let relative = entry
+                    .path()
+                    .strip_prefix(root)
+                    .expect("walkdir starts with root");
+
+                if !license_globs.match_path(relative) {
+                    trace!("Not a license files match: {}", relative.user_display());
+                    continue;
+                }
+
+                let file_type = entry.file_type();
+
+                if !(file_type.is_file() || file_type.is_symlink()) {
+                    trace!(
+                        "Not a file or symlink in license files match: {}",
+                        relative.user_display()
+                    );
+                    continue;
+                }
+
+                error_on_venv(entry.file_name(), entry.path())?;
+
+                debug!("License files match: {}", relative.user_display());
+
+                for (matched, matcher) in license_globs_matched
+                    .iter_mut()
+                    .zip(license_glob_matchers.iter())
+                {
+                    if *matched {
+                        continue;
+                    }
+
+                    if matcher.is_match(relative) {
+                        *matched = true;
+                    }
+                }
+
+                license_files.push(relative.portable_display().to_string());
+            }
+
+            if let Some((pattern, _)) = license_globs_parsed
+                .into_iter()
+                .zip(license_globs_matched)
+                .find(|(_, matched)| !matched)
+            {
+                return Err(ValidationError::LicenseGlobNoMatches {
+                    field: "project.license-files".to_string(),
+                    glob: pattern.to_string(),
+                }
+                .into());
+            }
+
+            for license_file in &license_files {
+                let file_path = root.join(license_file);
+                let bytes = fs_err::read(&file_path)?;
+                if str::from_utf8(&bytes).is_err() {
+                    return Err(ValidationError::LicenseFileNotUtf8(license_file.clone()).into());
+                }
+            }
+
+            // The glob order may be unstable
+            license_files.sort();
+
+            (None, license_expression, license_files)
+        } else {
+            match &self.project.license {
+                None => (None, None, Vec::new()),
+                Some(License::Spdx(license_expression)) => {
+                    (None, Some(license_expression.clone()), Vec::new())
+                }
+                Some(License::Text { text }) => (Some(text.clone()), None, Vec::new()),
+                Some(License::File { file }) => {
+                    let text = fs_err::read_to_string(root.join(file))?;
+                    (Some(text), None, Vec::new())
+                }
+            }
+        };
+
+        // Check that the license expression is a valid SPDX identifier.
+        if let Some(license_expression) = &license_expression {
+            if let Err(err) = spdx::Expression::parse(license_expression) {
+                return Err(ValidationError::InvalidSpdx(license_expression.clone(), err).into());
+            }
+        }
+
+        Ok((license, license_expression, license_files))
     }
 
     /// Validate and convert the entrypoints in `pyproject.toml`, including console and GUI scripts,
@@ -645,7 +658,7 @@ impl PyProjectToml {
 #[serde(rename_all = "kebab-case")]
 struct Project {
     /// The name of the project.
-    name: PackageName,
+    name: VerbatimPackageName,
     /// The version of the project.
     version: Version,
     /// The summary description of the project in one line.
@@ -676,7 +689,7 @@ struct Project {
     /// PyPI shows all URLs with their name. For some known patterns, they add favicons.
     /// main: <https://github.com/pypi/warehouse/blob/main/warehouse/templates/packaging/detail.html>
     /// archived: <https://github.com/pypi/warehouse/blob/e3bd3c3805ff47fff32b67a899c1ce11c16f3c31/warehouse/templates/packaging/detail.html>
-    urls: Option<BTreeMap<String, String>>,
+    urls: Option<IndexMap<String, String>>,
     /// The console entrypoints of the project.
     ///
     /// The key of the table is the name of the entry point and the value is the object reference.
@@ -782,18 +795,6 @@ pub(crate) enum Contact {
     Email { email: String },
 }
 
-/// The `[build-system]` section of a pyproject.toml as specified in PEP 517.
-#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
-struct BuildSystem {
-    /// PEP 508 dependencies required to execute the build system.
-    requires: Vec<SerdeVerbatim<Requirement<VerbatimParsedUrl>>>,
-    /// A string naming a Python object that will be used to perform the build.
-    build_backend: Option<String>,
-    /// <https://peps.python.org/pep-0517/#in-tree-build-backends>
-    backend_path: Option<Vec<String>>,
-}
-
 /// The `tool` section as specified in PEP 517.
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
@@ -808,6 +809,100 @@ pub(crate) struct Tool {
 pub(crate) struct ToolUv {
     /// Configuration for building source distributions and wheels with the uv build backend
     build_backend: Option<BuildBackendSettings>,
+}
+
+/// The `[build-system]` section of a pyproject.toml as specified in PEP 517.
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+struct BuildSystem {
+    /// PEP 508 dependencies required to execute the build system.
+    requires: Vec<SerdeVerbatim<Requirement<VerbatimParsedUrl>>>,
+    /// A string naming a Python object that will be used to perform the build.
+    build_backend: Option<String>,
+    /// <https://peps.python.org/pep-0517/#in-tree-build-backends>
+    backend_path: Option<Vec<String>>,
+}
+
+impl BuildSystem {
+    /// Check if the `[build-system]` table matches the uv build backend expectations and return
+    /// a list of warnings if it looks suspicious.
+    ///
+    /// Example of a valid table:
+    ///
+    /// ```toml
+    /// [build-system]
+    /// requires = ["uv_build>=0.4.15,<0.5.0"]
+    /// build-backend = "uv_build"
+    /// ```
+    pub(crate) fn check_build_system(&self, uv_version: &str) -> Vec<String> {
+        let mut warnings = Vec::new();
+        if self.build_backend.as_deref() != Some("uv_build") {
+            warnings.push(format!(
+                r#"The value for `build_system.build-backend` should be `"uv_build"`, not `"{}"`"#,
+                self.build_backend.clone().unwrap_or_default()
+            ));
+        }
+
+        let uv_version =
+            Version::from_str(uv_version).expect("uv's own version is not PEP 440 compliant");
+        let next_minor = uv_version.release().get(1).copied().unwrap_or_default() + 1;
+        let next_breaking = Version::new([0, next_minor]);
+
+        let expected = || {
+            format!(
+                "Expected a single uv requirement in `build-system.requires`, found `{}`",
+                toml::to_string(&self.requires).unwrap_or_default()
+            )
+        };
+
+        let [uv_requirement] = &self.requires.as_slice() else {
+            warnings.push(expected());
+            return warnings;
+        };
+        if uv_requirement.name.as_str() != "uv-build" {
+            warnings.push(expected());
+            return warnings;
+        }
+        let bounded = match &uv_requirement.version_or_url {
+            None => false,
+            Some(VersionOrUrl::Url(_)) => {
+                // We can't validate the url
+                true
+            }
+            Some(VersionOrUrl::VersionSpecifier(specifier)) => {
+                // We don't check how wide the range is (that's up to the user), we just
+                // check that the current version is compliant, to avoid accidentally using a
+                // too new or too old uv, and we check that an upper bound exists. The latter
+                // is very important to allow making breaking changes in uv without breaking
+                // the existing immutable source distributions on pypi.
+                if !specifier.contains(&uv_version) {
+                    // This is allowed to happen when testing prereleases, but we should still warn.
+                    warnings.push(format!(
+                        r#"`build_system.requires = ["{uv_requirement}"]` does not contain the
+                        current uv version {uv_version}"#,
+                    ));
+                }
+                Ranges::from(specifier.clone())
+                    .bounding_range()
+                    .map(|bounding_range| bounding_range.1 != Bound::Unbounded)
+                    .unwrap_or(false)
+            }
+        };
+
+        if !bounded {
+            warnings.push(format!(
+                "`build_system.requires = [\"{}\"]` is missing an \
+                upper bound on the `uv_build` version such as `<{next_breaking}`. \
+                Without bounding the `uv_build` version, the source distribution will break \
+                when a future, breaking version of `uv_build` is released.",
+                // Use an underscore consistently, to avoid confusing users between a package name with dash and a
+                // module name with underscore
+                uv_requirement.verbatim()
+            ));
+        }
+
+        warnings
+    }
 }
 
 #[cfg(test)]
@@ -838,6 +933,28 @@ mod tests {
             let _ = write!(formatted, "\n  Caused by: {source}");
         }
         formatted
+    }
+
+    #[test]
+    fn uppercase_package_name() {
+        let contents = r#"
+            [project]
+            name = "Hello-World"
+            version = "0.1.0"
+
+            [build-system]
+            requires = ["uv_build>=0.4.15,<0.5.0"]
+            build-backend = "uv_build"
+        "#;
+        let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
+        let temp_dir = TempDir::new().unwrap();
+
+        let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
+        assert_snapshot!(metadata.core_metadata_format(), @"
+        Metadata-Version: 2.3
+        Name: Hello-World
+        Version: 0.1.0
+        ");
     }
 
     #[test]
@@ -914,10 +1031,10 @@ mod tests {
         "#
         };
 
-        let pyproject_toml = PyProjectToml::parse(contents).unwrap();
+        let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
 
-        assert_snapshot!(metadata.core_metadata_format(), @r###"
+        assert_snapshot!(metadata.core_metadata_format(), @r#"
         Metadata-Version: 2.3
         Name: hello-world
         Version: 0.1.0
@@ -950,9 +1067,9 @@ mod tests {
         # Foo
 
         This is the foo library.
-        "###);
+        "#);
 
-        assert_snapshot!(pyproject_toml.to_entry_points().unwrap().unwrap(), @r###"
+        assert_snapshot!(pyproject_toml.to_entry_points().unwrap().unwrap(), @"
         [console_scripts]
         foo = foo.cli:__main__
 
@@ -961,8 +1078,7 @@ mod tests {
 
         [bar_group]
         foo-bar = foo:bar
-
-        "###);
+        ");
     }
 
     #[test]
@@ -1008,10 +1124,10 @@ mod tests {
         "#
         };
 
-        let pyproject_toml = PyProjectToml::parse(contents).unwrap();
+        let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
 
-        assert_snapshot!(metadata.core_metadata_format(), @r"
+        assert_snapshot!(metadata.core_metadata_format(), @"
         Metadata-Version: 2.3
         Name: hello-world
         Version: 0.1.0
@@ -1100,10 +1216,10 @@ mod tests {
         "#
         };
 
-        let pyproject_toml = PyProjectToml::parse(contents).unwrap();
+        let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
 
-        assert_snapshot!(metadata.core_metadata_format(), @r###"
+        assert_snapshot!(metadata.core_metadata_format(), @r#"
         Metadata-Version: 2.3
         Name: hello-world
         Version: 0.1.0
@@ -1143,9 +1259,9 @@ mod tests {
         # Foo
 
         This is the foo library.
-        "###);
+        "#);
 
-        assert_snapshot!(pyproject_toml.to_entry_points().unwrap().unwrap(), @r###"
+        assert_snapshot!(pyproject_toml.to_entry_points().unwrap().unwrap(), @"
         [console_scripts]
         foo = foo.cli:__main__
 
@@ -1154,14 +1270,13 @@ mod tests {
 
         [bar_group]
         foo-bar = foo:bar
-
-        "###);
+        ");
     }
 
     #[test]
     fn build_system_valid() {
         let contents = extend_project("");
-        let pyproject_toml = PyProjectToml::parse(&contents).unwrap();
+        let pyproject_toml: PyProjectToml = toml::from_str(&contents).unwrap();
         assert_snapshot!(
             pyproject_toml.check_build_system("0.4.15+test").join("\n"),
             @""
@@ -1179,10 +1294,10 @@ mod tests {
             requires = ["uv_build"]
             build-backend = "uv_build"
         "#};
-        let pyproject_toml = PyProjectToml::parse(contents).unwrap();
+        let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
             pyproject_toml.check_build_system("0.4.15+test").join("\n"),
-            @r###"`build_system.requires = ["uv_build"]` is missing an upper bound on the `uv_build` version such as `<0.5`. Without bounding the `uv_build` version, the source distribution will break when a future, breaking version of `uv_build` is released."###
+            @r#"`build_system.requires = ["uv_build"]` is missing an upper bound on the `uv_build` version such as `<0.5`. Without bounding the `uv_build` version, the source distribution will break when a future, breaking version of `uv_build` is released."#
         );
     }
 
@@ -1197,7 +1312,7 @@ mod tests {
             requires = ["uv_build>=0.4.15,<0.5.0", "wheel"]
             build-backend = "uv_build"
         "#};
-        let pyproject_toml = PyProjectToml::parse(contents).unwrap();
+        let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
             pyproject_toml.check_build_system("0.4.15+test").join("\n"),
             @"Expected a single uv requirement in `build-system.requires`, found ``"
@@ -1215,7 +1330,7 @@ mod tests {
             requires = ["setuptools"]
             build-backend = "uv_build"
         "#};
-        let pyproject_toml = PyProjectToml::parse(contents).unwrap();
+        let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
             pyproject_toml.check_build_system("0.4.15+test").join("\n"),
             @"Expected a single uv requirement in `build-system.requires`, found ``"
@@ -1233,10 +1348,10 @@ mod tests {
             requires = ["uv_build>=0.4.15,<0.5.0"]
             build-backend = "setuptools"
         "#};
-        let pyproject_toml = PyProjectToml::parse(contents).unwrap();
+        let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
             pyproject_toml.check_build_system("0.4.15+test").join("\n"),
-            @r###"The value for `build_system.build-backend` should be `"uv_build"`, not `"setuptools"`"###
+            @r#"The value for `build_system.build-backend` should be `"uv_build"`, not `"setuptools"`"#
         );
     }
 
@@ -1244,16 +1359,16 @@ mod tests {
     fn minimal() {
         let contents = extend_project("");
 
-        let metadata = PyProjectToml::parse(&contents)
+        let metadata = toml::from_str::<PyProjectToml>(&contents)
             .unwrap()
             .to_metadata(Path::new("/do/not/read"))
             .unwrap();
 
-        assert_snapshot!(metadata.core_metadata_format(), @r###"
+        assert_snapshot!(metadata.core_metadata_format(), @"
         Metadata-Version: 2.3
         Name: hello-world
         Version: 0.1.0
-        "###);
+        ");
     }
 
     #[test]
@@ -1263,15 +1378,14 @@ mod tests {
         "#
         });
 
-        let err = PyProjectToml::parse(&contents).unwrap_err();
-        assert_snapshot!(format_err(err), @r###"
-        Invalid pyproject.toml
-          Caused by: TOML parse error at line 4, column 10
+        let err = toml::from_str::<PyProjectToml>(&contents).unwrap_err();
+        assert_snapshot!(format_err(err), @r#"
+        TOML parse error at line 4, column 10
           |
         4 | readme = { path = "Readme.md" }
           |          ^^^^^^^^^^^^^^^^^^^^^^
         data did not match any variant of untagged enum Readme
-        "###);
+        "#);
     }
 
     #[test]
@@ -1281,7 +1395,7 @@ mod tests {
         "#
         });
 
-        let err = PyProjectToml::parse(&contents)
+        let err = toml::from_str::<PyProjectToml>(&contents)
             .unwrap()
             .to_metadata(Path::new("/do/not/read"))
             .unwrap_err();
@@ -1303,14 +1417,14 @@ mod tests {
         "#
         });
 
-        let err = PyProjectToml::parse(&contents)
+        let err = toml::from_str::<PyProjectToml>(&contents)
             .unwrap()
             .to_metadata(Path::new("/do/not/read"))
             .unwrap_err();
-        assert_snapshot!(format_err(err), @r###"
-        Invalid pyproject.toml
+        assert_snapshot!(format_err(err), @"
+        Invalid project metadata
           Caused by: `project.description` must be a single line
-        "###);
+        ");
     }
 
     #[test]
@@ -1321,14 +1435,14 @@ mod tests {
         "#
         });
 
-        let err = PyProjectToml::parse(&contents)
+        let err = toml::from_str::<PyProjectToml>(&contents)
             .unwrap()
             .to_metadata(Path::new("/do/not/read"))
             .unwrap_err();
-        assert_snapshot!(format_err(err), @r###"
-        Invalid pyproject.toml
+        assert_snapshot!(format_err(err), @"
+        Invalid project metadata
           Caused by: When `project.license-files` is defined, `project.license` must be an SPDX expression string
-        "###);
+        ");
     }
 
     #[test]
@@ -1337,16 +1451,16 @@ mod tests {
             license = "MIT OR Apache-2.0"
         "#
         });
-        let metadata = PyProjectToml::parse(&contents)
+        let metadata = toml::from_str::<PyProjectToml>(&contents)
             .unwrap()
             .to_metadata(Path::new("/do/not/read"))
             .unwrap();
-        assert_snapshot!(metadata.core_metadata_format(), @r###"
+        assert_snapshot!(metadata.core_metadata_format(), @"
         Metadata-Version: 2.4
         Name: hello-world
         Version: 0.1.0
         License-Expression: MIT OR Apache-2.0
-        "###);
+        ");
     }
 
     #[test]
@@ -1355,13 +1469,13 @@ mod tests {
             license = "MIT XOR Apache-2"
         "#
         });
-        let err = PyProjectToml::parse(&contents)
+        let err = toml::from_str::<PyProjectToml>(&contents)
             .unwrap()
             .to_metadata(Path::new("/do/not/read"))
             .unwrap_err();
         // TODO(konsti): We mess up the indentation in the error.
-        assert_snapshot!(format_err(err), @r"
-        Invalid pyproject.toml
+        assert_snapshot!(format_err(err), @"
+        Invalid project metadata
           Caused by: `project.license` is not a valid SPDX expression: MIT XOR Apache-2
           Caused by: MIT XOR Apache-2
             ^^^ unknown term
@@ -1375,18 +1489,18 @@ mod tests {
         "#
         });
 
-        let err = PyProjectToml::parse(&contents)
+        let err = toml::from_str::<PyProjectToml>(&contents)
             .unwrap()
             .to_metadata(Path::new("/do/not/read"))
             .unwrap_err();
-        assert_snapshot!(format_err(err), @r###"
-        Invalid pyproject.toml
+        assert_snapshot!(format_err(err), @"
+        Invalid project metadata
           Caused by: Dynamic metadata is not supported
-        "###);
+        ");
     }
 
     fn script_error(contents: &str) -> String {
-        let err = PyProjectToml::parse(contents)
+        let err = toml::from_str::<PyProjectToml>(contents)
             .unwrap()
             .to_entry_points()
             .unwrap_err();

@@ -1,14 +1,12 @@
 [package]
 name = "uv-install-wheel"
-version = "0.0.1"
-publish = false
-description = "Takes a wheel and installs it."
+version = "0.0.27"
+description = "This is an internal component crate of uv"
 keywords = ["wheel", "python"]
 
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
-documentation = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
@@ -22,6 +20,7 @@ name = "uv_install_wheel"
 
 [dependencies]
 uv-distribution-filename = { workspace = true }
+uv-flags = { workspace = true }
 uv-fs = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
@@ -31,21 +30,19 @@ uv-shell = { workspace = true }
 uv-trampoline-builder = { workspace = true }
 uv-warnings = { workspace = true }
 
-clap = { workspace = true, optional = true, features = ["derive"] }
 configparser = { workspace = true }
 csv = { workspace = true }
 data-encoding = { workspace = true }
 fs-err = { workspace = true }
+itertools = { workspace = true }
 mailparse = { workspace = true }
+owo-colors = { workspace = true }
 pathdiff = { workspace = true }
-reflink-copy = { workspace = true }
 regex = { workspace = true }
 rustc-hash = { workspace = true }
-schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
-tempfile = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 walkdir = { workspace = true }
@@ -53,6 +50,10 @@ walkdir = { workspace = true }
 [target.'cfg(target_os = "windows")'.dependencies]
 same-file = { workspace = true }
 self-replace = { workspace = true }
+
+[features]
+clap = ["uv-fs/clap"]
+schemars = ["uv-fs/schemars"]
 
 [dev-dependencies]
 anyhow = { workspace = true }

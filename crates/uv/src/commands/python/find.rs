@@ -7,6 +7,7 @@ use uv_client::BaseClientBuilder;
 use uv_configuration::DependencyGroupsWithDefaults;
 use uv_fs::Simplified;
 use uv_preview::Preview;
+use uv_python::downloads::ManagedPythonDownloadList;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
@@ -22,15 +23,18 @@ use crate::commands::{
 use crate::printer::Printer;
 
 /// Find a Python interpreter.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn find(
     project_dir: &Path,
     request: Option<String>,
     show_version: bool,
+    resolve_links: bool,
     no_project: bool,
     no_config: bool,
     system: bool,
     python_preference: PythonPreference,
+    python_downloads_json_url: Option<&str>,
+    client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
     printer: Printer,
     preview: Preview,
@@ -74,10 +78,14 @@ pub(crate) async fn find(
     )
     .await?;
 
+    let client = client_builder.clone().retries(0).build();
+    let download_list = ManagedPythonDownloadList::new(&client, python_downloads_json_url).await?;
+
     let python = PythonInstallation::find(
         &python_request.unwrap_or_default(),
         environment_preference,
         python_preference,
+        &download_list,
         cache,
         preview,
     )?;
@@ -105,11 +113,12 @@ pub(crate) async fn find(
             python.interpreter().python_version()
         )?;
     } else {
-        writeln!(
-            printer.stdout(),
-            "{}",
-            std::path::absolute(python.interpreter().sys_executable())?.simplified_display()
-        )?;
+        let path = if resolve_links {
+            dunce::canonicalize(python.interpreter().sys_executable())?
+        } else {
+            std::path::absolute(python.interpreter().sys_executable())?
+        };
+        writeln!(printer.stdout(), "{}", path.simplified_display())?;
     }
 
     Ok(ExitStatus::Success)
@@ -118,6 +127,7 @@ pub(crate) async fn find(
 pub(crate) async fn find_script(
     script: Pep723ItemRef<'_>,
     show_version: bool,
+    resolve_links: bool,
     client_builder: &BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -153,11 +163,12 @@ pub(crate) async fn find_script(
     if show_version {
         writeln!(printer.stdout(), "{}", interpreter.python_version())?;
     } else {
-        writeln!(
-            printer.stdout(),
-            "{}",
-            std::path::absolute(interpreter.sys_executable())?.simplified_display()
-        )?;
+        let path = if resolve_links {
+            dunce::canonicalize(interpreter.sys_executable())?
+        } else {
+            std::path::absolute(interpreter.sys_executable())?
+        };
+        writeln!(printer.stdout(), "{}", path.simplified_display())?;
     }
 
     Ok(ExitStatus::Success)

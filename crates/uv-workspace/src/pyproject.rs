@@ -22,6 +22,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 
 use uv_build_backend::BuildBackendSettings;
+use uv_configuration::GitLfsSetting;
 use uv_distribution_types::{Index, IndexName, RequirementSource};
 use uv_fs::{PortablePathBuf, relative_to};
 use uv_git_types::GitReference;
@@ -275,10 +276,11 @@ pub struct Tool {
     pub uv: Option<ToolUv>,
 }
 
-/// Validates that index names in the `tool.uv.index` field are unique.
+/// Validates the `tool.uv.index` field.
 ///
-/// This custom deserializer function checks for duplicate index names
-/// and returns an error if any duplicates are found.
+/// This custom deserializer function checks for:
+/// - Duplicate index names
+/// - Multiple indexes marked as default
 fn deserialize_index_vec<'de, D>(deserializer: D) -> Result<Option<Vec<Index>>, D::Error>
 where
     D: Deserializer<'de>,
@@ -286,6 +288,7 @@ where
     let indexes = Option::<Vec<Index>>::deserialize(deserializer)?;
     if let Some(indexes) = indexes.as_ref() {
         let mut seen_names = FxHashSet::with_capacity_and_hasher(indexes.len(), FxBuildHasher);
+        let mut seen_default = false;
         for index in indexes {
             if let Some(name) = index.name.as_ref() {
                 if !seen_names.insert(name) {
@@ -293,6 +296,14 @@ where
                         "duplicate index name `{name}`"
                     )));
                 }
+            }
+            if index.default {
+                if seen_default {
+                    return Err(serde::de::Error::custom(
+                        "found multiple indexes with `default = true`; only one index may be marked as default",
+                    ));
+                }
+                seen_default = true;
             }
         }
     }
@@ -488,6 +499,37 @@ pub struct ToolUv {
         "#
     )]
     pub override_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+
+    /// Dependencies to exclude when resolving the project's dependencies.
+    ///
+    /// Excludes are used to prevent a package from being selected during resolution,
+    /// regardless of whether it's requested by any other package. When a package is excluded,
+    /// it will be omitted from the dependency list entirely.
+    ///
+    /// Including a package as an exclusion will prevent it from being installed, even if
+    /// it's requested by transitive dependencies. This can be useful for removing optional
+    /// dependencies or working around packages with broken dependencies.
+    ///
+    /// !!! note
+    ///     In `uv lock`, `uv sync`, and `uv run`, uv will only read `exclude-dependencies` from
+    ///     the `pyproject.toml` at the workspace root, and will ignore any declarations in other
+    ///     workspace members or `uv.toml` files.
+    #[cfg_attr(
+        feature = "schemars",
+        schemars(
+            with = "Option<Vec<String>>",
+            description = "Package names to exclude, e.g., `werkzeug`, `numpy`."
+        )
+    )]
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            # Exclude Werkzeug from being installed, even if transitive dependencies request it.
+            exclude-dependencies = ["werkzeug"]
+        "#
+    )]
+    pub exclude_dependencies: Option<Vec<PackageName>>,
 
     /// Constraints to apply when resolving the project's dependencies.
     ///
@@ -977,7 +1019,6 @@ impl IntoIterator for Sources {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema), schemars(untagged))]
-#[allow(clippy::large_enum_variant)]
 enum SourcesWire {
     One(Source),
     Many(Vec<Source>),
@@ -1091,6 +1132,8 @@ pub enum Source {
         rev: Option<String>,
         tag: Option<String>,
         branch: Option<String>,
+        /// Whether to use Git LFS when cloning the repository.
+        lfs: Option<bool>,
         #[serde(
             skip_serializing_if = "uv_pep508::marker::ser::is_empty",
             serialize_with = "uv_pep508::marker::ser::serialize",
@@ -1189,6 +1232,7 @@ impl<'de> Deserialize<'de> for Source {
             rev: Option<String>,
             tag: Option<String>,
             branch: Option<String>,
+            lfs: Option<bool>,
             url: Option<DisplaySafeUrl>,
             path: Option<PortablePathBuf>,
             editable: Option<bool>,
@@ -1212,6 +1256,7 @@ impl<'de> Deserialize<'de> for Source {
             rev,
             tag,
             branch,
+            lfs,
             url,
             path,
             editable,
@@ -1289,6 +1334,7 @@ impl<'de> Deserialize<'de> for Source {
                 rev,
                 tag,
                 branch,
+                lfs,
                 marker,
                 extra,
                 group,
@@ -1545,6 +1591,10 @@ pub enum SourceError {
     )]
     UnusedBranch(String, String),
     #[error(
+        "`{0}` did not resolve to a Git repository, but a Git extension (`--lfs`) was provided."
+    )]
+    UnusedLfs(String),
+    #[error(
         "`{0}` did not resolve to a local directory, but the `--editable` flag was provided. Editable installs are only supported for local directories."
     )]
     UnusedEditable(String),
@@ -1573,12 +1623,16 @@ impl Source {
         rev: Option<String>,
         tag: Option<String>,
         branch: Option<String>,
+        lfs: GitLfsSetting,
         root: &Path,
         existing_sources: Option<&BTreeMap<PackageName, Sources>>,
     ) -> Result<Option<Self>, SourceError> {
         // If the user specified a Git reference for a non-Git source, try existing Git sources before erroring.
         if !matches!(source, RequirementSource::Git { .. })
-            && (branch.is_some() || tag.is_some() || rev.is_some())
+            && (branch.is_some()
+                || tag.is_some()
+                || rev.is_some()
+                || matches!(lfs, GitLfsSetting::Enabled { .. }))
         {
             if let Some(sources) = existing_sources {
                 if let Some(package_sources) = sources.get(name) {
@@ -1598,6 +1652,7 @@ impl Source {
                                 rev,
                                 tag,
                                 branch,
+                                lfs: lfs.into(),
                                 marker: *marker,
                                 extra: extra.clone(),
                                 group: group.clone(),
@@ -1614,6 +1669,9 @@ impl Source {
             }
             if let Some(branch) = branch {
                 return Err(SourceError::UnusedBranch(name.to_string(), branch));
+            }
+            if matches!(lfs, GitLfsSetting::Enabled { from_env: false }) {
+                return Err(SourceError::UnusedLfs(name.to_string()));
             }
         }
 
@@ -1666,9 +1724,25 @@ impl Source {
                     return Ok(None);
                 }
             }
-            RequirementSource::Path { install_path, .. }
-            | RequirementSource::Directory { install_path, .. } => Self::Path {
-                editable,
+            RequirementSource::Path { install_path, .. } => Self::Path {
+                editable: None,
+                package: None,
+                path: PortablePathBuf::from(
+                    relative_to(&install_path, root)
+                        .or_else(|_| std::path::absolute(&install_path))
+                        .map_err(SourceError::Absolute)?
+                        .into_boxed_path(),
+                ),
+                marker: MarkerTree::TRUE,
+                extra: None,
+                group: None,
+            },
+            RequirementSource::Directory {
+                install_path,
+                editable: is_editable,
+                ..
+            } => Self::Path {
+                editable: editable.or(is_editable),
                 package: None,
                 path: PortablePathBuf::from(
                     relative_to(&install_path, root)
@@ -1707,6 +1781,7 @@ impl Source {
                         rev: rev.cloned(),
                         tag,
                         branch,
+                        lfs: lfs.into(),
                         git: git.repository().clone(),
                         subdirectory: subdirectory.map(PortablePathBuf::from),
                         marker: MarkerTree::TRUE,
@@ -1718,6 +1793,7 @@ impl Source {
                         rev,
                         tag,
                         branch,
+                        lfs: lfs.into(),
                         git: git.repository().clone(),
                         subdirectory: subdirectory.map(PortablePathBuf::from),
                         marker: MarkerTree::TRUE,

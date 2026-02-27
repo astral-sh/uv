@@ -7,6 +7,7 @@ use std::sync::Arc;
 use jiff::Timestamp;
 use jiff::civil::{Date, DateTime, Time};
 use jiff::tz::{Offset, TimeZone};
+use petgraph::graph::NodeIndex;
 use serde::Deserialize;
 use toml_edit::{Array, ArrayOfTables, Item, Table, value};
 use url::Url;
@@ -28,7 +29,7 @@ use uv_distribution_types::{
 };
 use uv_fs::{PortablePathBuf, relative_to};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
-use uv_git_types::{GitOid, GitReference, GitUrl, GitUrlParseError};
+use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, MarkerTree, VerbatimUrl};
@@ -38,7 +39,7 @@ use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 
 use crate::lock::export::ExportableRequirements;
-use crate::lock::{Source, WheelTagHint, each_element_on_its_line_array};
+use crate::lock::{Source, WheelTagHint, each_element_on_its_line_array, is_wheel_unreachable};
 use crate::resolution::ResolutionGraphNode;
 use crate::{Installable, LockError, ResolverOutput};
 
@@ -231,7 +232,7 @@ pub struct PylockTomlPackage {
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
-#[allow(clippy::empty_structs_with_brackets)]
+#[expect(clippy::empty_structs_with_brackets)]
 struct PylockTomlDependency {}
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -330,10 +331,16 @@ struct PylockTomlAttestationIdentity {
 
 impl<'lock> PylockToml {
     /// Construct a [`PylockToml`] from a [`ResolverOutput`].
+    ///
+    /// If `tags` is provided, only wheels compatible with the given tags will be included.
+    /// If `build_options` is provided, packages marked as `--only-binary` will not include
+    /// source distributions.
     pub fn from_resolution(
         resolution: &ResolverOutput,
         omit: &[PackageName],
         install_path: &Path,
+        tags: Option<&Tags>,
+        build_options: &BuildOptions,
     ) -> Result<Self, PylockTomlErrorKind> {
         // The lock version is always `1.0` at time of writing.
         let lock_version = Version::new([1, 0]);
@@ -417,71 +424,46 @@ impl<'lock> PylockToml {
                     });
                 }
                 Dist::Built(BuiltDist::Registry(dist)) => {
-                    package.wheels = Some(
-                        dist.wheels
-                            .iter()
-                            .map(|wheel| {
-                                let url = wheel
-                                    .file
-                                    .url
-                                    .to_url()
-                                    .map_err(PylockTomlErrorKind::ToUrl)?;
-                                Ok(PylockTomlWheel {
-                                    // Optional "when the last component of path/ url would be the same value".
-                                    name: if url
-                                        .filename()
-                                        .is_ok_and(|filename| filename == *wheel.file.filename)
-                                    {
-                                        None
-                                    } else {
-                                        Some(wheel.filename.clone())
-                                    },
-                                    upload_time: wheel
-                                        .file
-                                        .upload_time_utc_ms
-                                        .map(Timestamp::from_millisecond)
-                                        .transpose()?,
-                                    url: Some(
-                                        wheel
-                                            .file
-                                            .url
-                                            .to_url()
-                                            .map_err(PylockTomlErrorKind::ToUrl)?,
-                                    ),
-                                    path: None,
-                                    size: wheel.file.size,
-                                    hashes: Hashes::from(wheel.file.hashes.clone()),
-                                })
-                            })
-                            .collect::<Result<Vec<_>, PylockTomlErrorKind>>()?,
-                    );
+                    package.wheels = Self::filter_and_convert_wheels(
+                        resolution,
+                        tags,
+                        &requires_python,
+                        node_index,
+                        &dist.wheels,
+                        build_options.no_binary_package(dist.name()),
+                    )?;
 
-                    if let Some(sdist) = dist.sdist.as_ref() {
-                        let url = sdist
-                            .file
-                            .url
-                            .to_url()
-                            .map_err(PylockTomlErrorKind::ToUrl)?;
-                        package.sdist = Some(PylockTomlSdist {
-                            // Optional "when the last component of path/ url would be the same value".
-                            name: if url
-                                .filename()
-                                .is_ok_and(|filename| filename == *sdist.file.filename)
-                            {
-                                None
-                            } else {
-                                Some(sdist.file.filename.clone())
-                            },
-                            upload_time: sdist
+                    // Filter sdist based on build options (--only-binary).
+                    let no_build = build_options.no_build_package(dist.name());
+
+                    if !no_build {
+                        if let Some(sdist) = dist.sdist.as_ref() {
+                            let url = sdist
                                 .file
-                                .upload_time_utc_ms
-                                .map(Timestamp::from_millisecond)
-                                .transpose()?,
-                            url: Some(url),
-                            path: None,
-                            size: sdist.file.size,
-                            hashes: Hashes::from(sdist.file.hashes.clone()),
-                        });
+                                .url
+                                .to_url()
+                                .map_err(PylockTomlErrorKind::ToUrl)?;
+                            package.sdist = Some(PylockTomlSdist {
+                                // Optional "when the last component of path/ url would be the same value".
+                                name: if url
+                                    .filename()
+                                    .is_ok_and(|filename| filename == *sdist.file.filename)
+                                {
+                                    None
+                                } else {
+                                    Some(sdist.file.filename.clone())
+                                },
+                                upload_time: sdist
+                                    .file
+                                    .upload_time_utc_ms
+                                    .map(Timestamp::from_millisecond)
+                                    .transpose()?,
+                                url: Some(url),
+                                path: None,
+                                size: sdist.file.size,
+                                hashes: Hashes::from(sdist.file.hashes.clone()),
+                            });
+                        }
                     }
                 }
                 Dist::Source(SourceDist::DirectUrl(dist)) => {
@@ -530,66 +512,41 @@ impl<'lock> PylockToml {
                     });
                 }
                 Dist::Source(SourceDist::Registry(dist)) => {
-                    package.wheels = Some(
-                        dist.wheels
-                            .iter()
-                            .map(|wheel| {
-                                let url = wheel
-                                    .file
-                                    .url
-                                    .to_url()
-                                    .map_err(PylockTomlErrorKind::ToUrl)?;
-                                Ok(PylockTomlWheel {
-                                    // Optional "when the last component of path/ url would be the same value".
-                                    name: if url
-                                        .filename()
-                                        .is_ok_and(|filename| filename == *wheel.file.filename)
-                                    {
-                                        None
-                                    } else {
-                                        Some(wheel.filename.clone())
-                                    },
-                                    upload_time: wheel
-                                        .file
-                                        .upload_time_utc_ms
-                                        .map(Timestamp::from_millisecond)
-                                        .transpose()?,
-                                    url: Some(
-                                        wheel
-                                            .file
-                                            .url
-                                            .to_url()
-                                            .map_err(PylockTomlErrorKind::ToUrl)?,
-                                    ),
-                                    path: None,
-                                    size: wheel.file.size,
-                                    hashes: Hashes::from(wheel.file.hashes.clone()),
-                                })
-                            })
-                            .collect::<Result<Vec<_>, PylockTomlErrorKind>>()?,
-                    );
+                    package.wheels = Self::filter_and_convert_wheels(
+                        resolution,
+                        tags,
+                        &requires_python,
+                        node_index,
+                        &dist.wheels,
+                        build_options.no_binary_package(&dist.name),
+                    )?;
 
-                    let url = dist.file.url.to_url().map_err(PylockTomlErrorKind::ToUrl)?;
-                    package.sdist = Some(PylockTomlSdist {
-                        // Optional "when the last component of path/ url would be the same value".
-                        name: if url
-                            .filename()
-                            .is_ok_and(|filename| filename == *dist.file.filename)
-                        {
-                            None
-                        } else {
-                            Some(dist.file.filename.clone())
-                        },
-                        upload_time: dist
-                            .file
-                            .upload_time_utc_ms
-                            .map(Timestamp::from_millisecond)
-                            .transpose()?,
-                        url: Some(url),
-                        path: None,
-                        size: dist.file.size,
-                        hashes: Hashes::from(dist.file.hashes.clone()),
-                    });
+                    // Filter sdist based on build options (--only-binary).
+                    let no_build = build_options.no_build_package(&dist.name);
+
+                    if !no_build {
+                        let url = dist.file.url.to_url().map_err(PylockTomlErrorKind::ToUrl)?;
+                        package.sdist = Some(PylockTomlSdist {
+                            // Optional "when the last component of path/ url would be the same value".
+                            name: if url
+                                .filename()
+                                .is_ok_and(|filename| filename == *dist.file.filename)
+                            {
+                                None
+                            } else {
+                                Some(dist.file.filename.clone())
+                            },
+                            upload_time: dist
+                                .file
+                                .upload_time_utc_ms
+                                .map(Timestamp::from_millisecond)
+                                .transpose()?,
+                            url: Some(url),
+                            path: None,
+                            size: dist.file.size,
+                            hashes: Hashes::from(dist.file.hashes.clone()),
+                        });
+                    }
                 }
             }
 
@@ -613,6 +570,79 @@ impl<'lock> PylockToml {
         })
     }
 
+    /// Filter wheels based on build options (--no-binary) and incompatible tags and return the
+    /// rest.
+    ///
+    /// Returns `Ok(None)` if no wheels are compatible.
+    fn filter_and_convert_wheels(
+        resolution: &ResolverOutput,
+        tags: Option<&Tags>,
+        requires_python: &RequiresPython,
+        node_index: NodeIndex,
+        wheels: &[RegistryBuiltWheel],
+        no_binary: bool,
+    ) -> Result<Option<Vec<PylockTomlWheel>>, PylockTomlErrorKind> {
+        if no_binary {
+            return Ok(None);
+        }
+
+        // Filter wheels based on tag compatibility and requires-python.
+        let wheels: Vec<_> = wheels
+            .iter()
+            .filter(|wheel| {
+                !is_wheel_unreachable(
+                    &wheel.filename,
+                    resolution,
+                    requires_python,
+                    node_index,
+                    tags,
+                )
+            })
+            .collect();
+
+        if wheels.is_empty() {
+            return Ok(None);
+        }
+
+        let wheels = wheels
+            .into_iter()
+            .map(|wheel| {
+                let url = wheel
+                    .file
+                    .url
+                    .to_url()
+                    .map_err(PylockTomlErrorKind::ToUrl)?;
+                Ok(PylockTomlWheel {
+                    // Optional "when the last component of path/ url would be the same value".
+                    name: if url
+                        .filename()
+                        .is_ok_and(|filename| filename == *wheel.file.filename)
+                    {
+                        None
+                    } else {
+                        Some(wheel.filename.clone())
+                    },
+                    upload_time: wheel
+                        .file
+                        .upload_time_utc_ms
+                        .map(Timestamp::from_millisecond)
+                        .transpose()?,
+                    url: Some(
+                        wheel
+                            .file
+                            .url
+                            .to_url()
+                            .map_err(PylockTomlErrorKind::ToUrl)?,
+                    ),
+                    path: None,
+                    size: wheel.file.size,
+                    hashes: Hashes::from(wheel.file.hashes.clone()),
+                })
+            })
+            .collect::<Result<Vec<_>, PylockTomlErrorKind>>()?;
+        Ok(Some(wheels))
+    }
+
     /// Construct a [`PylockToml`] from a uv lockfile.
     pub fn from_lock(
         target: &impl Installable<'lock>,
@@ -631,7 +661,7 @@ impl<'lock> PylockToml {
             dev,
             annotate,
             install_options,
-        );
+        )?;
 
         // Sort the nodes.
         nodes.sort_unstable_by_key(|node| &node.package.id);
@@ -903,7 +933,7 @@ impl<'lock> PylockToml {
         let mut doc = toml_edit::DocumentMut::new();
 
         doc.insert("lock-version", value(self.lock_version.to_string()));
-        doc.insert("created-by", value(self.created_by.to_string()));
+        doc.insert("created-by", value(self.created_by.as_str()));
         if let Some(ref requires_python) = self.requires_python {
             doc.insert("requires-python", value(requires_python.to_string()));
         }
@@ -1144,13 +1174,13 @@ impl<'lock> PylockToml {
                         kind: Box::new(PylockTomlErrorKind::IncompatibleWheelOnly(
                             package.name.clone(),
                         )),
-                        hint: package.tag_hint(tags),
+                        hint: package.tag_hint(tags, markers),
                     }),
                     (false, false) => Err(PylockTomlError {
                         kind: Box::new(PylockTomlErrorKind::NeitherSourceDistNorWheel(
                             package.name.clone(),
                         )),
-                        hint: package.tag_hint(tags),
+                        hint: package.tag_hint(tags, markers),
                     }),
                 };
             };
@@ -1279,7 +1309,7 @@ impl PylockTomlPackage {
     }
 
     /// Generate a [`WheelTagHint`] based on wheel-tag incompatibilities.
-    fn tag_hint(&self, tags: &Tags) -> Option<WheelTagHint> {
+    fn tag_hint(&self, tags: &Tags, markers: &MarkerEnvironment) -> Option<WheelTagHint> {
         let filenames = self
             .wheels
             .iter()
@@ -1287,7 +1317,7 @@ impl PylockTomlPackage {
             .filter_map(|wheel| wheel.filename(&self.name).ok())
             .collect::<Vec<_>>();
         let filenames = filenames.iter().map(Cow::as_ref).collect::<Vec<_>>();
-        WheelTagHint::from_wheels(&self.name, self.version.as_ref(), &filenames, tags)
+        WheelTagHint::from_wheels(&self.name, self.version.as_ref(), &filenames, tags, markers)
     }
 
     /// Returns the [`ResolvedRepositoryReference`] for the package, if it is a Git source.
@@ -1420,7 +1450,7 @@ impl PylockTomlVcs {
             let mut url = if let Some(url) = self.url.as_ref() {
                 url.clone()
             } else if let Some(path) = self.path.as_ref() {
-                DisplaySafeUrl::from(
+                DisplaySafeUrl::from_url(
                     Url::from_directory_path(install_path.join(path))
                         .map_err(|()| PylockTomlErrorKind::PathToUrl)?,
                 )
@@ -1437,7 +1467,8 @@ impl PylockTomlVcs {
                 .unwrap_or_else(|| GitReference::BranchOrTagOrCommit(self.commit_id.to_string()));
             let precise = self.commit_id;
 
-            GitUrl::from_commit(url, reference, precise)?
+            // TODO(samypr100): GitLfs::from_env() as pylock.toml spec doesn't specify how to label LFS support
+            GitUrl::from_commit(url, reference, precise, GitLfs::from_env())?
         };
 
         // Reconstruct the PEP 508-compatible URL from the `GitSource`.
@@ -1640,7 +1671,7 @@ impl PylockTomlArchive {
 }
 
 /// Convert a Jiff timestamp to a TOML datetime.
-#[allow(clippy::ref_option)]
+#[expect(clippy::ref_option)]
 fn timestamp_to_toml_datetime<S>(
     timestamp: &Option<Timestamp>,
     serializer: S,

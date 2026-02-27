@@ -94,12 +94,39 @@ pub enum MemberDiscovery {
     Ignore(BTreeSet<PathBuf>),
 }
 
+/// Whether a "project" must be defined via a `[project]` table.
+#[derive(Debug, Default, Clone, Hash, PartialEq, Eq)]
+pub enum ProjectDiscovery {
+    /// The `[project]` table is optional; when missing, the target is treated as a virtual
+    /// project with only dependency groups.
+    #[default]
+    Optional,
+    /// A `[project]` table must be defined.
+    ///
+    /// If not defined, discovery will fail.
+    Required,
+}
+
+impl ProjectDiscovery {
+    /// Whether a `[project]` table is required.
+    pub fn allows_implicit_workspace(&self) -> bool {
+        matches!(self, Self::Optional)
+    }
+
+    /// Whether a non-project workspace root is allowed.
+    pub fn allows_non_project_workspace(&self) -> bool {
+        matches!(self, Self::Optional)
+    }
+}
+
 #[derive(Debug, Default, Clone, Hash, PartialEq, Eq)]
 pub struct DiscoveryOptions {
     /// The path to stop discovery at.
     pub stop_discovery_at: Option<PathBuf>,
     /// The strategy to use when discovering workspace members.
     pub members: MemberDiscovery,
+    /// The strategy to use when discovering the project.
+    pub project: ProjectDiscovery,
 }
 
 pub type RequiresPythonSources = BTreeMap<(PackageName, Option<GroupName>), VersionSpecifiers>;
@@ -145,7 +172,7 @@ impl Workspace {
     ///   * If an explicit workspace root exists: Collect workspace from this root, we're done.
     ///   * If there is no explicit workspace: We have a single project workspace, we're done.
     ///
-    /// Note that there are two kinds of workspace roots: projects, and (legacy) non-project roots.
+    /// Note that there are two kinds of workspace roots: projects, and non-project roots.
     /// The non-project roots lack a `[project]` table, and so are not themselves projects, as in:
     /// ```toml
     /// [tool.uv.workspace]
@@ -162,6 +189,10 @@ impl Workspace {
         let path = std::path::absolute(path)
             .map_err(WorkspaceError::Normalize)?
             .clone();
+        // Remove `.` and `..`
+        let path = uv_fs::normalize_path(&path);
+        // Trim trailing slashes.
+        let path = path.components().collect::<PathBuf>();
 
         let project_path = path
             .ancestors()
@@ -227,7 +258,7 @@ impl Workspace {
             workspace_root.simplified_display()
         );
 
-        // Unlike in `ProjectWorkspace` discovery, we might be in a legacy non-project root without
+        // Unlike in `ProjectWorkspace` discovery, we might be in a non-project root without
         // being in any specific project.
         let current_project = pyproject_toml
             .project
@@ -322,7 +353,7 @@ impl Workspace {
         }
     }
 
-    /// Returns `true` if the workspace has a (legacy) non-project root.
+    /// Returns `true` if the workspace has a non-project root.
     pub fn is_non_project(&self) -> bool {
         !self
             .packages
@@ -616,6 +647,20 @@ impl Workspace {
             return vec![];
         };
         overrides.clone()
+    }
+
+    /// Returns the set of dependency exclusions for the workspace.
+    pub fn exclude_dependencies(&self) -> Vec<uv_normalize::PackageName> {
+        let Some(excludes) = self
+            .pyproject_toml
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.exclude_dependencies.as_ref())
+        else {
+            return vec![];
+        };
+        excludes.clone()
     }
 
     /// Returns the set of constraints for the workspace.
@@ -929,17 +974,19 @@ impl Workspace {
 
         // Add all other workspace members.
         for member_glob in workspace_definition.clone().members.unwrap_or_default() {
+            // Normalize the member glob to remove leading `./` and other relative path components
+            let normalized_glob = uv_fs::normalize_path(Path::new(member_glob.as_str()));
             let absolute_glob = PathBuf::from(glob::Pattern::escape(
                 workspace_root.simplified().to_string_lossy().as_ref(),
             ))
-            .join(member_glob.as_str())
+            .join(normalized_glob.as_ref())
             .to_string_lossy()
             .to_string();
             for member_root in glob(&absolute_glob)
-                .map_err(|err| WorkspaceError::Pattern(absolute_glob.to_string(), err))?
+                .map_err(|err| WorkspaceError::Pattern(absolute_glob.clone(), err))?
             {
                 let member_root = member_root
-                    .map_err(|err| WorkspaceError::GlobWalk(absolute_glob.to_string(), err))?;
+                    .map_err(|err| WorkspaceError::GlobWalk(absolute_glob.clone(), err))?;
                 if !seen.insert(member_root.clone()) {
                     continue;
                 }
@@ -1003,6 +1050,16 @@ impl Workspace {
                                 continue;
                             }
 
+                            // If the directory only contains gitignored files
+                            // (e.g., `__pycache__`), skip it.
+                            if has_only_gitignored_files(&member_root) {
+                                debug!(
+                                    "Ignoring workspace member with only gitignored files: `{}`",
+                                    member_root.simplified_display()
+                                );
+                                continue;
+                            }
+
                             return Err(WorkspaceError::MissingPyprojectTomlMember(
                                 member_root,
                                 member_glob.to_string(),
@@ -1023,10 +1080,17 @@ impl Workspace {
                     .and_then(|uv| uv.managed)
                     == Some(false)
                 {
-                    debug!(
-                        "Project `{}` is marked as unmanaged; omitting from workspace members",
-                        pyproject_toml.project.as_ref().unwrap().name
-                    );
+                    if let Some(project) = pyproject_toml.project.as_ref() {
+                        debug!(
+                            "Project `{}` is marked as unmanaged; omitting from workspace members",
+                            project.name
+                        );
+                    } else {
+                        debug!(
+                            "Workspace member at `{}` is marked as unmanaged; omitting from workspace members",
+                            member_root.simplified_display()
+                        );
+                    }
                     continue;
                 }
 
@@ -1324,6 +1388,10 @@ impl ProjectWorkspace {
         let project_path = std::path::absolute(install_path)
             .map_err(WorkspaceError::Normalize)?
             .clone();
+        // Remove `.` and `..`
+        let project_path = uv_fs::normalize_path(&project_path);
+        // Trim trailing slashes.
+        let project_path = project_path.components().collect::<PathBuf>();
 
         // Check if workspaces are explicitly disabled for the project.
         if project_pyproject_toml
@@ -1517,6 +1585,38 @@ async fn find_workspace(
     Ok(None)
 }
 
+/// Check if a directory only contains files that are ignored.
+///
+/// Returns `true` if walking the directory while respecting `.gitignore` and `.ignore` rules
+/// yields no files, indicating that any files present (e.g., `__pycache__`) are all ignored.
+fn has_only_gitignored_files(path: &Path) -> bool {
+    let walker = ignore::WalkBuilder::new(path)
+        .hidden(false)
+        .parents(true)
+        .ignore(true)
+        .git_ignore(true)
+        .git_global(true)
+        .git_exclude(true)
+        .build();
+
+    for entry in walker {
+        let Ok(entry) = entry else {
+            // If we can't read an entry, assume non-ignored content exists.
+            return false;
+        };
+
+        // Skip directories.
+        if entry.path().is_dir() {
+            continue;
+        }
+
+        // A non-ignored entry exists.
+        return false;
+    }
+
+    true
+}
+
 /// Check if we're in the `tool.uv.workspace.excluded` of a workspace.
 fn is_excluded_from_workspace(
     project_path: &Path,
@@ -1524,10 +1624,12 @@ fn is_excluded_from_workspace(
     workspace: &ToolUvWorkspace,
 ) -> Result<bool, WorkspaceError> {
     for exclude_glob in workspace.exclude.iter().flatten() {
+        // Normalize the exclude glob to remove leading `./` and other relative path components
+        let normalized_glob = uv_fs::normalize_path(Path::new(exclude_glob.as_str()));
         let absolute_glob = PathBuf::from(glob::Pattern::escape(
             workspace_root.simplified().to_string_lossy().as_ref(),
         ))
-        .join(exclude_glob.as_str());
+        .join(normalized_glob.as_ref());
         let absolute_glob = absolute_glob.to_string_lossy();
         let exclude_pattern = glob::Pattern::new(&absolute_glob)
             .map_err(|err| WorkspaceError::Pattern(absolute_glob.to_string(), err))?;
@@ -1545,10 +1647,12 @@ fn is_included_in_workspace(
     workspace: &ToolUvWorkspace,
 ) -> Result<bool, WorkspaceError> {
     for member_glob in workspace.members.iter().flatten() {
+        // Normalize the member glob to remove leading `./` and other relative path components
+        let normalized_glob = uv_fs::normalize_path(Path::new(member_glob.as_str()));
         let absolute_glob = PathBuf::from(glob::Pattern::escape(
             workspace_root.simplified().to_string_lossy().as_ref(),
         ))
-        .join(member_glob.as_str());
+        .join(normalized_glob.as_ref());
         let absolute_glob = absolute_glob.to_string_lossy();
         let include_pattern = glob::Pattern::new(&absolute_glob)
             .map_err(|err| WorkspaceError::Pattern(absolute_glob.to_string(), err))?;
@@ -1561,13 +1665,13 @@ fn is_included_in_workspace(
 
 /// A project that can be discovered.
 ///
-/// The project could be a package within a workspace, a real workspace root, or a (legacy)
-/// non-project workspace root, which can define its own dev dependencies.
+/// The project could be a package within a workspace, a real workspace root, or a non-project
+/// workspace root, which can define its own dev dependencies.
 #[derive(Debug, Clone)]
 pub enum VirtualProject {
     /// A project (which could be a workspace root or member).
     Project(ProjectWorkspace),
-    /// A (legacy) non-project workspace root.
+    /// A non-project workspace root.
     NonProject(Workspace),
 }
 
@@ -1583,33 +1687,6 @@ impl VirtualProject {
         path: &Path,
         options: &DiscoveryOptions,
         cache: &WorkspaceCache,
-    ) -> Result<Self, WorkspaceError> {
-        Self::discover_impl(path, options, cache, false).await
-    }
-
-    /// Equivalent to [`VirtualProject::discover`] but consider it acceptable for
-    /// both `[project]` and `[tool.uv.workspace]` to be missing.
-    ///
-    /// If they are, we act as if an empty `[tool.uv.workspace]` was found.
-    pub async fn discover_defaulted(
-        path: &Path,
-        options: &DiscoveryOptions,
-        cache: &WorkspaceCache,
-    ) -> Result<Self, WorkspaceError> {
-        Self::discover_impl(path, options, cache, true).await
-    }
-
-    /// Find the current project or virtual workspace root, given the current directory.
-    ///
-    /// Similar to calling [`ProjectWorkspace::discover`] with a fallback to [`Workspace::discover`],
-    /// but avoids rereading the `pyproject.toml` (and relying on error-handling as control flow).
-    ///
-    /// This method requires an absolute path and panics otherwise.
-    async fn discover_impl(
-        path: &Path,
-        options: &DiscoveryOptions,
-        cache: &WorkspaceCache,
-        default_missing_workspace: bool,
     ) -> Result<Self, WorkspaceError> {
         assert!(
             path.is_absolute(),
@@ -1656,6 +1733,7 @@ impl VirtualProject {
             .as_ref()
             .and_then(|tool| tool.uv.as_ref())
             .and_then(|uv| uv.workspace.as_ref())
+            .filter(|_| options.project.allows_non_project_workspace())
         {
             // Otherwise, if it contains a `tool.uv.workspace` table, it's a non-project workspace
             // root.
@@ -1674,7 +1752,7 @@ impl VirtualProject {
             .await?;
 
             Ok(Self::NonProject(workspace))
-        } else if default_missing_workspace {
+        } else if options.project.allows_implicit_workspace() {
             // Otherwise it's a pyproject.toml that maybe contains dependency-groups
             // that we want to treat like a project/workspace to handle those uniformly
             let project_path = std::path::absolute(project_root)
@@ -1786,7 +1864,7 @@ mod tests {
             .unwrap()
             .parent()
             .unwrap()
-            .join("scripts")
+            .join("test")
             .join("workspaces");
         let project = ProjectWorkspace::discover(
             &root_dir.join(folder),
@@ -2032,6 +2110,7 @@ mod tests {
                       "dependency-groups": null,
                       "dev-dependencies": null,
                       "override-dependencies": null,
+                      "exclude-dependencies": null,
                       "constraint-dependencies": null,
                       "build-constraint-dependencies": null,
                       "environments": null,
@@ -2132,6 +2211,7 @@ mod tests {
                       "dependency-groups": null,
                       "dev-dependencies": null,
                       "override-dependencies": null,
+                      "exclude-dependencies": null,
                       "constraint-dependencies": null,
                       "build-constraint-dependencies": null,
                       "environments": null,
@@ -2345,6 +2425,7 @@ mod tests {
                       "dependency-groups": null,
                       "dev-dependencies": null,
                       "override-dependencies": null,
+                      "exclude-dependencies": null,
                       "constraint-dependencies": null,
                       "build-constraint-dependencies": null,
                       "environments": null,
@@ -2454,6 +2535,7 @@ mod tests {
                       "dependency-groups": null,
                       "dev-dependencies": null,
                       "override-dependencies": null,
+                      "exclude-dependencies": null,
                       "constraint-dependencies": null,
                       "build-constraint-dependencies": null,
                       "environments": null,
@@ -2576,6 +2658,7 @@ mod tests {
                       "dependency-groups": null,
                       "dev-dependencies": null,
                       "override-dependencies": null,
+                      "exclude-dependencies": null,
                       "constraint-dependencies": null,
                       "build-constraint-dependencies": null,
                       "environments": null,
@@ -2672,6 +2755,7 @@ mod tests {
                       "dependency-groups": null,
                       "dev-dependencies": null,
                       "override-dependencies": null,
+                      "exclude-dependencies": null,
                       "constraint-dependencies": null,
                       "build-constraint-dependencies": null,
                       "environments": null,

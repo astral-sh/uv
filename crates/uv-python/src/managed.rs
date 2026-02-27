@@ -1,6 +1,6 @@
 use core::fmt;
 use std::borrow::Cow;
-use std::cmp::Reverse;
+use std::cmp::{Ordering, Reverse};
 use std::ffi::OsStr;
 use std::io::{self, Write};
 #[cfg(windows)]
@@ -10,25 +10,27 @@ use std::str::FromStr;
 
 use fs_err as fs;
 use itertools::Itertools;
-use same_file::is_same_file;
 use thiserror::Error;
 use tracing::{debug, warn};
-use uv_preview::{Preview, PreviewFeatures};
 #[cfg(windows)]
 use windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
-use uv_fs::{LockedFile, Simplified, replace_symlink, symlink_or_copy_file};
+use uv_fs::{
+    LockedFile, LockedFileError, LockedFileMode, Simplified, replace_symlink, symlink_or_copy_file,
+};
 use uv_platform::{Error as PlatformError, Os};
 use uv_platform::{LibcDetectionError, Platform};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
-use uv_trampoline_builder::{Launcher, windows_python_launcher};
+use uv_trampoline_builder::{Launcher, LauncherKind};
 
+use crate::discovery::VersionRequest;
 use crate::downloads::{Error as DownloadError, ManagedPythonDownload};
 use crate::implementation::{
     Error as ImplementationError, ImplementationName, LenientImplementationName,
 };
 use crate::installation::{self, PythonInstallationKey};
+use crate::interpreter::Interpreter;
 use crate::python_version::PythonVersion;
 use crate::{
     PythonInstallationMinorVersionKey, PythonRequest, PythonVariant, macos_dylib, sysconfig,
@@ -38,6 +40,8 @@ use crate::{
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
+    #[error(transparent)]
+    LockedFile(#[from] LockedFileError),
     #[error(transparent)]
     Download(#[from] DownloadError),
     #[error(transparent)]
@@ -50,49 +54,20 @@ pub enum Error {
     ExtractError(#[from] uv_extract::Error),
     #[error(transparent)]
     SysconfigError(#[from] sysconfig::Error),
-    #[error("Failed to copy to: {0}", to.user_display())]
-    CopyError {
-        to: PathBuf,
-        #[source]
-        err: io::Error,
-    },
     #[error("Missing expected Python executable at {}", _0.user_display())]
     MissingExecutable(PathBuf),
     #[error("Missing expected target directory for Python minor version link at {}", _0.user_display())]
     MissingPythonMinorVersionLinkTargetDirectory(PathBuf),
-    #[error("Failed to create canonical Python executable at {} from {}", to.user_display(), from.user_display())]
-    CanonicalizeExecutable {
-        from: PathBuf,
-        to: PathBuf,
-        #[source]
-        err: io::Error,
-    },
-    #[error("Failed to create Python executable link at {} from {}", to.user_display(), from.user_display())]
-    LinkExecutable {
-        from: PathBuf,
-        to: PathBuf,
-        #[source]
-        err: io::Error,
-    },
-    #[error("Failed to create Python minor version link directory at {} from {}", to.user_display(), from.user_display())]
-    PythonMinorVersionLinkDirectory {
-        from: PathBuf,
-        to: PathBuf,
-        #[source]
-        err: io::Error,
-    },
-    #[error("Failed to create directory for Python executable link at {}", to.user_display())]
-    ExecutableDirectory {
-        to: PathBuf,
-        #[source]
-        err: io::Error,
-    },
-    #[error("Failed to read Python installation directory: {0}", dir.user_display())]
-    ReadError {
-        dir: PathBuf,
-        #[source]
-        err: io::Error,
-    },
+    #[error("Failed to create canonical Python executable")]
+    CanonicalizeExecutable(#[source] io::Error),
+    #[error("Failed to create Python executable link")]
+    LinkExecutable(#[source] io::Error),
+    #[error("Failed to create Python minor version link directory")]
+    PythonMinorVersionLinkDirectory(#[source] io::Error),
+    #[error("Failed to create directory for Python executable link")]
+    ExecutableDirectory(#[source] io::Error),
+    #[error("Failed to read Python installation directory")]
+    ReadError(#[source] io::Error),
     #[error("Failed to find a directory to install executables into")]
     NoExecutableDirectory,
     #[error(transparent)]
@@ -108,6 +83,18 @@ pub enum Error {
     #[error(transparent)]
     MacOsDylib(#[from] macos_dylib::Error),
 }
+
+/// Compare two build version strings.
+///
+/// Build versions are typically YYYYMMDD date strings. Comparison is done numerically
+/// if both values parse as integers, otherwise falls back to lexicographic comparison.
+pub fn compare_build_versions(a: &str, b: &str) -> Ordering {
+    match (a.parse::<u64>(), b.parse::<u64>()) {
+        (Ok(a_num), Ok(b_num)) => a_num.cmp(&b_num),
+        _ => a.cmp(b),
+    }
+}
+
 /// A collection of uv-managed Python installations installed on the current system.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ManagedPythonInstallations {
@@ -124,7 +111,12 @@ impl ManagedPythonInstallations {
     /// Grab a file lock for the managed Python distribution directory to prevent concurrent access
     /// across processes.
     pub async fn lock(&self) -> Result<LockedFile, Error> {
-        Ok(LockedFile::acquire(self.root.join(".lock"), self.root.user_display()).await?)
+        Ok(LockedFile::acquire(
+            self.root.join(".lock"),
+            LockedFileMode::Exclusive,
+            self.root.user_display(),
+        )
+        .await?)
     }
 
     /// Prefer, in order:
@@ -220,18 +212,12 @@ impl ManagedPythonInstallations {
                         Err(err) => Some(Err(err)),
                     })
                     .collect::<Result<_, io::Error>>()
-                    .map_err(|err| Error::ReadError {
-                        dir: self.root.clone(),
-                        err,
-                    })?;
+                    .map_err(Error::ReadError)?;
                 directories
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => vec![],
             Err(err) => {
-                return Err(Error::ReadError {
-                    dir: self.root.clone(),
-                    err,
-                });
+                return Err(Error::ReadError(err));
             }
         };
         let scratch = self.scratch();
@@ -285,15 +271,10 @@ impl ManagedPythonInstallations {
         &'a self,
         version: &'a PythonVersion,
     ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + 'a, Error> {
+        let request = VersionRequest::from(version);
         Ok(self
             .find_matching_current_platform()?
-            .filter(move |installation| {
-                installation
-                    .path
-                    .file_name()
-                    .map(OsStr::to_string_lossy)
-                    .is_some_and(|filename| filename.starts_with(&format!("cpython-{version}")))
-            }))
+            .filter(move |installation| request.matches_installation_key(installation.key())))
     }
 
     pub fn root(&self) -> &Path {
@@ -337,7 +318,9 @@ impl ManagedPythonInstallation {
         }
     }
 
-    pub(crate) fn from_path(path: PathBuf) -> Result<Self, Error> {
+    pub(crate) fn from_path(path: impl AsRef<Path>) -> Result<Self, Error> {
+        let path = path.as_ref();
+
         let key = PythonInstallationKey::from_str(
             path.file_name()
                 .ok_or(Error::NameError("name is empty".to_string()))?
@@ -345,7 +328,8 @@ impl ManagedPythonInstallation {
                 .ok_or(Error::NameError("not a valid string".to_string()))?,
         )?;
 
-        let path = std::path::absolute(&path).map_err(|err| Error::AbsolutePath(path, err))?;
+        let path = std::path::absolute(path)
+            .map_err(|err| Error::AbsolutePath(path.to_path_buf(), err))?;
 
         // Try to read the BUILD file if it exists
         let build = match fs::read_to_string(path.join("BUILD")) {
@@ -361,6 +345,34 @@ impl ManagedPythonInstallation {
             sha256: None,
             build,
         })
+    }
+
+    /// Try to create a [`ManagedPythonInstallation`] from an [`Interpreter`].
+    ///
+    /// Returns `None` if the interpreter is not a managed installation.
+    pub fn try_from_interpreter(interpreter: &Interpreter) -> Option<Self> {
+        let managed_root = ManagedPythonInstallations::from_settings(None).ok()?;
+
+        // Canonicalize both paths to handle Windows path format differences
+        // (e.g., \\?\ prefix, different casing, junction vs actual path).
+        // Fall back to the original path if canonicalization fails (e.g., target doesn't exist).
+        let sys_base_prefix = dunce::canonicalize(interpreter.sys_base_prefix())
+            .unwrap_or_else(|_| interpreter.sys_base_prefix().to_path_buf());
+        let root = dunce::canonicalize(managed_root.root())
+            .unwrap_or_else(|_| managed_root.root().to_path_buf());
+
+        // Verify the interpreter's base prefix is within the managed root
+        let suffix = sys_base_prefix.strip_prefix(&root).ok()?;
+
+        let first_component = suffix.components().next()?;
+        let name = first_component.as_os_str().to_str()?;
+
+        // Verify it's a valid installation key
+        PythonInstallationKey::from_str(name).ok()?;
+
+        // Construct the installation from the path within the managed root
+        let path = managed_root.root().join(name);
+        Self::from_path(path).ok()
     }
 
     /// The path to this managed installation's Python executable.
@@ -392,7 +404,7 @@ impl ManagedPythonInstallation {
         let variant = if self.implementation() == ImplementationName::GraalPy {
             ""
         } else if cfg!(unix) {
-            self.key.variant.suffix()
+            self.key.variant.executable_suffix()
         } else if cfg!(windows) && windowed {
             // Use windowed Python that doesn't open a terminal.
             "w"
@@ -526,11 +538,7 @@ impl ManagedPythonInstallation {
                 }
                 Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
                 Err(err) => {
-                    return Err(Error::CanonicalizeExecutable {
-                        from: executable,
-                        to: python,
-                        err,
-                    });
+                    return Err(Error::CanonicalizeExecutable(err));
                 }
             }
         }
@@ -540,23 +548,8 @@ impl ManagedPythonInstallation {
 
     /// Ensure the environment contains the symlink directory (or junction on Windows)
     /// pointing to the patch directory for this minor version.
-    pub fn ensure_minor_version_link(&self, preview: Preview) -> Result<(), Error> {
-        if let Some(minor_version_link) = PythonMinorVersionLink::from_installation(self, preview) {
-            minor_version_link.create_directory()?;
-        }
-        Ok(())
-    }
-
-    /// If the environment contains a symlink directory (or junction on Windows),
-    /// update it to the latest patch directory for this minor version.
-    ///
-    /// Unlike [`ensure_minor_version_link`], will not create a new symlink directory
-    /// if one doesn't already exist,
-    pub fn update_minor_version_link(&self, preview: Preview) -> Result<(), Error> {
-        if let Some(minor_version_link) = PythonMinorVersionLink::from_installation(self, preview) {
-            if !minor_version_link.exists() {
-                return Ok(());
-            }
+    pub fn ensure_minor_version_link(&self) -> Result<(), Error> {
+        if let Some(minor_version_link) = PythonMinorVersionLink::from_installation(self) {
             minor_version_link.create_directory()?;
         }
         Ok(())
@@ -626,7 +619,7 @@ impl ManagedPythonInstallation {
                         "{}python{}{}{}",
                         std::env::consts::DLL_PREFIX,
                         self.key.version().python_version(),
-                        self.key.variant().suffix(),
+                        self.key.variant().executable_suffix(),
                         std::env::consts::DLL_SUFFIX
                     ));
                     macos_dylib::patch_dylib_install_name(dylib_path)?;
@@ -649,12 +642,12 @@ impl ManagedPythonInstallation {
     /// [`create_bin_link`].
     pub fn is_bin_link(&self, path: &Path) -> bool {
         if cfg!(unix) {
-            is_same_file(path, self.executable(false)).unwrap_or_default()
+            same_file::is_same_file(path, self.executable(false)).unwrap_or_default()
         } else if cfg!(windows) {
             let Some(launcher) = Launcher::try_from_path(path).unwrap_or_default() else {
                 return false;
             };
-            if !matches!(launcher.kind, uv_trampoline_builder::LauncherKind::Python) {
+            if !matches!(launcher.kind, LauncherKind::Python) {
                 return false;
             }
             // We canonicalize the target path of the launcher in case it includes a minor version
@@ -681,19 +674,34 @@ impl ManagedPythonInstallation {
         if (self.key.major, self.key.minor) != (other.key.major, other.key.minor) {
             return false;
         }
-        // Require a newer, or equal patch version (for pre-release upgrades)
-        if self.key.patch <= other.key.patch {
+        // If the patch versions are the same, we're handling a pre-release upgrade
+        // or a build version upgrade
+        if self.key.patch == other.key.patch {
+            return match (self.key.prerelease, other.key.prerelease) {
+                // Require a newer pre-release, if present on both
+                (Some(self_pre), Some(other_pre)) => self_pre > other_pre,
+                // Allow upgrade from pre-release to stable
+                (None, Some(_)) => true,
+                // Do not upgrade from stable to pre-release
+                (Some(_), None) => false,
+                // For matching stable versions (same patch, no prerelease), check build version
+                (None, None) => match (self.build.as_deref(), other.build.as_deref()) {
+                    // Download has build, installation doesn't -> upgrade (legacy)
+                    (Some(_), None) => true,
+                    // Both have build, compare them
+                    (Some(self_build), Some(other_build)) => {
+                        compare_build_versions(self_build, other_build) == Ordering::Greater
+                    }
+                    // Download doesn't have build -> no upgrade
+                    (None, _) => false,
+                },
+            };
+        }
+        // Require a newer patch version
+        if self.key.patch < other.key.patch {
             return false;
         }
-        if let Some(other_pre) = other.key.prerelease {
-            if let Some(self_pre) = self.key.prerelease {
-                return self_pre > other_pre;
-            }
-            // Do not upgrade from non-prerelease to prerelease
-            return false;
-        }
-        // Do not upgrade if the patch versions are the same
-        self.key.patch != other.key.patch
+        true
     }
 
     pub fn url(&self) -> Option<&str> {
@@ -739,11 +747,7 @@ impl PythonMinorVersionLink {
     /// For a Python 3.10.8 installation in `C:\path\to\uv\python\cpython-3.10.8-windows-x86_64-none\python.exe`,
     /// the junction would be `C:\path\to\uv\python\cpython-3.10-windows-x86_64-none` and the executable path including the
     /// junction would be `C:\path\to\uv\python\cpython-3.10-windows-x86_64-none\python.exe`.
-    pub fn from_executable(
-        executable: &Path,
-        key: &PythonInstallationKey,
-        preview: Preview,
-    ) -> Option<Self> {
+    fn from_executable(executable: &Path, key: &PythonInstallationKey) -> Option<Self> {
         let implementation = key.implementation();
         if !matches!(
             implementation.as_ref(),
@@ -793,24 +797,11 @@ impl PythonMinorVersionLink {
             symlink_executable,
             target_directory,
         };
-        // If preview mode is disabled, still return a `MinorVersionSymlink` for
-        // existing symlinks, allowing continued operations without the `--preview`
-        // flag after initial symlink directory installation.
-        if !preview.is_enabled(PreviewFeatures::PYTHON_UPGRADE) && !minor_version_link.exists() {
-            return None;
-        }
         Some(minor_version_link)
     }
 
-    pub fn from_installation(
-        installation: &ManagedPythonInstallation,
-        preview: Preview,
-    ) -> Option<Self> {
-        Self::from_executable(
-            installation.executable(false).as_path(),
-            installation.key(),
-            preview,
-        )
+    pub fn from_installation(installation: &ManagedPythonInstallation) -> Option<Self> {
+        Self::from_executable(installation.executable(false).as_path(), installation.key())
     }
 
     pub fn create_directory(&self) -> Result<(), Error> {
@@ -832,23 +823,27 @@ impl PythonMinorVersionLink {
             }
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
             Err(err) => {
-                return Err(Error::PythonMinorVersionLinkDirectory {
-                    from: self.symlink_directory.clone(),
-                    to: self.target_directory.clone(),
-                    err,
-                });
+                return Err(Error::PythonMinorVersionLinkDirectory(err));
             }
         }
         Ok(())
     }
 
+    /// Check if the minor version link exists and points to the expected target directory.
+    ///
+    /// This verifies both that the symlink/junction exists AND that it points to the
+    /// `target_directory` specified in this struct. This is important because the link
+    /// may exist but point to a different installation (e.g., after an upgrade), in which
+    /// case we should not use the link for the current installation.
     pub fn exists(&self) -> bool {
         #[cfg(unix)]
         {
             self.symlink_directory
                 .symlink_metadata()
-                .map(|metadata| metadata.file_type().is_symlink())
-                .unwrap_or(false)
+                .is_ok_and(|metadata| metadata.file_type().is_symlink())
+                && self
+                    .read_target()
+                    .is_some_and(|target| target == self.target_directory)
         }
         #[cfg(windows)]
         {
@@ -859,6 +854,25 @@ impl PythonMinorVersionLink {
                     // is a symlink or junction.
                     (metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT.0) != 0
                 })
+                && self
+                    .read_target()
+                    .is_some_and(|target| target == self.target_directory)
+        }
+    }
+
+    /// Read the target of the minor version link.
+    ///
+    /// On Unix, this reads the symlink target. On Windows, this reads the junction target
+    /// using the `junction` crate which properly handles the `\??\` prefix that Windows
+    /// uses internally for junction targets.
+    pub fn read_target(&self) -> Option<PathBuf> {
+        #[cfg(unix)]
+        {
+            self.symlink_directory.read_link().ok()
+        }
+        #[cfg(windows)]
+        {
+            junction::get_target(&self.symlink_directory).ok()
         }
     }
 }
@@ -900,10 +914,7 @@ fn executable_path_from_base(
 /// If the file already exists at the link path, an error will be returned.
 pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), Error> {
     let link_parent = link.parent().ok_or(Error::NoExecutableDirectory)?;
-    fs_err::create_dir_all(link_parent).map_err(|err| Error::ExecutableDirectory {
-        to: link_parent.to_path_buf(),
-        err,
-    })?;
+    fs_err::create_dir_all(link_parent).map_err(Error::ExecutableDirectory)?;
 
     if cfg!(unix) {
         // Note this will never copy on Unix — we use it here to allow compilation on Windows
@@ -912,30 +923,46 @@ pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), E
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
                 Err(Error::MissingExecutable(executable.to_path_buf()))
             }
-            Err(err) => Err(Error::LinkExecutable {
-                from: executable.to_path_buf(),
-                to: link.to_path_buf(),
-                err,
-            }),
+            Err(err) => Err(Error::LinkExecutable(err)),
         }
     } else if cfg!(windows) {
+        use uv_trampoline_builder::windows_python_launcher;
+
         // TODO(zanieb): Install GUI launchers as well
         let launcher = windows_python_launcher(executable, false)?;
 
         // OK to use `std::fs` here, `fs_err` does not support `File::create_new` and we attach
         // error context anyway
-        #[allow(clippy::disallowed_types)]
+        #[expect(clippy::disallowed_types)]
         {
             std::fs::File::create_new(link)
                 .and_then(|mut file| file.write_all(launcher.as_ref()))
-                .map_err(|err| Error::LinkExecutable {
-                    from: executable.to_path_buf(),
-                    to: link.to_path_buf(),
-                    err,
-                })
+                .map_err(Error::LinkExecutable)
         }
     } else {
-        unimplemented!("Only Windows and Unix systems are supported.")
+        unimplemented!("Only Windows and Unix are supported.")
+    }
+}
+
+/// Create or replace a link to a managed Python executable.
+///
+/// If a file already exists at the link path, it will be atomically replaced.
+///
+/// See [`create_link_to_executable`] for a variant that errors if the link already exists.
+pub fn replace_link_to_executable(link: &Path, executable: &Path) -> Result<(), Error> {
+    let link_parent = link.parent().ok_or(Error::NoExecutableDirectory)?;
+    fs_err::create_dir_all(link_parent).map_err(Error::ExecutableDirectory)?;
+
+    if cfg!(unix) {
+        replace_symlink(executable, link).map_err(Error::LinkExecutable)
+    } else if cfg!(windows) {
+        use uv_trampoline_builder::windows_python_launcher;
+
+        let launcher = windows_python_launcher(executable, false)?;
+
+        uv_fs::write_atomic_sync(link, &*launcher).map_err(Error::LinkExecutable)
+    } else {
+        unimplemented!("Only Windows and Unix are supported.")
     }
 }
 
@@ -962,4 +989,374 @@ impl fmt::Display for ManagedPythonInstallation {
 pub fn python_executable_dir() -> Result<PathBuf, Error> {
     uv_dirs::user_executable_directory(Some(EnvVars::UV_PYTHON_BIN_DIR))
         .ok_or(Error::NoExecutableDirectory)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::implementation::LenientImplementationName;
+    use crate::installation::PythonInstallationKey;
+    use crate::{ImplementationName, PythonVariant};
+    use std::path::PathBuf;
+    use std::str::FromStr;
+    use uv_pep440::{Prerelease, PrereleaseKind};
+    use uv_platform::Platform;
+
+    fn create_test_installation(
+        implementation: ImplementationName,
+        major: u8,
+        minor: u8,
+        patch: u8,
+        prerelease: Option<Prerelease>,
+        variant: PythonVariant,
+        build: Option<&str>,
+    ) -> ManagedPythonInstallation {
+        let platform = Platform::from_str("linux-x86_64-gnu").unwrap();
+        let key = PythonInstallationKey::new(
+            LenientImplementationName::Known(implementation),
+            major,
+            minor,
+            patch,
+            prerelease,
+            platform,
+            variant,
+        );
+        ManagedPythonInstallation {
+            path: PathBuf::from("/test/path"),
+            key,
+            url: None,
+            sha256: None,
+            build: build.map(|s| Cow::Owned(s.to_owned())),
+        }
+    }
+
+    #[test]
+    fn test_is_upgrade_of_same_version() {
+        let installation = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            None,
+            PythonVariant::Default,
+            None,
+        );
+
+        // Same patch version should not be an upgrade
+        assert!(!installation.is_upgrade_of(&installation));
+    }
+
+    #[test]
+    fn test_is_upgrade_of_patch_version() {
+        let older = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            None,
+            PythonVariant::Default,
+            None,
+        );
+        let newer = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            9,
+            None,
+            PythonVariant::Default,
+            None,
+        );
+
+        // Newer patch version should be an upgrade
+        assert!(newer.is_upgrade_of(&older));
+        // Older patch version should not be an upgrade
+        assert!(!older.is_upgrade_of(&newer));
+    }
+
+    #[test]
+    fn test_is_upgrade_of_different_minor_version() {
+        let py310 = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            None,
+            PythonVariant::Default,
+            None,
+        );
+        let py311 = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            11,
+            0,
+            None,
+            PythonVariant::Default,
+            None,
+        );
+
+        // Different minor versions should not be upgrades
+        assert!(!py311.is_upgrade_of(&py310));
+        assert!(!py310.is_upgrade_of(&py311));
+    }
+
+    #[test]
+    fn test_is_upgrade_of_different_implementation() {
+        let cpython = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            None,
+            PythonVariant::Default,
+            None,
+        );
+        let pypy = create_test_installation(
+            ImplementationName::PyPy,
+            3,
+            10,
+            9,
+            None,
+            PythonVariant::Default,
+            None,
+        );
+
+        // Different implementations should not be upgrades
+        assert!(!pypy.is_upgrade_of(&cpython));
+        assert!(!cpython.is_upgrade_of(&pypy));
+    }
+
+    #[test]
+    fn test_is_upgrade_of_different_variant() {
+        let default = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            None,
+            PythonVariant::Default,
+            None,
+        );
+        let freethreaded = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            9,
+            None,
+            PythonVariant::Freethreaded,
+            None,
+        );
+
+        // Different variants should not be upgrades
+        assert!(!freethreaded.is_upgrade_of(&default));
+        assert!(!default.is_upgrade_of(&freethreaded));
+    }
+
+    #[test]
+    fn test_is_upgrade_of_prerelease() {
+        let stable = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            None,
+            PythonVariant::Default,
+            None,
+        );
+        let prerelease = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
+                number: 1,
+            }),
+            PythonVariant::Default,
+            None,
+        );
+
+        // A stable version is an upgrade from prerelease
+        assert!(stable.is_upgrade_of(&prerelease));
+
+        // Prerelease are not upgrades of stable versions
+        assert!(!prerelease.is_upgrade_of(&stable));
+    }
+
+    #[test]
+    fn test_is_upgrade_of_prerelease_to_prerelease() {
+        let alpha1 = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
+                number: 1,
+            }),
+            PythonVariant::Default,
+            None,
+        );
+        let alpha2 = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
+                number: 2,
+            }),
+            PythonVariant::Default,
+            None,
+        );
+
+        // Later prerelease should be an upgrade
+        assert!(alpha2.is_upgrade_of(&alpha1));
+        // Earlier prerelease should not be an upgrade
+        assert!(!alpha1.is_upgrade_of(&alpha2));
+    }
+
+    #[test]
+    fn test_is_upgrade_of_prerelease_same_patch() {
+        let prerelease = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
+                number: 1,
+            }),
+            PythonVariant::Default,
+            None,
+        );
+
+        // Same prerelease should not be an upgrade
+        assert!(!prerelease.is_upgrade_of(&prerelease));
+    }
+
+    #[test]
+    fn test_is_upgrade_of_build_version() {
+        let older_build = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            None,
+            PythonVariant::Default,
+            Some("20240101"),
+        );
+        let newer_build = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            None,
+            PythonVariant::Default,
+            Some("20240201"),
+        );
+
+        // Newer build version should be an upgrade
+        assert!(newer_build.is_upgrade_of(&older_build));
+        // Older build version should not be an upgrade
+        assert!(!older_build.is_upgrade_of(&newer_build));
+    }
+
+    #[test]
+    fn test_is_upgrade_of_build_version_same() {
+        let installation = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            None,
+            PythonVariant::Default,
+            Some("20240101"),
+        );
+
+        // Same build version should not be an upgrade
+        assert!(!installation.is_upgrade_of(&installation));
+    }
+
+    #[test]
+    fn test_is_upgrade_of_build_with_legacy_installation() {
+        let legacy = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            None,
+            PythonVariant::Default,
+            None,
+        );
+        let with_build = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            None,
+            PythonVariant::Default,
+            Some("20240101"),
+        );
+
+        // Installation with build should upgrade legacy installation without build
+        assert!(with_build.is_upgrade_of(&legacy));
+        // Legacy installation should not upgrade installation with build
+        assert!(!legacy.is_upgrade_of(&with_build));
+    }
+
+    #[test]
+    fn test_is_upgrade_of_patch_takes_precedence_over_build() {
+        let older_patch_newer_build = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            None,
+            PythonVariant::Default,
+            Some("20240201"),
+        );
+        let newer_patch_older_build = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            9,
+            None,
+            PythonVariant::Default,
+            Some("20240101"),
+        );
+
+        // Newer patch version should be an upgrade regardless of build
+        assert!(newer_patch_older_build.is_upgrade_of(&older_patch_newer_build));
+        // Older patch version should not be an upgrade even with newer build
+        assert!(!older_patch_newer_build.is_upgrade_of(&newer_patch_older_build));
+    }
+
+    #[test]
+    fn test_find_version_matching() {
+        use crate::PythonVersion;
+
+        let platform = Platform::from_env().unwrap();
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        // Create mock installation directories
+        fs::create_dir(temp_dir.path().join(format!("cpython-3.10.0-{platform}"))).unwrap();
+
+        temp_env::with_var(
+            uv_static::EnvVars::UV_PYTHON_INSTALL_DIR,
+            Some(temp_dir.path()),
+            || {
+                let installations = ManagedPythonInstallations::from_settings(None).unwrap();
+
+                // Version 3.1 should NOT match 3.10
+                let v3_1 = PythonVersion::from_str("3.1").unwrap();
+                let matched: Vec<_> = installations.find_version(&v3_1).unwrap().collect();
+                assert_eq!(matched.len(), 0);
+
+                // Check that 3.10 matches
+                let v3_10 = PythonVersion::from_str("3.10").unwrap();
+                let matched: Vec<_> = installations.find_version(&v3_10).unwrap().collect();
+                assert_eq!(matched.len(), 1);
+            },
+        );
+    }
 }

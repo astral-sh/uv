@@ -37,7 +37,7 @@ impl From<EphemeralEnvironment> for PythonEnvironment {
 
 impl EphemeralEnvironment {
     /// Set the ephemeral overlay for a Python environment.
-    #[allow(clippy::result_large_err)]
+    #[expect(clippy::result_large_err)]
     pub(crate) fn set_overlay(&self, contents: impl AsRef<[u8]>) -> Result<(), ProjectError> {
         let site_packages = self
             .0
@@ -50,7 +50,7 @@ impl EphemeralEnvironment {
     }
 
     /// Enable system site packages for a Python environment.
-    #[allow(clippy::result_large_err)]
+    #[expect(clippy::result_large_err)]
     pub(crate) fn set_system_site_packages(&self) -> Result<(), ProjectError> {
         self.0
             .set_pyvenv_cfg("include-system-site-packages", "true")?;
@@ -69,7 +69,7 @@ impl EphemeralEnvironment {
     /// `extends-environment` key of the ephemeral environment's `pyvenv.cfg` file, making it
     /// easier for these tools to statically and reliably understand the relationship between
     /// the two environments.
-    #[allow(clippy::result_large_err)]
+    #[expect(clippy::result_large_err)]
     pub(crate) fn set_parent_environment(
         &self,
         parent_environment_sys_prefix: &Path,
@@ -119,7 +119,7 @@ impl CachedEnvironment {
         resolve: Box<dyn ResolveLogger>,
         install: Box<dyn InstallLogger>,
         installer_metadata: bool,
-        concurrency: Concurrency,
+        concurrency: &Concurrency,
         cache: &Cache,
         printer: Printer,
         preview: Preview,
@@ -174,11 +174,9 @@ impl CachedEnvironment {
         // Search in the content-addressed cache.
         let cache_entry = cache.entry(CacheBucket::Environments, interpreter_hash, resolution_hash);
 
-        if cache.refresh().is_none() {
-            if let Ok(root) = cache.resolve_link(cache_entry.path()) {
-                if let Ok(environment) = PythonEnvironment::from_root(root, cache) {
-                    return Ok(Self(environment));
-                }
+        if let Ok(root) = cache.resolve_link(cache_entry.path()) {
+            if let Ok(environment) = PythonEnvironment::from_root(root, cache) {
+                return Ok(Self(environment));
             }
         }
 
@@ -189,11 +187,10 @@ impl CachedEnvironment {
             interpreter,
             uv_virtualenv::Prompt::None,
             false,
-            uv_virtualenv::OnExisting::Remove,
+            uv_virtualenv::OnExisting::Remove(uv_virtualenv::RemovalReason::TemporaryEnvironment),
             true,
             false,
             false,
-            preview,
         )?;
 
         sync_environment(

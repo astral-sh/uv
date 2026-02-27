@@ -2,6 +2,7 @@ use std::fmt::Write;
 
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
+use tracing::debug;
 
 use uv_cache::{Cache, Removal};
 use uv_fs::Simplified;
@@ -12,9 +13,10 @@ use crate::commands::{ExitStatus, human_readable_bytes};
 use crate::printer::Printer;
 
 /// Clear the cache, removing all entries or those linked to specific packages.
-pub(crate) fn cache_clean(
+pub(crate) async fn cache_clean(
     packages: &[PackageName],
-    cache: &Cache,
+    force: bool,
+    cache: Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
     if !cache.root().exists() {
@@ -26,6 +28,21 @@ pub(crate) fn cache_clean(
         return Ok(ExitStatus::Success);
     }
 
+    let cache = match cache.with_exclusive_lock_no_wait() {
+        Ok(cache) => cache,
+        Err(cache) if force => {
+            debug!("Cache is currently in use, proceeding due to `--force`");
+            cache
+        }
+        Err(cache) => {
+            writeln!(
+                printer.stderr(),
+                "Cache is currently in-use, waiting for other uv processes to finish (use `--force` to override)"
+            )?;
+            cache.with_exclusive_lock().await?
+        }
+    };
+
     let summary = if packages.is_empty() {
         writeln!(
             printer.stderr(),
@@ -34,13 +51,14 @@ pub(crate) fn cache_clean(
         )?;
 
         let num_paths = walkdir::WalkDir::new(cache.root()).into_iter().count();
-        let reporter = CleaningDirectoryReporter::new(printer, num_paths);
+        let reporter = CleaningDirectoryReporter::new(printer, Some(num_paths));
 
+        let root = cache.root().to_path_buf();
         cache
             .clear(Box::new(reporter))
-            .with_context(|| format!("Failed to clear cache at: {}", cache.root().user_display()))?
+            .with_context(|| format!("Failed to clear cache at: {}", root.user_display()))?
     } else {
-        let reporter = CleaningPackageReporter::new(printer, packages.len());
+        let reporter = CleaningPackageReporter::new(printer, Some(packages.len()));
         let mut summary = Removal::default();
 
         for package in packages {

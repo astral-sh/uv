@@ -19,49 +19,51 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    DirectorySourceDist, Dist, Index, Requirement, Resolution, ResolvedDist, SourceDist,
+    DirectorySourceDist, Dist, Index, Name, Requirement, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::{PortablePathBuf, Simplified};
-use uv_installer::SitePackages;
+use uv_installer::{InstallationStrategy, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl, ParsedUrl};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, ForkStrategy, Installable, Lock, PrereleaseMode, ResolutionMode};
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, HashStrategy};
-use uv_warnings::{warn_user, warn_user_once};
+use uv_warnings::warn_user;
 use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
-use crate::commands::pip::operations::Modifications;
+use crate::commands::pip::operations::{ChangedDist, Changelog, Modifications};
 use crate::commands::pip::resolution_markers;
 use crate::commands::pip::{operations, resolution_tags};
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    PlatformState, ProjectEnvironment, ProjectError, ScriptEnvironment, UniversalState,
-    default_dependency_groups, detect_conflicts, script_extra_build_requires, script_specification,
-    update_environment,
+    EnvironmentUpdate, PlatformState, ProjectEnvironment, ProjectError, ScriptEnvironment,
+    UniversalState, default_dependency_groups, detect_conflicts, script_extra_build_requires,
+    script_specification, update_environment,
 };
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
-use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings, ResolverSettings};
+use crate::settings::{
+    FrozenSource, InstallerSettingsRef, LockCheck, LockCheckSource, ResolverInstallerSettings,
+    ResolverSettings,
+};
 
 /// Sync the project environment.
-#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn sync(
     project_dir: &Path,
-    locked: bool,
-    frozen: bool,
+    lock_check: LockCheck,
+    frozen: Option<FrozenSource>,
     dry_run: DryRun,
     active: Option<bool>,
     all_packages: bool,
-    package: Option<PackageName>,
+    package: Vec<PackageName>,
     extras: ExtrasSpecification,
     groups: DependencyGroups,
     editable: Option<EditableMode>,
@@ -83,11 +85,10 @@ pub(crate) async fn sync(
     preview: Preview,
     output_format: SyncFormat,
 ) -> Result<ExitStatus> {
-    if preview.is_enabled(PreviewFeatures::JSON_OUTPUT) && matches!(output_format, SyncFormat::Json)
-    {
+    if preview.is_enabled(PreviewFeature::JsonOutput) && matches!(output_format, SyncFormat::Json) {
         warn_user!(
             "The `--output-format json` option is experimental and the schema may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeatures::JSON_OUTPUT
+            PreviewFeature::JsonOutput
         );
     }
 
@@ -97,7 +98,7 @@ pub(crate) async fn sync(
         SyncTarget::Script(script)
     } else {
         // Identify the project.
-        let project = if frozen {
+        let project = if frozen.is_some() {
             VirtualProject::discover(
                 project_dir,
                 &DiscoveryOptions {
@@ -107,16 +108,28 @@ pub(crate) async fn sync(
                 &workspace_cache,
             )
             .await?
-        } else if let Some(package) = package.as_ref() {
+        } else if let [name] = package.as_slice() {
             VirtualProject::Project(
                 Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
                     .await?
-                    .with_current_project(package.clone())
-                    .with_context(|| format!("Package `{package}` not found in workspace"))?,
+                    .with_current_project(name.clone())
+                    .with_context(|| format!("Package `{name}` not found in workspace"))?,
             )
         } else {
-            VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
-                .await?
+            let project = VirtualProject::discover(
+                project_dir,
+                &DiscoveryOptions::default(),
+                &workspace_cache,
+            )
+            .await?;
+
+            for name in &package {
+                if !project.workspace().packages().contains_key(name) {
+                    return Err(anyhow::anyhow!("Package `{name}` not found in workspace"));
+                }
+            }
+
+            project
         };
 
         // TODO(lucab): improve warning content
@@ -198,6 +211,7 @@ pub(crate) async fn sync(
         environment: EnvironmentReport::from(&environment),
         action: SyncAction::from(&environment),
         target: TargetName::from(&target),
+        changes: PackageChangesReport::default(),
     };
 
     // Show the intermediate results if relevant
@@ -210,24 +224,33 @@ pub(crate) async fn sync(
     if let SyncTarget::Script(script) = &target {
         let lockfile = LockTarget::from(script).lock_path();
         if !lockfile.is_file() {
-            if frozen {
+            if frozen.is_some() {
                 return Err(anyhow::anyhow!(
                     "`uv sync --frozen` requires a script lockfile; run `{}` to lock the script",
                     format!("uv lock --script {}", script.path.user_display()).green(),
                 ));
             }
 
-            if locked {
+            if let LockCheck::Enabled(lock_check) = lock_check {
                 return Err(anyhow::anyhow!(
-                    "`uv sync --locked` requires a script lockfile; run `{}` to lock the script",
+                    "`uv sync {lock_check}` requires a script lockfile; run `{}` to lock the script",
                     format!("uv lock --script {}", script.path.user_display()).green(),
                 ));
             }
 
             // Parse the requirements from the script.
-            let spec = script_specification(script.into(), &settings.resolver)?.unwrap_or_default();
-            let script_extra_build_requires =
-                script_extra_build_requires(script.into(), &settings.resolver)?.into_inner();
+            let spec = script_specification(
+                script.into(),
+                &settings.resolver,
+                client_builder.credentials_cache(),
+            )?
+            .unwrap_or_default();
+            let script_extra_build_requires = script_extra_build_requires(
+                script.into(),
+                &settings.resolver,
+                client_builder.credentials_cache(),
+            )?
+            .into_inner();
 
             // Parse the build constraints from the script.
             let build_constraints = script
@@ -260,7 +283,7 @@ pub(crate) async fn sync(
                 Box::new(DefaultResolveLogger),
                 Box::new(DefaultInstallLogger),
                 installer_metadata,
-                concurrency,
+                &concurrency,
                 cache,
                 workspace_cache.clone(),
                 dry_run,
@@ -269,14 +292,17 @@ pub(crate) async fn sync(
             )
             .await
             {
-                Ok(..) => {
+                Ok(EnvironmentUpdate { changelog, .. }) => {
                     // Generate a report for the script without a lockfile
                     let report = Report {
                         schema: SchemaReport::default(),
                         target: TargetName::from(&target),
                         project: None,
                         script: Some(ScriptReport::from(script)),
-                        sync: sync_report,
+                        sync: SyncReport {
+                            changes: PackageChangesReport::from_changelog(&changelog),
+                            ..sync_report
+                        },
                         lock: None,
                         dry_run: dry_run.enabled(),
                     };
@@ -302,10 +328,10 @@ pub(crate) async fn sync(
     let state = UniversalState::default();
 
     // Determine the lock mode.
-    let mode = if frozen {
-        LockMode::Frozen
-    } else if locked {
-        LockMode::Locked(environment.interpreter())
+    let mode = if let Some(frozen_source) = frozen {
+        LockMode::Frozen(frozen_source.into())
+    } else if let LockCheck::Enabled(lock_check) = lock_check {
+        LockMode::Locked(environment.interpreter(), lock_check)
     } else if dry_run.enabled() {
         LockMode::DryRun(environment.interpreter())
     } else {
@@ -317,19 +343,21 @@ pub(crate) async fn sync(
         SyncTarget::Script(script) => LockTarget::from(script),
     };
 
-    let outcome = match LockOperation::new(
-        mode,
-        &settings.resolver,
-        &client_builder,
-        &state,
-        Box::new(DefaultResolveLogger),
-        concurrency,
-        cache,
-        &workspace_cache,
-        printer,
-        preview,
+    let outcome = match Box::pin(
+        LockOperation::new(
+            mode,
+            &settings.resolver,
+            &client_builder,
+            &state,
+            Box::new(DefaultResolveLogger),
+            &concurrency,
+            cache,
+            &workspace_cache,
+            printer,
+            preview,
+        )
+        .execute(lock_target),
     )
-    .execute(lock_target)
     .await
     {
         Ok(result) => Outcome::Success(result),
@@ -338,16 +366,18 @@ pub(crate) async fn sync(
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
-        Err(ProjectError::LockMismatch(prev, cur)) => {
+        Err(ProjectError::LockMismatch(prev, cur, lock_source)) => {
             if dry_run.enabled() {
                 // The lockfile is mismatched, but we're in dry-run mode. We should proceed with the
                 // sync operation, but exit with a non-zero status.
-                Outcome::LockMismatch(prev, cur)
+                Outcome::LockMismatch(prev, cur, lock_source)
             } else {
                 writeln!(
                     printer.stderr(),
                     "{}",
-                    ProjectError::LockMismatch(prev, cur).to_string().bold()
+                    ProjectError::LockMismatch(prev, cur, lock_source)
+                        .to_string()
+                        .bold()
                 )?;
                 return Ok(ExitStatus::Failure);
             }
@@ -360,28 +390,13 @@ pub(crate) async fn sync(
         writeln!(printer.stderr(), "{message}")?;
     }
 
-    let report = Report {
-        schema: SchemaReport::default(),
-        target: TargetName::from(&target),
-        project: target.project().map(ProjectReport::from),
-        script: target.script().map(ScriptReport::from),
-        sync: sync_report,
-        lock: Some(lock_report),
-        dry_run: dry_run.enabled(),
-    };
-
-    if let Some(output) = report.format(output_format) {
-        writeln!(printer.stdout_important(), "{output}")?;
-    }
-
     // Identify the installation target.
-    let sync_target =
-        identify_installation_target(&target, outcome.lock(), all_packages, package.as_ref());
+    let sync_target = identify_installation_target(&target, outcome.lock(), all_packages, &package);
 
     let state = state.fork();
 
     // Perform the sync operation.
-    match do_sync(
+    let changelog = match do_sync(
         sync_target,
         &environment,
         &extras,
@@ -395,7 +410,7 @@ pub(crate) async fn sync(
         &state,
         Box::new(DefaultInstallLogger),
         installer_metadata,
-        concurrency,
+        &concurrency,
         cache,
         workspace_cache,
         dry_run,
@@ -404,22 +419,41 @@ pub(crate) async fn sync(
     )
     .await
     {
-        Ok(()) => {}
+        Ok(changelog) => changelog,
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
+    };
+
+    let report = Report {
+        schema: SchemaReport::default(),
+        target: TargetName::from(&target),
+        project: target.project().map(ProjectReport::from),
+        script: target.script().map(ScriptReport::from),
+        sync: SyncReport {
+            changes: PackageChangesReport::from_changelog(&changelog),
+            ..sync_report
+        },
+        lock: Some(lock_report),
+        dry_run: dry_run.enabled(),
+    };
+
+    if let Some(output) = report.format(output_format) {
+        writeln!(printer.stdout_important(), "{output}")?;
     }
 
     match outcome {
         Outcome::Success(..) => Ok(ExitStatus::Success),
-        Outcome::LockMismatch(prev, cur) => {
+        Outcome::LockMismatch(prev, cur, lock_source) => {
             writeln!(
                 printer.stderr(),
                 "{}",
-                ProjectError::LockMismatch(prev, cur).to_string().bold()
+                ProjectError::LockMismatch(prev, cur, lock_source)
+                    .to_string()
+                    .bold()
             )?;
             Ok(ExitStatus::Failure)
         }
@@ -428,12 +462,12 @@ pub(crate) async fn sync(
 
 /// The outcome of a `lock` operation within a `sync` operation.
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 enum Outcome {
     /// The `lock` operation was successful.
     Success(LockResult),
     /// The `lock` operation successfully resolved, but failed due to a mismatch (e.g., with `--locked`).
-    LockMismatch(Option<Box<Lock>>, Box<Lock>),
+    LockMismatch(Option<Box<Lock>>, Box<Lock>, LockCheckSource),
 }
 
 impl Outcome {
@@ -444,7 +478,7 @@ impl Outcome {
                 LockResult::Changed(_, lock) => lock,
                 LockResult::Unchanged(lock) => lock,
             },
-            Self::LockMismatch(_prev, cur) => cur,
+            Self::LockMismatch(_prev, cur, _lock_source) => cur,
         }
     }
 }
@@ -453,7 +487,7 @@ fn identify_installation_target<'a>(
     target: &'a SyncTarget,
     lock: &'a Lock,
     all_packages: bool,
-    package: Option<&'a PackageName>,
+    package: &'a [PackageName],
 ) -> InstallTarget<'a> {
     match &target {
         SyncTarget::Project(project) => {
@@ -464,33 +498,45 @@ fn identify_installation_target<'a>(
                             workspace: project.workspace(),
                             lock,
                         }
-                    } else if let Some(package) = package {
-                        InstallTarget::Project {
-                            workspace: project.workspace(),
-                            name: package,
-                            lock,
-                        }
                     } else {
-                        // By default, install the root package.
-                        InstallTarget::Project {
-                            workspace: project.workspace(),
-                            name: project.project_name(),
-                            lock,
+                        match package {
+                            // By default, install the root project.
+                            [] => InstallTarget::Project {
+                                workspace: project.workspace(),
+                                name: project.project_name(),
+                                lock,
+                            },
+                            [name] => InstallTarget::Project {
+                                workspace: project.workspace(),
+                                name,
+                                lock,
+                            },
+                            names => InstallTarget::Projects {
+                                workspace: project.workspace(),
+                                names,
+                                lock,
+                            },
                         }
                     }
                 }
                 VirtualProject::NonProject(workspace) => {
                     if all_packages {
                         InstallTarget::NonProjectWorkspace { workspace, lock }
-                    } else if let Some(package) = package {
-                        InstallTarget::Project {
-                            workspace,
-                            name: package,
-                            lock,
-                        }
                     } else {
-                        // By default, install the entire workspace.
-                        InstallTarget::NonProjectWorkspace { workspace, lock }
+                        match package {
+                            // By default, install the entire workspace.
+                            [] => InstallTarget::NonProjectWorkspace { workspace, lock },
+                            [name] => InstallTarget::Project {
+                                workspace,
+                                name,
+                                lock,
+                            },
+                            names => InstallTarget::Projects {
+                                workspace,
+                                names,
+                                lock,
+                            },
+                        }
                     }
                 }
             }
@@ -500,7 +546,7 @@ fn identify_installation_target<'a>(
 }
 
 #[derive(Debug, Clone)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 enum SyncTarget {
     /// Sync a project environment.
     Project(VirtualProject),
@@ -553,7 +599,6 @@ impl Deref for SyncEnvironment {
 }
 
 /// Sync a lockfile with an environment.
-#[allow(clippy::fn_params_excessive_bools)]
 pub(super) async fn do_sync(
     target: InstallTarget<'_>,
     venv: &PythonEnvironment,
@@ -568,13 +613,13 @@ pub(super) async fn do_sync(
     state: &PlatformState,
     logger: Box<dyn InstallLogger>,
     installer_metadata: bool,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     cache: &Cache,
     workspace_cache: WorkspaceCache,
     dry_run: DryRun,
     printer: Printer,
     preview: Preview,
-) -> Result<(), ProjectError> {
+) -> Result<Changelog, ProjectError> {
     // Extract the project settings.
     let InstallerSettingsRef {
         index_locations,
@@ -594,25 +639,18 @@ pub(super) async fn do_sync(
         sources,
     } = settings;
 
-    if !preview.is_enabled(PreviewFeatures::EXTRA_BUILD_DEPENDENCIES)
-        && !extra_build_dependencies.is_empty()
-    {
-        warn_user_once!(
-            "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeatures::EXTRA_BUILD_DEPENDENCIES
-        );
-    }
-
     // Lower the extra build dependencies with source resolution.
     let extra_build_requires = match &target {
         InstallTarget::Workspace { workspace, .. }
         | InstallTarget::Project { workspace, .. }
+        | InstallTarget::Projects { workspace, .. }
         | InstallTarget::NonProjectWorkspace { workspace, .. } => {
             LoweredExtraBuildDependencies::from_workspace(
                 extra_build_dependencies.clone(),
                 workspace,
                 index_locations,
-                sources,
+                &sources,
+                client_builder.credentials_cache(),
             )?
         }
         InstallTarget::Script { script, .. } => {
@@ -633,10 +671,15 @@ pub(super) async fn do_sync(
                 extra_build_variables: extra_build_variables.clone(),
                 prerelease: PrereleaseMode::default(),
                 resolution: ResolutionMode::default(),
-                sources,
+                sources: sources.clone(),
+                torch_backend: None,
                 upgrade: Upgrade::default(),
             };
-            script_extra_build_requires((*script).into(), &resolver_settings)?
+            script_extra_build_requires(
+                (*script).into(),
+                &resolver_settings,
+                client_builder.credentials_cache(),
+            )?
         }
     }
     .into_inner();
@@ -712,7 +755,7 @@ pub(super) async fn do_sync(
     let extra_build_requires = extra_build_requires.match_runtime(&resolution)?;
 
     // Populate credentials from the target.
-    store_credentials_from_target(target);
+    store_credentials_from_target(target, &client_builder);
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(client_builder, cache.clone())
@@ -770,18 +813,19 @@ pub(super) async fn do_sync(
         build_options,
         &build_hasher,
         exclude_newer.clone(),
-        sources,
+        sources.clone(),
         workspace_cache.clone(),
-        concurrency,
+        concurrency.clone(),
         preview,
     );
 
     let site_packages = SitePackages::from_environment(venv)?;
 
     // Sync the environment.
-    operations::install(
+    let changelog = operations::install(
         &resolution,
         site_packages,
+        InstallationStrategy::Strict,
         modifications,
         reinstall,
         build_options,
@@ -803,7 +847,7 @@ pub(super) async fn do_sync(
     )
     .await?;
 
-    Ok(())
+    Ok(changelog)
 }
 
 /// Filter out any virtual workspace members.
@@ -895,15 +939,14 @@ fn apply_editable_mode(resolution: Resolution, editable: Option<EditableMode>) -
 ///
 /// These credentials can come from any of `tool.uv.sources`, `tool.uv.dev-dependencies`,
 /// `project.dependencies`, and `project.optional-dependencies`.
-fn store_credentials_from_target(target: InstallTarget<'_>) {
+fn store_credentials_from_target(target: InstallTarget<'_>, client_builder: &BaseClientBuilder) {
     // Iterate over any indexes in the target.
     for index in target.indexes() {
         if let Some(credentials) = index.credentials() {
-            let credentials = Arc::new(credentials);
-            uv_auth::store_credentials(index.raw_url(), credentials.clone());
             if let Some(root_url) = index.root_url() {
-                uv_auth::store_credentials(&root_url, credentials.clone());
+                client_builder.store_credentials(&root_url, credentials.clone());
             }
+            client_builder.store_credentials(index.raw_url(), credentials);
         }
     }
 
@@ -914,7 +957,7 @@ fn store_credentials_from_target(target: InstallTarget<'_>) {
                 uv_git::store_credentials_from_url(git);
             }
             Source::Url { url, .. } => {
-                uv_auth::store_credentials_from_url(url);
+                client_builder.store_credentials_from_url(url);
             }
             _ => {}
         }
@@ -930,7 +973,7 @@ fn store_credentials_from_target(target: InstallTarget<'_>) {
                 uv_git::store_credentials_from_url(url.repository());
             }
             ParsedUrl::Archive(ParsedArchiveUrl { url, .. }) => {
-                uv_auth::store_credentials_from_url(url);
+                client_builder.store_credentials_from_url(url);
             }
             _ => {}
         }
@@ -1208,6 +1251,9 @@ struct SyncReport {
     environment: EnvironmentReport,
     /// The action performed during the sync, e.g., what was done to the environment.
     action: SyncAction,
+    /// The packages that changed during the sync.
+    #[serde(default)]
+    changes: PackageChangesReport,
 
     // We store these fields so the report can format itself self-contained, but the outer
     // [`Report`] is intended to include these in user-facing output
@@ -1230,6 +1276,7 @@ impl SyncReport {
         let Self {
             environment,
             action,
+            changes: _,
             dry_run,
             target,
         } = self;
@@ -1246,6 +1293,66 @@ impl SyncReport {
 
         Some(message)
     }
+}
+
+/// A summary of all package changes performed during sync.
+#[derive(Serialize, Debug, Clone, Default)]
+struct PackageChangesReport(Vec<PackageChangeReport>);
+
+impl PackageChangesReport {
+    fn from_changelog(changelog: &Changelog) -> Self {
+        let mut changes: Vec<_> =
+            changelog
+                .uninstalled
+                .iter()
+                .map(|dist| PackageChangeReport::from_dist(dist, PackageChangeAction::Uninstalled))
+                .chain(changelog.installed.iter().map(|dist| {
+                    PackageChangeReport::from_dist(dist, PackageChangeAction::Installed)
+                }))
+                .chain(changelog.reinstalled.iter().map(|dist| {
+                    PackageChangeReport::from_dist(dist, PackageChangeAction::Reinstalled)
+                }))
+                .collect();
+
+        changes.sort_by(|a, b| {
+            a.name
+                .cmp(&b.name)
+                .then_with(|| a.action.cmp(&b.action))
+                .then_with(|| a.version.cmp(&b.version))
+        });
+        Self(changes)
+    }
+}
+
+/// A summary of a single package change performed during sync.
+#[derive(Serialize, Debug, Clone)]
+struct PackageChangeReport {
+    /// The normalized package name.
+    name: PackageName,
+    /// The resolved version of the package.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    version: Option<uv_pep440::Version>,
+    /// The action that was taken for the package.
+    action: PackageChangeAction,
+}
+
+impl PackageChangeReport {
+    fn from_dist(dist: &ChangedDist, action: PackageChangeAction) -> Self {
+        Self {
+            name: dist.name().clone(),
+            version: dist.version().cloned(),
+            action,
+        }
+    }
+}
+
+/// The action taken on an individual package during sync.
+#[derive(Serialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+enum PackageChangeAction {
+    Uninstalled,
+    Installed,
+    Reinstalled,
 }
 
 /// The report for a lock operation.
@@ -1270,9 +1377,9 @@ impl From<(&LockTarget<'_>, &LockMode<'_>, &Outcome)> for LockReport {
                 Outcome::Success(result) => {
                     match result {
                         LockResult::Unchanged(..) => match mode {
-                            // When `--frozen` is used, we don't check the lockfile
-                            LockMode::Frozen => LockAction::Use,
-                            LockMode::DryRun(_) | LockMode::Locked(_) | LockMode::Write(_) => {
+                            // When `--frozen` is used, we don't check the lockfile.
+                            LockMode::Frozen(_) => LockAction::Use,
+                            LockMode::DryRun(_) | LockMode::Locked(_, _) | LockMode::Write(_) => {
                                 LockAction::Check
                             }
                         },

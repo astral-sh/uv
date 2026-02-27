@@ -1,4 +1,5 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::str::FromStr;
@@ -38,9 +39,12 @@ where
     where
         D: Deserializer<'de>,
     {
-        let verbatim = String::deserialize(deserializer)?;
+        let verbatim = <Cow<'_, str>>::deserialize(deserializer)?;
         let inner = T::from_str(&verbatim).map_err(serde::de::Error::custom)?;
-        Ok(Self { verbatim, inner })
+        Ok(Self {
+            verbatim: verbatim.to_string(),
+            inner,
+        })
     }
 }
 

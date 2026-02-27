@@ -20,13 +20,13 @@ use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{Level, debug, info, instrument, trace, warn};
 
-use uv_configuration::{Constraints, Overrides};
+use uv_configuration::{Constraints, Excludes, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, DistributionMetadata,
     IncompatibleDist, IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations,
     IndexMetadata, IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement,
-    ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef,
+    ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -34,8 +34,9 @@ use uv_pep440::{MIN_VERSION, Version, VersionSpecifiers, release_specifiers_to_r
 use uv_pep508::{
     MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
 };
-use uv_platform_tags::Tags;
+use uv_platform_tags::{IncompatibleTag, Tags};
 use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKindRef, Conflicts, VerbatimParsedUrl};
+use uv_torch::TorchStrategy;
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
 use uv_warnings::warn_user_once;
 
@@ -82,7 +83,6 @@ use crate::{
     marker,
 };
 pub(crate) use provider::MetadataUnavailable;
-use uv_torch::TorchStrategy;
 
 mod availability;
 mod batch_prefetch;
@@ -111,6 +111,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     requirements: Vec<Requirement>,
     constraints: Constraints,
     overrides: Overrides,
+    excludes: Excludes,
     preferences: Preferences,
     git: GitResolver,
     capabilities: IndexCapabilities,
@@ -240,6 +241,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             requirements: manifest.requirements,
             constraints: manifest.constraints,
             overrides: manifest.overrides,
+            excludes: manifest.excludes,
             preferences: manifest.preferences,
             exclusions: manifest.exclusions,
             hasher: hasher.clone(),
@@ -322,6 +324,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             "Solving with target Python version: {}",
             self.python_requirement.target()
         );
+        if !self.options.exclude_newer.is_empty() {
+            debug!("Solving with exclude-newer: {}", self.options.exclude_newer);
+        }
 
         let mut visited = FxHashSet::default();
 
@@ -911,7 +916,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     }
 
     /// Convert the dependency [`Fork`]s into [`ForkState`]s.
-    #[allow(clippy::unused_self)]
+    #[expect(clippy::unused_self)]
     fn version_forks_to_fork_states(
         &self,
         current_state: ForkState,
@@ -1107,7 +1112,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             | PubGrubPackageInner::Group { name, .. }
             | PubGrubPackageInner::Package { name, .. } => {
                 if let Some(url) = package.name().and_then(|name| fork_urls.get(name)) {
-                    self.choose_version_url(name, range, url, python_requirement)
+                    self.choose_version_url(id, name, range, url, env, python_requirement, pubgrub)
                 } else {
                     self.choose_version_registry(
                         package,
@@ -1132,10 +1137,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     /// that version if it is in range and `None` otherwise.
     fn choose_version_url(
         &self,
+        id: Id<PubGrubPackage>,
         name: &PackageName,
         range: &Range<Version>,
         url: &VerbatimParsedUrl,
+        env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
+        pubgrub: &State<UvDependencyProvider>,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
         debug!(
             "Searching for a compatible version of {name} @ {} ({range})",
@@ -1176,8 +1184,53 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Ok(None);
         }
 
-        // The version is incompatible due to its Python requirement.
+        // If the URL points to a pre-built wheel, and the wheel's supported Python versions don't
+        // match our `Requires-Python`, mark it as incompatible.
+        let dist = Dist::from_url(name.clone(), url.clone())?;
+        if let Dist::Built(dist) = dist {
+            let filename = match &dist {
+                BuiltDist::Registry(dist) => &dist.best_wheel().filename,
+                BuiltDist::DirectUrl(dist) => &dist.filename,
+                BuiltDist::Path(dist) => &dist.filename,
+            };
+
+            // If the wheel does _not_ cover a required platform, it's incompatible.
+            if env.marker_environment().is_none() && !self.options.required_environments.is_empty()
+            {
+                let wheel_marker = implied_markers(filename);
+                // If the user explicitly marked a platform as required, ensure it has coverage.
+                for environment_marker in self.options.required_environments.iter().copied() {
+                    // If the platform is part of the current environment...
+                    if env.included_by_marker(environment_marker)
+                        && !find_environments(id, pubgrub).is_disjoint(environment_marker)
+                    {
+                        // ...but the wheel doesn't support it, it's incompatible.
+                        if wheel_marker.is_disjoint(environment_marker) {
+                            return Ok(Some(ResolverVersion::Unavailable(
+                                version.clone(),
+                                UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
+                                    IncompatibleWheel::MissingPlatform(environment_marker),
+                                )),
+                            )));
+                        }
+                    }
+                }
+            }
+
+            // If the wheel's Python tag doesn't match the target Python, it's incompatible.
+            if !python_requirement.target().matches_wheel_tag(filename) {
+                return Ok(Some(ResolverVersion::Unavailable(
+                    filename.version.clone(),
+                    UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
+                        IncompatibleWheel::Tag(IncompatibleTag::AbiPythonVersion),
+                    )),
+                )));
+            }
+        }
+
+        // The version is incompatible due to its `Requires-Python` requirement.
         if let Some(requires_python) = metadata.requires_python.as_ref() {
+            // TODO(charlie): We only care about this for source distributions.
             if !python_requirement
                 .installed()
                 .is_contained_by(requires_python)
@@ -1204,6 +1257,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 )));
             }
         }
+
+        // If this is a wheel, and the implied Python version doesn't overlap, raise an error.
 
         Ok(Some(ResolverVersion::Unforked(version.clone())))
     }
@@ -1866,6 +1921,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 );
 
                 requirements
+                    .filter(|requirement| !self.excludes.contains(&requirement.name))
                     .flat_map(|requirement| {
                         PubGrubDependency::from_requirement(
                             &self.conflicts,
@@ -2938,18 +2994,42 @@ impl ForkState {
                     resolution_strategy,
                     ResolutionStrategy::Lowest | ResolutionStrategy::LowestDirect(..)
                 );
+
                 if !has_url && missing_lower_bound && strategy_lowest {
-                    warn_user_once!(
-                        "The direct dependency `{name}` is unpinned. \
-                        Consider setting a lower bound when using `--resolution lowest` \
-                        or `--resolution lowest-direct` to avoid using outdated versions.",
-                        name = package.name_no_root().unwrap(),
-                    );
+                    let name = package.name_no_root().unwrap();
+                    // Handle cases where a package is listed both without and with a lower bound.
+                    // Example:
+                    // ```
+                    // "coverage[toml] ; python_version < '3.11'",
+                    // "coverage >= 7.10.0",
+                    // ```
+                    let bound_on_other_package = dependencies.iter().any(|other| {
+                        Some(name) == other.package.name()
+                            && !other
+                                .version
+                                .bounding_range()
+                                .map(|(lowest, _highest)| lowest == Bound::Unbounded)
+                                .unwrap_or(true)
+                    });
+
+                    if !bound_on_other_package {
+                        warn_user_once!(
+                            "The direct dependency `{name}` is unpinned. \
+                            Consider setting a lower bound when using `--resolution lowest` \
+                            or `--resolution lowest-direct` to avoid using outdated versions.",
+                        );
+                    }
                 }
             }
 
             // Update the package priorities.
             self.priorities.insert(package, version, &self.fork_urls);
+            // As we're adding an incompatibility from the proxy package to the base package,
+            // we need to register the base package.
+            if let Some(base_package) = package.base_package() {
+                self.priorities
+                    .insert(&base_package, version, &self.fork_urls);
+            }
         }
 
         Ok(())
@@ -2962,6 +3042,24 @@ impl ForkState {
         for_version: &Version,
         dependencies: Vec<PubGrubDependency>,
     ) {
+        for dependency in &dependencies {
+            let PubGrubDependency {
+                package,
+                version,
+                parent: _,
+                url: _,
+            } = dependency;
+
+            let Some(base_package) = package.base_package() else {
+                continue;
+            };
+
+            let proxy_package = self.pubgrub.package_store.alloc(package.clone());
+            let base_package_id = self.pubgrub.package_store.alloc(base_package.clone());
+            self.pubgrub
+                .add_proxy_package(proxy_package, base_package_id, version.clone());
+        }
+
         let conflict = self.pubgrub.add_package_version_dependencies(
             self.next,
             for_version.clone(),
@@ -3419,7 +3517,7 @@ impl ResolutionDependencyEdge {
 
 /// Fetch the metadata for an item
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub(crate) enum Request {
     /// A request to fetch the metadata for a package.
     Package(PackageName, Option<IndexMetadata>),
@@ -3488,7 +3586,7 @@ impl Display for Request {
 }
 
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 enum Response {
     /// The returned metadata for a package hosted on a registry.
     Package(PackageName, Option<IndexUrl>, VersionsResponse),
@@ -3739,6 +3837,13 @@ impl Forks {
         for set in conflicts.iter() {
             let mut new = vec![];
             for fork in std::mem::take(&mut forks) {
+                // Check if this conflict set is relevant to this fork. We need two conditions:
+                //
+                // 1. At least one item has dependencies in this fork (otherwise there's nothing to
+                //    fork on).
+                // 2. At least two items are not already excluded in this fork's environment
+                //    (otherwise the conflict constraint is already satisfied and no fork is
+                //    needed).
                 let mut has_conflicting_dependency = false;
                 for item in set.iter() {
                     if fork.contains_conflicting_item(item.as_ref()) {
@@ -3750,6 +3855,53 @@ impl Forks {
                 if !has_conflicting_dependency {
                     new.push(fork);
                     continue;
+                }
+
+                // If fewer than two items in this conflict set are still possible (not already
+                // excluded) in this fork, the conflict constraint is already satisfied by prior
+                // forking. We can skip the full N+1 fork split if the single remaining non-excluded
+                // item doesn't appear in any other conflict set (since it would never need its own
+                // "excluded" variant).
+                let non_excluded: Vec<_> = set
+                    .iter()
+                    .filter(|item| fork.env.included_by_group(item.as_ref()))
+                    .collect();
+                if non_excluded.len() < 2 {
+                    // Check if any non-excluded item still has a live conflict in another set —
+                    // i.e., another set where this item AND at least one other non-excluded item
+                    // both appear. If so, we still need to fork to create the "excluded" variant
+                    // for that item.
+                    let dominated = non_excluded.iter().all(|item| {
+                        !conflicts.iter().any(|other_set| {
+                            !std::ptr::eq(set, other_set)
+                                && other_set.contains(item.package(), item.kind().as_ref())
+                                && other_set
+                                    .iter()
+                                    .filter(|other_item| {
+                                        other_item.package() != item.package()
+                                            || other_item.kind() != item.kind()
+                                    })
+                                    .any(|other_item| {
+                                        fork.env.included_by_group(other_item.as_ref())
+                                    })
+                        })
+                    });
+                    if dominated {
+                        // When dependencies are added to forks, we check `included_by_marker` but
+                        // not on whether the dependency's conflict item is included by the fork's
+                        // environment so there may be extraneous dependencies and we need to filter
+                        // the fork to clean up dependencies gated on already-excluded extras.
+                        let rules: Vec<_> = set
+                            .iter()
+                            .filter(|item| !fork.env.included_by_group(item.as_ref()))
+                            .cloned()
+                            .map(Err)
+                            .collect();
+                        if let Some(filtered) = fork.filter(rules) {
+                            new.push(filtered);
+                        }
+                        continue;
+                    }
                 }
 
                 // Create a fork that excludes ALL conflicts.

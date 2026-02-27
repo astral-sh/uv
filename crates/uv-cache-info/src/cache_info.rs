@@ -1,10 +1,11 @@
 use std::borrow::Cow;
-use std::cmp::max;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 use tracing::{debug, warn};
+
+use uv_fs::Simplified;
 
 use crate::git_info::{Commit, Tags};
 use crate::glob::cluster_globs;
@@ -63,7 +64,7 @@ impl CacheInfo {
     pub fn from_directory(directory: &Path) -> Result<Self, CacheInfoError> {
         let mut commit = None;
         let mut tags = None;
-        let mut timestamp = None;
+        let mut last_changed: Option<(PathBuf, Timestamp)> = None;
         let mut directories = BTreeMap::new();
         let mut env = BTreeMap::new();
 
@@ -128,7 +129,12 @@ impl CacheInfo {
                         );
                         continue;
                     }
-                    timestamp = max(timestamp, Some(Timestamp::from_metadata(&metadata)));
+                    let timestamp = Timestamp::from_metadata(&metadata);
+                    if last_changed.as_ref().is_none_or(|(_, prev_timestamp)| {
+                        *prev_timestamp < Timestamp::from_metadata(&metadata)
+                    }) {
+                        last_changed = Some((path, timestamp));
+                    }
                 }
                 CacheKey::Directory { dir } => {
                     // Treat the path as a directory.
@@ -258,14 +264,25 @@ impl CacheInfo {
                         }
                         continue;
                     }
-                    timestamp = max(timestamp, Some(Timestamp::from_metadata(&metadata)));
+                    let timestamp = Timestamp::from_metadata(&metadata);
+                    if last_changed.as_ref().is_none_or(|(_, prev_timestamp)| {
+                        *prev_timestamp < Timestamp::from_metadata(&metadata)
+                    }) {
+                        last_changed = Some((entry.into_path(), timestamp));
+                    }
                 }
             }
         }
 
-        debug!(
-            "Computed cache info: {timestamp:?}, {commit:?}, {tags:?}, {env:?}, {directories:?}"
-        );
+        let timestamp = if let Some((path, timestamp)) = last_changed {
+            debug!(
+                "Computed cache info: {timestamp:?}, {commit:?}, {tags:?}, {env:?}, {directories:?}. Most recently modified: {}",
+                path.user_display()
+            );
+            Some(timestamp)
+        } else {
+            None
+        };
 
         Ok(Self {
             timestamp,

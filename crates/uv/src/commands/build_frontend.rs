@@ -15,8 +15,7 @@ use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildIsolation, BuildKind, BuildOptions, BuildOutput, Concurrency, Constraints,
-    DependencyGroupsWithDefaults, HashCheckingMode, IndexStrategy, KeyringProviderType,
-    SourceStrategy,
+    DependencyGroupsWithDefaults, HashCheckingMode, IndexStrategy, KeyringProviderType, NoSources,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
@@ -97,7 +96,7 @@ enum Error {
 }
 
 /// Build source distributions and wheels.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn build_frontend(
     project_dir: &Path,
     src: Option<PathBuf>,
@@ -108,7 +107,9 @@ pub(crate) async fn build_frontend(
     wheel: bool,
     list: bool,
     build_logs: bool,
+    gitignore: bool,
     force_pep517: bool,
+    clear: bool,
     build_constraints: Vec<RequirementsSource>,
     hash_checking: Option<HashCheckingMode>,
     python: Option<String>,
@@ -133,7 +134,9 @@ pub(crate) async fn build_frontend(
         wheel,
         list,
         build_logs,
+        gitignore,
         force_pep517,
+        clear,
         &build_constraints,
         hash_checking,
         python.as_deref(),
@@ -143,7 +146,7 @@ pub(crate) async fn build_frontend(
         no_config,
         python_preference,
         python_downloads,
-        concurrency,
+        &concurrency,
         cache,
         printer,
         preview,
@@ -165,7 +168,9 @@ enum BuildResult {
     Success,
 }
 
-#[allow(clippy::fn_params_excessive_bools)]
+// https://github.com/rust-lang/rust/issues/147648
+#[allow(unused_assignments)]
+#[expect(clippy::fn_params_excessive_bools)]
 async fn build_impl(
     project_dir: &Path,
     src: Option<&Path>,
@@ -176,7 +181,9 @@ async fn build_impl(
     wheel: bool,
     list: bool,
     build_logs: bool,
+    gitignore: bool,
     force_pep517: bool,
+    clear: bool,
     build_constraints: &[RequirementsSource],
     hash_checking: Option<HashCheckingMode>,
     python_request: Option<&str>,
@@ -186,7 +193,7 @@ async fn build_impl(
     no_config: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     cache: &Cache,
     printer: Printer,
     preview: Preview,
@@ -210,6 +217,7 @@ async fn build_impl(
         upgrade: _,
         build_options,
         sources,
+        torch_backend: _,
     } = settings;
 
     // Determine the source to build.
@@ -341,7 +349,9 @@ async fn build_impl(
             client_builder.clone(),
             hash_checking,
             build_logs,
+            gitignore,
             force_pep517,
+            clear,
             build_constraints,
             build_isolation,
             extra_build_dependencies,
@@ -349,7 +359,7 @@ async fn build_impl(
             *index_strategy,
             *keyring_provider,
             exclude_newer.clone(),
-            *sources,
+            sources.clone(),
             concurrency,
             build_options,
             sdist,
@@ -391,9 +401,15 @@ async fn build_impl(
                 let help = if let Error::Extract(uv_extract::Error::Tar(err)) = &err {
                     // TODO(konsti): astral-tokio-tar should use a proper error instead of
                     // encoding everything in strings
+                    // NOTE(ww): We check for both messages below because the both indicate
+                    // different external extraction scenarios; the first is for any
+                    // absolute path outside of the target directory, and the second
+                    // is specifically for symlinks that point outside.
                     if err.to_string().contains("/bin/python")
                         && std::error::Error::source(err).is_some_and(|err| {
-                            err.to_string().ends_with("outside of the target directory")
+                            let err = err.to_string();
+                            err.ends_with("outside of the target directory")
+                                || err.ends_with("external symlinks are not allowed")
                         })
                     {
                         Some(
@@ -426,7 +442,7 @@ async fn build_impl(
     }
 }
 
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 async fn build_package(
     source: AnnotatedSource<'_>,
     output_dir: Option<&Path>,
@@ -442,7 +458,9 @@ async fn build_package(
     client_builder: BaseClientBuilder<'_>,
     hash_checking: Option<HashCheckingMode>,
     build_logs: bool,
+    gitignore: bool,
     force_pep517: bool,
+    clear: bool,
     build_constraints: &[RequirementsSource],
     build_isolation: &BuildIsolation,
     extra_build_dependencies: &ExtraBuildDependencies,
@@ -450,8 +468,8 @@ async fn build_package(
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
     exclude_newer: ExcludeNewer,
-    sources: SourceStrategy,
-    concurrency: Concurrency,
+    sources: NoSources,
+    concurrency: &Concurrency,
     build_options: &BuildOptions,
     sdist: bool,
     wheel: bool,
@@ -474,6 +492,11 @@ async fn build_package(
             }
         }
     };
+
+    // Clear the output directory if requested
+    if clear && output_dir.exists() {
+        fs_err::remove_dir_all(&*output_dir)?;
+    }
 
     // (1) Explicit request from user
     let mut interpreter_request = python_request.map(PythonRequest::parse);
@@ -605,13 +628,13 @@ async fn build_package(
         build_options,
         &hasher,
         exclude_newer,
-        sources,
+        sources.clone(),
         workspace_cache,
-        concurrency,
+        concurrency.clone(),
         preview,
     );
 
-    prepare_output_directory(&output_dir).await?;
+    prepare_output_directory(&output_dir, gitignore).await?;
 
     // Determine the build plan.
     let plan = BuildPlan::determine(&source, sdist, wheel).map_err(Error::BuildPlan)?;
@@ -642,7 +665,7 @@ async fn build_package(
 
     let build_output = match printer {
         Printer::Default | Printer::NoProgress | Printer::Verbose => {
-            if build_logs {
+            if build_logs && !uv_flags::contains(uv_flags::EnvironmentFlags::HIDE_BUILD_OUTPUT) {
                 BuildOutput::Stderr
             } else {
                 BuildOutput::Quiet
@@ -665,7 +688,7 @@ async fn build_package(
                     printer,
                     "source distribution",
                     &build_dispatch,
-                    sources,
+                    &sources,
                     dist,
                     subdirectory,
                     version_id,
@@ -682,7 +705,7 @@ async fn build_package(
                 printer,
                 "source distribution",
                 &build_dispatch,
-                sources,
+                &sources,
                 dist,
                 subdirectory,
                 version_id,
@@ -697,7 +720,7 @@ async fn build_package(
             let ext = SourceDistExtension::from_path(path.as_path())
                 .map_err(|err| Error::InvalidSourceDistExt(path.user_display().to_string(), err))?;
             let temp_dir = tempfile::tempdir_in(cache.bucket(CacheBucket::SourceDistributions))?;
-            uv_extract::stream::archive(reader, ext, temp_dir.path()).await?;
+            uv_extract::stream::archive(path.display(), reader, ext, temp_dir.path()).await?;
 
             // Extract the top-level directory from the archive.
             let extracted = match uv_extract::strip_component(temp_dir.path()) {
@@ -720,6 +743,7 @@ async fn build_package(
                 version_id,
                 build_output,
                 Some(sdist_build.normalized_filename().version()),
+                preview,
             )
             .await?;
             build_results.push(wheel_build);
@@ -733,7 +757,7 @@ async fn build_package(
                 printer,
                 "source distribution",
                 &build_dispatch,
-                sources,
+                &sources,
                 dist,
                 subdirectory,
                 version_id,
@@ -757,6 +781,7 @@ async fn build_package(
                 version_id,
                 build_output,
                 None,
+                preview,
             )
             .await?;
             build_results.push(wheel_build);
@@ -770,7 +795,7 @@ async fn build_package(
                 printer,
                 "source distribution",
                 &build_dispatch,
-                sources,
+                &sources,
                 dist,
                 subdirectory,
                 version_id,
@@ -792,6 +817,7 @@ async fn build_package(
                 version_id,
                 build_output,
                 Some(sdist_build.normalized_filename().version()),
+                preview,
             )
             .await?;
             build_results.push(sdist_build);
@@ -804,7 +830,8 @@ async fn build_package(
                 Error::InvalidSourceDistExt(source.path().user_display().to_string(), err)
             })?;
             let temp_dir = tempfile::tempdir_in(&output_dir)?;
-            uv_extract::stream::archive(reader, ext, temp_dir.path()).await?;
+            uv_extract::stream::archive(source.path().display(), reader, ext, temp_dir.path())
+                .await?;
 
             // If the source distribution has a version in its filename, check the version.
             let version = source
@@ -835,6 +862,7 @@ async fn build_package(
                 version_id,
                 build_output,
                 version.as_ref(),
+                preview,
             )
             .await?;
             build_results.push(wheel_build);
@@ -877,7 +905,7 @@ async fn build_sdist(
     build_kind_message: &str,
     // Below is only used with PEP 517 builds
     build_dispatch: &BuildDispatch<'_>,
-    sources: SourceStrategy,
+    sources: &NoSources,
     dist: Option<&SourceDist>,
     subdirectory: Option<&Path>,
     version_id: Option<&str>,
@@ -886,8 +914,13 @@ async fn build_sdist(
     let build_result = match action {
         BuildAction::List => {
             let source_tree_ = source_tree.to_path_buf();
+            let sources_enabled = sources.is_none();
             let (filename, file_list) = tokio::task::spawn_blocking(move || {
-                uv_build_backend::list_source_dist(&source_tree_, uv_version::version())
+                uv_build_backend::list_source_dist(
+                    &source_tree_,
+                    uv_version::version(),
+                    sources_enabled,
+                )
             })
             .await??;
             let raw_filename = filename.to_string();
@@ -911,11 +944,13 @@ async fn build_sdist(
             )?;
             let source_tree = source_tree.to_path_buf();
             let output_dir_ = output_dir.to_path_buf();
+            let sources_enabled = sources.is_none();
             let filename = tokio::task::spawn_blocking(move || {
                 uv_build_backend::build_source_dist(
                     &source_tree,
                     &output_dir_,
                     uv_version::version(),
+                    sources_enabled,
                 )
             })
             .await??
@@ -980,19 +1015,26 @@ async fn build_wheel(
     build_kind_message: &str,
     // Below is only used with PEP 517 builds
     build_dispatch: &BuildDispatch<'_>,
-    sources: SourceStrategy,
+    sources: NoSources,
     dist: Option<&SourceDist>,
     subdirectory: Option<&Path>,
     version_id: Option<&str>,
     build_output: BuildOutput,
     // Used for checking version consistency
     version: Option<&Version>,
+    preview: Preview,
 ) -> Result<BuildMessage, Error> {
     let build_message = match action {
         BuildAction::List => {
             let source_tree_ = source_tree.to_path_buf();
+            let sources_enabled = sources.is_none();
             let (filename, file_list) = tokio::task::spawn_blocking(move || {
-                uv_build_backend::list_wheel(&source_tree_, uv_version::version())
+                uv_build_backend::list_wheel(
+                    &source_tree_,
+                    uv_version::version(),
+                    sources_enabled,
+                    preview,
+                )
             })
             .await??;
             let raw_filename = filename.to_string();
@@ -1016,12 +1058,15 @@ async fn build_wheel(
             )?;
             let source_tree = source_tree.to_path_buf();
             let output_dir_ = output_dir.to_path_buf();
+            let sources_enabled = sources.is_none();
             let filename = tokio::task::spawn_blocking(move || {
                 uv_build_backend::build_wheel(
                     &source_tree,
                     &output_dir_,
                     None,
                     uv_version::version(),
+                    sources_enabled,
+                    preview,
                 )
             })
             .await??;
@@ -1051,7 +1096,7 @@ async fn build_wheel(
                     source.path(),
                     version_id,
                     dist,
-                    sources,
+                    &sources,
                     BuildKind::Wheel,
                     build_output,
                     BuildStack::default(),
@@ -1078,19 +1123,21 @@ async fn build_wheel(
 }
 
 /// Create the output directory and add a `.gitignore`.
-async fn prepare_output_directory(output_dir: &Path) -> Result<(), Error> {
+async fn prepare_output_directory(output_dir: &Path, gitignore: bool) -> Result<(), Error> {
     // Create the output directory.
     fs_err::tokio::create_dir_all(&output_dir).await?;
 
     // Add a .gitignore.
-    match fs_err::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(output_dir.join(".gitignore"))
-    {
-        Ok(mut file) => file.write_all(b"*")?,
-        Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
-        Err(err) => return Err(err.into()),
+    if gitignore {
+        match fs_err::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(output_dir.join(".gitignore"))
+        {
+            Ok(mut file) => file.write_all(b"*")?,
+            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
+            Err(err) => return Err(err.into()),
+        }
     }
     Ok(())
 }

@@ -1,20 +1,130 @@
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::{fixture::PathChild, prelude::FileWriteStr};
-#[cfg(feature = "native-auth")]
 use uv_static::EnvVars;
 
-use crate::common::{TestContext, uv_snapshot};
+use uv_test::uv_snapshot;
 
-#[test]
+#[tokio::test]
 #[cfg(feature = "native-auth")]
-fn add_package_native_auth() -> Result<()> {
-    let context = TestContext::new("3.12").with_real_home();
+async fn add_package_native_auth_realm() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_real_home();
+    let proxy = crate::pypi_proxy::start().await;
 
     // Clear state before the test
     context
         .auth_logout()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg(proxy.uri())
+        .arg("--username")
+        .arg("public")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
+        .status()?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc::indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11, <4"
+        dependencies = []
+        "#
+    })?;
+
+    // Try to add a package without credentials.
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--default-index").arg(proxy.username_url("public", "/basic-auth/simple"))
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    "
+    );
+
+    // Login to the domain
+    uv_snapshot!(context.filters(), context.auth_login()
+        .arg(proxy.uri())
+        .arg("--username")
+        .arg("public")
+        .arg("--password")
+        .arg("heron")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for public@http://[LOCALHOST]/
+    "
+    );
+
+    // Try to add the original package without credentials again. This should use credentials
+    // storied in the system keyring.
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--default-index").arg(proxy.username_url("public", "/basic-auth/simple"))
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "
+    );
+
+    // Logout of the domain
+    uv_snapshot!(context.filters(), context.auth_logout()
+        .arg(proxy.uri())
+        .arg("--username")
+        .arg("public")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Removed credentials for public@http://[LOCALHOST]/
+    "
+    );
+
+    // Authentication should fail again
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--default-index").arg(proxy.username_url("public", "/basic-auth/simple"))
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    "
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+#[cfg(feature = "native-auth")]
+async fn add_package_native_auth() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_real_home();
+    let proxy = crate::pypi_proxy::start().await;
+
+    // Clear state before the test
+    context
+        .auth_logout()
+        .arg(proxy.url("/basic-auth/simple"))
         .arg("--username")
         .arg("public")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
@@ -32,7 +142,7 @@ fn add_package_native_auth() -> Result<()> {
     })?;
 
     // Try to add a package without credentials.
-    uv_snapshot!(context.add().arg("anyio").arg("--default-index").arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--default-index").arg(proxy.username_url("public", "/basic-auth/simple"))
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     success: false
     exit_code: 1
@@ -42,14 +152,14 @@ fn add_package_native_auth() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
       help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "
     );
 
     // Login to the index
-    uv_snapshot!(context.auth_login()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.auth_login()
+        .arg(proxy.url("/basic-auth/simple"))
         .arg("--username")
         .arg("public")
         .arg("--password")
@@ -60,30 +170,31 @@ fn add_package_native_auth() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Stored credentials for public@https://pypi-proxy.fly.dev/basic-auth
+    Stored credentials for public@http://[LOCALHOST]/basic-auth
     "
     );
 
     // Try to add the original package without credentials again. This should use
     // credentials storied in the system keyring.
-    uv_snapshot!(context.add().arg("anyio").arg("--default-index").arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--default-index").arg(proxy.username_url("public", "/basic-auth/simple"))
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
-
-          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
     "
     );
 
     // Logout of the index
-    uv_snapshot!(context.auth_logout()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.auth_logout()
+        .arg(proxy.url("/basic-auth/simple"))
         .arg("--username")
         .arg("public")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
@@ -92,12 +203,12 @@ fn add_package_native_auth() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed credentials for public@https://pypi-proxy.fly.dev/basic-auth
+    Removed credentials for public@http://[LOCALHOST]/basic-auth
     "
     );
 
     // Authentication should fail again
-    uv_snapshot!(context.add().arg("iniconfig").arg("--default-index").arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--default-index").arg(proxy.username_url("public", "/basic-auth/simple"))
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     success: false
     exit_code: 1
@@ -107,7 +218,7 @@ fn add_package_native_auth() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
       help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "
     );
@@ -115,35 +226,36 @@ fn add_package_native_auth() -> Result<()> {
     Ok(())
 }
 
-#[test]
+#[tokio::test]
 #[cfg(feature = "native-auth")]
-fn token_native_auth() -> Result<()> {
-    let context = TestContext::new_with_versions(&[]).with_real_home();
+async fn token_native_auth() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_real_home();
+    let proxy = crate::pypi_proxy::start().await;
 
     // Clear state before the test
     context
         .auth_logout()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg(proxy.url("/basic-auth/simple"))
         .arg("--username")
         .arg("public")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
         .status()?;
 
     // Without persisted credentials
-    uv_snapshot!(context.auth_token()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.auth_token()
+        .arg(proxy.url("/basic-auth/simple"))
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to fetch credentials for https://pypi-proxy.fly.dev/basic-auth/simple
+    error: Failed to fetch credentials for http://[LOCALHOST]/basic-auth/simple
     ");
 
     // Without persisted credentials (with a username in the request)
-    uv_snapshot!(context.auth_token()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.auth_token()
+        .arg(proxy.url("/basic-auth/simple"))
         .arg("--username")
         .arg("public")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
@@ -152,12 +264,12 @@ fn token_native_auth() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to fetch credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
+    error: Failed to fetch credentials for public@http://[LOCALHOST]/basic-auth/simple
     ");
 
     // Login to the index
-    uv_snapshot!(context.auth_login()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.auth_login()
+        .arg(proxy.url("/basic-auth/simple"))
         .arg("--username")
         .arg("public")
         .arg("--password")
@@ -168,41 +280,41 @@ fn token_native_auth() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Stored credentials for public@https://pypi-proxy.fly.dev/basic-auth
+    Stored credentials for public@http://[LOCALHOST]/basic-auth
     "
     );
 
     // Show the credentials
-    uv_snapshot!(context.auth_token()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.auth_token()
+        .arg(proxy.url("/basic-auth/simple"))
         .arg("--username")
         .arg("public")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
+    heron
 
     ----- stderr -----
-    error: Failed to fetch credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
     ");
 
     // Without the username
     // TODO(zanieb): Add a hint here if we can?
-    uv_snapshot!(context.auth_token()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.auth_token()
+        .arg(proxy.url("/basic-auth/simple"))
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to fetch credentials for https://pypi-proxy.fly.dev/basic-auth/simple
+    error: Failed to fetch credentials for http://[LOCALHOST]/basic-auth/simple
     ");
 
     // With a mismatched username
     // TODO(zanieb): Add a hint here if we can?
-    uv_snapshot!(context.auth_token()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.auth_token()
+        .arg(proxy.url("/basic-auth/simple"))
         .arg("--username")
         .arg("private")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
@@ -211,12 +323,12 @@ fn token_native_auth() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to fetch credentials for private@https://pypi-proxy.fly.dev/basic-auth/simple
+    error: Failed to fetch credentials for private@http://[LOCALHOST]/basic-auth/simple
     ");
 
     // Login to the index with a token
-    uv_snapshot!(context.auth_login()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.auth_login()
+        .arg(proxy.url("/basic-auth/simple"))
         .arg("--token")
         .arg("heron")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
@@ -225,44 +337,44 @@ fn token_native_auth() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Stored credentials for https://pypi-proxy.fly.dev/basic-auth
+    Stored credentials for http://[LOCALHOST]/basic-auth
     "
     );
 
     // Retrieve the token without a username
-    uv_snapshot!(context.auth_token()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.auth_token()
+        .arg(proxy.url("/basic-auth/simple"))
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
+    heron
 
     ----- stderr -----
-    error: Failed to fetch credentials for https://pypi-proxy.fly.dev/basic-auth/simple
     ");
 
     context
         .auth_logout()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg(proxy.url("/basic-auth/simple"))
         .arg("--username")
         .arg("public")
         .status()?;
 
     // Retrieve token using URL with embedded username (no --username needed)
-    uv_snapshot!(context.auth_token()
-        .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.auth_token()
+        .arg(proxy.username_url("public", "/basic-auth/simple"))
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
+    heron
 
     ----- stderr -----
-    error: Failed to fetch credentials for public@https://pypi-proxy.fly.dev/basic-auth/simple
     ");
 
     // Conflict between --username and URL username is rejected
-    uv_snapshot!(context.auth_token()
-        .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.auth_token()
+        .arg(proxy.username_url("public", "/basic-auth/simple"))
         .arg("--username")
         .arg("different")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
@@ -277,22 +389,223 @@ fn token_native_auth() -> Result<()> {
     Ok(())
 }
 
-#[test]
+#[tokio::test]
 #[cfg(feature = "native-auth")]
-fn login_native_auth() -> Result<()> {
-    let context = TestContext::new_with_versions(&[]).with_real_home();
+async fn token_native_auth_realm() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_real_home();
+    let proxy = crate::pypi_proxy::start().await;
 
     // Clear state before the test
     context
         .auth_logout()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg(proxy.uri())
+        .arg("--username")
+        .arg("public")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
+        .status()?;
+    context
+        .auth_logout()
+        .arg(proxy.url("/basic-auth/simple"))
+        .arg("--username")
+        .arg("public")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
+        .status()?;
+    context
+        .auth_logout()
+        .arg(proxy.uri())
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
+        .status()?;
+
+    // Without persisted credentials
+    uv_snapshot!(context.filters(), context.auth_token()
+        .arg(proxy.uri())
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for http://[LOCALHOST]/
+    ");
+
+    // Without persisted credentials (with a username in the request)
+    uv_snapshot!(context.filters(), context.auth_token()
+        .arg(proxy.uri())
+        .arg("--username")
+        .arg("public")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for public@http://[LOCALHOST]/
+    ");
+
+    // Login to the index
+    uv_snapshot!(context.filters(), context.auth_login()
+        .arg(proxy.uri())
+        .arg("--username")
+        .arg("public")
+        .arg("--password")
+        .arg("heron")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for public@http://[LOCALHOST]/
+    "
+    );
+
+    // Show the credentials
+    uv_snapshot!(context.filters(), context.auth_token()
+        .arg(proxy.uri())
+        .arg("--username")
+        .arg("public")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    heron
+
+    ----- stderr -----
+    ");
+
+    // Show the credentials for a child URL
+    uv_snapshot!(context.filters(), context.auth_token()
+        .arg(proxy.url("/basic-auth/simple"))
+        .arg("--username")
+        .arg("public")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    heron
+
+    ----- stderr -----
+    ");
+
+    // Without the username (defaults to __token__ which wasn't stored)
+    uv_snapshot!(context.filters(), context.auth_token()
+        .arg(proxy.uri())
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for http://[LOCALHOST]/
+    ");
+
+    // Without the username (defaults to __token__ which wasn't stored)
+    uv_snapshot!(context.filters(), context.auth_token()
+        .arg(proxy.url("/basic-auth/simple"))
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for http://[LOCALHOST]/basic-auth/simple
+    ");
+
+    // With a mismatched username
+    // TODO(zanieb): Add a hint here if we can?
+    uv_snapshot!(context.filters(), context.auth_token()
+        .arg(proxy.uri())
+        .arg("--username")
+        .arg("private")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for private@http://[LOCALHOST]/
+    ");
+
+    // With a mismatched port
+    uv_snapshot!(context.filters(), context.auth_token()
+        .arg("https://192.0.2.1:1000")
+        .arg("--username")
+        .arg("public")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for public@https://192.0.2.1:1000/
+    ");
+
+    // Login to the index with a token
+    uv_snapshot!(context.filters(), context.auth_login()
+        .arg(proxy.uri())
+        .arg("--token")
+        .arg("heron")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for http://[LOCALHOST]/
+    "
+    );
+
+    // Retrieve the token without a username
+    uv_snapshot!(context.filters(), context.auth_token()
+        .arg(proxy.uri())
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    heron
+
+    ----- stderr -----
+    ");
+
+    context
+        .auth_logout()
+        .arg(proxy.uri())
+        .arg("--username")
+        .arg("public")
+        .status()?;
+
+    // Retrieve token using URL with embedded username (no --username needed)
+    uv_snapshot!(context.filters(), context.auth_token()
+        .arg(proxy.username_url("public", "/basic-auth/simple"))
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    heron
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[tokio::test]
+#[cfg(feature = "native-auth")]
+async fn login_native_auth() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_real_home();
+    let proxy = crate::pypi_proxy::start().await;
+
+    // Clear state before the test
+    context
+        .auth_logout()
+        .arg(proxy.url("/basic-auth/simple"))
         .arg("--username")
         .arg("public")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
         .status()?;
 
     // Without a service name
-    uv_snapshot!(context.auth_login(), @r"
+    uv_snapshot!(context.filters(), context.auth_login(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -307,8 +620,8 @@ fn login_native_auth() -> Result<()> {
     ");
 
     // Without a username (or token)
-    uv_snapshot!(context.auth_login()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.auth_login()
+        .arg(proxy.url("/basic-auth/simple"))
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     success: false
     exit_code: 2
@@ -319,8 +632,8 @@ fn login_native_auth() -> Result<()> {
     ");
 
     // Without a password
-    uv_snapshot!(context.auth_login()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.auth_login()
+        .arg(proxy.url("/basic-auth/simple"))
         .arg("--username")
         .arg("public")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
@@ -333,8 +646,8 @@ fn login_native_auth() -> Result<()> {
     ");
 
     // Successful
-    uv_snapshot!(context.auth_login()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.auth_login()
+        .arg(proxy.url("/basic-auth/simple"))
         .arg("--username")
         .arg("public")
         .arg("--password")
@@ -345,30 +658,31 @@ fn login_native_auth() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Stored credentials for public@https://pypi-proxy.fly.dev/basic-auth
+    Stored credentials for public@http://[LOCALHOST]/basic-auth
     "
     );
 
     Ok(())
 }
 
-#[test]
+#[tokio::test]
 #[cfg(feature = "native-auth")]
-fn login_token_native_auth() -> Result<()> {
-    let context = TestContext::new_with_versions(&[]).with_real_home();
+async fn login_token_native_auth() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_real_home();
+    let proxy = crate::pypi_proxy::start().await;
 
     // Clear state before the test
     context
         .auth_logout()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg(proxy.url("/basic-auth/simple"))
         .arg("--username")
         .arg("__token__")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
         .status()?;
 
     // Successful with token
-    uv_snapshot!(context.auth_login()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.auth_login()
+        .arg(proxy.url("/basic-auth/simple"))
         .arg("--token")
         .arg("test-token")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
@@ -377,29 +691,35 @@ fn login_token_native_auth() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Stored credentials for https://pypi-proxy.fly.dev/basic-auth
+    Stored credentials for http://[LOCALHOST]/basic-auth
     "
     );
 
     Ok(())
 }
 
-#[test]
+#[tokio::test]
 #[cfg(feature = "native-auth")]
-fn logout_native_auth() -> Result<()> {
-    let context = TestContext::new_with_versions(&[]).with_real_home();
+async fn logout_native_auth() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_real_home();
+    let proxy = crate::pypi_proxy::start().await;
 
     // Clear state before the test
     context
         .auth_logout()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg(proxy.url("/basic-auth/simple"))
         .arg("--username")
         .arg("public")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
         .status()?;
+    context
+        .auth_logout()
+        .arg(proxy.url("/basic-auth/simple"))
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
+        .status()?;
 
     // Without a service name
-    uv_snapshot!(context.auth_logout(), @r"
+    uv_snapshot!(context.filters(), context.auth_logout(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -414,20 +734,21 @@ fn logout_native_auth() -> Result<()> {
     ");
 
     // Logout before logging in
-    uv_snapshot!(context.auth_logout()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.auth_logout()
+        .arg(proxy.url("/basic-auth/simple"))
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Removed credentials for https://pypi-proxy.fly.dev/basic-auth
+    error: Unable to remove credentials for http://[LOCALHOST]/basic-auth
+      Caused by: No matching entry found in secure storage
     ");
 
     // Logout before logging in (with a username)
-    uv_snapshot!(context.auth_logout()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.auth_logout()
+        .arg(proxy.url("/basic-auth/simple"))
         .arg("--username")
         .arg("public")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
@@ -436,13 +757,13 @@ fn logout_native_auth() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Unable to remove credentials for public@https://pypi-proxy.fly.dev/basic-auth
+    error: Unable to remove credentials for public@http://[LOCALHOST]/basic-auth
       Caused by: No matching entry found in secure storage
     ");
 
     // Login with a username
-    uv_snapshot!(context.auth_login()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.auth_login()
+        .arg(proxy.url("/basic-auth/simple"))
         .arg("--username")
         .arg("public")
         .arg("--password")
@@ -453,27 +774,27 @@ fn logout_native_auth() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Stored credentials for public@https://pypi-proxy.fly.dev/basic-auth
+    Stored credentials for public@http://[LOCALHOST]/basic-auth
     "
     );
 
     // Logout without a username
     // TODO(zanieb): Add a hint here if we can?
-    uv_snapshot!(context.auth_logout()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.auth_logout()
+        .arg(proxy.url("/basic-auth/simple"))
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Unable to remove credentials for https://pypi-proxy.fly.dev/basic-auth
+    error: Unable to remove credentials for http://[LOCALHOST]/basic-auth
       Caused by: No matching entry found in secure storage
     ");
 
     // Logout with a username
-    uv_snapshot!(context.auth_logout()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.auth_logout()
+        .arg(proxy.url("/basic-auth/simple"))
         .arg("--username")
         .arg("public")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
@@ -482,13 +803,13 @@ fn logout_native_auth() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed credentials for public@https://pypi-proxy.fly.dev/basic-auth
+    Removed credentials for public@http://[LOCALHOST]/basic-auth
     ");
 
     // Login again
     context
         .auth_login()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg(proxy.url("/basic-auth/simple"))
         .arg("--username")
         .arg("public")
         .arg("--password")
@@ -498,20 +819,20 @@ fn logout_native_auth() -> Result<()> {
         .success();
 
     // Logout with a username in the URL
-    uv_snapshot!(context.auth_logout()
-        .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.auth_logout()
+        .arg(proxy.username_url("public", "/basic-auth/simple"))
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Removed credentials for public@https://pypi-proxy.fly.dev/basic-auth
+    Removed credentials for public@http://[LOCALHOST]/basic-auth
     ");
 
     // Conflict between --username and a URL username is rejected
-    uv_snapshot!(context.auth_logout()
-        .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.auth_logout()
+        .arg(proxy.username_url("public", "/basic-auth/simple"))
         .arg("--username")
         .arg("foo")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
@@ -524,8 +845,8 @@ fn logout_native_auth() -> Result<()> {
     ");
 
     // Conflict between --token and a URL username is rejected
-    uv_snapshot!(context.auth_login()
-        .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.auth_login()
+        .arg(proxy.username_url("public", "/basic-auth/simple"))
         .arg("--token")
         .arg("foo")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
@@ -540,21 +861,22 @@ fn logout_native_auth() -> Result<()> {
     Ok(())
 }
 
-#[test]
+#[tokio::test]
 #[cfg(feature = "native-auth")]
-fn logout_token_native_auth() -> Result<()> {
-    let context = TestContext::new_with_versions(&[]).with_real_home();
+async fn logout_token_native_auth() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_real_home();
+    let proxy = crate::pypi_proxy::start().await;
 
     // Clear state before the test
     context
         .auth_logout()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg(proxy.url("/basic-auth/simple"))
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
         .status()?;
 
     // Login with a token
-    uv_snapshot!(context.auth_login()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.auth_login()
+        .arg(proxy.url("/basic-auth/simple"))
         .arg("--token")
         .arg("test-token")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
@@ -563,20 +885,20 @@ fn logout_token_native_auth() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Stored credentials for https://pypi-proxy.fly.dev/basic-auth
+    Stored credentials for http://[LOCALHOST]/basic-auth
     "
     );
 
     // Logout without a username
-    uv_snapshot!(context.auth_logout()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.auth_logout()
+        .arg(proxy.url("/basic-auth/simple"))
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Removed credentials for https://pypi-proxy.fly.dev/basic-auth
+    Removed credentials for http://[LOCALHOST]/basic-auth
     ");
 
     Ok(())
@@ -585,7 +907,7 @@ fn logout_token_native_auth() -> Result<()> {
 #[test]
 #[cfg(feature = "native-auth")]
 fn login_native_auth_url() {
-    let context = TestContext::new_with_versions(&[]).with_real_home();
+    let context = uv_test::test_context_with_versions!(&[]).with_real_home();
 
     // A domain-only service name gets https:// prepended
     uv_snapshot!(context.auth_login()
@@ -757,31 +1079,32 @@ fn login_native_auth_url() {
     ");
 }
 
-#[test]
-fn login_text_store() {
-    let context = TestContext::new_with_versions(&[]);
+#[tokio::test]
+async fn login_text_store() {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let proxy = crate::pypi_proxy::start().await;
 
     // Login with a username and password
-    uv_snapshot!(context.auth_login()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.auth_login()
+        .arg(proxy.url("/basic-auth/simple"))
         .arg("--username")
         .arg("public")
         .arg("--password")
-        .arg("heron"), @r"
+        .arg("heron"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Stored credentials for public@https://pypi-proxy.fly.dev/basic-auth
+    Stored credentials for public@http://[LOCALHOST]/basic-auth
     "
     );
 
     // Login with a token
-    uv_snapshot!(context.auth_login()
+    uv_snapshot!(context.filters(), context.auth_login()
         .arg("https://example.com/simple")
         .arg("--token")
-        .arg("test-token"), @r"
+        .arg("test-token"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -792,12 +1115,12 @@ fn login_text_store() {
     );
 
     // Empty username should fail
-    uv_snapshot!(context.auth_login()
+    uv_snapshot!(context.filters(), context.auth_login()
         .arg("https://example.com/simple")
         .arg("--username")
         .arg("")
         .arg("--password")
-        .arg("testpass"), @r"
+        .arg("testpass"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -808,12 +1131,12 @@ fn login_text_store() {
     );
 
     // Empty password should fail
-    uv_snapshot!(context.auth_login()
+    uv_snapshot!(context.filters(), context.auth_login()
         .arg("https://example.com/simple")
         .arg("--username")
         .arg("testuser")
         .arg("--password")
-        .arg(""), @r"
+        .arg(""), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -824,12 +1147,12 @@ fn login_text_store() {
     );
 
     // HTTP should fail
-    uv_snapshot!(context.auth_login()
+    uv_snapshot!(context.filters(), context.auth_login()
         .arg("http://example.com/simple")
         .arg("--username")
         .arg("testuser")
         .arg("--password")
-        .arg("testpass"), @r"
+        .arg("testpass"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -841,12 +1164,12 @@ fn login_text_store() {
     ");
 
     // Other protocol should fail
-    uv_snapshot!(context.auth_login()
+    uv_snapshot!(context.filters(), context.auth_login()
         .arg("ftp://example.com/simple")
         .arg("--username")
         .arg("testuser")
         .arg("--password")
-        .arg("testpass"), @r"
+        .arg("testpass"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -858,12 +1181,12 @@ fn login_text_store() {
     ");
 
     // HTTP should be allowed on localhost
-    uv_snapshot!(context.auth_login()
+    uv_snapshot!(context.filters(), context.auth_login()
         .arg("http://127.0.0.1/simple")
         .arg("--username")
         .arg("testuser")
         .arg("--password")
-        .arg("testpass"), @r"
+        .arg("testpass"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -873,12 +1196,12 @@ fn login_text_store() {
     ");
 
     // HTTP should be allowed on localhost
-    uv_snapshot!(context.auth_login()
+    uv_snapshot!(context.filters(), context.auth_login()
         .arg("http://localhost/simple")
         .arg("--username")
         .arg("testuser")
         .arg("--password")
-        .arg("testpass"), @r"
+        .arg("testpass"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -889,9 +1212,9 @@ fn login_text_store() {
 }
 
 #[test]
-#[allow(clippy::disallowed_types)]
+#[expect(clippy::disallowed_types)]
 fn login_password_stdin() -> Result<()> {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     // Create a temporary file with the password
     let password_file = context.temp_dir.child("password.txt");
@@ -904,7 +1227,7 @@ fn login_password_stdin() -> Result<()> {
         .arg("testuser")
         .arg("--password")
         .arg("-")
-        .stdin(std::fs::File::open(password_file)?), @r"
+        .stdin(std::fs::File::open(password_file)?), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -918,7 +1241,7 @@ fn login_password_stdin() -> Result<()> {
     uv_snapshot!(context.auth_token()
         .arg("https://example.com/simple")
         .arg("--username")
-        .arg("testuser"), @r"
+        .arg("testuser"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -932,9 +1255,9 @@ fn login_password_stdin() -> Result<()> {
 }
 
 #[test]
-#[allow(clippy::disallowed_types)]
+#[expect(clippy::disallowed_types)]
 fn login_token_stdin() -> Result<()> {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     // Create a temporary file with the token
     let token_file = context.temp_dir.child("token.txt");
@@ -945,7 +1268,7 @@ fn login_token_stdin() -> Result<()> {
         .arg("https://example.com/simple")
         .arg("--token")
         .arg("-")
-        .stdin(std::fs::File::open(token_file)?), @r"
+        .stdin(std::fs::File::open(token_file)?), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -957,7 +1280,7 @@ fn login_token_stdin() -> Result<()> {
 
     // Verify the credentials work by retrieving the token
     uv_snapshot!(context.auth_token()
-        .arg("https://example.com/simple"), @r"
+        .arg("https://example.com/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -970,14 +1293,15 @@ fn login_token_stdin() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn token_text_store() {
-    let context = TestContext::new_with_versions(&[]);
+#[tokio::test]
+async fn token_text_store() {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let proxy = crate::pypi_proxy::start().await;
 
     // Login first
     context
         .auth_login()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg(proxy.url("/basic-auth/simple"))
         .arg("--username")
         .arg("public")
         .arg("--password")
@@ -986,10 +1310,10 @@ fn token_text_store() {
         .success();
 
     // Retrieve the token
-    uv_snapshot!(context.auth_token()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.auth_token()
+        .arg(proxy.url("/basic-auth/simple"))
         .arg("--username")
-        .arg("public"), @r"
+        .arg("public"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1009,8 +1333,8 @@ fn token_text_store() {
         .success();
 
     // Retrieve token without username
-    uv_snapshot!(context.auth_token()
-        .arg("https://example.com/simple"), @r"
+    uv_snapshot!(context.filters(), context.auth_token()
+        .arg("https://example.com/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1021,10 +1345,10 @@ fn token_text_store() {
     );
 
     // Empty username should fail
-    uv_snapshot!(context.auth_token()
+    uv_snapshot!(context.filters(), context.auth_token()
         .arg("https://example.com/simple")
         .arg("--username")
-        .arg(""), @r"
+        .arg(""), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1035,14 +1359,15 @@ fn token_text_store() {
     );
 }
 
-#[test]
-fn logout_text_store() {
-    let context = TestContext::new_with_versions(&[]);
+#[tokio::test]
+async fn logout_text_store() {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let proxy = crate::pypi_proxy::start().await;
 
     // Login first
     context
         .auth_login()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg(proxy.url("/basic-auth/simple"))
         .arg("--username")
         .arg("public")
         .arg("--password")
@@ -1051,16 +1376,16 @@ fn logout_text_store() {
         .success();
 
     // Logout
-    uv_snapshot!(context.auth_logout()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.auth_logout()
+        .arg(proxy.url("/basic-auth/simple"))
         .arg("--username")
-        .arg("public"), @r"
+        .arg("public"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Removed credentials for public@https://pypi-proxy.fly.dev/basic-auth
+    Removed credentials for public@http://[LOCALHOST]/basic-auth
     "
     );
 
@@ -1073,8 +1398,8 @@ fn logout_text_store() {
         .assert()
         .success();
 
-    uv_snapshot!(context.auth_logout()
-        .arg("https://example.com/simple"), @r"
+    uv_snapshot!(context.filters(), context.auth_logout()
+        .arg("https://example.com/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1085,10 +1410,10 @@ fn logout_text_store() {
     );
 
     // Empty username should fail
-    uv_snapshot!(context.auth_logout()
+    uv_snapshot!(context.filters(), context.auth_logout()
         .arg("https://example.com/simple")
         .arg("--username")
-        .arg(""), @r"
+        .arg(""), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1099,35 +1424,36 @@ fn logout_text_store() {
     );
 }
 
-#[test]
-fn auth_disabled_provider_uses_text_store() {
-    let context = TestContext::new_with_versions(&[]);
+#[tokio::test]
+async fn auth_disabled_provider_uses_text_store() {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let proxy = crate::pypi_proxy::start().await;
 
     // Login with disabled provider should use text store
-    uv_snapshot!(context.auth_login()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.auth_login()
+        .arg(proxy.url("/basic-auth/simple"))
         .arg("--username")
         .arg("public")
         .arg("--password")
         .arg("heron")
         .arg("--keyring-provider")
-        .arg("disabled"), @r"
+        .arg("disabled"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Stored credentials for public@https://pypi-proxy.fly.dev/basic-auth
+    Stored credentials for public@http://[LOCALHOST]/basic-auth
     "
     );
 
     // Token retrieval should work with disabled provider
-    uv_snapshot!(context.auth_token()
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+    uv_snapshot!(context.filters(), context.auth_token()
+        .arg(proxy.url("/basic-auth/simple"))
         .arg("--username")
         .arg("public")
         .arg("--keyring-provider")
-        .arg("disabled"), @r"
+        .arg("disabled"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1140,7 +1466,7 @@ fn auth_disabled_provider_uses_text_store() {
 
 #[test]
 fn login_text_store_strips_simple_suffix() {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     // Login with `/simple` suffix - should strip it and store credentials for the root URL
     uv_snapshot!(context.auth_login()
@@ -1148,7 +1474,7 @@ fn login_text_store_strips_simple_suffix() {
         .arg("--username")
         .arg("testuser")
         .arg("--password")
-        .arg("testpass"), @r"
+        .arg("testpass"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1164,7 +1490,7 @@ fn login_text_store_strips_simple_suffix() {
         .arg("--username")
         .arg("devpiuser")
         .arg("--password")
-        .arg("devpipass"), @r"
+        .arg("devpipass"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1180,7 +1506,7 @@ fn login_text_store_strips_simple_suffix() {
         .arg("--username")
         .arg("caseuser")
         .arg("--password")
-        .arg("casepass"), @r"
+        .arg("casepass"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1196,7 +1522,7 @@ fn login_text_store_strips_simple_suffix() {
         .arg("--username")
         .arg("apiuser")
         .arg("--password")
-        .arg("apipass"), @r"
+        .arg("apipass"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1212,7 +1538,7 @@ fn login_text_store_strips_simple_suffix() {
         .arg("--username")
         .arg("slashuser")
         .arg("--password")
-        .arg("slashpass"), @r"
+        .arg("slashpass"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1225,7 +1551,7 @@ fn login_text_store_strips_simple_suffix() {
 
 #[test]
 fn logout_text_store_strips_simple_suffix() {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     // Login with `/simple` suffix first
     context
@@ -1242,7 +1568,7 @@ fn logout_text_store_strips_simple_suffix() {
     uv_snapshot!(context.auth_logout()
         .arg("https://example.com/simple")
         .arg("--username")
-        .arg("testuser"), @r"
+        .arg("testuser"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1267,7 +1593,7 @@ fn logout_text_store_strips_simple_suffix() {
     uv_snapshot!(context.auth_logout()
         .arg("https://devpi.example.com/root/+simple")
         .arg("--username")
-        .arg("devpiuser"), @r"
+        .arg("devpiuser"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1280,7 +1606,7 @@ fn logout_text_store_strips_simple_suffix() {
 
 #[test]
 fn token_text_store_strips_simple_suffix() {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     // Login with `/simple` suffix
     context
@@ -1297,7 +1623,7 @@ fn token_text_store_strips_simple_suffix() {
     uv_snapshot!(context.auth_token()
         .arg("https://example.com/simple")
         .arg("--username")
-        .arg("testuser"), @r"
+        .arg("testuser"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1318,7 +1644,7 @@ fn token_text_store_strips_simple_suffix() {
 
     // Retrieve token using URL with `/simple` - should work
     uv_snapshot!(context.auth_token()
-        .arg("https://token.example.com/simple"), @r"
+        .arg("https://token.example.com/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1331,7 +1657,7 @@ fn token_text_store_strips_simple_suffix() {
 
 #[test]
 fn token_text_store_username() {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     // Login with specific username
     context
@@ -1348,7 +1674,7 @@ fn token_text_store_username() {
     uv_snapshot!(context.auth_token()
         .arg("https://example.com/simple")
         .arg("--username")
-        .arg("testuser"), @r"
+        .arg("testuser"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1360,7 +1686,7 @@ fn token_text_store_username() {
 
     // Retrieve token without username
     uv_snapshot!(context.auth_token()
-        .arg("https://example.com/simple"), @r"
+        .arg("https://example.com/simple"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1374,7 +1700,7 @@ fn token_text_store_username() {
     uv_snapshot!(context.auth_token()
         .arg("https://example.com/simple")
         .arg("--username")
-        .arg("wronguser"), @r"
+        .arg("wronguser"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1395,7 +1721,7 @@ fn token_text_store_username() {
 
     // Retrieve token without specifying username - should work
     uv_snapshot!(context.auth_token()
-        .arg("https://token.example.com/simple"), @r"
+        .arg("https://token.example.com/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1418,7 +1744,7 @@ fn token_text_store_username() {
 
     // Retrieve token without username should fail
     uv_snapshot!(context.auth_token()
-        .arg("https://userexample.com/simple"), @r"
+        .arg("https://userexample.com/simple"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1431,7 +1757,7 @@ fn token_text_store_username() {
 
 #[test]
 fn logout_text_store_multiple_usernames() {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     // Login with two different usernames for the same service
     context
@@ -1458,7 +1784,7 @@ fn logout_text_store_multiple_usernames() {
     uv_snapshot!(context.auth_logout()
         .arg("https://example.com/simple")
         .arg("--username")
-        .arg("user1"), @r"
+        .arg("user1"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1472,7 +1798,7 @@ fn logout_text_store_multiple_usernames() {
     uv_snapshot!(context.auth_token()
         .arg("https://example.com/simple")
         .arg("--username")
-        .arg("user1"), @r"
+        .arg("user1"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1485,7 +1811,7 @@ fn logout_text_store_multiple_usernames() {
     uv_snapshot!(context.auth_token()
         .arg("https://example.com/simple")
         .arg("--username")
-        .arg("user2"), @r"
+        .arg("user2"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1497,7 +1823,7 @@ fn logout_text_store_multiple_usernames() {
 
     // Try to logout without specifying username (defaults to `__token__`)
     uv_snapshot!(context.auth_logout()
-        .arg("https://example.com/simple"), @r"
+        .arg("https://example.com/simple"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1511,7 +1837,7 @@ fn logout_text_store_multiple_usernames() {
 #[test]
 #[cfg(feature = "native-auth")]
 fn native_auth_prefix_match() -> Result<()> {
-    let context = TestContext::new_with_versions(&[]).with_real_home();
+    let context = uv_test::test_context_with_versions!(&[]).with_real_home();
 
     // Clear state before the test
     context
@@ -1546,12 +1872,12 @@ fn native_auth_prefix_match() -> Result<()> {
         .arg("--username")
         .arg("testuser")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
+    testpass
 
     ----- stderr -----
-    error: Failed to fetch credentials for testuser@https://example.com/api/v1
     "
     );
 
@@ -1561,7 +1887,7 @@ fn native_auth_prefix_match() -> Result<()> {
 #[test]
 #[cfg(feature = "native-auth")]
 fn native_auth_host_fallback() -> Result<()> {
-    let context = TestContext::new_with_versions(&[]).with_real_home();
+    let context = uv_test::test_context_with_versions!(&[]).with_real_home();
 
     // Clear state before the test
     context
@@ -1590,18 +1916,17 @@ fn native_auth_host_fallback() -> Result<()> {
     );
 
     // Should fallback to host-level matching
-    // TODO(zanieb): This is not working as intended
     uv_snapshot!(context.auth_token()
         .arg("https://example.com/any/path")
         .arg("--username")
         .arg("testuser")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
+    hostpass
 
     ----- stderr -----
-    error: Failed to fetch credentials for testuser@https://example.com/any/path
     "
     );
 
@@ -1621,4 +1946,373 @@ fn native_auth_host_fallback() -> Result<()> {
     );
 
     Ok(())
+}
+
+/// Test credential helper with basic auth credentials
+#[test]
+fn bazel_helper_basic_auth() {
+    let context = uv_test::test_context!("3.12");
+
+    // Store credentials
+    uv_snapshot!(context.filters(), context.auth_login()
+        .arg("https://test.example.com")
+        .arg("--username").arg("testuser")
+        .arg("--password").arg("testpass"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for testuser@https://test.example.com/
+    ");
+
+    uv_snapshot!(context.filters(), context.auth_helper()
+        .arg("--protocol=bazel")
+        .arg("get"),
+        input=r#"{"uri":"https://test.example.com/path"}"#,
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {"headers":{"Authorization":["Basic dGVzdHVzZXI6dGVzdHBhc3M="]}}
+
+    ----- stderr -----
+    warning: The `uv auth helper` command is experimental and may change without warning. Pass `--preview-features auth-helper` to disable this warning
+    "#
+    );
+}
+
+/// Test credential helper with token credentials
+#[test]
+fn bazel_helper_token() {
+    let context = uv_test::test_context!("3.12");
+
+    // Store token
+    uv_snapshot!(context.filters(), context.auth_login()
+        .arg("https://api.example.com")
+        .arg("--token").arg("mytoken123"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for https://api.example.com/
+    ");
+
+    // Test credential helper - tokens are stored as Basic auth with __token__ username
+    uv_snapshot!(context.filters(), context.auth_helper()
+        .arg("--protocol=bazel")
+        .arg("get"),
+        input=r#"{"uri":"https://api.example.com/v1/endpoint"}"#,
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {"headers":{"Authorization":["Basic X190b2tlbl9fOm15dG9rZW4xMjM="]}}
+
+    ----- stderr -----
+    warning: The `uv auth helper` command is experimental and may change without warning. Pass `--preview-features auth-helper` to disable this warning
+    "#
+    );
+}
+
+/// Test credential helper with no credentials found
+#[test]
+fn bazel_helper_no_credentials() {
+    let context = uv_test::test_context!("3.12");
+    uv_snapshot!(context.filters(), context.auth_helper()
+        .arg("--protocol=bazel")
+        .arg("get"),
+        input=r#"{"uri":"https://unknown.example.com/path"}"#,
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {"headers":{}}
+
+    ----- stderr -----
+    warning: The `uv auth helper` command is experimental and may change without warning. Pass `--preview-features auth-helper` to disable this warning
+    "#
+    );
+}
+
+/// Test credential helper with invalid JSON input
+#[test]
+fn bazel_helper_invalid_json() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.auth_helper()
+        .arg("--protocol=bazel")
+        .arg("get"),
+        input="not json",
+        @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `uv auth helper` command is experimental and may change without warning. Pass `--preview-features auth-helper` to disable this warning
+    error: Failed to parse credential request as JSON
+      Caused by: expected ident at line 1 column 2
+    "
+    );
+}
+
+/// Test credential helper with invalid URI
+#[test]
+fn bazel_helper_invalid_uri() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.auth_helper()
+        .arg("--protocol=bazel")
+        .arg("get"),
+        input=r#"{"uri":"not a url"}"#,
+        @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `uv auth helper` command is experimental and may change without warning. Pass `--preview-features auth-helper` to disable this warning
+    error: Failed to parse credential request as JSON
+      Caused by: relative URL without a base: "not a url" at line 1 column 18
+    "#
+    );
+}
+
+/// Test credential helper with username in URI
+#[test]
+fn bazel_helper_username_in_uri() {
+    let context = uv_test::test_context!("3.12");
+
+    // Store credentials with specific username
+    uv_snapshot!(context.filters(), context.auth_login()
+        .arg("https://test.example.com")
+        .arg("--username").arg("specificuser")
+        .arg("--password").arg("specificpass"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for specificuser@https://test.example.com/
+    ");
+
+    // Test with username in URI
+    uv_snapshot!(context.filters(), context.auth_helper()
+        .arg("--protocol=bazel")
+        .arg("get"),
+        input=r#"{"uri":"https://specificuser@test.example.com/path"}"#,
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {"headers":{"Authorization":["Basic c3BlY2lmaWN1c2VyOnNwZWNpZmljcGFzcw=="]}}
+
+    ----- stderr -----
+    warning: The `uv auth helper` command is experimental and may change without warning. Pass `--preview-features auth-helper` to disable this warning
+    "#
+    );
+}
+
+/// Test credential helper with unknown username in URI
+#[test]
+fn bazel_helper_unknown_username_in_uri() {
+    let context = uv_test::test_context!("3.12");
+
+    // Store credentials with specific username
+    uv_snapshot!(context.filters(), context.auth_login()
+        .arg("https://test.example.com")
+        .arg("--username").arg("specificuser")
+        .arg("--password").arg("specificpass"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for specificuser@https://test.example.com/
+    ");
+
+    // Test with username in URI
+    uv_snapshot!(context.filters(), context.auth_helper()
+        .arg("--protocol=bazel")
+        .arg("get"),
+        input=r#"{"uri":"https://differentuser@test.example.com/path"}"#,
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {"headers":{}}
+
+    ----- stderr -----
+    warning: The `uv auth helper` command is experimental and may change without warning. Pass `--preview-features auth-helper` to disable this warning
+    "#
+    );
+}
+
+/// Test that `pyx.dev` is recognized as a pyx domain even when `PYX_API_URL` points elsewhere.
+///
+/// When `PYX_API_URL` is set to a different URL (e.g., localhost for development),
+/// `pyx.dev` should still be recognized as a pyx domain and use the OAuth flow.
+#[test]
+fn login_pyx_dev_with_custom_api_url() {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    // When PYX_API_URL is set to localhost, `pyx.dev` should still be recognized as pyx
+    // and reject username/password (because pyx uses OAuth, not basic auth).
+    uv_snapshot!(context.auth_login()
+        .arg("pyx.dev")
+        .arg("--username")
+        .arg("testuser")
+        .arg("--password")
+        .arg("testpass")
+        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Cannot specify a username when logging in to pyx
+    "
+    );
+
+    // Same for api.pyx.dev
+    uv_snapshot!(context.auth_login()
+        .arg("api.pyx.dev")
+        .arg("--username")
+        .arg("testuser")
+        .arg("--password")
+        .arg("testpass")
+        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Cannot specify a username when logging in to pyx
+    "
+    );
+
+    // Other subdomains like beta.pyx.dev are NOT recognized as default pyx domains.
+    // They fall through to normal credential handling when PYX_API_URL doesn't match.
+    uv_snapshot!(context.auth_login()
+        .arg("beta.pyx.dev")
+        .arg("--username")
+        .arg("testuser")
+        .arg("--password")
+        .arg("testpass")
+        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for testuser@https://beta.pyx.dev/
+    "
+    );
+}
+
+/// Test that logout recognizes `pyx.dev` even with custom `PYX_API_URL`.
+#[test]
+fn logout_pyx_dev_with_custom_api_url() {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    // Logout for pyx.dev should use the pyx flow (succeeds with no-op message because
+    // no credentials exist, but verifies it's recognized as pyx).
+    uv_snapshot!(context.auth_logout()
+        .arg("pyx.dev")
+        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    No credentials found for http://localhost:8000/
+    "
+    );
+}
+
+/// Test that `uv auth token` recognizes `pyx.dev` even with custom `PYX_API_URL`.
+#[test]
+fn token_pyx_dev_with_custom_api_url() {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    // Token for pyx.dev should use the pyx flow and reject username.
+    uv_snapshot!(context.auth_token()
+        .arg("pyx.dev")
+        .arg("--username")
+        .arg("testuser")
+        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Cannot specify a username when logging in to pyx
+    "
+    );
+}
+
+/// Test behavior when using a pyx.dev subdomain (like staging) without setting `PYX_API_URL`.
+///
+/// This verifies that subdomains like `astral-sh-staging-api.pyx.dev` are NOT automatically
+/// treated as pyx domains - users must set `PYX_API_URL` to use non-default pyx environments.
+#[test]
+fn token_pyx_staging_without_env_var() {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    // Without PYX_API_URL set, staging pyx URLs are NOT recognized as pyx domains.
+    // They fall through to the normal credential store lookup.
+    uv_snapshot!(context.auth_token()
+        .arg("https://astral-sh-staging-api.pyx.dev"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for https://astral-sh-staging-api.pyx.dev/
+    "
+    );
+}
+
+/// Test that staging pyx URLs work correctly when `PYX_API_URL` is set.
+#[test]
+fn login_pyx_staging_with_env_var() {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    // When PYX_API_URL is set to a staging URL, that URL is recognized as pyx
+    // and rejects username/password.
+    uv_snapshot!(context.auth_login()
+        .arg("https://astral-sh-staging-api.pyx.dev")
+        .arg("--username")
+        .arg("testuser")
+        .arg("--password")
+        .arg("testpass")
+        .env(EnvVars::PYX_API_URL, "https://astral-sh-staging-api.pyx.dev"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Cannot specify a username when logging in to pyx
+    "
+    );
+
+    // When PYX_API_URL is set to staging, `pyx.dev` is still recognized as pyx
+    // (via is_default_pyx_domain) and uses the OAuth flow.
+    uv_snapshot!(context.auth_login()
+        .arg("pyx.dev")
+        .arg("--username")
+        .arg("testuser")
+        .arg("--password")
+        .arg("testpass")
+        .env(EnvVars::PYX_API_URL, "https://astral-sh-staging-api.pyx.dev"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Cannot specify a username when logging in to pyx
+    "
+    );
 }

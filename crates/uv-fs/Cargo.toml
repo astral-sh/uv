@@ -1,10 +1,10 @@
 [package]
 name = "uv-fs"
-version = "0.0.1"
+version = "0.0.27"
+description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
-documentation = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
@@ -16,19 +16,26 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-static = { workspace = true }
+uv-warnings = { workspace = true }
+
+clap = { workspace = true, optional = true }
 dunce = { workspace = true }
 either = { workspace = true }
 encoding_rs_io = { workspace = true }
 fs-err = { workspace = true }
-fs2 = { workspace = true }
 path-slash = { workspace = true }
 percent-encoding = { workspace = true }
+reflink-copy = { workspace = true }
+rustc-hash = { workspace = true }
 same-file = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 tempfile = { workspace = true }
-tokio = { workspace = true, optional = true}
+thiserror = { workspace = true }
+tokio = { workspace = true, optional = true }
 tracing = { workspace = true }
+walkdir = { workspace = true }
 
 [target.'cfg(any(unix, target_os = "wasi", target_os = "redox"))'.dependencies]
 rustix = { workspace = true }
@@ -40,4 +47,5 @@ windows = { workspace = true }
 
 [features]
 default = []
+clap = ["dep:clap"]
 tokio = ["dep:tokio", "fs-err/tokio"]

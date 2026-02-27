@@ -31,7 +31,8 @@ pub struct ResolutionMetadata {
     // Optional fields
     pub requires_dist: Box<[Requirement<VerbatimParsedUrl>]>,
     pub requires_python: Option<VersionSpecifiers>,
-    pub provides_extras: Box<[ExtraName]>,
+    #[serde(alias = "provides-extras")]
+    pub provides_extra: Box<[ExtraName]>,
     /// Whether the version field is dynamic.
     #[serde(default)]
     pub dynamic: bool,
@@ -64,7 +65,7 @@ impl ResolutionMetadata {
             .map(|requires_python| LenientVersionSpecifiers::from_str(&requires_python))
             .transpose()?
             .map(VersionSpecifiers::from);
-        let provides_extras = headers
+        let provides_extra = headers
             .get_all_values("Provides-Extra")
             .filter_map(
                 |provides_extra| match ExtraName::from_owned(provides_extra) {
@@ -85,7 +86,7 @@ impl ResolutionMetadata {
             version,
             requires_dist,
             requires_python,
-            provides_extras,
+            provides_extra,
             dynamic,
         })
     }
@@ -144,7 +145,7 @@ impl ResolutionMetadata {
             .map(|requires_python| LenientVersionSpecifiers::from_str(&requires_python))
             .transpose()?
             .map(VersionSpecifiers::from);
-        let provides_extras = headers
+        let provides_extra = headers
             .get_all_values("Provides-Extra")
             .filter_map(
                 |provides_extra| match ExtraName::from_owned(provides_extra) {
@@ -162,7 +163,7 @@ impl ResolutionMetadata {
             version,
             requires_dist,
             requires_python,
-            provides_extras,
+            provides_extra,
             dynamic,
         })
     }
@@ -250,7 +251,7 @@ impl ResolutionMetadata {
             .collect::<Result<Box<_>, _>>()?;
 
         // Extract the optional dependencies.
-        let provides_extras = project
+        let provides_extra = project
             .optional_dependencies
             .unwrap_or_default()
             .into_keys()
@@ -261,7 +262,7 @@ impl ResolutionMetadata {
             version,
             requires_dist,
             requires_python,
-            provides_extras,
+            provides_extra,
             dynamic,
         })
     }
@@ -370,7 +371,7 @@ mod tests {
         assert_eq!(meta.version, Version::new([1, 0]));
         assert!(meta.requires_python.is_none());
         assert!(meta.requires_dist.is_empty());
-        assert!(meta.provides_extras.is_empty());
+        assert!(meta.provides_extra.is_empty());
 
         let s = r#"
         [project]
@@ -384,7 +385,7 @@ mod tests {
         assert_eq!(meta.version, Version::new([1, 0]));
         assert_eq!(meta.requires_python, Some(">=3.6".parse().unwrap()));
         assert!(meta.requires_dist.is_empty());
-        assert!(meta.provides_extras.is_empty());
+        assert!(meta.provides_extra.is_empty());
 
         let s = r#"
         [project]
@@ -399,7 +400,7 @@ mod tests {
         assert_eq!(meta.version, Version::new([1, 0]));
         assert_eq!(meta.requires_python, Some(">=3.6".parse().unwrap()));
         assert_eq!(*meta.requires_dist, ["foo".parse().unwrap()]);
-        assert!(meta.provides_extras.is_empty());
+        assert!(meta.provides_extra.is_empty());
 
         let s = r#"
         [project]
@@ -423,6 +424,6 @@ mod tests {
                 "bar; extra == \"dotenv\"".parse().unwrap()
             ]
         );
-        assert_eq!(*meta.provides_extras, ["dotenv".parse().unwrap()]);
+        assert_eq!(*meta.provides_extra, ["dotenv".parse().unwrap()]);
     }
 }

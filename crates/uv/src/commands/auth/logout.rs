@@ -3,13 +3,15 @@ use std::fmt::Write;
 use anyhow::{Context, Result, bail};
 use owo_colors::OwoColorize;
 
-use uv_auth::{AuthBackend, Credentials, PyxTokenStore, Service, TextCredentialStore, Username};
+use uv_auth::{
+    AuthBackend, Credentials, PyxTokenStore, Service, TextCredentialStore, Username,
+    is_default_pyx_domain,
+};
 use uv_client::BaseClientBuilder;
 use uv_distribution_types::IndexUrl;
 use uv_pep508::VerbatimUrl;
 use uv_preview::Preview;
 
-use crate::settings::NetworkSettings;
 use crate::{commands::ExitStatus, printer::Printer};
 
 /// Logout from a service.
@@ -18,16 +20,16 @@ use crate::{commands::ExitStatus, printer::Printer};
 pub(crate) async fn logout(
     service: Service,
     username: Option<String>,
-    network_settings: &NetworkSettings,
+    client_builder: BaseClientBuilder<'_>,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
     let pyx_store = PyxTokenStore::from_settings()?;
-    if pyx_store.is_known_domain(service.url()) {
-        return pyx_logout(&pyx_store, network_settings, printer).await;
+    if pyx_store.is_known_domain(service.url()) || is_default_pyx_domain(service.url()) {
+        return pyx_logout(&pyx_store, client_builder, printer).await;
     }
 
-    let backend = AuthBackend::from_settings(preview)?;
+    let backend = AuthBackend::from_settings(preview).await?;
 
     // TODO(zanieb): Use a shared abstraction across `login` and `logout`?
     let url = service.url().clone();
@@ -93,15 +95,11 @@ pub(crate) async fn logout(
 /// Log out via the [`PyxTokenStore`], invalidating the existing tokens.
 async fn pyx_logout(
     store: &PyxTokenStore,
-    network_settings: &NetworkSettings,
+    client_builder: BaseClientBuilder<'_>,
     printer: Printer,
 ) -> Result<ExitStatus> {
     // Initialize the client.
-    let client = BaseClientBuilder::default()
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
-        .build();
+    let client = client_builder.build();
 
     // Retrieve the token store.
     let Some(tokens) = store.read().await? else {

@@ -4,7 +4,7 @@
 
 ## Syncing with upstream virtualenv activation scripts
 
-This crate tries to stay in sync with pypa/virtualenv project's activation scrips. However, there
+This crate tries to stay in sync with pypa/virtualenv project's activation scripts. However, there
 are some deviations that are specific to this crate's implementation.
 
 ### License disclaimers added

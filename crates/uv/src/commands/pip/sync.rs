@@ -9,7 +9,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, ExtrasSpecification,
-    HashCheckingMode, IndexStrategy, Reinstall, SourceStrategy, Upgrade,
+    HashCheckingMode, IndexStrategy, NoSources, Reinstall, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -20,22 +20,23 @@ use uv_distribution_types::{
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
-use uv_installer::SitePackages;
+use uv_installer::{InstallationStrategy, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups};
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::Conflicts;
 use uv_python::{
-    EnvironmentPreference, Prefix, PythonEnvironment, PythonInstallation, PythonPreference,
-    PythonRequest, PythonVersion, Target,
+    EnvironmentPreference, Prefix, PythonDownloads, PythonEnvironment, PythonInstallation,
+    PythonPreference, PythonRequest, PythonVersion, Target,
 };
 use uv_requirements::{GroupsSpecification, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
     DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PylockToml,
     PythonRequirement, ResolutionMode, ResolverEnvironment,
 };
+use uv_settings::PythonInstallMirrors;
 use uv_torch::{TorchMode, TorchSource, TorchStrategy};
 use uv_types::HashStrategy;
-use uv_warnings::{warn_user, warn_user_once};
+use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
@@ -43,11 +44,12 @@ use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::operations::{report_interpreter, report_target_environment};
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
+use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
 
 /// Install a set of locked requirements into the current Python environment.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn pip_sync(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
@@ -74,6 +76,8 @@ pub(crate) async fn pip_sync(
     build_options: BuildOptions,
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
+    python_downloads: PythonDownloads,
+    install_mirrors: PythonInstallMirrors,
     strict: bool,
     exclude_newer: ExcludeNewer,
     python: Option<String>,
@@ -81,7 +85,7 @@ pub(crate) async fn pip_sync(
     break_system_packages: bool,
     target: Option<Target>,
     prefix: Option<Prefix>,
-    sources: SourceStrategy,
+    sources: NoSources,
     python_preference: PythonPreference,
     concurrency: Concurrency,
     cache: Cache,
@@ -89,19 +93,11 @@ pub(crate) async fn pip_sync(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    if !preview.is_enabled(PreviewFeatures::EXTRA_BUILD_DEPENDENCIES)
-        && !extra_build_dependencies.is_empty()
-    {
-        warn_user_once!(
-            "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeatures::EXTRA_BUILD_DEPENDENCIES
-        );
-    }
-
     let client_builder = client_builder.clone().keyring(keyring_provider);
 
     // Initialize a few defaults.
     let overrides = &[];
+    let excludes = &[];
     let upgrade = Upgrade::default();
     let resolution_mode = ResolutionMode::default();
     let prerelease_mode = PrereleaseMode::default();
@@ -113,6 +109,7 @@ pub(crate) async fn pip_sync(
         requirements,
         constraints,
         overrides,
+        excludes,
         pylock,
         source_trees,
         groups,
@@ -127,6 +124,7 @@ pub(crate) async fn pip_sync(
         requirements,
         constraints,
         overrides,
+        excludes,
         extras,
         Some(groups),
         &client_builder,
@@ -134,10 +132,10 @@ pub(crate) async fn pip_sync(
     .await?;
 
     if pylock.is_some() {
-        if !preview.is_enabled(PreviewFeatures::PYLOCK) {
+        if !preview.is_enabled(PreviewFeature::Pylock) {
             warn_user!(
                 "The `--pylock` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-                PreviewFeatures::PYLOCK
+                PreviewFeature::Pylock
             );
         }
     }
@@ -161,16 +159,23 @@ pub(crate) async fn pip_sync(
 
     // Detect the current Python interpreter.
     let environment = if target.is_some() || prefix.is_some() {
-        let installation = PythonInstallation::find(
-            &python
-                .as_deref()
-                .map(PythonRequest::parse)
-                .unwrap_or_default(),
+        let python_request = python.as_deref().map(PythonRequest::parse);
+        let reporter = PythonDownloadReporter::single(printer);
+
+        let installation = PythonInstallation::find_or_download(
+            python_request.as_ref(),
             EnvironmentPreference::from_system_flag(system, false),
             python_preference.with_system_flag(system),
+            python_downloads,
+            &client_builder,
             &cache,
+            Some(&reporter),
+            install_mirrors.python_install_mirror.as_deref(),
+            install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.python_downloads_json_url.as_deref(),
             preview,
-        )?;
+        )
+        .await?;
         report_interpreter(&installation, true, printer)?;
         PythonEnvironment::from_installation(installation)
     } else {
@@ -386,9 +391,9 @@ pub(crate) async fn pip_sync(
         &build_options,
         &build_hasher,
         exclude_newer.clone(),
-        sources,
+        sources.clone(),
         WorkspaceCache::default(),
-        concurrency,
+        concurrency.clone(),
         preview,
     );
 
@@ -461,6 +466,7 @@ pub(crate) async fn pip_sync(
             requirements,
             constraints,
             overrides,
+            excludes,
             source_trees,
             project,
             BTreeSet::default(),
@@ -480,7 +486,7 @@ pub(crate) async fn pip_sync(
             &flat_index,
             state.index(),
             &build_dispatch,
-            concurrency,
+            &concurrency,
             options,
             Box::new(DefaultResolveLogger),
             printer,
@@ -525,7 +531,7 @@ pub(crate) async fn pip_sync(
         exclude_newer.clone(),
         sources,
         WorkspaceCache::default(),
-        concurrency,
+        concurrency.clone(),
         preview,
     );
 
@@ -533,6 +539,7 @@ pub(crate) async fn pip_sync(
     match operations::install(
         &resolution,
         site_packages,
+        InstallationStrategy::Permissive,
         Modifications::Exact,
         &reinstall,
         &build_options,
@@ -542,7 +549,7 @@ pub(crate) async fn pip_sync(
         &tags,
         &client,
         state.in_flight(),
-        concurrency,
+        &concurrency,
         &build_dispatch,
         &cache,
         &environment,

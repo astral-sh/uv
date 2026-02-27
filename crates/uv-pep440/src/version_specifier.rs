@@ -394,6 +394,15 @@ impl VersionSpecifier {
         }
     }
 
+    /// Remove all parts of the version beyond the minor segment of the release.
+    #[must_use]
+    pub fn only_minor_release(&self) -> Self {
+        Self {
+            operator: self.operator,
+            version: self.version.only_minor_release(),
+        }
+    }
+
     /// `==<version>`
     pub fn equals_version(version: Version) -> Self {
         Self {
@@ -564,7 +573,10 @@ impl VersionSpecifier {
                         .version
                         .release()
                         .iter()
-                        .zip(&*other.release())
+                        // Pad the version with zeros if it's shorter than the specifier
+                        // prefix, e.g., version "2" (== "2.0") should NOT match "==2.1.*"
+                        // because 2.0 != 2.1.
+                        .zip(other.release().iter().chain(std::iter::repeat(&0)))
                         .all(|(this, other)| this == other)
             }
             #[allow(deprecated)]
@@ -581,7 +593,10 @@ impl VersionSpecifier {
                     || !this
                         .release()
                         .iter()
-                        .zip(&*version.release())
+                        // Pad the version with zeros if it's shorter than the specifier
+                        // prefix, e.g., version "2" (== "2.0") should match "!=2.1.*"
+                        // because 2.0 != 2.1.
+                        .zip(other.release().iter().chain(std::iter::repeat(&0)))
                         .all(|(this, other)| this == other)
             }
             Operator::TildeEqual => {
@@ -1260,6 +1275,58 @@ mod tests {
             !VersionSpecifier::from_str("=== 1.2a1")
                 .unwrap()
                 .contains(&Version::from_str("1.2a1+local").unwrap())
+        );
+    }
+
+    #[test]
+    fn test_equal_star_short_version_bug() {
+        // Version "2" (equivalent to 2.0) should NOT match "==2.1.*"
+        let specifier = VersionSpecifier::from_str("==2.1.*").unwrap();
+        let version = Version::from_str("2").unwrap();
+        assert!(
+            !specifier.contains(&version),
+            "Bug: version '2' incorrectly matches '==2.1.*'"
+        );
+
+        // Version "2" (equivalent to 2.0) SHOULD match "!=2.1.*"
+        let specifier = VersionSpecifier::from_str("!=2.1.*").unwrap();
+        let version = Version::from_str("2").unwrap();
+        assert!(
+            specifier.contains(&version),
+            "Bug: version '2' should match '!=2.1.*' (2.0 is not in 2.1 family)"
+        );
+
+        // Verify existing behavior still works: "2" matches "==2.0.*"
+        let specifier = VersionSpecifier::from_str("==2.0.*").unwrap();
+        let version = Version::from_str("2").unwrap();
+        assert!(
+            specifier.contains(&version),
+            "version '2' should match '==2.0.*'"
+        );
+
+        // And "2" should NOT match "!=2.0.*"
+        let specifier = VersionSpecifier::from_str("!=2.0.*").unwrap();
+        let version = Version::from_str("2").unwrap();
+        assert!(
+            !specifier.contains(&version),
+            "version '2' should not match '!=2.0.*'"
+        );
+
+        // Local versions: local segment should be ignored for prefix matching.
+        // "2+local" (== "2.0") should NOT match "==2.1.*"
+        let specifier = VersionSpecifier::from_str("==2.1.*").unwrap();
+        let version = Version::from_str("2+local").unwrap();
+        assert!(
+            !specifier.contains(&version),
+            "version '2+local' should not match '==2.1.*'"
+        );
+
+        // "2+local" (== "2.0") SHOULD match "!=2.1.*"
+        let specifier = VersionSpecifier::from_str("!=2.1.*").unwrap();
+        let version = Version::from_str("2+local").unwrap();
+        assert!(
+            specifier.contains(&version),
+            "version '2+local' should match '!=2.1.*'"
         );
     }
 
@@ -1983,5 +2050,17 @@ Failed to parse version: Unexpected end of version specifier, expected operator.
             err.to_string(),
             "The ~= operator requires at least two segments in the release version"
         );
+    }
+
+    /// Do not panic with `u64::MAX` causing an `u64::MAX + 1` overflow.
+    #[test]
+    fn bounding_specifiers_u64_max_rejected_at_parse_time() {
+        assert!(VersionSpecifier::from_str("~=3.18446744073709551615.0").is_err());
+        assert!(VersionSpecifier::from_str("~=18446744073709551615.0").is_err());
+
+        // u64::MAX - 1 is accepted and bounding_specifiers does not overflow.
+        let specifier = VersionSpecifier::from_str("~=3.18446744073709551614.0").unwrap();
+        let tilde = TildeVersionSpecifier::from_specifier(specifier).unwrap();
+        let (_lower, _upper) = tilde.bounding_specifiers();
     }
 }

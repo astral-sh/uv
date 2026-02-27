@@ -1104,7 +1104,7 @@ impl NodeId {
     // The terminal node representing `true`, or a trivially `true` node.
     pub(crate) const TRUE: Self = Self(0);
 
-    // The terminal node representing `false`, or an unsatisifable node.
+    // The terminal node representing `false`, or an unsatisfiable node.
     pub(crate) const FALSE: Self = Self(1);
 
     /// Create a new, optionally complemented, [`NodeId`] with the given index.
@@ -1161,7 +1161,6 @@ type SmallVec<T> = smallvec::SmallVec<[T; 5]>;
 
 /// The edges of a decision node.
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
-#[allow(clippy::large_enum_variant)] // Nodes are interned.
 pub(crate) enum Edges {
     // The edges of a version variable, representing a disjoint set of ranges that cover
     // the output space.
@@ -1814,5 +1813,26 @@ mod tests {
         let a = m().and(x86, windows);
         let b = m().and(not_x86, windows);
         assert_eq!(m().or(a, b), windows);
+    }
+
+    /// Do not panic with `u64::MAX` causing an `u64::MAX + 1` overflow.
+    #[test]
+    fn python_version_marker_u64_max() {
+        // The parse error is converted to a warning and the condition is ignored.
+        assert_eq!(
+            MarkerExpression::from_str("python_version > '3.18446744073709551615'").unwrap(),
+            None,
+        );
+        assert_eq!(
+            MarkerExpression::from_str("python_version <= '3.18446744073709551615'").unwrap(),
+            None,
+        );
+
+        // `u64::MAX - 1` accepted
+        assert!(
+            MarkerExpression::from_str("python_version > '3.18446744073709551614'")
+                .unwrap()
+                .is_some()
+        );
     }
 }

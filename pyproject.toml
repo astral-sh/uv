@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "uv"
-version = "0.8.17"
+version = "0.10.7"
 description = "An extremely fast Python package and project manager, written in Rust."
 authors = [{ name = "Astral Software Inc.", email = "hey@astral.sh" }]
 requires-python = ">=3.8"
@@ -26,7 +26,9 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
+  "Programming Language :: Python :: 3.15",
   "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Rust",
   "Topic :: Software Development :: Quality Assurance",
   "Topic :: Software Development :: Testing",
   "Topic :: Software Development :: Libraries",
@@ -47,10 +49,11 @@ module-name = "uv"
 python-source = "python"
 strip = true
 include = [
-    { path = "rust-toolchain.toml", format = ["sdist", "wheel"] },
+    { path = "rust-toolchain.toml", format = "sdist" },
     # this one isn't discovered by maturin because it's behind a feature flag
-    { path = "crates/uv-performance-memory-allocator/**/*", format = ["sdist", "wheel"] },
-    { path = "crates/uv-trampoline/trampolines/*", format = "sdist" },
+    { path = "crates/uv-performance-memory-allocator/**/*", format = "sdist" },
+    { path = "crates/uv-trampoline-builder/trampolines/*", format = "sdist" },
+    # https://github.com/rust-lang/cargo/issues/5933
     { path = "LICENSE-APACHE", format = "sdist" },
     { path = "LICENSE-MIT", format = "sdist" },
 ]
@@ -67,14 +70,17 @@ version_files = [
   "crates/uv-version/Cargo.toml",
   "crates/uv-build/Cargo.toml",
   "crates/uv-build/pyproject.toml",
+  { target = "crates/uv-static/src/env_vars.rs", replace = "next release" },
   "docs/getting-started/installation.md",
   "docs/guides/integration/docker.md",
   "docs/guides/integration/pre-commit.md",
   "docs/guides/integration/github.md",
+  "docs/guides/integration/gitlab.md",
   "docs/guides/integration/aws-lambda.md",
   "docs/concepts/build-backend.md",
   "docs/concepts/projects/init.md",
   "docs/concepts/projects/workspaces.md",
+  { target = "docs/reference/environment.md", replace = "next release" },
 ]
 
 [tool.rooster.section-labels]
@@ -87,13 +93,6 @@ version_files = [
 "Rust API" = ["rustlib"]
 "Documentation" = ["documentation"]
 "Other changes" = ["__unknown__"]
-
-[tool.mypy]
-ignore_missing_imports = true
-files = [
-  "crates/uv-python/*.py",
-  "python/uv/*.py",
-]
 
 [tool.uv]
 managed = false

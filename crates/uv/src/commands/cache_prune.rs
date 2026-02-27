@@ -2,6 +2,7 @@ use std::fmt::Write;
 
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
+use tracing::debug;
 
 use uv_cache::{Cache, Removal};
 use uv_fs::Simplified;
@@ -10,7 +11,12 @@ use crate::commands::{ExitStatus, human_readable_bytes};
 use crate::printer::Printer;
 
 /// Prune all unreachable objects from the cache.
-pub(crate) fn cache_prune(ci: bool, cache: &Cache, printer: Printer) -> Result<ExitStatus> {
+pub(crate) async fn cache_prune(
+    ci: bool,
+    force: bool,
+    cache: Cache,
+    printer: Printer,
+) -> Result<ExitStatus> {
     if !cache.root().exists() {
         writeln!(
             printer.stderr(),
@@ -19,6 +25,21 @@ pub(crate) fn cache_prune(ci: bool, cache: &Cache, printer: Printer) -> Result<E
         )?;
         return Ok(ExitStatus::Success);
     }
+
+    let cache = match cache.with_exclusive_lock_no_wait() {
+        Ok(cache) => cache,
+        Err(cache) if force => {
+            debug!("Cache is currently in use, proceeding due to `--force`");
+            cache
+        }
+        Err(cache) => {
+            writeln!(
+                printer.stderr(),
+                "Cache is currently in-use, waiting for other uv processes to finish (use `--force` to override)"
+            )?;
+            cache.with_exclusive_lock().await?
+        }
+    };
 
     writeln!(
         printer.stderr(),
@@ -29,7 +50,7 @@ pub(crate) fn cache_prune(ci: bool, cache: &Cache, printer: Printer) -> Result<E
     let mut summary = Removal::default();
 
     // Prune the source distribution cache, which is tightly coupled to the builder crate.
-    summary += uv_distribution::prune(cache)
+    summary += uv_distribution::prune(&cache)
         .with_context(|| format!("Failed to prune cache at: {}", cache.root().user_display()))?;
 
     // Prune the remaining cache buckets.

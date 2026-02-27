@@ -8,7 +8,7 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 use uv_cache::Cache;
 use uv_cli::version::VersionInfo;
-use uv_cli::{VersionBump, VersionFormat};
+use uv_cli::{VersionBump, VersionBumpSpec, VersionFormat};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
     Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
@@ -38,7 +38,7 @@ use crate::commands::project::{
 };
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
-use crate::settings::ResolverInstallerSettings;
+use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
 /// Display version information for uv itself (`uv self version`)
 pub(crate) fn self_version(
@@ -53,18 +53,18 @@ pub(crate) fn self_version(
 }
 
 /// Read or update project version (`uv version`)
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn project_version(
     value: Option<String>,
-    mut bump: Vec<VersionBump>,
+    mut bump: Vec<VersionBumpSpec>,
     short: bool,
     output_format: VersionFormat,
     project_dir: &Path,
     package: Option<PackageName>,
     explicit_project: bool,
     dry_run: bool,
-    locked: bool,
-    frozen: bool,
+    lock_check: LockCheck,
+    frozen: Option<FrozenSource>,
     active: Option<bool>,
     no_sync: bool,
     python: Option<String>,
@@ -93,27 +93,30 @@ pub(crate) async fn project_version(
 
     // Short-circuit early for a frozen read
     let is_read_only = value.is_none() && bump.is_empty();
-    if frozen && is_read_only {
-        return Box::pin(print_frozen_version(
-            project,
-            &name,
-            project_dir,
-            active,
-            python,
-            install_mirrors,
-            &settings,
-            client_builder,
-            python_preference,
-            python_downloads,
-            concurrency,
-            no_config,
-            cache,
-            short,
-            output_format,
-            printer,
-            preview,
-        ))
-        .await;
+    if let Some(frozen_source) = frozen {
+        if is_read_only {
+            return Box::pin(print_frozen_version(
+                project,
+                &name,
+                project_dir,
+                frozen_source,
+                active,
+                python,
+                install_mirrors,
+                &settings,
+                client_builder,
+                python_preference,
+                python_downloads,
+                &concurrency,
+                no_config,
+                cache,
+                short,
+                output_format,
+                printer,
+                preview,
+            ))
+            .await;
+        }
     }
 
     let mut toml = PyProjectTomlMut::from_toml(
@@ -164,29 +167,29 @@ pub(crate) async fn project_version(
         // because that makes perfect sense and is reasonable to do.
         let release_components: Vec<_> = bump
             .iter()
-            .filter(|bump| {
+            .filter(|spec| {
                 matches!(
-                    bump,
+                    spec.bump,
                     VersionBump::Major | VersionBump::Minor | VersionBump::Patch
                 )
             })
             .collect();
         let prerelease_components: Vec<_> = bump
             .iter()
-            .filter(|bump| {
+            .filter(|spec| {
                 matches!(
-                    bump,
+                    spec.bump,
                     VersionBump::Alpha | VersionBump::Beta | VersionBump::Rc | VersionBump::Dev
                 )
             })
             .collect();
         let post_count = bump
             .iter()
-            .filter(|bump| *bump == &VersionBump::Post)
+            .filter(|spec| spec.bump == VersionBump::Post)
             .count();
         let stable_count = bump
             .iter()
-            .filter(|bump| *bump == &VersionBump::Stable)
+            .filter(|spec| spec.bump == VersionBump::Stable)
             .count();
 
         // Very little reason to do "bump to stable" and then do other things,
@@ -252,31 +255,48 @@ pub(crate) async fn project_version(
 
         // Apply all the bumps
         let mut new_version = old_version.clone();
-        for bump in &bump {
-            let command = match *bump {
-                VersionBump::Major => BumpCommand::BumpRelease { index: 0 },
-                VersionBump::Minor => BumpCommand::BumpRelease { index: 1 },
-                VersionBump::Patch => BumpCommand::BumpRelease { index: 2 },
-                VersionBump::Alpha => BumpCommand::BumpPrerelease {
+
+        for spec in &bump {
+            match spec.bump {
+                VersionBump::Major => new_version.bump(BumpCommand::BumpRelease {
+                    index: 0,
+                    value: spec.value,
+                }),
+                VersionBump::Minor => new_version.bump(BumpCommand::BumpRelease {
+                    index: 1,
+                    value: spec.value,
+                }),
+                VersionBump::Patch => new_version.bump(BumpCommand::BumpRelease {
+                    index: 2,
+                    value: spec.value,
+                }),
+                VersionBump::Stable => new_version.bump(BumpCommand::MakeStable),
+                VersionBump::Alpha => new_version.bump(BumpCommand::BumpPrerelease {
                     kind: PrereleaseKind::Alpha,
-                },
-                VersionBump::Beta => BumpCommand::BumpPrerelease {
+                    value: spec.value,
+                }),
+                VersionBump::Beta => new_version.bump(BumpCommand::BumpPrerelease {
                     kind: PrereleaseKind::Beta,
-                },
-                VersionBump::Rc => BumpCommand::BumpPrerelease {
+                    value: spec.value,
+                }),
+                VersionBump::Rc => new_version.bump(BumpCommand::BumpPrerelease {
                     kind: PrereleaseKind::Rc,
-                },
-                VersionBump::Post => BumpCommand::BumpPost,
-                VersionBump::Dev => BumpCommand::BumpDev,
-                VersionBump::Stable => BumpCommand::MakeStable,
-            };
-            new_version.bump(command);
+                    value: spec.value,
+                }),
+                VersionBump::Post => new_version.bump(BumpCommand::BumpPost { value: spec.value }),
+                VersionBump::Dev => new_version.bump(BumpCommand::BumpDev { value: spec.value }),
+            }
         }
 
         if new_version <= old_version {
             if old_version.is_stable() && new_version.is_pre() {
                 return Err(anyhow!(
                     "{old_version} => {new_version} didn't increase the version; when bumping to a pre-release version you also need to increase a release version component, e.g., with `--bump <major|minor|patch>`"
+                ));
+            }
+            if new_version.is_dev() && !old_version.is_dev() {
+                return Err(anyhow!(
+                    "{old_version} => {new_version} didn't increase the version; when bumping to a dev version you also need to increase another version component, e.g., with `--bump <major|minor|patch|alpha|beta|rc>`"
                 ));
             }
             return Err(anyhow!(
@@ -297,7 +317,7 @@ pub(crate) async fn project_version(
         Box::pin(lock_and_sync(
             project,
             project_dir,
-            locked,
+            lock_check,
             frozen,
             active,
             no_sync,
@@ -308,7 +328,7 @@ pub(crate) async fn project_version(
             python_preference,
             python_downloads,
             installer_metadata,
-            concurrency,
+            &concurrency,
             no_config,
             cache,
             printer,
@@ -358,7 +378,10 @@ async fn find_target(
         VirtualProject::Project(
             Workspace::discover(
                 project_dir,
-                &DiscoveryOptions::default(),
+                &DiscoveryOptions {
+                    project: uv_workspace::ProjectDiscovery::Required,
+                    ..DiscoveryOptions::default()
+                },
                 &WorkspaceCache::default(),
             )
             .await
@@ -369,7 +392,10 @@ async fn find_target(
     } else {
         VirtualProject::discover(
             project_dir,
-            &DiscoveryOptions::default(),
+            &DiscoveryOptions {
+                project: uv_workspace::ProjectDiscovery::Required,
+                ..DiscoveryOptions::default()
+            },
             &WorkspaceCache::default(),
         )
         .await
@@ -403,6 +429,7 @@ async fn print_frozen_version(
     project: VirtualProject,
     name: &PackageName,
     project_dir: &Path,
+    frozen_source: FrozenSource,
     active: Option<bool>,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
@@ -410,7 +437,7 @@ async fn print_frozen_version(
     client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     no_config: bool,
     cache: &Cache,
     short: bool,
@@ -444,19 +471,21 @@ async fn print_frozen_version(
     let state = UniversalState::default();
 
     // Lock and sync the environment, if necessary.
-    let lock = match project::lock::LockOperation::new(
-        LockMode::Frozen,
-        &settings.resolver,
-        &client_builder,
-        &state,
-        Box::new(DefaultResolveLogger),
-        concurrency,
-        cache,
-        &WorkspaceCache::default(),
-        printer,
-        preview,
+    let lock = match Box::pin(
+        project::lock::LockOperation::new(
+            LockMode::Frozen(frozen_source.into()),
+            &settings.resolver,
+            &client_builder,
+            &state,
+            Box::new(DefaultResolveLogger),
+            concurrency,
+            cache,
+            &WorkspaceCache::default(),
+            printer,
+            preview,
+        )
+        .execute((&target).into()),
     )
-    .execute((&target).into())
     .await
     {
         Ok(result) => result.into_lock(),
@@ -492,12 +521,11 @@ async fn print_frozen_version(
 }
 
 /// Re-lock and re-sync the project after a series of edits.
-#[allow(clippy::fn_params_excessive_bools)]
 async fn lock_and_sync(
     project: VirtualProject,
     project_dir: &Path,
-    locked: bool,
-    frozen: bool,
+    lock_check: LockCheck,
+    frozen: Option<FrozenSource>,
     active: Option<bool>,
     no_sync: bool,
     python: Option<String>,
@@ -507,14 +535,14 @@ async fn lock_and_sync(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     no_config: bool,
     cache: &Cache,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
     // If frozen, don't touch the lock or sync at all
-    if frozen {
+    if frozen.is_some() {
         return Ok(ExitStatus::Success);
     }
 
@@ -573,8 +601,8 @@ async fn lock_and_sync(
     };
 
     // Determine the lock mode.
-    let mode = if locked {
-        LockMode::Locked(target.interpreter())
+    let mode = if let LockCheck::Enabled(lock_check) = lock_check {
+        LockMode::Locked(target.interpreter(), lock_check)
     } else {
         LockMode::Write(target.interpreter())
     };
@@ -584,19 +612,21 @@ async fn lock_and_sync(
     let workspace_cache = WorkspaceCache::default();
 
     // Lock and sync the environment, if necessary.
-    let lock = match project::lock::LockOperation::new(
-        mode,
-        &settings.resolver,
-        &client_builder,
-        &state,
-        Box::new(DefaultResolveLogger),
-        concurrency,
-        cache,
-        &workspace_cache,
-        printer,
-        preview,
+    let lock = match Box::pin(
+        project::lock::LockOperation::new(
+            mode,
+            &settings.resolver,
+            &client_builder,
+            &state,
+            Box::new(DefaultResolveLogger),
+            concurrency,
+            cache,
+            &workspace_cache,
+            printer,
+            preview,
+        )
+        .execute((&target).into()),
     )
-    .execute((&target).into())
     .await
     {
         Ok(result) => result.into_lock(),
@@ -658,7 +688,7 @@ async fn lock_and_sync(
     )
     .await
     {
-        Ok(()) => {}
+        Ok(_) => {}
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
                 .report(err)

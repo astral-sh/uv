@@ -80,53 +80,29 @@ fn generate() -> String {
     // Partition and sort environment variables into UV_ and external variables.
     let (uv_vars, external_vars): (BTreeSet<_>, BTreeSet<_>) = EnvVars::metadata()
         .iter()
-        .partition(|(var, _)| var.starts_with("UV_"));
+        .partition(|(var, _, _)| var.starts_with("UV_"));
 
     output.push_str("uv defines and respects the following environment variables:\n\n");
 
-    for (var, doc) in uv_vars {
-        output.push_str(&render(var, doc));
+    for (var, doc, added_in) in uv_vars {
+        output.push_str(&render(var, doc, added_in));
     }
 
     output.push_str("\n\n## Externally defined variables\n\n");
     output.push_str("uv also reads the following externally defined environment variables:\n\n");
 
-    for (var, doc) in external_vars {
-        output.push_str(&render(var, doc));
+    for (var, doc, added_in) in external_vars {
+        output.push_str(&render(var, doc, added_in));
     }
 
     output
 }
 
 /// Render an environment variable and its documentation.
-fn render(var: &str, doc: &str) -> String {
-    format!("### `{var}`\n\n{doc}\n\n")
-}
-
-#[cfg(test)]
-mod tests {
-    use std::env;
-
-    use anyhow::Result;
-
-    use uv_static::EnvVars;
-
-    use crate::generate_all::Mode;
-
-    use super::{Args, main};
-
-    #[test]
-    fn test_generate_env_vars_reference() -> Result<()> {
-        // Skip this test in CI to avoid redundancy with the dedicated CI job
-        if env::var_os(EnvVars::CI).is_some() {
-            return Ok(());
-        }
-
-        let mode = if env::var(EnvVars::UV_UPDATE_SCHEMA).as_deref() == Ok("1") {
-            Mode::Write
-        } else {
-            Mode::Check
-        };
-        main(&Args { mode })
+fn render(var: &str, doc: &str, added_in: Option<&str>) -> String {
+    if let Some(added_in) = added_in {
+        format!("### `{var}`\n<small class=\"added-in\">added in `{added_in}`</small>\n\n{doc}\n\n")
+    } else {
+        format!("### `{var}`\n\n{doc}\n\n")
     }
 }

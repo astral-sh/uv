@@ -16,7 +16,7 @@ documentation_.
 1. If a message ends with a single relevant value, precede it with a colon, e.g.,
    `This is the value: value`. If the value is a literal, wrap it in backticks.
 1. Markdown files should be wrapped at 100 characters.
-1. Use a space, not an equals sign, for command line arguments with a value, e.g.
+1. Use a space, not an equals sign, for command-line arguments with a value, e.g.
    `--resolution lowest`, not `--resolution=lowest`.
 
 ## Styling uv

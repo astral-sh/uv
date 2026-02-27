@@ -15,22 +15,23 @@ use tracing::{debug, warn};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
-use uv_client::BaseClientBuilder;
-use uv_configuration::Concurrency;
-use uv_configuration::Constraints;
-use uv_configuration::TargetTriple;
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_configuration::{Concurrency, Constraints, GitLfsSetting, TargetTriple};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::InstalledDist;
 use uv_distribution_types::{
-    IndexUrl, Name, NameRequirementSpecification, Requirement, RequirementSource,
-    UnresolvedRequirement, UnresolvedRequirementSpecification,
+    IndexCapabilities, IndexUrl, Name, NameRequirementSpecification, Requirement,
+    RequirementSource, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
+use uv_fs::CWD;
 use uv_fs::Simplified;
-use uv_installer::{SatisfiesResult, SitePackages};
+use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
 use uv_preview::Preview;
+use uv_python::PythonVersionFile;
+use uv_python::VersionFileDiscoveryOptions;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest,
@@ -47,6 +48,7 @@ use uv_workspace::WorkspaceCache;
 use crate::child::run_to_completion;
 use crate::commands::ExitStatus;
 use crate::commands::pip;
+use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
@@ -80,8 +82,22 @@ impl Display for ToolRunCommand {
     }
 }
 
+/// Check if the given arguments contain a verbose flag (e.g., `--verbose`, `-v`, `-vv`, etc.)
+fn find_verbose_flag(args: &[std::ffi::OsString]) -> Option<&str> {
+    args.iter().find_map(|arg| {
+        let arg_str = arg.to_str()?;
+        if arg_str == "--verbose" {
+            Some("--verbose")
+        } else if arg_str.starts_with("-v") && arg_str.chars().skip(1).all(|c| c == 'v') {
+            Some(arg_str)
+        } else {
+            None
+        }
+    })
+}
+
 /// Run a command.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
     command: Option<ExternalCommand>,
     from: Option<String>,
@@ -90,6 +106,7 @@ pub(crate) async fn run(
     overrides: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
     show_resolution: bool,
+    lfs: GitLfsSetting,
     python: Option<String>,
     python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
@@ -112,6 +129,12 @@ pub(crate) async fn run(
     fn has_python_script_ext(path: &Path) -> bool {
         path.extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyw"))
+    }
+
+    if settings.resolver.torch_backend.is_some() {
+        warn_user_once!(
+            "The `--torch-backend` option is experimental and may change without warning."
+        );
     }
 
     // Read from the `.env` file, if necessary.
@@ -199,7 +222,7 @@ pub(crate) async fn run(
                     invocation_source,
                     "hint".bold().cyan(),
                     ":".bold(),
-                    format!("uv run {}", target_path.user_display().cyan()),
+                    format!("uv run {}", target_path.user_display()).green(),
                 ))
             } else {
                 let package_name = PackageName::from_str(target)?;
@@ -276,10 +299,11 @@ pub(crate) async fn run(
         &settings,
         &client_builder,
         isolated,
+        lfs,
         python_preference,
         python_downloads,
         installer_metadata,
-        concurrency,
+        &concurrency,
         &cache,
         printer,
         preview,
@@ -307,11 +331,24 @@ pub(crate) async fn run(
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
 
-            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
-                .with_context("tool")
+            let diagnostic =
+                diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls());
+            let diagnostic = if let Some(verbose_flag) = find_verbose_flag(args) {
+                diagnostic.with_hint(format!(
+                    "You provided `{}` to `{}`. Did you mean to provide it to `{}`? e.g., `{}`",
+                    verbose_flag.cyan(),
+                    target.cyan(),
+                    invocation_source.to_string().cyan(),
+                    format!("{invocation_source} {verbose_flag} {target}").green()
+                ))
+            } else {
+                diagnostic.with_context("tool")
+            };
+            return diagnostic
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
+
         Err(ProjectError::Requirements(err)) => {
             let err = miette::Report::msg(format!("{err}"))
                 .context("Failed to resolve `--with` requirement");
@@ -446,7 +483,11 @@ async fn show_help(
     let installed_tools = InstalledTools::from_settings()?;
     let _lock = match installed_tools.lock().await {
         Ok(lock) => lock,
-        Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+        Err(err)
+            if err
+                .as_io_error()
+                .is_some_and(|err| err.kind() == std::io::ErrorKind::NotFound) =>
+        {
             writeln!(printer.stdout(), "{help}")?;
             return Ok(());
         }
@@ -460,8 +501,10 @@ async fn show_help(
         .filter_map(|(name, tool)| {
             tool.ok().and_then(|_| {
                 installed_tools
-                    .version(&name, cache)
+                    .get_environment(&name, cache)
                     .ok()
+                    .flatten()
+                    .and_then(|tool_env| tool_env.version().ok())
                     .map(|version| (name, version))
             })
         })
@@ -641,7 +684,7 @@ impl std::fmt::Display for ExecutableProviderHints<'_> {
 // Clippy isn't happy about the difference in size between these variants, but
 // [`ToolRequirement::Package`] is the more common case and it seems annoying to box it.
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub(crate) enum ToolRequirement {
     Python {
         executable: String,
@@ -674,7 +717,6 @@ impl std::fmt::Display for ToolRequirement {
 ///
 /// If the target tool is already installed in a compatible environment, returns that
 /// [`PythonEnvironment`]. Otherwise, gets or creates a [`CachedEnvironment`].
-#[allow(clippy::fn_params_excessive_bools)]
 async fn get_or_create_environment(
     request: &ToolRequest<'_>,
     with: &[RequirementsSource],
@@ -689,53 +731,49 @@ async fn get_or_create_environment(
     settings: &ResolverInstallerSettings,
     client_builder: &BaseClientBuilder<'_>,
     isolated: bool,
+    lfs: GitLfsSetting,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     cache: &Cache,
     printer: Printer,
     preview: Preview,
 ) -> Result<(ToolRequirement, PythonEnvironment), ProjectError> {
     let reporter = PythonDownloadReporter::single(printer);
 
-    // Figure out what Python we're targeting, either explicitly like `uvx python@3`, or via the
-    // -p/--python flag.
-    let python_request = match request {
-        ToolRequest::Python {
-            request: tool_python_request,
-            ..
-        } => {
-            match python {
-                None => Some(tool_python_request.clone()),
+    // Determine explicit Python version requests
+    let explicit_python_request = python.map(PythonRequest::parse);
+    let tool_python_request = match request {
+        ToolRequest::Python { request, .. } => Some(request.clone()),
+        ToolRequest::Package { .. } => None,
+    };
 
-                // The user is both invoking a python interpreter directly and also supplying the
-                // -p/--python flag. Cases like `uvx -p pypy python` are allowed, for two reasons:
-                // 1) Previously this was the only way to invoke e.g. PyPy via `uvx`, and it's nice
-                // to remain compatible with that. 2) A script might define an alias like `uvx
-                // --python $MY_PYTHON ...`, and it's nice to be able to run the interpreter
-                // directly while sticking to that alias.
-                //
-                // However, we want to error out if we see conflicting or redundant versions like
-                // `uvx -p python38 python39`.
-                //
-                // Note that a command like `uvx default` doesn't bring us here. ToolRequest::parse
-                // returns ToolRequest::Package rather than ToolRequest::Python in that case. See
-                // PythonRequest::try_from_tool_name.
-                Some(python_flag) => {
-                    if tool_python_request != &PythonRequest::Default {
-                        return Err(anyhow::anyhow!(
-                            "Received multiple Python version requests: `{}` and `{}`",
-                            python_flag.to_string().cyan(),
-                            tool_python_request.to_canonical_string().cyan()
-                        )
-                        .into());
-                    }
-                    Some(PythonRequest::parse(python_flag))
-                }
-            }
+    // Resolve Python request with version file lookup when no explicit request
+    let python_request = match (explicit_python_request, tool_python_request) {
+        // e.g., `uvx --python 3.10 python3.12`
+        (Some(explicit), Some(tool_request)) if tool_request != PythonRequest::Default => {
+            // Conflict: both --python flag and versioned tool name
+            return Err(anyhow::anyhow!(
+                "Received multiple Python version requests: `{}` and `{}`",
+                explicit.to_canonical_string().cyan(),
+                tool_request.to_canonical_string().cyan()
+            )
+            .into());
         }
-        ToolRequest::Package { .. } => python.map(PythonRequest::parse),
+        // e.g, `uvx --python 3.10 ...`
+        (Some(explicit), _) => Some(explicit),
+        // e.g., `uvx python` or `uvx <tool>`
+        (None, Some(PythonRequest::Default) | None) => PythonVersionFile::discover(
+            &*CWD,
+            &VersionFileDiscoveryOptions::default()
+                .with_no_config(false)
+                .with_no_local(true),
+        )
+        .await?
+        .and_then(PythonVersionFile::into_version),
+        // e.g., `uvx python3.12`
+        (None, Some(tool_request)) => Some(tool_request),
     };
 
     // Discover an interpreter.
@@ -801,6 +839,7 @@ async fn get_or_create_environment(
                         &workspace_cache,
                         printer,
                         preview,
+                        lfs,
                     )
                     .await?
                     .pop()
@@ -868,10 +907,77 @@ async fn get_or_create_environment(
         }
     };
 
+    // For `@latest`, fetch the latest version and create a constraint.
+    let latest = if let ToolRequest::Package {
+        target: Target::Latest(_, name, _),
+        ..
+    } = &request
+    {
+        // Build the registry client to fetch the latest version.
+        let client = RegistryClientBuilder::new(
+            client_builder
+                .clone()
+                .keyring(settings.resolver.keyring_provider),
+            cache.clone(),
+        )
+        .index_locations(settings.resolver.index_locations.clone())
+        .index_strategy(settings.resolver.index_strategy)
+        .markers(interpreter.markers())
+        .platform(interpreter.platform())
+        .build();
+
+        // Initialize the capabilities.
+        let capabilities = IndexCapabilities::default();
+        let download_concurrency = concurrency.downloads_semaphore.clone();
+
+        // Initialize the client to fetch the latest version.
+        let latest_client = LatestClient {
+            client: &client,
+            capabilities: &capabilities,
+            prerelease: settings.resolver.prerelease,
+            exclude_newer: &settings.resolver.exclude_newer,
+            tags: None,
+            requires_python: None,
+        };
+
+        // Fetch the latest version.
+        if let Some(dist_filename) = latest_client
+            .find_latest(name, None, &download_concurrency)
+            .await?
+        {
+            let version = dist_filename.version().clone();
+            debug!("Resolved `{name}@latest` to `{name}=={version}`");
+
+            // The constraint pins the version during resolution to prevent backtracking.
+            Some(Requirement {
+                name: name.clone(),
+                extras: vec![].into_boxed_slice(),
+                groups: Box::new([]),
+                marker: MarkerTree::default(),
+                source: RequirementSource::Registry {
+                    specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(version)),
+                    index: None,
+                    conflict: None,
+                },
+                origin: None,
+            })
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     // Read the `--with` requirements.
-    let spec =
-        RequirementsSpecification::from_sources(with, constraints, overrides, None, client_builder)
-            .await?;
+    let spec = RequirementsSpecification::from_sources(
+        with,
+        constraints,
+        overrides,
+        &[],
+        None,
+        client_builder,
+    )
+    .await?;
 
     // Resolve the `--from` and `--with` requirements.
     let requirements = {
@@ -892,6 +998,7 @@ async fn get_or_create_environment(
                 &workspace_cache,
                 printer,
                 preview,
+                lfs,
             )
             .await?,
         );
@@ -918,6 +1025,7 @@ async fn get_or_create_environment(
         &workspace_cache,
         printer,
         preview,
+        lfs,
     )
     .await?;
 
@@ -931,7 +1039,7 @@ async fn get_or_create_environment(
                 .get_environment(&requirement.name, cache)?
                 .filter(|environment| {
                     python_request.as_ref().is_none_or(|python_request| {
-                        python_request.satisfied(environment.interpreter(), cache)
+                        python_request.satisfied(environment.environment().interpreter(), cache)
                     })
                 });
 
@@ -967,12 +1075,13 @@ async fn get_or_create_environment(
                     let tags = pip::resolution_tags(None, python_platform.as_ref(), &interpreter)?;
 
                     // Check if the installed packages meet the requirements.
-                    let site_packages = SitePackages::from_environment(&environment)?;
+                    let site_packages = SitePackages::from_environment(environment.environment())?;
                     if matches!(
                         site_packages.satisfies_requirements(
                             requirements.iter(),
-                            constraints.iter(),
+                            constraints.iter().chain(latest.iter()),
                             overrides.iter(),
+                            InstallationStrategy::Permissive,
                             &markers,
                             &tags,
                             config_setting,
@@ -983,7 +1092,7 @@ async fn get_or_create_environment(
                         Ok(SatisfiesResult::Fresh { .. })
                     ) {
                         debug!("Using existing tool `{}`", requirement.name);
-                        return Ok((from, environment));
+                        return Ok((from, environment.into_environment()));
                     }
                 }
             }
@@ -998,6 +1107,7 @@ async fn get_or_create_environment(
             .collect(),
         constraints: constraints
             .into_iter()
+            .chain(latest.into_iter())
             .map(NameRequirementSpecification::from)
             .collect(),
         overrides: overrides

@@ -1,10 +1,9 @@
 use std::fmt::Write;
 
 use anyhow::{Result, bail};
-use owo_colors::OwoColorize;
 use tracing::debug;
 
-use uv_auth::{AuthBackend, Service};
+use uv_auth::{AuthBackend, Service, is_default_pyx_domain};
 use uv_auth::{Credentials, PyxTokenStore};
 use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder};
 use uv_preview::Preview;
@@ -12,26 +11,21 @@ use uv_preview::Preview;
 use crate::commands::ExitStatus;
 use crate::commands::auth::login;
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 
 /// Show the token that will be used for a service.
 pub(crate) async fn token(
     service: Service,
     username: Option<String>,
-    network_settings: &NetworkSettings,
+    client_builder: BaseClientBuilder<'_>,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
     let pyx_store = PyxTokenStore::from_settings()?;
-    if pyx_store.is_known_domain(service.url()) {
+    if pyx_store.is_known_domain(service.url()) || is_default_pyx_domain(service.url()) {
         if username.is_some() {
             bail!("Cannot specify a username when logging in to pyx");
         }
-
-        let client = BaseClientBuilder::default()
-            .connectivity(network_settings.connectivity)
-            .native_tls(network_settings.native_tls)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone())
+        let client = client_builder
             .auth_integration(AuthIntegration::NoAuthMiddleware)
             .build();
 
@@ -39,7 +33,7 @@ pub(crate) async fn token(
         return Ok(ExitStatus::Success);
     }
 
-    let backend = AuthBackend::from_settings(preview)?;
+    let backend = AuthBackend::from_settings(preview).await?;
     let url = service.url();
 
     // Extract credentials from URL if present
@@ -72,7 +66,7 @@ pub(crate) async fn token(
             .await
             .ok_or_else(|| anyhow::anyhow!("Failed to fetch credentials for {display_url}"))?,
         AuthBackend::TextStore(store, _lock) => store
-            .get_credentials(url, Some(&username))
+            .get_credentials(url, Some(&username))?
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("Failed to fetch credentials for {display_url}"))?,
     };
@@ -95,6 +89,7 @@ pub(crate) async fn token(
 /// Refresh the authentication tokens in the [`PyxTokenStore`], prompting for login if necessary.
 async fn pyx_refresh(store: &PyxTokenStore, client: &BaseClient, printer: Printer) -> Result<()> {
     // Retrieve the token store.
+    // Use zero tolerance to force a refresh.
     let token = match store
         .access_token(client.for_host(store.api()).raw_client(), 0)
         .await
@@ -128,6 +123,6 @@ async fn pyx_refresh(store: &PyxTokenStore, client: &BaseClient, printer: Printe
         }
     };
 
-    writeln!(printer.stdout(), "{}", token.cyan())?;
+    writeln!(printer.stdout(), "{}", token.as_str())?;
     Ok(())
 }

@@ -1,10 +1,10 @@
 [package]
 name = "uv-build"
-version = "0.8.17"
+version = "0.10.7"
+description = "A Python build backend"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
-documentation = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
@@ -12,10 +12,13 @@ license = { workspace = true }
 [dependencies]
 uv-build-backend = { workspace = true }
 uv-logging = { workspace = true }
+uv-preview = { workspace = true }
 uv-version = { workspace = true }
+uv-static = { workspace = true }
 
 anstream = { workspace = true }
 anyhow = { workspace = true }
+tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [lints]
