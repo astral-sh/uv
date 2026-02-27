@@ -637,6 +637,7 @@ pub struct EnvironmentOptions {
     pub http_read_timeout_upload: Duration,
     pub http_retries: u32,
     pub concurrency: Concurrency,
+    pub cuda_driver_version: Option<String>,
     #[cfg(feature = "tracing-durations-export")]
     pub tracing_durations_file: Option<PathBuf>,
     pub frozen: EnvFlag,
@@ -727,6 +728,9 @@ impl EnvironmentOptions {
             .unwrap_or(DEFAULT_CONNECT_TIMEOUT),
             http_retries: parse_integer_environment_variable(EnvVars::UV_HTTP_RETRIES, None)?
                 .unwrap_or(uv_client::DEFAULT_RETRIES),
+            cuda_driver_version: parse_string_environment_variable(
+                EnvVars::UV_CUDA_DRIVER_VERSION,
+            )?,
             #[cfg(feature = "tracing-durations-export")]
             tracing_durations_file: parse_path_environment_variable(
                 EnvVars::TRACING_DURATIONS_FILE,
