@@ -13,42 +13,25 @@ import tomllib
 import urllib.parse
 from pathlib import Path
 
-# To be kept in sync with: `docs/index.md`
-URL = "https://github.com/astral-sh/uv/assets/1309177/{}"
-URL_LIGHT = URL.format("629e59c0-9c6e-4013-9ad4-adb2bcf5080d")
-URL_DARK = URL.format("03aa9163-1c79-4a87-a31d-7a9311ed9310")
-
-# https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax#specifying-the-theme-an-image-is-shown-to
-GITHUB = f"""
-<p align="center">
-  <picture align="center">
-    <source media="(prefers-color-scheme: dark)" srcset="{URL_DARK}">
-    <source media="(prefers-color-scheme: light)" srcset="{URL_LIGHT}">
-    <img alt="Shows a bar chart with benchmark results." src="{URL_LIGHT}">
-  </picture>
-</p>
-"""
-
-# https://github.com/pypi/warehouse/issues/11251
-PYPI = f"""
-<p align="center">
-  <img alt="Shows a bar chart with benchmark results." src="{URL_LIGHT}">
-</p>
-"""
+# The benchmark image URL in the README. This SVG uses CSS media queries to adapt to dark/light
+# mode. PyPI doesn't support this, so we replace it with a light-only version.
+# See: https://github.com/pypi/warehouse/issues/11251
+BENCHMARK_URL = "./assets/svg/Benchmark-Reactive.svg"
+BENCHMARK_URL_LIGHT = "https://raw.githubusercontent.com/astral-sh/uv/refs/heads/main/assets/svg/Benchmark-Light.svg"
 
 
 def main(target: str) -> None:
     """Modify the README.md to support the given target."""
 
-    # Replace the benchmark images based on the target.
     with Path("README.md").open(encoding="utf8") as fp:
         content = fp.read()
-        if GITHUB not in content:
-            msg = "README.md is not in the expected format."
-            raise ValueError(msg)
 
     if target == "pypi":
-        content = content.replace(GITHUB, PYPI)
+        # Replace the benchmark image URL with the light-only version for PyPI.
+        if BENCHMARK_URL not in content:
+            msg = "README.md is not in the expected format (benchmark image not found)."
+            raise ValueError(msg)
+        content = content.replace(BENCHMARK_URL, BENCHMARK_URL_LIGHT)
     else:
         msg = f"Unknown target: {target}"
         raise ValueError(msg)
