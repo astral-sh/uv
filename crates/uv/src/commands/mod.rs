@@ -29,6 +29,7 @@ pub(crate) use pip::show::pip_show;
 pub(crate) use pip::sync::pip_sync;
 pub(crate) use pip::tree::pip_tree;
 pub(crate) use pip::uninstall::pip_uninstall;
+pub(crate) use pip::versions::pip_index_versions;
 pub(crate) use project::add::add;
 pub(crate) use project::export::export;
 pub(crate) use project::format::format;
