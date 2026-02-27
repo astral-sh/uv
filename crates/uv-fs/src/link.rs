@@ -765,9 +765,36 @@ where
         })
 }
 
-/// Try to create a hard link, returning the `io::Error` on failure.
+/// Try to create a hard link, handling `TooManyLinks` (EMLINK/`ERROR_TOO_MANY_LINKS`)
+/// by copying the source to a fresh inode and retrying.
+///
+/// When a file has too many hardlinks (e.g., 65000 on ext4, ~177 on AWS EFS),
+/// this copies the source to a temp file (fresh inode), links the temp to the
+/// destination, then renames the temp over the source. Linking before renaming
+/// avoids a race where another process could exhaust the fresh inode's links
+/// between the rename and our link.
+///
+/// If two processes hit this simultaneously, both may copy the source file;
+/// this is benign — the rename is atomic, so the source simply gets reset twice.
 fn try_hardlink_file(src: &Path, dst: &Path) -> io::Result<()> {
-    fs_err::hard_link(src, dst)
+    match fs_err::hard_link(src, dst) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == io::ErrorKind::TooManyLinks => {
+            warn_user_once!(
+                "Resetting cache entry due to too many hardlinks: {}",
+                src.display()
+            );
+            let parent = src.parent().ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidInput, "path has no parent directory")
+            })?;
+            let temp = tempfile::NamedTempFile::new_in(parent)?;
+            fs_err::copy(src, temp.path())?;
+            fs_err::hard_link(temp.path(), dst)?;
+            fs_err::rename(temp.path(), src)?;
+            Ok(())
+        }
+        Err(err) => Err(err),
+    }
 }
 
 /// Atomically overwrite an existing file with a hard link.
@@ -786,7 +813,7 @@ where
     let tempdir = tempfile::tempdir_in(parent)?;
     let tempfile = tempdir.path().join(dst.file_name().unwrap());
 
-    if fs_err::hard_link(src, &tempfile).is_ok() {
+    if try_hardlink_file(src, &tempfile).is_ok() {
         fs_err::rename(&tempfile, dst)?;
         Ok(state.mode_working())
     } else {

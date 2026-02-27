@@ -214,6 +214,96 @@ fn install_hardlink() -> Result<()> {
     Ok(())
 }
 
+/// Test that EMLINK (too many hardlinks) is handled gracefully.
+///
+/// This test exhausts the hardlink limit on a cached file, then verifies that
+/// a subsequent install still succeeds by resetting the file's inode.
+///
+/// Requires `UV_INTERNAL__TEST_ALT_FS` pointing to a filesystem with a
+/// hardlink limit reachable within 66000 links (e.g., ext4 with ~65000).
+#[test]
+fn install_hardlink_after_emlink() -> anyhow::Result<()> {
+    use walkdir::WalkDir;
+
+    let Some(context) = uv_test::test_context!("3.12").with_cache_on_maxlinks_fs()? else {
+        return Ok(());
+    };
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+
+    // First install to populate the cache.
+    context
+        .pip_sync()
+        .arg("requirements.txt")
+        .arg("--link-mode")
+        .arg("hardlink")
+        .assert()
+        .success();
+
+    // Find a cached file from the package (any .so or .py file will do).
+    let cached_file = WalkDir::new(context.cache_dir.path())
+        .into_iter()
+        .filter_map(Result::ok)
+        .find(|e| {
+            e.file_type().is_file()
+                && (e
+                    .path()
+                    .extension()
+                    .is_some_and(|ext| ext == "so" || ext == "py"))
+        })
+        .expect("should find a cached file")
+        .into_path();
+
+    // Create a temp directory to hold hardlinks on the same filesystem as the cache entry.
+    let hardlink_dir = tempfile::tempdir_in(
+        cached_file
+            .parent()
+            .expect("cached file should have a parent directory"),
+    )?;
+
+    // Create hardlinks until we hit EMLINK or reach 66000 (ext4 limit is 65000).
+    let mut hit_emlink = false;
+    for i in 0..66000 {
+        let link_path = hardlink_dir.path().join(format!("link_{i}"));
+        match fs::hard_link(&cached_file, &link_path) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::TooManyLinks => {
+                hit_emlink = true;
+                break;
+            }
+            Err(err) => {
+                return Err(err.into());
+            }
+        }
+    }
+
+    assert!(
+        hit_emlink,
+        "Expected to hit TooManyLinks while creating hardlinks"
+    );
+
+    // Now try to install into a new venv - this should succeed because
+    // the installer will reset the cached file's inode when it hits EMLINK.
+    let venv2 = context.temp_dir.child("venv2");
+    context.venv().arg(venv2.path()).assert().success();
+
+    context
+        .pip_sync()
+        .arg("requirements.txt")
+        .arg("--link-mode")
+        .arg("hardlink")
+        .env(EnvVars::VIRTUAL_ENV, venv2.path())
+        .assert()
+        .success();
+
+    // Verify that another hardlink can be created after recovery.
+    let extra_link = hardlink_dir.path().join("post_recovery_link");
+    fs::hard_link(&cached_file, &extra_link)?;
+
+    Ok(())
+}
+
 /// Install a package into a virtual environment using symlink semantics.
 #[test]
 #[cfg(unix)] // Windows does not allow symlinks by default

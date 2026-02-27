@@ -75,6 +75,14 @@ jobs:
           sudo mount -t tmpfs -o size=256m tmpfs /tmpfs
           sudo chown "$(id -u):$(id -g)" /tmpfs
 
+      - name: "Create minix filesystem (low hardlink limit)"
+        run: |
+          truncate -s 16M /tmp/minix.img
+          mkfs.minix /tmp/minix.img
+          sudo mkdir /minix
+          sudo mount -o loop /tmp/minix.img /minix
+          sudo chown "$(id -u):$(id -g)" /minix
+
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@542cebaaed782771e619bd5609d97659d109c492 # v2.66.7
         with:
@@ -88,6 +96,7 @@ jobs:
           UV_INTERNAL__TEST_COW_FS: /btrfs
           UV_INTERNAL__TEST_NOCOW_FS: /tmpfs
           UV_INTERNAL__TEST_ALT_FS: /tmpfs
+          UV_INTERNAL__TEST_MAXLINKS_FS: /minix
         run: |
           cargo nextest run \
             --cargo-profile fast-build \
