@@ -307,3 +307,14 @@ jobs:
     with:
       plan: ${{ needs.plan.outputs.val }}
     secrets: inherit
+
+  custom-publish-mirror:
+    needs:
+      - plan
+      - announce
+    uses: ./.github/workflows/publish-mirror.yml
+    with:
+      plan: ${{ needs.plan.outputs.val }}
+    secrets: inherit
+    permissions:
+      "contents": "read"
