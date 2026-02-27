@@ -215,16 +215,19 @@ jobs:
 
   windows:
     name: ${{ matrix.platform.target }}
-    runs-on: github-windows-2022-x86_64-8
+    runs-on: ${{ matrix.platform.runner }}
     strategy:
       matrix:
         platform:
           - target: x86_64-pc-windows-msvc
             arch: x64
+            runner: github-windows-2022-x86_64-8
           - target: i686-pc-windows-msvc
             arch: x86
+            runner: github-windows-2022-x86_64-8
           - target: aarch64-pc-windows-msvc
-            arch: x64 # not relevant here
+            arch: arm64
+            runner: github-windows-11-aarch64-8
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -245,7 +248,6 @@ jobs:
           target: ${{ matrix.platform.target }}
           args: --release --locked --out dist --features self-update,windows-gui-bin --compatibility pypi
       - name: "Test wheel"
-        if: ${{ !startsWith(matrix.platform.target, 'aarch64') }}
         shell: bash
         run: |
           pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
@@ -284,7 +286,6 @@ jobs:
           target: ${{ matrix.platform.target }}
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
       - name: "Test wheel uv-build"
-        if: ${{ !startsWith(matrix.platform.target, 'aarch64') }}
         shell: bash
         run: |
           pip install ${PACKAGE_NAME}_build --no-index --find-links crates/uv-build/dist --force-reinstall
