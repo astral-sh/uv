@@ -15,9 +15,11 @@ Example usage:
 
 import argparse
 import asyncio
+import datetime
 import hashlib
 import json
 import logging
+import os
 import re
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
@@ -171,6 +173,14 @@ async def download_file(
             with open(dest, "wb") as f:
                 async for chunk in response.aiter_bytes():
                     f.write(chunk)
+            last_modified = response.headers.get("Last-Modified")
+            if last_modified is not None:
+                last_modified = datetime.datetime.strptime(
+                    last_modified, "%a, %d %b %Y %H:%M:%S %Z"
+                )
+            if last_modified is not None:
+                file_time = last_modified.timestamp()
+                os.utime(dest, (file_time, file_time))
 
         if expected_sha256 and sha256_checksum(dest) != expected_sha256:
             error_msg = f"SHA-256 mismatch for {dest}. Deleting corrupted file."
