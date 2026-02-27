@@ -431,6 +431,8 @@ impl InitSettings {
         )
         .unwrap_or(kind.packaged_by_default());
 
+        let bare = resolve_flag(bare, "bare", environment.init_bare).is_enabled();
+
         let filesystem_install_mirrors = filesystem
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
