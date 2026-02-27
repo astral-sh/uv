@@ -5,7 +5,7 @@ use std::sync::OnceLock;
 
 use pubgrub::Ranges;
 use rustc_hash::FxHashMap;
-use tracing::instrument;
+use tracing::{instrument, trace};
 
 use uv_client::{FlatIndexEntry, OwnedArchive, SimpleDetailMetadata, VersionFiles};
 use uv_configuration::BuildOptions;
@@ -448,6 +448,10 @@ impl VersionMapLazy {
                 let (excluded, upload_time) = if let Some(exclude_newer) = &self.exclude_newer {
                     match file.upload_time_utc_ms.as_ref() {
                         Some(&upload_time) if upload_time >= exclude_newer.timestamp_millis() => {
+                            trace!(
+                                "Excluding `{}` (uploaded {upload_time}) due to exclude-newer ({exclude_newer})",
+                                file.filename
+                            );
                             (true, Some(upload_time))
                         }
                         None => {
