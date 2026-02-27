@@ -4790,7 +4790,7 @@ fn export_lock_workspace_mismatch_with_frozen() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The lockfile at `uv.lock` needs to be updated, but `--frozen` was provided: Missing workspace member `foo`. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--frozen` was provided: Missing workspace member `foo`. This can happen after renaming `project.name`. To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
