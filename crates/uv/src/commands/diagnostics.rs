@@ -1,5 +1,7 @@
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
+use std::io::{BufRead, BufReader};
+use std::path::{Path, PathBuf};
 
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
@@ -486,4 +488,23 @@ fn format_chain(name: &PackageName, version: Option<&Version>, chain: &Derivatio
         message = format!("{message} `{}`", name.cyan());
     }
     message
+}
+
+
+pub(crate) fn extract_python_from_shebang(script_path: &Path) -> Option<PathBuf> {
+    let file = std::fs::File::open(script_path).ok()?;
+    let mut reader = BufReader::new(file);
+    let mut first_line = String::new();
+    reader.read_line(&mut first_line).ok()?;
+
+    // Check if it starts with shebang
+    let shebang = first_line.strip_prefix("#!")?;
+    let shebang = shebang.trim();
+
+    if shebang.contains("python") {
+        let interpreter = shebang.split_whitespace().next()?;
+        Some(PathBuf::from(interpreter))
+    } else {
+        None
+    }
 }
