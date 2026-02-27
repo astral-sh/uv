@@ -87,7 +87,7 @@ impl FilesystemOptions {
     /// The search starts at the given path and goes up the directory tree until a `uv.toml` file or
     /// `pyproject.toml` file is found.
     pub fn find(path: &Path) -> Result<Option<Self>, Error> {
-        for ancestor in path.ancestors() {
+        for (depth, ancestor) in path.ancestors().enumerate() {
             match Self::from_directory(ancestor) {
                 Ok(Some(options)) => {
                     return Ok(Some(options));
@@ -101,6 +101,15 @@ impl FilesystemOptions {
                         "Failed to parse `{}` during settings discovery:\n{}",
                         path.user_display().cyan(),
                         textwrap::indent(&err.to_string(), "  ")
+                    );
+                }
+                Err(Error::PyprojectTomlIsDirectory(path)) => {
+                    if depth == 0 {
+                        return Err(Error::PyprojectTomlIsDirectory(path));
+                    }
+                    warn_user!(
+                        "Ignoring `{}` during settings discovery because it's a directory, not a file.",
+                        path.user_display().cyan()
                     );
                 }
                 Err(err) => {
@@ -172,6 +181,9 @@ impl FilesystemOptions {
                 return Ok(Some(Self(options)));
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) if err.kind() == std::io::ErrorKind::IsADirectory => {
+                return Err(Error::PyprojectTomlIsDirectory(path));
+            }
             Err(err) => return Err(err.into()),
         }
 
@@ -580,6 +592,9 @@ pub enum Error {
     #[error("Failed to parse: `{}`", _0.user_display())]
     PyprojectToml(PathBuf, #[source] Box<toml::de::Error>),
 
+    #[error("Failed to read `{}` as it's a directory, not a file", _0.user_display())]
+    PyprojectTomlIsDirectory(PathBuf),
+
     #[error("Failed to parse: `{}`", _0.user_display())]
     UvToml(PathBuf, #[source] Box<toml::de::Error>),
 
@@ -750,6 +765,76 @@ impl EnvironmentOptions {
             venv_seed: EnvFlag::new(EnvVars::UV_VENV_SEED)?,
             venv_clear: EnvFlag::new(EnvVars::UV_VENV_CLEAR)?,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::{Path, PathBuf};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use super::{Error, FilesystemOptions};
+
+    struct TempDir(PathBuf);
+
+    impl TempDir {
+        fn new(label: &str) -> Self {
+            let unique = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock should be after unix epoch")
+                .as_nanos();
+            let path = std::env::temp_dir().join(format!(
+                "uv-settings-tests-{label}-{}-{unique}",
+                std::process::id()
+            ));
+            fs_err::create_dir_all(&path).expect("failed to create temp dir");
+            Self(path)
+        }
+
+        fn path(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = fs_err::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn find_errors_when_current_directory_contains_pyproject_directory() {
+        let temp = TempDir::new("current-pyproject-dir");
+        fs_err::create_dir(temp.path().join("pyproject.toml"))
+            .expect("failed to create pyproject directory");
+
+        let error =
+            FilesystemOptions::find(temp.path()).expect_err("expected directory read error");
+        let expected_path = temp.path().join("pyproject.toml");
+
+        match error {
+            Error::PyprojectTomlIsDirectory(path) => assert_eq!(path, expected_path),
+            other => panic!("unexpected error: {other}"),
+        }
+    }
+
+    #[test]
+    fn find_ignores_parent_pyproject_directory_and_continues_search() {
+        let temp = TempDir::new("parent-pyproject-dir");
+        fs_err::write(temp.path().join("uv.toml"), "").expect("failed to write uv.toml");
+
+        let child = temp.path().join("child");
+        fs_err::create_dir_all(&child).expect("failed to create child directory");
+        fs_err::create_dir(child.join("pyproject.toml")).expect("failed to create pyproject dir");
+
+        let nested = child.join("nested");
+        fs_err::create_dir_all(&nested).expect("failed to create nested directory");
+
+        let found = FilesystemOptions::find(&nested).expect("settings discovery should succeed");
+        assert!(
+            found.is_some(),
+            "expected to find ancestor uv.toml settings"
+        );
     }
 }
 
