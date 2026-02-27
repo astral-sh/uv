@@ -339,6 +339,43 @@ fn python_find_project() {
     warning: The requested interpreter resolved to Python 3.10.[X], which is incompatible with the project's Python requirement: `>=3.11` (from `project.requires-python`)
     ");
 
+    // If a project environment exists, `--project` should resolve it even when invoked outside
+    // the project directory.
+    uv_snapshot!(
+        context.filters(),
+        context
+            .venv()
+            .arg("--python")
+            .arg("3.12")
+            .arg("-q")
+            .current_dir(context.temp_dir.path()),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "
+    );
+
+    #[cfg(not(windows))]
+    uv_snapshot!(
+        context.filters(),
+        context
+            .python_find()
+            .arg("--project")
+            .arg(context.temp_dir.path())
+            .current_dir(context.temp_dir.path().parent().unwrap()),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [VENV]/[BIN]/[PYTHON]
+
+    ----- stderr -----
+    "
+    );
+
     // Or `--no-project` is used
     uv_snapshot!(context.filters(), context.python_find().arg("--no-project"), @"
     success: true
