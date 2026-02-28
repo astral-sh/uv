@@ -140,6 +140,8 @@ pub(crate) struct GitRemote {
 /// A local clone of a remote repository's database. Multiple [`GitCheckout`]s
 /// can be cloned from a single [`GitDatabase`].
 pub(crate) struct GitDatabase {
+    /// The remote repository where this database is fetched from.
+    remote: GitRemote,
     /// Underlying Git repository instance for this database.
     repo: GitRepository,
     /// Git LFS artifacts have been initialized (if requested).
@@ -270,7 +272,7 @@ impl GitRemote {
     /// populated the database with the latest version of `reference`, so
     /// return that database and the rev we resolve to.
     pub(crate) fn checkout(
-        &self,
+        self,
         into: &Path,
         db: Option<GitDatabase>,
         reference: &GitReference,
@@ -325,14 +327,21 @@ impl GitRemote {
             })
             .transpose()?;
 
-        Ok((GitDatabase { repo, lfs_ready }, rev))
+        Ok((
+            GitDatabase {
+                remote: self,
+                repo,
+                lfs_ready,
+            },
+            rev,
+        ))
     }
 
     /// Creates a [`GitDatabase`] of this remote at `db_path`.
-    #[expect(clippy::unused_self)]
     pub(crate) fn db_at(&self, db_path: &Path) -> Result<GitDatabase> {
         let repo = GitRepository::open(db_path)?;
         Ok(GitDatabase {
+            remote: self.clone(),
             repo,
             lfs_ready: None,
         })
@@ -352,7 +361,7 @@ impl GitDatabase {
             .filter(GitCheckout::is_fresh)
         {
             Some(co) => co.with_lfs_ready(self.lfs_ready),
-            None => GitCheckout::clone_into(destination, self, rev)?,
+            None => GitCheckout::clone_into(destination, self, rev, self.remote.url())?,
         };
         Ok(checkout)
     }
@@ -404,7 +413,12 @@ impl GitCheckout {
 
     /// Clone a repo for a `revision` into a local path from a `database`.
     /// This is a filesystem-to-filesystem clone.
-    fn clone_into(into: &Path, database: &GitDatabase, revision: GitOid) -> Result<Self> {
+    fn clone_into(
+        into: &Path,
+        database: &GitDatabase,
+        revision: GitOid,
+        original_remote_url: &Url,
+    ) -> Result<Self> {
         let dirname = into.parent().unwrap();
         fs_err::create_dir_all(dirname)?;
         match fs_err::remove_dir_all(into) {
@@ -439,7 +453,7 @@ impl GitCheckout {
 
         let repo = GitRepository::open(into)?;
         let checkout = Self::new(revision, repo);
-        let lfs_ready = checkout.reset(database.lfs_ready)?;
+        let lfs_ready = checkout.reset(database.lfs_ready, original_remote_url)?;
         Ok(checkout.with_lfs_ready(lfs_ready))
     }
 
@@ -466,20 +480,22 @@ impl GitCheckout {
         self
     }
 
-    /// This performs `git reset --hard` to the revision of this checkout, with
-    /// additional interrupt protection by a dummy file [`CHECKOUT_READY_LOCK`].
+    /// This performs `git reset --hard` to the revision of this checkout and updates submodules,
+    /// with additional interrupt protection by a dummy file [`CHECKOUT_READY_LOCK`].
     ///
-    /// If we're interrupted while performing a `git reset` (e.g., we die
+    /// If we're interrupted while performing any of the processes in this method (e.g., we die
     /// because of a signal) uv needs to be sure to try to check out this
     /// repo again on the next go-round.
     ///
     /// To enable this we have a dummy file in our checkout, [`.ok`],
-    /// which if present means that the repo has been successfully reset and is
-    /// ready to go. Hence, if we start to do a reset, we make sure this file
+    /// which if present means that the repo has been successfully checked out and is
+    /// ready to go. Hence if we start to update submodules, we make sure this file
     /// *doesn't* exist, and then once we're done we create the file.
     ///
     /// [`.ok`]: CHECKOUT_READY_LOCK
-    fn reset(&self, with_lfs: Option<bool>) -> Result<Option<bool>> {
+    /// `git reset --hard [<commit>]` can break relative submodule URLs, so we update submodules
+    /// using the original remote URL.
+    fn reset(&self, with_lfs: Option<bool>, original_remote_url: &Url) -> Result<Option<bool>> {
         let ok_file = self.repo.path.join(CHECKOUT_READY_LOCK);
         let _ = paths::remove_file(&ok_file);
 
@@ -487,9 +503,21 @@ impl GitCheckout {
         // as smudge filters can trigger on a reset even if lfs artifacts
         // were not originally "fetched".
         let lfs_skip_smudge = if with_lfs == Some(true) { "0" } else { "1" };
+        // Store the current origin URL
+        let current_origin = ProcessBuilder::new(GIT.as_ref()?)
+            .arg("config")
+            .arg("--get")
+            .arg("remote.origin.url")
+            .cwd(&self.repo.path)
+            .exec_with_output()?;
+
+        let current_origin = String::from_utf8_lossy(&current_origin.stdout)
+            .trim()
+            .to_string();
+
         debug!("Reset {} to {}", self.repo.path.display(), self.revision);
 
-        // Perform the hard reset.
+        // Perform the hard reset (`git reset --hard <rev>`).
         ProcessBuilder::new(GIT.as_ref()?)
             .arg("reset")
             .arg("--hard")
@@ -498,13 +526,33 @@ impl GitCheckout {
             .cwd(&self.repo.path)
             .exec_with_output()?;
 
-        // Update submodules (`git submodule update --recursive`).
+        // Temporarily set the origin to the original remote URL for submodule update.
+        ProcessBuilder::new(GIT.as_ref()?)
+            .arg("remote")
+            .arg("set-url")
+            .arg("origin")
+            .arg(original_remote_url.as_str())
+            .cwd(&self.repo.path)
+            .exec_with_output()
+            .map(drop)?;
+
+        // Update submodules (`git submodule update --recursive --init`).
         ProcessBuilder::new(GIT.as_ref()?)
             .arg("submodule")
             .arg("update")
             .arg("--recursive")
             .arg("--init")
             .env(EnvVars::GIT_LFS_SKIP_SMUDGE, lfs_skip_smudge)
+            .cwd(&self.repo.path)
+            .exec_with_output()
+            .map(drop)?;
+
+        // Set the origin URL back.
+        ProcessBuilder::new(GIT.as_ref()?)
+            .arg("remote")
+            .arg("set-url")
+            .arg("origin")
+            .arg(current_origin)
             .cwd(&self.repo.path)
             .exec_with_output()
             .map(drop)?;
