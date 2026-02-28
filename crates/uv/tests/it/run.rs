@@ -6405,3 +6405,69 @@ fn run_target_workspace_discovery_bare_script() -> Result<()> {
 
     Ok(())
 }
+
+/// Test that running `uv run python3.99` (or similar versioned python command) when the
+/// version is not available provides a helpful error message.
+#[test]
+#[cfg(target_family = "unix")]
+fn run_python_version_not_found() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#
+    })?;
+
+    // Create the required module structure
+    context
+        .temp_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
+
+    // Try to run a python version that doesn't exist (python3.99 is unlikely to exist)
+    uv_snapshot!(context.filters(), context.run().arg("python3.99"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+    hint: `python3.99` is not available in the current environment (Python 3.12). Did you mean `uv run -p 3.99 python` or `uvx python@3.99`?
+    error: Failed to spawn: `python3.99`
+      Caused by: No such file or directory (os error 2)
+    ");
+
+    Ok(())
+}
+
+/// Test that running `uv run python3.99` in a non-project context provides a helpful error message.
+#[test]
+#[cfg(target_family = "unix")]
+fn run_python_version_not_found_non_project() {
+    let context = uv_test::test_context!("3.12");
+
+    // Try to run without a project (using --no-project)
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("python3.99"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    hint: `python3.99` is not available in the current environment (Python 3.12). Did you mean `uv run -p 3.99 python` or `uvx python@3.99`?
+    error: Failed to spawn: `python3.99`
+      Caused by: No such file or directory (os error 2)
+    ");
+}
