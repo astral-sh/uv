@@ -1819,6 +1819,24 @@ fn tool_run_with_editable() -> anyhow::Result<()> {
       ╰─▶ Distribution not found at: file://[TEMP_DIR]/foo
     ");
 
+    // If invalid, we should reference `--from`.
+    uv_snapshot!(context.filters(), context
+        .tool_run()
+        .arg("--from")
+        .arg("./foo")
+        .arg("flask")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir
+        .as_os_str()).env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to resolve `--from` requirement
+      ╰─▶ Distribution not found at: file://[TEMP_DIR]/foo
+    ");
+
     Ok(())
 }
 
