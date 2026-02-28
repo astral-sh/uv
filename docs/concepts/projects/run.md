@@ -9,6 +9,13 @@ environment:
 $ uv run python -c "import example"
 ```
 
+!!! tip When invoked without any arguments, `uv run python` will start an interactive Python REPL in
+the project environment:
+
+    ```console
+    $ uv run python
+    ```
+
 When using `run`, uv will ensure that the project environment is up-to-date before running the given
 command.
 
