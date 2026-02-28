@@ -243,3 +243,54 @@ async fn cache_timeout() {
     error: Timeout ([TIME]) when waiting for lock on `[CACHE_DIR]/` at `[CACHE_DIR]/.lock`, is another uv process running? You can set `UV_LOCK_TIMEOUT` to increase the timeout.
     ");
 }
+
+/// `cache clean` should handle files with Windows-incompatible names (e.g., trailing dots).
+///
+/// See: <https://github.com/astral-sh/uv/issues/15569>
+#[test]
+#[cfg(windows)]
+fn clean_trailing_dot_filename() -> Result<()> {
+    use std::ffi::OsString;
+    use std::path::PathBuf;
+
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
+
+    // Create a file with a trailing dot (Windows-incompatible name).
+    // We need to use the extended-length path prefix to create it.
+    let cache_dir = context.cache_dir.path();
+    let test_subdir = cache_dir.join("test-bucket");
+    fs_err::create_dir_all(&test_subdir)?;
+
+    // Create a file with trailing dot using extended path.
+    let file_with_dot = test_subdir.join("logging.");
+    let mut extended_path = OsString::from(r"\\?\");
+    extended_path.push(file_with_dot.as_os_str());
+    let extended_path = PathBuf::from(extended_path);
+    fs_err::write(&extended_path, "test content")?;
+
+    // Verify the file exists (using extended path to read).
+    assert!(
+        extended_path.exists(),
+        "Test file with trailing dot should exist"
+    );
+
+    // Run `cache clean`; this should succeed even with the special filename.
+    uv_snapshot!(context.filters(), context.clean().arg("--verbose"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    DEBUG uv [VERSION] ([COMMIT] DATE)
+    Clearing cache at: [CACHE_DIR]/
+    Removed [N] files ([SIZE])
+    ");
+
+    // Verify the file is removed.
+    assert!(
+        !extended_path.exists(),
+        "File with trailing dot should be removed after cache clean"
+    );
+
+    Ok(())
+}
