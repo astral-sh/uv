@@ -13321,13 +13321,14 @@ async fn add_unexpected_error_code() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--index").arg(server.uri())
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+        .env(EnvVars::UV_HTTP_RETRIES, "1"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Request failed after 3 retries
+    error: Request failed after 1 retry in [TIME]
       Caused by: Failed to fetch: `http://[LOCALHOST]/anyio/`
       Caused by: HTTP status server error (503 Service Unavailable) for url (http://[LOCALHOST]/anyio/)
     "

@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::str::FromStr;
 use std::task::{Context, Poll};
+use std::time::{Duration, Instant, SystemTimeError};
 use std::{env, io};
 
 use futures::TryStreamExt;
@@ -54,11 +55,16 @@ pub enum Error {
     TooManyParts(String),
     #[error("Failed to download {0}")]
     NetworkError(DisplaySafeUrl, #[source] WrappedReqwestError),
-    #[error("Request failed after {retries} {subject}", subject = if *retries > 1 { "retries" } else { "retry" })]
+    #[error(
+        "Request failed after {retries} {subject} in {duration:.1}s",
+        subject = if *retries > 1 { "retries" } else { "retry" },
+        duration = duration.as_secs_f32()
+    )]
     NetworkErrorWithRetries {
         #[source]
         err: Box<Self>,
         retries: u32,
+        duration: Duration,
     },
     #[error("Failed to download {0}")]
     NetworkMiddlewareError(DisplaySafeUrl, #[source] anyhow::Error),
@@ -114,6 +120,8 @@ pub enum Error {
     },
     #[error(transparent)]
     BuildVersion(#[from] BuildVersionError),
+    #[error(transparent)]
+    SystemTime(#[from] SystemTimeError),
 }
 
 impl Error {
@@ -1132,6 +1140,7 @@ impl ManagedPythonDownload {
                         Err(Error::NetworkErrorWithRetries {
                             err: Box::new(err),
                             retries: retry_state.total_retries(),
+                            duration: retry_state.duration()?,
                         })
                     } else {
                         Err(err)
@@ -1592,12 +1601,14 @@ impl Error {
         url: DisplaySafeUrl,
         err: reqwest::Error,
         retries: Option<u32>,
+        start: Instant,
     ) -> Self {
         let err = Self::NetworkError(url, WrappedReqwestError::from(err));
         if let Some(retries) = retries {
             Self::NetworkErrorWithRetries {
                 err: Box::new(err),
                 retries,
+                duration: start.elapsed(),
             }
         } else {
             err
@@ -1709,6 +1720,7 @@ async fn read_url(
 
         Ok((Either::Left(reader), Some(size)))
     } else {
+        let start = Instant::now();
         let response = client
             .for_host(url)
             .get(Url::from(url.clone()))
@@ -1724,7 +1736,7 @@ async fn read_url(
         // Check the status code.
         let response = response
             .error_for_status()
-            .map_err(|err| Error::from_reqwest(url.clone(), err, retry_count))?;
+            .map_err(|err| Error::from_reqwest(url.clone(), err, retry_count, start))?;
 
         let size = response.content_length();
         let stream = response

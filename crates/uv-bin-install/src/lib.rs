@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::str::FromStr;
 use std::task::{Context, Poll};
+use std::time::{Duration, SystemTimeError};
 
 use futures::{StreamExt, TryStreamExt};
 use reqwest_retry::policies::ExponentialBackoff;
@@ -248,11 +249,16 @@ pub enum Error {
     #[error("Failed to detect platform")]
     Platform(#[from] uv_platform::Error),
 
-    #[error("Request failed after {retries} {subject}", subject = if *retries > 1 { "retries" } else { "retry" })]
+    #[error(
+        "Request failed after {retries} {subject} in {duration:.1}s",
+        subject = if *retries > 1 { "retries" } else { "retry" },
+        duration = duration.as_secs_f32()
+    )]
     RetriedError {
         #[source]
         err: Box<Self>,
         retries: u32,
+        duration: Duration,
     },
 
     #[error("Failed to fetch version manifest from: {url}")]
@@ -287,6 +293,9 @@ pub enum Error {
 
     #[error("Unsupported archive format: {0}")]
     UnsupportedArchiveFormat(String),
+
+    #[error(transparent)]
+    SystemTime(#[from] SystemTimeError),
 }
 
 impl Error {
@@ -352,6 +361,7 @@ pub async fn find_matching_version(
                     Err(Error::RetriedError {
                         err: Box::new(err),
                         retries: retry_state.total_retries(),
+                        duration: retry_state.duration()?,
                     })
                 } else {
                     Err(err)
@@ -628,6 +638,7 @@ async fn download_and_unpack_with_retry(
                     Err(Error::RetriedError {
                         err: Box::new(err),
                         retries: retry_state.total_retries(),
+                        duration: retry_state.duration()?,
                     })
                 } else {
                     Err(err)
@@ -678,6 +689,8 @@ async fn download_and_unpack(
             return Err(Error::RetriedError {
                 err: Box::new(err),
                 retries,
+                // This value is overwritten in `download_and_unpack_with_retry`.
+                duration: Duration::default(),
             });
         }
         return Err(err);

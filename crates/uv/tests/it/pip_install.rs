@@ -14240,14 +14240,14 @@ fn warn_on_lzma_wheel() {
         context.filters(),
         context.pip_install()
             .arg("futzed_lzma @ https://github.com/astral-sh/futzed-wheels/releases/download/v2026.02.09.2/futzed_lzma-0.1.0-py3-none-any.whl"),
-        @r"
+        @"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
       × Failed to download `futzed-lzma @ https://github.com/astral-sh/futzed-wheels/releases/download/v2026.02.09.2/futzed_lzma-0.1.0-py3-none-any.whl`
-      ├─▶ Request failed after 3 retries
+      ├─▶ Request failed after 3 retries in [TIME]
       ├─▶ Failed to read metadata: `https://github.com/astral-sh/futzed-wheels/releases/download/v2026.02.09.2/futzed_lzma-0.1.0-py3-none-any.whl`
       ├─▶ Failed to read from zip file
       ├─▶ an upstream reader returned an error: stream/file format not recognized
