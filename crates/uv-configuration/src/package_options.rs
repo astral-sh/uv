@@ -4,7 +4,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use uv_cache::Refresh;
 use uv_cache_info::Timestamp;
-use uv_distribution_types::Requirement;
+use uv_distribution_types::{Requirement, RequirementSource};
 use uv_normalize::PackageName;
 
 /// Whether to reinstall packages.
@@ -195,6 +195,13 @@ impl Upgrade {
 
         let mut constraints: FxHashMap<PackageName, Vec<Requirement>> = FxHashMap::default();
         for requirement in upgrade_package {
+            // skip any empty constraints
+            if let RequirementSource::Registry { specifier, .. } = &requirement.source {
+                if specifier.is_empty() {
+                    continue;
+                }
+            }
+
             constraints
                 .entry(requirement.name.clone())
                 .or_default()

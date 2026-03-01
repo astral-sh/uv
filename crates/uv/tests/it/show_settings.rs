@@ -9023,28 +9023,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
                         ),
                     },
                 ),
-                constraints: {
-                    PackageName(
-                        "sniffio",
-                    ): [
-                        Requirement {
-                            name: PackageName(
-                                "sniffio",
-                            ),
-                            extras: [],
-                            groups: [],
-                            marker: true,
-                            source: Registry {
-                                specifier: VersionSpecifiers(
-                                    [],
-                                ),
-                                index: None,
-                                conflict: None,
-                            },
-                            origin: None,
-                        },
-                    ],
-                },
+                constraints: {},
             },
             reinstall: None,
         },
@@ -9227,28 +9206,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             ),
             upgrade: Upgrade {
                 strategy: None,
-                constraints: {
-                    PackageName(
-                        "idna",
-                    ): [
-                        Requirement {
-                            name: PackageName(
-                                "idna",
-                            ),
-                            extras: [],
-                            groups: [],
-                            marker: true,
-                            source: Registry {
-                                specifier: VersionSpecifiers(
-                                    [],
-                                ),
-                                index: None,
-                                conflict: None,
-                            },
-                            origin: None,
-                        },
-                    ],
-                },
+                constraints: {},
             },
             reinstall: None,
         },
@@ -9431,28 +9389,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             ),
             upgrade: Upgrade {
                 strategy: All,
-                constraints: {
-                    PackageName(
-                        "idna",
-                    ): [
-                        Requirement {
-                            name: PackageName(
-                                "idna",
-                            ),
-                            extras: [],
-                            groups: [],
-                            marker: true,
-                            source: Registry {
-                                specifier: VersionSpecifiers(
-                                    [],
-                                ),
-                                index: None,
-                                conflict: None,
-                            },
-                            origin: None,
-                        },
-                    ],
-                },
+                constraints: {},
             },
             reinstall: None,
         },
@@ -9639,28 +9576,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
                         ),
                     },
                 ),
-                constraints: {
-                    PackageName(
-                        "idna",
-                    ): [
-                        Requirement {
-                            name: PackageName(
-                                "idna",
-                            ),
-                            extras: [],
-                            groups: [],
-                            marker: true,
-                            source: Registry {
-                                specifier: VersionSpecifiers(
-                                    [],
-                                ),
-                                index: None,
-                                conflict: None,
-                            },
-                            origin: None,
-                        },
-                    ],
-                },
+                constraints: {},
             },
             reinstall: None,
         },
@@ -9841,28 +9757,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
                         ),
                     },
                 ),
-                constraints: {
-                    PackageName(
-                        "idna",
-                    ): [
-                        Requirement {
-                            name: PackageName(
-                                "idna",
-                            ),
-                            extras: [],
-                            groups: [],
-                            marker: true,
-                            source: Registry {
-                                specifier: VersionSpecifiers(
-                                    [],
-                                ),
-                                index: None,
-                                conflict: None,
-                            },
-                            origin: None,
-                        },
-                    ],
-                },
+                constraints: {},
             },
             reinstall: None,
         },
@@ -10047,48 +9942,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
                         ),
                     },
                 ),
-                constraints: {
-                    PackageName(
-                        "sniffio",
-                    ): [
-                        Requirement {
-                            name: PackageName(
-                                "sniffio",
-                            ),
-                            extras: [],
-                            groups: [],
-                            marker: true,
-                            source: Registry {
-                                specifier: VersionSpecifiers(
-                                    [],
-                                ),
-                                index: None,
-                                conflict: None,
-                            },
-                            origin: None,
-                        },
-                    ],
-                    PackageName(
-                        "idna",
-                    ): [
-                        Requirement {
-                            name: PackageName(
-                                "idna",
-                            ),
-                            extras: [],
-                            groups: [],
-                            marker: true,
-                            source: Registry {
-                                specifier: VersionSpecifiers(
-                                    [],
-                                ),
-                                index: None,
-                                conflict: None,
-                            },
-                            origin: None,
-                        },
-                    ],
-                },
+                constraints: {},
             },
             reinstall: None,
         },
@@ -10233,28 +10087,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
                         ),
                     },
                 ),
-                constraints: {
-                    PackageName(
-                        "sniffio",
-                    ): [
-                        Requirement {
-                            name: PackageName(
-                                "sniffio",
-                            ),
-                            extras: [],
-                            groups: [],
-                            marker: true,
-                            source: Registry {
-                                specifier: VersionSpecifiers(
-                                    [],
-                                ),
-                                index: None,
-                                conflict: None,
-                            },
-                            origin: None,
-                        },
-                    ],
-                },
+                constraints: {},
             },
         },
     }
@@ -10380,28 +10213,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             torch_backend: None,
             upgrade: Upgrade {
                 strategy: None,
-                constraints: {
-                    PackageName(
-                        "idna",
-                    ): [
-                        Requirement {
-                            name: PackageName(
-                                "idna",
-                            ),
-                            extras: [],
-                            groups: [],
-                            marker: true,
-                            source: Registry {
-                                specifier: VersionSpecifiers(
-                                    [],
-                                ),
-                                index: None,
-                                conflict: None,
-                            },
-                            origin: None,
-                        },
-                    ],
-                },
+                constraints: {},
             },
         },
     }
@@ -10527,28 +10339,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             torch_backend: None,
             upgrade: Upgrade {
                 strategy: All,
-                constraints: {
-                    PackageName(
-                        "idna",
-                    ): [
-                        Requirement {
-                            name: PackageName(
-                                "idna",
-                            ),
-                            extras: [],
-                            groups: [],
-                            marker: true,
-                            source: Registry {
-                                specifier: VersionSpecifiers(
-                                    [],
-                                ),
-                                index: None,
-                                conflict: None,
-                            },
-                            origin: None,
-                        },
-                    ],
-                },
+                constraints: {},
             },
         },
     }
@@ -10678,28 +10469,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
                         ),
                     },
                 ),
-                constraints: {
-                    PackageName(
-                        "idna",
-                    ): [
-                        Requirement {
-                            name: PackageName(
-                                "idna",
-                            ),
-                            extras: [],
-                            groups: [],
-                            marker: true,
-                            source: Registry {
-                                specifier: VersionSpecifiers(
-                                    [],
-                                ),
-                                index: None,
-                                conflict: None,
-                            },
-                            origin: None,
-                        },
-                    ],
-                },
+                constraints: {},
             },
         },
     }
@@ -10819,28 +10589,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
                         ),
                     },
                 ),
-                constraints: {
-                    PackageName(
-                        "idna",
-                    ): [
-                        Requirement {
-                            name: PackageName(
-                                "idna",
-                            ),
-                            extras: [],
-                            groups: [],
-                            marker: true,
-                            source: Registry {
-                                specifier: VersionSpecifiers(
-                                    [],
-                                ),
-                                index: None,
-                                conflict: None,
-                            },
-                            origin: None,
-                        },
-                    ],
-                },
+                constraints: {},
             },
         },
     }
@@ -10964,48 +10713,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
                         ),
                     },
                 ),
-                constraints: {
-                    PackageName(
-                        "sniffio",
-                    ): [
-                        Requirement {
-                            name: PackageName(
-                                "sniffio",
-                            ),
-                            extras: [],
-                            groups: [],
-                            marker: true,
-                            source: Registry {
-                                specifier: VersionSpecifiers(
-                                    [],
-                                ),
-                                index: None,
-                                conflict: None,
-                            },
-                            origin: None,
-                        },
-                    ],
-                    PackageName(
-                        "idna",
-                    ): [
-                        Requirement {
-                            name: PackageName(
-                                "idna",
-                            ),
-                            extras: [],
-                            groups: [],
-                            marker: true,
-                            source: Registry {
-                                specifier: VersionSpecifiers(
-                                    [],
-                                ),
-                                index: None,
-                                conflict: None,
-                            },
-                            origin: None,
-                        },
-                    ],
-                },
+                constraints: {},
             },
         },
     }
