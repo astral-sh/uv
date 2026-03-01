@@ -40,8 +40,8 @@ version = "0.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e61320f0a8ca54a235b0e49307b16dcade6eecd441b1f8a8c7ca9204056cb17c"
 dependencies = [
- "astral-reqwest-middleware",
- "reqwest",
+ "astral-reqwest-middleware 0.4.2",
+ "reqwest 0.12.22",
  "secrecy",
  "serde",
  "serde_json",
@@ -263,8 +263,22 @@ dependencies = [
  "anyhow",
  "async-trait",
  "http",
- "reqwest",
+ "reqwest 0.12.22",
  "serde",
+ "thiserror 2.0.18",
+ "tower-service",
+]
+
+[[package]]
+name = "astral-reqwest-middleware"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "98e1c6be25cfbf1bb4fea1a9da51bc05d3259a9062df4e53f54e5607895e33c9"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "http",
+ "reqwest 0.13.2",
  "thiserror 2.0.18",
  "tower-service",
 ]
@@ -276,13 +290,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "78ab210f6cdf8fd3254d47e5ee27ce60ed34a428ff71b4ae9477b1c84b49498c"
 dependencies = [
  "anyhow",
- "astral-reqwest-middleware",
+ "astral-reqwest-middleware 0.4.2",
  "async-trait",
  "futures",
  "getrandom 0.2.16",
  "http",
  "hyper",
- "reqwest",
+ "reqwest 0.12.22",
  "retry-policies",
  "thiserror 2.0.18",
  "tokio",
@@ -326,18 +340,18 @@ dependencies = [
 
 [[package]]
 name = "astral_async_http_range_reader"
-version = "0.9.1"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ddaca0fbbf0d91103cca7c7611790c65f6eff1d456f7fe6bf565d436dc9b8f3"
+checksum = "7ab9a05148c7b3e85c17806fef4b2889c44f1a60575c5da9e9be80ce13227185"
 dependencies = [
- "astral-reqwest-middleware",
+ "astral-reqwest-middleware 0.5.1",
  "bisection",
  "futures",
  "http-content-range",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "memmap2",
- "reqwest",
- "thiserror 1.0.69",
+ "reqwest 0.13.2",
+ "thiserror 2.0.18",
  "tokio",
  "tokio-stream",
  "tokio-util",
@@ -446,7 +460,7 @@ dependencies = [
  "lazy_static",
  "miette",
  "mime",
- "reqwest",
+ "reqwest 0.12.22",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -2410,15 +2424,6 @@ dependencies = [
 
 [[package]]
 name = "itertools"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
-dependencies = [
- "either",
-]
-
-[[package]]
-name = "itertools"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
@@ -2485,9 +2490,9 @@ dependencies = [
 
 [[package]]
 name = "js-sys"
-version = "0.3.77"
+version = "0.3.90"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1cfaf33c695fc6e08064efbc1f72ec937429614f25eef83af942d0e227c3a28f"
+checksum = "14dc6f6450b3f6d4ed5b16327f38fed626d375a886159ca555bd7822c0c3a5a6"
 dependencies = [
  "once_cell",
  "wasm-bindgen",
@@ -3890,7 +3895,7 @@ dependencies = [
  "percent-encoding",
  "rand 0.8.5",
  "reqsign-core",
- "reqwest",
+ "reqwest 0.12.22",
  "rsa",
  "serde",
  "serde_json",
@@ -3910,7 +3915,7 @@ dependencies = [
  "http",
  "http-body-util",
  "reqsign-core",
- "reqwest",
+ "reqwest 0.12.22",
  "wasm-bindgen-futures",
 ]
 
@@ -3955,9 +3960,41 @@ dependencies = [
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
- "wasm-streams",
+ "wasm-streams 0.4.2",
  "web-sys",
  "webpki-roots",
+]
+
+[[package]]
+name = "reqwest"
+version = "0.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab3f43e3283ab1488b624b44b0e988d0acea0b3214e694730a055cb6b2efa801"
+dependencies = [
+ "base64 0.22.1",
+ "bytes",
+ "futures-core",
+ "futures-util",
+ "http",
+ "http-body",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "js-sys",
+ "log",
+ "percent-encoding",
+ "pin-project-lite",
+ "sync_wrapper",
+ "tokio",
+ "tokio-util",
+ "tower",
+ "tower-http",
+ "tower-service",
+ "url",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "wasm-streams 0.5.0",
+ "web-sys",
 ]
 
 [[package]]
@@ -5310,9 +5347,9 @@ dependencies = [
 
 [[package]]
 name = "tower-http"
-version = "0.6.6"
+version = "0.6.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "adc82fd73de2a9722ac5da747f12383d2bfdb93591ee6c58486e0097890f05f2"
+checksum = "d4e6559d53cc268e5031cd8429d05415bc4cb4aefc4aa5d6cc35fbf5b924a1f8"
 dependencies = [
  "bitflags 2.11.0",
  "bytes",
@@ -5728,7 +5765,7 @@ dependencies = [
  "petgraph",
  "predicates",
  "regex",
- "reqwest",
+ "reqwest 0.12.22",
  "rkyv",
  "rustc-hash",
  "self-replace",
@@ -5817,7 +5854,7 @@ version = "0.0.27"
 dependencies = [
  "anyhow",
  "arcstr",
- "astral-reqwest-middleware",
+ "astral-reqwest-middleware 0.4.2",
  "async-trait",
  "base64 0.22.1",
  "etcetera",
@@ -5828,7 +5865,7 @@ dependencies = [
  "jiff",
  "percent-encoding",
  "reqsign",
- "reqwest",
+ "reqwest 0.12.22",
  "rust-netrc",
  "rustc-hash",
  "schemars",
@@ -5885,12 +5922,12 @@ dependencies = [
 name = "uv-bin-install"
 version = "0.0.27"
 dependencies = [
- "astral-reqwest-middleware",
+ "astral-reqwest-middleware 0.4.2",
  "astral-reqwest-retry",
  "fs-err",
  "futures",
  "jiff",
- "reqwest",
+ "reqwest 0.12.22",
  "serde",
  "serde_json",
  "tempfile",
@@ -6094,7 +6131,7 @@ name = "uv-client"
 version = "0.0.27"
 dependencies = [
  "anyhow",
- "astral-reqwest-middleware",
+ "astral-reqwest-middleware 0.4.2",
  "astral-reqwest-retry",
  "astral-tl",
  "astral_async_http_range_reader",
@@ -6115,7 +6152,7 @@ dependencies = [
  "percent-encoding",
  "rcgen",
  "regex",
- "reqwest",
+ "reqwest 0.12.22",
  "rkyv",
  "rmp-serde",
  "rustc-hash",
@@ -6163,7 +6200,7 @@ dependencies = [
  "fs-err",
  "insta",
  "rayon",
- "reqwest",
+ "reqwest 0.12.22",
  "rustc-hash",
  "same-file",
  "schemars",
@@ -6208,7 +6245,7 @@ dependencies = [
  "owo-colors",
  "poloto",
  "pretty_assertions",
- "reqwest",
+ "reqwest 0.12.22",
  "resvg",
  "schemars",
  "serde",
@@ -6292,7 +6329,7 @@ name = "uv-distribution"
 version = "0.0.27"
 dependencies = [
  "anyhow",
- "astral-reqwest-middleware",
+ "astral-reqwest-middleware 0.4.2",
  "either",
  "fs-err",
  "futures",
@@ -6300,7 +6337,7 @@ dependencies = [
  "insta",
  "nanoid",
  "owo-colors",
- "reqwest",
+ "reqwest 0.12.22",
  "rmp-serde",
  "rustc-hash",
  "serde",
@@ -6406,7 +6443,7 @@ dependencies = [
  "md-5",
  "rayon",
  "regex",
- "reqwest",
+ "reqwest 0.12.22",
  "rustc-hash",
  "sha2",
  "tar",
@@ -6465,12 +6502,12 @@ name = "uv-git"
 version = "0.0.27"
 dependencies = [
  "anyhow",
- "astral-reqwest-middleware",
+ "astral-reqwest-middleware 0.4.2",
  "cargo-util",
  "dashmap",
  "fs-err",
  "owo-colors",
- "reqwest",
+ "reqwest 0.12.22",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -6772,7 +6809,7 @@ version = "0.0.27"
 dependencies = [
  "ambient-id",
  "anstream 1.0.0",
- "astral-reqwest-middleware",
+ "astral-reqwest-middleware 0.4.2",
  "astral-reqwest-retry",
  "astral-tokio-tar",
  "async-compression",
@@ -6783,7 +6820,7 @@ dependencies = [
  "glob",
  "insta",
  "itertools 0.14.0",
- "reqwest",
+ "reqwest 0.12.22",
  "rustc-hash",
  "serde",
  "serde_json",
@@ -6847,7 +6884,7 @@ version = "0.0.27"
 dependencies = [
  "anyhow",
  "assert_fs",
- "astral-reqwest-middleware",
+ "astral-reqwest-middleware 0.4.2",
  "astral-reqwest-retry",
  "clap",
  "configparser",
@@ -6862,7 +6899,7 @@ dependencies = [
  "owo-colors",
  "ref-cast",
  "regex",
- "reqwest",
+ "reqwest 0.12.22",
  "rmp-serde",
  "rustc-hash",
  "same-file",
@@ -6957,14 +6994,14 @@ version = "0.0.27"
 dependencies = [
  "anyhow",
  "assert_fs",
- "astral-reqwest-middleware",
+ "astral-reqwest-middleware 0.4.2",
  "fs-err",
  "indoc",
  "insta",
  "itertools 0.14.0",
  "memchr",
  "regex",
- "reqwest",
+ "reqwest 0.12.22",
  "rustc-hash",
  "tempfile",
  "test-case",
@@ -7168,7 +7205,7 @@ dependencies = [
  "itertools 0.14.0",
  "predicates",
  "regex",
- "reqwest",
+ "reqwest 0.12.22",
  "similar",
  "tempfile",
  "tokio",
@@ -7445,37 +7482,25 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen"
-version = "0.2.100"
+version = "0.2.113"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1edc8929d7499fc4e8f0be2262a241556cfc54a0bea223790e71446f2aab1ef5"
+checksum = "60722a937f594b7fde9adb894d7c092fc1bb6612897c46368d18e7a20208eff2"
 dependencies = [
  "cfg-if",
  "once_cell",
  "rustversion",
  "wasm-bindgen-macro",
-]
-
-[[package]]
-name = "wasm-bindgen-backend"
-version = "0.2.100"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f0a0651a5c2bc21487bde11ee802ccaf4c51935d0d3d42a6101f98161700bc6"
-dependencies = [
- "bumpalo",
- "log",
- "proc-macro2",
- "quote",
- "syn",
  "wasm-bindgen-shared",
 ]
 
 [[package]]
 name = "wasm-bindgen-futures"
-version = "0.4.50"
+version = "0.4.63"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "555d470ec0bc3bb57890405e5d4322cc9ea83cebb085523ced7be4144dac1e61"
+checksum = "8a89f4650b770e4521aa6573724e2aed4704372151bd0de9d16a3bbabb87441a"
 dependencies = [
  "cfg-if",
+ "futures-util",
  "js-sys",
  "once_cell",
  "wasm-bindgen",
@@ -7484,9 +7509,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro"
-version = "0.2.100"
+version = "0.2.113"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7fe63fc6d09ed3792bd0897b314f53de8e16568c2b3f7982f468c0bf9bd0b407"
+checksum = "0fac8c6395094b6b91c4af293f4c79371c163f9a6f56184d2c9a85f5a95f3950"
 dependencies = [
  "quote",
  "wasm-bindgen-macro-support",
@@ -7494,22 +7519,22 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro-support"
-version = "0.2.100"
+version = "0.2.113"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8ae87ea40c9f689fc23f209965b6fb8a99ad69aeeb0231408be24920604395de"
+checksum = "ab3fabce6159dc20728033842636887e4877688ae94382766e00b180abac9d60"
 dependencies = [
+ "bumpalo",
  "proc-macro2",
  "quote",
  "syn",
- "wasm-bindgen-backend",
  "wasm-bindgen-shared",
 ]
 
 [[package]]
 name = "wasm-bindgen-shared"
-version = "0.2.100"
+version = "0.2.113"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1a05d73b933a847d6cccdda8f838a22ff101ad9bf93e33684f39c1f5f0eece3d"
+checksum = "de0e091bdb824da87dc01d967388880d017a0a9bc4f3bdc0d86ee9f9336e3bb5"
 dependencies = [
  "unicode-ident",
 ]
@@ -7550,6 +7575,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasm-streams"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9d1ec4f6517c9e11ae630e200b2b65d193279042e28edd4a2cda233e46670bbb"
+dependencies = [
+ "futures-util",
+ "js-sys",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
 name = "wasmparser"
 version = "0.244.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7577,9 +7615,9 @@ dependencies = [
 
 [[package]]
 name = "web-sys"
-version = "0.3.77"
+version = "0.3.90"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33b6dd2ef9186f1f2072e409e99cd22a975331a6b3591b12c764e0e55c60d5d2"
+checksum = "705eceb4ce901230f8625bd1d665128056ccbe4b7408faa625eec1ba80f59a97"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
