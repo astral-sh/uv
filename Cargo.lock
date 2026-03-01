@@ -7187,6 +7187,7 @@ name = "uv-tool"
 version = "0.0.27"
 dependencies = [
  "fs-err",
+ "owo-colors",
  "pathdiff",
  "serde",
  "thiserror 2.0.18",

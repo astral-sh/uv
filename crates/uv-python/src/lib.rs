@@ -17,7 +17,7 @@ pub use crate::installation::{
     PythonInstallation, PythonInstallationKey, PythonInstallationMinorVersionKey,
 };
 pub use crate::interpreter::{
-    BrokenSymlink, Error as InterpreterError, Interpreter, canonicalize_executable,
+    BrokenLink, Error as InterpreterError, Interpreter, canonicalize_executable,
 };
 pub use crate::pointer_size::PointerSize;
 pub use crate::prefix::Prefix;
