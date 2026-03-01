@@ -5299,7 +5299,7 @@ build-backend = "hatchling.build"
 /// Like [`requires_python_source_dist_installed_incompatible`], but using a registry package
 /// (`iniconfig`) instead of a direct URL, with `--no-binary` to force building from source.
 #[test]
-fn requires_python_source_dist_installed_incompatible_registry() -> Result<()> {
+fn requires_python_source_dist_installed_incompatible_registry() {
     let context = uv_test::test_context!("3.9").with_exclude_newer("2025-11-01T00:00:00Z");
 
     // `--python-version 3.10` satisfies `requires-python >= 3.10`, so resolution succeeds
@@ -5321,8 +5321,6 @@ fn requires_python_source_dist_installed_incompatible_registry() -> Result<()> {
      + iniconfig==2.3.0
     "
     );
-
-    Ok(())
 }
 
 /// Install with `--no-build-isolation`, to disable isolation during PEP 517 builds.
