@@ -5253,6 +5253,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "toml_datetime"
+version = "1.0.0+spec-1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32c2555c699578a4f59f0cc68e5116c8d7cabbd45e1409b989d4be085b53f13e"
+dependencies = [
+ "serde_core",
+]
+
+[[package]]
 name = "toml_edit"
 version = "0.22.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5265,14 +5274,14 @@ dependencies = [
 
 [[package]]
 name = "toml_edit"
-version = "0.24.0+spec-1.1.0"
+version = "0.25.3+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c740b185920170a6d9191122cafef7010bd6270a3824594bff6784c04d7f09e"
+checksum = "a0a07913e63758bc95142d9863a5a45173b71515e68b690cad70cf99c3255ce1"
 dependencies = [
  "indexmap",
  "serde_core",
  "serde_spanned",
- "toml_datetime 0.7.5+spec-1.1.0",
+ "toml_datetime 1.0.0+spec-1.1.0",
  "toml_parser",
  "toml_writer",
  "winnow",
@@ -5280,9 +5289,9 @@ dependencies = [
 
 [[package]]
 name = "toml_parser"
-version = "1.0.6+spec-1.1.0"
+version = "1.0.9+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3198b4b0a8e11f09dd03e133c0280504d0801269e9afa46362ffde1cbeebf44"
+checksum = "702d4415e08923e7e1ef96cd5727c0dfed80b4d2fa25db9647fe5eb6f7c5a4c4"
 dependencies = [
  "winnow",
 ]
@@ -5743,7 +5752,7 @@ dependencies = [
  "tokio-stream",
  "tokio-util",
  "toml",
- "toml_edit 0.24.0+spec-1.1.0",
+ "toml_edit 0.25.3+spec-1.1.0",
  "tracing",
  "tracing-durations-export",
  "tracing-subscriber",
@@ -5982,7 +5991,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
- "toml_edit 0.24.0+spec-1.1.0",
+ "toml_edit 0.25.3+spec-1.1.0",
  "tracing",
  "uv-auth",
  "uv-cache-key",
@@ -6828,7 +6837,7 @@ dependencies = [
  "serde-untagged",
  "serde_json",
  "thiserror 2.0.18",
- "toml_edit 0.24.0+spec-1.1.0",
+ "toml_edit 0.25.3+spec-1.1.0",
  "tracing",
  "url",
  "uv-cache-key",
@@ -7015,7 +7024,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "toml",
- "toml_edit 0.24.0+spec-1.1.0",
+ "toml_edit 0.25.3+spec-1.1.0",
  "tracing",
  "url",
  "uv-cache-key",
@@ -7191,7 +7200,7 @@ dependencies = [
  "serde",
  "thiserror 2.0.18",
  "toml",
- "toml_edit 0.24.0+spec-1.1.0",
+ "toml_edit 0.25.3+spec-1.1.0",
  "tracing",
  "uv-cache",
  "uv-dirs",
@@ -7342,7 +7351,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "toml",
- "toml_edit 0.24.0+spec-1.1.0",
+ "toml_edit 0.25.3+spec-1.1.0",
  "tracing",
  "uv-build-backend",
  "uv-cache-key",
