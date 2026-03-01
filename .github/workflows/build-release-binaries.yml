@@ -940,6 +940,8 @@ jobs:
   musllinux-cross:
     name: ${{ matrix.platform.target }}
     runs-on: depot-ubuntu-24.04-8
+    env:
+      CARGO_TARGET_RISCV64GC_UNKNOWN_LINUX_MUSL_RUSTFLAGS: "-C target-feature=+crt-static"
     strategy:
       matrix:
         platform:
@@ -950,7 +952,6 @@ jobs:
             arch: armv7
           - target: riscv64gc-unknown-linux-musl
             arch: riscv64
-            maturin_docker_options: -e CARGO_TARGET_RISCV64GC_UNKNOWN_LINUX_MUSL_RUSTFLAGS='-C target-feature=+crt-static'
       fail-fast: false
 
     steps:
