@@ -816,7 +816,7 @@ enum RequirementSourceWire {
     Registry {
         #[serde(skip_serializing_if = "VersionSpecifiers::is_empty", default)]
         specifier: VersionSpecifiers,
-        index: Option<DisplaySafeUrl>,
+        index: Option<String>,
         conflict: Option<ConflictItem>,
     },
 }
@@ -829,9 +829,22 @@ impl From<RequirementSource> for RequirementSourceWire {
                 index,
                 conflict,
             } => {
-                let index = index.map(|index| index.url.into_url()).map(|mut index| {
-                    index.remove_credentials();
-                    index
+                let index = index.map(|index| {
+                    // Check if this is a path index that was originally relative
+                    if let IndexUrl::Path(path_url) = &index.url {
+                        if let Some(given) = path_url.given() {
+                            let given_path = Path::new(given);
+                            // For relative paths, preserve the original string directly
+                            if given_path.is_relative() && !given.starts_with("file://") {
+                                return given.to_string();
+                            }
+                        }
+                    }
+
+                    // Default behavior for absolute paths and non-path URLs
+                    let mut url = index.url.into_url();
+                    url.remove_credentials();
+                    url.to_string()
                 });
                 Self::Registry {
                     specifier,
@@ -943,12 +956,22 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 specifier,
                 index,
                 conflict,
-            } => Ok(Self::Registry {
-                specifier,
-                index: index
-                    .map(|index| IndexMetadata::from(IndexUrl::from(VerbatimUrl::from_url(index)))),
-                conflict,
-            }),
+            } => {
+                let index = if let Some(index_str) = index {
+                    let verbatim_url = VerbatimUrl::from_url_or_path(&index_str, None)?;
+                    Some(IndexMetadata::from(IndexUrl::from(
+                        verbatim_url.with_given(&index_str),
+                    )))
+                } else {
+                    None
+                };
+
+                Ok(Self::Registry {
+                    specifier,
+                    index,
+                    conflict,
+                })
+            }
             RequirementSourceWire::Git { git } => {
                 let mut repository = DisplaySafeUrl::parse(&git)?;
 

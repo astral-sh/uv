@@ -3612,10 +3612,24 @@ impl Source {
                 let path = url
                     .to_file_path()
                     .map_err(|()| LockErrorKind::UrlToPath { url: url.to_url() })?;
+                // Try to compute a relative path from the project root. If that fails (e.g., paths
+                // on different drives), preserve the original relative path from the user's config
+                // via `url.given()` if available, since flat indices should remain relative.
+                // Otherwise, fall back to an absolute path.
                 let path = relative_to(&path, root)
-                    .or_else(|_| std::path::absolute(&path))
-                    .map_err(LockErrorKind::IndexRelativePath)?;
-                let source = RegistrySource::Path(path.into_boxed_path());
+                    .or_else(|_| {
+                        if let Some(given) = url.given() {
+                            let given_path = Path::new(given);
+                            if given_path.is_relative() {
+                                return Ok(uv_fs::normalize_path(given_path).into_owned());
+                            }
+                        }
+                        std::path::absolute(&path)
+                    })
+                    .map_err(LockErrorKind::IndexRelativePath)?
+                    .into_boxed_path();
+
+                let source = RegistrySource::Path(path);
                 Ok(Self::Registry(source))
             }
         }
