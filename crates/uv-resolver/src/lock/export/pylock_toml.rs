@@ -1324,11 +1324,14 @@ impl PylockTomlPackage {
     pub fn as_git_ref(&self) -> Option<ResolvedRepositoryReference> {
         let vcs = self.vcs.as_ref()?;
         let url = vcs.url.as_ref()?;
-        let requested_revision = vcs.requested_revision.as_ref()?;
+        let reference = match vcs.requested_revision.as_ref() {
+            Some(rev) => GitReference::from_rev(rev.clone()),
+            None => GitReference::DefaultBranch,
+        };
         Some(ResolvedRepositoryReference {
             reference: RepositoryReference {
                 url: RepositoryUrl::new(url),
-                reference: GitReference::from_rev(requested_revision.clone()),
+                reference,
             },
             sha: vcs.commit_id,
         })
