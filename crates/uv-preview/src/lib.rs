@@ -38,6 +38,7 @@ pub enum PreviewFeature {
     SpecialCondaEnvNames = 1 << 23,
     RelocatableEnvsDefault = 1 << 24,
     PublishRequireNormalized = 1 << 25,
+    ProjectDirectoryMustExist = 1 << 26,
 }
 
 impl PreviewFeature {
@@ -70,6 +71,7 @@ impl PreviewFeature {
             Self::SpecialCondaEnvNames => "special-conda-env-names",
             Self::RelocatableEnvsDefault => "relocatable-envs-default",
             Self::PublishRequireNormalized => "publish-require-normalized",
+            Self::ProjectDirectoryMustExist => "project-directory-must-exist",
         }
     }
 }
@@ -115,6 +117,7 @@ impl FromStr for PreviewFeature {
             "special-conda-env-names" => Self::SpecialCondaEnvNames,
             "relocatable-envs-default" => Self::RelocatableEnvsDefault,
             "publish-require-normalized" => Self::PublishRequireNormalized,
+            "project-directory-must-exist" => Self::ProjectDirectoryMustExist,
             _ => return Err(PreviewFeatureParseError),
         })
     }
@@ -359,6 +362,10 @@ mod tests {
         assert_eq!(
             PreviewFeature::PublishRequireNormalized.as_str(),
             "publish-require-normalized"
+        );
+        assert_eq!(
+            PreviewFeature::ProjectDirectoryMustExist.as_str(),
+            "project-directory-must-exist"
         );
     }
 }
