@@ -149,7 +149,7 @@ pub enum UpgradeStrategy {
 #[derive(Debug, Default, Clone)]
 pub struct Upgrade {
     /// Strategy for picking packages to consider for upgrade.
-    pub strategy: UpgradeStrategy,
+    strategy: UpgradeStrategy,
 
     /// Additional version constraints for specific packages.
     constraints: FxHashMap<PackageName, Vec<Requirement>>,
@@ -180,7 +180,7 @@ impl Upgrade {
                 if upgrade_package.is_empty() {
                     return Some(Self::none());
                 }
-                // `--no-upgrade` with `--upgrade-package` allows selecting the specified packages for upgrade
+                // `--no-upgrade` with `--upgrade-package` allows selecting the specified packages for upgrade.
                 let packages = upgrade_package.iter().map(|req| req.name.clone()).collect();
                 UpgradeStrategy::Packages(packages)
             }
@@ -195,13 +195,12 @@ impl Upgrade {
 
         let mut constraints: FxHashMap<PackageName, Vec<Requirement>> = FxHashMap::default();
         for requirement in upgrade_package {
-            // skip any empty constraints
+            // Skip any "empty" constraints.
             if let RequirementSource::Registry { specifier, .. } = &requirement.source {
                 if specifier.is_empty() {
                     continue;
                 }
             }
-
             constraints
                 .entry(requirement.name.clone())
                 .or_default()
@@ -255,18 +254,21 @@ impl Upgrade {
     /// Combine a set of [`Upgrade`] values.
     #[must_use]
     pub fn combine(self, other: Self) -> Self {
-        // strategy: `other` takes precedence for explicit All/None, otherwise we merge
+        // For `strategy`: `other` takes precedence for an explicit `All` or `None`; otherwise, merge.
         let strategy = match (self.strategy, other.strategy) {
             (_, UpgradeStrategy::All) => UpgradeStrategy::All,
             (_, UpgradeStrategy::None) => UpgradeStrategy::None,
-            (UpgradeStrategy::Packages(mut self_pkgs), UpgradeStrategy::Packages(other_pkgs)) => {
-                self_pkgs.extend(other_pkgs);
-                UpgradeStrategy::Packages(self_pkgs)
+            (
+                UpgradeStrategy::Packages(mut self_packages),
+                UpgradeStrategy::Packages(other_packages),
+            ) => {
+                self_packages.extend(other_packages);
+                UpgradeStrategy::Packages(self_packages)
             }
-            (_, UpgradeStrategy::Packages(pkgs)) => UpgradeStrategy::Packages(pkgs),
+            (_, UpgradeStrategy::Packages(packages)) => UpgradeStrategy::Packages(packages),
         };
 
-        // constraints: always merge the constraints of `self` + `other`
+        // For `constraints`: always merge the constraints of `self` and `other`.
         let mut combined_constraints = self.constraints.clone();
         for (package, requirements) in other.constraints {
             combined_constraints

@@ -1080,12 +1080,13 @@ impl ValidatedLock {
 
         if upgrade.is_all() {
             // If the user specified `--upgrade`, then we can't use the existing lockfile.
+            //
+            // If the user is upgrading a subset of packages, we handle it below, after some checks
+            // regarding fork markers. In particular, we'd like to return `Preferable` here, but we
+            // shouldn't if the fork markers cannot be reused.
             debug!("Ignoring existing lockfile due to `--upgrade`");
             return Ok(Self::Unusable(lock));
         }
-        // If upgrade is `Packages`, this is handled below, after some checks regarding fork
-        // markers. In particular, we'd like to return `Preferable` here, but we shouldn't if
-        // the fork markers cannot be reused.
 
         // NOTE: It's important that this appears before any possible path that
         // returns `Self::Preferable`. In particular, if our fork markers are
