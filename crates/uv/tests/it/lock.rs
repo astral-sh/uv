@@ -23467,6 +23467,9 @@ fn lock_multiple_sources_extra() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = { virtual = "." }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
 
         [package.optional-dependencies]
         cpu = [

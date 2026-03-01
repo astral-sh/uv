@@ -108,7 +108,14 @@ impl PubGrubPackage {
         // extras end up having two distinct marker expressions, which in turn
         // makes them two distinct packages. This results in PubGrub being
         // unable to unify version constraints across such packages.
-        let marker = marker.simplify_extras_with(|_| true);
+        //
+        // We use `without_extras()` rather than `simplify_extras_with(|_| true)`
+        // because the latter assumes all extras are active, which incorrectly
+        // turns `extra != 'foo'` into FALSE (an impossible marker). In contrast,
+        // `without_extras()` removes extras by OR-ing both branches, preserving
+        // the non-extra part of the marker for both `extra == '...'` and
+        // `extra != '...'` expressions.
+        let marker = marker.without_extras();
         if let Some(extra) = extra {
             Self(Arc::new(PubGrubPackageInner::Extra {
                 name,
