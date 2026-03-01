@@ -9,7 +9,7 @@ use tempfile::tempdir_in;
 use uv_fs::Simplified;
 use uv_static::EnvVars;
 
-use uv_test::{TestContext, download_to_disk, packse_index_url, uv_snapshot, venv_bin_path};
+use uv_test::{TestContext, download_to_disk, uv_snapshot, venv_bin_path};
 
 #[test]
 fn sync() -> Result<()> {
@@ -12682,6 +12682,8 @@ fn direct_url_dependency_metadata() -> Result<()> {
 
 #[test]
 fn sync_required_environment_hint() -> Result<()> {
+    let server =
+        uv_test::packse::PackseServer::new("wheels/no-sdist-no-wheels-with-matching-platform.toml");
     let context = uv_test::test_context!("3.13");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -12690,14 +12692,14 @@ fn sync_required_environment_hint() -> Result<()> {
         name = "example"
         version = "0.1.0"
         requires-python = ">=3.13"
-        dependencies = ["no-sdist-no-wheels-with-matching-platform-a"]
+        dependencies = ["a"]
 
         [[tool.uv.index]]
         name = "packse"
-        url = "{}"
+        url = "{index_url}"
         default = true
         "#,
-        packse_index_url()
+        index_url = server.index_url()
     })?;
 
     uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
@@ -12726,9 +12728,9 @@ fn sync_required_environment_hint() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    error: Distribution `no-sdist-no-wheels-with-matching-platform-a==1.0.0 @ registry+https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/` can't be installed because it doesn't have a source distribution or wheel for the current platform
+    error: Distribution `a==1.0.0 @ registry+http://[LOCALHOST]/simple/` can't be installed because it doesn't have a source distribution or wheel for the current platform
 
-    hint: You're on [PLATFORM] (`[TAG]`), but `no-sdist-no-wheels-with-matching-platform-a` (v1.0.0) only has wheels for the following platform: `macosx_10_0_ppc64`; consider adding "sys_platform == '[PLATFORM]' and platform_machine == '[MACHINE]'" to `tool.uv.required-environments` to ensure uv resolves to a version with compatible wheels
+    hint: You're on [PLATFORM] (`[TAG]`), but `a` (v1.0.0) only has wheels for the following platform: `macosx_10_0_ppc64`; consider adding "sys_platform == '[PLATFORM]' and platform_machine == '[MACHINE]'" to `tool.uv.required-environments` to ensure uv resolves to a version with compatible wheels
     "#);
 
     Ok(())

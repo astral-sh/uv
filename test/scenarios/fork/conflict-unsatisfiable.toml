@@ -1,0 +1,23 @@
+name = "fork-conflict-unsatisfiable"
+description = '''
+This test ensures that conflicting dependency specifications lead to an
+unsatisfiable result.
+
+In particular, this is a case that should not fork even though there
+are conflicting requirements because their marker expressions are
+overlapping. (Well, there aren't any marker expressions here, which
+means they are both unconditional.)
+'''
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = false
+
+[root]
+requires = ["a>=2", "a<2"]
+
+[packages.a.versions."1.0.0"]
+[packages.a.versions."2.0.0"]
+[packages.a.versions."3.0.0"]

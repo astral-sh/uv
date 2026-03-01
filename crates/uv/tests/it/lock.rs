@@ -8,11 +8,10 @@ use url::Url;
 
 use uv_fs::Simplified;
 use uv_static::EnvVars;
+use uv_test::packse::PackseServer;
 #[cfg(feature = "test-git")]
 use uv_test::{READ_ONLY_GITHUB_TOKEN, decode_token};
-use uv_test::{
-    build_vendor_links_url, download_to_disk, packse_index_url, uv_snapshot, venv_bin_path,
-};
+use uv_test::{download_to_disk, uv_snapshot, venv_bin_path};
 
 #[test]
 fn lock_wheel_registry() -> Result<()> {
@@ -11472,12 +11471,13 @@ fn lock_upgrade_package() -> Result<()> {
 #[test]
 fn lock_upgrade_drop_fork_markers() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
 
     let requirements = r#"[project]
     name = "forking"
     version = "0.1.0"
     requires-python = ">=3.12"
-    dependencies = ["fork-upgrade-foo==1"]
+    dependencies = ["foo==1"]
 
     [build-system]
         requires = ["flit_core>=3.8,<4"]
@@ -11489,7 +11489,7 @@ fn lock_upgrade_drop_fork_markers() -> Result<()> {
     context
         .lock()
         .arg("--index-url")
-        .arg(packse_index_url())
+        .arg(server.index_url())
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .assert()
         .success();
@@ -11497,11 +11497,11 @@ fn lock_upgrade_drop_fork_markers() -> Result<()> {
     assert!(lock.contains("resolution-markers"));
 
     // Remove the bound and lock with `--upgrade`.
-    pyproject_toml.write_str(&requirements.replace("fork-upgrade-foo==1", "fork-upgrade-foo"))?;
+    pyproject_toml.write_str(&requirements.replace("foo==1", "foo"))?;
     context
         .lock()
         .arg("--index-url")
-        .arg(packse_index_url())
+        .arg(server.index_url())
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--upgrade")
         .assert()
@@ -12009,6 +12009,8 @@ fn lock_find_links_local_sdist() -> Result<()> {
 #[test]
 fn lock_find_links_http_wheel() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let vendor =
+        uv_test::find_links::FindLinksServer::new(&context.workspace_root.join("test/vendor"));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! { r#"
@@ -12019,10 +12021,10 @@ fn lock_find_links_http_wheel() -> Result<()> {
         dependencies = ["packaging==23.2"]
 
         [tool.uv]
-        find-links = ["{}"]
+        find-links = ["{vendor_url}"]
         no-build-package = ["packaging"]
         "#,
-        build_vendor_links_url()
+        vendor_url = vendor.url()
     })?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
@@ -12051,10 +12053,10 @@ fn lock_find_links_http_wheel() -> Result<()> {
         [[package]]
         name = "packaging"
         version = "23.2"
-        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/vendor/" }
-        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/vendor/build/packaging-23.2.tar.gz" }
+        source = { registry = "http://[LOCALHOST]/" }
+        sdist = { url = "http://[LOCALHOST]/packaging-23.2.tar.gz" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/vendor/build/packaging-23.2-py3-none-any.whl" },
+            { url = "http://[LOCALHOST]/packaging-23.2-py3-none-any.whl" },
         ]
 
         [[package]]
@@ -12100,6 +12102,8 @@ fn lock_find_links_http_wheel() -> Result<()> {
 #[test]
 fn lock_find_links_http_sdist() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let vendor =
+        uv_test::find_links::FindLinksServer::new(&context.workspace_root.join("test/vendor"));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! { r#"
@@ -12110,10 +12114,10 @@ fn lock_find_links_http_sdist() -> Result<()> {
         dependencies = ["packaging==23.2"]
 
         [tool.uv]
-        find-links = ["{}"]
+        find-links = ["{vendor_url}"]
         no-binary-package = ["packaging"]
         "#,
-        build_vendor_links_url()
+        vendor_url = vendor.url()
     })?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
@@ -12142,10 +12146,10 @@ fn lock_find_links_http_sdist() -> Result<()> {
         [[package]]
         name = "packaging"
         version = "23.2"
-        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/vendor/" }
-        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/vendor/build/packaging-23.2.tar.gz" }
+        source = { registry = "http://[LOCALHOST]/" }
+        sdist = { url = "http://[LOCALHOST]/packaging-23.2.tar.gz" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/vendor/build/packaging-23.2-py3-none-any.whl" },
+            { url = "http://[LOCALHOST]/packaging-23.2-py3-none-any.whl" },
         ]
 
         [[package]]
@@ -19803,9 +19807,10 @@ fn lock_repeat_named_index_cli() -> Result<()> {
         );
     });
 
-    // Resolve to PyPI, since the PyTorch index is replaced by the Packse index, which doesn't
+    // Resolve to PyPI, since the PyTorch index is replaced by an empty index, which doesn't
     // include `jinja2`.
-    uv_snapshot!(context.filters(), context.lock().arg("--index").arg(format!("pytorch={}", packse_index_url())), @"
+    let empty_index = PackseServer::empty();
+    uv_snapshot!(context.filters(), context.lock().arg("--index").arg(format!("pytorch={}", empty_index.index_url())), @"
     success: true
     exit_code: 0
     ----- stdout -----

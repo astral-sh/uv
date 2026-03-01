@@ -1,0 +1,26 @@
+name = "fork-marker-disjoint"
+description = '''
+A basic test that ensures, at least in this one basic case, that forking in
+universal resolution happens only when the corresponding marker expressions are
+completely disjoint. Here, we provide two completely incompatible dependency
+specifications with equivalent markers. Thus, they are trivially not disjoint,
+and resolution should fail.
+
+NOTE: This acts a regression test for the initial version of universal
+resolution that would fork whenever a package was repeated in the list of
+dependency specifications. So previously, this would produce a resolution with
+both `1.0.0` and `2.0.0` of `a`. But of course, the correct behavior is to fail
+resolving.
+'''
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = false
+
+[root]
+requires = ["a>=2 ; sys_platform == 'linux'", "a<2 ; sys_platform == 'linux'"]
+
+[packages.a.versions."1.0.0"]
+[packages.a.versions."2.0.0"]

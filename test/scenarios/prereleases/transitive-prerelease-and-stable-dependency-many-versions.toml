@@ -1,0 +1,53 @@
+name = "transitive-prerelease-and-stable-dependency-many-versions"
+description = "A transitive dependency has both a prerelease and a stable selector, but can only be satisfied by a prerelease. There are many prerelease versions."
+
+[root]
+requires = ["a", "b"]
+
+[expected]
+satisfiable = false
+explanation = "Since the user did not explicitly opt-in to a prerelease, it cannot be selected."
+
+[packages.a.versions."1.0.0"]
+requires = ["c>=2.0.0b1"]
+
+[packages.b.versions."1.0.0"]
+requires = ["c>=1.0.0,<=3.0.0"]
+
+[packages.c.versions."1.0.0"]
+
+[packages.c.versions."2.0.0a1"]
+
+[packages.c.versions."2.0.0a2"]
+
+[packages.c.versions."2.0.0a3"]
+
+[packages.c.versions."2.0.0a4"]
+
+[packages.c.versions."2.0.0a5"]
+
+[packages.c.versions."2.0.0a6"]
+
+[packages.c.versions."2.0.0a7"]
+
+[packages.c.versions."2.0.0a8"]
+
+[packages.c.versions."2.0.0a9"]
+
+[packages.c.versions."2.0.0b1"]
+
+[packages.c.versions."2.0.0b2"]
+
+[packages.c.versions."2.0.0b3"]
+
+[packages.c.versions."2.0.0b4"]
+
+[packages.c.versions."2.0.0b5"]
+
+[packages.c.versions."2.0.0b6"]
+
+[packages.c.versions."2.0.0b7"]
+
+[packages.c.versions."2.0.0b8"]
+
+[packages.c.versions."2.0.0b9"]

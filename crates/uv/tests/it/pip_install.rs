@@ -19,9 +19,9 @@ use uv_fs::Simplified;
 use uv_static::EnvVars;
 #[cfg(feature = "test-git")]
 use uv_test::decode_token;
+use uv_test::packse::PackseServer;
 use uv_test::{
-    DEFAULT_PYTHON_VERSION, TestContext, build_vendor_links_url, download_to_disk, get_bin,
-    packse_index_url, uv_snapshot, venv_bin_path,
+    DEFAULT_PYTHON_VERSION, TestContext, download_to_disk, get_bin, uv_snapshot, venv_bin_path,
 };
 
 #[test]
@@ -3913,6 +3913,7 @@ fn install_git_source_respects_offline_mode() {
 #[test]
 fn build_prerelease_hint() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("prereleases/transitive-package-only-prereleases-in-range.toml");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -3922,12 +3923,12 @@ fn build_prerelease_hint() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["transitive-package-only-prereleases-in-range-a"]
+        requires = ["a"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
     let mut command = context.pip_install();
-    command.arg("--index-url").arg(packse_index_url()).arg(".");
+    command.arg("--index-url").arg(server.index_url()).arg(".");
     command.env_remove(EnvVars::UV_EXCLUDE_NEWER);
 
     uv_snapshot!(
@@ -3942,11 +3943,11 @@ fn build_prerelease_hint() -> Result<()> {
     Resolved 1 package in [TIME]
       × Failed to build `project @ file://[TEMP_DIR]/`
       ├─▶ Failed to resolve requirements from `build-system.requires`
-      ├─▶ No solution found when resolving: `transitive-package-only-prereleases-in-range-a`
-      ╰─▶ Because only transitive-package-only-prereleases-in-range-b<=0.1 is available and transitive-package-only-prereleases-in-range-a==0.1.0 depends on transitive-package-only-prereleases-in-range-b>0.1, we can conclude that transitive-package-only-prereleases-in-range-a==0.1.0 cannot be used.
-          And because only transitive-package-only-prereleases-in-range-a==0.1.0 is available and you require transitive-package-only-prereleases-in-range-a, we can conclude that your requirements are unsatisfiable.
+      ├─▶ No solution found when resolving: `a`
+      ╰─▶ Because only b<=0.1 is available and a==0.1.0 depends on b>0.1, we can conclude that a==0.1.0 cannot be used.
+          And because only a==0.1.0 is available and you require a, we can conclude that your requirements are unsatisfiable.
 
-          hint: Only pre-releases of `transitive-package-only-prereleases-in-range-b` (e.g., 1.0.0a1) match these build requirements, and build environments can't enable pre-releases automatically. Add `transitive-package-only-prereleases-in-range-b>=1.0.0a1` to `build-system.requires`, `[tool.uv.extra-build-dependencies]`, or supply it via `uv build --build-constraint`.
+          hint: Only pre-releases of `b` (e.g., 1.0.0a1) match these build requirements, and build environments can't enable pre-releases automatically. Add `b>=1.0.0a1` to `build-system.requires`, `[tool.uv.extra-build-dependencies]`, or supply it via `uv build --build-constraint`.
     "
     );
 
@@ -6306,7 +6307,7 @@ fn already_installed_dependent_editable() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(build_vendor_links_url()), @"
+        .arg(context.workspace_root.join("test/vendor")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6347,7 +6348,7 @@ fn already_installed_dependent_editable() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(build_vendor_links_url()), @"
+        .arg(context.workspace_root.join("test/vendor")), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -6410,7 +6411,7 @@ fn already_installed_local_path_dependent() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(build_vendor_links_url()), @"
+        .arg(context.workspace_root.join("test/vendor")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6466,7 +6467,7 @@ fn already_installed_local_path_dependent() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(build_vendor_links_url()), @"
+        .arg(context.workspace_root.join("test/vendor")), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -6508,7 +6509,7 @@ fn already_installed_local_path_dependent() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(build_vendor_links_url()), @"
+        .arg(context.workspace_root.join("test/vendor")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6533,7 +6534,7 @@ fn already_installed_local_path_dependent() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(build_vendor_links_url()), @"
+        .arg(context.workspace_root.join("test/vendor")), @"
     success: true
     exit_code: 0
     ----- stdout -----

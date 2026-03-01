@@ -1,0 +1,31 @@
+name = "fork-non-local-fork-marker-transitive"
+description = '''
+This setup introduces dependencies on two distinct versions of `c`, where
+each such dependency has a marker expression attached that would normally
+make them disjoint. In a non-universal resolver, this is no problem. But in a
+forking resolver that tries to create one universal resolution, this can lead
+to two distinct versions of `c` in the resolution. This is in and of itself
+not a problem, since that is an expected scenario for universal resolution.
+The problem in this case is that because the dependency specifications for
+`c` occur in two different points (i.e., they are not sibling dependency
+specifications) in the dependency graph, the forking resolver does not "detect"
+it, and thus never forks and thus this results in "no resolution."
+'''
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = false
+
+[root]
+requires = ["a==1.0.0", "b==1.0.0"]
+
+[packages.a.versions."1.0.0"]
+requires = ["c<2.0.0 ; sys_platform == 'linux'"]
+
+[packages.b.versions."1.0.0"]
+requires = ["c>=2.0.0 ; sys_platform == 'darwin'"]
+
+[packages.c.versions."1.0.0"]
+[packages.c.versions."2.0.0"]

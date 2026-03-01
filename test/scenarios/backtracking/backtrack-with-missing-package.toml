@@ -1,0 +1,27 @@
+name = "backtrack-with-missing-package"
+description = """There are two packages, `a` and `b`. The latest version of `b` requires
+a specific version of `a`. The older version of `b` requires a package `c` that does not
+exist. The resolver should backtrack on `a` (not `b`) to find a solution without needing
+to try `b==1.0.0` which would fail due to the missing package."""
+
+[expected]
+satisfiable = true
+
+[expected.packages]
+a = "1.0.0"
+b = "2.0.0"
+
+[root]
+requires = ["a", "b"]
+
+[packages.a.versions]
+"1.0.0" = {}
+"2.0.0" = {}
+
+[packages.b.versions]
+# Old version requires a missing package - resolver should not need this
+"1.0.0" = { requires = ["c"] }
+# New version requires specific a version - should work with backtracking
+"2.0.0" = { requires = ["a==1.0.0"] }
+
+# Note: package `c` is intentionally not defined (missing package)

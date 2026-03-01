@@ -1,0 +1,15 @@
+name = "no-sdist-no-wheels-with-matching-abi"
+description = "No wheels with matching ABI tags are available, nor are any source distributions available"
+
+[root]
+requires = ["a"]
+
+[expected]
+satisfiable = false
+
+[packages.a.versions."1.0.0"]
+wheel_tags = ["py3-graalpy240_310_native-any"]
+sdist = false
+
+[resolver_options]
+python_platform = "x86_64-manylinux2014"

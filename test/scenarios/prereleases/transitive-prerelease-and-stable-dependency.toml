@@ -1,0 +1,19 @@
+name = "transitive-prerelease-and-stable-dependency"
+description = "A transitive dependency has both a prerelease and a stable selector, but can only be satisfied by a prerelease"
+
+[root]
+requires = ["a", "b"]
+
+[expected]
+satisfiable = false
+explanation = "Since the user did not explicitly opt-in to a prerelease, it cannot be selected."
+
+[packages.a.versions."1.0.0"]
+requires = ["c==2.0.0b1"]
+
+[packages.b.versions."1.0.0"]
+requires = ["c>=1.0.0,<=3.0.0"]
+
+[packages.c.versions."1.0.0"]
+
+[packages.c.versions."2.0.0b1"]

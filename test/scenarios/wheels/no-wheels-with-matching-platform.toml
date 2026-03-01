@@ -1,0 +1,11 @@
+name = "no-wheels-with-matching-platform"
+description = "No wheels with matching platform tags are available, just source distributions."
+
+[root]
+requires = ["a"]
+
+[expected]
+satisfiable = true
+
+[packages.a.versions."1.0.0"]
+wheel_tags = ["py3-any-macosx_10_0_ppc64"]

@@ -1,0 +1,23 @@
+name = "local-transitive-backtrack"
+description = "A dependency depends on a conflicting local version of a direct dependency, but we can backtrack to a compatible version."
+
+[root]
+requires = ["a", "b==2.0.0+foo"]
+
+[expected]
+satisfiable = true
+explanation = "Backtracking to '1.0.0' gives us compatible local versions of b."
+
+[expected.packages]
+a = "1.0.0"
+b = "2.0.0+foo"
+
+[packages.a.versions."1.0.0"]
+requires = ["b==2.0.0"]
+
+[packages.a.versions."2.0.0"]
+requires = ["b==2.0.0+bar"]
+
+[packages.b.versions."2.0.0+bar"]
+
+[packages.b.versions."2.0.0+foo"]

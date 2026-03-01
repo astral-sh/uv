@@ -1,0 +1,14 @@
+name = "no-wheels-no-build"
+description = "No wheels are available, only source distributions but the user has disabled builds."
+
+[root]
+requires = ["a"]
+
+[expected]
+satisfiable = false
+
+[packages.a.versions."1.0.0"]
+wheel = false
+
+[resolver_options]
+no_build = ["a"]
