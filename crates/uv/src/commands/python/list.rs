@@ -12,7 +12,9 @@ use rustc_hash::FxHashSet;
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_fs::Simplified;
-use uv_python::downloads::{ManagedPythonDownloadList, PythonDownloadRequest};
+use uv_python::downloads::{
+    Error as PythonDownloadError, ManagedPythonDownloadList, PythonDownloadRequest,
+};
 use uv_python::{
     DiscoveryError, EnvironmentPreference, PythonDownloads, PythonInstallation, PythonNotFound,
     PythonPreference, PythonRequest, PythonSource, find_python_installations,
@@ -123,10 +125,16 @@ pub(crate) async fn list(
             output.insert((
                 download.key().clone(),
                 Kind::Download,
-                Either::Right(download.download_url(
-                    python_install_mirror.as_deref(),
-                    pypy_install_mirror.as_deref(),
-                )?),
+                Either::Right(
+                    download
+                        .download_urls(
+                            python_install_mirror.as_deref(),
+                            pypy_install_mirror.as_deref(),
+                        )?
+                        .into_iter()
+                        .next()
+                        .ok_or(PythonDownloadError::NoPythonDownloadUrlFound)?,
+                ),
             ));
         }
     }

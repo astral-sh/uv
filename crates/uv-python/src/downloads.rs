@@ -17,7 +17,7 @@ use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt, BufWriter, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tokio_util::either::Either;
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, warn};
 use url::Url;
 
 use uv_client::{BaseClient, RetryState, WrappedReqwestError};
@@ -114,6 +114,8 @@ pub enum Error {
     },
     #[error(transparent)]
     BuildVersion(#[from] BuildVersionError),
+    #[error("No download URL found for Python")]
+    NoPythonDownloadUrlFound,
 }
 
 impl Error {
@@ -136,7 +138,32 @@ impl Error {
         }
         0
     }
+
+    /// Returns `true` if trying an alternative URL makes sense after this error.
+    ///
+    /// This includes HTTP-level failures (4xx such as 404, 5xx) and connection-level failures.
+    /// Hash mismatches, extraction failures, and similar post-download errors return `false`
+    /// because switching to a different host would not fix them.
+    fn should_try_next_url(&self) -> bool {
+        matches!(
+            self,
+            Self::NetworkError(..)
+                | Self::NetworkMiddlewareError(..)
+                | Self::NetworkErrorWithRetries { .. }
+        )
+    }
 }
+
+/// The URL prefix used by `python-build-standalone` releases on GitHub.
+const CPYTHON_DOWNLOADS_URL_PREFIX: &str =
+    "https://github.com/astral-sh/python-build-standalone/releases/download/";
+
+/// The default Astral mirror for `python-build-standalone` releases.
+///
+/// This mirror is tried first for CPython downloads when no user-configured mirror is set.
+/// If the mirror fails, uv falls back to the canonical GitHub URL.
+const CPYTHON_DOWNLOAD_DEFAULT_MIRROR: &str =
+    "https://releases.astral.sh/github/python-build-standalone/releases/download/";
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct ManagedPythonDownload {
@@ -1092,6 +1119,12 @@ impl ManagedPythonDownload {
     }
 
     /// Download and extract a Python distribution, retrying on failure.
+    ///
+    /// For CPython without a user-configured mirror, the default Astral mirror is tried first.
+    /// If a URL fails with an HTTP or connection error, the next URL in the list is tried.
+    /// Transient errors (e.g. HTTP 5xx, connection failures) are retried with backoff first;
+    /// non-retryable errors (e.g. HTTP 404) fall back immediately. Non-download-related errors
+    /// (e.g. a hash mismatch) cause an immediate failure without a fallback.
     #[instrument(skip(client, installation_dir, scratch_dir, reporter), fields(download = % self.key()))]
     pub async fn fetch_with_retry(
         &self,
@@ -1104,41 +1137,54 @@ impl ManagedPythonDownload {
         pypy_install_mirror: Option<&str>,
         reporter: Option<&dyn Reporter>,
     ) -> Result<DownloadResult, Error> {
-        let mut retry_state = RetryState::start(
-            *retry_policy,
-            self.download_url(python_install_mirror, pypy_install_mirror)?,
-        );
+        let urls = self.download_urls(python_install_mirror, pypy_install_mirror)?;
 
-        loop {
-            let result = self
-                .fetch(
-                    client,
-                    installation_dir,
-                    scratch_dir,
-                    reinstall,
-                    python_install_mirror,
-                    pypy_install_mirror,
-                    reporter,
-                )
-                .await;
-            match result {
-                Ok(download_result) => return Ok(download_result),
-                Err(err) => {
-                    if let Some(backoff) = retry_state.should_retry(&err, err.retries()) {
-                        retry_state.sleep_backoff(backoff).await;
-                        continue;
+        'url: for (i, url) in urls.iter().enumerate() {
+            let is_last = i == urls.len() - 1;
+            let mut retry_state = RetryState::start(*retry_policy, url.clone());
+
+            loop {
+                let result = self
+                    .fetch_from_url(
+                        url,
+                        client,
+                        installation_dir,
+                        scratch_dir,
+                        reinstall,
+                        reporter,
+                    )
+                    .await;
+                match result {
+                    Ok(download_result) => return Ok(download_result),
+                    Err(err) => {
+                        if let Some(backoff) = retry_state.should_retry(&err, err.retries()) {
+                            retry_state.sleep_backoff(backoff).await;
+                            continue;
+                        }
+                        // At this point we've exhausted all retries for this URL or found a
+                        // non-retryable error.
+                        if !is_last && err.should_try_next_url() {
+                            warn!(
+                                "Failed to download `{}` from {url} ({err}); falling back to {}",
+                                self.key(),
+                                urls[i + 1]
+                            );
+                            continue 'url;
+                        }
+                        return if retry_state.total_retries() > 0 {
+                            Err(Error::NetworkErrorWithRetries {
+                                err: Box::new(err),
+                                retries: retry_state.total_retries(),
+                            })
+                        } else {
+                            Err(err)
+                        };
                     }
-                    return if retry_state.total_retries() > 0 {
-                        Err(Error::NetworkErrorWithRetries {
-                            err: Box::new(err),
-                            retries: retry_state.total_retries(),
-                        })
-                    } else {
-                        Err(err)
-                    };
-                }
-            };
+                };
+            }
         }
+
+        unreachable!("download_urls() must return at least one URL")
     }
 
     /// Download and extract a Python distribution.
@@ -1153,7 +1199,29 @@ impl ManagedPythonDownload {
         pypy_install_mirror: Option<&str>,
         reporter: Option<&dyn Reporter>,
     ) -> Result<DownloadResult, Error> {
-        let url = self.download_url(python_install_mirror, pypy_install_mirror)?;
+        let urls = self.download_urls(python_install_mirror, pypy_install_mirror)?;
+        let url = urls.first().ok_or(Error::NoPythonDownloadUrlFound)?;
+        self.fetch_from_url(
+            url,
+            client,
+            installation_dir,
+            scratch_dir,
+            reinstall,
+            reporter,
+        )
+        .await
+    }
+
+    /// Download and extract a Python distribution from the given URL.
+    async fn fetch_from_url(
+        &self,
+        url: &DisplaySafeUrl,
+        client: &BaseClient,
+        installation_dir: &Path,
+        scratch_dir: &Path,
+        reinstall: bool,
+        reporter: Option<&dyn Reporter>,
+    ) -> Result<DownloadResult, Error> {
         let path = installation_dir.join(self.key().to_string());
 
         // If it is not a reinstall and the dir already exists, return it.
@@ -1213,13 +1281,13 @@ impl ManagedPythonDownload {
                         if client.connectivity().is_offline() {
                             return Err(Error::OfflinePythonMissing {
                                 file: Box::new(self.key().clone()),
-                                url: Box::new(url),
+                                url: Box::new(url.clone()),
                                 python_builds_dir,
                             });
                         }
 
                         self.download_archive(
-                            &url,
+                            url,
                             client,
                             reporter,
                             &python_builds_dir,
@@ -1255,7 +1323,7 @@ impl ManagedPythonDownload {
                 temp_dir.path().simplified_display()
             );
 
-            let (reader, size) = read_url(&url, client).await?;
+            let (reader, size) = read_url(url, client).await?;
             self.extract_reader(
                 reader,
                 temp_dir.path(),
@@ -1431,27 +1499,58 @@ impl ManagedPythonDownload {
         self.key.version()
     }
 
-    /// Return the [`Url`] to use when downloading the distribution. If a mirror is set via the
-    /// appropriate environment variable, use it instead.
+    /// Return the primary [`Url`] to use when downloading the distribution.
+    ///
+    /// This is the first URL from [`Self::download_urls`]. For CPython without a user-configured
+    /// mirror, this is the default Astral mirror URL. Use [`Self::download_urls`] to get all
+    /// URLs including fallbacks.
     pub fn download_url(
         &self,
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
     ) -> Result<DisplaySafeUrl, Error> {
+        self.download_urls(python_install_mirror, pypy_install_mirror)
+            .map(|mut urls| urls.remove(0))
+    }
+
+    /// Return the ordered list of [`Url`]s to try when downloading the distribution.
+    ///
+    /// For CPython without a user-configured mirror, the default Astral mirror is listed first,
+    /// followed by the canonical GitHub URL as a fallback.
+    ///
+    /// For all other cases (user mirror explicitly set, PyPy, GraalPy, Pyodide), a single URL
+    /// is returned with no fallback.
+    pub fn download_urls(
+        &self,
+        python_install_mirror: Option<&str>,
+        pypy_install_mirror: Option<&str>,
+    ) -> Result<Vec<DisplaySafeUrl>, Error> {
         match self.key.implementation {
             LenientImplementationName::Known(ImplementationName::CPython) => {
                 if let Some(mirror) = python_install_mirror {
-                    let Some(suffix) = self.url.strip_prefix(
-                        "https://github.com/astral-sh/python-build-standalone/releases/download/",
-                    ) else {
+                    // User-configured mirror: use it exclusively, no automatic fallback.
+                    let Some(suffix) = self.url.strip_prefix(CPYTHON_DOWNLOADS_URL_PREFIX) else {
                         return Err(Error::Mirror(
                             EnvVars::UV_PYTHON_INSTALL_MIRROR,
                             self.url.to_string(),
                         ));
                     };
-                    return Ok(DisplaySafeUrl::parse(
+                    return Ok(vec![DisplaySafeUrl::parse(
                         format!("{}/{}", mirror.trim_end_matches('/'), suffix).as_str(),
-                    )?);
+                    )?]);
+                }
+                // No user mirror: try the default Astral mirror first, fall back to GitHub.
+                if let Some(suffix) = self.url.strip_prefix(CPYTHON_DOWNLOADS_URL_PREFIX) {
+                    let mirror_url = DisplaySafeUrl::parse(
+                        format!(
+                            "{}/{}",
+                            CPYTHON_DOWNLOAD_DEFAULT_MIRROR.trim_end_matches('/'),
+                            suffix
+                        )
+                        .as_str(),
+                    )?;
+                    let canonical_url = DisplaySafeUrl::parse(&self.url)?;
+                    return Ok(vec![mirror_url, canonical_url]);
                 }
             }
 
@@ -1464,16 +1563,16 @@ impl ManagedPythonDownload {
                             self.url.to_string(),
                         ));
                     };
-                    return Ok(DisplaySafeUrl::parse(
+                    return Ok(vec![DisplaySafeUrl::parse(
                         format!("{}/{}", mirror.trim_end_matches('/'), suffix).as_str(),
-                    )?);
+                    )?]);
                 }
             }
 
             _ => {}
         }
 
-        Ok(DisplaySafeUrl::parse(&self.url)?)
+        Ok(vec![DisplaySafeUrl::parse(&self.url)?])
     }
 }
 
