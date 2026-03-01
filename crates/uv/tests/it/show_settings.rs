@@ -3585,6 +3585,7 @@ fn resolve_tool() -> anyhow::Result<()> {
         overrides: [],
         excludes: [],
         build_constraints: [],
+        system_site_packages: false,
         lfs: Disabled,
         python: None,
         python_platform: None,

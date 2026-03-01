@@ -60,6 +60,7 @@ pub(crate) async fn install(
     overrides: &[RequirementsSource],
     excludes: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
+    system_site_packages: bool,
     entrypoints: &[PackageName],
     lfs: GitLfsSetting,
     python: Option<String>,
@@ -695,7 +696,8 @@ pub(crate) async fn install(
             },
         };
 
-        let environment = installed_tools.create_environment(package_name, interpreter)?;
+        let environment =
+            installed_tools.create_environment(package_name, interpreter, system_site_packages)?;
 
         // At this point, we removed any existing environment, so we should remove any of its
         // executables.
@@ -754,6 +756,7 @@ pub(crate) async fn install(
         constraints,
         overrides,
         build_constraints,
+        system_site_packages,
         printer,
     )?;
 
