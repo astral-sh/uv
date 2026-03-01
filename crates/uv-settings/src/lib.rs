@@ -657,6 +657,7 @@ pub struct EnvironmentOptions {
     pub no_env_file: EnvFlag,
     pub venv_seed: EnvFlag,
     pub venv_clear: EnvFlag,
+    pub init_bare: EnvFlag,
 }
 
 impl EnvironmentOptions {
@@ -749,6 +750,7 @@ impl EnvironmentOptions {
             no_env_file: EnvFlag::new(EnvVars::UV_NO_ENV_FILE)?,
             venv_seed: EnvFlag::new(EnvVars::UV_VENV_SEED)?,
             venv_clear: EnvFlag::new(EnvVars::UV_VENV_CLEAR)?,
+            init_bare: EnvFlag::new(EnvVars::UV_INIT_BARE)?,
         })
     }
 }

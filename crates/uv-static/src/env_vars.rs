@@ -380,6 +380,11 @@ impl EnvVars {
     #[attr_added_in("0.3.0")]
     pub const UV_TOOL_BIN_DIR: &'static str = "UV_TOOL_BIN_DIR";
 
+    /// Equivalent to the `--bare` argument for `uv init`. If set, uv will only create a
+    /// `pyproject.toml`.
+    #[attr_added_in("0.10.7")]
+    pub const UV_INIT_BARE: &'static str = "UV_INIT_BARE";
+
     /// Equivalent to the `--build-backend` argument for `uv init`. Determines the default backend
     /// to use when creating a new project.
     #[attr_added_in("0.8.2")]

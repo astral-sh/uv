@@ -324,6 +324,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             "Solving with target Python version: {}",
             self.python_requirement.target()
         );
+        if !self.options.exclude_newer.is_empty() {
+            debug!("Solving with exclude-newer: {}", self.options.exclude_newer);
+        }
 
         let mut visited = FxHashSet::default();
 
