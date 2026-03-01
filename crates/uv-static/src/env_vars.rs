@@ -587,6 +587,13 @@ impl EnvVars {
     #[attr_added_in("0.10.5")]
     pub const UV_INTERNAL__TEST_ALT_FS: &'static str = "UV_INTERNAL__TEST_ALT_FS";
 
+    /// Path to a directory on a filesystem with a low hardlink limit (e.g., minix with ~250).
+    ///
+    /// When populated, uv will run additional tests that exercise EMLINK recovery.
+    #[attr_hidden]
+    #[attr_added_in("0.10.6")]
+    pub const UV_INTERNAL__TEST_MAXLINKS_FS: &'static str = "UV_INTERNAL__TEST_MAXLINKS_FS";
+
     /// Used to force treating an interpreter as "managed" during tests.
     #[attr_hidden]
     #[attr_added_in("0.8.0")]
