@@ -15706,3 +15706,122 @@ fn sync_reinstalls_on_version_change() -> Result<()> {
 
     Ok(())
 }
+
+/// Test that `uv sync --preview-features centralized-env` creates the environment
+/// in the cache and symlinks `.venv` to it.
+#[test]
+fn sync_centralized_env() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // Running `uv sync` with centralized-env should create the environment in the cache.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features")
+        .arg("centralized-env"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: [CACHE_DIR]/environments-v2/project-[HASH]
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    // `.venv` should be a symlink.
+    assert!(context.temp_dir.child(".venv").is_symlink());
+
+    // The symlink should point into the cache's environments bucket.
+    let link_target = fs_err::read_link(context.temp_dir.child(".venv").path())?;
+    assert!(
+        link_target
+            .to_string_lossy()
+            .contains("environments-v2/project-"),
+        "Expected symlink to point into environments-v2, got: {link_target:?}"
+    );
+
+    // A re-sync should reuse the existing environment.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features")
+        .arg("centralized-env"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Audited 1 package in [TIME]
+    ");
+
+    // The symlink should still be there and unchanged.
+    assert!(context.temp_dir.child(".venv").is_symlink());
+
+    Ok(())
+}
+
+/// Test that `uv sync --preview-features centralized-env` respects an existing
+/// real `.venv` directory and does not create a centralized environment.
+#[test]
+fn sync_centralized_env_existing_local_venv() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // First, create a local .venv without the centralized flag.
+    uv_snapshot!(context.filters(), context.sync(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    // `.venv` should be a real directory.
+    assert!(context.temp_dir.child(".venv").is_dir());
+    assert!(!context.temp_dir.child(".venv").is_symlink());
+
+    // Now sync with the centralized flag. It should use the existing `.venv`.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features")
+        .arg("centralized-env"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Audited 1 package in [TIME]
+    ");
+
+    // `.venv` should still be a real directory, not a symlink.
+    assert!(context.temp_dir.child(".venv").is_dir());
+    assert!(!context.temp_dir.child(".venv").is_symlink());
+
+    Ok(())
+}

@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
@@ -9,7 +8,7 @@ use owo_colors::OwoColorize;
 use tracing::{debug, trace, warn};
 use uv_auth::CredentialsCache;
 use uv_cache::{Cache, CacheBucket};
-use uv_cache_key::cache_digest;
+use uv_cache_key::{cache_digest, cache_name};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
@@ -979,7 +978,18 @@ impl ProjectInterpreter {
         .await?;
 
         // Read from the virtual environment first.
-        let root = workspace.venv(active);
+        let root = if preview.is_enabled(PreviewFeature::CentralizedEnv) {
+            let local_venv = workspace.local_venv();
+            // TODO(tk): Maybe we should just upgrade existing environments to
+            // centralised ones?
+            if local_venv.is_dir() && !local_venv.is_symlink() {
+                local_venv
+            } else {
+                workspace.venv(active, cache, preview)
+            }
+        } else {
+            workspace.venv(active, cache, preview)
+        };
         match PythonEnvironment::from_root(&root, cache) {
             Ok(venv) => {
                 match environment_is_usable(
@@ -1434,11 +1444,24 @@ impl ProjectEnvironment {
         .await?
         {
             // If we found an existing, compatible environment, use it.
-            ProjectInterpreter::Environment(environment) => Ok(Self::Existing(environment)),
+            ProjectInterpreter::Environment(environment) => {
+                // Ensure the `.venv` link is up-to-date for centralized environments,
+                // but only if `.venv` isn't already a real directory.
+                // TODO(tk): Handle the weird windows corner case for junctions
+                // copied to another machine.
+                if preview.is_enabled(PreviewFeature::CentralizedEnv) {
+                    let link_path = workspace.local_venv();
+                    if !link_path.is_dir() || link_path.is_symlink() {
+                        let root = workspace.venv(active, cache, preview);
+                        uv_fs::replace_symlink(&root, &link_path)?;
+                    }
+                }
+                Ok(Self::Existing(environment))
+            }
 
             // Otherwise, create a virtual environment with the discovered interpreter.
             ProjectInterpreter::Interpreter(interpreter) => {
-                let root = workspace.venv(active);
+                let root = workspace.venv(active, cache, preview);
 
                 // Avoid removing things that are not virtual environments
                 let replace = match (root.try_exists(), root.join("pyvenv.cfg").try_exists()) {
@@ -1544,6 +1567,17 @@ impl ProjectEnvironment {
                     false,
                     upgradeable,
                 )?;
+
+                // If centralized environments are enabled and the existing environment is not a
+                // directory, create a `.venv` symlink in the project directory pointing to the
+                // centralized environment.
+                if preview.is_enabled(PreviewFeature::CentralizedEnv) {
+                    let link_path = workspace.local_venv();
+                    // TODO(tk): Should not need this, should use some earlier heuristic?
+                    if !link_path.is_dir() {
+                        uv_fs::replace_symlink(&root, &link_path)?;
+                    }
+                }
 
                 if replace {
                     Ok(Self::Replaced(environment))
@@ -2952,43 +2986,6 @@ fn warn_on_requirements_txt_setting(spec: &RequirementsSpecification, settings: 
     }
 }
 
-/// Normalize a filename for use in a cache entry.
-///
-/// Replaces non-alphanumeric characters with dashes, and lowercases the filename.
-fn cache_name(name: &str) -> Option<Cow<'_, str>> {
-    if name.bytes().all(|c| matches!(c, b'0'..=b'9' | b'a'..=b'f')) {
-        return if name.is_empty() {
-            None
-        } else {
-            Some(Cow::Borrowed(name))
-        };
-    }
-    let mut normalized = String::with_capacity(name.len());
-    let mut dash = false;
-    for char in name.bytes() {
-        match char {
-            b'0'..=b'9' | b'a'..=b'z' | b'A'..=b'Z' => {
-                dash = false;
-                normalized.push(char.to_ascii_lowercase() as char);
-            }
-            _ => {
-                if !dash {
-                    normalized.push('-');
-                    dash = true;
-                }
-            }
-        }
-    }
-    if normalized.ends_with('-') {
-        normalized.pop();
-    }
-    if normalized.is_empty() {
-        None
-    } else {
-        Some(Cow::Owned(normalized))
-    }
-}
-
 fn format_requires_python_sources(conflicts: &RequiresPythonSources) -> String {
     conflicts
         .iter()
@@ -3031,20 +3028,4 @@ fn format_optional_requires_python_sources(
     }
     // Otherwise don't elaborate
     String::new()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_cache_name() {
-        assert_eq!(cache_name("foo"), Some("foo".into()));
-        assert_eq!(cache_name("foo-bar"), Some("foo-bar".into()));
-        assert_eq!(cache_name("foo_bar"), Some("foo-bar".into()));
-        assert_eq!(cache_name("foo-bar_baz"), Some("foo-bar-baz".into()));
-        assert_eq!(cache_name("foo-bar_baz_"), Some("foo-bar-baz".into()));
-        assert_eq!(cache_name("foo-_bar_baz"), Some("foo-bar-baz".into()));
-        assert_eq!(cache_name("_+-_"), None);
-    }
 }

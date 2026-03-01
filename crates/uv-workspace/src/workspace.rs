@@ -9,12 +9,15 @@ use itertools::Itertools;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, trace, warn};
 
+use uv_cache::{Cache, CacheBucket};
+use uv_cache_key::{cache_digest, cache_name};
 use uv_configuration::DependencyGroupsWithDefaults;
 use uv_distribution_types::{Index, Requirement, RequirementSource};
 use uv_fs::{CWD, Simplified};
 use uv_normalize::{DEV_DEPENDENCIES, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerTree, VerbatimUrl};
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
@@ -707,7 +710,10 @@ impl Workspace {
     /// If `active` is `true`, the `VIRTUAL_ENV` variable will be preferred. If it is `false`, any
     /// warnings about mismatch between the active environment and the project environment will be
     /// silenced.
-    pub fn venv(&self, active: Option<bool>) -> PathBuf {
+    ///
+    /// If the centralised environments preview feature is enabled, will return the path to the
+    /// central storage location.
+    pub fn venv(&self, active: Option<bool>, cache: &Cache, preview: Preview) -> PathBuf {
         /// Resolve the `UV_PROJECT_ENVIRONMENT` value, if any.
         fn from_project_environment_variable(workspace: &Workspace) -> Option<PathBuf> {
             let value = std::env::var_os(EnvVars::UV_PROJECT_ENVIRONMENT)?;
@@ -743,9 +749,14 @@ impl Workspace {
             Some(CWD.join(path))
         }
 
-        // Determine the default value
-        let project_env = from_project_environment_variable(self)
-            .unwrap_or_else(|| self.install_path.join(".venv"));
+        // Determine the default value.
+        let project_env = from_project_environment_variable(self).unwrap_or_else(|| {
+            if preview.is_enabled(PreviewFeature::CentralizedEnv) {
+                centralized_environment_root(self, cache)
+            } else {
+                self.install_path.join(".venv")
+            }
+        });
 
         // Warn if it conflicts with `VIRTUAL_ENV`
         if let Some(from_virtual_env) = from_virtual_env_variable() {
@@ -779,6 +790,12 @@ impl Workspace {
         }
 
         project_env
+    }
+
+    /// This workspace's local ".venv" directory/symlink/file path (may not
+    /// exist yet)
+    pub fn local_venv(&self) -> PathBuf {
+        self.install_path.join(".venv")
     }
 
     /// The members of the workspace.
@@ -1836,6 +1853,39 @@ impl VirtualProject {
     pub fn is_non_project(&self) -> bool {
         matches!(self, Self::NonProject(_))
     }
+}
+
+// TODO(tk): Expand the key to include more things
+/// Compute the centralized environment root for a project.
+///
+/// The environment is stored in the `Environments` cache bucket, keyed by a human-readable project
+/// name and a hash of the project's install path (to avoid collisions between projects with the
+/// same name).
+///
+/// For example: `~/.cache/uv/environments-v2/my-project-a1b2c3d4/`
+fn centralized_environment_root(workspace: &Workspace, cache: &Cache) -> PathBuf {
+    let digest = cache_digest(workspace.install_path());
+    let name = workspace
+        .pyproject_toml()
+        .project
+        .as_ref()
+        .and_then(|p| cache_name(p.name.as_ref()))
+        .or_else(|| {
+            workspace
+                .install_path()
+                .file_name()
+                .and_then(|f| f.to_str())
+                .and_then(cache_name)
+        });
+    let entry = if let Some(name) = name {
+        format!("{name}-{digest}")
+    } else {
+        // TODO(tk): Is it worth catering for this situation like this?
+        digest
+    };
+    cache
+        .shard(CacheBucket::Environments, entry)
+        .into_path_buf()
 }
 
 #[cfg(test)]
