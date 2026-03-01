@@ -59,6 +59,12 @@ like so:
 }
 ```
 
+!!! note
+
+    Renovate does not yet support updating the lock file associated to the
+    script (https://github.com/renovatebot/renovate/issues/33591), so if you rely on this feature
+    for a script, the lock file will need to be manually updated.
+
 ## Dependabot
 
 Dependabot has announced support for uv, but there are some use cases that are not yet working. See
