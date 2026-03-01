@@ -11067,18 +11067,7 @@ requires-python = ">=3.13"
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(&format!("-e {}", editable_dir.path().display()))?;
 
-    let filters: Vec<_> = [
-        // 3.11 may not be installed
-        (
-            "warning: The requested Python version 3.11 is not available; .* will be used to build dependencies instead.\n",
-            "",
-        ),
-    ]
-        .into_iter()
-        .chain(context.filters())
-        .collect();
-
-    uv_snapshot!(filters, context.pip_compile()
+    uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("--python-version=3.11"), @"
     success: false
@@ -11086,6 +11075,7 @@ requires-python = ">=3.13"
     ----- stdout -----
 
     ----- stderr -----
+    warning: The requested Python version 3.11 is not available; 3.12.[X] will be used to build dependencies instead.
       × No solution found when resolving dependencies:
       ╰─▶ Because the requested Python version (>=3.11) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
           And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
@@ -11099,9 +11089,6 @@ requires-python = ">=3.13"
 
 /// Resolve successfully when an editable's `Requires-Python` is satisfied by
 /// `--python-version` but not by the installed interpreter.
-///
-/// The `installed()` check is not applied in the resolver — the resolution target is what
-/// matters. Build compatibility is an install-time concern.
 #[test]
 fn requires_python_editable_installed_incompatible() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -11125,20 +11112,9 @@ requires-python = ">=3.13"
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(&format!("-e {}", editable_dir.path().display()))?;
 
-    let filters: Vec<_> = [
-        // 3.13 may not be installed
-        (
-            "warning: The requested Python version 3.13 is not available; .* will be used to build dependencies instead.\n",
-            "",
-        ),
-    ]
-        .into_iter()
-        .chain(context.filters())
-        .collect();
-
     // `--python-version 3.13` satisfies `requires-python >= 3.13`, so resolution succeeds
     // even though the installed interpreter is 3.12.
-    uv_snapshot!(filters, context.pip_compile()
+    uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("--python-version=3.13"), @"
     success: true
@@ -11156,6 +11132,7 @@ requires-python = ">=3.13"
         # via anyio
 
     ----- stderr -----
+    warning: The requested Python version 3.13 is not available; 3.12.[X] will be used to build dependencies instead.
     Resolved 4 packages in [TIME]
     "
     );

@@ -5265,8 +5265,8 @@ dependencies = []
 requires-python = ">=3.13"
 
 [build-system]
-requires = ["setuptools>=42"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 "#,
     )?;
     child_dir.child("src").child("example").create_dir_all()?;
@@ -5276,20 +5276,9 @@ build-backend = "setuptools.build_meta"
         .child("__init__.py")
         .touch()?;
 
-    let filters: Vec<_> = [
-        // 3.13 may not be installed
-        (
-            "warning: The requested Python version 3.13 is not available; .* will be used to build dependencies instead.\n",
-            "",
-        ),
-    ]
-        .into_iter()
-        .chain(context.filters())
-        .collect();
-
     // `--python-version 3.13` satisfies `requires-python >= 3.13`, so resolution succeeds
     // even though the installed interpreter is 3.12.
-    uv_snapshot!(filters, context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("--python-version=3.13")
         .arg(child_dir.path()), @"
     success: true
@@ -5301,6 +5290,35 @@ build-backend = "setuptools.build_meta"
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + example==0.0.0 (from file://[TEMP_DIR]/child)
+    "
+    );
+
+    Ok(())
+}
+
+/// Like [`requires_python_source_dist_installed_incompatible`], but using a registry package
+/// (`iniconfig`) instead of a direct URL, with `--no-binary` to force building from source.
+#[test]
+fn requires_python_source_dist_installed_incompatible_registry() -> Result<()> {
+    let context = uv_test::test_context!("3.9").with_exclude_newer("2025-11-01T00:00:00Z");
+
+    // `--python-version 3.10` satisfies `requires-python >= 3.10`, so resolution succeeds
+    // even though the installed interpreter is 3.9. This should arguably fail, and some build
+    // backends would likely error in this scenario.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--python-version=3.10")
+        .arg("--no-binary")
+        .arg("iniconfig")
+        .arg("iniconfig==2.3.0"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.3.0
     "
     );
 
