@@ -408,7 +408,10 @@ async fn perform_install(
             PythonUpgrade::Enabled(PythonUpgradeSource::Upgrade) => {
                 writeln!(
                     printer.stderr(),
-                    "There are no installed versions to upgrade"
+                    "No managed Python installations found\n\n{}{} Use `{}` to install a new Python version",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    "uv python install".green()
                 )?;
             }
             PythonUpgrade::Enabled(PythonUpgradeSource::Install) => {
@@ -743,15 +746,6 @@ async fn perform_install(
                     "Python is already installed. Use `uv python install <request>` to install another version.",
                 )?;
             }
-        } else if matches!(
-            upgrade,
-            PythonUpgrade::Enabled(PythonUpgradeSource::Upgrade)
-        ) && requests.is_empty()
-        {
-            writeln!(
-                printer.stderr(),
-                "There are no installed versions to upgrade"
-            )?;
         } else if let [request] = requests.as_slice() {
             // Convert to the inner request
             let request = &request.request;
