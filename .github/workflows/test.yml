@@ -204,6 +204,13 @@ jobs:
           # See https://github.com/astral-sh/uv/issues/6940
           UV_LINK_MODE: copy
           RUST_BACKTRACE: 1
+          # Dev Drive is ReFS which supports copy-on-write
+          # Note: trailing backslash is required — `D:` alone is a relative
+          # path on Windows (current directory on that drive), not the root.
+          UV_INTERNAL__TEST_COW_FS: "${{ env.DEV_DRIVE }}\\"
+          # C: is NTFS which does not support copy-on-write
+          UV_INTERNAL__TEST_NOCOW_FS: "C:\\"
+          UV_INTERNAL__TEST_ALT_FS: "C:\\"
         shell: bash
         run: |
           cargo nextest run \
