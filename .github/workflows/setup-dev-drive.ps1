@@ -70,7 +70,7 @@ assign letter=V
     Write-Output "Using Dev Drive at $Volume"
 }
 
-$Tmp = "$($Drive)\uv-tmp"
+$Tmp = "$($Drive)\uv\tmp"
 
 # Create the directory ahead of time in an attempt to avoid race-conditions
 New-Item $Tmp -ItemType Directory
@@ -87,6 +87,6 @@ Write-Output `
 	"TEMP=$($Tmp)" `
 	"RUSTUP_HOME=$($Drive)/.rustup" `
 	"CARGO_HOME=$($Drive)/.cargo" `
-	"UV_WORKSPACE=$($Drive)/uv" `
+	"UV_WORKSPACE=$($Drive)/uv/repo" `
 	"PATH=$($Drive)/.cargo/bin;$env:PATH" `
 	>> $env:GITHUB_ENV

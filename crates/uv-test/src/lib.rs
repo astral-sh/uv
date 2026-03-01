@@ -570,6 +570,17 @@ impl TestContext {
         self
     }
 
+    /// Add filters for the system temporary directory.
+    #[must_use]
+    pub fn with_filtered_system_tmp(mut self) -> Self {
+        self.filters.extend(
+            Self::path_patterns(std::env::temp_dir())
+                .into_iter()
+                .map(|pattern| (pattern, "[SYSTEM_TEMP_DIR]/".to_string())),
+        );
+        self
+    }
+
     /// Add a filter for (bytecode) compilation file counts
     #[must_use]
     pub fn with_filtered_compiled_file_count(mut self) -> Self {
@@ -1771,14 +1782,19 @@ impl TestContext {
 
     /// Generate an escaped regex pattern for the given path.
     fn path_pattern(path: impl AsRef<Path>) -> String {
-        format!(
-            // Trim the trailing separator for cross-platform directories filters
-            r"{}\\?/?",
-            regex::escape(&path.as_ref().simplified_display().to_string())
-                // Make separators platform agnostic because on Windows we will display
-                // paths with Unix-style separators sometimes
-                .replace(r"\\", r"(\\|\/)")
-        )
+        let escaped = regex::escape(&path.as_ref().simplified_display().to_string())
+            // Make separators platform agnostic because on Windows we will display
+            // paths with Unix-style separators sometimes
+            .replace(r"\\", r"(\\|\/)");
+
+        if cfg!(windows) {
+            // On Windows, paths are case-insensitive. Different tools may output
+            // different cases for the drive letter (e.g., `D:\` vs `d:\`), so we
+            // make the entire pattern case-insensitive.
+            format!(r"(?i:{escaped})\\?/?")
+        } else {
+            format!(r"{escaped}\\?/?")
+        }
     }
 
     pub fn python_path(&self) -> OsString {
