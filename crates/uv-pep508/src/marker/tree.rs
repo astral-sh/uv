@@ -861,6 +861,25 @@ impl MarkerTree {
         self.0 = INTERNER.lock().and(self.0, tree.0);
     }
 
+    /// Combine this marker tree with the one given via a conjunction,
+    /// then prune any partial contradictions involving known-incompatible
+    /// marker values (e.g., `os_name == 'nt' and sys_platform == 'linux'`).
+    ///
+    /// This is more expensive than [`Self::and`] and should only be used
+    /// when the result must be canonical (i.e., round-trip stable through
+    /// string serialization), such as when writing to `uv.lock`.
+    pub fn and_canonicalized(&mut self, tree: Self) {
+        self.0 = INTERNER.lock().and_pruned(self.0, tree.0);
+    }
+
+    /// Prune any partial contradictions involving known-incompatible
+    /// marker values, ensuring the tree is canonical (round-trip stable
+    /// through string serialization and re-parsing).
+    #[must_use]
+    pub fn canonicalize(self) -> Self {
+        Self(INTERNER.lock().canonicalize(self.0))
+    }
+
     /// Combine this marker tree with the one given via a disjunction.
     pub fn or(&mut self, tree: Self) {
         self.0 = INTERNER.lock().or(self.0, tree.0);
@@ -2111,6 +2130,147 @@ mod test {
                 .unwrap(),
             "python_full_version <= '3.12.1'"
         );
+    }
+
+    /// Regression test: the `and` operation on `MarkerTree` must fully
+    /// eliminate known-incompatible marker pairs like `os_name == 'nt'`
+    /// and `sys_platform == 'linux'`, even when one operand is a compound
+    /// disjunction containing both compatible and incompatible branches.
+    ///
+    /// When `os_name == 'nt'` is AND'ed with a fork marker like
+    /// `(sys_platform == 'linux' and ...) or (sys_platform != 'linux' and ...)`,
+    /// the `sys_platform == 'linux'` branch is contradictory with
+    /// `os_name == 'nt'` but was not being eliminated because the exclusion
+    /// check only fires when the entire result is contradictory. The
+    /// non-contradictory branch kept the overall node alive.
+    ///
+    /// This causes the resulting `MarkerTree` to be non-canonical: its
+    /// string serialization includes the dead branch, but re-parsing that
+    /// string correctly eliminates it, producing a different `MarkerTree`.
+    ///
+    /// See: <https://github.com/astral-sh/uv/issues/17747>
+    #[test]
+    fn marker_and_eliminates_partial_contradictions() {
+        // Build a compound fork marker with both linux and non-linux branches.
+        let dep_marker = m("os_name == 'nt'");
+        let fork_marker = m(
+            "(platform_machine != 'aarch64' and sys_platform == 'linux') \
+             or (sys_platform != 'darwin' and sys_platform != 'linux')",
+        );
+
+        // `os_name == 'nt' and sys_platform == 'linux'` is a known contradiction.
+        // Note: plain `and()` doesn't detect partial contradictions;
+        // canonicalization is needed to prune them.
+        assert!(
+            m("os_name == 'nt' and sys_platform == 'linux'")
+                .canonicalize()
+                .is_false()
+        );
+
+        // AND the dependency marker with the compound fork marker,
+        // canonicalizing to prune contradictory branches.
+        let mut result = dep_marker;
+        result.and_canonicalized(fork_marker);
+
+        // The result must be canonical: serializing and re-parsing should
+        // produce an identical MarkerTree.
+        let expected = m(
+            "os_name == 'nt' and sys_platform != 'darwin' and sys_platform != 'ios' and sys_platform != 'linux'",
+        );
+        assert_eq!(
+            result,
+            expected,
+            "AND should eliminate the contradictory sys_platform == 'linux' branch: \
+             got {:?}, expected {:?}",
+            result.try_to_string(),
+            expected.try_to_string(),
+        );
+    }
+
+    /// Same as above, but also exercises `simplify_python_versions` which
+    /// is part of the lock file round-trip path. When the compound fork
+    /// marker includes python version constraints, the non-canonical
+    /// subtree is carried through `simplify_python_versions` into the
+    /// simplified marker written to `uv.lock`. Deserializing the lock
+    /// file re-parses the marker string (which eliminates the dead
+    /// branch), producing a different `MarkerTree` and causing
+    /// `uv sync --locked` to fail with "lockfile needs to be updated".
+    ///
+    /// See: <https://github.com/astral-sh/uv/issues/17747>
+    #[test]
+    fn simplify_python_versions_preserves_exclusions() {
+        let dep_marker = m("os_name == 'nt'");
+        let fork_marker = m(
+            "(python_full_version >= '3.14' and platform_machine != 'aarch64' and sys_platform == 'linux') \
+             or (python_full_version >= '3.14' and sys_platform != 'darwin' and sys_platform != 'linux')",
+        );
+
+        let mut combined = dep_marker;
+        combined.and_canonicalized(fork_marker);
+
+        // Verify combined is round-trip stable.
+        if let Some(s) = combined.try_to_string() {
+            let reparsed: MarkerTree = s.parse().unwrap();
+            assert_eq!(combined, reparsed, "combined not round-trip stable: {s:?}");
+        }
+
+        // Simplify by assuming requires-python >= 3.14.
+        let simplified = combined.simplify_python_versions(
+            Bound::Included(Version::new([3, 14])).as_ref(),
+            Bound::Unbounded.as_ref(),
+        );
+
+        // The simplified marker must round-trip through string serialization.
+        if let Some(s) = simplified.try_to_string() {
+            let reparsed: MarkerTree = s.parse().unwrap();
+            assert_eq!(
+                simplified, reparsed,
+                "simplified marker should be canonical (round-trip stable): \
+                 serialized as {s:?}",
+            );
+        }
+    }
+
+    /// Test that pruning handles the case where the node's top
+    /// conflicting variable is lower-order than the exclusion tree's
+    /// top variable (`Ordering::Greater` in `prune_exclusions`).
+    ///
+    /// This happens when one operand has a conflicting variable (e.g.
+    /// `sys_platform`) but not a higher-order one (`os_name`), and the
+    /// other operand constrains `os_name`. The `and` result may have
+    /// `os_name` at the top with `sys_platform` children, and the
+    /// pruning must walk both levels correctly.
+    #[test]
+    fn prune_contradictions_with_variable_order_mismatch() {
+        // `os_name == 'posix' and sys_platform == 'win32'` is a known
+        // contradiction.
+        assert!(
+            m("os_name == 'posix' and sys_platform == 'win32'")
+                .canonicalize()
+                .is_false()
+        );
+
+        // AND'ing `os_name == 'nt'` (constrains os_name) with
+        // `sys_platform == 'win32' or sys_platform == 'linux'`
+        // (doesn't constrain os_name). The `sys_platform == 'linux'`
+        // branch contradicts `os_name == 'nt'`.
+        let mut result = m("os_name == 'nt'");
+        result.and_canonicalized(m("sys_platform == 'win32' or sys_platform == 'linux'"));
+
+        let expected = m("os_name == 'nt' and sys_platform == 'win32'");
+        assert_eq!(
+            result,
+            expected,
+            "should prune contradictory sys_platform == 'linux' branch: \
+             got {:?}, expected {:?}",
+            result.try_to_string(),
+            expected.try_to_string(),
+        );
+
+        // Verify round-trip stability.
+        let s = result.try_to_string().expect("should serialize");
+        let reparsed: MarkerTree = s.parse().unwrap();
+        assert_eq!(result, reparsed, "result should be round-trip stable: {s}");
     }
 
     #[test]

@@ -98,6 +98,9 @@ struct InternerState {
     /// Note that `OR` is implemented in terms of `AND`.
     cache: FxHashMap<(NodeId, NodeId), NodeId>,
 
+    /// A cache for `prune_exclusions` operations between two nodes.
+    prune_cache: FxHashMap<(NodeId, NodeId), NodeId>,
+
     /// The [`NodeId`] for the disjunction of known, mutually incompatible markers.
     exclusions: Option<NodeId>,
 }
@@ -351,6 +354,33 @@ impl InternerGuard<'_> {
         self.and(xi.not(), yi.not()).not()
     }
 
+    /// Prune any partial contradictions involving known-incompatible
+    /// marker values from the given node, ensuring it is canonical.
+    pub(crate) fn canonicalize(&mut self, node: NodeId) -> NodeId {
+        if node.is_true() || node.is_false() {
+            return node;
+        }
+        let top = self.shared.node(node);
+        if !top.var.is_conflicting_variable() {
+            return node;
+        }
+        let exclusions = self.exclusions();
+        self.prune_exclusions(node, exclusions)
+    }
+
+    /// Returns a decision node representing the conjunction of two nodes,
+    /// then prunes any partial contradictions involving known-incompatible
+    /// marker values.
+    ///
+    /// This is the entry point for user-facing `MarkerTree::and()`. It
+    /// delegates to [`Self::and`] for the BDD conjunction, then walks the
+    /// result to eliminate dead branches that combine contradictory values
+    /// (e.g., `os_name == 'nt' and sys_platform == 'linux'`).
+    pub(crate) fn and_pruned(&mut self, xi: NodeId, yi: NodeId) -> NodeId {
+        let node = self.and(xi, yi);
+        self.canonicalize(node)
+    }
+
     /// Returns a decision node representing the conjunction of two nodes.
     pub(crate) fn and(&mut self, xi: NodeId, yi: NodeId) -> NodeId {
         if xi.is_true() {
@@ -426,6 +456,92 @@ impl InternerGuard<'_> {
         self.state.cache.insert((xi, yi), node);
 
         node
+    }
+
+    /// Walk the conflicting-variable levels of `node` and prune any subtree
+    /// whose path is entirely contained in the `exclusions` set.
+    ///
+    /// This walks `node` and `exclusions` in lockstep (both use the same
+    /// variable ordering). At each conflicting-variable level, it checks
+    /// each child: if that child combined with the exclusion constraint for
+    /// the same variable range is entirely contradictory, it maps the child
+    /// to `FALSE`. For non-conflicting variable levels, it stops recursing
+    /// since exclusions only involve conflicting variables.
+    fn prune_exclusions(&mut self, node: NodeId, exclusions: NodeId) -> NodeId {
+        // Terminal cases.
+        if node.is_false() || exclusions.is_false() {
+            return node;
+        }
+
+        // If the node is TRUE (accepts everything), check whether
+        // the accumulated exclusion path is also TRUE (covers everything).
+        // If so, this entire path is contradictory.
+        if node.is_true() {
+            return if exclusions.is_true() {
+                NodeId::FALSE
+            } else {
+                node
+            };
+        }
+
+        // Check the memoization cache.
+        let key = (node, exclusions);
+        if let Some(&cached) = self.state.prune_cache.get(&key) {
+            return cached;
+        }
+
+        // If the entire node is within the exclusion set, prune it.
+        if self.disjointness(node, exclusions.not()) {
+            self.state.prune_cache.insert(key, NodeId::FALSE);
+            return NodeId::FALSE;
+        }
+
+        // If no part of this node overlaps with exclusions, keep it as-is.
+        if self.disjointness(node, exclusions) {
+            self.state.prune_cache.insert(key, node);
+            return node;
+        }
+
+        let n = self.shared.node(node);
+
+        // Only recurse through conflicting variable levels.
+        if !n.var.is_conflicting_variable() {
+            self.state.prune_cache.insert(key, node);
+            return node;
+        }
+
+        let e = self.shared.node(exclusions);
+
+        let result = match n.var.cmp(&e.var) {
+            // Node variable is higher order than exclusion variable:
+            // recurse into each child of node with the full exclusion tree.
+            Ordering::Less => {
+                let var = n.var.clone();
+                let children = n
+                    .children
+                    .map(node, |child| self.prune_exclusions(child, exclusions));
+                self.create_node(var, children)
+            }
+            // Exclusion variable is higher order than node variable:
+            // the node doesn't branch on this exclusion variable, so
+            // pruning at this level is not possible. This can occur
+            // when the `and` result only involves a subset of the
+            // conflicting variables.
+            Ordering::Greater => node,
+            // Same variable: walk children in parallel using `apply`.
+            Ordering::Equal => {
+                let var = n.var.clone();
+                let node_children = n.children.clone();
+                let excl_children = e.children.clone();
+                let children = node_children.apply(node, &excl_children, exclusions, |n, e| {
+                    self.prune_exclusions(n, e)
+                });
+                self.create_node(var, children)
+            }
+        };
+
+        self.state.prune_cache.insert(key, result);
+        result
     }
 
     /// Returns `true` if there is no environment in which both marker trees can apply,

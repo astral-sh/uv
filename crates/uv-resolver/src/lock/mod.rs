@@ -4862,8 +4862,10 @@ impl Dependency {
         extra: BTreeSet<ExtraName>,
         complexified_marker: UniversalMarker,
     ) -> Self {
-        let simplified_marker =
-            SimplifiedMarkerTree::new(requires_python, complexified_marker.combined());
+        let simplified_marker = SimplifiedMarkerTree::new(
+            requires_python,
+            complexified_marker.combined().canonicalize(),
+        );
         let complexified_marker = simplified_marker.into_marker(requires_python);
         Self {
             package_id,
