@@ -76,7 +76,7 @@ jobs:
           sudo chown "$(id -u):$(id -g)" /tmpfs
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@542cebaaed782771e619bd5609d97659d109c492 # v2.66.7
+        uses: taiki-e/install-action@f92912fad184299a31e22ad070a5059fd07d4f59 # v2.68.7
         with:
           tool: cargo-nextest
 
@@ -129,7 +129,7 @@ jobs:
         run: uv python install
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@542cebaaed782771e619bd5609d97659d109c492 # v2.66.7
+        uses: taiki-e/install-action@f92912fad184299a31e22ad070a5059fd07d4f59 # v2.68.7
         with:
           tool: cargo-nextest
 
@@ -191,7 +191,7 @@ jobs:
         run: rustup show
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@542cebaaed782771e619bd5609d97659d109c492 # v2.66.7
+        uses: taiki-e/install-action@f92912fad184299a31e22ad070a5059fd07d4f59 # v2.68.7
         with:
           tool: cargo-nextest
 
