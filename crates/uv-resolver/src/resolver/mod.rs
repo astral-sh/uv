@@ -1231,28 +1231,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // The version is incompatible due to its `Requires-Python` requirement.
         if let Some(requires_python) = metadata.requires_python.as_ref() {
             // TODO(charlie): We only care about this for source distributions.
-            //
-            // Only check against the installed Python version when the target has not been
-            // narrowed (i.e., we are not inside a fork with a more restrictive Python bound).
-            // In a fork like `python_version >= '3.12'`, the target is narrowed to `>=3.12`
-            // even though the installed interpreter may be 3.10. The installed check is
-            // irrelevant there: the source distribution would only be built on a compatible
-            // interpreter matching the fork's constraint.
-            if python_requirement.installed() == python_requirement.target() {
-                if !python_requirement
-                    .installed()
-                    .is_contained_by(requires_python)
-                {
-                    return Ok(Some(ResolverVersion::Unavailable(
-                        version.clone(),
-                        UnavailableVersion::IncompatibleDist(IncompatibleDist::Source(
-                            IncompatibleSource::RequiresPython(
-                                requires_python.clone(),
-                                PythonRequirementKind::Installed,
-                            ),
-                        )),
-                    )));
-                }
+            if !python_requirement
+                .installed()
+                .is_contained_by(requires_python)
+            {
+                return Ok(Some(ResolverVersion::Unavailable(
+                    version.clone(),
+                    UnavailableVersion::IncompatibleDist(IncompatibleDist::Source(
+                        IncompatibleSource::RequiresPython(
+                            requires_python.clone(),
+                            PythonRequirementKind::Installed,
+                        ),
+                    )),
+                )));
             }
             if !python_requirement.target().is_contained_by(requires_python) {
                 return Ok(Some(ResolverVersion::Unavailable(
@@ -1260,11 +1251,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     UnavailableVersion::IncompatibleDist(IncompatibleDist::Source(
                         IncompatibleSource::RequiresPython(
                             requires_python.clone(),
-                            if python_requirement.installed() == python_requirement.target() {
-                                PythonRequirementKind::Installed
-                            } else {
-                                PythonRequirementKind::Target
-                            },
+                            PythonRequirementKind::Target,
                         ),
                     )),
                 )));

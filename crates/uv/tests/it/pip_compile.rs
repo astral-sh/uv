@@ -11087,10 +11087,8 @@ requires-python = ">=3.13"
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the requested Python version (>=3.11) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
+      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
           And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
-
-          hint: The `--python-version` value (>=3.11) includes Python versions that are not supported by your dependencies (e.g., example==0.0.0 only supports >=3.13). Consider using a higher `--python-version` value.
     "
     );
 
