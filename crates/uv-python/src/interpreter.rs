@@ -1,3 +1,5 @@
+#[cfg(unix)]
+use nix::sys::utsname::uname;
 use std::borrow::Cow;
 use std::env::consts::ARCH;
 use std::fmt::{Display, Formatter};
@@ -827,6 +829,10 @@ pub enum Error {
     BrokenSymlink(BrokenSymlink),
     #[error("Python interpreter not found at `{0}`")]
     NotFound(PathBuf),
+    #[error(
+        "Python interpreter at `{0}` exists but could not be executed (is it the correct architecture?)"
+    )]
+    NotExecutable(PathBuf),
     #[error("Failed to query Python interpreter at `{path}`")]
     SpawnFailed {
         path: PathBuf,
@@ -963,7 +969,14 @@ impl InterpreterInfo {
             .output()
             .map_err(|err| {
                 match err.kind() {
-                    io::ErrorKind::NotFound => return Error::NotFound(interpreter.to_path_buf()),
+                    io::ErrorKind::NotFound => {
+                        // If the file exists but can't be executed, it's likely an
+                        // architecture mismatch (e.g., the ELF interpreter is missing).
+                        if interpreter.try_exists().unwrap_or(false) {
+                            return Error::NotExecutable(interpreter.to_path_buf());
+                        }
+                        return Error::NotFound(interpreter.to_path_buf());
+                    }
                     io::ErrorKind::PermissionDenied => {
                         return Error::PermissionDenied {
                             path: interpreter.to_path_buf(),
@@ -1073,6 +1086,18 @@ impl InterpreterInfo {
         Ok(())
     }
 
+    #[cfg(unix)]
+    fn uname_machine() -> Option<String> {
+        uname()
+            .ok()
+            .and_then(|uts| uts.machine().to_str().map(str::to_string))
+    }
+
+    #[cfg(not(unix))]
+    fn uname_machine() -> Option<String> {
+        None
+    }
+
     /// A wrapper around [`markers::query_interpreter_info`] to cache the computed markers.
     ///
     /// Running a Python script is (relatively) expensive, and the markers won't change
@@ -1106,12 +1131,15 @@ impl InterpreterInfo {
 
         let canonical = canonicalize_executable(&absolute).map_err(handle_io_error)?;
 
+        let uname_machine = Self::uname_machine();
         let cache_entry = cache.entry(
             CacheBucket::Interpreter,
             // Shard interpreter metadata by host architecture, operating system, and version, to
-            // invalidate the cache (e.g.) on OS upgrades.
+            // invalidate the cache (e.g.) on OS upgrades. Include `uname -m` so `setarch`
+            // (or similar) can influence marker environments.
             cache_digest(&(
                 ARCH,
+                uname_machine.as_deref().unwrap_or_default(),
                 sys_info::os_type().unwrap_or_default(),
                 sys_info::os_release().unwrap_or_default(),
             )),

@@ -1004,3 +1004,48 @@ jobs:
 
       - name: "Check cache compatibility"
         run: python scripts/check_cache_compat.py --uv-current ./uv --uv-previous ./uv-aarch64-apple-darwin/uv
+
+  integration-test-setarch:
+    name: "setarch ${{ matrix.setarch }} on ${{ matrix.native-arch }}"
+    timeout-minutes: 10
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            artifact: uv-linux-libc
+            setarch: linux32
+            native-arch: x86_64
+          - runner: ubuntu-24.04-arm
+            artifact: uv-linux-aarch64
+            setarch: armv7l
+            native-arch: aarch64
+    steps:
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ matrix.artifact }}-${{ inputs.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Create venv"
+        run: ./uv venv -v --python 3.11 test-venv
+
+      - name: "Write requirements file"
+        run: |
+          cat > requirements.txt <<'EOF'
+          idna==3.10; platform_machine == '${{ matrix.native-arch }}'
+          idna==3.9; platform_machine != '${{ matrix.native-arch }}'
+          EOF
+
+      - name: "Resolve with native arch (populates cache)"
+        run: |
+          ./uv pip install --python test-venv --dry-run -r requirements.txt 2>&1 | tee native-output.txt
+          grep 'idna==3.10' native-output.txt
+
+      - name: "Resolve under setarch (expect cache invalidation)"
+        run: |
+          setarch ${{ matrix.setarch }} ./uv pip install --python test-venv --dry-run -r requirements.txt 2>&1 | tee setarch-output.txt
+          grep 'idna==3.9' setarch-output.txt

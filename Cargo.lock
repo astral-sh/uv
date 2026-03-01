@@ -6859,6 +6859,7 @@ dependencies = [
  "insta",
  "itertools 0.14.0",
  "junction",
+ "nix 0.30.1",
  "owo-colors",
  "ref-cast",
  "regex",

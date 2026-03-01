@@ -174,6 +174,11 @@ pub struct PlatformRequest {
 }
 
 impl PlatformRequest {
+    /// Returns `true` if no specific platform was requested.
+    pub fn is_any(&self) -> bool {
+        self.os.is_none() && self.arch.is_none() && self.libc.is_none()
+    }
+
     /// Check if this platform request is satisfied by a platform.
     pub fn matches(&self, platform: &Platform) -> bool {
         if let Some(os) = self.os {
