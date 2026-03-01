@@ -65,6 +65,33 @@ like so:
     script (https://github.com/renovatebot/renovate/issues/33591), so if you rely on this feature
     for a script, the lock file will need to be manually updated.
 
+### Dependency cooldown
+
+If you use [`exclude-newer`](../../reference/settings.md#exclude-newer) option, it is recommended to
+also set the equivalent
+[`minimumReleaseAge`](https://docs.renovatebot.com/configuration-options/#minimumreleaseage) option
+in Renovate, to avoid ending up with pull requests where uv would not be able to lock the
+dependencies.
+
+For instance, if you've set `exclude-newer` to `1 week`, you can set:
+
+```jsx title="renovate.json5"
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+
+  // Enable only for PyPI.
+  packageRules: [
+    {
+      matchDatasources: ["pypi"],
+      minimumReleaseAge: "1 week",
+    },
+  ],
+
+  // Or enable for every ecosystem.
+  minimumReleaseAge: "1 week",
+}
+```
+
 ## Dependabot
 
 Dependabot has announced support for uv, but there are some use cases that are not yet working. See
@@ -81,4 +108,26 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+```
+
+### Dependency cooldown
+
+If you use [`exclude-newer`](../../reference/settings.md#exclude-newer) option, it is recommended to
+also set the equivalent
+[`cooldown`](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference#cooldown-)
+option in Dependabot, to avoid ending up with pull requests where uv would not be able to lock the
+dependencies.
+
+For instance, if you've set `exclude-newer` to `1 week`, you can set:
+
+```yaml title="dependabot.yml"
+version: 2
+
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
 ```
