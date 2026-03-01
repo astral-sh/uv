@@ -5247,6 +5247,66 @@ requires-python = ">=3.13"
     Ok(())
 }
 
+/// Resolve successfully when `--python-version` satisfies `Requires-Python` but the installed
+/// interpreter does not. The `installed()` check is not applied in the resolver — the resolution
+/// target is what matters.
+#[test]
+fn requires_python_source_dist_installed_incompatible() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Create a source distribution with `requires-python >= 3.13`.
+    let child_dir = context.temp_dir.child("child");
+    child_dir.create_dir_all()?;
+    child_dir.child("pyproject.toml").write_str(
+        r#"[project]
+name = "example"
+version = "0.0.0"
+dependencies = []
+requires-python = ">=3.13"
+
+[build-system]
+requires = ["setuptools>=42"]
+build-backend = "setuptools.build_meta"
+"#,
+    )?;
+    child_dir.child("src").child("example").create_dir_all()?;
+    child_dir
+        .child("src")
+        .child("example")
+        .child("__init__.py")
+        .touch()?;
+
+    let filters: Vec<_> = [
+        // 3.13 may not be installed
+        (
+            "warning: The requested Python version 3.13 is not available; .* will be used to build dependencies instead.\n",
+            "",
+        ),
+    ]
+        .into_iter()
+        .chain(context.filters())
+        .collect();
+
+    // `--python-version 3.13` satisfies `requires-python >= 3.13`, so resolution succeeds
+    // even though the installed interpreter is 3.12.
+    uv_snapshot!(filters, context.pip_install()
+        .arg("--python-version=3.13")
+        .arg(child_dir.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + example==0.0.0 (from file://[TEMP_DIR]/child)
+    "
+    );
+
+    Ok(())
+}
+
 /// Install with `--no-build-isolation`, to disable isolation during PEP 517 builds.
 #[test]
 fn no_build_isolation() -> Result<()> {
