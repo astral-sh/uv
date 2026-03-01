@@ -4,7 +4,7 @@ use std::fmt::Write;
 use std::num::ParseIntError;
 use std::path::Path;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, SystemTime, SystemTimeError};
 use std::{env, io, iter};
 
 use anyhow::anyhow;
@@ -1302,6 +1302,11 @@ impl RetryState {
     /// After a failed retryable request, this equals the maximum number of retries.
     pub fn total_retries(&self) -> u32 {
         self.total_retries
+    }
+
+    /// The total duration from the first request to the (failure) of the last request.
+    pub fn duration(&self) -> Result<Duration, SystemTimeError> {
+        self.start_time.elapsed()
     }
 
     /// Determines whether request should be retried.
