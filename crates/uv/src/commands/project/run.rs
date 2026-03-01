@@ -28,7 +28,7 @@ use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified, create_symlink};
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
-use uv_preview::{Preview, PreviewFeature};
+use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, Interpreter, PyVenvConfiguration, PythonDownloads, PythonEnvironment,
     PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
@@ -81,6 +81,7 @@ pub(crate) async fn run(
     project_dir: &Path,
     script: Option<Pep723Item>,
     command: Option<RunCommand>,
+    downloaded_script: Option<&tempfile::NamedTempFile>,
     requirements: Vec<RequirementsSource>,
     show_resolution: bool,
     lock_check: LockCheck,
@@ -545,35 +546,18 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
         script_interpreter
     } else {
-        // When running a target with the preview flag enabled, discover the workspace starting
-        // from the target's directory rather than the current working directory.
-        let discovery_dir: Cow<'_, Path> =
-            if preview.is_enabled(PreviewFeature::TargetWorkspaceDiscovery) {
-                if let Some(dir) = command.as_ref().and_then(RunCommand::script_dir) {
-                    Cow::Owned(std::path::absolute(dir)?)
-                } else {
-                    Cow::Borrowed(project_dir)
-                }
-            } else {
-                Cow::Borrowed(project_dir)
-            };
-
         let project = if let Some(package) = package.as_ref() {
             // We need a workspace, but we don't need to have a current package, we can be e.g. in
             // the root of a virtual workspace and then switch into the selected package.
             Some(VirtualProject::Project(
-                Workspace::discover(
-                    &discovery_dir,
-                    &DiscoveryOptions::default(),
-                    &workspace_cache,
-                )
-                .await?
-                .with_current_project(package.clone())
-                .with_context(|| format!("Package `{package}` not found in workspace"))?,
+                Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
+                    .await?
+                    .with_current_project(package.clone())
+                    .with_context(|| format!("Package `{package}` not found in workspace"))?,
             ))
         } else {
             match VirtualProject::discover(
-                &discovery_dir,
+                project_dir,
                 &DiscoveryOptions::default(),
                 &workspace_cache,
             )
@@ -1284,7 +1268,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     };
 
     debug!("Running `{command}`");
-    let mut process = command.as_command(interpreter);
+    let mut process = command.as_command(interpreter, downloaded_script);
 
     // Construct the `PATH` environment variable.
     let new_path = std::env::join_paths(
@@ -1437,7 +1421,7 @@ pub(crate) enum RunCommand {
     /// Execute a `pythonw` script provided via `stdin`.
     PythonGuiStdin(Vec<u8>, Vec<OsString>),
     /// Execute a Python script provided via a remote URL.
-    PythonRemote(DisplaySafeUrl, tempfile::NamedTempFile, Vec<OsString>),
+    PythonRemote(DisplaySafeUrl, Vec<OsString>),
     /// Execute an external command.
     External(OsString, Vec<OsString>),
     /// Execute an empty command (in practice, `python` with no arguments).
@@ -1477,7 +1461,11 @@ impl RunCommand {
     }
 
     /// Convert a [`RunCommand`] into a [`Command`].
-    fn as_command(&self, interpreter: &Interpreter) -> Command {
+    fn as_command(
+        &self,
+        interpreter: &Interpreter,
+        downloaded_script: Option<&tempfile::NamedTempFile>,
+    ) -> Command {
         match self {
             Self::Python(args) => {
                 let mut process = Command::new(interpreter.sys_executable());
@@ -1507,9 +1495,9 @@ impl RunCommand {
                 process.args(args);
                 process
             }
-            Self::PythonRemote(.., target, args) => {
+            Self::PythonRemote(.., args) => {
                 let mut process = Command::new(interpreter.sys_executable());
-                process.arg(target.path());
+                process.arg(downloaded_script.unwrap().path());
                 process.args(args);
                 process
             }
@@ -1604,7 +1592,7 @@ impl RunCommand {
     }
 
     /// Return the directory containing the script, if any.
-    fn script_dir(&self) -> Option<&Path> {
+    pub(crate) fn script_dir(&self) -> Option<&Path> {
         let parent = match self {
             Self::PythonScript(target, _)
             | Self::PythonGuiScript(target, _)
@@ -1742,9 +1730,8 @@ async fn resolve_gist_url(
 
 impl RunCommand {
     /// Determine the [`RunCommand`] for a given set of arguments.
-    pub(crate) async fn from_args(
+    pub(crate) fn from_args(
         command: &ExternalCommand,
-        client_builder: BaseClientBuilder<'_>,
         module: bool,
         script: bool,
         gui_script: bool,
@@ -1776,47 +1763,8 @@ impl RunCommand {
             // We don't do this check on Windows since the file path would
             // be invalid anyway, and thus couldn't refer to a local file.
             if !cfg!(unix) || matches!(target_path.try_exists(), Ok(false)) {
-                let mut url = DisplaySafeUrl::parse(&target.to_string_lossy())?;
-
-                let client = client_builder.build();
-                let mut response = client
-                    .for_host(&url)
-                    .get(Url::from(url.clone()))
-                    .send()
-                    .await?;
-
-                // If it's a Gist URL, use the GitHub API to get the raw URL.
-                if response.url().host_str() == Some("gist.github.com") {
-                    url =
-                        resolve_gist_url(DisplaySafeUrl::ref_cast(response.url()), &client_builder)
-                            .await?;
-
-                    response = client
-                        .for_host(&url)
-                        .get(Url::from(url.clone()))
-                        .send()
-                        .await?;
-                }
-
-                let file_stem = url
-                    .path_segments()
-                    .and_then(Iterator::last)
-                    .and_then(|segment| segment.strip_suffix(".py"))
-                    .unwrap_or("script");
-                let file = tempfile::Builder::new()
-                    .prefix(file_stem)
-                    .suffix(".py")
-                    .tempfile()?;
-
-                // Stream the response to the file.
-                let mut writer = file.as_file();
-                let mut reader = response.bytes_stream();
-                while let Some(chunk) = reader.next().await {
-                    use std::io::Write;
-                    writer.write_all(&chunk?)?;
-                }
-
-                return Ok(Self::PythonRemote(url, file, args.to_vec()));
+                let url = DisplaySafeUrl::parse(&target.to_string_lossy())?;
+                return Ok(Self::PythonRemote(url, args.to_vec()));
             }
         }
 
@@ -1860,6 +1808,52 @@ impl RunCommand {
                 args.iter().map(std::clone::Clone::clone).collect(),
             ))
         }
+    }
+
+    pub(crate) async fn download_remote_script(
+        mut url: &DisplaySafeUrl,
+        client_builder: &BaseClientBuilder<'_>,
+    ) -> anyhow::Result<tempfile::NamedTempFile> {
+        let client = client_builder.build();
+        let mut response = client
+            .for_host(url)
+            .get(Url::from(url.clone()))
+            .send()
+            .await?;
+
+        let gist_url;
+        // If it's a Gist URL, use the GitHub API to get the raw URL.
+        if response.url().host_str() == Some("gist.github.com") {
+            gist_url =
+                resolve_gist_url(DisplaySafeUrl::ref_cast(response.url()), client_builder).await?;
+            url = &gist_url;
+
+            response = client
+                .for_host(url)
+                .get(Url::from(url.clone()))
+                .send()
+                .await?;
+        }
+
+        let file_stem = url
+            .path_segments()
+            .and_then(Iterator::last)
+            .and_then(|segment| segment.strip_suffix(".py"))
+            .unwrap_or("script");
+        let file = tempfile::Builder::new()
+            .prefix(file_stem)
+            .suffix(".py")
+            .tempfile()?;
+
+        // Stream the response to the file.
+        let mut writer = file.as_file();
+        let mut reader = response.bytes_stream();
+        while let Some(chunk) = reader.next().await {
+            use std::io::Write;
+            writer.write_all(&chunk?)?;
+        }
+
+        Ok(file)
     }
 }
 
