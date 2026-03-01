@@ -44,15 +44,16 @@ Renovate supports updating dependencies defined using
 
 Since it cannot automatically detect which Python files use script inline metadata, their locations
 need to be explicitly defined using
-[`fileMatch`](https://docs.renovatebot.com/configuration-options/#filematch), like so:
+[`managerFilePatterns`](https://docs.renovatebot.com/configuration-options/#managerfilepatterns),
+like so:
 
 ```jsx title="renovate.json5"
 {
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
   pep723: {
-    fileMatch: [
-      "scripts/generate_docs\\.py",
-      "scripts/run_server\\.py",
+    managerFilePatterns: [
+      "docs/build.py",
+      "scripts/**/*.py",
     ],
   },
 }
