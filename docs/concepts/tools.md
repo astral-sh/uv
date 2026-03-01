@@ -277,6 +277,8 @@ However, there are a couple notable differences when using uv's tool interface:
 - The `--no-project` flag is not needed — tools are always run isolated from the project.
 - If a tool is already installed, `uv tool run` will use the installed version but `uv run` will
   not.
+- If the inferred package provides a single executable with a different name, `uv tool run` will run
+  it automatically and print a note.
 
 If the tool should not be isolated from the project, e.g., when running `pytest` or `mypy`, then
 `uv run` should be used instead of `uv tool run`.

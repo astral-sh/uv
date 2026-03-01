@@ -359,45 +359,73 @@ pub(crate) async fn run(
     };
 
     // TODO(zanieb): Determine the executable command via the package entry points
-    let executable = from.executable();
+    let requested_executable = from.executable();
+    let mut executable = requested_executable.to_string();
+    let mut executable_path: Option<PathBuf> = None;
     let site_packages = SitePackages::from_environment(&environment)?;
 
     // Check if the provided command is not part of the executables for the `from` package,
-    // and if it's provided by another package in the environment.
-    let provider_hints = match &from {
-        ToolRequirement::Python { .. } => None,
-        ToolRequirement::Package { requirement, .. } => Some(ExecutableProviderHints::new(
-            executable,
-            requirement,
-            &site_packages,
-            invocation_source,
-        )),
-    };
+    // and if it's provided by another package in the environment. Also check for
+    // single-executable fallback (matching pipx behavior).
+    match &from {
+        ToolRequirement::Python { .. } => {}
+        ToolRequirement::Package { requirement, .. } => {
+            let provider_hints = ExecutableProviderHints::new(
+                requested_executable,
+                requirement,
+                &site_packages,
+                invocation_source,
+            );
 
-    if let Some(ref provider_hints) = provider_hints {
-        if provider_hints.not_from_any() {
-            if !explicit_from {
-                // If the user didn't use `--from` and the command isn't in the environment, we're now
-                // just invoking an arbitrary executable on the `PATH` and should exit instead.
-                writeln!(printer.stderr(), "{provider_hints}")?;
-                return Ok(ExitStatus::Failure);
+            if provider_hints.not_from_any() {
+                if !explicit_from {
+                    // If the user didn't use `--from` and the command isn't in the environment, we can
+                    // try to unambiguously map `<package>` -> single executable (matching pipx behavior).
+                    //
+                    // This preserves the original safety property of the early-exit: we still don't
+                    // "fall through" to an arbitrary PATH executable. We only ever run an entrypoint
+                    // from the tool environment.
+                    if let Some(fallback_executable) = provider_hints.single_executable_fallback() {
+                        writeln!(
+                            printer.stderr(),
+                            "NOTE: running app '{}' from '{}'",
+                            fallback_executable.name.cyan(),
+                            requirement.name.cyan()
+                        )?;
+                        executable = fallback_executable.name;
+                        executable_path = Some(fallback_executable.path);
+                    } else {
+                        writeln!(printer.stderr(), "{provider_hints}")?;
+                        return Ok(ExitStatus::Failure);
+                    }
+                } else {
+                    // In the case where `--from` is used, we'll warn on failure if the command is not found
+                    // TODO(zanieb): Consider if we should require `--with` instead of `--from` in this case?
+                    // It'd be a breaking change but would make `uvx` invocations safer.
+                }
+            } else if provider_hints.not_from_expected() {
+                // However, if the user used `--from`, we shouldn't fail because they requested that the
+                // package and executable be different. We'll warn if the executable comes from another
+                // package though, because that could be confusing
+                warn_user_once!("{provider_hints}");
             }
-            // In the case where `--from` is used, we'll warn on failure if the command is not found
-            // TODO(zanieb): Consider if we should require `--with` instead of `--from` in this case?
-            // It'd be a breaking change but would make `uvx` invocations safer.
-        } else if provider_hints.not_from_expected() {
-            // However, if the user used `--from`, we shouldn't fail because they requested that the
-            // package and executable be different. We'll warn if the executable comes from another
-            // package though, because that could be confusing
-            warn_user_once!("{provider_hints}");
         }
     }
 
     // Construct the command
     let mut process = if cfg!(windows) {
-        WindowsRunnable::from_script_path(environment.scripts(), executable.as_ref()).into()
+        if let Some(ref executable_path) = executable_path {
+            WindowsRunnable::from_script_path(environment.scripts(), executable_path.as_os_str())
+                .into()
+        } else {
+            WindowsRunnable::from_script_path(environment.scripts(), executable.as_ref()).into()
+        }
     } else {
-        Command::new(executable)
+        if let Some(ref executable_path) = executable_path {
+            Command::new(executable_path)
+        } else {
+            Command::new(&executable)
+        }
     };
 
     process.args(args);
@@ -426,13 +454,21 @@ pub(crate) async fn run(
     let handle = match process.spawn() {
         Ok(handle) => Ok(handle),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            if let Some(ref provider_hints) = provider_hints {
-                if provider_hints.not_from_any() && explicit_from {
-                    // We deferred this warning earlier, because `--from` was used and the command
-                    // could have come from the `PATH`. Display a more helpful message instead of the
-                    // OS error.
-                    writeln!(printer.stderr(), "{provider_hints}")?;
-                    return Ok(ExitStatus::Failure);
+            // If we didn't use a fallback and used `--from`, we deferred the warning earlier because
+            // the command could have come from the `PATH`. Display a more helpful message instead of
+            // the OS error.
+            if explicit_from {
+                if let ToolRequirement::Package { requirement, .. } = &from {
+                    let provider_hints = ExecutableProviderHints::new(
+                        &executable,
+                        requirement,
+                        &site_packages,
+                        invocation_source,
+                    );
+                    if provider_hints.not_from_any() {
+                        writeln!(printer.stderr(), "{provider_hints}")?;
+                        return Ok(ExitStatus::Failure);
+                    }
                 }
             }
             Err(err)
@@ -547,6 +583,12 @@ struct ExecutableProviderHints<'a> {
     invocation_source: ToolRunCommand,
 }
 
+#[derive(Debug, Clone)]
+struct FallbackExecutable {
+    name: String,
+    path: PathBuf,
+}
+
 impl<'a> ExecutableProviderHints<'a> {
     fn new(
         executable: &'a str,
@@ -575,6 +617,47 @@ impl<'a> ExecutableProviderHints<'a> {
     /// If the executable is not provided by any package.
     fn not_from_any(&self) -> bool {
         self.packages.is_empty()
+    }
+
+    /// If the requested executable matches the package name of the `--from` requirement.
+    fn executable_matches_package_name(&self) -> bool {
+        match PackageName::from_str(self.executable) {
+            Ok(name) => name == self.from.name,
+            Err(_) => false,
+        }
+    }
+
+    /// Returns the single executable name if:
+    /// - The executable is not provided by any package in the environment
+    /// - The package provides exactly one executable
+    /// - The requested executable matches the package name (user didn't explicitly
+    ///   request a different executable)
+    fn single_executable_fallback(&self) -> Option<FallbackExecutable> {
+        // Only apply fallback when executable wasn't found
+        if !self.not_from_any() {
+            return None;
+        }
+
+        // Only apply when user didn't explicitly specify a different executable
+        // (i.e., executable name matches package name)
+        if !self.executable_matches_package_name() {
+            return None;
+        }
+
+        // Get entrypoints for the package and only return if exactly one is available.
+        //
+        // `get_entrypoints()` returns owned Strings, so we clone the single name.
+        let entrypoints = get_entrypoints(&self.from.name, self.site_packages).ok()?;
+        match entrypoints.as_slice() {
+            [(name, path)] => Some(FallbackExecutable {
+                name: name
+                    .strip_suffix(std::env::consts::EXE_SUFFIX)
+                    .unwrap_or(name)
+                    .to_string(),
+                path: path.clone(),
+            }),
+            _ => None,
+        }
     }
 }
 
@@ -620,7 +703,7 @@ impl std::fmt::Display for ExecutableProviderHints<'_> {
                     _ => "<EXECUTABLE-NAME>",
                 };
                 // If the user didn't use `--from`, suggest it
-                if *executable == from.name.as_str() {
+                if self.executable_matches_package_name() {
                     let suggested_command =
                         format!("{} --from {} {name}", invocation_source, from.name);
                     writeln!(f, "\nUse `{}` instead.", suggested_command.green().bold())?;

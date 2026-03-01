@@ -65,6 +65,16 @@ Tools are installed into temporary, isolated environments when using `uvx`.
 When `uvx ruff` is invoked, uv installs the `ruff` package which provides the `ruff` command.
 However, sometimes the package and command names differ.
 
+If a package provides exactly one executable, `uvx` will run it automatically and print a note:
+
+```console
+$ uvx tally-cli --version
+NOTE: running app 'tally' from 'tally-cli'
+tally version 0.1.3 (3671a4f)
+```
+
+If a package provides multiple executables, use `--from` to select the one you want.
+
 The `--from` option can be used to invoke a command from a specific package, e.g., `http` which is
 provided by `httpie`:
 
