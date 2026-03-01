@@ -11,6 +11,7 @@ use crate::commands::{PythonUpgrade, PythonUpgradeSource};
 use uv_auth::Service;
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::comma::CommaSeparatedRequirements;
+use uv_cli::options::{Resolve, resolve_and_combine_indexes};
 use uv_cli::{
     AddArgs, AuthLoginArgs, AuthLogoutArgs, AuthTokenArgs, ColorChoice, ExternalCommand,
     GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs,
@@ -571,6 +572,8 @@ impl RunSettings {
         args: RunArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
+        package_indexes: Vec<Index>,
+        preview: Preview,
     ) -> Self {
         let RunArgs {
             extra,
@@ -688,7 +691,13 @@ impl RunSettings {
             python_platform,
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
-                resolver_installer_options(installer, build),
+                resolver_installer_options(
+                    installer,
+                    build,
+                    filesystem.as_ref(),
+                    package_indexes,
+                    preview,
+                ),
                 filesystem,
             ),
             env_file: EnvFile::from_args(env_file, no_env_file),
@@ -731,6 +740,8 @@ impl ToolRunSettings {
         filesystem: Option<FilesystemOptions>,
         invocation_source: ToolRunCommand,
         environment: EnvironmentOptions,
+        package_indexes: Vec<Index>,
+        preview: Preview,
     ) -> Self {
         let ToolRunArgs {
             command,
@@ -781,15 +792,22 @@ impl ToolRunSettings {
             }
         }
 
+        let options = resolver_installer_options(
+            installer,
+            build,
+            filesystem.as_ref(),
+            package_indexes,
+            preview,
+        );
+
         let filesystem_options = filesystem.map(FilesystemOptions::into_options);
 
-        let options =
-            resolver_installer_options(installer, build).combine(ResolverInstallerOptions::from(
-                filesystem_options
-                    .as_ref()
-                    .map(|options| options.top_level.clone())
-                    .unwrap_or_default(),
-            ));
+        let options = options.combine(ResolverInstallerOptions::from(
+            filesystem_options
+                .as_ref()
+                .map(|options| options.top_level.clone())
+                .unwrap_or_default(),
+        ));
 
         let filesystem_install_mirrors = filesystem_options
             .map(|options| options.install_mirrors.clone())
@@ -880,6 +898,8 @@ impl ToolInstallSettings {
         args: ToolInstallArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
+        package_indexes: Vec<Index>,
+        preview: Preview,
     ) -> Self {
         let ToolInstallArgs {
             package,
@@ -903,15 +923,22 @@ impl ToolInstallSettings {
             torch_backend,
         } = args;
 
+        let options = resolver_installer_options(
+            installer,
+            build,
+            filesystem.as_ref(),
+            package_indexes,
+            preview,
+        );
+
         let filesystem_options = filesystem.map(FilesystemOptions::into_options);
 
-        let options =
-            resolver_installer_options(installer, build).combine(ResolverInstallerOptions::from(
-                filesystem_options
-                    .as_ref()
-                    .map(|options| options.top_level.clone())
-                    .unwrap_or_default(),
-            ));
+        let options = options.combine(ResolverInstallerOptions::from(
+            filesystem_options
+                .as_ref()
+                .map(|options| options.top_level.clone())
+                .unwrap_or_default(),
+        ));
 
         let filesystem_install_mirrors = filesystem_options
             .map(|options| options.install_mirrors.clone())
@@ -989,6 +1016,8 @@ impl ToolUpgradeSettings {
         args: ToolUpgradeArgs,
         filesystem: Option<FilesystemOptions>,
         environment: &EnvironmentOptions,
+        package_indexes: Vec<Index>,
+        preview: Preview,
     ) -> Self {
         let ToolUpgradeArgs {
             name,
@@ -1058,7 +1087,13 @@ impl ToolUpgradeSettings {
             no_sources_package,
         };
 
-        let args = resolver_installer_options(installer, build);
+        let args = resolver_installer_options(
+            installer,
+            build,
+            filesystem.as_ref(),
+            package_indexes,
+            preview,
+        );
         let filesystem = filesystem.map(FilesystemOptions::into_options);
         let filesystem_install_mirrors = filesystem
             .clone()
@@ -1585,6 +1620,8 @@ impl SyncSettings {
         args: SyncArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
+        package_indexes: Vec<Index>,
+        preview: Preview,
     ) -> Self {
         let SyncArgs {
             extra,
@@ -1634,7 +1671,13 @@ impl SyncSettings {
             .unwrap_or_default();
 
         let settings = ResolverInstallerSettings::combine(
-            resolver_installer_options(installer, build),
+            resolver_installer_options(
+                installer,
+                build,
+                filesystem.as_ref(),
+                package_indexes,
+                preview,
+            ),
             filesystem,
         );
 
@@ -1730,6 +1773,8 @@ impl LockSettings {
         args: LockArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
+        package_indexes: Vec<Index>,
+        preview: Preview,
     ) -> Self {
         let LockArgs {
             check,
@@ -1768,7 +1813,16 @@ impl LockSettings {
             script,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
-            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
+            settings: ResolverSettings::combine(
+                resolver_options(
+                    resolver,
+                    build,
+                    filesystem.as_ref(),
+                    package_indexes,
+                    preview,
+                ),
+                filesystem,
+            ),
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -1821,6 +1875,8 @@ impl AddSettings {
         args: AddArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
+        package_indexes: Vec<Index>,
+        preview: Preview,
     ) -> Self {
         let AddArgs {
             packages,
@@ -1877,23 +1933,17 @@ impl AddSettings {
         };
 
         // Track the `--index` and `--default-index` arguments from the command-line.
-        let indexes = installer
-            .index_args
-            .default_index
-            .clone()
-            .and_then(Maybe::into_option)
-            .into_iter()
-            .chain(
-                installer
-                    .index_args
-                    .index
-                    .clone()
-                    .into_iter()
-                    .flat_map(|v| v.clone())
-                    .flatten()
-                    .filter_map(Maybe::into_option),
-            )
-            .collect::<Vec<_>>();
+        let indexes: Vec<_> = resolve_and_combine_indexes(
+            installer.index_args.default_index.clone(),
+            installer.index_args.index.clone(),
+            filesystem.as_ref(),
+            package_indexes.clone(),
+            preview,
+            true,
+        )
+        .into_iter()
+        .flatten()
+        .collect();
 
         // Warn user if an ambiguous relative path was passed as a value for
         // `--index` or `--default-index`.
@@ -1991,7 +2041,13 @@ impl AddSettings {
             refresh: Refresh::from(refresh),
             indexes,
             settings: ResolverInstallerSettings::combine(
-                resolver_installer_options(installer, build),
+                resolver_installer_options(
+                    installer,
+                    build,
+                    filesystem.as_ref(),
+                    package_indexes,
+                    preview,
+                ),
                 filesystem,
             ),
             install_mirrors: environment
@@ -2025,6 +2081,8 @@ impl RemoveSettings {
         args: RemoveArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
+        package_indexes: Vec<Index>,
+        preview: Preview,
     ) -> Self {
         let RemoveArgs {
             dev,
@@ -2090,7 +2148,13 @@ impl RemoveSettings {
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
-                resolver_installer_options(installer, build),
+                resolver_installer_options(
+                    installer,
+                    build,
+                    filesystem.as_ref(),
+                    package_indexes,
+                    preview,
+                ),
                 filesystem,
             ),
             install_mirrors: environment
@@ -2125,6 +2189,8 @@ impl VersionSettings {
         args: VersionArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
+        package_indexes: Vec<Index>,
+        preview: Preview,
     ) -> Self {
         let VersionArgs {
             value,
@@ -2174,7 +2240,13 @@ impl VersionSettings {
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
-                resolver_installer_options(installer, build),
+                resolver_installer_options(
+                    installer,
+                    build,
+                    filesystem.as_ref(),
+                    package_indexes,
+                    preview,
+                ),
                 filesystem,
             ),
             install_mirrors: environment
@@ -2213,6 +2285,8 @@ impl TreeSettings {
         args: TreeArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
+        package_indexes: Vec<Index>,
+        preview: Preview,
     ) -> Self {
         let TreeArgs {
             tree,
@@ -2275,7 +2349,16 @@ impl TreeSettings {
             python_version,
             python_platform,
             python: python.and_then(Maybe::into_option),
-            resolver: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
+            resolver: ResolverSettings::combine(
+                resolver_options(
+                    resolver,
+                    build,
+                    filesystem.as_ref(),
+                    package_indexes,
+                    preview,
+                ),
+                filesystem,
+            ),
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -2314,6 +2397,8 @@ impl ExportSettings {
         args: ExportArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
+        package_indexes: Vec<Index>,
+        preview: Preview,
     ) -> Self {
         let ExportArgs {
             format,
@@ -2417,7 +2502,16 @@ impl ExportSettings {
             script,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
-            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
+            settings: ResolverSettings::combine(
+                resolver_options(
+                    resolver,
+                    build,
+                    filesystem.as_ref(),
+                    package_indexes,
+                    preview,
+                ),
+                filesystem,
+            ),
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -2486,6 +2580,8 @@ impl PipCompileSettings {
         args: PipCompileArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
+        package_indexes: Vec<Index>,
+        preview: Preview,
     ) -> Self {
         let PipCompileArgs {
             src_file,
@@ -2664,7 +2760,7 @@ impl PipCompileSettings {
                     ),
                     annotation_style,
                     torch_backend,
-                    ..PipOptions::from(resolver)
+                    ..PipOptions::resolve(resolver, filesystem.as_ref(), package_indexes, preview)
                 },
                 filesystem,
                 environment,
@@ -2690,6 +2786,8 @@ impl PipSyncSettings {
         args: Box<PipSyncArgs>,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
+        package_indexes: Vec<Index>,
+        preview: Preview,
     ) -> Self {
         let PipSyncArgs {
             src_file,
@@ -2767,7 +2865,7 @@ impl PipSyncSettings {
                     all_extras: flag(all_extras, no_all_extras, "all-extras"),
                     group: Some(group),
                     torch_backend,
-                    ..PipOptions::from(installer)
+                    ..PipOptions::resolve(installer, filesystem.as_ref(), package_indexes, preview)
                 },
                 filesystem,
                 environment,
@@ -2802,6 +2900,8 @@ impl PipInstallSettings {
         args: PipInstallArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
+        package_indexes: Vec<Index>,
+        preview: Preview,
     ) -> Self {
         let PipInstallArgs {
             package,
@@ -2951,7 +3051,7 @@ impl PipInstallSettings {
                     require_hashes: flag(require_hashes, no_require_hashes, "require-hashes"),
                     verify_hashes: flag(verify_hashes, no_verify_hashes, "verify-hashes"),
                     torch_backend,
-                    ..PipOptions::from(installer)
+                    ..PipOptions::resolve(installer, filesystem.as_ref(), package_indexes, preview)
                 },
                 filesystem,
                 environment,
@@ -3082,6 +3182,8 @@ impl PipListSettings {
         args: PipListArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
+        package_indexes: Vec<Index>,
+        preview: Preview,
     ) -> Self {
         let PipListArgs {
             editable,
@@ -3113,7 +3215,7 @@ impl PipListSettings {
                     strict: flag(strict, no_strict, "strict"),
                     target,
                     prefix,
-                    ..PipOptions::from(fetch)
+                    ..PipOptions::resolve(fetch, filesystem.as_ref(), package_indexes, preview)
                 },
                 filesystem,
                 environment,
@@ -3188,6 +3290,8 @@ impl PipTreeSettings {
         args: PipTreeArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
+        package_indexes: Vec<Index>,
+        preview: Preview,
     ) -> Self {
         let PipTreeArgs {
             show_version_specifiers,
@@ -3214,7 +3318,7 @@ impl PipTreeSettings {
                     python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system, "system"),
                     strict: flag(strict, no_strict, "strict"),
-                    ..PipOptions::from(fetch)
+                    ..PipOptions::resolve(fetch, filesystem.as_ref(), package_indexes, preview)
                 },
                 filesystem,
                 environment,
@@ -3288,6 +3392,8 @@ impl BuildSettings {
         args: BuildArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
+        package_indexes: Vec<Index>,
+        preview: Preview,
     ) -> Self {
         let BuildArgs {
             src,
@@ -3341,7 +3447,16 @@ impl BuildSettings {
             ),
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
-            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
+            settings: ResolverSettings::combine(
+                resolver_options(
+                    resolver,
+                    build,
+                    filesystem.as_ref(),
+                    package_indexes,
+                    preview,
+                ),
+                filesystem,
+            ),
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -3372,6 +3487,8 @@ impl VenvSettings {
         args: VenvArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
+        package_indexes: Vec<Index>,
+        preview: Preview,
     ) -> Self {
         let VenvArgs {
             python,
@@ -3423,7 +3540,7 @@ impl VenvSettings {
                     exclude_newer_package: exclude_newer_package
                         .map(ExcludeNewerPackage::from_iter),
                     link_mode,
-                    ..PipOptions::from(index_args)
+                    ..PipOptions::resolve(index_args, filesystem.as_ref(), package_indexes, preview)
                 },
                 filesystem,
                 environment,

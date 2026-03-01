@@ -6,7 +6,7 @@ use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::{
     assert::PathAssert,
-    fixture::{FileTouch, FileWriteStr, PathChild},
+    fixture::{FileTouch, FileWriteStr, PathChild, PathCreateDir},
 };
 use indoc::indoc;
 use insta::assert_snapshot;
@@ -4677,4 +4677,63 @@ fn tool_install_python_platform() {
      ~ black==24.3.0
     Installed 2 executables: black, blackd
     ");
+}
+
+#[test]
+fn tool_install_index_by_name() {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let uv_dir = context.user_config_dir.child("uv");
+    uv_dir.create_dir_all().unwrap();
+    let user_config = uv_dir.child("uv.toml");
+    user_config
+        .write_str(indoc! {r#"
+            [[index]]
+            name = "proxy"
+            url = "https://pypi-proxy.fly.dev/simple"
+        "#})
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("pytest")
+        .arg("--index")
+        .arg("proxy")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+    Installed 2 executables: py.test, pytest
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("pytest").join("uv-receipt.toml")).unwrap(), @r#"
+        [tool]
+        requirements = [{ name = "pytest" }]
+        entrypoints = [
+            { name = "py.test", install-path = "[TEMP_DIR]/bin/py.test", from = "pytest" },
+            { name = "pytest", install-path = "[TEMP_DIR]/bin/pytest", from = "pytest" },
+        ]
+
+        [tool.options]
+        index = [{ name = "proxy", url = "https://pypi-proxy.fly.dev/simple", explicit = false, default = false, format = "simple", authenticate = "auto" }, { name = "proxy", url = "https://pypi-proxy.fly.dev/simple", explicit = false, default = false, format = "simple", authenticate = "auto" }]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "#);
+    });
 }

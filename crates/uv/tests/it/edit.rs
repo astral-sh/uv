@@ -289,7 +289,7 @@ fn add_git() -> Result<()> {
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
         "#
-        );
+            );
     });
 
     // Install from the lockfile.
@@ -385,7 +385,7 @@ fn add_git_private_source() -> Result<()> {
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-private-pypackage#d780faf0ac91257d4d5a4f0c5a0e4509608c0071" }
         "#
-        );
+            );
     });
 
     // Install from the lockfile.
@@ -479,7 +479,7 @@ fn add_git_private_raw() -> Result<()> {
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-private-pypackage#d780faf0ac91257d4d5a4f0c5a0e4509608c0071" }
         "#
-        );
+            );
     });
 
     // Install from the lockfile.
@@ -757,7 +757,7 @@ fn add_git_lfs() -> Result<()> {
         version = "0.1.0"
         source = { git = "https://github.com/astral-sh/test-lfs-repo?lfs=true&rev=0fe88f7c2e2883521bf065c108d9ee8eb115674b#0fe88f7c2e2883521bf065c108d9ee8eb115674b" }
         "#
-        );
+            );
     });
 
     // Change revision as an unnamed requirement
@@ -1026,7 +1026,7 @@ fn add_git_raw() -> Result<()> {
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
         "#
-        );
+            );
     });
 
     // Install from the lockfile.
@@ -1285,7 +1285,7 @@ fn add_unnamed() -> Result<()> {
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
         "#
-        );
+            );
     });
 
     // Install from the lockfile.
@@ -1948,7 +1948,7 @@ fn add_remove_workspace() -> Result<()> {
         version = "0.1.0"
         source = { editable = "child2" }
         "#
-        );
+            );
     });
 
     // Install from the lockfile.
@@ -2026,7 +2026,7 @@ fn add_remove_workspace() -> Result<()> {
         version = "0.1.0"
         source = { editable = "child2" }
         "#
-        );
+            );
     });
 
     // Install from the lockfile.
@@ -2616,7 +2616,7 @@ fn add_workspace_editable() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         "#
-        );
+            );
     });
 
     // Install from the lockfile.
@@ -3820,7 +3820,7 @@ fn add_update_git_reference_script() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.add().arg("--script=script.py").arg("https://github.com/astral-test/uv-public-pypackage.git"),
-        @"
+    @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3853,7 +3853,7 @@ fn add_update_git_reference_script() -> Result<()> {
     });
 
     uv_snapshot!(context.filters(), context.add().arg("--script=script.py").arg("uv-public-pypackage").arg("--branch=test-branch"),
-        @"
+    @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7531,7 +7531,7 @@ fn remove_repeated() -> Result<()> {
         [tool.uv.sources]
         anyio = {{ path = "{anyio_local}" }}
     "#,
-        anyio_local = anyio_local.portable_display(),
+    anyio_local = anyio_local.portable_display(),
     })?;
 
     uv_snapshot!(context.filters(), context.remove().arg("anyio"), @"
@@ -11003,7 +11003,7 @@ fn add_index_with_existing_relative_path_index() -> Result<()> {
     let wheel_dst = packages.child("ok-1.0.0-py3-none-any.whl");
     fs_err::copy(&wheel_src, &wheel_dst)?;
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("./test-index"), @"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("./test-index"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11026,20 +11026,20 @@ fn add_index_with_non_existent_relative_path() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
         [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
-    "#})?;
+            name = "project"
+                version = "0.1.0"
+                requires-python = ">=3.12"
+                dependencies = []
+                "#})?;
 
     uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("./test-index"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
+        success: false
+        exit_code: 2
+        ----- stdout -----
 
-    ----- stderr -----
-    error: Directory not found for index: file://[TEMP_DIR]/test-index
-    ");
+        ----- stderr -----
+        error: Directory not found for index: file://[TEMP_DIR]/test-index
+        ");
 
     Ok(())
 }
@@ -11062,18 +11062,18 @@ async fn add_index_with_non_existent_relative_path_with_same_name_as_index() -> 
         [[tool.uv.index]]
         name = "test-index"
         url = "{proxy_uri}/simple"
-    "#,
+        "#,
         proxy_uri = proxy.uri()
     ))?;
 
     uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("./test-index"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
+        success: false
+        exit_code: 2
+        ----- stdout -----
 
-    ----- stderr -----
-    error: Directory not found for index: file://[TEMP_DIR]/test-index
-    ");
+        ----- stderr -----
+        error: Directory not found for index: file://[TEMP_DIR]/test-index
+        ");
 
     Ok(())
 }
@@ -11095,14 +11095,14 @@ async fn add_index_empty_directory() -> Result<()> {
         [[tool.uv.index]]
         name = "test-index"
         url = "{proxy_uri}/simple"
-    "#,
+        "#,
         proxy_uri = proxy.uri()
     ))?;
 
     let packages = context.temp_dir.child("test-index");
     packages.create_dir_all()?;
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("./test-index"), @"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("./test-index"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11119,9 +11119,8 @@ async fn add_index_empty_directory() -> Result<()> {
 }
 
 #[test]
-fn add_index_with_ambiguous_relative_path() -> Result<()> {
+fn add_index_by_name_missing() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let context = context.with_filter((r"\./|\.\\", r"[PREFIX]"));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -11132,26 +11131,775 @@ fn add_index_with_ambiguous_relative_path() -> Result<()> {
         dependencies = []
     "#})?;
 
-    #[cfg(unix)]
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("test-index"), @"
+    uv_snapshot!(context.add().arg("iniconfig").arg("--index").arg("test-index"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    warning: Relative paths passed to `--index` or `--default-index` should be disambiguated from index names (use `[PREFIX]test-index`). Support for ambiguous values will be removed in the future
-    error: Directory not found for index: file://[TEMP_DIR]/test-index
+    error: Could not find an index named `test-index`
     ");
 
-    #[cfg(windows)]
+    Ok(())
+}
+
+#[test]
+fn add_index_by_name() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [[tool.uv.index]]
+        name = "test-index"
+        url = "https://pypi-proxy.fly.dev/simple"
+    "#})?;
+
     uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("test-index"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    let pyproject = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig>=2.0.0",
+        ]
+
+        [[tool.uv.index]]
+        name = "test-index"
+        url = "https://pypi-proxy.fly.dev/simple"
+
+        [tool.uv.sources]
+        iniconfig = { index = "test-index" }
+        "#
+        );
+    });
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi-proxy.fly.dev/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0", index = "https://pypi-proxy.fly.dev/simple" }]
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+#[test]
+fn add_index_by_name_for_workspace() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [[tool.uv.index]]
+        name = "test-index"
+        url = "https://pypi-proxy.fly.dev/simple"
+    "#})?;
+
+    let child_dir = context.temp_dir.child("child");
+    child_dir.create_dir_all()?;
+    let child_pyproject = child_dir.child("pyproject.toml");
+    child_pyproject.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("test-index"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    let pyproject = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig>=2.0.0",
+        ]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [[tool.uv.index]]
+        name = "test-index"
+        url = "https://pypi-proxy.fly.dev/simple"
+
+        [tool.uv.sources]
+        iniconfig = { index = "test-index" }
+        "#
+        );
+    });
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "child",
+            "project",
+        ]
+
+        [[package]]
+        name = "child"
+        version = "0.1.0"
+        source = { virtual = "child" }
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi-proxy.fly.dev/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0", index = "https://pypi-proxy.fly.dev/simple" }]
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+#[test]
+fn add_index_by_name_for_workspace_member() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let workspace_toml = context.temp_dir.child("pyproject.toml");
+    workspace_toml.write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [[tool.uv.index]]
+        name = "test-index"
+        url = "https://pypi-proxy.fly.dev/simple"
+    "#})?;
+
+    let child_dir = context.temp_dir.child("child");
+    child_dir.create_dir_all()?;
+    let child_pyproject = child_dir.child("pyproject.toml");
+    child_pyproject.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("test-index").current_dir(&child_dir), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    let pyproject = fs_err::read_to_string(context.temp_dir.join("child").join("pyproject.toml"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig>=2.0.0",
+        ]
+
+        [tool.uv.sources]
+        iniconfig = { index = "test-index" }
+        "#
+        );
+    });
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "child",
+        ]
+
+        [[package]]
+        name = "child"
+        version = "0.1.0"
+        source = { virtual = "child" }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0", index = "https://pypi-proxy.fly.dev/simple" }]
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi-proxy.fly.dev/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        ]
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+#[test]
+fn add_index_by_name_no_cross_member_references() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let workspace_toml = context.temp_dir.child("pyproject.toml");
+    workspace_toml.write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv.workspace]
+        members = ["child1", "child2"]
+    "#})?;
+
+    let child1_dir = context.temp_dir.child("child1");
+    child1_dir.create_dir_all()?;
+    let child1_pyproject = child1_dir.child("pyproject.toml");
+    child1_pyproject.write_str(indoc! {r#"
+        [project]
+        name = "child1"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [[tool.uv.index]]
+        name = "child1-index"
+        url = "https://pypi-proxy.fly.dev/simple"
+    "#})?;
+
+    let child2_dir = context.temp_dir.child("child2");
+    child2_dir.create_dir_all()?;
+    let child2_pyproject = child2_dir.child("pyproject.toml");
+    child2_pyproject.write_str(indoc! {r#"
+        [project]
+        name = "child2"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.add().arg("iniconfig").arg("--index").arg("child1-index").current_dir(&child2_dir), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    warning: Relative paths passed to `--index` or `--default-index` should be disambiguated from index names (use `[PREFIX]test-index` or `[PREFIX]test-index`). Support for ambiguous values will be removed in the future
-    error: Directory not found for index: file://[TEMP_DIR]/test-index
+    error: Could not find an index named `child1-index`
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn add_index_by_name_precedence() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let uv_dir = context.user_config_dir.child("uv");
+    uv_dir.create_dir_all()?;
+    let user_config = uv_dir.child("uv.toml");
+    user_config.write_str(indoc! {r#"
+        [[index]]
+        name = "test-index-2"
+        url = "https://pypi.org/simple"
+
+        [[index]]
+        name = "test-index-3"
+        url = "https://pypi-proxy.fly.dev/simple"
+    "#})?;
+
+    let workspace_toml = context.temp_dir.child("pyproject.toml");
+    workspace_toml.write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [[tool.uv.index]]
+        name = "test-index"
+        url = "https://pypi.org/simple"
+
+        [[tool.uv.index]]
+        name = "test-index-2"
+        url = "https://pypi-proxy.fly.dev/simple"
+    "#})?;
+
+    let child_dir = context.temp_dir.child("child");
+    child_dir.create_dir_all()?;
+    let child_pyproject = child_dir.child("pyproject.toml");
+    child_pyproject.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [[tool.uv.index]]
+        name = "test-index"
+        url = "https://pypi-proxy.fly.dev/simple"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context
+        .add()
+        .arg("--package")
+        .arg("child")
+        .arg("iniconfig")
+        .arg("--index")
+        .arg("test-index"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "child",
+        ]
+
+        [[package]]
+        name = "child"
+        version = "0.1.0"
+        source = { virtual = "child" }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0", index = "https://pypi-proxy.fly.dev/simple" }]
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi-proxy.fly.dev/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        ]
+        "#
+        );
+    });
+    context
+        .remove()
+        .arg("--package")
+        .arg("child")
+        .arg("iniconfig")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context
+        .add()
+        .arg("--package")
+        .arg("child")
+        .arg("iniconfig")
+        .arg("--index")
+        .arg("test-index-2"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "child",
+        ]
+
+        [[package]]
+        name = "child"
+        version = "0.1.0"
+        source = { virtual = "child" }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0", index = "https://pypi-proxy.fly.dev/simple" }]
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi-proxy.fly.dev/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        ]
+        "#
+        );
+    });
+    context
+        .remove()
+        .arg("--package")
+        .arg("child")
+        .arg("iniconfig")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context
+        .add()
+        .arg("--package")
+        .arg("child")
+        .arg("iniconfig")
+        .arg("--index")
+        .arg("test-index-3")
+        , @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "child",
+        ]
+
+        [[package]]
+        name = "child"
+        version = "0.1.0"
+        source = { virtual = "child" }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0", index = "https://pypi-proxy.fly.dev/simple" }]
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi-proxy.fly.dev/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        ]
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+/// When a directory exists with the same name as a configured index, warn and use the directory.
+#[test]
+fn add_index_by_name_directory_ambiguity() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [[tool.uv.index]]
+        name = "proxy"
+        url = "https://pypi-proxy.fly.dev/simple"
+    "#})?;
+
+    // Create a directory with the same name as the index
+    let proxy_dir = context.temp_dir.child("proxy");
+    proxy_dir.create_dir_all()?;
+
+    // Should warn about ambiguity and use the directory (which will fail since it's empty)
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("proxy"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Relative paths passed to `--index` should be disambiguated from index names (use `./proxy`). In the future, this path will be treated as the index defined by the same name
+    warning: Relative paths passed to `--index` or `--default-index` should be disambiguated from index names (use `./proxy`). Support for ambiguous values will be removed in the future
+    warning: Index directory `file://[TEMP_DIR]/proxy` is empty, skipping
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
+/// With preview enabled, prefer the index name over an ambiguous directory.
+#[test]
+fn add_index_by_name_directory_ambiguity_preview() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [[tool.uv.index]]
+        name = "proxy"
+        url = "https://pypi-proxy.fly.dev/simple"
+    "#})?;
+
+    // Create a directory with the same name as the index
+    let proxy_dir = context.temp_dir.child("proxy");
+    proxy_dir.create_dir_all()?;
+
+    // With preview, should use the named index (not the directory)
+    uv_snapshot!(context.filters(), context.add()
+        .arg("iniconfig")
+        .arg("--index").arg("proxy")
+        .arg("--preview-features").arg("index-assume-name"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn add_index_by_name_explicit_single() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [[tool.uv.index]]
+        name = "explicit"
+        explicit = true
+        url = "https://pypi-proxy.fly.dev/simple"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add()
+        .arg("--index").arg("explicit")
+        .arg("iniconfig"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Explicit index `explicit` will be ignored. Explicit indexes are only used when specified in `[tool.uv.sources]`.
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn add_index_by_name_explicit_multiple() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [[tool.uv.index]]
+        name = "explicit"
+        explicit = true
+        url = "https://pypi-proxy.fly.dev/simple"
+
+        [[tool.uv.index]]
+        name = "implicit"
+        url = "https://pypi-proxy.fly.dev/simple"
+    "#})?;
+
+    // Multiple indexes with at least one explicit should produce a warning
+    uv_snapshot!(context.filters(), context.add()
+        .arg("--index").arg("explicit")
+        .arg("--index").arg("implicit")
+        .arg("iniconfig"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Explicit index `explicit` will be ignored. Explicit indexes are only used when specified in `[tool.uv.sources]`.
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
     ");
 
     Ok(())

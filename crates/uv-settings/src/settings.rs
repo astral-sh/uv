@@ -213,6 +213,16 @@ impl Options {
             ..self
         })
     }
+
+    /// Set the origin for all contained indexes.
+    #[must_use]
+    pub fn with_origin(self, origin: Origin) -> Self {
+        Self {
+            top_level: self.top_level.with_origin(origin),
+            pip: self.pip.map(|pip| pip.with_origin(origin)),
+            ..self
+        }
+    }
 }
 
 /// Global settings, relevant to all invocations.
@@ -602,6 +612,36 @@ impl ResolverInstallerSchema {
                 .transpose()?,
             ..self
         })
+    }
+
+    /// Set the origin for all contained indexes.
+    #[must_use]
+    pub fn with_origin(self, origin: Origin) -> Self {
+        Self {
+            index: self.index.map(|index| {
+                index
+                    .into_iter()
+                    .map(|index| index.with_origin(origin))
+                    .collect()
+            }),
+            ..self
+        }
+    }
+
+    /// Return the priority ordered list of indexes
+    pub fn indexes(&self) -> impl Iterator<Item = Index> {
+        self.index
+            .iter()
+            .flatten()
+            .cloned()
+            .chain(
+                self.extra_index_url
+                    .iter()
+                    .flatten()
+                    .cloned()
+                    .map(Index::from),
+            )
+            .chain(self.index_url.iter().cloned().map(Index::from))
     }
 }
 
@@ -1969,6 +2009,20 @@ impl PipOptions {
                 .transpose()?,
             ..self
         })
+    }
+
+    /// Set the origin for all contained indexes.
+    #[must_use]
+    pub fn with_origin(self, origin: Origin) -> Self {
+        Self {
+            index: self.index.map(|index| {
+                index
+                    .into_iter()
+                    .map(|index| index.with_origin(origin))
+                    .collect()
+            }),
+            ..self
+        }
     }
 }
 
