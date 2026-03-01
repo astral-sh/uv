@@ -1963,7 +1963,8 @@ async fn run_project(
     match *project_command {
         ProjectCommand::Init(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::InitSettings::resolve(args, filesystem, environment);
+            let args =
+                settings::InitSettings::resolve(args, filesystem, environment, globals.preview);
             show_settings!(args);
 
             // The `--project` arg is being deprecated for `init` with a warning now and an error in preview.
