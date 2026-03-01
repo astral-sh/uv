@@ -5247,6 +5247,82 @@ requires-python = ">=3.13"
     Ok(())
 }
 
+/// Resolve successfully when `--python-version` satisfies `Requires-Python` but the installed
+/// interpreter does not. The `installed()` check is not applied in the resolver — the resolution
+/// target is what matters.
+#[test]
+fn requires_python_source_dist_installed_incompatible() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Create a source distribution with `requires-python >= 3.13`.
+    let child_dir = context.temp_dir.child("child");
+    child_dir.create_dir_all()?;
+    child_dir.child("pyproject.toml").write_str(
+        r#"[project]
+name = "example"
+version = "0.0.0"
+dependencies = []
+requires-python = ">=3.13"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+"#,
+    )?;
+    child_dir.child("src").child("example").create_dir_all()?;
+    child_dir
+        .child("src")
+        .child("example")
+        .child("__init__.py")
+        .touch()?;
+
+    // `--python-version 3.13` satisfies `requires-python >= 3.13`, so resolution succeeds
+    // even though the installed interpreter is 3.12.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--python-version=3.13")
+        .arg(child_dir.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + example==0.0.0 (from file://[TEMP_DIR]/child)
+    "
+    );
+
+    Ok(())
+}
+
+/// Like [`requires_python_source_dist_installed_incompatible`], but using a registry package
+/// (`iniconfig`) instead of a direct URL, with `--no-binary` to force building from source.
+#[test]
+fn requires_python_source_dist_installed_incompatible_registry() {
+    let context = uv_test::test_context!("3.9").with_exclude_newer("2025-11-01T00:00:00Z");
+
+    // `--python-version 3.10` satisfies `requires-python >= 3.10`, so resolution succeeds
+    // even though the installed interpreter is 3.9. This should arguably fail, and some build
+    // backends would likely error in this scenario.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--python-version=3.10")
+        .arg("--no-binary")
+        .arg("iniconfig")
+        .arg("iniconfig==2.3.0"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.3.0
+    "
+    );
+}
+
 /// Install with `--no-build-isolation`, to disable isolation during PEP 517 builds.
 #[test]
 fn no_build_isolation() -> Result<()> {
