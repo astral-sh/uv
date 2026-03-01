@@ -1,8 +1,15 @@
 # TLS certificates
 
-By default, uv loads certificates from the bundled `webpki-roots` crate. The `webpki-roots` are a
-reliable set of trust roots from Mozilla, and including them in uv improves portability and
-performance (especially on macOS, where reading the system trust store incurs a significant delay).
+By default, uv uses rustls with bundled
+[webpki-root-certs](https://crates.io/crates/webpki-root-certs) certificates, providing consistent
+and portable TLS verification across all platforms.
+
+Supported backends:
+
+- **rustls + webpki-root-certs (Default)**: Uses bundled roots for consistent behavior across
+  platforms.
+- **Native TLS**: Uses the platform's native TLS implementation (SChannel on Windows, Secure
+  Transport on macOS, OpenSSL on Linux).
 
 ## System certificates
 
@@ -13,13 +20,20 @@ command-line flag, or set the `UV_NATIVE_TLS` environment variable to `true`.
 
 ## Custom certificates
 
-If a direct path to the certificate is required (e.g., in CI), set the `SSL_CERT_FILE` environment
-variable to the path of the certificate bundle, to instruct uv to use that file instead of the
-system's trust store.
+To use custom CA certificates, you can set the `SSL_CERT_FILE` environment variable to the path of a
+certificate bundle (PEM format), or set `SSL_CERT_DIR` to a directory containing certificate files
+(`.pem`, `.crt`, or `.cer` extensions).
+
+Custom certificates are merged with the certificate store used by the active TLS backend. When using
+the default rustls backend, they are layered on top of the bundled webpki-root-certs. When using
+native TLS, they are layered on top of the platform's certificate store.
+
+The `SSL_CERT_FILE` can point to a single certificate or a bundle containing multiple certificates.
+The `SSL_CERT_DIR` can contain multiple certificate files, and uv will load all valid certificates
+from the directory.
 
 If client certificate authentication (mTLS) is desired, set the `SSL_CLIENT_CERT` environment
-variable to the path of the PEM formatted file containing the certificate followed by the private
-key.
+variable to the path of a PEM formatted file containing the certificate followed by the private key.
 
 ## Insecure hosts
 

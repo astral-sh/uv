@@ -158,9 +158,11 @@ pub(crate) async fn tree(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::with_tls_backend(
+                client_builder.tls_backend(),
+            )
+            .report(err)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };

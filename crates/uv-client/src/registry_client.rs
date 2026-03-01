@@ -100,14 +100,6 @@ impl<'a> RegistryClientBuilder<'a> {
     }
 
     #[must_use]
-    pub fn built_in_root_certs(mut self, built_in_root_certs: bool) -> Self {
-        self.base_client_builder = self
-            .base_client_builder
-            .built_in_root_certs(built_in_root_certs);
-        self
-    }
-
-    #[must_use]
     pub fn cache(mut self, cache: Cache) -> Self {
         self.cache = cache;
         self
@@ -1143,7 +1135,11 @@ impl RegistryClient {
             if let Some(authorization) = req.headers().get("authorization") {
                 headers.append("authorization", authorization.clone());
             }
-
+            // Specify identity encoding to prevent double compression from async_http_range_reader and reqwest
+            headers.insert(
+                reqwest::header::ACCEPT_ENCODING,
+                reqwest::header::HeaderValue::from_static("identity"),
+            );
             // This response callback is special, we actually make a number of subsequent requests to
             // fetch the file from the remote zip.
             let read_metadata_range_request = |response: Response| {

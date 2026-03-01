@@ -322,7 +322,7 @@
       "type": ["boolean", "null"]
     },
     "native-tls": {
-      "description": "Whether to load TLS certificates from the platform's native certificate store.\n\nBy default, uv loads certificates from the bundled `webpki-roots` crate. The\n`webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv\nimproves portability and performance (especially on macOS).\n\nHowever, in some cases, you may want to use the platform's native certificate store,\nespecially if you're relying on a corporate trust root (e.g., for a mandatory proxy) that's\nincluded in your system's certificate store.",
+      "description": "Whether to use the native-tls TLS backend instead of the default rustls backend.\n\nBy default, uv uses rustls with bundled webpki-root-certs certificates, which provides\nconsistent and portable TLS verification across all platforms.\n\nSetting this to `true` is equivalent to `--tls-backend native-tls`, which uses\nthe platform's native TLS implementation.",
       "type": ["boolean", "null"]
     },
     "no-binary": {

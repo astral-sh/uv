@@ -294,8 +294,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             {
                 Ok(result) => result.into_lock(),
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::native_tls(
-                        client_builder.is_native_tls(),
+                    return diagnostics::OperationDiagnostic::with_tls_backend(
+                        client_builder.tls_backend(),
                     )
                     .with_context("script")
                     .report(err)
@@ -341,8 +341,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             {
                 Ok(_) => {}
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::native_tls(
-                        client_builder.is_native_tls(),
+                    return diagnostics::OperationDiagnostic::with_tls_backend(
+                        client_builder.tls_backend(),
                     )
                     .with_context("script")
                     .report(err)
@@ -458,8 +458,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 {
                     Ok(update) => Some(update.into_environment().into_interpreter()),
                     Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::native_tls(
-                            client_builder.is_native_tls(),
+                        return diagnostics::OperationDiagnostic::with_tls_backend(
+                            client_builder.tls_backend(),
                         )
                         .with_context("script")
                         .report(err)
@@ -796,8 +796,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 {
                     Ok(result) => result,
                     Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::native_tls(
-                            client_builder.is_native_tls(),
+                        return diagnostics::OperationDiagnostic::with_tls_backend(
+                            client_builder.tls_backend(),
                         )
                         .report(err)
                         .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
@@ -884,8 +884,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 {
                     Ok(_) => {}
                     Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::native_tls(
-                            client_builder.is_native_tls(),
+                        return diagnostics::OperationDiagnostic::with_tls_backend(
+                            client_builder.tls_backend(),
                         )
                         .report(err)
                         .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
@@ -1038,8 +1038,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             let environment = match result {
                 Ok(resolution) => resolution,
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::native_tls(
-                        client_builder.is_native_tls(),
+                    return diagnostics::OperationDiagnostic::with_tls_backend(
+                        client_builder.tls_backend(),
                     )
                     .with_context("`--with`")
                     .report(err)

@@ -313,8 +313,8 @@ pub(crate) async fn sync(
                 }
                 // TODO(zanieb): We should respect `--output-format json` for the error case
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::native_tls(
-                        client_builder.is_native_tls(),
+                    return diagnostics::OperationDiagnostic::with_tls_backend(
+                        client_builder.tls_backend(),
                     )
                     .report(err)
                     .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
@@ -362,9 +362,11 @@ pub(crate) async fn sync(
     {
         Ok(result) => Outcome::Success(result),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::with_tls_backend(
+                client_builder.tls_backend(),
+            )
+            .report(err)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(ProjectError::LockMismatch(prev, cur, lock_source)) => {
             if dry_run.enabled() {
@@ -421,9 +423,11 @@ pub(crate) async fn sync(
     {
         Ok(changelog) => changelog,
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::with_tls_backend(
+                client_builder.tls_backend(),
+            )
+            .report(err)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };

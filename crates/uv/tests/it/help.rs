@@ -57,7 +57,7 @@ fn help() {
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
           --native-tls
-              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
+              Whether to use the native-tls TLS backend instead of rustls [env: UV_NATIVE_TLS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -137,7 +137,7 @@ fn help_flag() {
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
           --native-tls
-              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
+              Whether to use the native-tls TLS backend instead of rustls [env: UV_NATIVE_TLS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -216,7 +216,7 @@ fn help_short_flag() {
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
           --native-tls
-              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
+              Whether to use the native-tls TLS backend instead of rustls [env: UV_NATIVE_TLS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -366,15 +366,13 @@ fn help_subcommand() {
               - never:  Disables colored output
 
           --native-tls
-              Whether to load TLS certificates from the platform's native store.
+              Whether to use the native-tls TLS backend instead of rustls.
               
-              By default, uv loads certificates from the bundled `webpki-roots` crate. The
-              `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv
-              improves portability and performance (especially on macOS).
+              By default, uv uses the rustls TLS backend with bundled webpki-root-certs certificates,
+              providing consistent and portable TLS verification across all platforms.
               
-              However, in some cases, you may want to use the platform's native certificate store,
-              especially if you're relying on a corporate trust root (e.g., for a mandatory proxy)
-              that's included in your system's certificate store.
+              Setting this flag is equivalent to `--tls-backend native-tls`, which uses the platform's
+              native TLS implementation.
 
               [env: UV_NATIVE_TLS=]
 
@@ -652,15 +650,13 @@ fn help_subsubcommand() {
               - never:  Disables colored output
 
           --native-tls
-              Whether to load TLS certificates from the platform's native store.
+              Whether to use the native-tls TLS backend instead of rustls.
               
-              By default, uv loads certificates from the bundled `webpki-roots` crate. The
-              `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv
-              improves portability and performance (especially on macOS).
+              By default, uv uses the rustls TLS backend with bundled webpki-root-certs certificates,
+              providing consistent and portable TLS verification across all platforms.
               
-              However, in some cases, you may want to use the platform's native certificate store,
-              especially if you're relying on a corporate trust root (e.g., for a mandatory proxy)
-              that's included in your system's certificate store.
+              Setting this flag is equivalent to `--tls-backend native-tls`, which uses the platform's
+              native TLS implementation.
 
               [env: UV_NATIVE_TLS=]
 
@@ -781,7 +777,7 @@ fn help_flag_subcommand() {
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
           --native-tls
-              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
+              Whether to use the native-tls TLS backend instead of rustls [env: UV_NATIVE_TLS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -864,7 +860,7 @@ fn help_flag_subsubcommand() {
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
           --native-tls
-              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
+              Whether to use the native-tls TLS backend instead of rustls [env: UV_NATIVE_TLS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -1025,7 +1021,7 @@ fn help_with_global_option() {
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
           --native-tls
-              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
+              Whether to use the native-tls TLS backend instead of rustls [env: UV_NATIVE_TLS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -1147,7 +1143,7 @@ fn help_with_no_pager() {
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
           --native-tls
-              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
+              Whether to use the native-tls TLS backend instead of rustls [env: UV_NATIVE_TLS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
