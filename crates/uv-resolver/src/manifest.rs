@@ -98,6 +98,12 @@ impl Manifest {
         self
     }
 
+    #[must_use]
+    pub fn with_preferences(mut self, preferences: Preferences) -> Self {
+        self.preferences = preferences;
+        self
+    }
+
     /// Return an iterator over all requirements, constraints, and overrides, in priority order,
     /// such that requirements come first, followed by constraints, followed by overrides.
     ///

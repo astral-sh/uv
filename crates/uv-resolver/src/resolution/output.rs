@@ -6,6 +6,7 @@ use indexmap::IndexSet;
 use petgraph::{
     Directed, Direction,
     graph::{Graph, NodeIndex},
+    visit::EdgeRef,
 };
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
@@ -20,6 +21,9 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier};
 use uv_pep508::{MarkerEnvironment, MarkerTree, MarkerTreeKind};
 use uv_pypi_types::{Conflicts, HashDigests, ParsedUrlError, VerbatimParsedUrl, Yanked};
+use uv_types::{
+    BuildDependencyEdge, BuildDependencyPackage, BuildResolutionGraph, ResolvedBuildDependency,
+};
 
 use crate::graph_ops::{marker_reachability, simplify_conflict_markers};
 use crate::pins::FilePins;
@@ -596,6 +600,78 @@ impl ResolverOutput {
                 ResolutionGraphNode::Root => None,
                 ResolutionGraphNode::Dist(dist) => Some(dist),
             })
+    }
+
+    /// Extract the build resolution graph: direct build requirements (root edges)
+    /// and all packages with their direct dependency edges.
+    ///
+    /// This preserves the dependency graph structure so that transitive build
+    /// dependencies can be walked at sync time via
+    /// [`Lock::all_build_resolutions`] with proper marker evaluation.
+    pub fn build_resolution_graph(&self) -> BuildResolutionGraph {
+        let mut roots = Vec::new();
+        let mut packages = Vec::new();
+
+        // Find the root node.
+        let root_index = self
+            .graph
+            .node_indices()
+            .find(|&idx| matches!(self.graph[idx], ResolutionGraphNode::Root));
+
+        // Collect all base packages with their direct dependency edges.
+        for node_index in self.graph.node_indices() {
+            let ResolutionGraphNode::Dist(dist) = &self.graph[node_index] else {
+                continue;
+            };
+            if !dist.is_base() {
+                continue;
+            }
+
+            // Collect this package's outgoing dependency edges.
+            let mut dependencies = Vec::new();
+            for edge in self.graph.edges(node_index) {
+                let ResolutionGraphNode::Dist(dep_dist) = &self.graph[edge.target()] else {
+                    continue;
+                };
+                if !dep_dist.is_base() {
+                    continue;
+                }
+                dependencies.push(BuildDependencyEdge {
+                    name: dep_dist.name.clone(),
+                    version: dep_dist.version.clone(),
+                    marker: edge.weight().pep508(),
+                });
+            }
+
+            packages.push(BuildDependencyPackage {
+                dist: dist.dist.clone(),
+                hashes: dist.hashes.clone().into_iter().collect(),
+                dependencies,
+            });
+        }
+
+        // Collect direct build requirements (edges from the resolution root
+        // to the packages listed in `build-system.requires`).
+        if let Some(root_idx) = root_index {
+            for edge in self.graph.edges(root_idx) {
+                let ResolutionGraphNode::Dist(dist) = &self.graph[edge.target()] else {
+                    continue;
+                };
+                if !dist.is_base() {
+                    continue;
+                }
+                roots.push(ResolvedBuildDependency {
+                    dist: dist.dist.clone(),
+                    hashes: dist.hashes.clone().into_iter().collect(),
+                    marker: edge.weight().pep508(),
+                });
+            }
+        }
+
+        BuildResolutionGraph {
+            direct_dependencies: roots,
+            packages,
+        }
     }
 
     /// Return the number of distinct packages in the graph.

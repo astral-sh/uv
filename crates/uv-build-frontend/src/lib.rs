@@ -33,7 +33,7 @@ use uv_configuration::{BuildKind, BuildOutput, NoSources};
 use uv_distribution::BuildRequires;
 use uv_distribution_types::{
     ConfigSettings, ExtraBuildRequirement, ExtraBuildRequires, IndexLocations, Requirement,
-    Resolution,
+    Resolution, SourceDist,
 };
 use uv_fs::{LockedFile, LockedFileMode};
 use uv_fs::{PythonExt, Simplified};
@@ -42,7 +42,9 @@ use uv_pep440::Version;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_static::EnvVars;
-use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, SourceBuildTrait};
+use uv_types::{
+    AnyErrorBuild, BuildContext, BuildIsolation, BuildPackageKey, BuildStack, SourceBuildTrait,
+};
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
 
@@ -285,6 +287,7 @@ impl SourceBuild {
         source: &Path,
         subdirectory: Option<&Path>,
         install_path: &Path,
+        source_dist: Option<&SourceDist>,
         fallback_package_name: Option<&PackageName>,
         fallback_package_version: Option<&Version>,
         interpreter: &Interpreter,
@@ -334,6 +337,9 @@ impl SourceBuild {
             .and_then(|project| project.version.as_ref())
             .or(fallback_package_version)
             .cloned();
+        let package_key = package_name.clone().map(|name| {
+            BuildPackageKey::from_source_dist(name, package_version.clone(), source_dist)
+        });
 
         let extra_build_dependencies = package_name
             .as_ref()
@@ -392,6 +398,7 @@ impl SourceBuild {
                 source_build_context.clone(),
                 &pep517_backend,
                 extra_build_dependencies,
+                package_key.as_ref(),
                 build_stack,
             )
             .await?;
@@ -450,6 +457,7 @@ impl SourceBuild {
                 build_context,
                 package_name.as_ref(),
                 package_version.as_ref(),
+                package_key.as_ref(),
                 version_id,
                 locations,
                 no_sources,
@@ -519,6 +527,7 @@ impl SourceBuild {
         source_build_context: SourceBuildContext,
         pep517_backend: &Pep517Backend,
         extra_build_dependencies: Vec<Requirement>,
+        package: Option<&BuildPackageKey>,
         build_stack: &BuildStack,
     ) -> Result<Resolution, Error> {
         Ok(
@@ -530,7 +539,7 @@ impl SourceBuild {
                     resolved_requirements.clone()
                 } else {
                     let resolved_requirements = build_context
-                        .resolve(&DEFAULT_BACKEND.requirements, build_stack)
+                        .resolve(&DEFAULT_BACKEND.requirements, package, build_stack)
                         .await
                         .map_err(|err| {
                             Error::RequirementsResolve("`setup.py` build", err.into())
@@ -555,7 +564,7 @@ impl SourceBuild {
                     )
                 };
                 build_context
-                    .resolve(&requirements, build_stack)
+                    .resolve(&requirements, package, build_stack)
                     .await
                     .map_err(|err| Error::RequirementsResolve(dependency_sources, err.into()))?
             },
@@ -954,6 +963,7 @@ async fn create_pep517_build_environment(
     build_context: &impl BuildContext,
     package_name: Option<&PackageName>,
     package_version: Option<&Version>,
+    package_key: Option<&BuildPackageKey>,
     version_id: Option<&str>,
     locations: &IndexLocations,
     no_sources: NoSources,
@@ -1084,7 +1094,7 @@ async fn create_pep517_build_environment(
             .chain(extra_requires)
             .collect();
         let resolution = build_context
-            .resolve(&requirements, build_stack)
+            .resolve(&requirements, package_key, build_stack)
             .await
             .map_err(|err| {
                 Error::RequirementsResolve("`build-system.requires`", AnyErrorBuild::from(err))

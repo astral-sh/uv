@@ -1,12 +1,12 @@
 #![allow(clippy::single_match_else)]
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt::Write;
 use std::path::Path;
 use std::sync::Arc;
 
 use owo_colors::OwoColorize;
-use rustc_hash::{FxBuildHasher, FxHashMap};
+use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use tracing::debug;
 
 use uv_cache::{Cache, Refresh};
@@ -18,8 +18,9 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
-    DependencyMetadata, HashGeneration, Index, IndexLocations, NameRequirementSpecification,
-    Requirement, RequiresPython, UnresolvedRequirementSpecification,
+    BuiltDist, DependencyMetadata, Dist, HashGeneration, Index, IndexLocations, Name,
+    NameRequirementSpecification, Requirement, RequiresPython, ResolvedDist, SourceDist,
+    UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
@@ -36,7 +37,10 @@ use uv_resolver::{
 };
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
-use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
+use uv_types::{
+    BuildContext, BuildIsolation, BuildPackageKey, BuildPreferences, BuildResolutionGraph,
+    BuildStack, EmptyInstalledPackages, HashStrategy,
+};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Editability, Workspace, WorkspaceCache, WorkspaceMember};
 
@@ -761,6 +765,13 @@ async fn do_lock(
     // Convert to the `Constraints` format.
     let dispatch_constraints = Constraints::from_requirements(build_constraints.iter().cloned());
 
+    // Extract build dependency preferences from the existing lock file so the
+    // resolver prefers previously locked build dependency versions.
+    let build_preferences = existing_lock
+        .as_ref()
+        .map(|lock| BuildPreferences::new(lock.build_dependency_preferences()))
+        .unwrap_or_default();
+
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -785,7 +796,16 @@ async fn do_lock(
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
-    );
+    )
+    .with_build_preferences(build_preferences);
+
+    // Use universal resolution for build dependencies when locking, so the
+    // resolved build deps work on all platforms.
+    let build_dispatch = if preview.is_enabled(PreviewFeature::LockBuildDependencies) {
+        build_dispatch.with_universal_build_resolution()
+    } else {
+        build_dispatch
+    };
 
     let database = DistributionDatabase::new(
         &client,
@@ -976,7 +996,7 @@ async fn do_lock(
             .relative_to(target.install_path())?;
 
             let previous = existing_lock.map(ValidatedLock::into_lock);
-            let lock = Lock::from_resolution(&resolution, target.install_path())?
+            let mut lock = Lock::from_resolution(&resolution, target.install_path())?
                 .with_manifest(manifest)
                 .with_conflicts(conflicts)
                 .with_supported_environments(
@@ -992,6 +1012,35 @@ async fn do_lock(
                         .unwrap_or_default(),
                 );
 
+            // Only record build dependencies in the lock file when the preview feature is enabled.
+            if preview.is_enabled(PreviewFeature::LockBuildDependencies) {
+                if !build_options.no_build_all() {
+                    let build_database =
+                        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads);
+                    resolve_all_possible_builds(
+                        &lock,
+                        target.install_path(),
+                        build_options,
+                        &build_dispatch,
+                        &build_database,
+                        &build_hasher,
+                    )
+                    .await
+                    .map_err(ProjectError::from)?;
+                } else {
+                    debug!(
+                        "Skipping lock build dependency resolution because `--no-build` is enabled"
+                    );
+                }
+
+                let build_resolutions = build_dispatch.build_resolutions().snapshot();
+                lock = lock.with_build_resolutions(
+                    &build_resolutions,
+                    packages,
+                    target.install_path(),
+                )?;
+            }
+
             if previous.as_ref().is_some_and(|previous| *previous == lock) {
                 Ok(LockResult::Unchanged(lock))
             } else {
@@ -999,6 +1048,120 @@ async fn do_lock(
             }
         }
     }
+}
+
+fn source_dist_from_resolved_dist(resolved_dist: &ResolvedDist) -> Option<SourceDist> {
+    let ResolvedDist::Installable { dist, .. } = resolved_dist else {
+        return None;
+    };
+
+    match dist.as_ref() {
+        Dist::Source(source_dist) => Some(source_dist.clone()),
+        Dist::Built(BuiltDist::Registry(built_dist)) => built_dist
+            .sdist
+            .as_ref()
+            .map(|sdist| SourceDist::Registry(sdist.clone())),
+        Dist::Built(BuiltDist::DirectUrl(_) | BuiltDist::Path(_)) => None,
+    }
+}
+
+fn graph_for_key<'a>(
+    map: &'a BTreeMap<BuildPackageKey, BuildResolutionGraph>,
+    key: &BuildPackageKey,
+) -> Option<&'a BuildResolutionGraph> {
+    if let Some(graph) = map.get(key) {
+        return Some(graph);
+    }
+
+    let mut matches = map
+        .iter()
+        .filter(|(candidate, _)| candidate.name == key.name && candidate.version == key.version)
+        .map(|(_, graph)| graph);
+
+    let first = matches.next()?;
+    if matches.next().is_none() {
+        Some(first)
+    } else {
+        None
+    }
+}
+
+async fn resolve_all_possible_builds(
+    lock: &Lock,
+    workspace_root: &Path,
+    build_options: &uv_configuration::BuildOptions,
+    build_dispatch: &BuildDispatch<'_>,
+    database: &DistributionDatabase<'_, BuildDispatch<'_>>,
+    build_hasher: &HashStrategy,
+) -> anyhow::Result<()> {
+    let mut queue: VecDeque<(BuildPackageKey, SourceDist)> = lock
+        .source_distributions_for_build(workspace_root)?
+        .into_iter()
+        .filter(|(key, _)| !build_options.no_build_package(&key.name))
+        .collect();
+
+    let mut seen: FxHashSet<BuildPackageKey> = FxHashSet::default();
+
+    while let Some((key, source_dist)) = queue.pop_front() {
+        if !seen.insert(key.clone()) {
+            continue;
+        }
+
+        let mut resolved_from_pyproject = false;
+
+        if let SourceDist::Directory(directory) = &source_dist
+            && let Ok(contents) =
+                fs_err::read_to_string(directory.install_path.join("pyproject.toml"))
+            && let Ok(pyproject) = uv_workspace::pyproject::PyProjectToml::from_string(contents)
+            && let Some(build_system) = pyproject.build_system
+        {
+            let requirements: Vec<Requirement> = build_system
+                .requires
+                .into_iter()
+                .map(Requirement::from)
+                .collect();
+            if !requirements.is_empty() {
+                let build_stack = BuildStack::default();
+                let _ = build_dispatch
+                    .resolve(&requirements, Some(&key), &build_stack)
+                    .await?;
+                resolved_from_pyproject = true;
+            }
+        }
+
+        if !resolved_from_pyproject {
+            let dist = Dist::Source(source_dist.clone());
+            let hash_policy = build_hasher.get(&dist);
+            database
+                .get_or_build_wheel_metadata(&dist, hash_policy)
+                .await?;
+        }
+
+        let snapshot = build_dispatch.build_resolutions().snapshot();
+        let Some(graph) = graph_for_key(&snapshot, &key) else {
+            continue;
+        };
+
+        for package in &graph.packages {
+            let Some(source_dist) = source_dist_from_resolved_dist(&package.dist) else {
+                continue;
+            };
+
+            let name = package.dist.name().clone();
+            if build_options.no_build_package(&name) {
+                continue;
+            }
+
+            let dep_key = BuildPackageKey::from_source_dist(
+                name,
+                package.dist.version().cloned(),
+                Some(&source_dist),
+            );
+            queue.push_back((dep_key, source_dist));
+        }
+    }
+
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -1410,6 +1573,18 @@ impl ValidatedLock {
                     debug!(
                         "Resolving despite existing lockfile due to mismatched extras for: `{name}`\n  Requested: {:?}\n  Existing: {:?}",
                         expected, actual
+                    );
+                }
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedBuildRequires(name, version) => {
+                if let Some(version) = version {
+                    debug!(
+                        "Resolving despite existing lockfile due to mismatched `build-system.requires` for: `{name}=={version}`"
+                    );
+                } else {
+                    debug!(
+                        "Resolving despite existing lockfile due to mismatched `build-system.requires` for: `{name}`"
                     );
                 }
                 Ok(Self::Preferable(lock))

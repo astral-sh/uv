@@ -2004,6 +2004,8 @@ fn test_path_hopping() -> Result<()> {
         dependencies = ["foo"]
         [tool.uv.sources]
         foo = { path = "../libs/foo", editable = true }
+        [tool.uv]
+        exclude-newer-package = { uv-build = "2026-02-15T00:00:00Z" }
     "#};
     let main_project_dir = context.temp_dir.join("project");
     make_project(&main_project_dir, "project", deps)?;
@@ -2042,6 +2044,9 @@ fn test_path_hopping() -> Result<()> {
       },
       "project": {
         "editable": "."
+      },
+      "uv-build": {
+        "registry": "https://pypi.org/simple"
       }
     }
     "#);

@@ -7263,6 +7263,7 @@ dependencies = [
  "uv-normalize",
  "uv-once-map",
  "uv-pep440",
+ "uv-pep508",
  "uv-pypi-types",
  "uv-python",
  "uv-redacted",

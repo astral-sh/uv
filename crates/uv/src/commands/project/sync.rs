@@ -31,7 +31,7 @@ use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequ
 use uv_resolver::{FlatIndex, ForkStrategy, Installable, Lock, PrereleaseMode, ResolutionMode};
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
-use uv_types::{BuildIsolation, HashStrategy};
+use uv_types::{BuildIsolation, HashStrategy, LockedBuildResolutions};
 use uv_warnings::warn_user;
 use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
@@ -793,6 +793,17 @@ pub(super) async fn do_sync(
         FlatIndex::from_entries(entries, Some(&tags), &hasher, build_options)
     };
 
+    // Extract locked build resolutions from the lock file for source builds.
+    let locked_build_resolutions = {
+        let map = target.lock().all_build_resolutions(
+            target.install_path(),
+            &tags,
+            build_options,
+            venv.interpreter().markers(),
+        )?;
+        LockedBuildResolutions::new(map)
+    };
+
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -817,7 +828,8 @@ pub(super) async fn do_sync(
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
-    );
+    )
+    .with_locked_build_resolutions(locked_build_resolutions);
 
     let site_packages = SitePackages::from_environment(venv)?;
 
