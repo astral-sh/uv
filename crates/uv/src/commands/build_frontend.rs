@@ -743,7 +743,6 @@ async fn build_package(
                 version_id,
                 build_output,
                 Some(sdist_build.normalized_filename().version()),
-                preview,
             )
             .await?;
             build_results.push(wheel_build);
@@ -781,7 +780,6 @@ async fn build_package(
                 version_id,
                 build_output,
                 None,
-                preview,
             )
             .await?;
             build_results.push(wheel_build);
@@ -817,7 +815,6 @@ async fn build_package(
                 version_id,
                 build_output,
                 Some(sdist_build.normalized_filename().version()),
-                preview,
             )
             .await?;
             build_results.push(sdist_build);
@@ -862,7 +859,6 @@ async fn build_package(
                 version_id,
                 build_output,
                 version.as_ref(),
-                preview,
             )
             .await?;
             build_results.push(wheel_build);
@@ -1022,19 +1018,13 @@ async fn build_wheel(
     build_output: BuildOutput,
     // Used for checking version consistency
     version: Option<&Version>,
-    preview: Preview,
 ) -> Result<BuildMessage, Error> {
     let build_message = match action {
         BuildAction::List => {
             let source_tree_ = source_tree.to_path_buf();
             let sources_enabled = sources.is_none();
             let (filename, file_list) = tokio::task::spawn_blocking(move || {
-                uv_build_backend::list_wheel(
-                    &source_tree_,
-                    uv_version::version(),
-                    sources_enabled,
-                    preview,
-                )
+                uv_build_backend::list_wheel(&source_tree_, uv_version::version(), sources_enabled)
             })
             .await??;
             let raw_filename = filename.to_string();
@@ -1066,7 +1056,6 @@ async fn build_wheel(
                     None,
                     uv_version::version(),
                     sources_enabled,
-                    preview,
                 )
             })
             .await??;

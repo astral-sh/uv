@@ -3,7 +3,6 @@ use anyhow::{Context, Result};
 use std::env;
 use std::io::Write;
 use std::path::Path;
-use uv_preview::Preview;
 
 /// PEP 517 hook to build a source distribution.
 pub(crate) fn build_sdist(sdist_directory: &Path) -> Result<ExitStatus> {
@@ -22,7 +21,6 @@ pub(crate) fn build_sdist(sdist_directory: &Path) -> Result<ExitStatus> {
 pub(crate) fn build_wheel(
     wheel_directory: &Path,
     metadata_directory: Option<&Path>,
-    preview: Preview,
 ) -> Result<ExitStatus> {
     let filename = uv_build_backend::build_wheel(
         &env::current_dir()?,
@@ -30,7 +28,6 @@ pub(crate) fn build_wheel(
         metadata_directory,
         uv_version::version(),
         false,
-        preview,
     )?;
     // Tell the build frontend about the name of the artifact we built
     writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;
@@ -41,7 +38,6 @@ pub(crate) fn build_wheel(
 pub(crate) fn build_editable(
     wheel_directory: &Path,
     metadata_directory: Option<&Path>,
-    preview: Preview,
 ) -> Result<ExitStatus> {
     let filename = uv_build_backend::build_editable(
         &env::current_dir()?,
@@ -49,7 +45,6 @@ pub(crate) fn build_editable(
         metadata_directory,
         uv_version::version(),
         false,
-        preview,
     )?;
     // Tell the build frontend about the name of the artifact we built
     writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;
@@ -67,15 +62,11 @@ pub(crate) fn get_requires_for_build_wheel() -> Result<ExitStatus> {
 }
 
 /// PEP 517 hook to just emit metadata through `.dist-info`.
-pub(crate) fn prepare_metadata_for_build_wheel(
-    metadata_directory: &Path,
-    preview: Preview,
-) -> Result<ExitStatus> {
+pub(crate) fn prepare_metadata_for_build_wheel(metadata_directory: &Path) -> Result<ExitStatus> {
     let filename = uv_build_backend::metadata(
         &env::current_dir()?,
         metadata_directory,
         uv_version::version(),
-        preview,
     )?;
     // Tell the build frontend about the name of the artifact we built
     writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;
@@ -88,15 +79,11 @@ pub(crate) fn get_requires_for_build_editable() -> Result<ExitStatus> {
 }
 
 /// PEP 660 hook to just emit metadata through `.dist-info`.
-pub(crate) fn prepare_metadata_for_build_editable(
-    metadata_directory: &Path,
-    preview: Preview,
-) -> Result<ExitStatus> {
+pub(crate) fn prepare_metadata_for_build_editable(metadata_directory: &Path) -> Result<ExitStatus> {
     let filename = uv_build_backend::metadata(
         &env::current_dir()?,
         metadata_directory,
         uv_version::version(),
-        preview,
     )?;
     // Tell the build frontend about the name of the artifact we built
     writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;

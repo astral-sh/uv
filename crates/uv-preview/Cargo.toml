@@ -9,6 +9,9 @@ repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
 
+[package.metadata.cargo-shear]
+ignored = ["uv-preview"]
+
 [lib]
 doctest = false
 
@@ -23,6 +26,8 @@ itertools = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+uv-preview = { path = ".", features = ["testing"] }
 
 [features]
 default = []
+testing = []

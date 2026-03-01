@@ -15,7 +15,7 @@ use uv_distribution_filename::WheelFilename;
 use uv_fs::Simplified;
 use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag};
-use uv_preview::{Preview, PreviewFeature};
+use uv_preview::PreviewFeature;
 use uv_warnings::warn_user_once;
 
 use crate::metadata::DEFAULT_EXCLUDES;
@@ -31,7 +31,6 @@ pub fn build_wheel(
     metadata_directory: Option<&Path>,
     uv_version: &str,
     show_warnings: bool,
-    preview: Preview,
 ) -> Result<WheelFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     for warning in pyproject_toml.check_build_system(uv_version) {
@@ -67,7 +66,6 @@ pub fn build_wheel(
         uv_version,
         wheel_writer,
         show_warnings,
-        preview,
     )?;
 
     temp_file
@@ -82,7 +80,6 @@ pub fn list_wheel(
     source_tree: &Path,
     uv_version: &str,
     show_warnings: bool,
-    preview: Preview,
 ) -> Result<(WheelFilename, FileList), Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     for warning in pyproject_toml.check_build_system(uv_version) {
@@ -109,7 +106,6 @@ pub fn list_wheel(
         uv_version,
         writer,
         show_warnings,
-        preview,
     )?;
     Ok((filename, files))
 }
@@ -121,7 +117,6 @@ fn write_wheel(
     uv_version: &str,
     mut wheel_writer: impl DirectoryWriter,
     show_warnings: bool,
-    preview: Preview,
 ) -> Result<(), Error> {
     let settings = pyproject_toml
         .settings()
@@ -273,7 +268,6 @@ fn write_wheel(
         filename,
         source_tree,
         uv_version,
-        preview,
     )?;
     wheel_writer.close(&dist_info_dir)?;
 
@@ -287,7 +281,6 @@ pub fn build_editable(
     metadata_directory: Option<&Path>,
     uv_version: &str,
     show_warnings: bool,
-    preview: Preview,
 ) -> Result<WheelFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     for warning in pyproject_toml.check_build_system(uv_version) {
@@ -344,7 +337,6 @@ pub fn build_editable(
         &filename,
         source_tree,
         uv_version,
-        preview,
     )?;
     wheel_writer.close(&dist_info_dir)?;
 
@@ -360,7 +352,6 @@ pub fn metadata(
     source_tree: &Path,
     metadata_directory: &Path,
     uv_version: &str,
-    preview: Preview,
 ) -> Result<String, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     for warning in pyproject_toml.check_build_system(uv_version) {
@@ -389,7 +380,6 @@ pub fn metadata(
         &filename,
         source_tree,
         uv_version,
-        preview,
     )?;
     wheel_writer.close(&dist_info_dir)?;
 
@@ -594,7 +584,6 @@ fn write_dist_info(
     filename: &WheelFilename,
     root: &Path,
     uv_version: &str,
-    preview: Preview,
 ) -> Result<String, Error> {
     let dist_info_dir = format!(
         "{}-{}.dist-info",
@@ -610,7 +599,7 @@ fn write_dist_info(
         &format!("{dist_info_dir}/WHEEL"),
         wheel_info.to_string().as_bytes(),
     )?;
-    if preview.is_enabled(PreviewFeature::MetadataJson) {
+    if uv_preview::is_enabled(PreviewFeature::MetadataJson) {
         writer.write_bytes(
             &format!("{dist_info_dir}/WHEEL.json"),
             &serde_json::to_vec(&wheel_info).map_err(Error::Json)?,
@@ -631,7 +620,7 @@ fn write_dist_info(
         &format!("{dist_info_dir}/METADATA"),
         metadata.core_metadata_format().as_bytes(),
     )?;
-    if preview.is_enabled(PreviewFeature::MetadataJson) {
+    if uv_preview::is_enabled(PreviewFeature::MetadataJson) {
         writer.write_bytes(
             &format!("{dist_info_dir}/METADATA.json"),
             &serde_json::to_vec(&metadata).map_err(Error::Json)?,
@@ -914,15 +903,10 @@ mod test {
     /// Snapshot all files from the prepare metadata hook.
     #[test]
     fn test_prepare_metadata() {
+        let _preview = uv_preview::test::with_features(&[]);
         let metadata_dir = TempDir::new().unwrap();
         let built_by_uv = Path::new("../../test/packages/built-by-uv");
-        metadata(
-            built_by_uv,
-            metadata_dir.path(),
-            "1.0.0+test",
-            Preview::default(),
-        )
-        .unwrap();
+        metadata(built_by_uv, metadata_dir.path(), "1.0.0+test").unwrap();
 
         let mut files: Vec<_> = WalkDir::new(metadata_dir.path())
             .sort_by_file_name()

@@ -60,6 +60,8 @@ ignored = ["uv-options-metadata"]
 schemars = ["dep:schemars", "uv-pypi-types/schemars"]
 
 [dev-dependencies]
+uv-preview = { workspace = true, features = ["testing"] }
+
 indoc = { workspace = true }
 insta = { workspace = true }
 regex = { workspace = true }
