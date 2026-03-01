@@ -1339,4 +1339,7 @@ impl EnvVars {
     /// Defaults to 300s (5 min).
     #[attr_added_in("0.9.4")]
     pub const UV_LOCK_TIMEOUT: &'static str = "UV_LOCK_TIMEOUT";
+
+    #[attr_added_in("0.10.0")]
+    pub const UV_NO_WAIT: &'static str = "UV_NO_WAIT";
 }
