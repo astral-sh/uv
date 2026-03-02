@@ -6007,6 +6007,7 @@ name = "uv-cache"
 version = "0.0.27"
 dependencies = [
  "clap",
+ "filetime",
  "fs-err",
  "nanoid",
  "rmp-serde",
@@ -6015,6 +6016,7 @@ dependencies = [
  "serde",
  "tempfile",
  "thiserror 2.0.18",
+ "tokio",
  "tracing",
  "uv-cache-info",
  "uv-cache-key",
