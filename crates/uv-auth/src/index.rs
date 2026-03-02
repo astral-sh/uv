@@ -107,6 +107,11 @@ impl Indexes {
             .unwrap_or(AuthPolicy::Auto)
     }
 
+    /// Iterate over all indexes.
+    pub fn iter(&self) -> impl Iterator<Item = &Index> {
+        self.0.iter()
+    }
+
     fn find_prefix_index(&self, url: &Url) -> Option<&Index> {
         self.0.iter().find(|&index| index.is_prefix_for(url))
     }

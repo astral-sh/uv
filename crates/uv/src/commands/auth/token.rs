@@ -91,7 +91,7 @@ async fn pyx_refresh(store: &PyxTokenStore, client: &BaseClient, printer: Printe
     // Retrieve the token store.
     // Use zero tolerance to force a refresh.
     let token = match store
-        .access_token(client.for_host(store.api()).raw_client(), 0)
+        .access_token(client.for_host(store.api()).raw_client(), 0, None)
         .await
     {
         // If the tokens were successfully refreshed, return them.
