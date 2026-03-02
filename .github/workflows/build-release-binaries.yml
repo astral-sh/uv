@@ -940,14 +940,22 @@ jobs:
   musllinux-cross:
     name: ${{ matrix.platform.target }}
     runs-on: depot-ubuntu-24.04-8
+    env:
+      CARGO_TARGET_RISCV64GC_UNKNOWN_LINUX_MUSL_RUSTFLAGS: "-C target-feature=+crt-static"
     strategy:
       matrix:
         platform:
           - target: aarch64-unknown-linux-musl
             arch: aarch64
+            maturin_build_args: --compatibility pypi
             maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
           - target: armv7-unknown-linux-musleabihf
             arch: armv7
+            maturin_build_args: --compatibility pypi
+          - target: riscv64gc-unknown-linux-musl
+            arch: riscv64
+            # TODO: remove conditional --compatibility pypi once https://github.com/PyO3/maturin/pull/3053 lands
+            maturin_build_args: ""
       fail-fast: false
 
     steps:
@@ -969,7 +977,7 @@ jobs:
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_1
           # Tag the musl builds as manylinux 2_17 fallback cause the aarch64 build only support 2_28
-          args: --release --locked --out dist --features self-update --compatibility 2_17 --compatibility pypi
+          args: --release --locked --out dist --features self-update --compatibility 2_17 ${{ matrix.platform.maturin_build_args }}
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           rust-toolchain: ${{ matrix.platform.toolchain || null }}
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
@@ -1042,7 +1050,7 @@ jobs:
           maturin-version: v1.12.4
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_1
-          args: --profile minimal-size --locked ${{ matrix.platform.arch == 'aarch64' && '--compatibility 2_17' || ''}} --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
+          args: --profile minimal-size --locked ${{ matrix.platform.arch == 'aarch64' && '--compatibility 2_17' || ''}} --out crates/uv-build/dist -m crates/uv-build/Cargo.toml ${{ matrix.platform.maturin_build_args }}
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           rust-toolchain: ${{ matrix.platform.toolchain || null }}
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
