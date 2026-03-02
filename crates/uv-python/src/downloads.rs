@@ -20,7 +20,7 @@ use tokio_util::either::Either;
 use tracing::{debug, instrument, warn};
 use url::Url;
 
-use uv_client::{BaseClient, RetryState, WrappedReqwestError};
+use uv_client::{BaseClient, RetryState, WrappedReqwestError, retryable_on_request_failure};
 use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
 use uv_fs::{Simplified, rename_with_retry};
@@ -137,6 +137,28 @@ impl Error {
             return *retries;
         }
         0
+    }
+
+    /// Returns `true` if trying an alternative URL makes sense after this error.
+    ///
+    /// HTTP-level failures (4xx, 5xx) and connection-level failures return `true`.
+    /// Hash mismatches, extraction failures, and similar post-download errors return `false`
+    /// because switching to a different host would not fix them.
+    fn should_try_next_url(&self) -> bool {
+        match self {
+            // There are two primary reasons to try an alternative URL:
+            // - HTTP/DNS/TCP/etc errors due to a mirror being blocked at various layers
+            // - HTTP 404s from the mirror, which may mean the next URL still works
+            // So we catch all network-level errors here.
+            Self::NetworkError(..)
+            | Self::NetworkMiddlewareError(..)
+            | Self::NetworkErrorWithRetries { .. } => true,
+            // `Io` uses `#[error(transparent)]`, so `source()` delegates to the inner error's
+            // own source rather than returning the `io::Error` itself. We must unwrap it
+            // explicitly so that `retryable_on_request_failure` can inspect the io error kind.
+            Self::Io(err) => retryable_on_request_failure(err).is_some(),
+            _ => false,
+        }
     }
 }
 
@@ -1144,7 +1166,7 @@ impl ManagedPythonDownload {
                 {
                     Ok(download_result) => return Ok(download_result),
                     Err(err) => {
-                        if !is_last {
+                        if !is_last && err.should_try_next_url() {
                             warn!(
                                 "Failed to download `{}` from {url} ({err}); falling back to {}",
                                 self.key(),
@@ -2297,5 +2319,61 @@ mod tests {
             download_without_build.to_display_with_build().to_string(),
             "cpython-3.12.0-linux-x86_64-gnu"
         );
+    }
+
+    /// A hash mismatch is a post-download integrity failure — retrying a different URL cannot fix
+    /// it, so it should not trigger a fallback.
+    #[test]
+    fn test_should_try_next_url_hash_mismatch() {
+        let err = Error::HashMismatch {
+            installation: "cpython-3.12.0".to_string(),
+            expected: "abc".to_string(),
+            actual: "def".to_string(),
+        };
+        assert!(!err.should_try_next_url());
+    }
+
+    /// A local filesystem error during extraction (e.g. permission denied writing to disk) is not
+    /// a network failure — a different URL would produce the same outcome.
+    #[test]
+    fn test_should_try_next_url_extract_error_filesystem() {
+        let err = Error::ExtractError(
+            "archive.tar.gz".to_string(),
+            uv_extract::Error::Io(io::Error::new(io::ErrorKind::PermissionDenied, "")),
+        );
+        assert!(!err.should_try_next_url());
+    }
+
+    /// A generic IO error from a local filesystem operation (e.g. permission denied on cache
+    /// directory) should not trigger a fallback to a different URL.
+    #[test]
+    fn test_should_try_next_url_io_error_filesystem() {
+        let err = Error::Io(io::Error::new(io::ErrorKind::PermissionDenied, ""));
+        assert!(!err.should_try_next_url());
+    }
+
+    /// A network IO error (e.g. connection reset mid-download) surfaces as `Error::Io` from
+    /// `download_archive`. It should trigger a fallback because a different mirror may succeed.
+    #[test]
+    fn test_should_try_next_url_io_error_network() {
+        let err = Error::Io(io::Error::new(io::ErrorKind::ConnectionReset, ""));
+        assert!(err.should_try_next_url());
+    }
+
+    /// A 404 HTTP response from the mirror becomes `Error::NetworkError` — it should trigger a
+    /// URL fallback, because a 404 on the mirror does not mean the file is absent from GitHub.
+    #[test]
+    fn test_should_try_next_url_network_error_404() {
+        let url =
+            DisplaySafeUrl::from_str("https://releases.astral.sh/python/cpython-3.12.0.tar.gz")
+                .unwrap();
+        // `NetworkError` wraps a `WrappedReqwestError`; we use a middleware error as a
+        // stand-in because `should_try_next_url` only inspects the variant, not the contents.
+        let wrapped = WrappedReqwestError::with_problem_details(
+            reqwest_middleware::Error::Middleware(anyhow::anyhow!("404 Not Found")),
+            None,
+        );
+        let err = Error::NetworkError(url, wrapped);
+        assert!(err.should_try_next_url());
     }
 }
