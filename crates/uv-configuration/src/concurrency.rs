@@ -24,6 +24,8 @@ pub struct Concurrency {
     pub downloads_semaphore: Arc<Semaphore>,
     /// A global semaphore to limit the number of concurrent builds.
     pub builds_semaphore: Arc<Semaphore>,
+    /// A global semaphore to limit the number of concurrent source distribution preparations.
+    pub source_distribution_semaphore: Arc<Semaphore>,
 }
 
 /// Custom `Debug` to hide semaphore fields from `--show-settings` output.
@@ -56,6 +58,7 @@ impl Concurrency {
             installs,
             downloads_semaphore: Arc::new(Semaphore::new(downloads)),
             builds_semaphore: Arc::new(Semaphore::new(builds)),
+            source_distribution_semaphore: Arc::new(Semaphore::new(builds)),
         }
     }
 
