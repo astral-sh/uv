@@ -65,9 +65,8 @@ pub(crate) struct SourceDistributionBuilder<'a, T: BuildContext> {
     build_context: &'a T,
     build_stack: Option<&'a BuildStack>,
     reporter: Option<Arc<dyn Reporter>>,
-    /// Limits the number of concurrent source distribution builds and metadata generation tasks.
-    /// These tasks can hold an advisory cache shard lock open and may open many additional file
-    /// descriptors while invoking build backends.
+    /// Limits concurrent source distribution preparation work.
+    /// This bounds tasks that may hold shard locks and open many file descriptors.
     concurrency_limit: Arc<Semaphore>,
 }
 
@@ -515,8 +514,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
         let lock_shard = cache_shard;
-        let revision_shard = lock_shard.shard(revision.id());
-        let source_dist_entry = revision_shard.entry(SOURCE);
+        let cache_shard = lock_shard.shard(revision.id());
+        let source_dist_entry = cache_shard.entry(SOURCE);
 
         // We don't track any cache information for URL-based source distributions; they're assumed
         // to be immutable.
@@ -530,8 +529,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
         let cache_shard = build_info
             .cache_shard()
-            .map(|digest| revision_shard.shard(digest))
-            .unwrap_or(revision_shard);
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
 
         // If the cache contains a compatible wheel, return it.
         if let Some(file) = BuiltWheelFile::find_in_cache(tags, &cache_shard)
@@ -662,8 +661,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
         let lock_shard = cache_shard;
-        let revision_shard = lock_shard.shard(revision.id());
-        let source_dist_entry = revision_shard.entry(SOURCE);
+        let cache_shard = lock_shard.shard(revision.id());
+        let source_dist_entry = cache_shard.entry(SOURCE);
 
         // If the metadata is static, return it.
         let dynamic =
@@ -679,7 +678,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             };
 
         // If the cache contains compatible metadata, return it.
-        let metadata_entry = revision_shard.entry(METADATA);
+        let metadata_entry = cache_shard.entry(METADATA);
 
         if let Some(metadata) = self
             .read_matching_cached_metadata(source, &metadata_entry)
@@ -691,7 +690,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             });
         }
 
-        // Otherwise, we need a source distribution.
+        // Otherwise, we need a wheel.
         let revision = if source_dist_entry.path().is_dir() {
             revision
         } else {
@@ -777,8 +776,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
         let cache_shard = build_info
             .cache_shard()
-            .map(|digest| revision_shard.shard(digest))
-            .unwrap_or(revision_shard);
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
 
         let task = self
             .reporter
@@ -947,8 +946,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
         let lock_shard = cache_shard;
-        let revision_shard = lock_shard.shard(revision.id());
-        let source_entry = revision_shard.entry(SOURCE);
+        let cache_shard = lock_shard.shard(revision.id());
+        let source_entry = cache_shard.entry(SOURCE);
 
         // If there are build settings or extra build dependencies, we need to scope to a cache shard.
         let config_settings = self.config_settings_for(source.name());
@@ -958,8 +957,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
         let cache_shard = build_info
             .cache_shard()
-            .map(|digest| revision_shard.shard(digest))
-            .unwrap_or(revision_shard);
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
 
         // If the cache contains a compatible wheel, return it.
         if let Some(file) = BuiltWheelFile::find_in_cache(tags, &cache_shard)
@@ -1066,8 +1065,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
         let lock_shard = cache_shard;
-        let revision_shard = lock_shard.shard(revision.id());
-        let source_entry = revision_shard.entry(SOURCE);
+        let cache_shard = lock_shard.shard(revision.id());
+        let source_entry = cache_shard.entry(SOURCE);
 
         // If the metadata is static, return it.
         let dynamic = match StaticMetadata::read(source, source_entry.path(), None).await? {
@@ -1082,7 +1081,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         };
 
         // If the cache contains compatible metadata, return it.
-        let metadata_entry = revision_shard.entry(METADATA);
+        let metadata_entry = cache_shard.entry(METADATA);
 
         if let Some(metadata) = self
             .read_matching_cached_metadata(source, &metadata_entry)
@@ -1155,8 +1154,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
         let cache_shard = build_info
             .cache_shard()
-            .map(|digest| revision_shard.shard(digest))
-            .unwrap_or(revision_shard);
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
 
         // Otherwise, we need to build a wheel.
         let task = self
