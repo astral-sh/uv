@@ -268,7 +268,7 @@ impl BuildContext for BuildDispatch<'_> {
                 self.client,
                 self,
                 self.concurrency.downloads_semaphore.clone(),
-                self.concurrency.builds_semaphore.clone(),
+                self.concurrency.source_distribution_semaphore.clone(),
             )
             .with_build_stack(build_stack),
         )?;
@@ -362,10 +362,9 @@ impl BuildContext for BuildDispatch<'_> {
                     self.client,
                     self,
                     self.concurrency.downloads_semaphore.clone(),
-                    self.concurrency.builds_semaphore.clone(),
+                    self.concurrency.source_distribution_semaphore.clone(),
                 )
                 .with_build_stack(build_stack),
-                self.concurrency.downloads,
             );
 
             debug!(
