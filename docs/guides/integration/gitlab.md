@@ -53,6 +53,7 @@ uv-install:
         - $UV_CACHE_DIR
   script:
     # Your `uv` commands
+  after_script:
     - uv cache prune --ci
 ```
 
