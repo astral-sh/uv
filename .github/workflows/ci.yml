@@ -247,7 +247,7 @@ jobs:
     if: ${{ needs.plan.outputs.build-docker == 'true' }}
     uses: ./.github/workflows/build-docker.yml
     with:
-      push-sha: ${{ needs.plan.outputs.push-docker == 'true' }}
+      push-dev: ${{ needs.plan.outputs.push-docker == 'true' }}
     secrets: inherit
     permissions:
       contents: read
