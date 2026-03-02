@@ -32,7 +32,7 @@ use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
     EnvironmentPreference, Interpreter, PyVenvConfiguration, PythonDownloads, PythonEnvironment,
     PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
-    VersionFileDiscoveryOptions,
+    VersionFileDiscoveryOptions, VersionRequest,
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
@@ -74,6 +74,21 @@ use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings, ResolverSettings};
+
+/// If the [`RunCommand`] looks like a versioned Python executable (e.g. `python3.12`, `pypy39`),
+/// return the parsed [`VersionRequest`].
+fn as_python_version_request(command: &RunCommand) -> Option<VersionRequest> {
+    let RunCommand::External(executable, _) = command else {
+        return None;
+    };
+    let name = executable.to_str()?;
+    match PythonRequest::try_from_tool_name(name) {
+        Ok(Some(
+            PythonRequest::Version(version) | PythonRequest::ImplementationVersion(_, version),
+        )) => Some(version),
+        _ => None,
+    }
+}
 
 /// Run a command.
 #[expect(clippy::fn_params_excessive_bools)]
@@ -1331,10 +1346,33 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited
-    // TODO(zanieb): Throw a nicer error message if the command is not found
-    let handle = process
-        .spawn()
-        .with_context(|| format!("Failed to spawn: `{}`", command.display_executable()))?;
+    let handle = match process.spawn() {
+        Ok(handle) => handle,
+        Err(err) => {
+            // If the command looks like `python3.12` and was not found, hint at alternatives.
+            if err.kind() == std::io::ErrorKind::NotFound {
+                if let Some(version) = as_python_version_request(&command) {
+                    let current_python = format!(
+                        "{}.{}",
+                        interpreter.python_major(),
+                        interpreter.python_minor()
+                    );
+                    writeln!(
+                        printer.stderr(),
+                        "{}: `{}` is not available in the current environment (Python {current_python}). Did you mean `{}` or `{}`?",
+                        "hint".cyan().bold(),
+                        command.display_executable(),
+                        format!("uv run -p {version} python").green(),
+                        format!("uvx python@{version}").green(),
+                    )?;
+                }
+            }
+            return Err(anyhow!(err).context(format!(
+                "Failed to spawn: `{}`",
+                command.display_executable()
+            )));
+        }
+    };
 
     run_to_completion(handle).await
 }
