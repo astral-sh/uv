@@ -17,7 +17,7 @@ use windows::Win32::System::Threading::{
 };
 
 use crate::job::JobError;
-use crate::{Job, install_ctrl_handler};
+use crate::{Job, ignore_ctrl_c};
 
 /// A child process supervised by a [`Job`] object.
 ///
@@ -69,7 +69,7 @@ pub fn spawn_child(cmd: &mut Command, hide_console: bool) -> std::io::Result<Inf
 
     // Ignore control-C/control-Break/logout/etc.; the same event will be delivered
     // to the child, so we let them decide whether to exit or not.
-    let _ = install_ctrl_handler();
+    let _ = ignore_ctrl_c();
 
     // SAFETY: The handle is valid because `supervised` borrows `child`.
     let wait_result = unsafe { WaitForSingleObject(supervised.raw_handle(), INFINITE) };

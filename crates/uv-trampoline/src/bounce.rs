@@ -24,7 +24,7 @@ use windows::Win32::{
 };
 use windows::core::{PSTR, s};
 
-use uv_windows::{Job, install_ctrl_handler};
+use uv_windows::{Job, ignore_ctrl_c};
 
 use uv_static::EnvVars;
 
@@ -289,7 +289,7 @@ fn print_job_error_and_exit(message: &str, err: uv_windows::JobError) -> ! {
 }
 
 #[cold]
-fn print_ctrl_handler_error_and_exit(err: uv_windows::CtrlHandlerError) -> ! {
+fn print_ctrl_c_error_and_exit(err: uv_windows::CtrlCError) -> ! {
     error!(
         "uv trampoline failed to set control handler\n  Caused by: os error {}",
         err.code()
@@ -471,8 +471,8 @@ pub fn bounce(is_gui: bool) -> ! {
 
     // We want to ignore control-C/control-Break/logout/etc.; the same event will
     // be delivered to the child, so we let them decide whether to exit or not.
-    if let Err(e) = install_ctrl_handler() {
-        print_ctrl_handler_error_and_exit(e);
+    if let Err(e) = ignore_ctrl_c() {
+        print_ctrl_c_error_and_exit(e);
     }
 
     if is_gui {
