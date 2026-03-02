@@ -4253,7 +4253,7 @@ async fn tool_install_credentials() {
         ]
 
         [tool.options]
-        index = [{ url = "http://[LOCALHOST]/basic-auth/simple", explicit = false, default = false, format = "simple", authenticate = "auto" }]
+        index = [{ url = "http://[LOCALHOST]/basic-auth/simple", explicit = false, default = false, format = "simple", authenticate = "always" }]
         exclude-newer = "2025-01-18T00:00:00Z"
         "#);
     });

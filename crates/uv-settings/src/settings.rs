@@ -2107,7 +2107,12 @@ pub struct ToolOptions {
 impl From<ResolverInstallerOptions> for ToolOptions {
     fn from(value: ResolverInstallerOptions) -> Self {
         Self {
-            index: value.index,
+            index: value.index.map(|indexes| {
+                indexes
+                    .into_iter()
+                    .map(Index::with_promoted_auth_policy)
+                    .collect()
+            }),
             index_url: value.index_url,
             extra_index_url: value.extra_index_url,
             no_index: value.no_index,
