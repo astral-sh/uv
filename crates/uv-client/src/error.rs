@@ -1,10 +1,12 @@
+use std::fmt::{Display, Formatter};
+use std::ops::Deref;
+use std::path::PathBuf;
+use std::time::{Duration, Instant};
+
 use async_http_range_reader::AsyncHttpRangeReaderError;
 use async_zip::error::ZipError;
 use reqwest::Response;
 use serde::Deserialize;
-use std::fmt::{Display, Formatter};
-use std::ops::Deref;
-use std::path::PathBuf;
 use tracing::warn;
 
 use uv_cache::Error as CacheError;
@@ -114,6 +116,7 @@ impl ProblemDetails {
 pub struct Error {
     kind: Box<ErrorKind>,
     retries: u32,
+    duration: Duration,
 }
 
 impl Display for Error {
@@ -121,9 +124,10 @@ impl Display for Error {
         if self.retries > 0 {
             write!(
                 f,
-                "Request failed after {retries} {subject}",
+                "Request failed after {retries} {subject} in {duration:.1}s",
                 retries = self.retries,
-                subject = if self.retries > 1 { "retries" } else { "retry" }
+                subject = if self.retries > 1 { "retries" } else { "retry" },
+                duration = self.duration.as_secs_f32(),
             )
         } else {
             Display::fmt(&self.kind, f)
@@ -143,16 +147,23 @@ impl std::error::Error for Error {
 
 impl Error {
     /// Create a new [`Error`] with the given [`ErrorKind`] and number of retries.
-    pub fn new(kind: ErrorKind, retries: u32) -> Self {
+    pub fn new(kind: ErrorKind, retries: u32, duration: Duration) -> Self {
         Self {
             kind: Box::new(kind),
             retries,
+            duration,
         }
     }
 
     /// Return the number of retries that were attempted before this error was returned.
     pub fn retries(&self) -> u32 {
         self.retries
+    }
+
+    /// Return the time taken for network requests, including retries, backoff and jitter,
+    /// before this error was returned.
+    pub fn duration(&self) -> Duration {
+        self.duration
     }
 
     /// Convert this error into an [`ErrorKind`].
@@ -189,6 +200,7 @@ impl Error {
     pub(crate) fn from_reqwest_middleware(
         url: DisplaySafeUrl,
         err: reqwest_middleware::Error,
+        start: Instant,
     ) -> Self {
         if let reqwest_middleware::Error::Middleware(ref underlying) = err {
             if let Some(offline_err) = underlying.downcast_ref::<OfflineError>() {
@@ -201,6 +213,7 @@ impl Error {
                 return Self::new(
                     ErrorKind::WrappedReqwestError(url, WrappedReqwestError::from(err)),
                     retries,
+                    start.elapsed(),
                 );
             }
         }
@@ -316,6 +329,7 @@ impl From<ErrorKind> for Error {
         Self {
             kind: Box::new(kind),
             retries: 0,
+            duration: Duration::default(),
         }
     }
 }
