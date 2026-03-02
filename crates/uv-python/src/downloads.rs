@@ -138,20 +138,6 @@ impl Error {
         }
         0
     }
-
-    /// Returns `true` if trying an alternative URL makes sense after this error.
-    ///
-    /// This includes HTTP-level failures (4xx such as 404, 5xx) and connection-level failures.
-    /// Hash mismatches, extraction failures, and similar post-download errors return `false`
-    /// because switching to a different host would not fix them.
-    fn should_try_next_url(&self) -> bool {
-        matches!(
-            self,
-            Self::NetworkError(..)
-                | Self::NetworkMiddlewareError(..)
-                | Self::NetworkErrorWithRetries { .. }
-        )
-    }
 }
 
 /// The URL prefix used by `python-build-standalone` releases on GitHub.
@@ -1121,10 +1107,8 @@ impl ManagedPythonDownload {
     /// Download and extract a Python distribution, retrying on failure.
     ///
     /// For CPython without a user-configured mirror, the default Astral mirror is tried first.
-    /// If a URL fails with an HTTP or connection error, the next URL in the list is tried.
-    /// Transient errors (e.g. HTTP 5xx, connection failures) are retried with backoff first;
-    /// non-retryable errors (e.g. HTTP 404) fall back immediately. Non-download-related errors
-    /// (e.g. a hash mismatch) cause an immediate failure without a fallback.
+    /// Each attempt tries all URLs in sequence without backoff between them; backoff is only
+    /// applied after all URLs have been exhausted.
     #[instrument(skip(client, installation_dir, scratch_dir, reporter), fields(download = % self.key()))]
     pub async fn fetch_with_retry(
         &self,
@@ -1138,13 +1122,16 @@ impl ManagedPythonDownload {
         reporter: Option<&dyn Reporter>,
     ) -> Result<DownloadResult, Error> {
         let urls = self.download_urls(python_install_mirror, pypy_install_mirror)?;
+        let mut retry_state = RetryState::start(
+            *retry_policy,
+            // We pass in the last URL because that will trigger backoff if it fails.
+            urls.last().ok_or(Error::NoPythonDownloadUrlFound)?.clone(),
+        );
 
-        'url: for (i, url) in urls.iter().enumerate() {
-            let is_last = i == urls.len() - 1;
-            let mut retry_state = RetryState::start(*retry_policy, url.clone());
-
-            loop {
-                let result = self
+        'retry: loop {
+            for (i, url) in urls.iter().enumerate() {
+                let is_last = i == urls.len() - 1;
+                match self
                     .fetch_from_url(
                         url,
                         client,
@@ -1153,23 +1140,22 @@ impl ManagedPythonDownload {
                         reinstall,
                         reporter,
                     )
-                    .await;
-                match result {
+                    .await
+                {
                     Ok(download_result) => return Ok(download_result),
                     Err(err) => {
-                        if let Some(backoff) = retry_state.should_retry(&err, err.retries()) {
-                            retry_state.sleep_backoff(backoff).await;
-                            continue;
-                        }
-                        // At this point we've exhausted all retries for this URL or found a
-                        // non-retryable error.
-                        if !is_last && err.should_try_next_url() {
+                        if !is_last {
                             warn!(
                                 "Failed to download `{}` from {url} ({err}); falling back to {}",
                                 self.key(),
                                 urls[i + 1]
                             );
-                            continue 'url;
+                            continue;
+                        }
+                        // All URLs exhausted; apply the retry policy.
+                        if let Some(backoff) = retry_state.should_retry(&err, err.retries()) {
+                            retry_state.sleep_backoff(backoff).await;
+                            continue 'retry;
                         }
                         return if retry_state.total_retries() > 0 {
                             Err(Error::NetworkErrorWithRetries {
@@ -1180,11 +1166,10 @@ impl ManagedPythonDownload {
                             Err(err)
                         };
                     }
-                };
+                }
             }
+            unreachable!("download_urls() must return at least one URL");
         }
-
-        unreachable!("download_urls() must return at least one URL")
     }
 
     /// Download and extract a Python distribution.
