@@ -5,7 +5,7 @@
 
 #![cfg(windows)]
 
-mod ctrl_handler;
+mod ctrl_c;
 #[cfg(feature = "std")]
 mod exception;
 mod job;
@@ -13,7 +13,9 @@ mod job;
 mod spawn;
 mod wine;
 
-pub use ctrl_handler::{CtrlHandlerError, install_ctrl_handler};
+#[cfg(feature = "std")]
+pub use ctrl_c::on_ctrl_c;
+pub use ctrl_c::{CtrlCError, ignore_ctrl_c};
 #[cfg(feature = "std")]
 pub use exception::install_unhandled_exception_handler;
 pub use job::{Job, JobError};
