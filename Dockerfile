@@ -1,18 +1,24 @@
-FROM --platform=$BUILDPLATFORM ubuntu AS build
+FROM --platform=$BUILDPLATFORM ubuntu:22.04@sha256:3ba65aa20f86a0fad9df2b2c259c613df006b2e6d0bfcc8a146afb8c525a9751 AS build
+
+ARG BUILD_ESSENTIAL_VERSION=12.9ubuntu3
+ARG CURL_VERSION=7.81.0-1ubuntu1.22
+ARG PYTHON3_VENV_VERSION=3.10.6-1~22.04.1
+ARG CARGO_ZIGBUILD_VERSION=0.22.1
+
 ENV HOME="/root"
 WORKDIR $HOME
 
-RUN apt update \
-  && apt install -y --no-install-recommends \
-  build-essential \
-  curl \
-  python3-venv \
-  && apt clean \
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+  build-essential=${BUILD_ESSENTIAL_VERSION} \
+  curl=${CURL_VERSION} \
+  python3-venv=${PYTHON3_VENV_VERSION} \
+  && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 
 # Setup zig as cross compiling linker
 RUN python3 -m venv $HOME/.venv
-RUN .venv/bin/pip install cargo-zigbuild
+RUN .venv/bin/pip install cargo-zigbuild==${CARGO_ZIGBUILD_VERSION}
 ENV PATH="$HOME/.venv/bin:$PATH"
 
 # Install rust
