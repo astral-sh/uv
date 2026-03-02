@@ -68,6 +68,11 @@ pub enum PyxTokens {
     ///
     /// API keys are long-lived tokens that can be exchanged for an access token.
     ApiKey(PyxApiKeyTokens),
+    /// A Trusted Access token.
+    ///
+    /// Trusted Access tokens are obtained through an OIDC exchange flow between
+    /// pyx and an OIDC IdP, like GitHub Actions.
+    TrustedAccess(AccessToken),
 }
 
 impl From<PyxTokens> for AccessToken {
@@ -75,6 +80,7 @@ impl From<PyxTokens> for AccessToken {
         match tokens {
             PyxTokens::OAuth(PyxOAuthTokens { access_token, .. }) => access_token,
             PyxTokens::ApiKey(PyxApiKeyTokens { access_token, .. }) => access_token,
+            PyxTokens::TrustedAccess(access_token) => access_token,
         }
     }
 }
@@ -84,6 +90,7 @@ impl From<PyxTokens> for Credentials {
         let access_token = match tokens {
             PyxTokens::OAuth(PyxOAuthTokens { access_token, .. }) => access_token,
             PyxTokens::ApiKey(PyxApiKeyTokens { access_token, .. }) => access_token,
+            PyxTokens::TrustedAccess(access_token) => access_token,
         };
         Self::from(access_token)
     }
@@ -127,6 +134,7 @@ impl PyxTokens {
         match self {
             Self::OAuth(PyxOAuthTokens { access_token, .. }) => access_token,
             Self::ApiKey(PyxApiKeyTokens { access_token, .. }) => access_token,
+            Self::TrustedAccess(access_token) => access_token,
         }
     }
 
@@ -325,6 +333,8 @@ impl PyxTokenStore {
                 )
                 .await?;
             }
+            // Trusted Access tokens are not written to disk.
+            PyxTokens::TrustedAccess(_) => (),
         }
         Ok(())
     }
@@ -395,23 +405,75 @@ impl PyxTokenStore {
                 let digest = uv_cache_key::cache_digest(api_key);
                 self.subdirectory.join(format!("{digest}.lock"))
             }
+            // NOTE: Trusted Access tokens are not stored on disk; this lockfile
+            // synchronizes the in-memory token refresh.
+            PyxTokens::TrustedAccess(_) => self.subdirectory.join("trusted-access.lock"),
         }
     }
 
-    /// Bootstrap the tokens from the store.
+    /// Bootstrap the tokens from an API key or from Trusted Access.
     async fn bootstrap(
         &self,
         client: &ClientWithMiddleware,
     ) -> Result<Option<PyxTokens>, TokenStoreError> {
+        if let Some(api_key) = read_pyx_api_key() {
+            // If an API key is present, use it to bootstrap the tokens.
+            self.bootstrap_from_api_key(api_key, client).await.map(Some)
+        } else {
+            // Otherwise, attempt to bootstrap from Trusted Access.
+            self.bootstrap_from_trusted_access(client).await
+        }
+    }
+
+    /// Bootstrap a [`PyxTokens`] from Trusted Access.
+    async fn bootstrap_from_trusted_access(
+        &self,
+        client: &ClientWithMiddleware,
+    ) -> Result<Option<PyxTokens>, TokenStoreError> {
+        #[derive(Debug, Clone, serde::Serialize)]
+        struct RequestBody<'a> {
+            token: &'a str,
+        }
+
+        #[derive(Debug, Clone, serde::Deserialize)]
+        struct ResponseBody {
+            token: AccessToken,
+        }
+
+        // Get an OIDC token from the ambient environment (e.g., GitHub Actions).
+        let detector = ambient_id::Detector::new_with_client(client.clone());
+        let Some(id_token) = detector.detect("pyx:trusted-access").await? else {
+            debug!("No ambient OIDC credentials detected for Trusted Access");
+            return Ok(None);
+        };
+
+        // Exchange the OIDC token for a Trusted Access token from pyx.
+        let mut url = self.api.clone();
+        url.set_path("v1/trusted-access/TODO/mint-token");
+
+        let request = client
+            .request(reqwest::Method::POST, Url::from(url))
+            .json(&RequestBody {
+                token: id_token.reveal(),
+            })
+            .build()?;
+
+        let response = client.execute(request).await?;
+        let ResponseBody { token } = response.error_for_status()?.json::<ResponseBody>().await?;
+
+        Ok(Some(PyxTokens::TrustedAccess(token)))
+    }
+
+    /// Bootstrap a [`PyxTokens`] from an API key.
+    async fn bootstrap_from_api_key(
+        &self,
+        api_key: String,
+        client: &ClientWithMiddleware,
+    ) -> Result<PyxTokens, TokenStoreError> {
         #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
         struct Payload {
             access_token: AccessToken,
         }
-
-        // Retrieve the API key from the environment variable, if set.
-        let Some(api_key) = read_pyx_api_key() else {
-            return Ok(None);
-        };
 
         debug!("Bootstrapping access token from an API key");
 
@@ -435,7 +497,7 @@ impl PyxTokenStore {
         // Write the tokens to disk.
         self.write(&tokens).await?;
 
-        Ok(Some(tokens))
+        Ok(tokens)
     }
 
     /// Refresh the tokens in the store, if they are expired.
@@ -525,6 +587,18 @@ impl PyxTokenStore {
                     api_key,
                 })
             }
+            PyxTokens::TrustedAccess(_) => {
+                // Refreshing a Trusted Access token is the same as bootstrapping it.
+                self.bootstrap_from_trusted_access(client)
+                    .await?
+                    .ok_or_else(|| {
+                        // This can only happen if we're in an environment that previously
+                        // offered us an OIDC token, but is no longer detected.
+                        // This strongly suggests some kind of runtime meddling by the user.
+                        // TODO: Custom error type here?
+                        TokenStoreError::Io(io::Error::other("could not refresh Trusted Access token: no ambient OIDC credentials detected"))
+                    })?
+            }
         };
 
         // Write the new tokens to disk
@@ -566,6 +640,8 @@ pub enum TokenStoreError {
     Jiff(#[from] jiff::Error),
     #[error(transparent)]
     Jwt(#[from] JwtError),
+    #[error(transparent)]
+    TrustedAccess(#[from] ambient_id::Error),
 }
 
 impl TokenStoreError {
