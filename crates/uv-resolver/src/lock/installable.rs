@@ -32,6 +32,12 @@ pub trait Installable<'lock> {
     /// Return the [`PackageName`] of the target, if available.
     fn project_name(&self) -> Option<&PackageName>;
 
+    /// Return the available extras from the project metadata.
+    fn available_extras(&self) -> Vec<ExtraName>;
+
+    /// Return the available dependency groups from the project metadata.
+    fn available_dependency_groups(&self) -> Vec<GroupName>;
+
     /// Convert the [`Lock`] to a [`Resolution`] using the given marker environment, tags, and root.
     fn to_resolution(
         &self,

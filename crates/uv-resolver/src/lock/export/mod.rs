@@ -24,6 +24,7 @@ use crate::universal_marker::resolve_conflicts;
 use crate::{Installable, LockError, Package};
 
 pub mod cyclonedx_json;
+mod marker_conversion;
 mod pylock_toml;
 mod requirements_txt;
 
