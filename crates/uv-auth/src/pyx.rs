@@ -253,6 +253,19 @@ impl PyxTokenStore {
         })
     }
 
+    /// Extract the workspace name from a pyx URL (Simple API or CDN).
+    ///
+    /// Handles all URL shapes served by pyx:
+    /// - Simple API: `{api}/simple/{workspace}/{view}`
+    ///   e.g. `https://api.pyx.dev/simple/acme/main`
+    /// - CDN views: `https://views.{cdn}/v1/{shard}/{workspace}/{view}/{sig}/{path}`
+    /// - CDN files: `https://files.{cdn}/{workspace}/{path}`
+    ///
+    /// Returns `None` if the URL does not match any known shape for this store.
+    pub fn workspace_for_url<'a>(&self, url: &'a DisplaySafeUrl) -> Option<&'a str> {
+        workspace_from_simple_url(url, &self.api).or_else(|| workspace_from_cdn_url(url, &self.cdn))
+    }
+
     /// Return the root directory for the token store.
     pub fn root(&self) -> &Path {
         &self.root
@@ -271,10 +284,14 @@ impl PyxTokenStore {
     ///
     /// If no access token is found, but an API key is present, the API key will be used to
     /// bootstrap an access token.
+    ///
+    /// `workspace` is the pyx workspace name, required to bootstrap a Trusted Access token. If
+    /// `None`, Trusted Access bootstrapping is skipped.
     pub async fn access_token(
         &self,
         client: &ClientWithMiddleware,
         tolerance_secs: u64,
+        workspace: Option<&str>,
     ) -> Result<Option<AccessToken>, TokenStoreError> {
         // If the access token is already set in the environment, return it.
         if let Some(access_token) = read_pyx_auth_token() {
@@ -282,7 +299,7 @@ impl PyxTokenStore {
         }
 
         // Initialize the tokens from the store.
-        let tokens = self.init(client, tolerance_secs).await?;
+        let tokens = self.init(client, tolerance_secs, workspace).await?;
 
         // Extract the access token from the OAuth tokens or API key.
         Ok(tokens.map(AccessToken::from))
@@ -294,20 +311,26 @@ impl PyxTokenStore {
     ///
     /// If no access token is found, but an API key is present, the API key will be used to
     /// bootstrap an access token.
+    ///
+    /// `workspace` is the pyx workspace name, required to bootstrap a Trusted Access token. If
+    /// `None`, Trusted Access bootstrapping is skipped.
     pub async fn init(
         &self,
         client: &ClientWithMiddleware,
         tolerance_secs: u64,
+        workspace: Option<&str>,
     ) -> Result<Option<PyxTokens>, TokenStoreError> {
         match self.read().await? {
             Some(tokens) => {
                 // Refresh the tokens if they are expired.
-                let tokens = self.refresh(tokens, client, tolerance_secs).await?;
+                let tokens = self
+                    .refresh(tokens, client, tolerance_secs, workspace)
+                    .await?;
                 Ok(Some(tokens))
             }
             None => {
-                // If no tokens are present, bootstrap them from an API key.
-                self.bootstrap(client).await
+                // If no tokens are present, bootstrap them from an API key or Trusted Access.
+                self.bootstrap(client, workspace).await
             }
         }
     }
@@ -412,23 +435,31 @@ impl PyxTokenStore {
     }
 
     /// Bootstrap the tokens from an API key or from Trusted Access.
+    ///
+    /// `workspace` is the pyx workspace name, required to bootstrap a Trusted Access token. If
+    /// `None`, Trusted Access bootstrapping is skipped.
     async fn bootstrap(
         &self,
         client: &ClientWithMiddleware,
+        workspace: Option<&str>,
     ) -> Result<Option<PyxTokens>, TokenStoreError> {
         if let Some(api_key) = read_pyx_api_key() {
             // If an API key is present, use it to bootstrap the tokens.
             self.bootstrap_from_api_key(api_key, client).await.map(Some)
         } else {
             // Otherwise, attempt to bootstrap from Trusted Access.
-            self.bootstrap_from_trusted_access(client).await
+            self.bootstrap_from_trusted_access(client, workspace).await
         }
     }
 
     /// Bootstrap a [`PyxTokens`] from Trusted Access.
+    ///
+    /// `workspace` is the pyx workspace name. If `None`, Trusted Access bootstrapping is skipped,
+    /// since the workspace is required to construct the token endpoint.
     async fn bootstrap_from_trusted_access(
         &self,
         client: &ClientWithMiddleware,
+        workspace: Option<&str>,
     ) -> Result<Option<PyxTokens>, TokenStoreError> {
         #[derive(Debug, Clone, serde::Serialize)]
         struct RequestBody<'a> {
@@ -440,6 +471,12 @@ impl PyxTokenStore {
             token: AccessToken,
         }
 
+        // Trusted Access requires the workspace name to construct the token endpoint.
+        let Some(workspace) = workspace else {
+            debug!("Skipping Trusted Access: pyx workspace name is not known");
+            return Ok(None);
+        };
+
         // Get an OIDC token from the ambient environment (e.g., GitHub Actions).
         let detector = ambient_id::Detector::new_with_client(client.clone());
         let Some(id_token) = detector.detect("pyx:trusted-access").await? else {
@@ -449,7 +486,7 @@ impl PyxTokenStore {
 
         // Exchange the OIDC token for a Trusted Access token from pyx.
         let mut url = self.api.clone();
-        url.set_path("v1/trusted-access/TODO/mint-token");
+        url.set_path(&format!("v1/trusted-access/{workspace}/mint-token"));
 
         let request = client
             .request(reqwest::Method::POST, Url::from(url))
@@ -509,6 +546,7 @@ impl PyxTokenStore {
         tokens: PyxTokens,
         client: &ClientWithMiddleware,
         tolerance_secs: u64,
+        workspace: Option<&str>,
     ) -> Result<PyxTokens, TokenStoreError> {
         let reason = match tokens.check_fresh(tolerance_secs) {
             Ok(exp) => {
@@ -589,7 +627,7 @@ impl PyxTokenStore {
             }
             PyxTokens::TrustedAccess(_) => {
                 // Refreshing a Trusted Access token is the same as bootstrapping it.
-                self.bootstrap_from_trusted_access(client)
+                self.bootstrap_from_trusted_access(client, workspace)
                     .await?
                     .ok_or_else(|| {
                         // This can only happen if we're in an environment that previously
@@ -727,6 +765,66 @@ fn is_known_domain(url: &Url, api: &DisplaySafeUrl, cdn: &str) -> bool {
         }
     }
     is_known_url(url, api, cdn)
+}
+
+/// Extract the workspace name from a pyx CDN URL.
+///
+/// Pyx CDN URLs come in two forms:
+/// - `https://views.{cdn}/v1/{shard}/{workspace}/{view}/{viewSignature}/{filePath}`
+/// - `https://files.{cdn}/{workspace}/{path}`
+fn workspace_from_cdn_url<'a>(url: &'a DisplaySafeUrl, cdn: &str) -> Option<&'a str> {
+    // Must be HTTPS on a known CDN subdomain.
+    if url.scheme() != "https" {
+        return None;
+    }
+    let host = url.host_str()?;
+    let mut segments = url.path_segments()?;
+
+    // views.{cdn}/v1/{shard}/{workspace}/{view}/...
+    if host.strip_prefix("views.") == Some(cdn) {
+        if segments.next()? != "v1" {
+            return None;
+        }
+        let _shard = segments.next().filter(|s| !s.is_empty())?;
+        let workspace = segments.next().filter(|s| !s.is_empty())?;
+        // Must have at least a view segment after the workspace.
+        segments.next().filter(|s| !s.is_empty())?;
+        return Some(workspace);
+    }
+
+    // files.{cdn}/{workspace}/{path}
+    if host.strip_prefix("files.") == Some(cdn) {
+        let workspace = segments.next().filter(|s| !s.is_empty())?;
+        // Must have at least one path segment after the workspace.
+        segments.next().filter(|s| !s.is_empty())?;
+        return Some(workspace);
+    }
+
+    None
+}
+
+/// Extract the workspace name from a pyx Simple API URL.
+///
+/// Pyx Simple API URLs have the form `{api}/simple/{workspace}/{view}` (e.g.,
+/// `https://api.pyx.dev/simple/acme/main`). Returns the workspace segment when
+/// the URL matches the given `api` base URL.
+fn workspace_from_simple_url<'a>(url: &'a DisplaySafeUrl, api: &DisplaySafeUrl) -> Option<&'a str> {
+    // The URL must be on the same host/port as the API.
+    if url.scheme() != api.scheme()
+        || url.host_str() != api.host_str()
+        || url.port_or_known_default() != api.port_or_known_default()
+    {
+        return None;
+    }
+    // Path must be `/simple/{workspace}/{view}[/]`.
+    let mut segments = url.path_segments()?;
+    if segments.next()? != "simple" {
+        return None;
+    }
+    let workspace = segments.next().filter(|s| !s.is_empty())?;
+    // There must be at least a view segment after the workspace.
+    segments.next().filter(|s| !s.is_empty())?;
+    Some(workspace)
 }
 
 /// Returns `true` if the URL is on the default pyx domain.
@@ -942,5 +1040,176 @@ mod tests {
         assert!(!is_default_pyx_domain(
             &Url::parse("https://beta.pyx.dev").unwrap()
         ));
+    }
+
+    #[test]
+    fn test_workspace_from_cdn_url() {
+        let cdn = "astralhosted.com";
+
+        // views CDN URL.
+        assert_eq!(
+            workspace_from_cdn_url(
+                &DisplaySafeUrl::parse(
+                    "https://views.astralhosted.com/v1/abc123/acme/main/sig/pkg-1.0-py3-none-any.whl"
+                )
+                .unwrap(),
+                cdn
+            ),
+            Some("acme")
+        );
+
+        // files CDN URL.
+        assert_eq!(
+            workspace_from_cdn_url(
+                &DisplaySafeUrl::parse(
+                    "https://files.astralhosted.com/acme/pkg-1.0-py3-none-any.whl"
+                )
+                .unwrap(),
+                cdn
+            ),
+            Some("acme")
+        );
+
+        // views CDN URL must have enough path segments.
+        assert_eq!(
+            workspace_from_cdn_url(
+                &DisplaySafeUrl::parse("https://views.astralhosted.com/v1/abc123/acme").unwrap(),
+                cdn
+            ),
+            None
+        );
+
+        // files CDN URL must have a path after workspace.
+        assert_eq!(
+            workspace_from_cdn_url(
+                &DisplaySafeUrl::parse("https://files.astralhosted.com/acme").unwrap(),
+                cdn
+            ),
+            None
+        );
+
+        // views CDN must start with /v1/.
+        assert_eq!(
+            workspace_from_cdn_url(
+                &DisplaySafeUrl::parse(
+                    "https://views.astralhosted.com/v2/abc123/acme/main/sig/file"
+                )
+                .unwrap(),
+                cdn
+            ),
+            None
+        );
+
+        // HTTP is rejected.
+        assert_eq!(
+            workspace_from_cdn_url(
+                &DisplaySafeUrl::parse(
+                    "http://files.astralhosted.com/acme/pkg-1.0-py3-none-any.whl"
+                )
+                .unwrap(),
+                cdn
+            ),
+            None
+        );
+
+        // Unknown CDN subdomain returns None.
+        assert_eq!(
+            workspace_from_cdn_url(
+                &DisplaySafeUrl::parse(
+                    "https://other.astralhosted.com/acme/pkg-1.0-py3-none-any.whl"
+                )
+                .unwrap(),
+                cdn
+            ),
+            None
+        );
+
+        // Wrong CDN domain entirely.
+        assert_eq!(
+            workspace_from_cdn_url(
+                &DisplaySafeUrl::parse("https://files.other.com/acme/pkg-1.0-py3-none-any.whl")
+                    .unwrap(),
+                cdn
+            ),
+            None
+        );
+
+        // Custom CDN domain works the same way.
+        assert_eq!(
+            workspace_from_cdn_url(
+                &DisplaySafeUrl::parse("https://files.example-cdn.com/myorg/file.whl").unwrap(),
+                "example-cdn.com"
+            ),
+            Some("myorg")
+        );
+    }
+
+    #[test]
+    fn test_workspace_from_simple_url() {
+        let api = DisplaySafeUrl::parse("https://api.pyx.dev").unwrap();
+
+        // Standard pyx simple index URL.
+        assert_eq!(
+            workspace_from_simple_url(
+                &DisplaySafeUrl::parse("https://api.pyx.dev/simple/acme/main").unwrap(),
+                &api
+            ),
+            Some("acme")
+        );
+
+        // Trailing slash is fine.
+        assert_eq!(
+            workspace_from_simple_url(
+                &DisplaySafeUrl::parse("https://api.pyx.dev/simple/acme/main/").unwrap(),
+                &api
+            ),
+            Some("acme")
+        );
+
+        // Must have a view segment after the workspace (bare /simple/acme is not a full index URL).
+        assert_eq!(
+            workspace_from_simple_url(
+                &DisplaySafeUrl::parse("https://api.pyx.dev/simple/acme").unwrap(),
+                &api
+            ),
+            None
+        );
+
+        // Non-simple path returns None.
+        assert_eq!(
+            workspace_from_simple_url(
+                &DisplaySafeUrl::parse("https://api.pyx.dev/v1/upload/acme/main").unwrap(),
+                &api
+            ),
+            None
+        );
+
+        // Different host returns None.
+        assert_eq!(
+            workspace_from_simple_url(
+                &DisplaySafeUrl::parse("https://other.pyx.dev/simple/acme/main").unwrap(),
+                &api
+            ),
+            None
+        );
+
+        // Different scheme returns None.
+        assert_eq!(
+            workspace_from_simple_url(
+                &DisplaySafeUrl::parse("http://api.pyx.dev/simple/acme/main").unwrap(),
+                &api
+            ),
+            None
+        );
+
+        // Custom API URL works the same way.
+        let custom_api = DisplaySafeUrl::parse("https://staging.example.com").unwrap();
+        assert_eq!(
+            workspace_from_simple_url(
+                &DisplaySafeUrl::parse("https://staging.example.com/simple/myorg/prod").unwrap(),
+                &custom_api
+            ),
+            Some("myorg")
+        );
     }
 }

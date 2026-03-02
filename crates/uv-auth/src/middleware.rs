@@ -5,6 +5,7 @@ use http::{Extensions, StatusCode};
 use netrc::Netrc;
 use reqwest::{Request, Response};
 use reqwest_middleware::{ClientWithMiddleware, Error, Middleware, Next};
+use rustc_hash::FxHashMap;
 use tokio::sync::Mutex;
 use tracing::{debug, trace, warn};
 
@@ -120,15 +121,6 @@ impl TextStoreMode {
     }
 }
 
-#[derive(Debug, Clone)]
-enum TokenState {
-    /// The token state has not yet been initialized from the store.
-    Uninitialized,
-    /// The token state has been initialized, and the store either returned tokens or `None` if
-    /// the user has not yet authenticated.
-    Initialized(Option<AccessToken>),
-}
-
 #[derive(Clone)]
 enum S3CredentialState {
     /// The S3 credential state has not yet been initialized.
@@ -166,8 +158,13 @@ pub struct AuthMiddleware {
     base_client: Option<ClientWithMiddleware>,
     /// The pyx token store to use for persistent credentials.
     pyx_token_store: Option<PyxTokenStore>,
-    /// Tokens to use for persistent credentials.
-    pyx_token_state: Mutex<TokenState>,
+    /// Per-workspace token state.
+    ///
+    /// Keyed by workspace name (e.g., `"acme"`). All known pyx URL shapes encode the workspace
+    /// so the key is always present. Each workspace gets its own entry so that Trusted Access
+    /// tokens — which are minted per-workspace — are cached and refreshed independently. A
+    /// missing entry means the token has not yet been fetched for that workspace.
+    pyx_token_state: Mutex<FxHashMap<String, Option<AccessToken>>>,
     /// Cached S3 credentials to avoid running the credential helper multiple times.
     s3_credential_state: Mutex<S3CredentialState>,
     /// Cached GCS credentials to avoid running the credential helper multiple times.
@@ -193,7 +190,7 @@ impl AuthMiddleware {
             only_authenticated: false,
             base_client: None,
             pyx_token_store: None,
-            pyx_token_state: Mutex::new(TokenState::Uninitialized),
+            pyx_token_state: Mutex::new(FxHashMap::default()),
             s3_credential_state: Mutex::new(S3CredentialState::Uninitialized),
             gcs_credential_state: Mutex::new(GcsCredentialState::Uninitialized),
             preview: Preview::default(),
@@ -752,27 +749,36 @@ impl AuthMiddleware {
         if let Some(base_client) = self.base_client.as_ref() {
             if let Some(token_store) = self.pyx_token_store.as_ref() {
                 if token_store.is_known_url(url) {
-                    let mut token_state = self.pyx_token_state.lock().await;
+                    // Derive the workspace from the URL. All known pyx URL shapes — Simple API
+                    // (`/simple/{workspace}/{view}`) and CDN — encode the workspace name.
+                    let Some(workspace) = token_store.workspace_for_url(url).map(str::to_owned)
+                    else {
+                        // URL is recognized as pyx but workspace isn't extractable (shouldn't
+                        // happen in practice); fall through to other auth methods.
+                        debug!("Could not extract workspace from pyx URL {url}");
+                        self.cache().fetches.done(key.clone(), None);
+                        return None;
+                    };
 
-                    // If the token store is uninitialized, initialize it.
-                    let token = match *token_state {
-                        TokenState::Uninitialized => {
-                            trace!("Initializing token store for {url}");
-                            let generated = match token_store
-                                .access_token(base_client, DEFAULT_TOLERANCE_SECS)
-                                .await
-                            {
-                                Ok(Some(token)) => Some(token),
-                                Ok(None) => None,
-                                Err(err) => {
-                                    warn!("Failed to generate access tokens: {err}");
-                                    None
-                                }
-                            };
-                            *token_state = TokenState::Initialized(generated.clone());
-                            generated
-                        }
-                        TokenState::Initialized(ref tokens) => tokens.clone(),
+                    let mut token_state_map = self.pyx_token_state.lock().await;
+
+                    let token = if let Some(token) = token_state_map.get(&workspace) {
+                        token.clone()
+                    } else {
+                        trace!("Initializing token store for {url}");
+                        let generated = match token_store
+                            .access_token(base_client, DEFAULT_TOLERANCE_SECS, Some(&workspace))
+                            .await
+                        {
+                            Ok(Some(token)) => Some(token),
+                            Ok(None) => None,
+                            Err(err) => {
+                                warn!("Failed to generate access tokens: {err}");
+                                None
+                            }
+                        };
+                        token_state_map.insert(workspace, generated.clone());
+                        generated
                     };
 
                     let credentials = token.map(|token| {
