@@ -358,75 +358,82 @@ fn python_executables_from_installed<'a>(
     platform: PlatformRequest,
     preference: PythonPreference,
 ) -> Box<dyn Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a> {
-    let from_managed_installations = iter::once_with(move || {
-        ManagedPythonInstallations::from_settings(None)
-            .map_err(Error::from)
-            .and_then(|installed_installations| {
-                debug!(
+    let extra_managed_install_dirs = env::var_os(EnvVars::UV_PYTHON_EXTRA_INSTALL_DIRS)
+        .into_iter()
+        .flat_map(|value| env::split_paths(&value).collect::<Vec<_>>())
+        .filter(|path| !path.as_os_str().is_empty());
+
+    let from_managed_installations = iter::once(None)
+        .chain(extra_managed_install_dirs.into_iter().map(Some))
+        .map(move |install_dir| {
+            ManagedPythonInstallations::from_settings(install_dir)
+                .map_err(Error::from)
+                .and_then(|installed_installations| {
+                    debug!(
                     "Searching for managed installations at `{}`",
                     installed_installations.root().user_display()
                 );
-                let installations = installed_installations.find_matching_current_platform()?;
+                    let installations = installed_installations.find_matching_current_platform()?;
 
-                let build_versions = python_build_versions_from_env()?;
+                    let build_versions = python_build_versions_from_env()?;
 
-                // Check that the Python version and platform satisfy the request to avoid
-                // unnecessary interpreter queries later
-                Ok(installations
-                    .into_iter()
-                    .filter(move |installation| {
-                        if !version.matches_version(&installation.version()) {
-                            debug!("Skipping managed installation `{installation}`: does not satisfy `{version}`");
-                            return false;
-                        }
-                        if !platform.matches(installation.platform()) {
-                            debug!("Skipping managed installation `{installation}`: does not satisfy requested platform `{platform}`");
-                            return false;
-                        }
-
-                        if let Some(requested_build) = build_versions.get(&installation.implementation()) {
-                            let Some(installation_build) = installation.build() else {
-                                debug!(
-                                    "Skipping managed installation `{installation}`: a build version was requested but is not recorded for this installation"
-                                );
-                                return false;
-                            };
-                            if installation_build != requested_build {
-                                debug!(
-                                    "Skipping managed installation `{installation}`: requested build version `{requested_build}` does not match installation build version `{installation_build}`"
-                                );
+                    // Check that the Python version and platform satisfy the request to avoid
+                    // unnecessary interpreter queries later
+                    Ok(installations
+                        .into_iter()
+                        .filter(move |installation| {
+                            if !version.matches_version(&installation.version()) {
+                                debug!("Skipping managed installation `{installation}`: does not satisfy `{version}`");
                                 return false;
                             }
-                        }
+                            if !platform.matches(installation.platform()) {
+                                debug!("Skipping managed installation `{installation}`: does not satisfy requested platform `{platform}`");
+                                return false;
+                            }
 
-                        true
-                    })
-                    .inspect(|installation| debug!("Found managed installation `{installation}`"))
-                    .map(move |installation| {
-                        // If it's not a patch version request, then attempt to read the stable
-                        // minor version link.
-                        let executable = version
+                            if let Some(requested_build) = build_versions.get(&installation.implementation()) {
+                                let Some(installation_build) = installation.build() else {
+                                    debug!(
+                                    "Skipping managed installation `{installation}`: a build version was requested but is not recorded for this installation"
+                                );
+                                    return false;
+                                };
+                                if installation_build != requested_build {
+                                    debug!(
+                                    "Skipping managed installation `{installation}`: requested build version `{requested_build}` does not match installation build version `{installation_build}`"
+                                );
+                                    return false;
+                                }
+                            }
+
+                            true
+                        })
+                        .inspect(|installation| debug!("Found managed installation `{installation}`"))
+                        .map(move |installation| {
+                            // If it's not a patch version request, then attempt to read the stable
+                            // minor version link.
+                            let executable = version
                                 .patch()
                                 .is_none()
                                 .then(|| {
                                     PythonMinorVersionLink::from_installation(
                                         &installation,
                                     )
-                                    .filter(PythonMinorVersionLink::exists)
-                                    .map(
-                                        |minor_version_link| {
-                                            minor_version_link.symlink_executable.clone()
-                                        },
-                                    )
+                                        .filter(PythonMinorVersionLink::exists)
+                                        .map(
+                                            |minor_version_link| {
+                                                minor_version_link.symlink_executable.clone()
+                                            },
+                                        )
                                 })
                                 .flatten()
                                 .unwrap_or_else(|| installation.executable(false));
-                        (PythonSource::Managed, executable)
-                    })
-                )
-            })
-    })
-    .flatten_ok();
+                            (PythonSource::Managed, executable)
+                        })
+                    )
+                })
+        })
+        .flatten_ok();
 
     let from_search_path = iter::once_with(move || {
         python_executables_from_search_path(version, implementation)

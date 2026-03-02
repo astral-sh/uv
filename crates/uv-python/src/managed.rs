@@ -248,7 +248,7 @@ impl ManagedPythonInstallations {
     ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + use<>, Error> {
         let platform = Platform::from_env()?;
 
-        let iter = Self::from_settings(None)?
+        let iter = self
             .find_all()?
             .filter(move |installation| {
                 if !platform.supports(installation.platform()) {
