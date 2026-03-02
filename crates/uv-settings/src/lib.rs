@@ -341,6 +341,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
                 no_sources_package: _,
                 upgrade,
                 upgrade_package,
+                no_upgrade_package,
                 reinstall,
                 reinstall_package,
                 no_build,
@@ -499,6 +500,9 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     }
     if upgrade_package.is_some() {
         masked_fields.push("upgrade-package");
+    }
+    if no_upgrade_package.is_some() {
+        masked_fields.push("no-upgrade-package");
     }
     if reinstall.is_some() {
         masked_fields.push("reinstall");

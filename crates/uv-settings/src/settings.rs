@@ -514,6 +514,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             no_sources_package,
             upgrade,
             upgrade_package,
+            no_upgrade_package,
             reinstall,
             reinstall_package,
             no_build,
@@ -555,6 +556,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
                     .flatten()
                     .map(Into::into)
                     .collect(),
+                no_upgrade_package.unwrap_or_default(),
             ),
             reinstall: Reinstall::from_args(reinstall, reinstall_package.unwrap_or_default()),
             no_build,
@@ -989,6 +991,15 @@ pub struct ResolverInstallerSchema {
         "#
     )]
     pub upgrade_package: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+    /// Allow package upgrades for all packages, excluding the specified packages.
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            no-upgrade-package = ["ruff"]
+        "#
+    )]
+    pub no_upgrade_package: Option<Vec<PackageName>>,
     /// Reinstall all packages, regardless of whether they're already installed. Implies `refresh`.
     #[option(
         default = "false",
@@ -1889,6 +1900,15 @@ pub struct PipOptions {
         "#
     )]
     pub upgrade_package: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+    /// Allow package upgrades for all packages, excluding the specified packages.
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            no-upgrade-package = ["ruff"]
+        "#
+    )]
+    pub no_upgrade_package: Option<Vec<PackageName>>,
     /// Reinstall all packages, regardless of whether they're already installed. Implies `refresh`.
     #[option(
         default = "false",
@@ -2006,6 +2026,7 @@ impl From<ResolverInstallerSchema> for ResolverOptions {
                     .flatten()
                     .map(Into::into)
                     .collect(),
+                value.no_upgrade_package.unwrap_or_default(),
             ),
             no_build: value.no_build,
             no_build_package: value.no_build_package,
@@ -2224,6 +2245,7 @@ pub struct OptionsWire {
     no_sources_package: Option<Vec<PackageName>>,
     upgrade: Option<bool>,
     upgrade_package: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+    no_upgrade_package: Option<Vec<PackageName>>,
     reinstall: Option<bool>,
     reinstall_package: Option<Vec<PackageName>>,
     no_build: Option<bool>,
@@ -2321,6 +2343,7 @@ impl From<OptionsWire> for Options {
             no_sources_package,
             upgrade,
             upgrade_package,
+            no_upgrade_package,
             reinstall,
             reinstall_package,
             no_build,
@@ -2399,6 +2422,7 @@ impl From<OptionsWire> for Options {
                 no_sources_package,
                 upgrade,
                 upgrade_package,
+                no_upgrade_package,
                 reinstall,
                 reinstall_package,
                 no_build,
