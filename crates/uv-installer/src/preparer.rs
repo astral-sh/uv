@@ -1,7 +1,7 @@
 use std::cmp::Reverse;
 use std::sync::Arc;
 
-use futures::{FutureExt, Stream, StreamExt, TryFutureExt, TryStreamExt};
+use futures::{FutureExt, Stream, TryFutureExt, TryStreamExt, stream::FuturesUnordered};
 use tracing::{debug, instrument};
 
 use uv_cache::Cache;
@@ -26,7 +26,6 @@ pub struct Preparer<'a, Context: BuildContext> {
     build_options: &'a BuildOptions,
     database: DistributionDatabase<'a, Context>,
     reporter: Option<Arc<dyn Reporter>>,
-    concurrency: usize,
 }
 
 impl<'a, Context: BuildContext> Preparer<'a, Context> {
@@ -36,7 +35,6 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
         hashes: &'a HashStrategy,
         build_options: &'a BuildOptions,
         database: DistributionDatabase<'a, Context>,
-        concurrency: usize,
     ) -> Self {
         Self {
             tags,
@@ -45,7 +43,6 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
             build_options,
             database,
             reporter: None,
-            concurrency,
         }
     }
 
@@ -61,7 +58,6 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                 .database
                 .with_reporter(reporter.clone().into_distribution_reporter()),
             reporter: Some(reporter),
-            concurrency: self.concurrency,
         }
     }
 
@@ -72,8 +68,9 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
         in_flight: &'stream InFlight,
         resolution: &'stream Resolution,
     ) -> impl Stream<Item = Result<CachedDist, Error>> + 'stream {
-        futures::stream::iter(distributions)
-            .map(move |dist| async move {
+        distributions
+            .into_iter()
+            .map(async |dist| {
                 let wheel = self
                     .get_wheel((*dist).clone(), in_flight, resolution)
                     .boxed_local()
@@ -83,7 +80,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                 }
                 Ok::<CachedDist, Error>(wheel)
             })
-            .buffer_unordered(self.concurrency)
+            .collect::<FuturesUnordered<_>>()
     }
 
     /// Download, build, and unzip a set of distributions.

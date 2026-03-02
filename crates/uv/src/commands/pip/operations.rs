@@ -160,7 +160,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                         client,
                         build_dispatch,
                         concurrency.downloads_semaphore.clone(),
-                        concurrency.builds_semaphore.clone(),
+                        concurrency.source_distribution_semaphore.clone(),
                     ),
                 )
                 .with_reporter(Arc::new(ResolverReporter::from(printer)))
@@ -179,7 +179,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                     client,
                     build_dispatch,
                     concurrency.downloads_semaphore.clone(),
-                    concurrency.builds_semaphore.clone(),
+                    concurrency.source_distribution_semaphore.clone(),
                 ),
             )
             .with_reporter(Arc::new(ResolverReporter::from(printer)))
@@ -292,7 +292,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                         client,
                         build_dispatch,
                         concurrency.downloads_semaphore.clone(),
-                        concurrency.builds_semaphore.clone(),
+                        concurrency.source_distribution_semaphore.clone(),
                     ),
                 )
                 .with_reporter(Arc::new(ResolverReporter::from(printer)))
@@ -328,7 +328,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                     client,
                     build_dispatch,
                     concurrency.downloads_semaphore.clone(),
-                    concurrency.builds_semaphore.clone(),
+                    concurrency.source_distribution_semaphore.clone(),
                 ),
             )
             .with_reporter(Arc::new(ResolverReporter::from(printer)))
@@ -381,7 +381,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 client,
                 build_dispatch,
                 concurrency.downloads_semaphore.clone(),
-                concurrency.builds_semaphore.clone(),
+                concurrency.source_distribution_semaphore.clone(),
             ),
         )?
         .with_reporter(Arc::new(reporter));
@@ -778,9 +778,8 @@ async fn execute_plan(
                 client,
                 build_dispatch,
                 concurrency.downloads_semaphore.clone(),
-                concurrency.builds_semaphore.clone(),
+                concurrency.source_distribution_semaphore.clone(),
             ),
-            concurrency.downloads,
         )
         .with_reporter(Arc::new(
             PrepareReporter::from(printer).with_length(remote.len() as u64),

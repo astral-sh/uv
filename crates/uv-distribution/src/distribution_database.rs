@@ -59,11 +59,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         client: &'a RegistryClient,
         build_context: &'a Context,
         downloads_semaphore: Arc<Semaphore>,
-        builds_semaphore: Arc<Semaphore>,
+        source_distribution_semaphore: Arc<Semaphore>,
     ) -> Self {
         Self {
             build_context,
-            builder: SourceDistributionBuilder::new(build_context, builds_semaphore),
+            builder: SourceDistributionBuilder::new(build_context, source_distribution_semaphore),
             client: ManagedClient::new(client, downloads_semaphore),
             reporter: None,
         }

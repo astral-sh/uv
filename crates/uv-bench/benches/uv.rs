@@ -230,7 +230,7 @@ mod resolver {
                 client,
                 &build_context,
                 concurrency.downloads_semaphore.clone(),
-                concurrency.builds_semaphore.clone(),
+                concurrency.source_distribution_semaphore.clone(),
             ),
         )?;
 
