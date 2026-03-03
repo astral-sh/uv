@@ -61,7 +61,7 @@ use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{
     ExcludeNewer, ExcludeNewerPackage, ExcludeNewerValue, InMemoryIndex, MetadataResponse,
-    PrereleaseMode, ResolutionMode, ResolverOutput,
+    PackageExcludeNewer, PrereleaseMode, ResolutionMode, ResolverOutput,
 };
 
 mod export;
@@ -110,6 +110,36 @@ static X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     .unwrap();
     UniversalMarker::new(pep508, ConflictMarker::TRUE)
 });
+static PPC64LE_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("platform_machine == 'ppc64le'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static PPC64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("platform_machine == 'ppc64'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static S390X_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("platform_machine == 's390x'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static RISCV64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("platform_machine == 'riscv64'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static LOONGARCH64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("platform_machine == 'loongarch64'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static ARMV7L_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 =
+        MarkerTree::from_str("platform_machine == 'armv7l' or platform_machine == 'armv8l'")
+            .unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static ARMV6L_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("platform_machine == 'armv6l'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
 static LINUX_ARM_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let mut marker = *LINUX_MARKERS;
     marker.and(*ARM_MARKERS);
@@ -123,6 +153,41 @@ static LINUX_X86_64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
 static LINUX_X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let mut marker = *LINUX_MARKERS;
     marker.and(*X86_MARKERS);
+    marker
+});
+static LINUX_PPC64LE_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*PPC64LE_MARKERS);
+    marker
+});
+static LINUX_PPC64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*PPC64_MARKERS);
+    marker
+});
+static LINUX_S390X_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*S390X_MARKERS);
+    marker
+});
+static LINUX_RISCV64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*RISCV64_MARKERS);
+    marker
+});
+static LINUX_LOONGARCH64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*LOONGARCH64_MARKERS);
+    marker
+});
+static LINUX_ARMV7L_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*ARMV7L_MARKERS);
+    marker
+});
+static LINUX_ARMV6L_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*ARMV6L_MARKERS);
     marker
 });
 static WINDOWS_ARM_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
@@ -261,19 +326,35 @@ impl Lock {
 
             // If there are multiple distributions for the same package, include the markers of all
             // forks that included the current distribution.
+            //
+            // Normalize with a simplify/complexify round-trip through `requires-python` to
+            // match markers deserialized from the lockfile (which get complexified on read).
             let fork_markers = if duplicates.contains(dist.name()) {
                 resolution
                     .fork_markers
                     .iter()
                     .filter(|fork_markers| !fork_markers.is_disjoint(dist.marker))
-                    .copied()
+                    .map(|marker| {
+                        let simplified =
+                            SimplifiedMarkerTree::new(&requires_python, marker.combined());
+                        UniversalMarker::from_combined(simplified.into_marker(&requires_python))
+                    })
                     .collect()
             } else {
                 vec![]
             };
 
             let mut package = Package::from_annotated_dist(dist, fork_markers, root)?;
-            Self::remove_unreachable_wheels(resolution, &requires_python, node_index, &mut package);
+            let wheels = &mut package.wheels;
+            wheels.retain(|wheel| {
+                !is_wheel_unreachable(
+                    &wheel.filename,
+                    resolution,
+                    &requires_python,
+                    node_index,
+                    None,
+                )
+            });
 
             // Add all dependencies
             for edge in resolution.graph.edges(node_index) {
@@ -359,6 +440,18 @@ impl Lock {
             fork_strategy: resolution.options.fork_strategy,
             exclude_newer: resolution.options.exclude_newer.clone().into(),
         };
+        // Normalize fork markers with a simplify/complexify round-trip through
+        // `requires-python`. This ensures markers from the resolver (which don't include
+        // `requires-python` bounds) match markers deserialized from the lockfile (which get
+        // complexified on read).
+        let fork_markers = resolution
+            .fork_markers
+            .iter()
+            .map(|marker| {
+                let simplified = SimplifiedMarkerTree::new(&requires_python, marker.combined());
+                UniversalMarker::from_combined(simplified.into_marker(&requires_python))
+            })
+            .collect();
         let lock = Self::new(
             VERSION,
             REVISION,
@@ -369,177 +462,9 @@ impl Lock {
             Conflicts::empty(),
             vec![],
             vec![],
-            resolution.fork_markers.clone(),
+            fork_markers,
         )?;
         Ok(lock)
-    }
-
-    /// Remove wheels that can't be selected for installation due to environment markers.
-    ///
-    /// For example, a package included under `sys_platform == 'win32'` does not need Linux
-    /// wheels.
-    fn remove_unreachable_wheels(
-        graph: &ResolverOutput,
-        requires_python: &RequiresPython,
-        node_index: NodeIndex,
-        locked_dist: &mut Package,
-    ) {
-        // Remove wheels that don't match `requires-python` and can't be selected for installation.
-        locked_dist
-            .wheels
-            .retain(|wheel| requires_python.matches_wheel_tag(&wheel.filename));
-
-        // Filter by platform tags.
-        locked_dist.wheels.retain(|wheel| {
-            // Naively, we'd check whether `platform_system == 'Linux'` is disjoint, or
-            // `os_name == 'posix'` is disjoint, or `sys_platform == 'linux'` is disjoint (each on its
-            // own sufficient to exclude linux wheels), but due to
-            // `(A ∩ (B ∩ C) = ∅) => ((A ∩ B = ∅) or (A ∩ C = ∅))`
-            // a single disjointness check with the intersection is sufficient, so we have one
-            // constant per platform.
-            let platform_tags = wheel.filename.platform_tags();
-
-            if platform_tags.iter().all(PlatformTag::is_any) {
-                return true;
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_linux) {
-                if platform_tags.iter().all(PlatformTag::is_arm) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*LINUX_ARM_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*LINUX_X86_64_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_x86) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*LINUX_X86_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if graph.graph[node_index].marker().is_disjoint(*LINUX_MARKERS) {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_windows) {
-                if platform_tags.iter().all(PlatformTag::is_arm) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*WINDOWS_ARM_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*WINDOWS_X86_64_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_x86) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*WINDOWS_X86_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if graph.graph[node_index]
-                    .marker()
-                    .is_disjoint(*WINDOWS_MARKERS)
-                {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_macos) {
-                if platform_tags.iter().all(PlatformTag::is_arm) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*MAC_ARM_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*MAC_X86_64_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_x86) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*MAC_X86_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if graph.graph[node_index].marker().is_disjoint(*MAC_MARKERS) {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_android) {
-                if platform_tags.iter().all(PlatformTag::is_arm) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*ANDROID_ARM_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*ANDROID_X86_64_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_x86) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*ANDROID_X86_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if graph.graph[node_index]
-                    .marker()
-                    .is_disjoint(*ANDROID_MARKERS)
-                {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_arm) {
-                if graph.graph[node_index].marker().is_disjoint(*ARM_MARKERS) {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_x86_64) {
-                if graph.graph[node_index]
-                    .marker()
-                    .is_disjoint(*X86_64_MARKERS)
-                {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_x86) {
-                if graph.graph[node_index].marker().is_disjoint(*X86_MARKERS) {
-                    return false;
-                }
-            }
-
-            true
-        });
     }
 
     /// Initialize a [`Lock`] from a list of [`Package`] entries.
@@ -1080,20 +1005,29 @@ impl Lock {
                 // Serialize package-specific exclusions as a separate field
                 if !exclude_newer.package.is_empty() {
                     let mut package_table = toml_edit::Table::new();
-                    for (name, exclude_newer_value) in &exclude_newer.package {
-                        if let Some(span) = exclude_newer_value.span() {
-                            // Serialize as inline table with timestamp and span
-                            let mut inline = toml_edit::InlineTable::new();
-                            inline.insert(
-                                "timestamp",
-                                exclude_newer_value.timestamp().to_string().into(),
-                            );
-                            inline.insert("span", span.to_string().into());
-                            package_table.insert(name.as_ref(), Item::Value(inline.into()));
-                        } else {
-                            // Serialize as simple string
-                            package_table
-                                .insert(name.as_ref(), value(exclude_newer_value.to_string()));
+                    for (name, setting) in &exclude_newer.package {
+                        match setting {
+                            PackageExcludeNewer::Enabled(exclude_newer_value) => {
+                                if let Some(span) = exclude_newer_value.span() {
+                                    // Serialize as inline table with timestamp and span
+                                    let mut inline = toml_edit::InlineTable::new();
+                                    inline.insert(
+                                        "timestamp",
+                                        exclude_newer_value.timestamp().to_string().into(),
+                                    );
+                                    inline.insert("span", span.to_string().into());
+                                    package_table.insert(name.as_ref(), Item::Value(inline.into()));
+                                } else {
+                                    // Serialize as simple string
+                                    package_table.insert(
+                                        name.as_ref(),
+                                        value(exclude_newer_value.to_string()),
+                                    );
+                                }
+                            }
+                            PackageExcludeNewer::Disabled => {
+                                package_table.insert(name.as_ref(), value(false));
+                            }
                         }
                     }
                     options_table.insert("exclude-newer-package", Item::Table(package_table));
@@ -1383,7 +1317,6 @@ impl Lock {
     }
 
     /// Return a [`SatisfiesResult`] if the given requirements do not match the [`Package`] metadata.
-    #[allow(clippy::unused_self)]
     fn satisfies_requires_dist<'lock>(
         &self,
         requires_dist: Box<[Requirement]>,
@@ -2159,7 +2092,7 @@ struct ResolverOptions {
     exclude_newer: ExcludeNewerWire,
 }
 
-#[allow(clippy::struct_field_names)]
+#[expect(clippy::struct_field_names)]
 #[derive(Clone, Debug, Default, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 struct ExcludeNewerWire {
@@ -2601,11 +2534,17 @@ impl Package {
 
         if !no_binary {
             if let Some(best_wheel_index) = self.find_best_wheel(tag_policy) {
-                let hashes = self.wheels[best_wheel_index]
-                    .hash
-                    .as_ref()
-                    .map(|hash| HashDigests::from(vec![hash.0.clone()]))
-                    .unwrap_or_else(|| HashDigests::from(vec![]));
+                let hashes = {
+                    let wheel = &self.wheels[best_wheel_index];
+                    HashDigests::from(
+                        wheel
+                            .hash
+                            .iter()
+                            .chain(wheel.zstd.iter().flat_map(|z| z.hash.iter()))
+                            .map(|h| h.0.clone())
+                            .collect::<Vec<_>>(),
+                    )
+                };
 
                 let dist = match &self.id.source {
                     Source::Registry(source) => {
@@ -5365,7 +5304,7 @@ where
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[allow(clippy::enum_variant_names)]
+#[expect(clippy::enum_variant_names)]
 enum WheelTagHint {
     /// None of the available wheels for a package have a compatible Python language tag (e.g.,
     /// `cp310` in `cp310-abi3-manylinux_2_17_x86_64.whl`).
@@ -6158,6 +6097,288 @@ fn simplified_universal_markers(
         .into_iter()
         .filter_map(MarkerTree::try_to_string)
         .collect()
+}
+
+/// Filter out wheels that can't be selected for installation due to environment markers.
+///
+/// For example, a package included under `sys_platform == 'win32'` does not need Linux
+/// wheels.
+///
+/// Returns `true` if the wheel is definitely unreachable, and `false` if it may be reachable,
+/// including if the wheel tag isn't recognized.
+pub(crate) fn is_wheel_unreachable(
+    filename: &WheelFilename,
+    graph: &ResolverOutput,
+    requires_python: &RequiresPython,
+    node_index: NodeIndex,
+    tags: Option<&Tags>,
+) -> bool {
+    if let Some(tags) = tags
+        && !filename.compatibility(tags).is_compatible()
+    {
+        return true;
+    }
+    // Remove wheels that don't match `requires-python` and can't be selected for installation.
+    if !requires_python.matches_wheel_tag(filename) {
+        return true;
+    }
+
+    // Filter by platform tags.
+
+    // Naively, we'd check whether `platform_system == 'Linux'` is disjoint, or
+    // `os_name == 'posix'` is disjoint, or `sys_platform == 'linux'` is disjoint (each on its
+    // own sufficient to exclude linux wheels), but due to
+    // `(A ∩ (B ∩ C) = ∅) => ((A ∩ B = ∅) or (A ∩ C = ∅))`
+    // a single disjointness check with the intersection is sufficient, so we have one
+    // constant per platform.
+    let platform_tags = filename.platform_tags();
+
+    if platform_tags.iter().all(PlatformTag::is_any) {
+        return false;
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_linux) {
+        if platform_tags.iter().all(PlatformTag::is_arm) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*LINUX_ARM_MARKERS)
+            {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*LINUX_X86_64_MARKERS)
+            {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_x86) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*LINUX_X86_MARKERS)
+            {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_ppc64le) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*LINUX_PPC64LE_MARKERS)
+            {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_ppc64) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*LINUX_PPC64_MARKERS)
+            {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_s390x) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*LINUX_S390X_MARKERS)
+            {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_riscv64) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*LINUX_RISCV64_MARKERS)
+            {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_loongarch64) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*LINUX_LOONGARCH64_MARKERS)
+            {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_armv7l) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*LINUX_ARMV7L_MARKERS)
+            {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_armv6l) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*LINUX_ARMV6L_MARKERS)
+            {
+                return true;
+            }
+        } else if graph.graph[node_index].marker().is_disjoint(*LINUX_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_windows) {
+        if platform_tags.iter().all(PlatformTag::is_arm) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*WINDOWS_ARM_MARKERS)
+            {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*WINDOWS_X86_64_MARKERS)
+            {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_x86) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*WINDOWS_X86_MARKERS)
+            {
+                return true;
+            }
+        } else if graph.graph[node_index]
+            .marker()
+            .is_disjoint(*WINDOWS_MARKERS)
+        {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_macos) {
+        if platform_tags.iter().all(PlatformTag::is_arm) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*MAC_ARM_MARKERS)
+            {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*MAC_X86_64_MARKERS)
+            {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_x86) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*MAC_X86_MARKERS)
+            {
+                return true;
+            }
+        } else if graph.graph[node_index].marker().is_disjoint(*MAC_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_android) {
+        if platform_tags.iter().all(PlatformTag::is_arm) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*ANDROID_ARM_MARKERS)
+            {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*ANDROID_X86_64_MARKERS)
+            {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_x86) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*ANDROID_X86_MARKERS)
+            {
+                return true;
+            }
+        } else if graph.graph[node_index]
+            .marker()
+            .is_disjoint(*ANDROID_MARKERS)
+        {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_arm) {
+        if graph.graph[node_index].marker().is_disjoint(*ARM_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_x86_64) {
+        if graph.graph[node_index]
+            .marker()
+            .is_disjoint(*X86_64_MARKERS)
+        {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_x86) {
+        if graph.graph[node_index].marker().is_disjoint(*X86_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_ppc64le) {
+        if graph.graph[node_index]
+            .marker()
+            .is_disjoint(*PPC64LE_MARKERS)
+        {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_ppc64) {
+        if graph.graph[node_index].marker().is_disjoint(*PPC64_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_s390x) {
+        if graph.graph[node_index].marker().is_disjoint(*S390X_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_riscv64) {
+        if graph.graph[node_index]
+            .marker()
+            .is_disjoint(*RISCV64_MARKERS)
+        {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_loongarch64) {
+        if graph.graph[node_index]
+            .marker()
+            .is_disjoint(*LOONGARCH64_MARKERS)
+        {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_armv7l) {
+        if graph.graph[node_index]
+            .marker()
+            .is_disjoint(*ARMV7L_MARKERS)
+        {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_armv6l) {
+        if graph.graph[node_index]
+            .marker()
+            .is_disjoint(*ARMV6L_MARKERS)
+        {
+            return true;
+        }
+    }
+
+    false
 }
 
 #[cfg(test)]

@@ -9,7 +9,7 @@ use serde::Deserialize;
 use thiserror::Error;
 use url::Url;
 
-use uv_configuration::SourceStrategy;
+use uv_configuration::NoSources;
 use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
 use uv_pypi_types::VerbatimParsedUrl;
@@ -110,31 +110,31 @@ impl Pep723ItemRef<'_> {
     }
 
     /// Collect any `tool.uv.index` from the script.
-    pub fn indexes(&self, source_strategy: SourceStrategy) -> &[uv_distribution_types::Index] {
+    pub fn indexes(&self, source_strategy: &NoSources) -> &[uv_distribution_types::Index] {
         match source_strategy {
-            SourceStrategy::Enabled => self
+            NoSources::None => self
                 .metadata()
                 .tool
                 .as_ref()
                 .and_then(|tool| tool.uv.as_ref())
                 .and_then(|uv| uv.top_level.index.as_deref())
                 .unwrap_or(&[]),
-            SourceStrategy::Disabled => &[],
+            NoSources::All | NoSources::Packages(_) => &[],
         }
     }
 
     /// Collect any `tool.uv.sources` from the script.
-    pub fn sources(&self, source_strategy: SourceStrategy) -> &BTreeMap<PackageName, Sources> {
+    pub fn sources(&self, source_strategy: &NoSources) -> &BTreeMap<PackageName, Sources> {
         static EMPTY: BTreeMap<PackageName, Sources> = BTreeMap::new();
         match source_strategy {
-            SourceStrategy::Enabled => self
+            NoSources::None => self
                 .metadata()
                 .tool
                 .as_ref()
                 .and_then(|tool| tool.uv.as_ref())
                 .and_then(|uv| uv.sources.as_ref())
                 .unwrap_or(&EMPTY),
-            SourceStrategy::Disabled => &EMPTY,
+            NoSources::All | NoSources::Packages(_) => &EMPTY,
         }
     }
 }

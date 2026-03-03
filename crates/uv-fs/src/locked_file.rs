@@ -14,7 +14,7 @@ use crate::{Simplified, is_known_already_locked_error};
 
 /// Parsed value of `UV_LOCK_TIMEOUT`, with a default of 5 min.
 static LOCK_TIMEOUT: LazyLock<Duration> = LazyLock::new(|| {
-    let default_timeout = Duration::from_secs(300);
+    let default_timeout = Duration::from_mins(5);
     let Some(lock_timeout) = env::var_os(EnvVars::UV_LOCK_TIMEOUT) else {
         return default_timeout;
     };
@@ -147,7 +147,7 @@ impl LockedFile {
         let try_lock_exclusive = tokio::task::spawn_blocking(move || (mode.try_lock(&file), file));
         let file = match try_lock_exclusive.await? {
             (Ok(()), file) => {
-                debug!("Acquired {mode} lock for `{resource}`");
+                trace!("Acquired {mode} lock for `{resource}`");
                 return Ok(Self(file));
             }
             (Err(err), file) => {
@@ -180,7 +180,7 @@ impl LockedFile {
             source: err,
         })?;
 
-        debug!("Acquired {mode} lock for `{resource}`");
+        trace!("Acquired {mode} lock for `{resource}`");
         Ok(Self(file))
     }
 
@@ -192,7 +192,7 @@ impl LockedFile {
         );
         match mode.try_lock(&file) {
             Ok(()) => {
-                debug!("Acquired {mode} lock for `{resource}`");
+                trace!("Acquired {mode} lock for `{resource}`");
                 Some(Self(file))
             }
             Err(err) => {
@@ -235,14 +235,14 @@ impl LockedFile {
     #[cfg(unix)]
     fn create(path: impl AsRef<Path>) -> Result<fs_err::File, LockedFileError> {
         use rustix::io::Errno;
-        #[allow(clippy::disallowed_types)]
+        #[expect(clippy::disallowed_types)]
         use std::{fs::File, os::unix::fs::PermissionsExt};
         use tempfile::NamedTempFile;
 
         /// The permissions the lockfile should end up with
         const DESIRED_MODE: u32 = 0o666;
 
-        #[allow(clippy::disallowed_types)]
+        #[expect(clippy::disallowed_types)]
         fn try_set_permissions(file: &File, path: &Path) {
             if let Err(err) = file.set_permissions(std::fs::Permissions::from_mode(DESIRED_MODE)) {
                 warn!(
@@ -347,7 +347,7 @@ impl Drop for LockedFile {
                 self.0.path().display()
             );
         } else {
-            debug!("Released lock at `{}`", self.0.path().display());
+            trace!("Released lock at `{}`", self.0.path().display());
         }
     }
 }

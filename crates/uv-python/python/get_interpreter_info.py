@@ -531,6 +531,7 @@ def get_operating_system_and_architecture():
             "minor": int(version[1]),
             "simulator": ios_ver.is_simulator,
         }
+        [_version, architecture, _platform] = version_arch.split("-")
     elif operating_system == "emscripten":
         pyodide_abi_version = sysconfig.get_config_var("PYODIDE_ABI_VERSION")
         if not pyodide_abi_version:

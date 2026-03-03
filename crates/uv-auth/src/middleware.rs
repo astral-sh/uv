@@ -8,13 +8,13 @@ use reqwest_middleware::{ClientWithMiddleware, Error, Middleware, Next};
 use tokio::sync::Mutex;
 use tracing::{debug, trace, warn};
 
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 use uv_warnings::owo_colors::OwoColorize;
 
 use crate::credentials::Authentication;
-use crate::providers::{HuggingFaceProvider, S3EndpointProvider};
+use crate::providers::{GcsEndpointProvider, HuggingFaceProvider, S3EndpointProvider};
 use crate::pyx::{DEFAULT_TOLERANCE_SECS, PyxTokenStore};
 use crate::{
     AccessToken, CredentialsCache, KeyringProvider,
@@ -138,6 +138,15 @@ enum S3CredentialState {
     Initialized(Option<Arc<Authentication>>),
 }
 
+#[derive(Clone)]
+enum GcsCredentialState {
+    /// The GCS credential state has not yet been initialized.
+    Uninitialized,
+    /// The GCS credential state has been initialized, with either a signer or `None` if
+    /// no GCS endpoint is configured.
+    Initialized(Option<Arc<Authentication>>),
+}
+
 /// A middleware that adds basic authentication to requests.
 ///
 /// Uses a cache to propagate credentials from previously seen requests and
@@ -161,6 +170,8 @@ pub struct AuthMiddleware {
     pyx_token_state: Mutex<TokenState>,
     /// Cached S3 credentials to avoid running the credential helper multiple times.
     s3_credential_state: Mutex<S3CredentialState>,
+    /// Cached GCS credentials to avoid running the credential helper multiple times.
+    gcs_credential_state: Mutex<GcsCredentialState>,
     preview: Preview,
 }
 
@@ -184,6 +195,7 @@ impl AuthMiddleware {
             pyx_token_store: None,
             pyx_token_state: Mutex::new(TokenState::Uninitialized),
             s3_credential_state: Mutex::new(S3CredentialState::Uninitialized),
+            gcs_credential_state: Mutex::new(GcsCredentialState::Uninitialized),
             preview: Preview::default(),
         }
     }
@@ -353,7 +365,9 @@ impl Middleware for AuthMiddleware {
 
             // Check the cache for a URL match first. This can save us from
             // making a failing request
-            let credentials = self.cache().get_url(request.url(), &Username::none());
+            let credentials = self
+                .cache()
+                .get_url(DisplaySafeUrl::ref_cast(request.url()), &Username::none());
             if let Some(credentials) = credentials.as_ref() {
                 request = credentials.authenticate(request).await;
 
@@ -601,10 +615,10 @@ impl AuthMiddleware {
                 .await;
         }
 
-        let credentials = if let Some(credentials) = self
-            .cache()
-            .get_url(request.url(), credentials.as_username().as_ref())
-        {
+        let credentials = if let Some(credentials) = self.cache().get_url(
+            DisplaySafeUrl::ref_cast(request.url()),
+            credentials.as_username().as_ref(),
+        ) {
             request = credentials.authenticate(request).await;
             // Do not insert already-cached credentials
             None
@@ -712,6 +726,28 @@ impl AuthMiddleware {
             }
         }
 
+        if GcsEndpointProvider::is_gcs_endpoint(url, self.preview) {
+            let mut gcs_state = self.gcs_credential_state.lock().await;
+
+            // If the GCS credential state is uninitialized, initialize it.
+            let credentials = match &*gcs_state {
+                GcsCredentialState::Uninitialized => {
+                    trace!("Initializing GCS credentials for {url}");
+                    let signer = GcsEndpointProvider::create_signer();
+                    let credentials = Arc::new(Authentication::from(signer));
+                    *gcs_state = GcsCredentialState::Initialized(Some(credentials.clone()));
+                    Some(credentials)
+                }
+                GcsCredentialState::Initialized(credentials) => credentials.clone(),
+            };
+
+            if let Some(credentials) = credentials {
+                debug!("Found GCS credentials for {url}");
+                self.cache().fetches.done(key, Some(credentials.clone()));
+                return Some(credentials);
+            }
+        }
+
         // If this is a known URL, authenticate it via the token store.
         if let Some(base_client) = self.base_client.as_ref() {
             if let Some(token_store) = self.pyx_token_store.as_ref() {
@@ -769,19 +805,23 @@ impl AuthMiddleware {
         // Text credential store support.
         } else if let Some(credentials) = self.text_store.get().await.and_then(|text_store| {
             debug!("Checking text store for credentials for {url}");
-            text_store
-                .get_credentials(
-                    url,
-                    credentials
-                        .as_ref()
-                        .and_then(|credentials| credentials.username()),
-                )
-                .cloned()
+            match text_store.get_credentials(
+                url,
+                credentials
+                    .as_ref()
+                    .and_then(|credentials| credentials.username()),
+            ) {
+                Ok(credentials) => credentials.cloned(),
+                Err(err) => {
+                    debug!("Failed to get credentials from text store: {err}");
+                    None
+                }
+            }
         }) {
             debug!("Found credentials in plaintext store for {url}");
             Some(credentials)
         } else if let Some(credentials) = {
-            if self.preview.is_enabled(PreviewFeatures::NATIVE_AUTH) {
+            if self.preview.is_enabled(PreviewFeature::NativeAuth) {
                 let native_store = KeyringProvider::native();
                 let username = credentials.and_then(|credentials| credentials.username());
                 let display_username = if let Some(username) = username {
@@ -1014,7 +1054,7 @@ mod tests {
         let base_url = Url::parse(&server.uri())?;
         let cache = CredentialsCache::new();
         cache.insert(
-            &base_url,
+            DisplaySafeUrl::ref_cast(&base_url),
             Arc::new(Authentication::from(Credentials::basic(
                 Some(username.to_string()),
                 Some(password.to_string()),
@@ -1068,7 +1108,7 @@ mod tests {
         let base_url = Url::parse(&server.uri())?;
         let cache = CredentialsCache::new();
         cache.insert(
-            &base_url,
+            DisplaySafeUrl::ref_cast(&base_url),
             Arc::new(Authentication::from(Credentials::basic(
                 Some(username.to_string()),
                 None,
@@ -1464,7 +1504,7 @@ mod tests {
         // Seed _just_ the username. We should pull the username from the cache if not present on the
         // URL.
         cache.insert(
-            &base_url,
+            DisplaySafeUrl::ref_cast(&base_url),
             Arc::new(Authentication::from(Credentials::basic(
                 Some(username.to_string()),
                 None,
@@ -1516,14 +1556,14 @@ mod tests {
         let cache = CredentialsCache::new();
         // Seed the cache with our credentials
         cache.insert(
-            &base_url_1,
+            DisplaySafeUrl::ref_cast(&base_url_1),
             Arc::new(Authentication::from(Credentials::basic(
                 Some(username_1.to_string()),
                 Some(password_1.to_string()),
             ))),
         );
         cache.insert(
-            &base_url_2,
+            DisplaySafeUrl::ref_cast(&base_url_2),
             Arc::new(Authentication::from(Credentials::basic(
                 Some(username_2.to_string()),
                 Some(password_2.to_string()),
@@ -1711,14 +1751,14 @@ mod tests {
 
         // Seed the cache with our credentials
         cache.insert(
-            &base_url_1,
+            DisplaySafeUrl::ref_cast(&base_url_1),
             Arc::new(Authentication::from(Credentials::basic(
                 Some(username_1.to_string()),
                 Some(password_1.to_string()),
             ))),
         );
         cache.insert(
-            &base_url_2,
+            DisplaySafeUrl::ref_cast(&base_url_2),
             Arc::new(Authentication::from(Credentials::basic(
                 Some(username_2.to_string()),
                 Some(password_2.to_string()),
@@ -2575,5 +2615,62 @@ mod tests {
 
     fn create_request(url: &str) -> Request {
         Request::new(Method::GET, Url::parse(url).unwrap())
+    }
+
+    /// Test for <https://github.com/astral-sh/uv/issues/17343>
+    ///
+    /// URLs with an empty username but a password (e.g., `https://:token@example.com`)
+    /// should be recognized as having credentials and authenticate successfully.
+    #[test(tokio::test)]
+    async fn test_credentials_in_url_empty_username() -> Result<(), Error> {
+        let username = "";
+        let password = "token";
+
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(basic_auth(username, password))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+
+        let client = test_client_builder()
+            .with(AuthMiddleware::new().with_cache(CredentialsCache::new()))
+            .build();
+
+        let base_url = Url::parse(&server.uri())?;
+
+        // Test with the URL format `:password@host` (empty username, password present)
+        let mut url = base_url.clone();
+        url.set_password(Some(password)).unwrap();
+        assert_eq!(
+            client.get(url).send().await?.status(),
+            200,
+            "URL with empty username but password should authenticate successfully"
+        );
+
+        // Subsequent requests to the same realm should also succeed (credentials cached)
+        assert_eq!(
+            client.get(server.uri()).send().await?.status(),
+            200,
+            "Subsequent requests should use cached credentials"
+        );
+
+        assert_eq!(
+            client
+                .get(format!("{}/foo", server.uri()))
+                .send()
+                .await?
+                .status(),
+            200,
+            "Requests to different paths in the same realm should succeed"
+        );
+
+        Ok(())
     }
 }

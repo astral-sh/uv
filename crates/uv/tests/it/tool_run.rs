@@ -1,29 +1,29 @@
-use crate::common::{TestContext, uv_snapshot};
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use uv_fs::copy_dir_all;
 use uv_static::EnvVars;
+use uv_test::{uv_snapshot, venv_bin_path};
 
 #[test]
 fn tool_run_args() {
-    let context = TestContext::new("3.12").with_filtered_counts();
-    let mut filters = context.filters();
-    filters.push((
-        r"Usage: uv tool run \[OPTIONS\] (?s).*",
-        "[UV TOOL RUN HELP]",
-    ));
-    filters.push((r"usage: pytest \[options\] (?s).*", "[PYTEST HELP]"));
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
+    let context = context
+        .with_filter((
+            r"Usage: uv(\.exe)? tool run \[OPTIONS\] (?s).*",
+            "[UV TOOL RUN HELP]",
+        ))
+        .with_filter((r"usage: pytest \[options\] (?s).*", "[PYTEST HELP]"));
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // We treat arguments before the command as uv tool run arguments
-    uv_snapshot!(filters, context.tool_run()
+    uv_snapshot!(context.filters(), context.tool_run()
         .arg("--help")
         .arg("pytest")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -33,11 +33,11 @@ fn tool_run_args() {
     ");
 
     // We don't treat arguments after the command as uv tool run arguments
-    uv_snapshot!(filters, context.tool_run()
+    uv_snapshot!(context.filters(), context.tool_run()
         .arg("pytest")
         .arg("--help")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -45,12 +45,12 @@ fn tool_run_args() {
     ");
 
     // Can use `--` to separate uv arguments from the command arguments.
-    uv_snapshot!(filters, context.tool_run()
+    uv_snapshot!(context.filters(), context.tool_run()
         .arg("--")
         .arg("pytest")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -58,12 +58,12 @@ fn tool_run_args() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    "###);
+    ");
 }
 
 #[test]
 fn tool_run_at_version() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -71,7 +71,7 @@ fn tool_run_at_version() {
         .arg("pytest@8.0.0")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -85,14 +85,14 @@ fn tool_run_at_version() {
      + packaging==24.0
      + pluggy==1.4.0
      + pytest==8.0.0
-    "###);
+    ");
 
     // Empty versions are just treated as package and command names
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("pytest@")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -102,14 +102,14 @@ fn tool_run_at_version() {
       Caused by: Expected URL
     pytest@
            ^
-    "###);
+    ");
 
     // Invalid versions are just treated as package and command names
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("pytest@invalid")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -117,7 +117,7 @@ fn tool_run_at_version() {
     ----- stderr -----
       × Failed to resolve tool requirement
       ╰─▶ Distribution not found at: file://[TEMP_DIR]/invalid
-    "###);
+    ");
 
     let filters = context
         .filters()
@@ -136,7 +136,7 @@ fn tool_run_at_version() {
         .arg("pytest@8.0.0")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -158,7 +158,7 @@ fn tool_run_at_version() {
 
 #[test]
 fn tool_run_from_version() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -168,7 +168,7 @@ fn tool_run_from_version() {
         .arg("pytest")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -182,12 +182,12 @@ fn tool_run_from_version() {
      + packaging==24.0
      + pluggy==1.4.0
      + pytest==8.0.0
-    "###);
+    ");
 }
 
 #[test]
 fn tool_run_constraints() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -200,7 +200,7 @@ fn tool_run_constraints() {
         .arg("pytest")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -214,12 +214,12 @@ fn tool_run_constraints() {
      + packaging==24.0
      + pluggy==1.3.0
      + pytest==8.0.2
-    "###);
+    ");
 }
 
 #[test]
 fn tool_run_overrides() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -232,7 +232,7 @@ fn tool_run_overrides() {
         .arg("pytest")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -246,12 +246,12 @@ fn tool_run_overrides() {
      + packaging==24.0
      + pluggy==1.3.0
      + pytest==8.1.1
-    "###);
+    ");
 }
 
 #[test]
 fn tool_run_suggest_valid_commands() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -260,7 +260,7 @@ fn tool_run_suggest_valid_commands() {
     .arg("black")
     .arg("orange")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -284,7 +284,7 @@ fn tool_run_suggest_valid_commands() {
     uv_snapshot!(context.filters(), context.tool_run()
     .arg("fastapi-cli")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -303,23 +303,23 @@ fn tool_run_suggest_valid_commands() {
 #[test]
 fn tool_run_warn_executable_not_in_from() {
     // FastAPI 0.111 is only available from this date onwards.
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_exclude_newer("2024-05-04T00:00:00Z")
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    let mut filters = context.filters();
-    filters.push(("\\+ uvloop(.+)\n ", ""));
-    // Strip off the `fastapi` command output.
-    filters.push(("(?s)fastapi` instead.*", "fastapi` instead."));
+    let context = context
+        .with_filter(("\\+ uvloop(.+)\n ", ""))
+        // Strip off the `fastapi` command output.
+        .with_filter(("(?s)fastapi` instead.*", "fastapi` instead."));
 
-    uv_snapshot!(filters, context.tool_run()
+    uv_snapshot!(context.filters(), context.tool_run()
         .arg("--from")
         .arg("fastapi")
         .arg("fastapi")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -368,7 +368,7 @@ fn tool_run_warn_executable_not_in_from() {
 
 #[test]
 fn tool_run_from_install() {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -386,7 +386,7 @@ fn tool_run_from_install() {
         .arg("black")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -394,7 +394,7 @@ fn tool_run_from_install() {
     Python (CPython) 3.12.[X]
 
     ----- stderr -----
-    "###);
+    ");
 
     // Verify that `--isolated` uses an isolated environment.
     uv_snapshot!(context.filters(), context.tool_run()
@@ -402,7 +402,7 @@ fn tool_run_from_install() {
         .arg("black")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -419,14 +419,14 @@ fn tool_run_from_install() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    "###);
+    ");
 
     // Verify that `tool run black` at a different version installs the new version.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("black@24.1.1")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -443,7 +443,7 @@ fn tool_run_from_install() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    "###);
+    ");
 
     // Verify that `--with` installs a new version.
     // TODO(charlie): This could (in theory) layer the `--with` requirements on top of the existing
@@ -454,7 +454,7 @@ fn tool_run_from_install() {
         .arg("black")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -472,7 +472,7 @@ fn tool_run_from_install() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    "###);
+    ");
 
     // Verify that `tool run black` at a different version (via `--from`) installs the new version.
     uv_snapshot!(context.filters(), context.tool_run()
@@ -481,7 +481,7 @@ fn tool_run_from_install() {
         .arg("black")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -498,12 +498,12 @@ fn tool_run_from_install() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    "###);
+    ");
 }
 
 #[test]
 fn tool_run_from_install_constraints() {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -521,7 +521,7 @@ fn tool_run_from_install_constraints() {
         .arg("flask")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -530,7 +530,7 @@ fn tool_run_from_install_constraints() {
     Werkzeug 3.0.1
 
     ----- stderr -----
-    "###);
+    ");
 
     // Verify that `tool run flask` with a compatible constraint uses the already-installed version.
     context
@@ -545,7 +545,7 @@ fn tool_run_from_install_constraints() {
         .arg("flask")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -554,7 +554,7 @@ fn tool_run_from_install_constraints() {
     Werkzeug 3.0.1
 
     ----- stderr -----
-    "###);
+    ");
 
     // Verify that `tool run flask` with an incompatible constraint installs a new version.
     context
@@ -569,7 +569,7 @@ fn tool_run_from_install_constraints() {
         .arg("flask")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -588,7 +588,7 @@ fn tool_run_from_install_constraints() {
      + jinja2==3.1.3
      + markupsafe==2.1.5
      + werkzeug==2.3.8
-    "###);
+    ");
 
     // Verify that `tool run flask` with a compatible override uses the already-installed version.
     context
@@ -603,7 +603,7 @@ fn tool_run_from_install_constraints() {
         .arg("flask")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -612,7 +612,7 @@ fn tool_run_from_install_constraints() {
     Werkzeug 3.0.1
 
     ----- stderr -----
-    "###);
+    ");
 
     // Verify that `tool run flask` with an incompatible override installs a new version.
     context
@@ -627,7 +627,7 @@ fn tool_run_from_install_constraints() {
         .arg("flask")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -646,7 +646,7 @@ fn tool_run_from_install_constraints() {
      + jinja2==3.1.3
      + markupsafe==2.1.5
      + werkzeug==3.0.0
-    "###);
+    ");
 
     // Verify that an override that enables a new extra also invalidates the environment.
     context
@@ -661,7 +661,7 @@ fn tool_run_from_install_constraints() {
         .arg("flask")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -681,12 +681,12 @@ fn tool_run_from_install_constraints() {
      + markupsafe==2.1.5
      + python-dotenv==1.0.1
      + werkzeug==3.0.1
-    "###);
+    ");
 }
 
 #[test]
 fn tool_run_cache() {
-    let context = TestContext::new_with_versions(&["3.11", "3.12"]).with_filtered_counts();
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]).with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -697,7 +697,7 @@ fn tool_run_cache() {
         .arg("black")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -714,7 +714,7 @@ fn tool_run_cache() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    "###);
+    ");
 
     // Verify that `tool run black` uses the cached version.
     uv_snapshot!(context.filters(), context.tool_run()
@@ -723,7 +723,7 @@ fn tool_run_cache() {
         .arg("black")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -732,7 +732,7 @@ fn tool_run_cache() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    "###);
+    ");
 
     // Verify that `--refresh` allows cache reuse.
     uv_snapshot!(context.filters(), context.tool_run()
@@ -742,7 +742,7 @@ fn tool_run_cache() {
         .arg("black")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -762,7 +762,7 @@ fn tool_run_cache() {
         .arg("black")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -780,7 +780,7 @@ fn tool_run_cache() {
         .arg("black")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -797,7 +797,7 @@ fn tool_run_cache() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    "###);
+    ");
 
     // But that re-invoking with the previous interpreter retains the cached version.
     uv_snapshot!(context.filters(), context.tool_run()
@@ -806,7 +806,7 @@ fn tool_run_cache() {
         .arg("black")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -815,7 +815,7 @@ fn tool_run_cache() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    "###);
+    ");
 
     // Verify that `--with` leads to a fresh environment.
     uv_snapshot!(context.filters(), context.tool_run()
@@ -826,7 +826,7 @@ fn tool_run_cache() {
         .arg("black")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -844,12 +844,12 @@ fn tool_run_cache() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    "###);
+    ");
 }
 
 #[test]
 fn tool_run_url() {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -859,7 +859,7 @@ fn tool_run_url() {
         .arg("flask")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -878,7 +878,7 @@ fn tool_run_url() {
      + jinja2==3.1.3
      + markupsafe==2.1.5
      + werkzeug==3.0.1
-    "###);
+    ");
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--from")
@@ -886,7 +886,7 @@ fn tool_run_url() {
         .arg("flask")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -896,13 +896,13 @@ fn tool_run_url() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    "###);
+    ");
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("flask @ https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -912,13 +912,13 @@ fn tool_run_url() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    "###);
+    ");
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -928,14 +928,14 @@ fn tool_run_url() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    "###);
+    ");
 }
 
 /// Test running a tool with a Git requirement.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn tool_run_git() {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -943,7 +943,7 @@ fn tool_run_git() {
         .arg("git+https://github.com/psf/black@24.2.0")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -960,13 +960,13 @@ fn tool_run_git() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    "###);
+    ");
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("black @ git+https://github.com/psf/black@24.2.0")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -975,7 +975,7 @@ fn tool_run_git() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    "###);
+    ");
 
     // Clear the cache.
     fs_err::remove_dir_all(&context.cache_dir).expect("Failed to remove cache dir.");
@@ -986,7 +986,7 @@ fn tool_run_git() {
         .arg("black")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1011,7 +1011,7 @@ fn tool_run_git() {
         .arg("black")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1020,14 +1020,14 @@ fn tool_run_git() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    "###);
+    ");
 }
 
 /// Test running a tool with a Git LFS enabled requirement.
 #[test]
-#[cfg(feature = "git-lfs")]
+#[cfg(feature = "test-git-lfs")]
 fn tool_run_git_lfs() {
-    let context = TestContext::new("3.13")
+    let context = uv_test::test_context!("3.13")
         .with_filtered_counts()
         .with_filtered_exe_suffix()
         .with_git_lfs_config();
@@ -1036,9 +1036,9 @@ fn tool_run_git_lfs() {
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--lfs")
-        .arg("git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f")
+        .arg("git+https://github.com/astral-sh/test-lfs-repo@54e5eebd3c6851b1353fc7b1e5b4eca11e27581c")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1048,14 +1048,14 @@ fn tool_run_git_lfs() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f#lfs=true)
-    "###);
+     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@54e5eebd3c6851b1353fc7b1e5b4eca11e27581c#lfs=true)
+    ");
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--lfs")
-        .arg("test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f")
+        .arg("test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo@54e5eebd3c6851b1353fc7b1e5b4eca11e27581c")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1063,18 +1063,18 @@ fn tool_run_git_lfs() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    "###);
+    ");
 
     // Clear the cache.
     fs_err::remove_dir_all(&context.cache_dir).expect("Failed to remove cache dir.");
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--from")
-        .arg("git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f")
+        .arg("git+https://github.com/astral-sh/test-lfs-repo@54e5eebd3c6851b1353fc7b1e5b4eca11e27581c")
         .arg("--lfs")
         .arg("test-lfs-repo-assets")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1084,16 +1084,16 @@ fn tool_run_git_lfs() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f#lfs=true)
+     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@54e5eebd3c6851b1353fc7b1e5b4eca11e27581c#lfs=true)
     ");
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--from")
-        .arg("test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f")
+        .arg("test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo@54e5eebd3c6851b1353fc7b1e5b4eca11e27581c")
         .arg("--lfs")
         .arg("test-lfs-repo-assets")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1113,19 +1113,19 @@ fn tool_run_git_lfs() {
     // calls to `git` and `git_metadata` functions which don't have guaranteed execution order.
     // In addition, we can get different error codes depending on where the failure occurs,
     // although we know the error code cannot be 0.
-    let mut filters = context.filters();
-    filters.push((r"exit_code: -?[1-9]\d*", "exit_code: [ERROR_CODE]"));
-    filters.push((
-        "(?s)(----- stderr -----).*?The source distribution `[^`]+` is missing Git LFS artifacts.*",
-        "$1\n[PREFIX]The source distribution `[DISTRIBUTION]` is missing Git LFS artifacts",
-    ));
+    let context = context
+        .with_filter((r"exit_code: -?[1-9]\d*", "exit_code: [ERROR_CODE]"))
+        .with_filter((
+            "(?s)(----- stderr -----).*?The source distribution `[^`]+` is missing Git LFS artifacts.*",
+            "$1\n[PREFIX]The source distribution `[DISTRIBUTION]` is missing Git LFS artifacts",
+        ));
 
-    uv_snapshot!(filters, context.tool_run()
+    uv_snapshot!(context.filters(), context.tool_run()
         .arg("--lfs")
-        .arg("test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f")
+        .arg("test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo@54e5eebd3c6851b1353fc7b1e5b4eca11e27581c")
         .env(EnvVars::UV_INTERNAL__TEST_LFS_DISABLED, "1")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: false
     exit_code: [ERROR_CODE]
     ----- stdout -----
@@ -1138,19 +1138,19 @@ fn tool_run_git_lfs() {
     #[cfg(not(windows))]
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--from")
-        .arg("test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f")
+        .arg("test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo@54e5eebd3c6851b1353fc7b1e5b4eca11e27581c")
         .arg("test-lfs-repo-assets")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r#"
     success: false
-    exit_code: 1
+    exit_code: [ERROR_CODE]
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f)
+     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@54e5eebd3c6851b1353fc7b1e5b4eca11e27581c)
     Traceback (most recent call last):
       File "[CACHE_DIR]/archive-v0/[HASH]/bin/test-lfs-repo-assets", line 12, in <module>
         sys.exit(main_lfs())
@@ -1166,19 +1166,19 @@ fn tool_run_git_lfs() {
     #[cfg(windows)]
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--from")
-        .arg("test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f")
+        .arg("test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo@54e5eebd3c6851b1353fc7b1e5b4eca11e27581c")
         .arg("test-lfs-repo-assets")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r#"
     success: false
-    exit_code: 1
+    exit_code: [ERROR_CODE]
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f)
+     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@54e5eebd3c6851b1353fc7b1e5b4eca11e27581c)
     Traceback (most recent call last):
       File "<frozen runpy>", line 198, in _run_module_as_main
       File "<frozen runpy>", line 88, in _run_code
@@ -1197,7 +1197,7 @@ fn tool_run_git_lfs() {
 /// Read requirements from a `requirements.txt` file.
 #[test]
 fn tool_run_requirements_txt() {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -1212,7 +1212,7 @@ fn tool_run_requirements_txt() {
         .arg("flask")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1233,13 +1233,13 @@ fn tool_run_requirements_txt() {
      + markupsafe==2.1.5
      + typing-extensions==4.10.0
      + werkzeug==3.0.1
-    "###);
+    ");
 }
 
 /// Ignore and warn when (e.g.) the `--index-url` argument is a provided `requirements.txt`.
 #[test]
 fn tool_run_requirements_txt_arguments() {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -1258,7 +1258,7 @@ fn tool_run_requirements_txt_arguments() {
         .arg("flask")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1279,20 +1279,20 @@ fn tool_run_requirements_txt_arguments() {
      + jinja2==3.1.3
      + markupsafe==2.1.5
      + werkzeug==3.0.1
-    "###);
+    ");
 }
 
 /// List installed tools when no command arg is given (e.g. `uv tool run`).
 #[test]
 fn tool_run_list_installed() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // No tools installed.
     uv_snapshot!(context.filters(), context.tool_run()
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1301,7 +1301,7 @@ fn tool_run_list_installed() {
     See `uv tool run --help` for more information.
 
     ----- stderr -----
-    "###);
+    ");
 
     // Install `black`.
     context
@@ -1315,7 +1315,7 @@ fn tool_run_list_installed() {
     // List installed tools.
     uv_snapshot!(context.filters(), context.tool_run()
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1328,13 +1328,13 @@ fn tool_run_list_installed() {
     See `uv tool run --help` for more information.
 
     ----- stderr -----
-    "###);
+    ");
 }
 
 /// By default, omit resolver and installer output.
 #[test]
 fn tool_run_without_output() {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -1345,7 +1345,7 @@ fn tool_run_without_output() {
         .arg("pytest")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1353,7 +1353,7 @@ fn tool_run_without_output() {
 
     ----- stderr -----
     Installed [N] packages in [TIME]
-    "###);
+    ");
 
     // Subsequent runs are quiet.
     uv_snapshot!(context.filters(), context.tool_run()
@@ -1362,20 +1362,20 @@ fn tool_run_without_output() {
         .arg("pytest")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
     pytest 8.1.1
 
     ----- stderr -----
-    "###);
+    ");
 }
 
 #[test]
 #[cfg(not(windows))]
 fn tool_run_csv_with_shorthand() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -1414,7 +1414,7 @@ fn tool_run_csv_with_shorthand() -> anyhow::Result<()> {
         .arg("pytest")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1429,7 +1429,7 @@ fn tool_run_csv_with_shorthand() -> anyhow::Result<()> {
      + pluggy==1.4.0
      + pytest==8.1.1
      + typing-extensions==4.10.0
-    "###);
+    ");
 
     Ok(())
 }
@@ -1437,7 +1437,7 @@ fn tool_run_csv_with_shorthand() -> anyhow::Result<()> {
 #[test]
 #[cfg(not(windows))]
 fn tool_run_csv_with() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -1476,7 +1476,7 @@ fn tool_run_csv_with() -> anyhow::Result<()> {
         .arg("pytest")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1491,7 +1491,7 @@ fn tool_run_csv_with() -> anyhow::Result<()> {
      + pluggy==1.4.0
      + pytest==8.1.1
      + typing-extensions==4.10.0
-    "###);
+    ");
 
     Ok(())
 }
@@ -1499,7 +1499,7 @@ fn tool_run_csv_with() -> anyhow::Result<()> {
 #[test]
 #[cfg(windows)]
 fn tool_run_csv_with() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -1561,7 +1561,7 @@ fn tool_run_csv_with() -> anyhow::Result<()> {
 #[test]
 #[cfg(not(windows))]
 fn tool_run_repeated_with() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -1602,7 +1602,7 @@ fn tool_run_repeated_with() -> anyhow::Result<()> {
         .arg("pytest")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1617,7 +1617,7 @@ fn tool_run_repeated_with() -> anyhow::Result<()> {
      + pluggy==1.4.0
      + pytest==8.1.1
      + typing-extensions==4.10.0
-    "###);
+    ");
 
     Ok(())
 }
@@ -1625,7 +1625,7 @@ fn tool_run_repeated_with() -> anyhow::Result<()> {
 #[test]
 #[cfg(windows)]
 fn tool_run_repeated_with() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -1688,7 +1688,7 @@ fn tool_run_repeated_with() -> anyhow::Result<()> {
 
 #[test]
 fn tool_run_with_editable() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -1728,7 +1728,7 @@ fn tool_run_with_editable() -> anyhow::Result<()> {
         .arg("flask")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1749,11 +1749,11 @@ fn tool_run_with_editable() -> anyhow::Result<()> {
      + jinja2==3.1.3
      + markupsafe==2.1.5
      + werkzeug==3.0.1
-    "###);
+    ");
 
     // Requesting an editable requirement should install it in a layer, even if it satisfied
     uv_snapshot!(context.filters(), context.tool_run().arg("--with-editable").arg("./src/anyio_local").arg("flask").arg("--version").env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str()).env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()),
-    @r###"
+    @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1773,10 +1773,10 @@ fn tool_run_with_editable() -> anyhow::Result<()> {
      + jinja2==3.1.3
      + markupsafe==2.1.5
      + werkzeug==3.0.1
-    "###);
+    ");
 
     // Requesting the project itself should use a new environment.
-    uv_snapshot!(context.filters(), context.tool_run().arg("--with-editable").arg(".").arg("flask").arg("--version").env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str()).env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    uv_snapshot!(context.filters(), context.tool_run().arg("--with-editable").arg(".").arg("flask").arg("--version").env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str()).env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1799,7 +1799,7 @@ fn tool_run_with_editable() -> anyhow::Result<()> {
      + markupsafe==2.1.5
      + sniffio==1.3.1
      + werkzeug==3.0.1
-    "###);
+    ");
 
     // If invalid, we should reference `--with`.
     uv_snapshot!(context.filters(), context
@@ -1809,7 +1809,7 @@ fn tool_run_with_editable() -> anyhow::Result<()> {
         .arg("flask")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir
-        .as_os_str()).env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .as_os_str()).env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1817,21 +1817,21 @@ fn tool_run_with_editable() -> anyhow::Result<()> {
     ----- stderr -----
       × Failed to resolve `--with` requirement
       ╰─▶ Distribution not found at: file://[TEMP_DIR]/foo
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
 fn warn_no_executables_found() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("requests")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1852,7 +1852,7 @@ fn warn_no_executables_found() {
 /// Warn when a user passes `--upgrade` to `uv tool run`.
 #[test]
 fn tool_run_upgrade_warn() {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -1861,7 +1861,7 @@ fn tool_run_upgrade_warn() {
         .arg("pytest")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1876,7 +1876,7 @@ fn tool_run_upgrade_warn() {
      + packaging==24.0
      + pluggy==1.4.0
      + pytest==8.1.1
-    "###);
+    ");
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--upgrade")
@@ -1885,7 +1885,7 @@ fn tool_run_upgrade_warn() {
         .arg("pytest")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1901,20 +1901,20 @@ fn tool_run_upgrade_warn() {
      + pluggy==1.4.0
      + pytest==8.1.1
      + typing-extensions==4.10.0
-    "###);
+    ");
 }
 
 /// If we fail to resolve the tool, we should include "tool" in the error message.
 #[test]
 fn tool_run_resolution_error() {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("add")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1922,12 +1922,12 @@ fn tool_run_resolution_error() {
     ----- stderr -----
       × No solution found when resolving tool dependencies:
       ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
-    "###);
+    ");
 }
 
 #[test]
 fn tool_run_latest() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -1945,21 +1945,21 @@ fn tool_run_latest() {
         .arg("pytest")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
     pytest 7.0.0
 
     ----- stderr -----
-    "###);
+    ");
 
     // Run `pytest@latest`, which should use the latest version.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("pytest@latest")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1973,26 +1973,26 @@ fn tool_run_latest() {
      + packaging==24.0
      + pluggy==1.4.0
      + pytest==8.1.1
-    "###);
+    ");
 
     // Run `pytest`, which should use the installed version.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("pytest")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
     pytest 7.0.0
 
     ----- stderr -----
-    "###);
+    ");
 }
 
 #[test]
 fn tool_run_latest_extra() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -2000,7 +2000,7 @@ fn tool_run_latest_extra() {
         .arg("flask[dotenv]@latest")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2020,13 +2020,13 @@ fn tool_run_latest_extra() {
      + markupsafe==2.1.5
      + python-dotenv==1.0.1
      + werkzeug==3.0.1
-    "###);
+    ");
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("flask[dotenv]@3.0.0")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2046,12 +2046,12 @@ fn tool_run_latest_extra() {
      + markupsafe==2.1.5
      + python-dotenv==1.0.1
      + werkzeug==3.0.1
-    "###);
+    ");
 }
 
 #[test]
 fn tool_run_extra() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -2059,7 +2059,7 @@ fn tool_run_extra() {
         .arg("flask[dotenv]")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2079,12 +2079,12 @@ fn tool_run_extra() {
      + markupsafe==2.1.5
      + python-dotenv==1.0.1
      + werkzeug==3.0.1
-    "###);
+    ");
 }
 
 #[test]
 fn tool_run_specifier() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -2092,7 +2092,7 @@ fn tool_run_specifier() {
         .arg("flask<3.0.0")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2111,15 +2111,15 @@ fn tool_run_specifier() {
      + jinja2==3.1.3
      + markupsafe==2.1.5
      + werkzeug==3.0.1
-    "###);
+    ");
 }
 
 #[test]
 fn tool_run_python() {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("python")
-        .arg("--version"), @r###"
+        .arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2128,12 +2128,12 @@ fn tool_run_python() {
     ----- stderr -----
     Resolved in [TIME]
     Audited in [TIME]
-    "###);
+    ");
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("python")
         .arg("-c")
-        .arg("print('Hello, world!')"), @r###"
+        .arg("print('Hello, world!')"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2141,18 +2141,18 @@ fn tool_run_python() {
 
     ----- stderr -----
     Resolved in [TIME]
-    "###);
+    ");
 }
 
 #[test]
 fn tool_run_python_at_version() {
-    let context = TestContext::new_with_versions(&["3.12", "3.11"])
+    let context = uv_test::test_context_with_versions!(&["3.12", "3.11"])
         .with_filtered_counts()
         .with_filtered_python_sources();
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("python")
-        .arg("--version"), @r###"
+        .arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2161,11 +2161,11 @@ fn tool_run_python_at_version() {
     ----- stderr -----
     Resolved in [TIME]
     Audited in [TIME]
-    "###);
+    ");
 
     uv_snapshot!(context.filters(), context.tool_run()
             .arg("python@3.12")
-            .arg("--version"), @r###"
+            .arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2173,11 +2173,11 @@ fn tool_run_python_at_version() {
 
     ----- stderr -----
     Resolved in [TIME]
-    "###);
+    ");
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("python@3.11")
-        .arg("--version"), @r###"
+        .arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2186,12 +2186,12 @@ fn tool_run_python_at_version() {
     ----- stderr -----
     Resolved in [TIME]
     Audited in [TIME]
-    "###);
+    ");
 
     // The @ is optional.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("python3.11")
-        .arg("--version"), @r###"
+        .arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2199,12 +2199,12 @@ fn tool_run_python_at_version() {
 
     ----- stderr -----
     Resolved in [TIME]
-    "###);
+    ");
 
     // Dotless syntax also works.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("python311")
-        .arg("--version"), @r###"
+        .arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2212,13 +2212,13 @@ fn tool_run_python_at_version() {
 
     ----- stderr -----
     Resolved in [TIME]
-    "###);
+    ");
 
     // Other implementations like PyPy also work. PyPy isn't currently in the test suite, so
     // specify CPython and rely on the fact that they go through the same codepath.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("cpython311")
-        .arg("--version"), @r###"
+        .arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2226,13 +2226,13 @@ fn tool_run_python_at_version() {
 
     ----- stderr -----
     Resolved in [TIME]
-    "###);
+    ");
 
     // But short names don't work in the executable position (as opposed to with -p/--python). We
     // interpret those as package names.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("cp311")
-        .arg("--version"), @r"
+        .arg("--version"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2245,7 +2245,7 @@ fn tool_run_python_at_version() {
     // Bare versions don't work either. Again we interpret them as package names.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("311")
-        .arg("--version"), @r"
+        .arg("--version"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2260,7 +2260,7 @@ fn tool_run_python_at_version() {
         .arg("-p")
         .arg("3.11")
         .arg("python")
-        .arg("--version"), @r###"
+        .arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2268,14 +2268,14 @@ fn tool_run_python_at_version() {
 
     ----- stderr -----
     Resolved in [TIME]
-    "###);
+    ");
 
     // @ syntax is also allowed here.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("-p")
         .arg("python@311")
         .arg("python")
-        .arg("--version"), @r###"
+        .arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2283,14 +2283,14 @@ fn tool_run_python_at_version() {
 
     ----- stderr -----
     Resolved in [TIME]
-    "###);
+    ");
 
     // But @ with nothing in front of it is not.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("-p")
         .arg("@311")
         .arg("python")
-        .arg("--version"), @r"
+        .arg("--version"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2304,59 +2304,59 @@ fn tool_run_python_at_version() {
         .arg("-p")
         .arg("3.12")
         .arg("python@3.11")
-        .arg("--version"), @r###"
+        .arg("--version"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Received multiple Python version requests: `3.12` and `3.11`
-    "###);
+    ");
 
     // Request a version that does not exist
     uv_snapshot!(context.filters(), context.tool_run()
-        .arg("python@3.12.99"), @r###"
+        .arg("python@3.12.99"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No interpreter found for Python 3.12.[X] in [PYTHON SOURCES]
-    "###);
+    ");
 
     // Request an invalid version
     uv_snapshot!(context.filters(), context.tool_run()
-        .arg("python@3.300"), @r###"
+        .arg("python@3.300"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Invalid version request: 3.300
-    "###);
+    ");
 
     // Request `@latest` (not yet supported)
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("python@latest")
-        .arg("--version"), @r###"
+        .arg("--version"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Requesting the 'latest' Python version is not yet supported
-    "###);
+    ");
 }
 
 #[test]
 fn tool_run_hint_version_not_available() {
-    let context = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_counts()
         .with_filtered_python_sources();
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("python@3.12")
-        .env(EnvVars::UV_PYTHON_DOWNLOADS, "never"), @r"
+        .env(EnvVars::UV_PYTHON_DOWNLOADS, "never"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2370,7 +2370,7 @@ fn tool_run_hint_version_not_available() {
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("python@3.12")
         .env(EnvVars::UV_PYTHON_DOWNLOADS, "auto")
-        .env(EnvVars::UV_OFFLINE, "true"), @r"
+        .env(EnvVars::UV_OFFLINE, "true"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2384,7 +2384,7 @@ fn tool_run_hint_version_not_available() {
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("python@3.12")
         .env(EnvVars::UV_PYTHON_DOWNLOADS, "auto")
-        .env(EnvVars::UV_NO_MANAGED_PYTHON, "true"), @r"
+        .env(EnvVars::UV_NO_MANAGED_PYTHON, "true"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2397,31 +2397,21 @@ fn tool_run_hint_version_not_available() {
 }
 
 #[test]
-fn tool_run_python_from() {
-    let context = TestContext::new_with_versions(&["3.12", "3.11"])
+fn tool_run_python_from_global_version_file() {
+    let context = uv_test::test_context_with_versions!(&["3.12", "3.11"])
         .with_filtered_counts()
         .with_filtered_python_sources();
 
-    uv_snapshot!(context.filters(), context.tool_run()
-        .arg("--from")
-        .arg("python")
-        .arg("python")
-        .arg("--version"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    Python 3.12.[X]
-
-    ----- stderr -----
-    Resolved in [TIME]
-    Audited in [TIME]
-    "###);
+    context
+        .python_pin()
+        .arg("3.11")
+        .arg("--global")
+        .assert()
+        .success();
 
     uv_snapshot!(context.filters(), context.tool_run()
-        .arg("--from")
-        .arg("python@3.11")
         .arg("python")
-        .arg("--version"), @r###"
+        .arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2430,13 +2420,110 @@ fn tool_run_python_from() {
     ----- stderr -----
     Resolved in [TIME]
     Audited in [TIME]
-    "###);
+    ");
+}
+
+#[test]
+fn tool_run_python_version_overrides_global_pin() {
+    let context = uv_test::test_context_with_versions!(&["3.12", "3.11"])
+        .with_filtered_counts()
+        .with_filtered_python_sources();
+
+    // Set global pin to 3.11
+    context
+        .python_pin()
+        .arg("3.11")
+        .arg("--global")
+        .assert()
+        .success();
+
+    // Explicitly request python3.12, should override global pin
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python3.12")
+        .arg("--version"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    Audited in [TIME]
+    ");
+}
+
+#[test]
+fn tool_run_python_with_explicit_default_bypasses_global_pin() {
+    let context = uv_test::test_context_with_versions!(&["3.12", "3.11"])
+        .with_filtered_counts()
+        .with_filtered_python_sources();
+
+    // Set global pin to 3.11
+    context
+        .python_pin()
+        .arg("3.11")
+        .arg("--global")
+        .assert()
+        .success();
+
+    // Explicitly request --python default, should bypass global pin and use system default (3.12)
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--python")
+        .arg("default")
+        .arg("python")
+        .arg("--version"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    Audited in [TIME]
+    ");
+}
+
+#[test]
+fn tool_run_python_from() {
+    let context = uv_test::test_context_with_versions!(&["3.12", "3.11"])
+        .with_filtered_counts()
+        .with_filtered_python_sources();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("python")
+        .arg("python")
+        .arg("--version"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    Audited in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("python@3.11")
+        .arg("python")
+        .arg("--version"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    Audited in [TIME]
+    ");
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--from")
         .arg("python311")
         .arg("python")
-        .arg("--version"), @r"
+        .arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2450,7 +2537,7 @@ fn tool_run_python_from() {
         .arg("--from")
         .arg("python>3.11,<3.13")
         .arg("python")
-        .arg("--version"), @r"
+        .arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2466,7 +2553,7 @@ fn tool_run_python_from() {
         .arg("python@3.11")
         .arg("bash")
         .arg("-c")
-        .arg("python --version"), @r"
+        .arg("python --version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2479,7 +2566,7 @@ fn tool_run_python_from() {
 
 #[test]
 fn run_with_env_file() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -2498,14 +2585,15 @@ fn run_with_env_file() -> anyhow::Result<()> {
         script = "foo.main:run"
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
 
     // Create the `foo` module.
     let foo_project_src = foo_dir.child("src");
     let foo_module = foo_project_src.child("foo");
+    foo_module.child("__init__.py").touch()?;
     let foo_main_py = foo_module.child("main.py");
     foo_main_py.write_str(indoc! { r#"
         def run():
@@ -2525,7 +2613,7 @@ fn run_with_env_file() -> anyhow::Result<()> {
         .arg("./foo")
         .arg("script")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2555,7 +2643,7 @@ fn run_with_env_file() -> anyhow::Result<()> {
         .arg("./foo")
         .arg("script")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2573,7 +2661,7 @@ fn run_with_env_file() -> anyhow::Result<()> {
 
 #[test]
 fn tool_run_from_at() {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_exclude_newer("2025-01-18T00:00:00Z")
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
@@ -2585,7 +2673,7 @@ fn tool_run_from_at() {
         .arg("app")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2596,7 +2684,7 @@ fn tool_run_from_at() {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + executable-application==0.3.0
-    "###);
+    ");
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--from")
@@ -2604,7 +2692,7 @@ fn tool_run_from_at() {
         .arg("app")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2615,12 +2703,12 @@ fn tool_run_from_at() {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + executable-application==0.2.0
-    "###);
+    ");
 }
 
 #[test]
 fn tool_run_verbatim_name() {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
@@ -2631,7 +2719,7 @@ fn tool_run_verbatim_name() {
         .arg("change_wheel_version")
         .arg("--help")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2663,7 +2751,7 @@ fn tool_run_verbatim_name() {
         .arg("change-wheel-version")
         .arg("--help")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2683,7 +2771,7 @@ fn tool_run_verbatim_name() {
         .arg("change_wheel_version")
         .arg("--help")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2708,10 +2796,10 @@ fn tool_run_verbatim_name() {
 
 #[test]
 fn tool_run_with_existing_py_script() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
     context.temp_dir.child("script.py").touch()?;
 
-    uv_snapshot!(context.filters(), context.tool_run().arg("script.py"), @r"
+    uv_snapshot!(context.filters(), context.tool_run().arg("script.py"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2726,12 +2814,12 @@ fn tool_run_with_existing_py_script() -> anyhow::Result<()> {
 
 #[test]
 fn tool_run_with_existing_pyw_script() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
     context.temp_dir.child("script.pyw").touch()?;
 
     // We treat arguments before the command as uv arguments
     uv_snapshot!(context.filters(), context.tool_run()
-        .arg("script.pyw"), @r"
+        .arg("script.pyw"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2746,11 +2834,11 @@ fn tool_run_with_existing_pyw_script() -> anyhow::Result<()> {
 
 #[test]
 fn tool_run_with_nonexistent_py_script() {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
 
     // We treat arguments before the command as uv arguments
     uv_snapshot!(context.filters(), context.tool_run()
-        .arg("script.py"), @r"
+        .arg("script.py"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2764,11 +2852,11 @@ fn tool_run_with_nonexistent_py_script() {
 
 #[test]
 fn tool_run_with_nonexistent_pyw_script() {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
 
     // We treat arguments before the command as uv arguments
     uv_snapshot!(context.filters(), context.tool_run()
-        .arg("script.pyw"), @r"
+        .arg("script.pyw"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2782,13 +2870,13 @@ fn tool_run_with_nonexistent_pyw_script() {
 
 #[test]
 fn tool_run_with_from_script() {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
 
     // We treat arguments before the command as uv arguments
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--from")
         .arg("script.py")
-        .arg("ruff"), @r"
+        .arg("ruff"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2802,13 +2890,13 @@ fn tool_run_with_from_script() {
 
 #[test]
 fn tool_run_with_script_and_from_script() {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
 
     // We treat arguments before the command as uv arguments
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--from")
         .arg("script.py")
-        .arg("other-script.py"), @r"
+        .arg("other-script.py"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2824,7 +2912,7 @@ fn tool_run_with_script_and_from_script() {
 /// we show a helpful hint.
 #[test]
 fn tool_run_verbose_hint() {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -2833,7 +2921,7 @@ fn tool_run_verbose_hint() {
         .arg("nonexistent-package-foo")
         .arg("--verbose")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2842,14 +2930,14 @@ fn tool_run_verbose_hint() {
       × No solution found when resolving dependencies:
       ╰─▶ Because nonexistent-package-foo was not found in the package registry and you require nonexistent-package-foo, we can conclude that your requirements are unsatisfiable.
       help: You provided `--verbose` to `nonexistent-package-foo`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run --verbose nonexistent-package-foo`
-    "###);
+    ");
 
     // Test with -v flag
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("nonexistent-package-bar")
         .arg("-v")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2858,14 +2946,14 @@ fn tool_run_verbose_hint() {
       × No solution found when resolving dependencies:
       ╰─▶ Because nonexistent-package-bar was not found in the package registry and you require nonexistent-package-bar, we can conclude that your requirements are unsatisfiable.
       help: You provided `-v` to `nonexistent-package-bar`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run -v nonexistent-package-bar`
-    "###);
+    ");
 
     // Test with -vv flag
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("nonexistent-package-baz")
         .arg("-vv")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2874,14 +2962,14 @@ fn tool_run_verbose_hint() {
       × No solution found when resolving dependencies:
       ╰─▶ Because nonexistent-package-baz was not found in the package registry and you require nonexistent-package-baz, we can conclude that your requirements are unsatisfiable.
       help: You provided `-vv` to `nonexistent-package-baz`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run -vv nonexistent-package-baz`
-    "###);
+    ");
 
     // Test for false positives
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("nonexistent-package-quux")
         .arg("-version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2894,7 +2982,7 @@ fn tool_run_verbose_hint() {
 
 #[test]
 fn tool_run_with_compatible_build_constraints() -> Result<()> {
-    let context = TestContext::new("3.9")
+    let context = uv_test::test_context!("3.9")
         .with_exclude_newer("2024-05-04T00:00:00Z")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -2907,7 +2995,7 @@ fn tool_run_with_compatible_build_constraints() -> Result<()> {
         .arg("--build-constraints")
         .arg("build_constraints.txt")
         .arg("pytest")
-        .arg("--version"), @r"
+        .arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2931,7 +3019,7 @@ fn tool_run_with_compatible_build_constraints() -> Result<()> {
 
 #[test]
 fn tool_run_with_incompatible_build_constraints() -> Result<()> {
-    let context = TestContext::new("3.9")
+    let context = uv_test::test_context!("3.9")
         .with_exclude_newer("2024-05-04T00:00:00Z")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -2950,7 +3038,7 @@ fn tool_run_with_incompatible_build_constraints() -> Result<()> {
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2967,7 +3055,7 @@ fn tool_run_with_incompatible_build_constraints() -> Result<()> {
 
 #[test]
 fn tool_run_with_dependencies_from_script() -> Result<()> {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_missing_file_error();
 
@@ -2994,7 +3082,7 @@ fn tool_run_with_dependencies_from_script() -> Result<()> {
         .arg("script.py")
         .arg("black")
         .arg("script.py")
-        .arg("-q"), @r"
+        .arg("-q"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3019,7 +3107,7 @@ fn tool_run_with_dependencies_from_script() -> Result<()> {
         .arg("script-no-ext")
         .arg("black")
         .arg("script-no-ext")
-        .arg("-q"), @r"
+        .arg("-q"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3035,7 +3123,7 @@ fn tool_run_with_dependencies_from_script() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--with-requirements")
         .arg("not_pep723_script.py")
-        .arg("black"), @r"
+        .arg("black"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3048,7 +3136,7 @@ fn tool_run_with_dependencies_from_script() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--with-requirements")
         .arg("missing_file.py")
-        .arg("black"), @r"
+        .arg("black"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3068,7 +3156,7 @@ fn tool_run_with_dependencies_from_script() -> Result<()> {
 #[cfg(windows)]
 #[test]
 fn tool_run_windows_runnable_types() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -3147,9 +3235,9 @@ fn tool_run_windows_runnable_types() -> anyhow::Result<()> {
     ----- stderr -----
     An executable named `does_not_exist` is not provided by package `foo`.
     The following executables are available:
-    - custom_pydoc.exe
     - custom_pydoc.bat
     - custom_pydoc.cmd
+    - custom_pydoc.exe
     - custom_pydoc.ps1
     "###);
 
@@ -3380,7 +3468,7 @@ fn tool_run_windows_runnable_types() -> anyhow::Result<()> {
 
 #[test]
 fn tool_run_reresolve_python() -> anyhow::Result<()> {
-    let context = TestContext::new_with_versions(&["3.11", "3.12"]).with_filtered_counts();
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]).with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
     let foo_dir = context.temp_dir.child("foo");
@@ -3415,7 +3503,7 @@ fn tool_run_reresolve_python() -> anyhow::Result<()> {
         .arg("./foo")
         .arg("foo")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3436,7 +3524,7 @@ fn tool_run_reresolve_python() -> anyhow::Result<()> {
         .arg("3.11")
         .arg("foo")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3455,7 +3543,7 @@ fn tool_run_reresolve_python() -> anyhow::Result<()> {
         .arg(">=3.11")
         .arg("foo")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3474,7 +3562,7 @@ fn tool_run_reresolve_python() -> anyhow::Result<()> {
 #[cfg(windows)]
 #[test]
 fn tool_run_windows_dotted_package_name() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -3505,4 +3593,60 @@ fn tool_run_windows_dotted_package_name() -> anyhow::Result<()> {
     "###);
 
     Ok(())
+}
+
+/// Regression test for <https://github.com/astral-sh/uv/issues/17436>
+#[tokio::test]
+async fn tool_run_latest_keyring_auth() {
+    let keyring_context = uv_test::test_context!("3.12");
+
+    // Install our keyring plugin
+    keyring_context
+        .pip_install()
+        .arg(
+            keyring_context
+                .workspace_root
+                .join("test")
+                .join("packages")
+                .join("keyring_test_plugin"),
+        )
+        .assert()
+        .success();
+
+    let proxy = crate::pypi_proxy::start().await;
+
+    let context = uv_test::test_context!("3.12")
+        .with_exclude_newer("2025-01-18T00:00:00Z")
+        .with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Combine keyring venv bin with tool bin directory to avoid PATH warnings.
+    let path = std::env::join_paths([venv_bin_path(&keyring_context.venv), bin_dir.to_path_buf()])
+        .unwrap();
+
+    // Test that the keyring is consulted during the @latest version lookup.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--index")
+        .arg(proxy.username_url("public", "/basic-auth/simple"))
+        .arg("--keyring-provider")
+        .arg("subprocess")
+        .arg("executable-application@latest")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, format!(r#"{{"{host}": {{"public": "heron"}}}}"#, host = proxy.host_port()))
+        .env(EnvVars::PATH, path), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Keyring request for public@http://[LOCALHOST]/basic-auth/simple
+    Keyring request for public@[LOCALHOST]
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + executable-application==0.3.0
+    Installed 1 executable: app
+    ");
 }

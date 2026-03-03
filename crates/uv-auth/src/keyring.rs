@@ -233,6 +233,26 @@ impl KeyringProvider {
                     Self::fetch_dummy(store, &host, username)
                 }
             };
+
+            // For non-HTTPS URLs, `store` includes the scheme in the service name
+            // (e.g., `http://host:port`) to avoid leaking credentials across schemes.
+            // Try `scheme://host:port` as a fallback to match those entries.
+            if credentials.is_none() && url.scheme() != "https" {
+                let scheme_host = format!("{}://{host}", url.scheme());
+                trace!("Checking keyring for scheme+host {scheme_host}");
+                credentials = match self.backend {
+                    KeyringProviderBackend::Native => {
+                        self.fetch_native(&scheme_host, username).await
+                    }
+                    KeyringProviderBackend::Subprocess => {
+                        self.fetch_subprocess(&scheme_host, username).await
+                    }
+                    #[cfg(test)]
+                    KeyringProviderBackend::Dummy(ref store) => {
+                        Self::fetch_dummy(store, &scheme_host, username)
+                    }
+                };
+            }
         }
 
         credentials.map(|(username, password)| Credentials::basic(Some(username), Some(password)))
@@ -572,6 +592,35 @@ mod tests {
         let url = Url::parse("https://foo@example.com").unwrap();
         let credentials = keyring
             .fetch(DisplaySafeUrl::ref_cast(&url), Some("bar"))
+            .await;
+        assert_eq!(credentials, None);
+    }
+
+    #[tokio::test]
+    async fn fetch_http_scheme_host_fallback() {
+        // When credentials are stored with scheme included (e.g., `http://host:port`),
+        // the fetch should find them via the `scheme://host:port` fallback.
+        let url = Url::parse("http://127.0.0.1:8080/basic-auth/simple/anyio/").unwrap();
+        let keyring = KeyringProvider::dummy([("http://127.0.0.1:8080", "user", "password")]);
+        let credentials = keyring
+            .fetch(DisplaySafeUrl::ref_cast(&url), Some("user"))
+            .await;
+        assert_eq!(
+            credentials,
+            Some(Credentials::basic(
+                Some("user".to_string()),
+                Some("password".to_string())
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn fetch_http_scheme_host_no_cross_scheme() {
+        // Credentials stored under `http://` should not be returned for `https://` requests.
+        let url = Url::parse("https://127.0.0.1:8080/basic-auth/simple/anyio/").unwrap();
+        let keyring = KeyringProvider::dummy([("http://127.0.0.1:8080", "user", "password")]);
+        let credentials = keyring
+            .fetch(DisplaySafeUrl::ref_cast(&url), Some("user"))
             .await;
         assert_eq!(credentials, None);
     }

@@ -15,7 +15,7 @@ use tracing::debug;
 
 /// Shells for which virtualenv activation scripts are available.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-#[allow(clippy::doc_markdown)]
+#[expect(clippy::doc_markdown)]
 pub enum Shell {
     /// Bourne Again SHell (bash)
     Bash,
@@ -38,14 +38,15 @@ pub enum Shell {
 impl Shell {
     /// Determine the user's current shell from the environment.
     ///
-    /// This will read the `SHELL` environment variable and try to determine which shell is in use
-    /// from that.
+    /// First checks shell-specific environment variables (`NU_VERSION`, `FISH_VERSION`,
+    /// `BASH_VERSION`, `ZSH_VERSION`, `KSH_VERSION`, `PSModulePath`) which are set by the
+    /// respective shells. This takes priority over `SHELL` because on Unix, `SHELL` refers
+    /// to the user's login shell, not the currently running shell.
     ///
-    /// If `SHELL` is not set, then on windows, it will default to powershell, and on
-    /// other `OSes` it will return `None`.
+    /// Falls back to parsing the `SHELL` environment variable if no shell-specific variables
+    /// are found. On Windows, defaults to PowerShell (or Command Prompt if `PROMPT` is set).
     ///
-    /// If `SHELL` is set, but contains a value that doesn't correspond to one of the supported
-    /// shell types, then return `None`.
+    /// Returns `None` if the shell cannot be determined.
     pub fn from_env() -> Option<Self> {
         if std::env::var_os(EnvVars::NU_VERSION).is_some() {
             Some(Self::Nushell)
@@ -57,6 +58,8 @@ impl Shell {
             Some(Self::Zsh)
         } else if std::env::var_os(EnvVars::KSH_VERSION).is_some() {
             Some(Self::Ksh)
+        } else if std::env::var_os(EnvVars::PS_MODULE_PATH).is_some() {
+            Some(Self::Powershell)
         } else if let Some(env_shell) = std::env::var_os(EnvVars::SHELL) {
             Self::from_shell_path(env_shell)
         } else if cfg!(windows) {
@@ -307,7 +310,7 @@ fn parse_shell_from_path(path: &Path) -> Option<Shell> {
         "fish" => Some(Shell::Fish),
         "csh" => Some(Shell::Csh),
         "ksh" => Some(Shell::Ksh),
-        "powershell" | "powershell_ise" => Some(Shell::Powershell),
+        "powershell" | "powershell_ise" | "pwsh" => Some(Shell::Powershell),
         _ => None,
     }
 }

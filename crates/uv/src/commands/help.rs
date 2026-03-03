@@ -70,6 +70,18 @@ pub(crate) fn help(query: &[String], printer: Printer, no_pager: bool) -> Result
         .render_long_help()
     };
 
+    // Reformat inline [env: VAR=] annotations to their own line.
+    let help_plain = if is_root {
+        help.to_string()
+    } else {
+        reformat_env_annotations(&help.to_string())
+    };
+    let help_ansi = if is_root {
+        help.ansi().to_string()
+    } else {
+        reformat_env_annotations(&help.ansi().to_string())
+    };
+
     let want_color = match anstream::Stdout::choice(&std::io::stdout()) {
         ColorChoice::Always | ColorChoice::AlwaysAnsi => true,
         ColorChoice::Never => false,
@@ -83,19 +95,154 @@ pub(crate) fn help(query: &[String], printer: Printer, no_pager: bool) -> Result
     if should_page && let Some(pager) = Pager::try_from_env() {
         let query = query.join(" ");
         if want_color && pager.supports_colors() {
-            pager.spawn(format!("{}: {query}", "uv help".bold()), help.ansi())?;
+            pager.spawn(format!("{}: {query}", "uv help".bold()), &help_ansi)?;
         } else {
-            pager.spawn(format!("uv help: {query}"), help)?;
+            pager.spawn(format!("uv help: {query}"), &help_plain)?;
         }
     } else {
         if want_color {
-            writeln!(printer.stdout(), "{}", help.ansi())?;
+            writeln!(printer.stdout(), "{help_ansi}")?;
         } else {
-            writeln!(printer.stdout(), "{help}")?;
+            writeln!(printer.stdout(), "{help_plain}")?;
         }
     }
 
     Ok(ExitStatus::Success)
+}
+
+/// Get the first non-ANSI character starting at a given byte position.
+///
+/// Returns `None` if the rest of the string is empty or only contains ANSI sequences.
+fn first_non_ansi_char(s: &str, start: usize) -> Option<char> {
+    let mut chars = s[start..].chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            // Skip ANSI escape sequences.
+            if chars.peek() == Some(&'[') {
+                chars.next();
+                for c in chars.by_ref() {
+                    if c.is_ascii_alphabetic() {
+                        break;
+                    }
+                }
+            }
+        } else {
+            return Some(c);
+        }
+    }
+    None
+}
+
+/// Reformat `[env: VAR=]` annotations in long help output.
+///
+/// Moves inline `[env: VAR=]` annotations to their own line at the end of each
+/// argument's description, matching clap's native formatting for environment vars.
+fn reformat_env_annotations(help: &str) -> String {
+    let mut result = String::new();
+    let mut pending_env: Option<String> = None;
+
+    let lines: Vec<&str> = help.lines().collect();
+    let mut i = 0;
+
+    while i < lines.len() {
+        let line = lines[i];
+
+        // Classify the line type based on clap's help formatting:
+        // - Argument lines: 6 spaces + `-` or `<` (e.g., "      --offline", "      <PACKAGE>")
+        // - Description lines: 10 spaces + text (e.g., "          Disable network access")
+        // - Section headers: no leading spaces, ends with `:` (e.g., "Options:")
+        //
+        // Leading spaces never contain ANSI codes, but argument names may be colored,
+        // so we skip ANSI sequences when checking the first content character.
+        let indent = line.len() - line.trim_start().len();
+        let first_char = first_non_ansi_char(line, indent);
+        let is_arg_line = indent == 6 && matches!(first_char, Some('-' | '<'));
+        let is_section_header = indent == 0 && line.ends_with(':');
+        let is_description_line = indent == 10;
+
+        // Flush pending env before starting a new argument or section.
+        if is_arg_line || is_section_header {
+            if let Some(env) = pending_env.take() {
+                // Remove trailing blank lines; add exactly one blank line before the environment variable.
+                while result.ends_with("\n\n") {
+                    result.pop();
+                }
+                if !result.ends_with('\n') {
+                    result.push('\n');
+                }
+                result.push('\n');
+                let _ = write!(result, "          {env}\n\n");
+            }
+        }
+
+        // Check for inline environment annotations on description lines.
+        if is_description_line {
+            if let Some((env_annotation, new_line)) = extract_env_annotation(line) {
+                pending_env = Some(env_annotation);
+                if !new_line.trim().is_empty() {
+                    result.push_str(&new_line);
+                    // Add a period, if the line doesn't end with punctuation.
+                    if !new_line.ends_with('.') && !new_line.ends_with(':') {
+                        result.push('.');
+                    }
+                    result.push('\n');
+                }
+                i += 1;
+                continue;
+            }
+        }
+
+        result.push_str(line);
+        result.push('\n');
+        i += 1;
+    }
+
+    // Flush any remaining pending environment variables at the end of the help.
+    if let Some(env) = pending_env {
+        while result.ends_with("\n\n") {
+            result.pop();
+        }
+        if !result.ends_with('\n') {
+            result.push('\n');
+        }
+        result.push('\n');
+        let _ = writeln!(result, "          {env}");
+    }
+
+    if result.ends_with('\n') {
+        result.pop();
+    }
+
+    result
+}
+
+/// Extract an inline `[env: VAR=]` annotation from a line.
+///
+/// Returns the annotation and the line with the annotation removed, or `None` if no
+/// annotation is found.
+fn extract_env_annotation(line: &str) -> Option<(String, String)> {
+    // Look for the pattern: " [env: SOMETHING=]"
+    let start = line.find(" [env: ")?;
+    let rest = &line[start + " [env: ".len()..];
+    let end_offset = rest.find("=]")?;
+
+    // Validate that the environment variable name contains only uppercase letters and underscores.
+    let env_name = &rest[..end_offset];
+    if !env_name.chars().all(|c| c.is_ascii_uppercase() || c == '_') {
+        return None;
+    }
+
+    let annotation_end = start + " [env: ".len() + end_offset + "=]".len();
+    let annotation = line[start + " ".len()..annotation_end].to_string();
+    let new_line = format!("{}{}", &line[..start], &line[annotation_end..]);
+
+    // Only extract if there's actual text remaining (not just whitespace).
+    // If the line is just the annotation (clap-generated), leave it alone.
+    if new_line.trim().is_empty() {
+        return None;
+    }
+
+    Some((annotation, new_line))
 }
 
 /// Find the command corresponding to a set of arguments, e.g., `["uv", "pip", "install"]`.

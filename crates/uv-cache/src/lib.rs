@@ -40,6 +40,8 @@ pub const ARCHIVE_VERSION: u8 = 0;
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
+    #[error("Failed to initialize cache at `{}`", _0.user_display())]
+    Init(PathBuf, #[source] io::Error),
     #[error("Could not make the path absolute")]
     Absolute(#[source] io::Error),
     #[error("Could not acquire lock")]
@@ -443,10 +445,23 @@ impl Cache {
         // We have to put this below the gitignore. Otherwise, if the build backend uses the rust
         // ignore crate it will walk up to the top level .gitignore and ignore its python source
         // files.
-        fs_err::OpenOptions::new().create(true).write(true).open(
-            root.join(CacheBucket::SourceDistributions.to_str())
-                .join(".git"),
-        )?;
+        let phony_git = root
+            .join(CacheBucket::SourceDistributions.to_str())
+            .join(".git");
+        match fs_err::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open(&phony_git)
+        {
+            Ok(_) => {}
+            // Handle read-only caches including sandboxed environments.
+            Err(err) if err.kind() == io::ErrorKind::ReadOnlyFilesystem => {
+                if !phony_git.exists() {
+                    return Err(err);
+                }
+            }
+            Err(err) => return Err(err),
+        }
 
         Ok(())
     }
@@ -455,7 +470,7 @@ impl Cache {
     pub async fn init(self) -> Result<Self, Error> {
         let root = &self.root;
 
-        Self::create_base_files(root)?;
+        Self::create_base_files(root).map_err(|err| Error::Init(root.clone(), err))?;
 
         // Block cache removal operations from interfering.
         let lock_file = match LockedFile::acquire(
@@ -491,7 +506,7 @@ impl Cache {
     pub fn init_no_wait(self) -> Result<Option<Self>, Error> {
         let root = &self.root;
 
-        Self::create_base_files(root)?;
+        Self::create_base_files(root).map_err(|err| Error::Init(root.clone(), err))?;
 
         // Block cache removal operations from interfering.
         let Some(lock_file) = LockedFile::acquire_no_wait(
@@ -1143,7 +1158,7 @@ pub enum CacheBucket {
     ///  * `simple-v0/pypi/<package_name>.rkyv`
     ///  * `simple-v0/<digest(index_url)>/<package_name>.rkyv`
     ///
-    /// The response is parsed into `uv_client::SimpleMetadata` before storage.
+    /// The response is parsed into `uv_client::SimpleDetailMetadata` before storage.
     Simple,
     /// A cache of unzipped wheels, stored as directories. This is used internally within the cache.
     /// When other buckets need to store directories, they should persist them to
@@ -1172,10 +1187,10 @@ impl CacheBucket {
             Self::Interpreter => "interpreter-v4",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/it/cache_clean.rs`.
-            Self::Simple => "simple-v18",
+            Self::Simple => "simple-v20",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/it/cache_prune.rs`.
-            Self::Wheels => "wheels-v5",
+            Self::Wheels => "wheels-v6",
             // Note that when bumping this, you'll also need to bump
             // `ARCHIVE_VERSION` in `crates/uv-cache/src/lib.rs`.
             Self::Archive => "archive-v0",

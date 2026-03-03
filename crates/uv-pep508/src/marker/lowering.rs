@@ -7,7 +7,6 @@ use crate::{MarkerValueExtra, MarkerValueString, MarkerValueVersion};
 
 /// Those environment markers with a PEP 440 version as value such as `python_version`
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
-#[allow(clippy::enum_variant_names)]
 pub enum CanonicalMarkerValueVersion {
     /// `implementation_version`
     ImplementationVersion,

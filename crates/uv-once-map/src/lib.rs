@@ -1,7 +1,6 @@
 use std::borrow::Borrow;
 use std::fmt::{Debug, Formatter};
 use std::hash::{BuildHasher, Hash, RandomState};
-use std::pin::pin;
 use std::sync::Arc;
 
 use dashmap::DashMap;
@@ -77,7 +76,7 @@ impl<K: Eq + Hash, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
         };
 
         // Register the waiter for calls to `notify_waiters`.
-        let notification = pin!(notify.notified());
+        let notification = notify.notified();
 
         // Make sure the value wasn't inserted in-between us checking the map and registering the waiter.
         if let Value::Filled(value) = self.items.get(key).expect("map is append-only").value() {

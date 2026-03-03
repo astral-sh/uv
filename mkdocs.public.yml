@@ -1,6 +1,0 @@
-# NOTE: Usually, you should edit the template instead.
-# This file is used for forks and contributors, production uses `mkdocs.insiders.yml`.
-INHERIT: mkdocs.template.yml
-
-watch:
-  - mkdocs.template.yml

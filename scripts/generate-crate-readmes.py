@@ -152,6 +152,8 @@ def main() -> None:
     subprocess.run(
         ["npx", "prettier", "--write"] + [str(path) for path in generated_paths],
         check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
 
 

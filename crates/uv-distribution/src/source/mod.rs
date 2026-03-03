@@ -28,7 +28,7 @@ use uv_cache_info::CacheInfo;
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
-use uv_configuration::{BuildKind, BuildOutput, SourceStrategy};
+use uv_configuration::{BuildKind, BuildOutput, NoSources};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
     BuildInfo, BuildVariables, BuildableSource, ConfigSettings, DirectorySourceUrl,
@@ -546,7 +546,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source_dist_entry.path(),
                 subdirectory,
                 &cache_shard,
-                SourceStrategy::Disabled,
+                NoSources::None,
             )
             .await?;
 
@@ -674,7 +674,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source,
                 source_dist_entry.path(),
                 subdirectory,
-                SourceStrategy::Disabled,
+                NoSources::None,
             )
             .boxed_local()
             .await?
@@ -726,7 +726,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source_dist_entry.path(),
                 subdirectory,
                 &cache_shard,
-                SourceStrategy::Disabled,
+                NoSources::None,
             )
             .await?;
 
@@ -792,6 +792,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         };
 
         let download = |response| {
+            let query_url = url.clone();
+
             async {
                 // At this point, we're seeing a new or updated source distribution. Initialize a
                 // new revision, to collect the source and built artifacts.
@@ -802,7 +804,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 let entry = cache_shard.shard(revision.id()).entry(SOURCE);
                 let algorithms = hashes.algorithms();
                 let hashes = self
-                    .download_archive(response, source, ext, entry.path(), &algorithms)
+                    .download_archive(query_url, response, source, ext, entry.path(), &algorithms)
                     .await?;
 
                 Ok(revision.with_hashes(HashDigests::from(hashes)))
@@ -927,7 +929,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source_entry.path(),
                 None,
                 &cache_shard,
-                SourceStrategy::Disabled,
+                NoSources::None,
             )
             .await?;
 
@@ -1026,7 +1028,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
-            .build_metadata(source, source_entry.path(), None, SourceStrategy::Disabled)
+            .build_metadata(source, source_entry.path(), None, NoSources::None)
             .boxed_local()
             .await?
         {
@@ -1077,7 +1079,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source_entry.path(),
                 None,
                 &cache_shard,
-                SourceStrategy::Disabled,
+                NoSources::None,
             )
             .await?;
 
@@ -1233,10 +1235,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let (disk_filename, filename, metadata) = self
             .build_distribution(
                 source,
-                &resource.install_path,
+                resource.install_path,
                 None,
                 &cache_shard,
-                self.build_context.sources(),
+                self.build_context.sources().clone(),
             )
             .await?;
 
@@ -1280,15 +1282,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // If the metadata is static, return it.
-        let dynamic = match StaticMetadata::read(source, &resource.install_path, None).await? {
+        let dynamic = match StaticMetadata::read(source, resource.install_path, None).await? {
             StaticMetadata::Some(metadata) => {
                 return Ok(ArchiveMetadata::from(
                     Metadata::from_workspace(
                         metadata,
-                        resource.install_path.as_ref(),
+                        resource.install_path,
                         None,
                         self.build_context.locations(),
-                        self.build_context.sources(),
+                        self.build_context.sources().clone(),
                         self.build_context.workspace_cache(),
                         credentials_cache,
                     )
@@ -1339,10 +1341,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     return Ok(ArchiveMetadata::from(
                         Metadata::from_workspace(
                             metadata,
-                            resource.install_path.as_ref(),
+                            resource.install_path,
                             None,
                             self.build_context.locations(),
-                            self.build_context.sources(),
+                            self.build_context.sources().clone(),
                             self.build_context.workspace_cache(),
                             credentials_cache,
                         )
@@ -1361,9 +1363,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         if let Some(metadata) = self
             .build_metadata(
                 source,
-                &resource.install_path,
+                resource.install_path,
                 None,
-                self.build_context.sources(),
+                self.build_context.sources().clone(),
             )
             .boxed_local()
             .await?
@@ -1389,10 +1391,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Ok(ArchiveMetadata::from(
                 Metadata::from_workspace(
                     metadata,
-                    resource.install_path.as_ref(),
+                    resource.install_path,
                     None,
                     self.build_context.locations(),
-                    self.build_context.sources(),
+                    self.build_context.sources().clone(),
                     self.build_context.workspace_cache(),
                     credentials_cache,
                 )
@@ -1420,10 +1422,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let (_disk_filename, _filename, metadata) = self
             .build_distribution(
                 source,
-                &resource.install_path,
+                resource.install_path,
                 None,
                 &cache_shard,
-                self.build_context.sources(),
+                self.build_context.sources().clone(),
             )
             .await?;
 
@@ -1451,10 +1453,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         Ok(ArchiveMetadata::from(
             Metadata::from_workspace(
                 metadata,
-                resource.install_path.as_ref(),
+                resource.install_path,
                 None,
                 self.build_context.locations(),
-                self.build_context.sources(),
+                self.build_context.sources().clone(),
                 self.build_context.workspace_cache(),
                 credentials_cache,
             )
@@ -1475,7 +1477,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // Determine the last-modified time of the source distribution.
-        let cache_info = CacheInfo::from_directory(&resource.install_path)?;
+        let cache_info = CacheInfo::from_directory(resource.install_path)?;
 
         // Read the existing metadata from the cache.
         let entry = cache_shard.entry(LOCAL_REVISION);
@@ -1530,7 +1532,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     path,
                     None,
                     self.build_context.locations(),
-                    self.build_context.sources(),
+                    self.build_context.sources().clone(),
                     self.build_context.workspace_cache(),
                     credentials_cache,
                 )
@@ -1657,7 +1659,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 fetch.path(),
                 resource.subdirectory,
                 &cache_shard,
-                self.build_context.sources(),
+                self.build_context.sources().clone(),
             )
             .await?;
 
@@ -1852,7 +1854,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             &path,
                             Some(&git_member),
                             self.build_context.locations(),
-                            self.build_context.sources(),
+                            self.build_context.sources().clone(),
                             self.build_context.workspace_cache(),
                             credentials_cache,
                         )
@@ -1886,7 +1888,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                                 &path,
                                 Some(&git_member),
                                 self.build_context.locations(),
-                                self.build_context.sources(),
+                                self.build_context.sources().clone(),
                                 self.build_context.workspace_cache(),
                                 credentials_cache,
                             )
@@ -1910,7 +1912,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source,
                 fetch.path(),
                 resource.subdirectory,
-                self.build_context.sources(),
+                self.build_context.sources().clone(),
             )
             .boxed_local()
             .await?
@@ -1939,7 +1941,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     &path,
                     Some(&git_member),
                     self.build_context.locations(),
-                    self.build_context.sources(),
+                    self.build_context.sources().clone(),
                     self.build_context.workspace_cache(),
                     credentials_cache,
                 )
@@ -1970,7 +1972,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 fetch.path(),
                 resource.subdirectory,
                 &cache_shard,
-                self.build_context.sources(),
+                self.build_context.sources().clone(),
             )
             .await?;
 
@@ -2001,7 +2003,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 fetch.path(),
                 Some(&git_member),
                 self.build_context.locations(),
-                self.build_context.sources(),
+                self.build_context.sources().clone(),
                 self.build_context.workspace_cache(),
                 credentials_cache,
             )
@@ -2242,6 +2244,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         };
 
         let download = |response| {
+            let query_url = url.clone();
+
             async {
                 // Take the union of the requested and existing hash algorithms.
                 let algorithms = {
@@ -2255,7 +2259,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 };
 
                 let hashes = self
-                    .download_archive(response, source, ext, entry.path(), &algorithms)
+                    .download_archive(query_url, response, source, ext, entry.path(), &algorithms)
                     .await?;
                 for existing in revision.hashes() {
                     if !hashes.contains(existing) {
@@ -2289,6 +2293,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     /// Download and unzip a source distribution into the cache from an HTTP response.
     async fn download_archive(
         &self,
+        query_url: DisplaySafeUrl,
         response: Response,
         source: &BuildableSource<'_>,
         ext: SourceDistExtension,
@@ -2301,6 +2306,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .bucket(CacheBucket::SourceDistributions),
         )
         .map_err(Error::CacheWrite)?;
+
         let reader = response
             .bytes_stream()
             .map_err(std::io::Error::other)
@@ -2316,7 +2322,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Download and unzip the source distribution into a temporary directory.
         let span = info_span!("download_source_dist", source_dist = %source);
-        uv_extract::stream::archive(&mut hasher, ext, temp_dir.path())
+        uv_extract::stream::archive(query_url, &mut hasher, ext, temp_dir.path())
             .await
             .map_err(|err| Error::Extract(source.to_string(), err))?;
         drop(span);
@@ -2385,7 +2391,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let mut hasher = uv_extract::hash::HashReader::new(reader, &mut hashers);
 
         // Unzip the archive into a temporary directory.
-        uv_extract::stream::archive(&mut hasher, ext, &temp_dir.path())
+        uv_extract::stream::archive(path.display(), &mut hasher, ext, &temp_dir.path())
             .await
             .map_err(|err| Error::Extract(temp_dir.path().to_string_lossy().into_owned(), err))?;
 
@@ -2434,7 +2440,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source_root: &Path,
         subdirectory: Option<&Path>,
         cache_shard: &CacheShard,
-        source_strategy: SourceStrategy,
+        no_sources: NoSources,
     ) -> Result<(String, WheelFilename, ResolutionMetadata), Error> {
         debug!("Building: {source}");
 
@@ -2470,7 +2476,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source_root,
                 subdirectory,
                 temp_dir.path(),
-                source_strategy,
+                no_sources.clone(),
                 if source.is_editable() {
                     BuildKind::Editable
                 } else {
@@ -2510,7 +2516,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source_root: source_root.to_path_buf().into_boxed_path(),
                 subdirectory: subdirectory
                     .map(|subdirectory| subdirectory.to_path_buf().into_boxed_path()),
-                source_strategy,
+                no_sources: no_sources.clone(),
                 build_kind,
             };
 
@@ -2533,7 +2539,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         source_root,
                         Some(&source.to_string()),
                         source.as_dist(),
-                        source_strategy,
+                        &no_sources,
                         if source.is_editable() {
                             BuildKind::Editable
                         } else {
@@ -2586,7 +2592,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         source_root: &Path,
         subdirectory: Option<&Path>,
-        source_strategy: SourceStrategy,
+        no_sources: NoSources,
     ) -> Result<Option<ResolutionMetadata>, Error> {
         debug!("Preparing metadata for: {source}");
 
@@ -2642,7 +2648,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source_root,
                 Some(&source.to_string()),
                 source.as_dist(),
-                source_strategy,
+                &no_sources,
                 build_kind,
                 if uv_flags::contains(uv_flags::EnvironmentFlags::HIDE_BUILD_OUTPUT) {
                     BuildOutput::Quiet
@@ -2664,7 +2670,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source_root: source_root.to_path_buf().into_boxed_path(),
                 subdirectory: subdirectory
                     .map(|subdirectory| subdirectory.to_path_buf().into_boxed_path()),
-                source_strategy,
+                no_sources,
                 build_kind,
             },
             builder,

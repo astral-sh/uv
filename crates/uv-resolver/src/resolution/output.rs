@@ -59,7 +59,7 @@ pub struct ResolverOutput {
 }
 
 #[derive(Debug, Clone)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub(crate) enum ResolutionGraphNode {
     Root,
     Dist(AnnotatedDist),

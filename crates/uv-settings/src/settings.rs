@@ -4,12 +4,12 @@ use serde::{Deserialize, Serialize};
 
 use uv_cache_info::CacheKey;
 use uv_configuration::{
-    BuildIsolation, IndexStrategy, KeyringProviderType, PackageNameSpecifier, Reinstall,
+    BuildIsolation, IndexStrategy, KeyringProviderType, PackageNameSpecifier, ProxyUrl, Reinstall,
     RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
 };
 use uv_distribution_types::{
-    ConfigSettings, ExtraBuildVariables, Index, IndexUrl, IndexUrlError, PackageConfigSettings,
-    PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
+    ConfigSettings, ExtraBuildVariables, Index, IndexUrl, IndexUrlError, Origin,
+    PackageConfigSettings, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
 };
 use uv_install_wheel::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
@@ -171,6 +171,40 @@ impl Options {
         }
     }
 
+    /// Set the [`Origin`] on all indexes without an existing origin.
+    #[must_use]
+    pub fn with_origin(mut self, origin: Origin) -> Self {
+        if let Some(indexes) = &mut self.top_level.index {
+            for index in indexes {
+                index.origin.get_or_insert(origin);
+            }
+        }
+        if let Some(index_url) = &mut self.top_level.index_url {
+            index_url.try_set_origin(origin);
+        }
+        if let Some(extra_index_urls) = &mut self.top_level.extra_index_url {
+            for index_url in extra_index_urls {
+                index_url.try_set_origin(origin);
+            }
+        }
+        if let Some(pip) = &mut self.pip {
+            if let Some(indexes) = &mut pip.index {
+                for index in indexes {
+                    index.origin.get_or_insert(origin);
+                }
+            }
+            if let Some(index_url) = &mut pip.index_url {
+                index_url.try_set_origin(origin);
+            }
+            if let Some(extra_index_urls) = &mut pip.extra_index_url {
+                for index_url in extra_index_urls {
+                    index_url.try_set_origin(origin);
+                }
+            }
+        }
+        self
+    }
+
     /// Resolve the [`Options`] relative to the given root directory.
     pub fn relative_to(self, root_dir: &Path) -> Result<Self, IndexUrlError> {
         Ok(Self {
@@ -212,6 +246,7 @@ pub struct GlobalOptions {
     #[option(
         default = "false",
         value_type = "bool",
+        uv_toml_only = true,
         example = r#"
             native-tls = true
         "#
@@ -243,6 +278,7 @@ pub struct GlobalOptions {
     #[option(
         default = "None",
         value_type = "str",
+        uv_toml_only = true,
         example = r#"
             cache-dir = "./.uv_cache"
         "#
@@ -311,6 +347,36 @@ pub struct GlobalOptions {
         "#
     )]
     pub concurrent_installs: Option<NonZeroUsize>,
+    /// The URL of the HTTP proxy to use.
+    #[option(
+        default = "None",
+        value_type = "str",
+        uv_toml_only = true,
+        example = r#"
+            http-proxy = "http://proxy.example.com"
+        "#
+    )]
+    pub http_proxy: Option<ProxyUrl>,
+    /// The URL of the HTTPS proxy to use.
+    #[option(
+        default = "None",
+        value_type = "str",
+        uv_toml_only = true,
+        example = r#"
+            https-proxy = "https://proxy.example.com"
+        "#
+    )]
+    pub https_proxy: Option<ProxyUrl>,
+    /// A list of hosts to exclude from proxying.
+    #[option(
+        default = "None",
+        value_type = "list[str]",
+        uv_toml_only = true,
+        example = r#"
+            no-proxy = ["localhost", "127.0.0.1"]
+        "#
+    )]
+    pub no_proxy: Option<Vec<String>>,
     /// Allow insecure connections to host.
     ///
     /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
@@ -350,6 +416,7 @@ pub struct InstallerOptions {
     pub no_binary: Option<bool>,
     pub no_binary_package: Option<Vec<PackageName>>,
     pub no_sources: Option<bool>,
+    pub no_sources_package: Option<Vec<PackageName>>,
 }
 
 /// Settings relevant to all resolver operations.
@@ -380,6 +447,7 @@ pub struct ResolverOptions {
     pub extra_build_dependencies: Option<ExtraBuildDependencies>,
     pub extra_build_variables: Option<ExtraBuildVariables>,
     pub no_sources: Option<bool>,
+    pub no_sources_package: Option<Vec<PackageName>>,
 }
 
 /// Shared settings, relevant to all operations that must resolve and install dependencies. The
@@ -408,6 +476,7 @@ pub struct ResolverInstallerOptions {
     pub torch_backend: Option<TorchMode>,
     pub compile_bytecode: Option<bool>,
     pub no_sources: Option<bool>,
+    pub no_sources_package: Option<Vec<PackageName>>,
     pub upgrade: Option<Upgrade>,
     pub reinstall: Option<Reinstall>,
     pub no_build: Option<bool>,
@@ -442,6 +511,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             torch_backend,
             compile_bytecode,
             no_sources,
+            no_sources_package,
             upgrade,
             upgrade_package,
             reinstall,
@@ -477,6 +547,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             torch_backend,
             compile_bytecode,
             no_sources,
+            no_sources_package,
             upgrade: Upgrade::from_args(
                 upgrade,
                 upgrade_package
@@ -843,7 +914,7 @@ pub struct ResolverInstallerSchema {
     pub exclude_newer_package: Option<ExcludeNewerPackage>,
     /// The method to use when installing packages from the global cache.
     ///
-    /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
+    /// Defaults to `clone` (also known as Copy-on-Write) on macOS and Linux, and `hardlink` on
     /// Windows.
     ///
     /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
@@ -851,7 +922,7 @@ pub struct ResolverInstallerSchema {
     /// will break all installed packages by way of removing the underlying source files. Use
     /// symlinks with caution.
     #[option(
-        default = "\"clone\" (macOS) or \"hardlink\" (Linux, Windows)",
+        default = "\"clone\" (macOS, Linux) or \"hardlink\" (Windows)",
         value_type = "str",
         example = r#"
             link-mode = "copy"
@@ -888,6 +959,15 @@ pub struct ResolverInstallerSchema {
         "#
     )]
     pub no_sources: Option<bool>,
+    /// Ignore `tool.uv.sources` for the specified packages.
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            no-sources-package = ["ruff"]
+        "#
+    )]
+    pub no_sources_package: Option<Vec<PackageName>>,
     /// Allow package upgrades, ignoring pinned versions in any existing output file.
     #[option(
         default = "false",
@@ -1010,6 +1090,7 @@ pub struct PythonInstallMirrors {
     #[option(
         default = "None",
         value_type = "str",
+        uv_toml_only = true,
         example = r#"
             python-install-mirror = "https://github.com/astral-sh/python-build-standalone/releases/download"
         "#
@@ -1026,6 +1107,7 @@ pub struct PythonInstallMirrors {
     #[option(
         default = "None",
         value_type = "str",
+        uv_toml_only = true,
         example = r#"
             pypy-install-mirror = "https://downloads.python.org/pypy"
         "#
@@ -1036,6 +1118,7 @@ pub struct PythonInstallMirrors {
     #[option(
         default = "None",
         value_type = "str",
+        uv_toml_only = true,
         example = r#"
             python-downloads-json-url = "/etc/uv/python-downloads.json"
         "#
@@ -1698,7 +1781,7 @@ pub struct PipOptions {
     pub annotation_style: Option<AnnotationStyle>,
     /// The method to use when installing packages from the global cache.
     ///
-    /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
+    /// Defaults to `clone` (also known as Copy-on-Write) on macOS and Linux, and `hardlink` on
     /// Windows.
     ///
     /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
@@ -1706,7 +1789,7 @@ pub struct PipOptions {
     /// will break all installed packages by way of removing the underlying source files. Use
     /// symlinks with caution.
     #[option(
-        default = "\"clone\" (macOS) or \"hardlink\" (Linux, Windows)",
+        default = "\"clone\" (macOS, Linux) or \"hardlink\" (Windows)",
         value_type = "str",
         example = r#"
             link-mode = "copy"
@@ -1776,6 +1859,15 @@ pub struct PipOptions {
         "#
     )]
     pub no_sources: Option<bool>,
+    /// Ignore `tool.uv.sources` for the specified packages.
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            no-sources-package = ["ruff"]
+        "#
+    )]
+    pub no_sources_package: Option<Vec<PackageName>>,
     /// Allow package upgrades, ignoring pinned versions in any existing output file.
     #[option(
         default = "false",
@@ -1926,6 +2018,7 @@ impl From<ResolverInstallerSchema> for ResolverOptions {
             extra_build_dependencies: value.extra_build_dependencies,
             extra_build_variables: value.extra_build_variables,
             no_sources: value.no_sources,
+            no_sources_package: value.no_sources_package,
             torch_backend: value.torch_backend,
         }
     }
@@ -1967,6 +2060,7 @@ impl From<ResolverInstallerSchema> for InstallerOptions {
             no_binary: value.no_binary,
             no_binary_package: value.no_binary_package,
             no_sources: value.no_sources,
+            no_sources_package: value.no_sources_package,
         }
     }
 }
@@ -2002,6 +2096,7 @@ pub struct ToolOptions {
     pub link_mode: Option<LinkMode>,
     pub compile_bytecode: Option<bool>,
     pub no_sources: Option<bool>,
+    pub no_sources_package: Option<Vec<PackageName>>,
     pub no_build: Option<bool>,
     pub no_build_package: Option<Vec<PackageName>>,
     pub no_binary: Option<bool>,
@@ -2012,7 +2107,12 @@ pub struct ToolOptions {
 impl From<ResolverInstallerOptions> for ToolOptions {
     fn from(value: ResolverInstallerOptions) -> Self {
         Self {
-            index: value.index,
+            index: value.index.map(|indexes| {
+                indexes
+                    .into_iter()
+                    .map(Index::with_promoted_auth_policy)
+                    .collect()
+            }),
             index_url: value.index_url,
             extra_index_url: value.extra_index_url,
             no_index: value.no_index,
@@ -2033,6 +2133,7 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             link_mode: value.link_mode,
             compile_bytecode: value.compile_bytecode,
             no_sources: value.no_sources,
+            no_sources_package: value.no_sources_package,
             no_build: value.no_build,
             no_build_package: value.no_build_package,
             no_binary: value.no_binary,
@@ -2066,6 +2167,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             link_mode: value.link_mode,
             compile_bytecode: value.compile_bytecode,
             no_sources: value.no_sources,
+            no_sources_package: value.no_sources_package,
             upgrade: None,
             reinstall: None,
             no_build: value.no_build,
@@ -2105,6 +2207,9 @@ pub struct OptionsWire {
     find_links: Option<Vec<PipFindLinks>>,
     index_strategy: Option<IndexStrategy>,
     keyring_provider: Option<KeyringProviderType>,
+    http_proxy: Option<ProxyUrl>,
+    https_proxy: Option<ProxyUrl>,
+    no_proxy: Option<Vec<String>>,
     allow_insecure_host: Option<Vec<TrustedHost>>,
     resolution: Option<ResolutionMode>,
     prerelease: Option<PrereleaseMode>,
@@ -2121,6 +2226,7 @@ pub struct OptionsWire {
     link_mode: Option<LinkMode>,
     compile_bytecode: Option<bool>,
     no_sources: Option<bool>,
+    no_sources_package: Option<Vec<PackageName>>,
     upgrade: Option<bool>,
     upgrade_package: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     reinstall: Option<bool>,
@@ -2200,6 +2306,9 @@ impl From<OptionsWire> for Options {
             find_links,
             index_strategy,
             keyring_provider,
+            http_proxy,
+            https_proxy,
+            no_proxy,
             allow_insecure_host,
             resolution,
             prerelease,
@@ -2214,6 +2323,7 @@ impl From<OptionsWire> for Options {
             link_mode,
             compile_bytecode,
             no_sources,
+            no_sources_package,
             upgrade,
             upgrade_package,
             reinstall,
@@ -2262,6 +2372,9 @@ impl From<OptionsWire> for Options {
                 concurrent_downloads,
                 concurrent_builds,
                 concurrent_installs,
+                http_proxy,
+                https_proxy,
+                no_proxy,
                 // Used twice for backwards compatibility
                 allow_insecure_host: allow_insecure_host.clone(),
             },
@@ -2288,6 +2401,7 @@ impl From<OptionsWire> for Options {
                 link_mode,
                 compile_bytecode,
                 no_sources,
+                no_sources_package,
                 upgrade,
                 upgrade_package,
                 reinstall,

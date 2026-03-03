@@ -3,7 +3,7 @@ use assert_fs::fixture::{FileWriteStr, PathChild};
 use insta::assert_snapshot;
 use uv_static::EnvVars;
 
-use crate::common::{TestContext, uv_snapshot};
+use uv_test::uv_snapshot;
 
 /// Lock with a relative exclude-newer value.
 ///
@@ -12,7 +12,7 @@ use crate::common::{TestContext, uv_snapshot};
 /// - 3.7: 2024-04-11
 #[test]
 fn lock_exclude_newer_relative() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -31,14 +31,14 @@ fn lock_exclude_newer_relative() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
-        .arg("3 weeks"), @r###"
+        .arg("3 weeks"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
     // Should resolve to idna 3.6 (released 2023-11-25, before cutoff of 2024-04-10)
@@ -80,7 +80,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, later_timestamp)
         .arg("--exclude-newer")
         .arg("3 weeks")
-        .arg("--locked"), @r"
+        .arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -96,13 +96,14 @@ fn lock_exclude_newer_relative() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
-        .arg("2 weeks"), @r"
+        .arg("2 weeks")
+        .arg("--upgrade"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to change of exclude newer span from `P3W` to `P2W`
+    Resolving despite existing lockfile due to change of exclude newer span from `P3W` to `P2W`
     Resolved 2 packages in [TIME]
     Updated idna v3.6 -> v3.7
     ");
@@ -147,7 +148,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
         .arg("2 weeks")
-        .arg("--upgrade"), @r"
+        .arg("--upgrade"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -196,7 +197,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
         .arg("2 weeks")
-        .arg("--refresh"), @r"
+        .arg("--refresh"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -208,6 +209,123 @@ fn lock_exclude_newer_relative() -> Result<()> {
     Ok(())
 }
 
+/// Test that exclude-newer changes in either direction work correctly:
+/// - Getting OLDER (more restrictive): forces downgrade of invalid versions
+/// - Getting NEWER (less restrictive): keeps existing versions stable (use --upgrade to get newer)
+///
+/// Uses idna which has releases at:
+/// - 3.6: 2023-11-25
+/// - 3.7: 2024-04-11
+#[test]
+fn lock_exclude_newer_older_vs_newer() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["idna"]
+        "#,
+    )?;
+
+    // Start with a cutoff that allows idna 3.7 (released 2024-04-11)
+    // 2 weeks before 2024-05-01 is 2024-04-17, which is AFTER idna 3.7 release
+    let current_timestamp = "2024-05-01T00:00:00Z";
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .arg("--exclude-newer")
+        .arg("2 weeks"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(
+        lock.contains("version = \"3.7\""),
+        "Expected idna 3.7 in lockfile"
+    );
+
+    // Now make exclude-newer OLDER (more restrictive): 3 weeks back from 2024-05-01 is 2024-04-10
+    // This is BEFORE idna 3.7 release (2024-04-11), so 3.7 becomes INVALID and must be replaced
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .arg("--exclude-newer")
+        .arg("3 weeks"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolving despite existing lockfile due to change of exclude newer span from `P2W` to `P3W`
+    Resolved 2 packages in [TIME]
+    Updated idna v3.7 -> v3.6
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(
+        lock.contains("version = \"3.6\""),
+        "Expected idna 3.6 in lockfile after downgrade"
+    );
+
+    // Now make exclude-newer NEWER (less restrictive): back to 2 weeks (2024-04-17)
+    // This allows idna 3.7 again, but existing version (3.6) is still valid so it stays
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .arg("--exclude-newer")
+        .arg("2 weeks"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolving despite existing lockfile due to change of exclude newer span from `P3W` to `P2W`
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(
+        lock.contains("version = \"3.6\""),
+        "Expected idna 3.6 to stay stable without --upgrade"
+    );
+
+    // With --upgrade, should now get idna 3.7 since the constraint allows it
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .arg("--exclude-newer")
+        .arg("2 weeks")
+        .arg("--upgrade"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Updated idna v3.6 -> v3.7
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(
+        lock.contains("version = \"3.7\""),
+        "Expected idna 3.7 after --upgrade"
+    );
+
+    Ok(())
+}
+
 /// Lock with a relative exclude-newer-package value.
 ///
 /// Uses idna which has releases at:
@@ -215,7 +333,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
 /// - 3.7: 2024-04-11
 #[test]
 fn lock_exclude_newer_package_relative() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -234,7 +352,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer-package")
-        .arg("idna=3 weeks"), @r"
+        .arg("idna=3 weeks"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -284,7 +402,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, later_timestamp)
         .arg("--exclude-newer-package")
         .arg("idna=3 weeks")
-        .arg("--locked"), @r"
+        .arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -300,13 +418,14 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer-package")
-        .arg("idna=2 weeks"), @r"
+        .arg("idna=2 weeks")
+        .arg("--upgrade"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to change of exclude newer span from `P3W` to `P2W` for package `idna`
+    Resolving despite existing lockfile due to change of exclude newer span from `P3W` to `P2W` for package `idna`
     Resolved 2 packages in [TIME]
     Updated idna v3.6 -> v3.7
     ");
@@ -352,7 +471,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer-package")
         .arg("idna=2 weeks")
-        .arg("--upgrade"), @r"
+        .arg("--upgrade"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -404,7 +523,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
 /// - 3.7: 2024-04-11
 #[test]
 fn lock_exclude_newer_relative_pyproject() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -424,7 +543,7 @@ fn lock_exclude_newer_relative_pyproject() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp), @r"
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -475,7 +594,7 @@ fn lock_exclude_newer_relative_pyproject() -> Result<()> {
 /// - 3.7: 2024-04-11
 #[test]
 fn lock_exclude_newer_package_relative_pyproject() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -495,7 +614,7 @@ fn lock_exclude_newer_package_relative_pyproject() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp), @r"
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -551,7 +670,7 @@ fn lock_exclude_newer_package_relative_pyproject() -> Result<()> {
 /// - 4.11.0: 2024-04-05
 #[test]
 fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -577,7 +696,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
         .arg("--exclude-newer")
         .arg("3 weeks")
         .arg("--exclude-newer-package")
-        .arg("typing-extensions=2 weeks"), @r"
+        .arg("typing-extensions=2 weeks"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -645,7 +764,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
         .arg("3 weeks")
         .arg("--exclude-newer-package")
         .arg("typing-extensions=2 weeks")
-        .arg("--locked"), @r"
+        .arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -663,13 +782,14 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
         .arg("--exclude-newer")
         .arg("2 weeks")
         .arg("--exclude-newer-package")
-        .arg("typing-extensions=2 weeks"), @r"
+        .arg("typing-extensions=2 weeks")
+        .arg("--upgrade"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to change of exclude newer span from `P3W` to `P2W`
+    Resolving despite existing lockfile due to change of exclude newer span from `P3W` to `P2W`
     Resolved 3 packages in [TIME]
     Updated idna v3.6 -> v3.7
     ");
@@ -682,13 +802,13 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
         .arg("--exclude-newer")
         .arg("2 weeks")
         .arg("--exclude-newer-package")
-        .arg("typing-extensions=3 days"), @r"
+        .arg("typing-extensions=3 days"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to change of exclude newer span from `P2W` to `P3D` for package `typing-extensions`
+    Resolving despite existing lockfile due to change of exclude newer span from `P2W` to `P3D` for package `typing-extensions`
     Resolved 3 packages in [TIME]
     ");
 
@@ -700,13 +820,13 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
         .arg("--exclude-newer")
         .arg("2024-05-20T00:00:00Z")
         .arg("--exclude-newer-package")
-        .arg("typing-extensions=2 weeks"), @r"
+        .arg("typing-extensions=2 weeks"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to removal of exclude newer span
+    Resolving despite existing lockfile due to removal of exclude newer span
     Resolved 3 packages in [TIME]
     ");
 
@@ -766,13 +886,13 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
         .arg("--exclude-newer")
         .arg("3 weeks")
         .arg("--exclude-newer-package")
-        .arg("typing-extensions=2024-04-01T00:00:00Z"), @r"
+        .arg("typing-extensions=2024-04-01T00:00:00Z"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to addition of exclude newer span `P3W`
+    Resolving despite existing lockfile due to addition of exclude newer span `P3W`
     Resolved 3 packages in [TIME]
     Updated idna v3.7 -> v3.6
     Updated typing-extensions v4.11.0 -> v4.10.0
@@ -833,7 +953,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
 /// Lock with various relative exclude newer value formats.
 #[test]
 fn lock_exclude_newer_relative_values() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -849,26 +969,12 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--exclude-newer")
-        .arg("1 day"), @r###"
+        .arg("1 day"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 2 packages in [TIME]
-    "###);
-
-    uv_snapshot!(context.filters(), context
-        .lock()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .arg("--exclude-newer")
-        .arg("30days"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Ignoring existing lockfile due to change of exclude newer span from `P1D` to `P30D`
     Resolved 2 packages in [TIME]
     ");
 
@@ -876,13 +982,13 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--exclude-newer")
-        .arg("P1D"), @r"
+        .arg("30days"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to change of exclude newer span from `P30D` to `P1D`
+    Resolving despite existing lockfile due to change of exclude newer span from `P1D` to `P30D`
     Resolved 2 packages in [TIME]
     ");
 
@@ -890,13 +996,13 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--exclude-newer")
-        .arg("1 week"), @r"
+        .arg("P1D"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to change of exclude newer span from `P1D` to `P1W`
+    Resolving despite existing lockfile due to change of exclude newer span from `P30D` to `P1D`
     Resolved 2 packages in [TIME]
     ");
 
@@ -904,13 +1010,13 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--exclude-newer")
-        .arg("1 week ago"), @r"
+        .arg("1 week"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to change of exclude newer span from `P1W` to `-P1W`
+    Resolving despite existing lockfile due to change of exclude newer span from `P1D` to `P1W`
     Resolved 2 packages in [TIME]
     ");
 
@@ -918,7 +1024,21 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--exclude-newer")
-        .arg("3 months"), @r"
+        .arg("1 week ago"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolving despite existing lockfile due to change of exclude newer span from `P1W` to `-P1W`
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--exclude-newer")
+        .arg("3 months"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -933,7 +1053,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--exclude-newer")
-        .arg("2 months ago"), @r"
+        .arg("2 months ago"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -948,7 +1068,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--exclude-newer")
-        .arg("1 year"), @r"
+        .arg("1 year"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -963,7 +1083,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--exclude-newer")
-        .arg("1 year ago"), @r"
+        .arg("1 year ago"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -977,7 +1097,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .arg("--exclude-newer")
-        .arg("invalid span"), @r"
+        .arg("invalid span"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -991,35 +1111,38 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .arg("--exclude-newer")
-        .arg("P4Z"), @r#"
+        .arg("P4Z"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value 'P4Z' for '--exclude-newer <EXCLUDE_NEWER>': `P4Z` could not be parsed as an ISO 8601 duration: failed to parse "P4Z" as an ISO 8601 duration string: expected to find date unit designator suffix (Y, M, W or D), but found "Z" instead
+    error: invalid value 'P4Z' for '--exclude-newer <EXCLUDE_NEWER>': `P4Z` could not be parsed as an ISO 8601 duration: expected to find date unit designator suffix (`Y`, `M`, `W` or `D`), but found `Z` instead
 
     For more information, try '--help'.
-    "#);
-
-    uv_snapshot!(context.filters(), context
-        .lock()
-        .arg("--exclude-newer")
-        .arg("2006-12-02T02:07:43"), @r"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
-    ----- stderr -----
-    Ignoring existing lockfile due to removal of exclude newer span
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there are no versions of iniconfig and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
     ");
 
     uv_snapshot!(context.filters(), context
         .lock()
         .arg("--exclude-newer")
-        .arg("12/02/2006"), @r"
+        .arg("2006-12-02T02:07:43Z"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolving despite existing lockfile due to removal of exclude newer span
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there are no versions of iniconfig and iniconfig==2.0.0 was published after the exclude newer time, we can conclude that all versions of iniconfig cannot be used.
+          And because your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2006-12-02T02:07:43Z. Consider using `exclude-newer-package` to override the cutoff for this package.
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--exclude-newer")
+        .arg("12/02/2006"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1039,7 +1162,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value '2 weak' for '--exclude-newer <EXCLUDE_NEWER>': `2 weak` could not be parsed as a duration: failed to parse "2 weak" in the "friendly" format: parsed value 'P2W', but unparsed input "eak" remains (expected no unparsed input)
+    error: invalid value '2 weak' for '--exclude-newer <EXCLUDE_NEWER>': `2 weak` could not be parsed as a duration: failed to parse input in the "friendly" duration format: parsed value 'P2W', but unparsed input "eak" remains (expected no unparsed input)
 
     For more information, try '--help'.
     "#);
@@ -1047,7 +1170,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .arg("--exclude-newer")
-        .arg("30"), @r"
+        .arg("30"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1067,7 +1190,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value '1000000 years' for '--exclude-newer <EXCLUDE_NEWER>': `1000000 years` could not be parsed as a duration: failed to parse "1000000 years" in the "friendly" format: failed to set value 1000000 as year unit on span: parameter 'years' with value 1000000 is not in the required range of -19998..=19998
+    error: invalid value '1000000 years' for '--exclude-newer <EXCLUDE_NEWER>': `1000000 years` could not be parsed as a duration: failed to parse input in the "friendly" duration format: failed to set value for year unit on span: parameter 'years' is not in the required range of -19998..=19998
 
     For more information, try '--help'.
     "#);
@@ -1078,7 +1201,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
 /// Lock with various relative exclude newer value formats in a `pyproject.toml`.
 #[test]
 fn lock_exclude_newer_relative_values_pyproject() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -1135,7 +1258,7 @@ fn lock_exclude_newer_relative_values_pyproject() -> Result<()> {
         |
       9 |         exclude-newer = "2 foos"
         |                         ^^^^^^^^
-      `2 foos` could not be parsed as a duration: failed to parse "2 foos" in the "friendly" format: expected to find unit designator suffix (e.g., 'years' or 'secs'), but found input beginning with "foos" instead
+      `2 foos` could not be parsed as a duration: failed to parse input in the "friendly" duration format: expected to find unit designator suffix (e.g., `years` or `secs`) after parsing integer
 
     Resolved 2 packages in [TIME]
     "#);
@@ -1165,7 +1288,7 @@ fn lock_exclude_newer_relative_values_pyproject() -> Result<()> {
         |
       9 |         exclude-newer = "P4Z"
         |                         ^^^^^
-      `P4Z` could not be parsed as an ISO 8601 duration: failed to parse "P4Z" as an ISO 8601 duration string: expected to find date unit designator suffix (Y, M, W or D), but found "Z" instead
+      `P4Z` could not be parsed as an ISO 8601 duration: expected to find date unit designator suffix (`Y`, `M`, `W` or `D`), but found `Z` instead
 
     Resolved 2 packages in [TIME]
     "#);

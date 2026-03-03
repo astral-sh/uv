@@ -97,14 +97,10 @@ pub enum MemberDiscovery {
 /// Whether a "project" must be defined via a `[project]` table.
 #[derive(Debug, Default, Clone, Hash, PartialEq, Eq)]
 pub enum ProjectDiscovery {
-    /// The `[project]` table is optional; when missing, the target is treated as virtual.
+    /// The `[project]` table is optional; when missing, the target is treated as a virtual
+    /// project with only dependency groups.
     #[default]
     Optional,
-    /// A `[project]` table must be defined, unless `[tool.uv.workspace]` is present indicating a
-    /// legacy non-project workspace root.
-    ///
-    /// If neither is defined, discovery will fail.
-    Legacy,
     /// A `[project]` table must be defined.
     ///
     /// If not defined, discovery will fail.
@@ -114,20 +110,12 @@ pub enum ProjectDiscovery {
 impl ProjectDiscovery {
     /// Whether a `[project]` table is required.
     pub fn allows_implicit_workspace(&self) -> bool {
-        match self {
-            Self::Optional => true,
-            Self::Legacy => false,
-            Self::Required => false,
-        }
+        matches!(self, Self::Optional)
     }
 
-    /// Whether a legacy workspace root is allowed.
-    pub fn allows_legacy_workspace(&self) -> bool {
-        match self {
-            Self::Optional => true,
-            Self::Legacy => true,
-            Self::Required => false,
-        }
+    /// Whether a non-project workspace root is allowed.
+    pub fn allows_non_project_workspace(&self) -> bool {
+        matches!(self, Self::Optional)
     }
 }
 
@@ -184,7 +172,7 @@ impl Workspace {
     ///   * If an explicit workspace root exists: Collect workspace from this root, we're done.
     ///   * If there is no explicit workspace: We have a single project workspace, we're done.
     ///
-    /// Note that there are two kinds of workspace roots: projects, and (legacy) non-project roots.
+    /// Note that there are two kinds of workspace roots: projects, and non-project roots.
     /// The non-project roots lack a `[project]` table, and so are not themselves projects, as in:
     /// ```toml
     /// [tool.uv.workspace]
@@ -270,7 +258,7 @@ impl Workspace {
             workspace_root.simplified_display()
         );
 
-        // Unlike in `ProjectWorkspace` discovery, we might be in a legacy non-project root without
+        // Unlike in `ProjectWorkspace` discovery, we might be in a non-project root without
         // being in any specific project.
         let current_project = pyproject_toml
             .project
@@ -365,7 +353,7 @@ impl Workspace {
         }
     }
 
-    /// Returns `true` if the workspace has a (legacy) non-project root.
+    /// Returns `true` if the workspace has a non-project root.
     pub fn is_non_project(&self) -> bool {
         !self
             .packages
@@ -1062,6 +1050,16 @@ impl Workspace {
                                 continue;
                             }
 
+                            // If the directory only contains gitignored files
+                            // (e.g., `__pycache__`), skip it.
+                            if has_only_gitignored_files(&member_root) {
+                                debug!(
+                                    "Ignoring workspace member with only gitignored files: `{}`",
+                                    member_root.simplified_display()
+                                );
+                                continue;
+                            }
+
                             return Err(WorkspaceError::MissingPyprojectTomlMember(
                                 member_root,
                                 member_glob.to_string(),
@@ -1082,10 +1080,17 @@ impl Workspace {
                     .and_then(|uv| uv.managed)
                     == Some(false)
                 {
-                    debug!(
-                        "Project `{}` is marked as unmanaged; omitting from workspace members",
-                        pyproject_toml.project.as_ref().unwrap().name
-                    );
+                    if let Some(project) = pyproject_toml.project.as_ref() {
+                        debug!(
+                            "Project `{}` is marked as unmanaged; omitting from workspace members",
+                            project.name
+                        );
+                    } else {
+                        debug!(
+                            "Workspace member at `{}` is marked as unmanaged; omitting from workspace members",
+                            member_root.simplified_display()
+                        );
+                    }
                     continue;
                 }
 
@@ -1580,6 +1585,38 @@ async fn find_workspace(
     Ok(None)
 }
 
+/// Check if a directory only contains files that are ignored.
+///
+/// Returns `true` if walking the directory while respecting `.gitignore` and `.ignore` rules
+/// yields no files, indicating that any files present (e.g., `__pycache__`) are all ignored.
+fn has_only_gitignored_files(path: &Path) -> bool {
+    let walker = ignore::WalkBuilder::new(path)
+        .hidden(false)
+        .parents(true)
+        .ignore(true)
+        .git_ignore(true)
+        .git_global(true)
+        .git_exclude(true)
+        .build();
+
+    for entry in walker {
+        let Ok(entry) = entry else {
+            // If we can't read an entry, assume non-ignored content exists.
+            return false;
+        };
+
+        // Skip directories.
+        if entry.path().is_dir() {
+            continue;
+        }
+
+        // A non-ignored entry exists.
+        return false;
+    }
+
+    true
+}
+
 /// Check if we're in the `tool.uv.workspace.excluded` of a workspace.
 fn is_excluded_from_workspace(
     project_path: &Path,
@@ -1696,7 +1733,7 @@ impl VirtualProject {
             .as_ref()
             .and_then(|tool| tool.uv.as_ref())
             .and_then(|uv| uv.workspace.as_ref())
-            .filter(|_| options.project.allows_legacy_workspace())
+            .filter(|_| options.project.allows_non_project_workspace())
         {
             // Otherwise, if it contains a `tool.uv.workspace` table, it's a non-project workspace
             // root.

@@ -13,7 +13,6 @@ use crate::{InstalledMetadata, InstalledVersion, Name};
 /// Note equality and hash operations are only based on the name and canonical version, not the
 /// kind.
 #[derive(Debug, Clone, Eq)]
-#[allow(clippy::large_enum_variant)]
 pub enum LocalDist {
     Cached(CachedDist, CanonicalVersion),
     Installed(InstalledDist, CanonicalVersion),

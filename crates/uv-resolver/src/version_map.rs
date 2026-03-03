@@ -5,7 +5,7 @@ use std::sync::OnceLock;
 
 use pubgrub::Ranges;
 use rustc_hash::FxHashMap;
-use tracing::instrument;
+use tracing::{instrument, trace};
 
 use uv_client::{FlatIndexEntry, OwnedArchive, SimpleDetailMetadata, VersionFiles};
 use uv_configuration::BuildOptions;
@@ -333,7 +333,7 @@ impl<'a> VersionMapDistHandle<'a> {
 
 /// The kind of internal version map we have.
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 enum VersionMapInner {
     /// All distributions are fully materialized in memory.
     ///
@@ -342,7 +342,7 @@ enum VersionMapInner {
     Eager(VersionMapEager),
     /// Some distributions might be fully materialized (i.e., by initializing
     /// a `VersionMap` with a `FlatDistributions`), but some distributions
-    /// might still be in their "raw" `SimpleMetadata` format. In this case, a
+    /// might still be in their "raw" `SimpleDetailMetadata` format. In this case, a
     /// `PrioritizedDist` isn't actually created in memory until the
     /// specific version has been requested.
     Lazy(VersionMapLazy),
@@ -363,7 +363,7 @@ struct VersionMapEager {
 ///
 /// The idea here is that some packages have a lot of versions published, and
 /// needing to materialize a full `VersionMap` with all corresponding metadata
-/// for every version in memory is expensive. Since a `SimpleMetadata` can be
+/// for every version in memory is expensive. Since a `SimpleDetailMetadata` can be
 /// materialized with very little cost (via `rkyv` in the warm cached case),
 /// avoiding another conversion step into a fully filled out `VersionMap` can
 /// provide substantial savings in some cases.
@@ -448,6 +448,10 @@ impl VersionMapLazy {
                 let (excluded, upload_time) = if let Some(exclude_newer) = &self.exclude_newer {
                     match file.upload_time_utc_ms.as_ref() {
                         Some(&upload_time) if upload_time >= exclude_newer.timestamp_millis() => {
+                            trace!(
+                                "Excluding `{}` (uploaded {upload_time}) due to exclude-newer ({exclude_newer})",
+                                file.filename
+                            );
                             (true, Some(upload_time))
                         }
                         None => {
@@ -638,7 +642,7 @@ enum LazyPrioritizedDist {
     /// `FlatDistributions`.
     OnlyFlat(PrioritizedDist),
     /// Represents a lazily constructed distribution from an index into a
-    /// `VersionFiles` from `SimpleMetadata`.
+    /// `VersionFiles` from `SimpleDetailMetadata`.
     OnlySimple(SimplePrioritizedDist),
     /// Combines the above. This occurs when we have data from both a flat
     /// distribution and a simple distribution.
@@ -651,7 +655,7 @@ enum LazyPrioritizedDist {
 /// Represents a lazily initialized `PrioritizedDist`.
 #[derive(Debug)]
 struct SimplePrioritizedDist {
-    /// An offset into `SimpleMetadata` corresponding to a `SimpleMetadatum`.
+    /// An offset into `SimpleDetailMetadata` corresponding to a `SimpleMetadatum`.
     /// This provides access to a `VersionFiles` that is used to construct a
     /// `PrioritizedDist`.
     datum_index: usize,

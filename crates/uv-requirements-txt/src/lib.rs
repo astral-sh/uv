@@ -982,7 +982,7 @@ fn parse_requirement_and_hashes(
     //
     // While `requirements.txt` is a valid package name (per the spec), PyPI disallows
     // `requirements.txt` and some other variants anyway.
-    #[allow(clippy::case_sensitive_file_extension_comparisons)]
+    #[expect(clippy::case_sensitive_file_extension_comparisons)]
     if requirement.ends_with(".txt") || requirement.ends_with(".in") {
         let path = Path::new(requirement);
         let path = if path.is_absolute() {
@@ -1736,10 +1736,10 @@ mod test {
         insta::with_settings!({
             filters => filters,
         }, {
-            insta::assert_snapshot!(errors, @r###"
+            insta::assert_snapshot!(errors, @"
             Error parsing included file in `<REQUIREMENTS_TXT>` at position 0
             failed to read from file `<MISSING_TXT>`: The system cannot find the path specified. (os error 2)
-            "###);
+            ");
         });
 
         Ok(())
@@ -1763,12 +1763,12 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_snapshot!(errors, @r###"
+            insta::assert_snapshot!(errors, @"
             Couldn't parse requirement in `<REQUIREMENTS_TXT>` at position 0
             Expected an alphanumeric character starting the extra name, found `ö`
             numpy[ö]==1.29
                   ^
-            "###);
+            ");
         });
 
         Ok(())
@@ -1792,12 +1792,12 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_snapshot!(errors, @r###"
+            insta::assert_snapshot!(errors, @"
             Couldn't parse requirement in `<REQUIREMENTS_TXT>` at position 0
             empty host
             numpy @ https:///
                     ^^^^^^^^^
-            "###);
+            ");
         });
 
         Ok(())
@@ -1821,12 +1821,12 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_snapshot!(errors, @r###"
+            insta::assert_snapshot!(errors, @"
             Couldn't parse requirement in `<REQUIREMENTS_TXT>` at position 3
             Expected direct URL (`https://localhost:8080/`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
             https://localhost:8080/
             ^^^^^^^^^^^^^^^^^^^^^^^
-            "###);
+            ");
         });
 
         Ok(())
@@ -1850,10 +1850,10 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_snapshot!(errors, @r###"
+            insta::assert_snapshot!(errors, @"
             Unsupported editable requirement in `<REQUIREMENTS_TXT>`
             Editable must refer to a local directory, not an HTTPS URL: `https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.gz`
-            "###);
+            ");
         });
 
         Ok(())
@@ -1877,12 +1877,12 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_snapshot!(errors, @r###"
+            insta::assert_snapshot!(errors, @"
             Couldn't parse requirement in `<REQUIREMENTS_TXT>` at position 3
             Expected either alphanumerical character (starting the extra name) or `]` (ending the extras section), found `,`
             black[,abcdef]
                   ^
-            "###);
+            ");
         });
 
         Ok(())
@@ -1906,10 +1906,10 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_snapshot!(errors, @r###"
+            insta::assert_snapshot!(errors, @"
             Invalid URL in `<REQUIREMENTS_TXT>` at position 0: `123`
             relative URL without a base
-            "###);
+            ");
         });
 
         Ok(())
@@ -1933,10 +1933,10 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_snapshot!(errors, @r###"
+            insta::assert_snapshot!(errors, @"
             Invalid URL in `<REQUIREMENTS_TXT>` at position 0: `https:////`
             empty host
-            "###);
+            ");
         });
 
         Ok(())
@@ -2026,7 +2026,7 @@ mod test {
         insta::with_settings!({
             filters => path_filters(&path_filter(temp_dir.path())),
         }, {
-            insta::assert_debug_snapshot!(requirements, @r###"
+            insta::assert_debug_snapshot!(requirements, @r#"
             RequirementsTxt {
                 requirements: [
                     RequirementEntry {
@@ -2057,7 +2057,7 @@ mod test {
                 no_binary: None,
                 only_binary: None,
             }
-            "###);
+            "#);
         });
 
         Ok(())
@@ -2086,7 +2086,7 @@ mod test {
         insta::with_settings!({
             filters => path_filters(&path_filter(temp_dir.path())),
         }, {
-            insta::assert_debug_snapshot!(requirements, @r###"
+            insta::assert_debug_snapshot!(requirements, @r#"
             RequirementsTxt {
                 requirements: [
                     RequirementEntry {
@@ -2123,7 +2123,7 @@ mod test {
                 ),
                 only_binary: None,
             }
-            "###);
+            "#);
         });
 
         Ok(())
@@ -2851,9 +2851,7 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_snapshot!(errors, @r###"
-            Unexpected '-', expected '-c', '-e', '-r' or the start of a requirement at <REQUIREMENTS_TXT>:2:3
-            "###);
+            insta::assert_snapshot!(errors, @"Unexpected '-', expected '-c', '-e', '-r' or the start of a requirement at <REQUIREMENTS_TXT>:2:3");
         });
 
         Ok(())

@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::str::FromStr;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result, anyhow, bail};
 use owo_colors::OwoColorize;
 use toml_edit::{InlineTable, Value};
 use tracing::{debug, trace, warn};
@@ -39,7 +39,7 @@ use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
 
 /// Add one or more packages to the project requirements.
-#[allow(clippy::single_match_else, clippy::fn_params_excessive_bools)]
+#[expect(clippy::single_match_else, clippy::fn_params_excessive_bools)]
 pub(crate) async fn init(
     project_dir: &Path,
     explicit_path: Option<PathBuf>,
@@ -199,7 +199,7 @@ pub(crate) async fn init(
     Ok(ExitStatus::Success)
 }
 
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 async fn init_script(
     script_path: &Path,
     bare: bool,
@@ -283,7 +283,7 @@ async fn init_script(
 }
 
 /// Initialize a project (and, implicitly, a workspace root) at the given path.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 async fn init_project(
     path: &Path,
     name: &PackageName,
@@ -311,7 +311,18 @@ async fn init_project(
     // Discover the current workspace, if it exists.
     let workspace_cache = WorkspaceCache::default();
     let workspace = {
-        let parent = path.parent().expect("Project path has no parent");
+        let parent = match path.parent() {
+            Some(parent) => parent,
+            None => {
+                if path.is_dir() {
+                    // Support creating a project in the filesystem root (`/` on Unix).
+                    path
+                } else {
+                    // Not sure how we'd end up here, but we need to handle the case.
+                    bail!("Project directory has no parent directory");
+                }
+            }
+        };
         match Workspace::discover(
             parent,
             &DiscoveryOptions {
@@ -748,7 +759,7 @@ impl InitKind {
 
 impl InitProjectKind {
     /// Initialize this project kind at the target path.
-    #[allow(clippy::fn_params_excessive_bools)]
+    #[expect(clippy::fn_params_excessive_bools)]
     fn init(
         self,
         name: &PackageName,
@@ -794,7 +805,7 @@ impl InitProjectKind {
     }
 
     /// Initialize a Python application at the target path.
-    #[allow(clippy::fn_params_excessive_bools)]
+    #[expect(clippy::fn_params_excessive_bools)]
     fn init_application(
         name: &PackageName,
         path: &Path,
@@ -877,7 +888,7 @@ impl InitProjectKind {
     }
 
     /// Initialize a library project at the target path.
-    #[allow(clippy::fn_params_excessive_bools)]
+    #[expect(clippy::fn_params_excessive_bools)]
     fn init_library(
         name: &PackageName,
         path: &Path,

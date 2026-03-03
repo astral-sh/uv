@@ -1,10 +1,10 @@
 use uv_static::EnvVars;
 
-use crate::common::{TestContext, uv_snapshot};
+use uv_test::uv_snapshot;
 
 #[test]
 fn help() {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     // The `uv help` command should show the long help message
     uv_snapshot!(context.filters(), context.help(), @r#"
@@ -57,8 +57,7 @@ fn help() {
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
           --native-tls
-              Whether to load TLS certificates from the platform's native certificate store [env:
-              UV_NATIVE_TLS=]
+              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -87,7 +86,7 @@ fn help() {
 
 #[test]
 fn help_flag() {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     uv_snapshot!(context.filters(), context.command().arg("--help"), @r#"
     success: true
@@ -138,8 +137,7 @@ fn help_flag() {
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
           --native-tls
-              Whether to load TLS certificates from the platform's native certificate store [env:
-              UV_NATIVE_TLS=]
+              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -167,7 +165,7 @@ fn help_flag() {
 
 #[test]
 fn help_short_flag() {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     uv_snapshot!(context.filters(), context.command().arg("-h"), @r#"
     success: true
@@ -218,8 +216,7 @@ fn help_short_flag() {
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
           --native-tls
-              Whether to load TLS certificates from the platform's native certificate store [env:
-              UV_NATIVE_TLS=]
+              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -247,7 +244,7 @@ fn help_short_flag() {
 
 #[test]
 fn help_subcommand() {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     uv_snapshot!(context.filters(), context.help().arg("python"), @r#"
     success: true
@@ -331,14 +328,14 @@ fn help_subcommand() {
               By default, uv prefers using Python versions it manages. However, it will use system
               Python versions if a uv-managed Python is not installed. This option disables use of
               system Python versions.
-              
+
               [env: UV_MANAGED_PYTHON=]
 
           --no-managed-python
               Disable use of uv-managed Python versions.
               
               Instead, uv will search for a suitable Python version on the system.
-              
+
               [env: UV_NO_MANAGED_PYTHON=]
 
           --no-python-downloads
@@ -369,7 +366,7 @@ fn help_subcommand() {
               - never:  Disables colored output
 
           --native-tls
-              Whether to load TLS certificates from the platform's native certificate store.
+              Whether to load TLS certificates from the platform's native store.
               
               By default, uv loads certificates from the bundled `webpki-roots` crate. The
               `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv
@@ -378,14 +375,14 @@ fn help_subcommand() {
               However, in some cases, you may want to use the platform's native certificate store,
               especially if you're relying on a corporate trust root (e.g., for a mandatory proxy)
               that's included in your system's certificate store.
-              
+
               [env: UV_NATIVE_TLS=]
 
           --offline
               Disable network access.
               
               When disabled, uv will only use locally cached data and locally available files.
-              
+
               [env: UV_OFFLINE=]
 
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -406,7 +403,7 @@ fn help_subcommand() {
               Hide all progress outputs.
               
               For example, spinners or progress bars.
-              
+
               [env: UV_NO_PROGRESS=]
 
           --directory <DIRECTORY>
@@ -455,14 +452,13 @@ fn help_subcommand() {
 
     Use `uv help python <command>` for more information on a specific command.
 
-
     ----- stderr -----
     "#);
 }
 
 #[test]
 fn help_subsubcommand() {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     uv_snapshot!(context.filters(), context.help().env_remove(EnvVars::UV_PYTHON_INSTALL_DIR).arg("python").arg("install"), @r#"
     success: true
@@ -575,10 +571,24 @@ fn help_subsubcommand() {
               executables are also installed.
               
               Alternative Python variants will still include their tag. For example, installing
-              3.13+freethreaded with `--default` will include in `python3t` and `pythont`, not `python3`
-              and `python`.
+              3.13+freethreaded with `--default` will include `python3t` and `pythont` instead of
+              `python3` and `python`.
               
               If multiple Python versions are requested, uv will exit with an error.
+
+          --compile-bytecode
+              Compile Python's standard library to bytecode after installation.
+              
+              By default, uv does not compile Python (`.py`) files to bytecode (`__pycache__/*.pyc`);
+              instead, compilation is performed lazily the first time a module is imported. For
+              use-cases in which start time is important, such as CLI applications and Docker
+              containers, this option can be enabled to trade longer installation times and some
+              additional disk space for faster start times.
+              
+              When enabled, uv will process the Python version's `stdlib` directory. It will ignore any
+              compilation errors.
+              
+              [env: UV_COMPILE_BYTECODE=]
 
     Cache options:
       -n, --no-cache
@@ -604,14 +614,14 @@ fn help_subsubcommand() {
               By default, uv prefers using Python versions it manages. However, it will use system
               Python versions if a uv-managed Python is not installed. This option disables use of
               system Python versions.
-              
+
               [env: UV_MANAGED_PYTHON=]
 
           --no-managed-python
               Disable use of uv-managed Python versions.
               
               Instead, uv will search for a suitable Python version on the system.
-              
+
               [env: UV_NO_MANAGED_PYTHON=]
 
           --no-python-downloads
@@ -642,7 +652,7 @@ fn help_subsubcommand() {
               - never:  Disables colored output
 
           --native-tls
-              Whether to load TLS certificates from the platform's native certificate store.
+              Whether to load TLS certificates from the platform's native store.
               
               By default, uv loads certificates from the bundled `webpki-roots` crate. The
               `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv
@@ -651,14 +661,14 @@ fn help_subsubcommand() {
               However, in some cases, you may want to use the platform's native certificate store,
               especially if you're relying on a corporate trust root (e.g., for a mandatory proxy)
               that's included in your system's certificate store.
-              
+
               [env: UV_NATIVE_TLS=]
 
           --offline
               Disable network access.
               
               When disabled, uv will only use locally cached data and locally available files.
-              
+
               [env: UV_OFFLINE=]
 
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -679,7 +689,7 @@ fn help_subsubcommand() {
               Hide all progress outputs.
               
               For example, spinners or progress bars.
-              
+
               [env: UV_NO_PROGRESS=]
 
           --directory <DIRECTORY>
@@ -726,14 +736,13 @@ fn help_subsubcommand() {
       -h, --help
               Display the concise help for this command
 
-
     ----- stderr -----
     "#);
 }
 
 #[test]
 fn help_flag_subcommand() {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     uv_snapshot!(context.filters(), context.command().arg("python").arg("--help"), @r#"
     success: true
@@ -772,8 +781,7 @@ fn help_flag_subcommand() {
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
           --native-tls
-              Whether to load TLS certificates from the platform's native certificate store [env:
-              UV_NATIVE_TLS=]
+              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -799,7 +807,7 @@ fn help_flag_subcommand() {
 
 #[test]
 fn help_flag_subsubcommand() {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     uv_snapshot!(context.filters(), context.command().arg("python").arg("install").arg("--help"), @r#"
     success: true
@@ -833,6 +841,9 @@ fn help_flag_subsubcommand() {
               Upgrade existing Python installations to the latest patch version
           --default
               Use as the default Python version
+          --compile-bytecode
+              Compile Python's standard library to bytecode after installation [env:
+              UV_COMPILE_BYTECODE=]
 
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
@@ -853,8 +864,7 @@ fn help_flag_subsubcommand() {
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
           --native-tls
-              Whether to load TLS certificates from the platform's native certificate store [env:
-              UV_NATIVE_TLS=]
+              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -878,9 +888,9 @@ fn help_flag_subsubcommand() {
 
 #[test]
 fn help_unknown_subcommand() {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("foobar"), @r"
+    uv_snapshot!(context.filters(), context.help().arg("foobar"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -909,7 +919,7 @@ fn help_unknown_subcommand() {
         generate-shell-completion
     ");
 
-    uv_snapshot!(context.filters(), context.help().arg("foo").arg("bar"), @r"
+    uv_snapshot!(context.filters(), context.help().arg("foo").arg("bar"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -941,9 +951,9 @@ fn help_unknown_subcommand() {
 
 #[test]
 fn help_unknown_subsubcommand() {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("python").arg("foobar"), @r"
+    uv_snapshot!(context.filters(), context.help().arg("python").arg("foobar"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -963,7 +973,7 @@ fn help_unknown_subsubcommand() {
 
 #[test]
 fn help_with_global_option() {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     uv_snapshot!(context.filters(), context.help().arg("--no-cache"), @r#"
     success: true
@@ -1015,8 +1025,7 @@ fn help_with_global_option() {
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
           --native-tls
-              Whether to load TLS certificates from the platform's native certificate store [env:
-              UV_NATIVE_TLS=]
+              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -1045,9 +1054,9 @@ fn help_with_global_option() {
 
 #[test]
 fn help_with_help() {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("--help"), @r###"
+    uv_snapshot!(context.filters(), context.help().arg("--help"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1059,14 +1068,14 @@ fn help_with_help() {
       --no-pager Disable pager when printing help
 
     ----- stderr -----
-    "###);
+    ");
 }
 
 #[test]
 fn help_with_version() {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("--version"), @r"
+    uv_snapshot!(context.filters(), context.help().arg("--version"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1084,7 +1093,7 @@ fn help_with_version() {
 
 #[test]
 fn help_with_no_pager() {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     // We can't really test whether the --no-pager option works with a snapshot test.
     // It's still nice to have a test for the option to confirm the option exists.
@@ -1138,8 +1147,7 @@ fn help_with_no_pager() {
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
           --native-tls
-              Whether to load TLS certificates from the platform's native certificate store [env:
-              UV_NATIVE_TLS=]
+              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>

@@ -36,7 +36,6 @@ pub(crate) fn pip_show(
     preview: Preview,
 ) -> Result<ExitStatus> {
     if packages.is_empty() {
-        #[allow(clippy::print_stderr)]
         {
             writeln!(
                 printer.stderr(),

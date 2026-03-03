@@ -11,7 +11,7 @@ bitflags::bitflags! {
 }
 
 /// Initialize the environment flags.
-#[allow(clippy::result_unit_err)]
+#[expect(clippy::result_unit_err)]
 pub fn init(flags: EnvironmentFlags) -> Result<(), ()> {
     FLAGS.set(flags).map_err(|_| ())
 }

@@ -1,4 +1,3 @@
-#[cfg(feature = "schemars")]
 use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
@@ -39,7 +38,7 @@ impl GroupName {
     /// Create a validated, normalized group name.
     ///
     /// At present, this is no more efficient than calling [`GroupName::from_str`].
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(clippy::needless_pass_by_value)]
     pub fn from_owned(name: String) -> Result<Self, InvalidNameError> {
         validate_and_normalize_ref(&name).map(Self)
     }
@@ -148,7 +147,7 @@ impl<'de> Deserialize<'de> for PipGroupName {
     where
         D: Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
+        let s = <Cow<'_, str>>::deserialize(deserializer)?;
         Self::from_str(&s).map_err(serde::de::Error::custom)
     }
 }

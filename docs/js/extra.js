@@ -88,6 +88,8 @@ document$.subscribe(function () {
       "concepts/projects/run/#legacy-scripts-on-windows",
     "concepts/projects/sync/#checking-if-the-lockfile-is-up-to-date":
       "concepts/projects/sync/#checking-the-lockfile",
+    "concepts/projects/sync/#retaining-extraneous-packages":
+      "concepts/projects/sync/#handling-of-extraneous-packages",
     "concepts/authentication/#git-authentication":
       "concepts/authentication/git/",
     "concepts/authentication/#git-credential-helpers":

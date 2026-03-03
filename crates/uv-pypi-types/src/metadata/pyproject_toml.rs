@@ -86,5 +86,5 @@ pub(super) struct Tool {
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
-#[allow(clippy::empty_structs_with_brackets)]
+#[expect(clippy::empty_structs_with_brackets)]
 pub(super) struct ToolPoetry {}

@@ -5,7 +5,7 @@ use std::ops::Bound;
 use indexmap::IndexSet;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use pubgrub::{DerivationTree, Derived, External, Map, Range, ReportFormatter, Term};
+use pubgrub::{DerivationTree, Derived, External, Map, Range, Ranges, ReportFormatter, Term};
 use rustc_hash::FxHashMap;
 
 use uv_configuration::{IndexStrategy, NoBinary, NoBuild};
@@ -14,7 +14,8 @@ use uv_distribution_types::{
     IndexLocations, IndexMetadata, IndexUrl, RequiresPython,
 };
 use uv_normalize::PackageName;
-use uv_pep440::{Version, VersionSpecifiers};
+use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
+use uv_pep508::{MarkerEnvironment, MarkerExpression, MarkerTree, MarkerValueVersion};
 use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, Tags};
 
 use crate::candidate_selector::CandidateSelector;
@@ -28,7 +29,9 @@ use crate::resolver::{
     MetadataUnavailable, UnavailableErrorChain, UnavailablePackage, UnavailableReason,
     UnavailableVersion,
 };
-use crate::{Flexibility, InMemoryIndex, Options, ResolverEnvironment, VersionsResponse};
+use crate::{
+    ExcludeNewerValue, Flexibility, InMemoryIndex, Options, ResolverEnvironment, VersionsResponse,
+};
 
 #[derive(Debug)]
 pub(crate) struct PubGrubReportFormatter<'a> {
@@ -535,11 +538,30 @@ impl PubGrubReportFormatter<'_> {
         fork_urls: &ForkUrls,
         fork_indexes: &ForkIndexes,
         env: &ResolverEnvironment,
+        current_environment: &MarkerEnvironment,
         tags: Option<&Tags>,
         workspace_members: &BTreeSet<PackageName>,
         options: &Options,
         output_hints: &mut IndexSet<PubGrubHint>,
     ) {
+        // Check for disjoint target hints (only applicable to universal resolution).
+        if let Some(markers) = env.fork_markers() {
+            // TODO(konsti): This is a crude approximation to telling the user the difference
+            // between their Python version and the relevant Python version range from the marker.
+            let current_python_version = current_environment.python_version().version.clone();
+            let current_python_marker = MarkerTree::expression(MarkerExpression::Version {
+                key: MarkerValueVersion::PythonVersion,
+                specifier: VersionSpecifier::equals_version(current_python_version.clone()),
+            });
+            if markers.is_disjoint(current_python_marker) {
+                output_hints.insert(PubGrubHint::DisjointPythonVersion {
+                    python_version: current_python_version,
+                });
+            } else if !markers.evaluate(current_environment, &[]) {
+                output_hints.insert(PubGrubHint::DisjointEnvironment);
+            }
+        }
+
         match derivation_tree {
             DerivationTree::External(External::Custom(package, set, reason)) => {
                 if let Some(name) = package.name_no_root() {
@@ -618,6 +640,21 @@ impl PubGrubReportFormatter<'_> {
                         incomplete_packages,
                         output_hints,
                     );
+
+                    if let Some(exclude_newer) = options.exclude_newer.exclude_newer_package(name) {
+                        if self
+                            .available_versions
+                            .get(name)
+                            .is_some_and(BTreeSet::is_empty)
+                            && Self::has_versions_in_index(name, index, fork_indexes)
+                        {
+                            output_hints.insert(PubGrubHint::ExcludeNewer {
+                                package: name.clone(),
+                                per_package: options.exclude_newer.package.contains_key(name),
+                                exclude_newer,
+                            });
+                        }
+                    }
                 }
             }
             DerivationTree::External(External::FromDependencyOf(
@@ -683,6 +720,7 @@ impl PubGrubReportFormatter<'_> {
                     fork_urls,
                     fork_indexes,
                     env,
+                    current_environment,
                     tags,
                     workspace_members,
                     options,
@@ -700,6 +738,7 @@ impl PubGrubReportFormatter<'_> {
                     fork_urls,
                     fork_indexes,
                     env,
+                    current_environment,
                     tags,
                     workspace_members,
                     options,
@@ -752,7 +791,9 @@ impl PubGrubReportFormatter<'_> {
                     })
                 }
             }
-            IncompatibleTag::Abi | IncompatibleTag::AbiPythonVersion => {
+            IncompatibleTag::Abi
+            | IncompatibleTag::FreethreadedAbi
+            | IncompatibleTag::AbiPythonVersion => {
                 let best = tags.and_then(Tags::abi_tag);
                 let tags = prioritized
                     .abi_tags()
@@ -1012,6 +1053,30 @@ impl PubGrubReportFormatter<'_> {
             }
         }
     }
+
+    fn has_versions_in_index(
+        name: &PackageName,
+        index: &InMemoryIndex,
+        fork_indexes: &ForkIndexes,
+    ) -> bool {
+        let response = if let Some(url) = fork_indexes.get(name).map(IndexMetadata::url) {
+            index.explicit().get(&(name.clone(), url.clone()))
+        } else {
+            index.implicit().get(name)
+        };
+
+        let Some(response) = response else {
+            return false;
+        };
+
+        let VersionsResponse::Found(ref version_maps) = *response else {
+            return false;
+        };
+
+        version_maps
+            .iter()
+            .any(|vm| vm.iter(&Ranges::full()).next().is_some())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1180,6 +1245,20 @@ pub(crate) enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         tags: BTreeSet<PlatformTag>,
     },
+    /// All versions of a package were excluded by `exclude-newer`.
+    ExcludeNewer {
+        package: PackageName,
+        per_package: bool,
+        // excluded from `PartialEq` and `Hash`
+        exclude_newer: ExcludeNewerValue,
+    },
+    /// The resolution failed for a Python version that is different from the current Python version.
+    DisjointPythonVersion {
+        // excluded from `PartialEq` and `Hash`
+        python_version: Version,
+    },
+    /// The resolution failed for an environment that is different from the current environment.
+    DisjointEnvironment,
 }
 
 /// This private enum mirrors [`PubGrubHint`] but only includes fields that should be
@@ -1256,6 +1335,12 @@ enum PubGrubHintCore {
     PlatformTags {
         package: PackageName,
     },
+    ExcludeNewer {
+        package: PackageName,
+        per_package: bool,
+    },
+    DisjointPythonVersion,
+    DisjointEnvironment,
 }
 
 impl From<PubGrubHint> for PubGrubHintCore {
@@ -1322,6 +1407,16 @@ impl From<PubGrubHint> for PubGrubHintCore {
             PubGrubHint::LanguageTags { package, .. } => Self::LanguageTags { package },
             PubGrubHint::AbiTags { package, .. } => Self::AbiTags { package },
             PubGrubHint::PlatformTags { package, .. } => Self::PlatformTags { package },
+            PubGrubHint::ExcludeNewer {
+                package,
+                per_package,
+                ..
+            } => Self::ExcludeNewer {
+                package,
+                per_package,
+            },
+            PubGrubHint::DisjointPythonVersion { .. } => Self::DisjointPythonVersion,
+            PubGrubHint::DisjointEnvironment => Self::DisjointEnvironment,
         }
     }
 }
@@ -1750,6 +1845,57 @@ impl std::fmt::Display for PubGrubHint {
                     tags.iter()
                         .map(|tag| format!("`{}`", tag.cyan()))
                         .join(", "),
+                )
+            }
+            Self::ExcludeNewer {
+                package,
+                per_package,
+                exclude_newer,
+            } => {
+                if *per_package {
+                    write!(
+                        f,
+                        "{}{} `{}` was filtered by `{}` to only include packages uploaded \
+                        before {}. Consider removing the setting or updating it to a later date.",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        package.cyan(),
+                        "exclude-newer-package".green(),
+                        exclude_newer.cyan(),
+                    )
+                } else {
+                    write!(
+                        f,
+                        "{}{} `{}` was filtered by `{}` to only include packages uploaded \
+                        before {}. Consider using `{}` to override the cutoff for this package.",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        package.cyan(),
+                        "exclude-newer".green(),
+                        exclude_newer.cyan(),
+                        "exclude-newer-package".green(),
+                    )
+                }
+            }
+            Self::DisjointPythonVersion { python_version } => {
+                write!(
+                    f,
+                    "{}{} While the active Python version is {}, \
+                    the resolution failed for other Python versions supported by your \
+                    project. Consider limiting your project's supported Python versions \
+                    using `requires-python`.",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    python_version.cyan(),
+                )
+            }
+            Self::DisjointEnvironment => {
+                write!(
+                    f,
+                    "{}{} The resolution failed for an environment that is not the current one, \
+                    consider limiting the environments with `tool.uv.environments`.",
+                    "hint".bold().cyan(),
+                    ":".bold(),
                 )
             }
         }

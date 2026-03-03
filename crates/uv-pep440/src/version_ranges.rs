@@ -621,4 +621,31 @@ mod tests {
         let v = "0.12.0.post1".parse::<Version>().unwrap();
         assert!(!range.contains(&v), "should exclude 0.12.0.post1");
     }
+
+    /// Do not panic with `u64::MAX` causing an `u64::MAX + 1` overflow.
+    #[test]
+    fn u64_max_version_segments_rejected_at_parse_time() {
+        assert!(
+            "~=18446744073709551615.0"
+                .parse::<VersionSpecifier>()
+                .is_err()
+        );
+        assert!(
+            "==18446744073709551615.*"
+                .parse::<VersionSpecifier>()
+                .is_err()
+        );
+
+        // u64::MAX - 1 is still accepted.
+        assert!(
+            "~=18446744073709551614.0"
+                .parse::<VersionSpecifier>()
+                .is_ok()
+        );
+        assert!(
+            "==18446744073709551614.*"
+                .parse::<VersionSpecifier>()
+                .is_ok()
+        );
+    }
 }

@@ -6,7 +6,7 @@ use diskus::DiskUsage;
 use crate::commands::{ExitStatus, human_readable_bytes};
 use crate::printer::Printer;
 use uv_cache::Cache;
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 use uv_warnings::warn_user;
 
 /// Display the total size of the cache.
@@ -16,10 +16,10 @@ pub(crate) fn cache_size(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    if !preview.is_enabled(PreviewFeatures::CACHE_SIZE) {
+    if !preview.is_enabled(PreviewFeature::CacheSize) {
         warn_user!(
             "`uv cache size` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeatures::CACHE_SIZE
+            PreviewFeature::CacheSize
         );
     }
 

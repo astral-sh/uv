@@ -92,7 +92,7 @@ impl Platform {
             return true;
         }
 
-        #[allow(clippy::unnested_or_patterns)]
+        #[expect(clippy::unnested_or_patterns)]
         if self.os.is_windows()
             && matches!(
                 (self.arch.family(), other.arch.family()),

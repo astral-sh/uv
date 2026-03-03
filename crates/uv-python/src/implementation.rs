@@ -49,10 +49,19 @@ impl ImplementationName {
         }
     }
 
+    /// The executable name used in distributions of this implementation.
     pub fn executable_name(self) -> &'static str {
         match self {
             Self::CPython | Self::Pyodide => "python",
             Self::PyPy | Self::GraalPy => self.into(),
+        }
+    }
+
+    /// The name used when installing this implementation as an executable into the bin directory.
+    pub fn executable_install_name(self) -> &'static str {
+        match self {
+            Self::Pyodide => "pyodide",
+            _ => self.executable_name(),
         }
     }
 
@@ -77,6 +86,13 @@ impl LenientImplementationName {
     pub fn executable_name(&self) -> &str {
         match self {
             Self::Known(implementation) => implementation.executable_name(),
+            Self::Unknown(name) => name,
+        }
+    }
+
+    pub fn executable_install_name(&self) -> &str {
+        match self {
+            Self::Known(implementation) => implementation.executable_install_name(),
             Self::Unknown(name) => name,
         }
     }

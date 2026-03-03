@@ -14,7 +14,7 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// List installed tools.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn list(
     show_paths: bool,
     show_version_specifiers: bool,

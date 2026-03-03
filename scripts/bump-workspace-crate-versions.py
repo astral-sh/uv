@@ -20,6 +20,37 @@ NO_BUMP_CRATES = {"uv", "uv-build", "uv-version"}
 
 
 def main() -> None:
+    # Pre-sync NO_BUMP_CRATES versions before running cargo metadata.
+    #
+    # Rooster updates crate versions but isn't workspace-aware, so it doesn't update
+    # the workspace dependency pins in the root Cargo.toml. This can cause cargo metadata
+    # to fail with version mismatches (e.g., when going from 0.9.x to 0.10.0).
+    # We fix the pins first by reading the crate versions directly.
+    script_dir = pathlib.Path(__file__).parent
+    workspace_manifest = script_dir.parent / "Cargo.toml"
+    workspace_manifest_contents = workspace_manifest.read_text()
+    parsed_workspace_manifest = tomllib.loads(workspace_manifest_contents)
+
+    for crate_name in NO_BUMP_CRATES:
+        crate_manifest = script_dir.parent / "crates" / crate_name / "Cargo.toml"
+        if not crate_manifest.exists():
+            continue
+        crate_version = tomllib.loads(crate_manifest.read_text())["package"]["version"]
+        manifest_dependency = parsed_workspace_manifest["workspace"][
+            "dependencies"
+        ].get(crate_name)
+        if manifest_dependency is None:
+            continue
+        manifest_version = manifest_dependency["version"]
+        if manifest_version != crate_version:
+            workspace_manifest_contents = workspace_manifest_contents.replace(
+                f'{crate_name} = {{ version = "{manifest_version}"',
+                f'{crate_name} = {{ version = "{crate_version}"',
+            )
+
+    workspace_manifest.write_text(workspace_manifest_contents)
+
+    # Now cargo metadata will succeed
     result = subprocess.run(
         ["cargo", "metadata", "--format-version", "1"],
         capture_output=True,
@@ -29,7 +60,6 @@ def main() -> None:
     content = json.loads(result.stdout)
     packages = {package["id"]: package for package in content["packages"]}
 
-    workspace_manifest = pathlib.Path(content["workspace_root"]) / "Cargo.toml"
     workspace_manifest_contents = workspace_manifest.read_text()
     parsed_workspace_manifest = tomllib.loads(workspace_manifest_contents)
 

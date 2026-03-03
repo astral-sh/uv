@@ -86,7 +86,7 @@ impl DependencyGroups {
     }
 
     /// Create from raw CLI args
-    #[allow(clippy::fn_params_excessive_bools)]
+    #[expect(clippy::fn_params_excessive_bools)]
     pub fn from_args(
         dev: bool,
         no_dev: bool,

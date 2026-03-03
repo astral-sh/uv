@@ -40,7 +40,7 @@ use crate::{
 use windows::Win32::Foundation::{APPMODEL_ERROR_NO_PACKAGE, ERROR_CANT_ACCESS_FILE, WIN32_ERROR};
 
 /// A Python executable and its associated platform markers.
-#[allow(clippy::struct_excessive_bools)]
+#[expect(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub struct Interpreter {
     platform: Platform,
@@ -920,7 +920,7 @@ pub enum InterpreterInfoError {
     EmscriptenNotPyodide,
 }
 
-#[allow(clippy::struct_excessive_bools)]
+#[expect(clippy::struct_excessive_bools)]
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct InterpreterInfo {
     platform: Platform,

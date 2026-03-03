@@ -6,7 +6,7 @@ use either::Either;
 use path_slash::PathExt;
 
 /// The current working directory.
-#[allow(clippy::exit, clippy::print_stderr)]
+#[expect(clippy::print_stderr)]
 pub static CWD: LazyLock<PathBuf> = LazyLock::new(|| {
     std::env::current_dir().unwrap_or_else(|_e| {
         eprintln!("Current directory does not exist");
@@ -430,11 +430,11 @@ impl<'de> serde::de::Deserialize<'de> for PortablePathBuf {
     where
         D: serde::de::Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
+        let s = <Cow<'_, str>>::deserialize(deserializer)?;
         if s == "." {
             Ok(Self(PathBuf::new().into_boxed_path()))
         } else {
-            Ok(Self(PathBuf::from(s).into_boxed_path()))
+            Ok(Self(PathBuf::from(s.as_ref()).into_boxed_path()))
         }
     }
 }

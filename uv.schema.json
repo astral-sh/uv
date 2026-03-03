@@ -178,7 +178,7 @@
       "description": "Limit candidate packages to those that were uploaded prior to the given date.\n\nAccepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), a \"friendly\" duration (e.g.,\n`24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`, `P7D`, `P30D`).\n\nDurations do not respect semantics of the local time zone and are always resolved to a fixed\nnumber of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).\nCalendar units such as months and years are not allowed.",
       "anyOf": [
         {
-          "$ref": "#/definitions/ExcludeNewerTimestamp"
+          "$ref": "#/definitions/ExcludeNewerValue"
         },
         {
           "type": "null"
@@ -243,6 +243,28 @@
         }
       ]
     },
+    "http-proxy": {
+      "description": "The URL of the HTTP proxy to use.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ProxyUrl"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "https-proxy": {
+      "description": "The URL of the HTTPS proxy to use.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ProxyUrl"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "index": {
       "description": "The indexes to use when resolving dependencies.\n\nAccepts either a repository compliant with [PEP 503](https://peps.python.org/pep-0503/)\n(the simple repository API), or a local directory laid out in the same format.\n\nIndexes are considered in the order in which they're defined, such that the first-defined\nindex has the highest priority. Further, the indexes provided by this setting are given\nhigher priority than any indexes specified via [`index_url`](#index-url) or\n[`extra_index_url`](#extra-index-url). uv will only consider the first index that contains\na given package, unless an alternative [index strategy](#index-strategy) is specified.\n\nIf an index is marked as `explicit = true`, it will be used exclusively for the\ndependencies that select it explicitly via `[tool.uv.sources]`, as in:\n\n```toml\n[[tool.uv.index]]\nname = \"pytorch\"\nurl = \"https://download.pytorch.org/whl/cu121\"\nexplicit = true\n\n[tool.uv.sources]\ntorch = { index = \"pytorch\" }\n```\n\nIf an index is marked as `default = true`, it will be moved to the end of the prioritized list, such that it is\ngiven the lowest priority when resolving packages. Additionally, marking an index as default will disable the\nPyPI default index.",
       "type": ["array", "null"],
@@ -285,7 +307,7 @@
       ]
     },
     "link-mode": {
-      "description": "The method to use when installing packages from the global cache.\n\nDefaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and\nWindows.\n\nWARNING: The use of symlink link mode is discouraged, as they create tight coupling between\nthe cache and the target environment. For example, clearing the cache (`uv cache clean`)\nwill break all installed packages by way of removing the underlying source files. Use\nsymlinks with caution.",
+      "description": "The method to use when installing packages from the global cache.\n\nDefaults to `clone` (also known as Copy-on-Write) on macOS and Linux, and `hardlink` on\nWindows.\n\nWARNING: The use of symlink link mode is discouraged, as they create tight coupling between\nthe cache and the target environment. For example, clearing the cache (`uv cache clean`)\nwill break all installed packages by way of removing the underlying source files. Use\nsymlinks with caution.",
       "anyOf": [
         {
           "$ref": "#/definitions/LinkMode"
@@ -344,9 +366,23 @@
       "description": "Ignore all registry indexes (e.g., PyPI), instead relying on direct URL dependencies and\nthose provided via `--find-links`.",
       "type": ["boolean", "null"]
     },
+    "no-proxy": {
+      "description": "A list of hosts to exclude from proxying.",
+      "type": ["array", "null"],
+      "items": {
+        "type": "string"
+      }
+    },
     "no-sources": {
       "description": "Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the\nstandards-compliant, publishable package metadata, as opposed to using any local or Git\nsources.",
       "type": ["boolean", "null"]
+    },
+    "no-sources-package": {
+      "description": "Ignore `tool.uv.sources` for the specified packages.",
+      "type": ["array", "null"],
+      "items": {
+        "$ref": "#/definitions/PackageName"
+      }
     },
     "offline": {
       "description": "Disable network access, relying only on locally cached data and locally available files.",
@@ -771,10 +807,10 @@
     "ExcludeNewerPackage": {
       "type": "object",
       "additionalProperties": {
-        "$ref": "#/definitions/ExcludeNewerTimestamp"
+        "$ref": "#/definitions/PackageExcludeNewer"
       }
     },
-    "ExcludeNewerTimestamp": {
+    "ExcludeNewerValue": {
       "description": "Exclude distributions uploaded after the given timestamp.\n\nAccepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`), as well as relative durations (e.g., `1 week`, `30 days`, `6 months`). Relative durations are resolved to a timestamp at lock time.",
       "type": "string"
     },
@@ -1015,24 +1051,25 @@
       ]
     },
     "LinkMode": {
+      "description": "The method to use when linking.\n\nDefaults to [`Clone`](LinkMode::Clone) on macOS and Linux (which support copy-on-write on\nAPFS and btrfs/xfs/bcachefs respectively), and [`Hardlink`](LinkMode::Hardlink) on other\nplatforms.",
       "oneOf": [
         {
-          "description": "Clone (i.e., copy-on-write) packages from the wheel into the `site-packages` directory.",
+          "description": "Clone (i.e., copy-on-write) packages from the source into the destination.",
           "type": "string",
           "const": "clone"
         },
         {
-          "description": "Copy packages from the wheel into the `site-packages` directory.",
+          "description": "Copy packages from the source into the destination.",
           "type": "string",
           "const": "copy"
         },
         {
-          "description": "Hard link packages from the wheel into the `site-packages` directory.",
+          "description": "Hard link packages from the source into the destination.",
           "type": "string",
           "const": "hardlink"
         },
         {
-          "description": "Symbolically link packages from the wheel into the `site-packages` directory.",
+          "description": "Symbolically link packages from the source into the destination.",
           "type": "string",
           "const": "symlink"
         }
@@ -1064,6 +1101,18 @@
       "additionalProperties": {
         "$ref": "#/definitions/ConfigSettings"
       }
+    },
+    "PackageExcludeNewer": {
+      "oneOf": [
+        {
+          "description": "Disable exclude-newer for this package.",
+          "type": "boolean",
+          "const": false
+        },
+        {
+          "$ref": "#/definitions/ExcludeNewerValue"
+        }
+      ]
     },
     "PackageName": {
       "description": "The normalized name of a package.\n\nConverts the name to lowercase and collapses runs of `-`, `_`, and `.` down to a single `-`.\nFor example, `---`, `.`, and `__` are all converted to a single `-`.\n\nSee: <https://packaging.python.org/en/latest/specifications/name-normalization/>",
@@ -1175,7 +1224,7 @@
           "description": "Limit candidate packages to those that were uploaded prior to a given point in time.\n\nAccepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,\n`2006-12-02T02:07:43Z`). A full timestamp is required to ensure that the resolver will\nbehave consistently across timezones.",
           "anyOf": [
             {
-              "$ref": "#/definitions/ExcludeNewerTimestamp"
+              "$ref": "#/definitions/ExcludeNewerValue"
             },
             {
               "type": "null"
@@ -1292,7 +1341,7 @@
           ]
         },
         "link-mode": {
-          "description": "The method to use when installing packages from the global cache.\n\nDefaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and\nWindows.\n\nWARNING: The use of symlink link mode is discouraged, as they create tight coupling between\nthe cache and the target environment. For example, clearing the cache (`uv cache clean`)\nwill break all installed packages by way of removing the underlying source files. Use\nsymlinks with caution.",
+          "description": "The method to use when installing packages from the global cache.\n\nDefaults to `clone` (also known as Copy-on-Write) on macOS and Linux, and `hardlink` on\nWindows.\n\nWARNING: The use of symlink link mode is discouraged, as they create tight coupling between\nthe cache and the target environment. For example, clearing the cache (`uv cache clean`)\nwill break all installed packages by way of removing the underlying source files. Use\nsymlinks with caution.",
           "anyOf": [
             {
               "$ref": "#/definitions/LinkMode"
@@ -1357,6 +1406,13 @@
         "no-sources": {
           "description": "Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the\nstandards-compliant, publishable package metadata, as opposed to using any local or Git\nsources.",
           "type": ["boolean", "null"]
+        },
+        "no-sources-package": {
+          "description": "Ignore `tool.uv.sources` for the specified packages.",
+          "type": ["array", "null"],
+          "items": {
+            "$ref": "#/definitions/PackageName"
+          }
         },
         "no-strip-extras": {
           "description": "Include extras in the output file.\n\nBy default, uv strips extras, as any packages pulled in by the extras are already included\nas dependencies in the output file directly. Further, output files generated with\n`--no-strip-extras` cannot be used as constraints files in `install` and `sync` invocations.",
@@ -1521,6 +1577,11 @@
         }
       ]
     },
+    "ProxyUrl": {
+      "description": "A proxy URL (e.g., `http://proxy.example.com:8080`).",
+      "type": "string",
+      "format": "uri"
+    },
     "PythonDownloads": {
       "oneOf": [
         {
@@ -1633,7 +1694,8 @@
           ],
           "default": null
         }
-      }
+      },
+      "additionalProperties": false
     },
     "SchemaConflictSet": {
       "description": "Like [`ConflictSet`], but for deserialization in `pyproject.toml`.\n\nThe schema format is different from the in-memory format. Specifically, the\nschema format does not allow specifying the package name (or will make it\noptional in the future), where as the in-memory format needs the package\nname.",
@@ -2336,6 +2398,16 @@
           "description": "Use the PyTorch index for CUDA 8.0.",
           "type": "string",
           "const": "cu80"
+        },
+        {
+          "description": "Use the PyTorch index for ROCm 7.1.",
+          "type": "string",
+          "const": "rocm7.1"
+        },
+        {
+          "description": "Use the PyTorch index for ROCm 7.0.",
+          "type": "string",
+          "const": "rocm7.0"
         },
         {
           "description": "Use the PyTorch index for ROCm 6.4.",

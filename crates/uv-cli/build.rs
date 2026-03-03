@@ -19,7 +19,6 @@ fn main() {
 
     commit_info(&workspace_root);
 
-    #[allow(clippy::disallowed_methods)]
     let target = std::env::var(EnvVars::TARGET).unwrap();
     println!("cargo:rustc-env=RUST_HOST_TARGET={target}");
 }

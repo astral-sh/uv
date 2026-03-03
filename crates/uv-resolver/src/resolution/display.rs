@@ -50,7 +50,7 @@ impl<'a> DisplayResolutionGraph<'a> {
     /// output contain non-empty conflicting groups. That is, when using `uv
     /// pip compile`, specifying conflicts is not supported because their
     /// conditional logic cannot be encoded into a `requirements.txt`.
-    #[allow(clippy::fn_params_excessive_bools)]
+    #[expect(clippy::fn_params_excessive_bools)]
     pub fn new(
         underlying: &'a ResolverOutput,
         env: &'a ResolverEnvironment,

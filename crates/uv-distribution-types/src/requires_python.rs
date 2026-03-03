@@ -8,7 +8,7 @@ use uv_pep440::{
     release_specifiers_to_ranges,
 };
 use uv_pep508::{MarkerExpression, MarkerTree, MarkerValueVersion};
-use uv_platform_tags::{AbiTag, LanguageTag};
+use uv_platform_tags::{AbiTag, CPythonAbiVariants, LanguageTag};
 
 /// The `Requires-Python` requirement specifier.
 ///
@@ -310,7 +310,7 @@ impl RequiresPython {
                 let minor = version.release().get(1).copied()?;
                 let minor = u8::try_from(minor).ok()?;
                 Some(AbiTag::CPython {
-                    gil_disabled: false,
+                    variant: CPythonAbiVariants::default(),
                     python_version: (major, minor),
                 })
             }

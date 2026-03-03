@@ -48,16 +48,15 @@ pub async fn read_requirements_txt(
         .collect::<Result<Vec<_>, PreferenceError>>()?;
 
     // Apply the upgrade strategy to the requirements.
-    Ok(match upgrade {
+    Ok(if upgrade.is_none() {
         // Respect all pinned versions from the existing lockfile.
-        Upgrade::None => preferences,
-        // Ignore all pinned versions from the existing lockfile.
-        Upgrade::All => vec![],
-        // Ignore pinned versions for the specified packages.
-        Upgrade::Packages(packages) => preferences
+        preferences
+    } else {
+        // Ignore all pinned versions for packages that should be upgraded.
+        preferences
             .into_iter()
-            .filter(|preference| !packages.contains_key(preference.name()))
-            .collect(),
+            .filter(|preference| !upgrade.contains(preference.name()))
+            .collect()
     })
 }
 

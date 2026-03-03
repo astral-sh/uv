@@ -1,4 +1,4 @@
-#[allow(clippy::disallowed_types)]
+#[expect(clippy::disallowed_types)]
 use std::fs::{File, FileTimes};
 use std::io::Write;
 use std::path::PathBuf;
@@ -40,18 +40,17 @@ fn main() {
     );
 
     let json_data: serde_json::Value = serde_json::from_str(
-        #[allow(clippy::disallowed_methods)]
+        #[expect(clippy::disallowed_methods)]
         &fs::read_to_string(&version_metadata).expect("Failed to read download-metadata.json"),
     )
     .expect("Failed to parse JSON");
 
     let filtered_data = process_json(&json_data);
 
-    #[allow(clippy::disallowed_types)]
+    #[expect(clippy::disallowed_types)]
     let mut out_file = File::create(version_metadata_minified)
         .expect("failed to open download-metadata-minified.json");
 
-    #[allow(clippy::disallowed_methods)]
     out_file
         .write_all(
             serde_json::to_string(&filtered_data)
@@ -63,7 +62,7 @@ fn main() {
     // Cargo uses the modified times of the paths specified in
     // `rerun-if-changed`, so fetch the current file times and set them the same
     // on the output file.
-    #[allow(clippy::disallowed_methods)]
+    #[expect(clippy::disallowed_methods)]
     let meta =
         fs::metadata(version_metadata).expect("failed to read metadata for download-metadata.json");
 

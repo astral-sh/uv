@@ -65,7 +65,7 @@ fn split_glob(pattern: impl AsRef<str>) -> GlobParts {
 /// Classic trie with edges being path components and values being glob patterns.
 #[derive(Default)]
 struct Trie<'a> {
-    children: BTreeMap<Component<'a>, Trie<'a>>,
+    children: BTreeMap<Component<'a>, Self>,
     patterns: Vec<&'a Path>,
 }
 
@@ -81,7 +81,7 @@ impl<'a> Trie<'a> {
         }
     }
 
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(clippy::needless_pass_by_value)]
     fn collect_patterns(
         &self,
         pattern_prefix: PathBuf,
@@ -109,7 +109,6 @@ impl<'a> Trie<'a> {
         }
     }
 
-    #[allow(clippy::needless_pass_by_value)]
     fn collect_groups(&self, prefix: PathBuf, groups: &mut Vec<(PathBuf, Vec<PathBuf>)>) {
         // LCP-style grouping of patterns
         if self.patterns.is_empty() {

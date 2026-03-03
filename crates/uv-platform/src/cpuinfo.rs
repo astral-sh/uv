@@ -27,7 +27,7 @@ pub(crate) fn detect_hardware_floating_point_support() -> Result<bool, Error> {
 /// For non-Linux systems or architectures, the function will return `false` as hardware floating-point detection
 /// is not applicable outside of Linux ARM architectures.
 #[cfg(not(target_os = "linux"))]
-#[allow(clippy::unnecessary_wraps)]
+#[expect(clippy::unnecessary_wraps)]
 pub(crate) fn detect_hardware_floating_point_support() -> Result<bool, Error> {
     Ok(false) // Non-Linux or non-ARM systems: hardware floating-point detection is not applicable
 }

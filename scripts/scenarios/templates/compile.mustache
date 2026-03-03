@@ -3,7 +3,7 @@
 //! Generated with `{{generated_with}}`
 //! Scenarios from <{{generated_from}}>
 //!
-#![cfg(all(feature = "python", feature = "pypi", unix))]
+#![cfg(all(feature = "test-python", feature = "test-pypi", unix))]
 
 use std::env;
 use std::process::Command;
@@ -15,7 +15,7 @@ use predicates::prelude::predicate;
 
 use uv_static::EnvVars;
 
-use crate::common::{
+use uv_test::{
     TestContext, build_vendor_links_url, get_bin, packse_index_url, python_path_with_versions,
     uv_snapshot,
 };
@@ -24,7 +24,7 @@ use crate::common::{
 fn command(context: &TestContext, python_versions: &[&str]) -> Command {
     let python_path = python_path_with_versions(&context.temp_dir, python_versions)
         .expect("Failed to create Python test path");
-    let mut command = Command::new(get_bin());
+    let mut command = Command::new(get_bin!());
     command
         .arg("pip")
         .arg("compile")
@@ -51,11 +51,11 @@ fn command(context: &TestContext, python_versions: &[&str]) -> Command {
 {{/tree}}
 /// ```
 {{#python_patch}}
-#[cfg(feature = "python-patch")]
+#[cfg(feature = "test-python-patch")]
 {{/python_patch}}
 #[test]
 fn {{module_name}}() -> Result<()> {
-    let context = TestContext::new("{{environment.python}}");
+    let context = uv_test::test_context!("{{environment.python}}");
     let python_versions = &[{{#environment.additional_python}}"{{.}}", {{/environment.additional_python}}];
 
     // In addition to the standard filters, swap out package names for shorter messages

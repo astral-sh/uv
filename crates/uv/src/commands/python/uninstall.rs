@@ -12,7 +12,6 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, warn};
 
 use uv_fs::Simplified;
-use uv_preview::Preview;
 use uv_python::downloads::PythonDownloadRequest;
 use uv_python::managed::{
     ManagedPythonInstallations, PythonMinorVersionLink, python_executable_dir,
@@ -30,14 +29,13 @@ pub(crate) async fn uninstall(
     targets: Vec<String>,
     all: bool,
     printer: Printer,
-    preview: Preview,
 ) -> Result<ExitStatus> {
     let installations = ManagedPythonInstallations::from_settings(install_dir)?.init()?;
 
     let _lock = installations.lock().await?;
 
     // Perform the uninstallation.
-    do_uninstall(&installations, targets, all, printer, preview).await?;
+    do_uninstall(&installations, targets, all, printer).await?;
 
     // Clean up any empty directories.
     if uv_fs::directories(installations.root())?.all(|path| uv_fs::is_temporary(&path)) {
@@ -66,7 +64,6 @@ async fn do_uninstall(
     targets: Vec<String>,
     all: bool,
     printer: Printer,
-    preview: Preview,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
@@ -241,7 +238,7 @@ async fn do_uninstall(
         .iter()
         .filter(|(minor_version, _)| uninstalled_minor_versions.contains(minor_version))
     {
-        installation.update_minor_version_link(preview)?;
+        installation.ensure_minor_version_link()?;
     }
     // For each uninstalled installation, check if there are no remaining installations
     // for its minor version. If there are none remaining, remove the symlink directory
@@ -249,7 +246,7 @@ async fn do_uninstall(
     for installation in &matching_installations {
         if !remaining_minor_versions.contains_key(installation.minor_version_key()) {
             if let Some(minor_version_link) =
-                PythonMinorVersionLink::from_installation(installation, preview)
+                PythonMinorVersionLink::from_installation(installation)
             {
                 if minor_version_link.exists() {
                     let result = if cfg!(windows) {

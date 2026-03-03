@@ -1,7 +1,8 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+
 use uv_auth::CredentialsCache;
-use uv_configuration::SourceStrategy;
+use uv_configuration::NoSources;
 use uv_distribution_types::{IndexLocations, Requirement};
 use uv_normalize::{GroupName, PackageName};
 use uv_workspace::dependency_groups::FlatDependencyGroups;
@@ -55,7 +56,7 @@ impl SourcedDependencyGroups {
         pyproject_path: &Path,
         git_member: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
-        source_strategy: SourceStrategy,
+        no_sources: NoSources,
         cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
@@ -74,9 +75,10 @@ impl SourcedDependencyGroups {
                     .expect("git checkout has a parent")
                     .to_path_buf()
             }),
-            members: match source_strategy {
-                SourceStrategy::Enabled => MemberDiscovery::default(),
-                SourceStrategy::Disabled => MemberDiscovery::None,
+            members: if no_sources.is_none() {
+                MemberDiscovery::default()
+            } else {
+                MemberDiscovery::None
             },
             ..DiscoveryOptions::default()
         };
@@ -92,8 +94,8 @@ impl SourcedDependencyGroups {
         let dependency_groups =
             FlatDependencyGroups::from_pyproject_toml(project.root(), project.pyproject_toml())?;
 
-        // If sources/indexes are disabled we can just stop here
-        let SourceStrategy::Enabled = source_strategy else {
+        // Early return if all sources are disabled
+        if matches!(no_sources, NoSources::All) {
             return Ok(Self {
                 name: project.project_name().cloned(),
                 dependency_groups: dependency_groups
@@ -108,7 +110,7 @@ impl SourcedDependencyGroups {
                     })
                     .collect(),
             });
-        };
+        }
 
         // Collect any `tool.uv.index` entries.
         let empty = vec![];
@@ -143,30 +145,38 @@ impl SourcedDependencyGroups {
                     .requirements
                     .into_iter()
                     .flat_map(|requirement| {
-                        let requirement_name = requirement.name.clone();
-                        let group = name.clone();
-                        let extra = None;
-                        LoweredRequirement::from_requirement(
-                            requirement,
-                            project.project_name(),
-                            project.root(),
-                            project_sources,
-                            project_indexes,
-                            extra,
-                            Some(&group),
-                            locations,
-                            project.workspace(),
-                            git_member,
-                            credentials_cache,
-                        )
-                        .map(move |requirement| match requirement {
-                            Ok(requirement) => Ok(requirement.into_inner()),
-                            Err(err) => Err(MetadataError::GroupLoweringError(
-                                group.clone(),
-                                requirement_name.clone(),
-                                Box::new(err),
-                            )),
-                        })
+                        // Check if sources should be disabled for this specific package
+                        if no_sources.for_package(&requirement.name) {
+                            vec![Ok(Requirement::from(requirement))].into_iter()
+                        } else {
+                            let requirement_name = requirement.name.clone();
+                            let group = name.clone();
+                            let extra = None;
+
+                            LoweredRequirement::from_requirement(
+                                requirement,
+                                project.project_name(),
+                                project.root(),
+                                project_sources,
+                                project_indexes,
+                                extra,
+                                Some(&group),
+                                locations,
+                                project.workspace(),
+                                git_member,
+                                credentials_cache,
+                            )
+                            .map(move |requirement| match requirement {
+                                Ok(requirement) => Ok(requirement.into_inner()),
+                                Err(err) => Err(MetadataError::GroupLoweringError(
+                                    group.clone(),
+                                    requirement_name.clone(),
+                                    Box::new(err),
+                                )),
+                            })
+                            .collect::<Vec<_>>()
+                            .into_iter()
+                        }
                     })
                     .collect::<Result<Box<_>, _>>()?;
                 Ok::<(GroupName, Box<_>), MetadataError>((name, requirements))

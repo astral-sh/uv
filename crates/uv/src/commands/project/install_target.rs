@@ -37,7 +37,7 @@ pub(crate) enum InstallTarget<'lock> {
         workspace: &'lock Workspace,
         lock: &'lock Lock,
     },
-    /// An entire workspace with a (legacy) non-project root.
+    /// An entire workspace with a non-project root.
     NonProjectWorkspace {
         workspace: &'lock Workspace,
         lock: &'lock Lock,
@@ -95,7 +95,17 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
         match self {
             Self::Project { name, .. } => Some(name),
             Self::Projects { .. } => None,
-            Self::Workspace { .. } => None,
+            Self::Workspace { lock, .. } => {
+                // If the workspace contains a single member at the root, it will be omitted from
+                // the list of workspace members encoded in the lockfile. In that case, identify
+                // the root project by its source so that install options (e.g.,
+                // `--no-emit-workspace`) can filter it correctly.
+                if lock.members().is_empty() {
+                    lock.root().map(Package::name)
+                } else {
+                    None
+                }
+            }
             Self::NonProjectWorkspace { .. } => None,
             Self::Script { .. } => None,
         }
@@ -261,7 +271,7 @@ impl<'lock> InstallTarget<'lock> {
     }
 
     /// Validate the extras requested by the [`ExtrasSpecification`].
-    #[allow(clippy::result_large_err)]
+    #[expect(clippy::result_large_err)]
     pub(crate) fn validate_extras(self, extras: &ExtrasSpecification) -> Result<(), ProjectError> {
         if extras.is_empty() {
             return Ok(());
@@ -317,7 +327,7 @@ impl<'lock> InstallTarget<'lock> {
     }
 
     /// Validate the dependency groups requested by the [`DependencyGroupSpecifier`].
-    #[allow(clippy::result_large_err)]
+    #[expect(clippy::result_large_err)]
     pub(crate) fn validate_groups(
         self,
         groups: &DependencyGroupsWithDefaults,

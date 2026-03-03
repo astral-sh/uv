@@ -51,7 +51,7 @@ impl IndexCacheControl {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case")]
 pub struct Index {
@@ -347,6 +347,18 @@ impl Index {
         self.url.root()
     }
 
+    /// If credentials are available (via the URL or environment) and [`AuthPolicy`] is
+    /// [`AuthPolicy::Auto`], promote to [`AuthPolicy::Always`] so that future operations
+    /// (e.g., `uv tool upgrade`) know that authentication is required even after the credentials
+    /// are stripped from the stored URL.
+    #[must_use]
+    pub fn with_promoted_auth_policy(mut self) -> Self {
+        if matches!(self.authenticate, AuthPolicy::Auto) && self.credentials().is_some() {
+            self.authenticate = AuthPolicy::Always;
+        }
+        self
+    }
+
     /// Retrieve the credentials for the index, either from the environment, or from the URL itself.
     pub fn credentials(&self) -> Option<Credentials> {
         // If the index is named, and credentials are provided via the environment, prefer those.
@@ -542,6 +554,56 @@ impl<'a> From<&'a IndexUrl> for IndexMetadataRef<'a> {
             url: value,
             format: IndexFormat::Simple,
         }
+    }
+}
+
+/// Wire type for deserializing an [`Index`] with validation.
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct IndexWire {
+    name: Option<IndexName>,
+    url: IndexUrl,
+    #[serde(default)]
+    explicit: bool,
+    #[serde(default)]
+    default: bool,
+    #[serde(default)]
+    format: IndexFormat,
+    publish_url: Option<DisplaySafeUrl>,
+    #[serde(default)]
+    authenticate: AuthPolicy,
+    #[serde(default)]
+    ignore_error_codes: Option<Vec<SerializableStatusCode>>,
+    #[serde(default)]
+    cache_control: Option<IndexCacheControl>,
+}
+
+impl<'de> Deserialize<'de> for Index {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let wire = IndexWire::deserialize(deserializer)?;
+
+        if wire.explicit && wire.name.is_none() {
+            return Err(serde::de::Error::custom(format!(
+                "An index with `explicit = true` requires a `name`: {}",
+                wire.url
+            )));
+        }
+
+        Ok(Self {
+            name: wire.name,
+            url: wire.url,
+            explicit: wire.explicit,
+            default: wire.default,
+            origin: None,
+            format: wire.format,
+            publish_url: wire.publish_url,
+            authenticate: wire.authenticate,
+            ignore_error_codes: wire.ignore_error_codes,
+            cache_control: wire.cache_control,
+        })
     }
 }
 

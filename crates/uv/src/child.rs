@@ -286,7 +286,7 @@ pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitS
         if let Ok(code) = u8::try_from(code) {
             Ok(ExitStatus::External(code))
         } else {
-            #[allow(clippy::exit)]
+            #[expect(clippy::exit)]
             std::process::exit(code);
         }
     } else {
