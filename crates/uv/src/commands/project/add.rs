@@ -1349,7 +1349,7 @@ impl AddTarget {
             }
             Self::Project(project, venv) => {
                 let project = project
-                    .with_pyproject_toml(
+                    .update_member(
                         toml::from_str(content).map_err(ProjectError::PyprojectTomlParse)?,
                     )?
                     .ok_or(ProjectError::PyprojectTomlUpdate)?;
