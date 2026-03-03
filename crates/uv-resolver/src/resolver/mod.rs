@@ -1973,6 +1973,24 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         if self.excludes.contains(&requirement.name) {
                             continue;
                         }
+                        // If the requirement's marker references extras that
+                        // are part of a declared conflict for this package,
+                        // the conflict system already handles proper forking
+                        // between them. Creating complementary deps would
+                        // interfere with conflict resolution.
+                        {
+                            let mut dominated_by_conflicts = false;
+                            requirement.marker.visit_extras(|op, extra_name| {
+                                if op == MarkerOperator::Equal
+                                    && self.conflicts.contains(name, extra_name)
+                                {
+                                    dominated_by_conflicts = true;
+                                }
+                            });
+                            if dominated_by_conflicts {
+                                continue;
+                            }
+                        }
                         // A base dep (without a URL) for the same name must
                         // already exist, confirming this is a conditional
                         // source split rather than a dep that only appears in
@@ -1996,11 +2014,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         let negated = requirement.marker.negate();
                         let mut base_marker = base.package.marker();
                         base_marker.and(negated);
-                        base.package =
-                            PubGrubPackage::from_package_url(requirement.name.clone(), base_marker);
+                        base.package = PubGrubPackage::from_package_preserving_extras(
+                            requirement.name.clone(),
+                            base_marker,
+                        );
 
                         deps.push(PubGrubDependency {
-                            package: PubGrubPackage::from_package_url(
+                            package: PubGrubPackage::from_package_preserving_extras(
                                 requirement.name.clone(),
                                 requirement.marker,
                             ),
