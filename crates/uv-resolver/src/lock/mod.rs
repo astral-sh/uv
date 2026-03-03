@@ -1793,27 +1793,28 @@ impl Lock {
                 // metadata object.
                 let parent = root.join(source_tree);
                 let path = parent.join("pyproject.toml");
-                let metadata =
-                    match fs_err::tokio::read_to_string(&path).await {
-                        Ok(contents) => {
-                            let pyproject_toml = toml::from_str::<PyProjectToml>(&contents)
-                                .map_err(|err| LockErrorKind::InvalidPyprojectToml {
+                let metadata = match fs_err::tokio::read_to_string(&path).await {
+                    Ok(contents) => {
+                        let pyproject_toml =
+                            PyProjectToml::from_toml(&contents).map_err(|err| {
+                                LockErrorKind::InvalidPyprojectToml {
                                     path: path.clone(),
                                     err,
-                                })?;
-                            database
-                                .requires_dist(&parent, &pyproject_toml)
-                                .await
-                                .map_err(|err| LockErrorKind::Resolution {
-                                    id: package.id.clone(),
-                                    err,
-                                })?
-                        }
-                        Err(err) if err.kind() == io::ErrorKind::NotFound => None,
-                        Err(err) => {
-                            return Err(LockErrorKind::UnreadablePyprojectToml { path, err }.into());
-                        }
-                    };
+                                }
+                            })?;
+                        database
+                            .requires_dist(&parent, &pyproject_toml)
+                            .await
+                            .map_err(|err| LockErrorKind::Resolution {
+                                id: package.id.clone(),
+                                err,
+                            })?
+                    }
+                    Err(err) if err.kind() == io::ErrorKind::NotFound => None,
+                    Err(err) => {
+                        return Err(LockErrorKind::UnreadablePyprojectToml { path, err }.into());
+                    }
+                };
 
                 let satisfied = metadata.is_some_and(|metadata| {
                     // Validate that the package is still dynamic.
@@ -5986,7 +5987,7 @@ enum LockErrorKind {
     InvalidPyprojectToml {
         path: PathBuf,
         #[source]
-        err: toml::de::Error,
+        err: uv_pypi_types::MetadataError,
     },
     /// An error that occurs when a workspace member has a non-local source.
     #[error("Workspace member `{id}` has non-local source", id = id.cyan())]
