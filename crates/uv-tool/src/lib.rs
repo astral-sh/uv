@@ -314,15 +314,12 @@ impl InstalledTools {
         let environment_path = self.tool_dir(name);
 
         // Remove any existing environment.
-        match fs_err::remove_dir_all(&environment_path) {
-            Ok(()) => {
-                debug!(
-                    "Removed existing environment for tool `{name}`: {}",
-                    environment_path.user_display()
-                );
-            }
-            Err(err) if err.kind() == io::ErrorKind::NotFound => (),
-            Err(err) => return Err(err.into()),
+        if environment_path.try_exists()? {
+            remove_virtualenv(&environment_path)?;
+            debug!(
+                "Removed existing environment for tool `{name}`: {}",
+                environment_path.user_display()
+            );
         }
 
         debug!(
