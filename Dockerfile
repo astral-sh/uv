@@ -1,6 +1,7 @@
 FROM --platform=$BUILDPLATFORM ubuntu:24.04@sha256:d1e2e92c075e5ca139d51a140fff46f84315c0fdce203eab2807c7e495eff4f9 AS build
 
 ARG UBUNTU_SNAPSHOT=20260301T000000Z
+ARG RUSTUP_VERSION=1.28.1
 
 ENV HOME="/root"
 WORKDIR $HOME
@@ -27,11 +28,15 @@ RUN case "$TARGETPLATFORM" in \
   *) exit 1 ;; \
   esac
 
-# Update rustup whenever we bump the rust version
-COPY rust-toolchain.toml rust-toolchain.toml
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --target $(cat rust_target.txt) --profile minimal --default-toolchain none
+RUN curl --proto '=https' --tlsv1.2 -sSf \
+  "https://static.rust-lang.org/rustup/archive/${RUSTUP_VERSION}/$(uname -m)-unknown-linux-gnu/rustup-init" \
+  -o rustup-init \
+  && chmod +x rustup-init \
+  && ./rustup-init -y --target $(cat rust_target.txt) --profile minimal --default-toolchain none \
+  && rm rustup-init
 ENV PATH="$HOME/.cargo/bin:$PATH"
 # Install the toolchain then the musl target
+COPY rust-toolchain.toml rust-toolchain.toml
 RUN rustup toolchain install
 RUN rustup target add $(cat rust_target.txt)
 
