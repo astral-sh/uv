@@ -6189,7 +6189,8 @@ fn sync_with_target_installs_missing_python() -> Result<()> {
     // Create a context that only has Python 3.11 available.
     let context = uv_test::test_context!("3.11")
         .with_python_download_cache()
-        .with_managed_python_dirs();
+        .with_managed_python_dirs()
+        .with_filtered_latest_python_versions();
 
     let target_dir = context.temp_dir.child("target-dir");
     let requirements = context.temp_dir.child("requirements.txt");
@@ -6205,7 +6206,7 @@ fn sync_with_target_installs_missing_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.13
+    Using CPython 3.12.[LATEST]
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
