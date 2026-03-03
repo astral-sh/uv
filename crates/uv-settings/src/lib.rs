@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use uv_client::{DEFAULT_CONNECT_TIMEOUT, DEFAULT_READ_TIMEOUT, DEFAULT_READ_TIMEOUT_UPLOAD};
 use uv_dirs::{system_config_file, user_config_dir};
+use uv_distribution_types::Origin;
 use uv_flags::EnvironmentFlags;
 use uv_fs::Simplified;
 use uv_static::{EnvVars, InvalidEnvironmentVariable, parse_boolish_environment_variable};
@@ -23,6 +24,12 @@ impl FilesystemOptions {
     /// Convert the [`FilesystemOptions`] into [`Options`].
     pub fn into_options(self) -> Options {
         self.0
+    }
+
+    /// Set the [`Origin`] on all indexes without an existing origin.
+    #[must_use]
+    pub fn with_origin(self, origin: Origin) -> Self {
+        Self(self.0.with_origin(origin))
     }
 }
 
@@ -48,7 +55,7 @@ impl FilesystemOptions {
             Ok(options) => {
                 tracing::debug!("Found user configuration in: `{}`", file.display());
                 validate_uv_toml(&file, &options)?;
-                Ok(Some(Self(options)))
+                Ok(Some(Self(options.with_origin(Origin::User))))
             }
             Err(Error::Io(err))
                 if matches!(
@@ -72,7 +79,7 @@ impl FilesystemOptions {
         tracing::debug!("Found system configuration in: `{}`", file.display());
         let options = read_file(&file)?;
         validate_uv_toml(&file, &options)?;
-        Ok(Some(Self(options)))
+        Ok(Some(Self(options.with_origin(Origin::System))))
     }
 
     /// Find the [`FilesystemOptions`] for the given path.
@@ -131,7 +138,7 @@ impl FilesystemOptions {
 
                 tracing::debug!("Found workspace configuration at `{}`", path.display());
                 validate_uv_toml(&path, &options)?;
-                return Ok(Some(Self(options)));
+                return Ok(Some(Self(options.with_origin(Origin::Project))));
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
             Err(err) => return Err(err.into()),
@@ -650,6 +657,7 @@ pub struct EnvironmentOptions {
     pub no_env_file: EnvFlag,
     pub venv_seed: EnvFlag,
     pub venv_clear: EnvFlag,
+    pub init_bare: EnvFlag,
 }
 
 impl EnvironmentOptions {
@@ -742,6 +750,7 @@ impl EnvironmentOptions {
             no_env_file: EnvFlag::new(EnvVars::UV_NO_ENV_FILE)?,
             venv_seed: EnvFlag::new(EnvVars::UV_VENV_SEED)?,
             venv_clear: EnvFlag::new(EnvVars::UV_VENV_CLEAR)?,
+            init_bare: EnvFlag::new(EnvVars::UV_INIT_BARE)?,
         })
     }
 }

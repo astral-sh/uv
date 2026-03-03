@@ -7,7 +7,6 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::Serialize;
-use tokio::sync::Semaphore;
 use tracing::debug;
 use unicode_width::UnicodeWidthStr;
 
@@ -117,7 +116,7 @@ pub(crate) async fn pip_list(
         .markers(environment.interpreter().markers())
         .platform(environment.interpreter().platform())
         .build();
-        let download_concurrency = Semaphore::new(concurrency.downloads);
+        let download_concurrency = concurrency.downloads_semaphore.clone();
 
         // Determine the platform tags.
         let interpreter = environment.interpreter();

@@ -42,9 +42,9 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup show
 
-      - uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
+      - uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098 # v7.3.1
         with:
-          version: "0.10.1"
+          version: "0.10.7"
 
       - name: "Install required Python versions"
         run: uv python install
@@ -60,6 +60,21 @@ jobs:
         # the login password doesn't matter, but the keyring must be unlocked for the tests to work
         run: gnome-keyring-daemon --components=secrets --daemonize --unlock <<< 'foobar'
 
+      - name: "Create btrfs filesystem"
+        run: |
+          sudo apt-get install -y btrfs-progs
+          truncate -s 1G /tmp/btrfs.img
+          mkfs.btrfs /tmp/btrfs.img
+          sudo mkdir /btrfs
+          sudo mount -o loop /tmp/btrfs.img /btrfs
+          sudo chown "$(id -u):$(id -g)" /btrfs
+
+      - name: "Create tmpfs filesystem"
+        run: |
+          sudo mkdir /tmpfs
+          sudo mount -t tmpfs -o size=256m tmpfs /tmpfs
+          sudo chown "$(id -u):$(id -g)" /tmpfs
+
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@542cebaaed782771e619bd5609d97659d109c492 # v2.66.7
         with:
@@ -70,6 +85,9 @@ jobs:
           # Retry more than default to reduce flakes in CI
           UV_HTTP_RETRIES: 5
           RUST_BACKTRACE: 1
+          UV_INTERNAL__TEST_COW_FS: /btrfs
+          UV_INTERNAL__TEST_NOCOW_FS: /tmpfs
+          UV_INTERNAL__TEST_ALT_FS: /tmpfs
         run: |
           cargo nextest run \
             --cargo-profile fast-build \
@@ -97,9 +115,15 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup show
 
-      - uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
+      - name: "Create HFS+ disk image (no reflink support)"
+        run: |
+          hdiutil create -size 256m -fs HFS+ -volname NoReflink /tmp/noreflink.dmg
+          hdiutil attach /tmp/noreflink.dmg
+          echo "HFS_MOUNT=/Volumes/NoReflink" >> "$GITHUB_ENV"
+
+      - uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098 # v7.3.1
         with:
-          version: "0.10.1"
+          version: "0.10.7"
 
       - name: "Install required Python versions"
         run: uv python install
@@ -114,6 +138,11 @@ jobs:
           # Retry more than default to reduce flakes in CI
           UV_HTTP_RETRIES: 5
           RUST_BACKTRACE: 1
+          # macOS tmpdir is on APFS which supports reflink
+          UV_INTERNAL__TEST_COW_FS: ${{ runner.temp }}
+          # HFS+ RAM disk does not support copy-on-write and is on a different device
+          UV_INTERNAL__TEST_NOCOW_FS: ${{ env.HFS_MOUNT }}
+          UV_INTERNAL__TEST_ALT_FS: ${{ env.HFS_MOUNT }}
         run: |
           cargo nextest run \
             --cargo-profile fast-build \
@@ -143,9 +172,9 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
 
-      - uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
+      - uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098 # v7.3.1
         with:
-          version: "0.10.1"
+          version: "0.10.7"
 
       - name: "Install required Python versions"
         run: uv python install

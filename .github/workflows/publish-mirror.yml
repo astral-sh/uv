@@ -1,0 +1,45 @@
+# Publish uv releases to a mirror
+#
+# Assumed to run as a subworkflow of .github/workflows/release.yml as a custom publish job
+name: publish-mirror
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  publish-mirror:
+    runs-on: ubuntu-latest
+    environment:
+      name: release
+    env:
+      VERSION: ${{ fromJson(inputs.plan).announcement_tag }}
+    steps:
+      - name: "Download GitHub Artifacts"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: artifacts-*
+          path: artifacts
+          merge-multiple: true
+      - name: "Upload to R2"
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.MIRROR_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.MIRROR_R2_SECRET_ACCESS_KEY }}
+          AWS_ENDPOINT_URL: https://${{ secrets.MIRROR_R2_CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          AWS_DEFAULT_REGION: auto
+          R2_BUCKET: ${{ secrets.MIRROR_R2_BUCKET_NAME }}
+          PROJECT: uv
+        run: |
+          aws s3 cp --recursive --output table --color on \
+            --exclude '*' \
+            --include '*.zip' --include '*.zip.sha256' \
+            --include '*.tar.gz' --include '*.tar.gz.sha256' \
+            --include sha256.sum --include '*.ps1' --include '*.sh' \
+            --cache-control "public, max-age=31536000, immutable" \
+            artifacts/ \
+            s3://${R2_BUCKET}/github/$PROJECT/releases/download/$VERSION/

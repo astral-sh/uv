@@ -486,7 +486,7 @@ pub(crate) async fn pip_install(
         exclude_newer.clone(),
         sources.clone(),
         WorkspaceCache::default(),
-        concurrency,
+        concurrency.clone(),
         preview,
     );
 
@@ -595,7 +595,7 @@ pub(crate) async fn pip_install(
             &flat_index,
             state.index(),
             &build_dispatch,
-            concurrency,
+            &concurrency,
             options,
             Box::new(DefaultResolveLogger),
             printer,
@@ -640,7 +640,7 @@ pub(crate) async fn pip_install(
         exclude_newer.clone(),
         sources,
         WorkspaceCache::default(),
-        concurrency,
+        concurrency.clone(),
         preview,
     );
 
@@ -658,7 +658,7 @@ pub(crate) async fn pip_install(
         &tags,
         &client,
         state.in_flight(),
-        concurrency,
+        &concurrency,
         &build_dispatch,
         &cache,
         &environment,

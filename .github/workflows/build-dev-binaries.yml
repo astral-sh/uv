@@ -190,15 +190,14 @@ jobs:
 
   build-binary-windows-aarch64:
     name: "windows aarch64"
-    timeout-minutes: 25
-    runs-on:
-      labels: windows-latest
+    timeout-minutes: 10
+    runs-on: windows-11-arm
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
-      - name: Create Dev Drive using ReFS
+      - name: Setup Dev Drive
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
 
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
@@ -211,20 +210,17 @@ jobs:
           workspaces: ${{ env.UV_WORKSPACE }}
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
-      - name: "Install cross target"
-        run: rustup target add aarch64-pc-windows-msvc
-
       - name: "Build"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: cargo build --profile no-debug --target aarch64-pc-windows-msvc
+        run: cargo build --profile no-debug --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: uv-windows-aarch64-${{ github.sha }}
           path: |
-            ${{ env.UV_WORKSPACE }}/target/aarch64-pc-windows-msvc/no-debug/uv.exe
-            ${{ env.UV_WORKSPACE }}/target/aarch64-pc-windows-msvc/no-debug/uvx.exe
+            ${{ env.UV_WORKSPACE }}/target/no-debug/uv.exe
+            ${{ env.UV_WORKSPACE }}/target/no-debug/uvx.exe
           retention-days: 1
 
   build-binary-msrv:

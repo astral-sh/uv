@@ -332,12 +332,17 @@ fn prune_stale_revision() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
-    context.temp_dir.child("src").child("__init__.py").touch()?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
     context.temp_dir.child("README").touch()?;
 
     let filters: Vec<_> = context

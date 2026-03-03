@@ -37,13 +37,13 @@ fn cache_init_failure() -> Result<()> {
     // Point the cache to a subdirectory within the read-only parent
     let cache_dir = cache_parent.child("cache");
 
-    let mut filters = context.filters();
     // Filter both the relative path (in the first line) and absolute path (in the cause)
-    filters.push((r"cache_parent/cache", "[CACHE_DIR]"));
-    filters.push((
-        r"failed to create directory `.*`",
-        "failed to create directory `[CACHE_DIR]`",
-    ));
+    let context = context
+        .with_filter((r"cache_parent/cache", "[CACHE_DIR]"))
+        .with_filter((
+            r"failed to create directory `.*`",
+            "failed to create directory `[CACHE_DIR]`",
+        ));
 
     // Build the sync command manually to use our custom cache directory.
     // We can't use context.sync() because it adds --cache-dir with the default cache.
@@ -56,7 +56,7 @@ fn cache_init_failure() -> Result<()> {
     context.add_shared_env(&mut command, false);
 
     // Running a command should fail with a chained error about cache initialization
-    uv_snapshot!(&filters, command, @"
+    uv_snapshot!(context.filters(), command, @"
     success: false
     exit_code: 2
     ----- stdout -----

@@ -13,6 +13,7 @@ use thiserror::Error;
 use tracing::{debug, instrument, trace};
 use uv_cache::Cache;
 use uv_client::BaseClient;
+use uv_distribution_types::RequiresPython;
 use uv_fs::Simplified;
 use uv_fs::which::is_executable;
 use uv_pep440::{
@@ -2241,8 +2242,53 @@ impl PythonRequest {
             Self::Key(download_request) => download_request
                 .version()
                 .and_then(VersionRequest::as_pep440_version),
-            _ => None,
+            Self::Default
+            | Self::Any
+            | Self::Directory(_)
+            | Self::File(_)
+            | Self::ExecutableName(_)
+            | Self::Implementation(_) => None,
         }
+    }
+
+    /// Convert an interpreter request into [`VersionSpecifiers`] representing the range of
+    /// compatible versions.
+    ///
+    /// Returns `None` if the request doesn't carry version constraints (e.g., a path or
+    /// executable name).
+    pub fn as_version_specifiers(&self) -> Option<VersionSpecifiers> {
+        match self {
+            Self::Version(version) | Self::ImplementationVersion(_, version) => {
+                version.as_version_specifiers()
+            }
+            Self::Key(download_request) => download_request
+                .version()
+                .and_then(VersionRequest::as_version_specifiers),
+            Self::Default
+            | Self::Any
+            | Self::Directory(_)
+            | Self::File(_)
+            | Self::ExecutableName(_)
+            | Self::Implementation(_) => None,
+        }
+    }
+
+    /// Returns `true` when this request is compatible with the given `requires-python` specifier.
+    ///
+    /// Requests without version constraints (e.g., paths, executable names) are always considered
+    /// compatible. For versioned requests, compatibility means the request's version range has a
+    /// non-empty intersection with the `requires-python` range.
+    pub fn intersects_requires_python(&self, requires_python: &RequiresPython) -> bool {
+        let Some(specifiers) = self.as_version_specifiers() else {
+            return true;
+        };
+
+        let request_range = release_specifiers_to_ranges(specifiers);
+        let requires_python_range =
+            release_specifiers_to_ranges(requires_python.specifiers().clone());
+        !request_range
+            .intersection(&requires_python_range)
+            .is_empty()
     }
 }
 
@@ -3109,6 +3155,38 @@ impl VersionRequest {
             ),
         }
     }
+
+    /// Convert this request into [`VersionSpecifiers`] representing the range of compatible
+    /// versions.
+    ///
+    /// Returns `None` for requests without version constraints (e.g., [`VersionRequest::Default`]
+    /// and [`VersionRequest::Any`]).
+    pub fn as_version_specifiers(&self) -> Option<VersionSpecifiers> {
+        match self {
+            Self::Default | Self::Any => None,
+            Self::Major(major, _) => Some(VersionSpecifiers::from(
+                VersionSpecifier::equals_star_version(Version::new([u64::from(*major)])),
+            )),
+            Self::MajorMinor(major, minor, _) => Some(VersionSpecifiers::from(
+                VersionSpecifier::equals_star_version(Version::new([
+                    u64::from(*major),
+                    u64::from(*minor),
+                ])),
+            )),
+            Self::MajorMinorPatch(major, minor, patch, _) => {
+                Some(VersionSpecifiers::from(VersionSpecifier::equals_version(
+                    Version::new([u64::from(*major), u64::from(*minor), u64::from(*patch)]),
+                )))
+            }
+            Self::MajorMinorPrerelease(major, minor, prerelease, _) => {
+                Some(VersionSpecifiers::from(VersionSpecifier::equals_version(
+                    Version::new([u64::from(*major), u64::from(*minor), 0])
+                        .with_pre(Some(*prerelease)),
+                )))
+            }
+            Self::Range(specifiers, _) => Some(specifiers.clone()),
+        }
+    }
 }
 
 impl FromStr for VersionRequest {
@@ -3506,6 +3584,7 @@ mod tests {
     use assert_fs::{TempDir, prelude::*};
     use target_lexicon::{Aarch64Architecture, Architecture};
     use test_log::test;
+    use uv_distribution_types::RequiresPython;
     use uv_pep440::{Prerelease, PrereleaseKind, Version, VersionSpecifiers};
 
     use crate::{
@@ -4300,6 +4379,64 @@ mod tests {
         assert_eq!(
             PythonRequest::Version(VersionRequest::from_str(">=3.10").unwrap()).as_pep440_version(),
             None
+        );
+    }
+
+    #[test]
+    fn intersects_requires_python_exact() {
+        let requires_python =
+            RequiresPython::from_specifiers(&VersionSpecifiers::from_str(">=3.12").unwrap());
+
+        assert!(PythonRequest::parse("3.12").intersects_requires_python(&requires_python));
+        assert!(!PythonRequest::parse("3.11").intersects_requires_python(&requires_python));
+    }
+
+    #[test]
+    fn intersects_requires_python_major() {
+        let requires_python =
+            RequiresPython::from_specifiers(&VersionSpecifiers::from_str(">=3.12").unwrap());
+
+        // `3` overlaps with `>=3.12` (e.g., 3.12, 3.13, ... are all Python 3)
+        assert!(PythonRequest::parse("3").intersects_requires_python(&requires_python));
+        // `2` does not overlap with `>=3.12`
+        assert!(!PythonRequest::parse("2").intersects_requires_python(&requires_python));
+    }
+
+    #[test]
+    fn intersects_requires_python_range() {
+        let requires_python =
+            RequiresPython::from_specifiers(&VersionSpecifiers::from_str(">=3.12").unwrap());
+
+        assert!(PythonRequest::parse(">=3.12,<3.13").intersects_requires_python(&requires_python));
+        assert!(!PythonRequest::parse(">=3.10,<3.12").intersects_requires_python(&requires_python));
+    }
+
+    #[test]
+    fn intersects_requires_python_implementation_range() {
+        let requires_python =
+            RequiresPython::from_specifiers(&VersionSpecifiers::from_str(">=3.12").unwrap());
+
+        assert!(
+            PythonRequest::parse("cpython@>=3.12,<3.13")
+                .intersects_requires_python(&requires_python)
+        );
+        assert!(
+            !PythonRequest::parse("cpython@>=3.10,<3.12")
+                .intersects_requires_python(&requires_python)
+        );
+    }
+
+    #[test]
+    fn intersects_requires_python_no_version() {
+        let requires_python =
+            RequiresPython::from_specifiers(&VersionSpecifiers::from_str(">=3.12").unwrap());
+
+        // Requests without version constraints are always compatible
+        assert!(PythonRequest::Any.intersects_requires_python(&requires_python));
+        assert!(PythonRequest::Default.intersects_requires_python(&requires_python));
+        assert!(
+            PythonRequest::Implementation(ImplementationName::CPython)
+                .intersects_requires_python(&requires_python)
         );
     }
 }

@@ -241,8 +241,8 @@ fn package() -> Result<()> {
         dependencies = ["iniconfig>=1"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -251,6 +251,12 @@ fn package() -> Result<()> {
 
     let init = src.child("__init__.py");
     init.touch()?;
+
+    child
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child"), @"
     success: true
@@ -699,11 +705,11 @@ fn mixed_requires_python() -> Result<()> {
     let child = context.temp_dir.child("packages").child("bird-feeder");
     child.create_dir_all()?;
 
-    let src = context.temp_dir.child("src").child("bird_feeder");
-    src.create_dir_all()?;
-
-    let init = src.child("__init__.py");
-    init.touch()?;
+    child
+        .child("src")
+        .child("bird_feeder")
+        .child("__init__.py")
+        .touch()?;
 
     let pyproject_toml = child.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -714,8 +720,8 @@ fn mixed_requires_python() -> Result<()> {
         requires-python = ">=3.9"
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -1104,9 +1110,9 @@ fn check() -> Result<()> {
     Ok(())
 }
 
-/// Sync development dependencies in a (legacy) non-project workspace root.
+/// Sync development dependencies in a non-project workspace root.
 #[test]
-fn sync_legacy_non_project_dev_dependencies() -> Result<()> {
+fn sync_non_project_dev_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -1185,9 +1191,9 @@ fn sync_legacy_non_project_dev_dependencies() -> Result<()> {
     Ok(())
 }
 
-/// Sync development dependencies in a (legacy) non-project workspace root with `--frozen`.
+/// Sync development dependencies in a non-project workspace root with `--frozen`.
 #[test]
-fn sync_legacy_non_project_frozen() -> Result<()> {
+fn sync_non_project_frozen() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -1253,9 +1259,9 @@ fn sync_legacy_non_project_frozen() -> Result<()> {
     Ok(())
 }
 
-/// Sync development dependencies in a (legacy) non-project workspace root.
+/// Sync dependency groups in a non-project workspace root.
 #[test]
-fn sync_legacy_non_project_group() -> Result<()> {
+fn sync_non_project_group() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -1371,11 +1377,11 @@ fn sync_legacy_non_project_group() -> Result<()> {
     Ok(())
 }
 
-/// Sync development dependencies in a (legacy) non-project workspace root with `--frozen`.
+/// Sync development dependencies in a non-project workspace root with `--frozen`.
 ///
 /// Modify the `pyproject.toml` after locking.
 #[test]
-fn sync_legacy_non_project_frozen_modification() -> Result<()> {
+fn sync_non_project_frozen_modification() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -1766,13 +1772,19 @@ fn sync_build_isolation_extra() -> Result<()> {
         compile = ["source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz"]
 
         [build-system]
-        requires = ["setuptools >= 40.9.0"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv]
         no-build-isolation-package = ["source-distribution"]
         "#,
     )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
 
     // Running `uv sync` should fail for the `compile` extra.
     uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("compile"), @r#"
@@ -1953,7 +1965,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
     "#})?;
 
     context.venv().arg("--clear").assert().success();
-    uv_snapshot!(context.filters(), context.sync(), @r"
+    uv_snapshot!(context.filters(), context.sync(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1966,7 +1978,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
     ");
 
     context.venv().arg("--clear").assert().success();
-    uv_snapshot!(context.filters(), context.sync(), @r"
+    uv_snapshot!(context.filters(), context.sync(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1994,7 +2006,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
     "#})?;
 
     context.venv().arg("--clear").assert().success();
-    uv_snapshot!(context.filters(), context.sync(), @r"
+    uv_snapshot!(context.filters(), context.sync(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2062,7 +2074,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
 
     // Confirm that `bad_child` fails if anyio is provided
     context.venv().arg("--clear").assert().success();
-    uv_snapshot!(context.filters(), context.sync(), @r"
+    uv_snapshot!(context.filters(), context.sync(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2097,7 +2109,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
     "#})?;
 
     context.venv().arg("--clear").assert().success();
-    uv_snapshot!(context.filters(), context.sync(), @r"
+    uv_snapshot!(context.filters(), context.sync(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2189,7 +2201,7 @@ fn sync_extra_build_dependencies_setuptools_legacy() -> Result<()> {
     "#})?;
 
     context.venv().arg("--clear").assert().success();
-    uv_snapshot!(context.filters(), context.sync(), @r"
+    uv_snapshot!(context.filters(), context.sync(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2295,7 +2307,7 @@ fn sync_extra_build_dependencies_setuptools() -> Result<()> {
     "#})?;
 
     context.venv().arg("--clear").assert().success();
-    uv_snapshot!(context.filters(), context.sync(), @r"
+    uv_snapshot!(context.filters(), context.sync(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2369,7 +2381,7 @@ fn sync_extra_build_dependencies_sources() -> Result<()> {
     })?;
 
     // Running `uv sync` should succeed, as `anyio` is provided as a source
-    uv_snapshot!(context.filters(), context.sync(), @r"
+    uv_snapshot!(context.filters(), context.sync(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2504,7 +2516,7 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
 
     // The child should be rebuilt with `3.5` on reinstall, the "latest" on Test PyPI.
     uv_snapshot!(context.filters(), context.sync()
-        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.3"), @r"
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.3"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2523,7 +2535,7 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync()
-        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "3.5"), @r"
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "3.5"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2600,7 +2612,7 @@ fn sync_extra_build_dependencies_sources_from_child() -> Result<()> {
     })?;
 
     // Running `uv sync` should fail due to the unapplied source
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").arg("--refresh"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").arg("--refresh"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2707,7 +2719,7 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
     "#})?;
 
     context.venv().arg("--clear").assert().success();
-    uv_snapshot!(context.filters(), context.sync(), @r"
+    uv_snapshot!(context.filters(), context.sync(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2773,7 +2785,7 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
     "#})?;
 
     context.venv().arg("--clear").assert().success();
-    uv_snapshot!(context.filters(), context.sync(), @r"
+    uv_snapshot!(context.filters(), context.sync(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4636,10 +4648,17 @@ fn sync_group_member() -> Result<()> {
         dependencies = ["iniconfig>=1"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
         )?;
+    context
+        .temp_dir
+        .child("child")
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
 
     // Generate a lockfile.
     context.lock().assert().success();
@@ -4661,9 +4680,9 @@ fn sync_group_member() -> Result<()> {
     Ok(())
 }
 
-/// Sync with `--only-group`, where the group includes a legacy non-`[project]` workspace member.
+/// Sync with `--only-group`, where the group includes a non-`[project]` workspace member.
 #[test]
-fn sync_group_legacy_non_project_member() -> Result<()> {
+fn sync_group_non_project_member() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     // Create a workspace.
@@ -4695,10 +4714,17 @@ fn sync_group_legacy_non_project_member() -> Result<()> {
         dependencies = ["iniconfig>=1"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
         )?;
+    context
+        .temp_dir
+        .child("child")
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
 
     // Generate a lockfile.
     uv_snapshot!(context.filters(), context.lock(), @"
@@ -4802,14 +4828,20 @@ fn sync_group_self() -> Result<()> {
         test = ["idna>=3"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [dependency-groups]
         foo = ["project", "typing-extensions>=4"]
         bar = ["project[test]"]
         "#,
     )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
 
     // Generate a lockfile.
     uv_snapshot!(context.filters(), context.lock(), @"
@@ -5349,10 +5381,16 @@ fn read_metadata_statically_over_the_cache() -> Result<()> {
         dependencies = ["anyio>=4,<5"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
 
     context.sync().assert().success();
     let lock1 = context.read("uv.lock");
@@ -5382,10 +5420,16 @@ fn no_install_project() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
 
     // Generate a lockfile.
     context.lock().assert().success();
@@ -5436,8 +5480,8 @@ fn no_install_workspace() -> Result<()> {
         dependencies = ["anyio==3.7.0", "child"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.workspace]
         members = ["child"]
@@ -5446,6 +5490,12 @@ fn no_install_workspace() -> Result<()> {
         child = { workspace = true }
         "#,
     )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
 
     // Add a workspace member.
     let child = context.temp_dir.child("child");
@@ -5458,8 +5508,8 @@ fn no_install_workspace() -> Result<()> {
         dependencies = ["iniconfig>=1"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
     child
@@ -5575,8 +5625,8 @@ fn no_install_local() -> Result<()> {
         dependencies = ["anyio==3.7.0", "local", "local-editable", "workspace-member"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         local = { path = "./local" }
@@ -5587,6 +5637,12 @@ fn no_install_local() -> Result<()> {
         members = ["workspace-member"]
         "#,
     )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
 
     // Add a local package, local editable package, and then a workspace member
     // as a dependency.
@@ -5659,10 +5715,16 @@ fn no_install_package() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
 
     // Generate a lockfile.
     context.lock().assert().success();
@@ -5716,8 +5778,8 @@ fn no_install_project_no_build() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -6166,10 +6228,16 @@ fn convert_to_virtual() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
 
     // Running `uv sync` should install the project itself.
     uv_snapshot!(context.filters(), context.sync(), @"
@@ -6361,10 +6429,16 @@ fn convert_to_package() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
 
     // Running `uv sync` should install the project itself.
     uv_snapshot!(context.filters(), context.sync(), @"
@@ -7203,7 +7277,7 @@ fn sync_empty_virtual_environment() -> Result<()> {
 
 /// Test for warnings when `VIRTUAL_ENV` is set but will not be respected.
 #[test]
-fn sync_legacy_non_project_warning() -> Result<()> {
+fn sync_virtual_env_warning() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -7382,10 +7456,16 @@ fn sync_update_project() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("my_project")
+        .child("__init__.py")
+        .touch()?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
     success: true
@@ -8065,8 +8145,8 @@ fn transitive_dev() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv]
         dev-dependencies = ["iniconfig>=1"]
@@ -8078,6 +8158,12 @@ fn transitive_dev() -> Result<()> {
 
     let init = src.child("__init__.py");
     init.touch()?;
+
+    child
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--dev"), @"
     success: true
@@ -8113,8 +8199,8 @@ fn sync_no_editable() -> Result<()> {
         dependencies = ["child"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         child = { workspace = true }
@@ -8130,6 +8216,13 @@ fn sync_no_editable() -> Result<()> {
     let init = src.child("__init__.py");
     init.touch()?;
 
+    context
+        .temp_dir
+        .child("src")
+        .child("root")
+        .child("__init__.py")
+        .touch()?;
+
     let child = context.temp_dir.child("child");
     fs_err::create_dir_all(&child)?;
 
@@ -8142,8 +8235,8 @@ fn sync_no_editable() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -8411,8 +8504,8 @@ fn build_system_requires_workspace() -> Result<()> {
         dependencies = ["typing-extensions>=3.10"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -8494,8 +8587,8 @@ fn build_system_requires_path() -> Result<()> {
         dependencies = ["typing-extensions>=3.10"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -8853,7 +8946,7 @@ fn sync_no_sources_package() -> Result<()> {
     )?;
 
     // First lock the project
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8863,7 +8956,7 @@ fn sync_no_sources_package() -> Result<()> {
     ");
 
     // Sync with sources disabled for anyio only
-    uv_snapshot!(context.filters(), context.sync().arg("--no-sources-package").arg("anyio"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-sources-package").arg("anyio"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9010,7 +9103,7 @@ fn sync_ignores_incompatible_global_python_version() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.10", "3.11"]);
 
     // Create a global pin before creating the project (to avoid pin compatibility check)
-    uv_snapshot!(context.filters(), context.python_pin().arg("--global").arg("3.10"), @r"
+    uv_snapshot!(context.filters(), context.python_pin().arg("--global").arg("3.10"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9030,7 +9123,7 @@ fn sync_ignores_incompatible_global_python_version() -> Result<()> {
     "#})?;
 
     // Ensure sync succeeds and uses a compatible interpreter (ignoring the conflicting global pin)
-    uv_snapshot!(context.filters(), context.sync(), @r"
+    uv_snapshot!(context.filters(), context.sync(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9121,8 +9214,8 @@ fn sync_all() -> Result<()> {
         dependencies = ["anyio>3", "child"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.workspace]
         members = ["child"]
@@ -9149,8 +9242,8 @@ fn sync_all() -> Result<()> {
         dependencies = ["iniconfig>=1"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
     child
@@ -9349,7 +9442,7 @@ fn sync_extra_comma_separated() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("types,async"), @r#"
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("types,async"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9362,7 +9455,7 @@ fn sync_extra_comma_separated() -> Result<()> {
      + idna==3.6
      + sniffio==1.3.1
      + typing-extensions==4.10.0
-    "#);
+    ");
 
     Ok(())
 }
@@ -12616,17 +12709,17 @@ fn sync_required_environment_hint() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    let mut filters = context.filters();
-    filters.push((
-        r"You're on [^ ]+ \(`.*`\)",
-        "You're on [PLATFORM] (`[TAG]`)",
-    ));
-    filters.push((
-        r"sys_platform == '[^']+' and platform_machine == '[^']+'",
-        "sys_platform == '[PLATFORM]' and platform_machine == '[MACHINE]'",
-    ));
+    let context = context
+        .with_filter((
+            r"You're on [^ ]+ \(`.*`\)",
+            "You're on [PLATFORM] (`[TAG]`)",
+        ))
+        .with_filter((
+            r"sys_platform == '[^']+' and platform_machine == '[^']+'",
+            "sys_platform == '[PLATFORM]' and platform_machine == '[MACHINE]'",
+        ));
 
-    uv_snapshot!(filters, context.sync().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r#"
+    uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -12726,7 +12819,7 @@ dependencies = [
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to addition of exclude newer `2022-09-04T00:00:00Z` for package `tqdm`
+    Resolving despite existing lockfile due to addition of exclude newer `2022-09-04T00:00:00Z` for package `tqdm`
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
@@ -12810,7 +12903,7 @@ exclude-newer-package = { tqdm = "2022-09-04T00:00:00Z" }
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to addition of exclude newer `2022-09-04T00:00:00Z` for package `tqdm`
+    Resolving despite existing lockfile due to addition of exclude newer `2022-09-04T00:00:00Z` for package `tqdm`
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
@@ -13723,7 +13816,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     "#})?;
 
     // The child should be built with anyio 4.0
-    uv_snapshot!(context.filters(), context.sync().env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @r"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13755,7 +13848,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
 
     // The child should be rebuilt with anyio 3.7, without `--reinstall`
     uv_snapshot!(context.filters(), context.sync()
-        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @r"
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -13774,7 +13867,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync()
-        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "3.7"), @r"
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "3.7"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13819,7 +13912,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
 
     // This should fail
     uv_snapshot!(context.filters(), context.sync()
-        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.1"), @r"
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.1"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -13848,7 +13941,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
         child = [{ requirement = "anyio>4", match-runtime = true }]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.sync(), @r"
+    uv_snapshot!(context.filters(), context.sync(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -14017,7 +14110,7 @@ fn reject_unmatched_runtime() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -14487,7 +14580,7 @@ fn match_runtime_optional() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync(), @r"
+    uv_snapshot!(context.filters(), context.sync(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14578,7 +14671,7 @@ fn sync_extra_build_dependencies_cache() -> Result<()> {
     "#})?;
 
     // Running `uv sync` should rebuild the child package with the new build dependency.
-    uv_snapshot!(context.filters(), context.sync(), @r"
+    uv_snapshot!(context.filters(), context.sync(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14592,7 +14685,7 @@ fn sync_extra_build_dependencies_cache() -> Result<()> {
     ");
 
     // Running `uv sync` again should be a no-op.
-    uv_snapshot!(context.filters(), context.sync(), @r"
+    uv_snapshot!(context.filters(), context.sync(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14617,7 +14710,7 @@ fn sync_extra_build_dependencies_cache() -> Result<()> {
         child = [{ requirement = "iniconfig>0", match-runtime = false }]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.sync(), @r"
+    uv_snapshot!(context.filters(), context.sync(), @"
     success: true
     exit_code: 0
     ----- stdout -----

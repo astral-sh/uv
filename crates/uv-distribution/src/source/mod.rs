@@ -1235,7 +1235,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let (disk_filename, filename, metadata) = self
             .build_distribution(
                 source,
-                &resource.install_path,
+                resource.install_path,
                 None,
                 &cache_shard,
                 self.build_context.sources().clone(),
@@ -1282,12 +1282,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // If the metadata is static, return it.
-        let dynamic = match StaticMetadata::read(source, &resource.install_path, None).await? {
+        let dynamic = match StaticMetadata::read(source, resource.install_path, None).await? {
             StaticMetadata::Some(metadata) => {
                 return Ok(ArchiveMetadata::from(
                     Metadata::from_workspace(
                         metadata,
-                        resource.install_path.as_ref(),
+                        resource.install_path,
                         None,
                         self.build_context.locations(),
                         self.build_context.sources().clone(),
@@ -1341,7 +1341,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     return Ok(ArchiveMetadata::from(
                         Metadata::from_workspace(
                             metadata,
-                            resource.install_path.as_ref(),
+                            resource.install_path,
                             None,
                             self.build_context.locations(),
                             self.build_context.sources().clone(),
@@ -1363,7 +1363,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         if let Some(metadata) = self
             .build_metadata(
                 source,
-                &resource.install_path,
+                resource.install_path,
                 None,
                 self.build_context.sources().clone(),
             )
@@ -1391,7 +1391,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Ok(ArchiveMetadata::from(
                 Metadata::from_workspace(
                     metadata,
-                    resource.install_path.as_ref(),
+                    resource.install_path,
                     None,
                     self.build_context.locations(),
                     self.build_context.sources().clone(),
@@ -1422,7 +1422,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let (_disk_filename, _filename, metadata) = self
             .build_distribution(
                 source,
-                &resource.install_path,
+                resource.install_path,
                 None,
                 &cache_shard,
                 self.build_context.sources().clone(),
@@ -1453,7 +1453,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         Ok(ArchiveMetadata::from(
             Metadata::from_workspace(
                 metadata,
-                resource.install_path.as_ref(),
+                resource.install_path,
                 None,
                 self.build_context.locations(),
                 self.build_context.sources().clone(),
@@ -1477,7 +1477,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // Determine the last-modified time of the source distribution.
-        let cache_info = CacheInfo::from_directory(&resource.install_path)?;
+        let cache_info = CacheInfo::from_directory(resource.install_path)?;
 
         // Read the existing metadata from the cache.
         let entry = cache_shard.entry(LOCAL_REVISION);

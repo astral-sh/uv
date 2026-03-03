@@ -8,7 +8,7 @@ use std::{fmt, io};
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 use thiserror::Error;
-use tracing::instrument;
+use tracing::{debug, instrument};
 
 use uv_build_backend::check_direct_build;
 use uv_cache::{Cache, CacheBucket};
@@ -80,8 +80,10 @@ enum Error {
     Fmt(#[from] fmt::Error),
     #[error("Can't use `--force-pep517` with `--list`")]
     ListForcePep517,
-    #[error("Can only use `--list` with the uv backend")]
-    ListNonUv,
+    #[error(
+        "Can only use `--list` with a compatible uv build backend, but `{name}` is not compatible because {reason}"
+    )]
+    ListNonUv { name: String, reason: String },
     #[error(
         "`{0}` is not a valid build source. Expected to receive a source directory, or a source \
          distribution ending in one of: {1}."
@@ -146,7 +148,7 @@ pub(crate) async fn build_frontend(
         no_config,
         python_preference,
         python_downloads,
-        concurrency,
+        &concurrency,
         cache,
         printer,
         preview,
@@ -193,7 +195,7 @@ async fn build_impl(
     no_config: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     cache: &Cache,
     printer: Printer,
     preview: Preview,
@@ -469,7 +471,7 @@ async fn build_package(
     keyring_provider: KeyringProviderType,
     exclude_newer: ExcludeNewer,
     sources: NoSources,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     build_options: &BuildOptions,
     sdist: bool,
     wheel: bool,
@@ -630,7 +632,7 @@ async fn build_package(
         exclude_newer,
         sources.clone(),
         workspace_cache,
-        concurrency,
+        concurrency.clone(),
         preview,
     );
 
@@ -646,16 +648,28 @@ async fn build_package(
             return Err(Error::ListForcePep517);
         }
 
-        if !check_direct_build(source.path(), source.path().user_display()) {
-            // TODO(konsti): Provide more context on what mismatched
-            return Err(Error::ListNonUv);
+        if let Err(reason) = check_direct_build(source.path(), uv_version::version()) {
+            return Err(Error::ListNonUv {
+                name: source.path().user_display().to_string(),
+                reason: reason.to_string(),
+            });
         }
 
         BuildAction::List
-    } else if !force_pep517 && check_direct_build(source.path(), source.path().user_display()) {
-        BuildAction::DirectBuild
-    } else {
+    } else if force_pep517 {
         BuildAction::Pep517
+    } else {
+        match check_direct_build(source.path(), uv_version::version()) {
+            Ok(()) => BuildAction::DirectBuild,
+            Err(reason) => {
+                debug!(
+                    "Not using `uv_build` direct build for `{}` because {}",
+                    source.path().user_display(),
+                    reason
+                );
+                BuildAction::Pep517
+            }
+        }
     };
 
     // Prepare some common arguments for the build.

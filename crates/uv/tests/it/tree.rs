@@ -1144,8 +1144,8 @@ fn non_project_member() -> Result<()> {
         dependencies = ["iniconfig", "sniffio", "anyio"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 

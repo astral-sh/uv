@@ -9,7 +9,6 @@ use petgraph::Direction;
 use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::prelude::EdgeRef;
 use rustc_hash::{FxHashMap, FxHashSet};
-use tokio::sync::Semaphore;
 
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
@@ -100,7 +99,7 @@ pub(crate) async fn pip_tree(
         .markers(environment.interpreter().markers())
         .platform(environment.interpreter().platform())
         .build();
-        let download_concurrency = Semaphore::new(concurrency.downloads);
+        let download_concurrency = concurrency.downloads_semaphore.clone();
 
         // Determine the platform tags.
         let interpreter = environment.interpreter();

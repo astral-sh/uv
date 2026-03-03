@@ -3,7 +3,6 @@ use std::path::Path;
 use anstream::print;
 use anyhow::{Error, Result};
 use futures::StreamExt;
-use tokio::sync::Semaphore;
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
@@ -147,7 +146,7 @@ pub(crate) async fn tree(
             client_builder,
             &state,
             Box::new(DefaultResolveLogger),
-            concurrency,
+            &concurrency,
             cache,
             &WorkspaceCache::default(),
             printer,
@@ -226,7 +225,7 @@ pub(crate) async fn tree(
             .index_locations(index_locations.clone())
             .keyring(*keyring_provider)
             .build();
-            let download_concurrency = Semaphore::new(concurrency.downloads);
+            let download_concurrency = concurrency.downloads_semaphore.clone();
 
             // Initialize the client to fetch the latest version of each package.
             let client = LatestClient {

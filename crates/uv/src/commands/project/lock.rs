@@ -196,7 +196,7 @@ pub(crate) async fn lock(
             &client_builder,
             &state,
             Box::new(DefaultResolveLogger),
-            concurrency,
+            &concurrency,
             cache,
             &workspace_cache,
             printer,
@@ -208,6 +208,22 @@ pub(crate) async fn lock(
     .await
     {
         Ok(lock) => {
+            if let Some(frozen_source) = frozen {
+                match frozen_source {
+                    FrozenSource::Cli => {
+                        warn_user!(
+                            "The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because `--frozen` was provided; use `--check` instead"
+                        );
+                    }
+                    FrozenSource::Env | FrozenSource::Configuration => {
+                        warn_user!(
+                            "The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because {} was provided; use `--no-frozen` or `--check` instead",
+                            MissingLockfileSource::from(frozen_source)
+                        );
+                    }
+                }
+            }
+
             if dry_run.enabled() {
                 // In `--dry-run` mode, show all changes.
                 if let LockResult::Changed(previous, lock) = &lock {
@@ -272,7 +288,7 @@ pub(super) struct LockOperation<'env> {
     client_builder: &'env BaseClientBuilder<'env>,
     state: &'env UniversalState,
     logger: Box<dyn ResolveLogger>,
-    concurrency: Concurrency,
+    concurrency: &'env Concurrency,
     cache: &'env Cache,
     workspace_cache: &'env WorkspaceCache,
     printer: Printer,
@@ -287,7 +303,7 @@ impl<'env> LockOperation<'env> {
         client_builder: &'env BaseClientBuilder<'env>,
         state: &'env UniversalState,
         logger: Box<dyn ResolveLogger>,
-        concurrency: Concurrency,
+        concurrency: &'env Concurrency,
         cache: &'env Cache,
         workspace_cache: &'env WorkspaceCache,
         printer: Printer,
@@ -335,6 +351,7 @@ impl<'env> LockOperation<'env> {
                     .read()
                     .await?
                     .ok_or(ProjectError::MissingLockfile(source))?;
+
                 // Check if the discovered workspace members match the locked workspace members.
                 if let LockTarget::Workspace(workspace) = target {
                     for package_name in workspace.packages().keys() {
@@ -442,7 +459,7 @@ async fn do_lock(
     client_builder: &BaseClientBuilder<'_>,
     state: &UniversalState,
     logger: Box<dyn ResolveLogger>,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
@@ -766,11 +783,15 @@ async fn do_lock(
         exclude_newer.clone(),
         sources.clone(),
         workspace_cache.clone(),
-        concurrency,
+        concurrency.clone(),
         preview,
     );
 
-    let database = DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads);
+    let database = DistributionDatabase::new(
+        &client,
+        &build_dispatch,
+        concurrency.downloads_semaphore.clone(),
+    );
 
     // If any of the resolution-determining settings changed, invalidate the lock.
     let existing_lock = if let Some(existing_lock) = existing_lock {
@@ -1051,25 +1072,20 @@ impl ValidatedLock {
             if !change.is_relative_timestamp_change() {
                 let _ = writeln!(
                     printer.stderr(),
-                    "Ignoring existing lockfile due to {change}",
+                    "Resolving despite existing lockfile due to {change}",
                 );
                 return Ok(Self::Preferable(lock));
             }
         }
 
-        match upgrade {
-            Upgrade::None => {}
-            Upgrade::All => {
-                // If the user specified `--upgrade`, then we can't use the existing lockfile.
-                debug!("Ignoring existing lockfile due to `--upgrade`");
-                return Ok(Self::Unusable(lock));
-            }
-            Upgrade::Packages(_) => {
-                // This is handled below, after some checks regarding fork
-                // markers. In particular, we'd like to return `Preferable`
-                // here, but we shouldn't if the fork markers cannot be
-                // reused.
-            }
+        if upgrade.is_all() {
+            // If the user specified `--upgrade`, then we can't use the existing lockfile.
+            //
+            // If the user is upgrading a subset of packages, we handle it below, after some checks
+            // regarding fork markers. In particular, we'd like to return `Preferable` here, but we
+            // shouldn't if the fork markers cannot be reused.
+            debug!("Ignoring existing lockfile due to `--upgrade`");
+            return Ok(Self::Unusable(lock));
         }
 
         // NOTE: It's important that this appears before any possible path that
@@ -1179,7 +1195,7 @@ impl ValidatedLock {
 
         // If the user specified `--upgrade-package`, then at best we can prefer some of
         // the existing versions.
-        if let Upgrade::Packages(_) = upgrade {
+        if !(upgrade.is_none() || upgrade.is_all()) {
             debug!("Resolving despite existing lockfile due to `--upgrade-package`");
             return Ok(Self::Preferable(lock));
         }

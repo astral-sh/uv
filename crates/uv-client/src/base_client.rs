@@ -20,8 +20,8 @@ use reqwest::{Client, ClientBuilder, IntoUrl, NoProxy, Proxy, Request, Response,
 use reqwest_middleware::{ClientWithMiddleware, Middleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{
-    RetryPolicy, RetryTransientMiddleware, Retryable, RetryableStrategy, default_on_request_error,
-    default_on_request_success,
+    Jitter, RetryPolicy, RetryTransientMiddleware, Retryable, RetryableStrategy,
+    default_on_request_error, default_on_request_success,
 };
 use thiserror::Error;
 use tracing::{debug, trace};
@@ -371,11 +371,7 @@ impl<'a> BaseClientBuilder<'a> {
 
     /// Create a [`RetryPolicy`] for the client.
     pub fn retry_policy(&self) -> ExponentialBackoff {
-        let mut builder = ExponentialBackoff::builder();
-        if env::var_os(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY).is_some() {
-            builder = builder.retry_bounds(Duration::from_millis(0), Duration::from_millis(0));
-        }
-        builder.build_with_max_retries(self.retries)
+        retry_policy(self.retries)
     }
 
     pub fn build(&self) -> BaseClient {
@@ -810,11 +806,7 @@ impl BaseClient {
 
     /// The [`RetryPolicy`] for the client.
     pub fn retry_policy(&self) -> ExponentialBackoff {
-        let mut builder = ExponentialBackoff::builder();
-        if env::var_os(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY).is_some() {
-            builder = builder.retry_bounds(Duration::from_millis(0), Duration::from_millis(0));
-        }
-        builder.build_with_max_retries(self.retries)
+        retry_policy(self.retries)
     }
 
     pub fn credentials_cache(&self) -> &CredentialsCache {
@@ -1143,6 +1135,20 @@ impl<'a> RequestBuilder<'a> {
     }
 }
 
+/// Create a [`RetryPolicy`] with the given number of retries.
+fn retry_policy(retries: u32) -> ExponentialBackoff {
+    let mut builder = ExponentialBackoff::builder();
+    if env::var_os(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY).is_some() {
+        builder = builder.retry_bounds(Duration::from_millis(0), Duration::from_millis(0));
+    } else {
+        // Configure an effective minimum between attempts of 1s and a real maximum of 30s.
+        builder = builder
+            .jitter(Jitter::Bounded)
+            .retry_bounds(Duration::from_secs(2), Duration::from_secs(30));
+    }
+    builder.build_with_max_retries(retries)
+}
+
 /// An extension over [`DefaultRetryableStrategy`] that logs transient request failures and
 /// adds additional retry cases.
 pub struct UvRetryableStrategy;
@@ -1183,7 +1189,7 @@ impl RetryableStrategy for UvRetryableStrategy {
 /// * When streaming a response, a reqwest error may be hidden several layers behind errors
 ///   of different crates processing the stream, including `io::Error` layers
 /// * Any `h2` error
-fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retryable> {
+pub fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retryable> {
     // First, try to show a nice trace log
     if let Some((Some(status), Some(url))) = find_source::<WrappedReqwestError>(&err)
         .map(|request_err| (request_err.status(), request_err.url()))
@@ -1221,19 +1227,19 @@ fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retryable
             has_known_error = true;
             // Ignore the default retry strategy returning fatal.
             if default_on_request_error(reqwest_err) == Some(Retryable::Transient) {
-                trace!("Retrying nested reqwest error");
+                trace!("Transient nested reqwest error");
                 return Some(Retryable::Transient);
             }
             if is_retryable_status_error(reqwest_err) {
-                trace!("Retrying nested reqwest status code error");
+                trace!("Transient nested reqwest status code error");
                 return Some(Retryable::Transient);
             }
 
-            trace!("Cannot retry nested reqwest error");
+            trace!("Fatal nested reqwest error");
         } else if source.downcast_ref::<h2::Error>().is_some() {
             // All h2 errors look like errors that should be retried
             // https://github.com/astral-sh/uv/issues/15916
-            trace!("Retrying nested h2 error");
+            trace!("Transient nested h2 error");
             return Some(Retryable::Transient);
         } else if let Some(io_err) = source.downcast_ref::<io::Error>() {
             has_known_error = true;
@@ -1252,12 +1258,12 @@ fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retryable
                 io::ErrorKind::UnexpectedEof,
             ];
             if retryable_io_err_kinds.contains(&io_err.kind()) {
-                trace!("Retrying error: `{}`", io_err.kind());
+                trace!("Transient IO error: `{}`", io_err.kind());
                 return Some(Retryable::Transient);
             }
 
             trace!(
-                "Cannot retry IO error `{}`, not a retryable IO error kind",
+                "Fatal IO error `{}`, not a transient IO error kind",
                 io_err.kind()
             );
         }
@@ -1266,7 +1272,7 @@ fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retryable
     }
 
     if !has_known_error {
-        trace!("Cannot retry error: Neither an IO error nor a reqwest error");
+        trace!("Cannot retry error: neither an IO error nor a reqwest error");
     }
 
     None
@@ -1627,7 +1633,7 @@ mod tests {
             }
         }
 
-        assert_debug_snapshot!(retried, @r"
+        assert_debug_snapshot!(retried, @"
         [
             100,
             102,

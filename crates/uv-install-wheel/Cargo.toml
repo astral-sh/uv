@@ -1,6 +1,6 @@
 [package]
 name = "uv-install-wheel"
-version = "0.0.22"
+version = "0.0.27"
 description = "This is an internal component crate of uv"
 keywords = ["wheel", "python"]
 
@@ -30,7 +30,6 @@ uv-shell = { workspace = true }
 uv-trampoline-builder = { workspace = true }
 uv-warnings = { workspace = true }
 
-clap = { workspace = true, optional = true, features = ["derive"] }
 configparser = { workspace = true }
 csv = { workspace = true }
 data-encoding = { workspace = true }
@@ -39,14 +38,11 @@ itertools = { workspace = true }
 mailparse = { workspace = true }
 owo-colors = { workspace = true }
 pathdiff = { workspace = true }
-reflink-copy = { workspace = true }
 regex = { workspace = true }
 rustc-hash = { workspace = true }
-schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
-tempfile = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 walkdir = { workspace = true }
@@ -54,6 +50,10 @@ walkdir = { workspace = true }
 [target.'cfg(target_os = "windows")'.dependencies]
 same-file = { workspace = true }
 self-replace = { workspace = true }
+
+[features]
+clap = ["uv-fs/clap"]
+schemars = ["uv-fs/schemars"]
 
 [dev-dependencies]
 anyhow = { workspace = true }

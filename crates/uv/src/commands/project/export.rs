@@ -208,7 +208,7 @@ pub(crate) async fn export(
             &client_builder,
             &state,
             Box::new(DefaultResolveLogger),
-            concurrency,
+            &concurrency,
             cache,
             &workspace_cache,
             printer,

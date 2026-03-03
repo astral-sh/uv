@@ -36,7 +36,7 @@ fn create_venv() {
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.12"), @r"
+        .arg("3.12"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -221,7 +221,7 @@ fn virtual_empty() -> Result<()> {
         wow = "someconfig"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @r"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -249,7 +249,7 @@ fn virtual_dependency_group() -> Result<()> {
         dev = ["sniffio"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @r"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1416,14 +1416,13 @@ fn path_with_trailing_space_gives_proper_error() {
 
     // Set a custom cache directory with a trailing space
     let path_with_trailing_slash = format!("{} ", context.cache_dir.path().display());
-    let mut filters = context.filters();
     // Windows translates error messages, for example i get:
     // ": Das System kann den angegebenen Pfad nicht finden. (os error 3)"
-    filters.push((
+    let context = context.with_filter((
         r"CACHEDIR.TAG`: .* \(os error 3\)",
         "CACHEDIR.TAG`: The system cannot find the path specified. (os error 3)",
     ));
-    uv_snapshot!(filters, std::process::Command::new(uv_test::get_bin!())
+    uv_snapshot!(context.filters(), std::process::Command::new(uv_test::get_bin!())
         .arg("venv")
         .env(EnvVars::UV_CACHE_DIR, path_with_trailing_slash), @r###"
     success: false
@@ -1509,7 +1508,7 @@ fn venv_python_preference() {
     Activate with: source .venv/[BIN]/activate
     ");
 
-    uv_snapshot!(context.filters(), context.venv().arg("--no-managed-python"), @r"
+    uv_snapshot!(context.filters(), context.venv().arg("--no-managed-python"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1532,7 +1531,7 @@ fn venv_python_preference() {
     Activate with: source .venv/[BIN]/activate
     ");
 
-    uv_snapshot!(context.filters(), context.venv(), @r"
+    uv_snapshot!(context.filters(), context.venv(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1654,7 +1653,7 @@ fn create_venv_symlink_recreate_preservation() -> Result<()> {
         .arg(symlink_path.as_os_str())
         .arg("--clear")
         .arg("--python")
-        .arg("3.12"), @r"
+        .arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1718,7 +1717,7 @@ fn create_venv_nested_symlink_preservation() -> Result<()> {
         .arg(symlink_path.as_os_str())
         .arg("--clear")
         .arg("--python")
-        .arg("3.12"), @r"
+        .arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----

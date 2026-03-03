@@ -147,7 +147,7 @@ impl<'a> BuildDispatch<'a> {
             build_options,
             hasher,
             exclude_newer,
-            source_build_context: SourceBuildContext::default(),
+            source_build_context: SourceBuildContext::new(concurrency.builds_semaphore.clone()),
             build_extra_env_vars: FxHashMap::default(),
             sources,
             workspace_cache,
@@ -264,8 +264,12 @@ impl BuildContext for BuildDispatch<'_> {
             self.hasher,
             self,
             EmptyInstalledPackages,
-            DistributionDatabase::new(self.client, self, self.concurrency.downloads)
-                .with_build_stack(build_stack),
+            DistributionDatabase::new(
+                self.client,
+                self,
+                self.concurrency.downloads_semaphore.clone(),
+            )
+            .with_build_stack(build_stack),
         )?;
         let resolution = Resolution::from(resolver.resolve().await.with_context(|| {
             format!(
@@ -353,8 +357,12 @@ impl BuildContext for BuildDispatch<'_> {
                 tags,
                 self.hasher,
                 self.build_options,
-                DistributionDatabase::new(self.client, self, self.concurrency.downloads)
-                    .with_build_stack(build_stack),
+                DistributionDatabase::new(
+                    self.client,
+                    self,
+                    self.concurrency.downloads_semaphore.clone(),
+                )
+                .with_build_stack(build_stack),
             );
 
             debug!(
@@ -489,7 +497,6 @@ impl BuildContext for BuildDispatch<'_> {
             build_kind,
             environment_variables,
             build_output,
-            self.concurrency.builds,
             self.client.credentials_cache(),
         )
         .boxed_local()
@@ -515,8 +522,8 @@ impl BuildContext for BuildDispatch<'_> {
         // Only perform the direct build if the backend is uv in a compatible version.
         let source_tree_str = source_tree.display().to_string();
         let identifier = version_id.unwrap_or_else(|| &source_tree_str);
-        if !check_direct_build(&source_tree, identifier) {
-            trace!("Requirements for direct build not matched: {identifier}");
+        if let Err(reason) = check_direct_build(&source_tree, uv_version::version()) {
+            trace!("Requirements for direct build not matched because {reason}");
             return Ok(None);
         }
 

@@ -203,7 +203,7 @@ mod resolver {
             exclude_newer,
             sources,
             workspace_cache,
-            concurrency,
+            concurrency.clone(),
             Preview::default(),
         );
 
@@ -226,7 +226,11 @@ mod resolver {
             &hashes,
             &build_context,
             installed_packages,
-            DistributionDatabase::new(client, &build_context, concurrency.downloads),
+            DistributionDatabase::new(
+                client,
+                &build_context,
+                concurrency.downloads_semaphore.clone(),
+            ),
         )?;
 
         Ok(resolver.resolve().await?)

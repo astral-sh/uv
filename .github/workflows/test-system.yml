@@ -45,7 +45,7 @@ jobs:
     timeout-minutes: 10
     name: "python on fedora"
     runs-on: ubuntu-latest
-    container: fedora:44@sha256:64de49837325632232088e59c20518565a9d657095f9f3c2fa6033a42fb1412b
+    container: fedora:45@sha256:af8cdc432037f5e8e288bbc26c2b55b96000a911ec5b37959cd464d830f6cc5b
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -649,7 +649,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: conda-incubator/setup-miniconda@835234971496cad1653abb28a638a281cf32541f # v3.2.0
+      - uses: conda-incubator/setup-miniconda@fc2d68f6413eb2d87b895e92f8584b5b94a10167 # v3.3.0
         with:
           miniconda-version: "latest"
           activate-environment: uv

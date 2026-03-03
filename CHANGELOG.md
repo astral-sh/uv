@@ -3,6 +3,113 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.10.7
+
+Released on 2026-02-27.
+
+### Bug fixes
+
+- Fix handling of junctions in Windows Containers on Windows ([#18192](https://github.com/astral-sh/uv/pull/18192))
+
+### Enhancements
+
+- Activate logging for middleware retries ([#18200](https://github.com/astral-sh/uv/pull/18200))
+- Upload uv releases to a mirror ([#18159](https://github.com/astral-sh/uv/pull/18159))
+
+## 0.10.6
+
+Released on 2026-02-24.
+
+### Bug fixes
+
+- Apply lockfile marker normalization for fork markers ([#18116](https://github.com/astral-sh/uv/pull/18116))
+- Fix Python version selection for scripts with a `requires-python` conflicting with `.python-version` ([#18097](https://github.com/astral-sh/uv/pull/18097))
+- Preserve file permissions when using reflinks on Linux ([#18187](https://github.com/astral-sh/uv/pull/18187))
+
+### Documentation
+
+- Remove verbose documentation from optional dependencies help text ([#18180](https://github.com/astral-sh/uv/pull/18180))
+
+## 0.10.5
+
+Released on 2026-02-23.
+
+### Enhancements
+
+- Add hint when named index is found in a parent config file ([#18087](https://github.com/astral-sh/uv/pull/18087))
+- Add warning for `uv lock --frozen` ([#17859](https://github.com/astral-sh/uv/pull/17859))
+- Attempt to use reflinks by default on Linux ([#18117](https://github.com/astral-sh/uv/pull/18117))
+- Fallback to hardlinks after reflink failure before copying ([#18104](https://github.com/astral-sh/uv/pull/18104))
+- Filter `pylock.toml` wheels by tags and `requires-python` ([#18081](https://github.com/astral-sh/uv/pull/18081))
+- Validate wheel filenames are normalized during `uv publish` ([#17783](https://github.com/astral-sh/uv/pull/17783))
+- Fix message when `exclude-newer` invalidates the lock file ([#18100](https://github.com/astral-sh/uv/pull/18100))
+- Change the missing files log level to debug ([#18075](https://github.com/astral-sh/uv/pull/18075))
+
+### Performance
+
+- Improve performance of repeated conflicts with an extra ([#18094](https://github.com/astral-sh/uv/pull/18094))
+
+### Bug fixes
+
+- Fix `--no-emit-workspace` with `--all-packages` on single-member workspaces ([#18098](https://github.com/astral-sh/uv/pull/18098))
+- Fix `UV_NO_DEFAULT_GROUPS` rejecting truthy values like `1` ([#18057](https://github.com/astral-sh/uv/pull/18057))
+- Fix iOS detection ([#17973](https://github.com/astral-sh/uv/pull/17973))
+- Propagate project-level conflicts to package extras ([#18096](https://github.com/astral-sh/uv/pull/18096))
+- Use a global build concurrency semaphore ([#18054](https://github.com/astral-sh/uv/pull/18054))
+
+### Documentation
+
+- Update documentation heading for environment variable files ([#18122](https://github.com/astral-sh/uv/pull/18122))
+- Fix comment about `uv export` formats ([#17900](https://github.com/astral-sh/uv/pull/17900))
+- Make it clear that Windows is supported in user- and system- level configuration docs ([#18106](https://github.com/astral-sh/uv/pull/18106))
+
+## 0.10.4
+
+Released on 2026-02-17.
+
+### Enhancements
+
+- Remove duplicate references to the affected paths when showing `uv python` errors ([#18008](https://github.com/astral-sh/uv/pull/18008))
+- Skip discovery of workspace members that contain only git-ignored files, including in sub-directories ([#18051](https://github.com/astral-sh/uv/pull/18051))
+
+### Bug fixes
+
+- Don't panic when initialising a package at the filesystem root (e.g. `uv init / --name foo`) ([#17983](https://github.com/astral-sh/uv/pull/17983))
+- Fix permissions on `wheel` and `sdist` files produced by the `uv_build` build backend ([#18020](https://github.com/astral-sh/uv/pull/18020))
+- Revert locked file change to fix locked files on NFS mounts ([#18071](https://github.com/astral-sh/uv/pull/18071))
+
+## 0.10.3
+
+Released on 2026-02-16.
+
+### Python
+
+- Add CPython 3.15.0a6
+
+### Enhancements
+
+- Don't open file locks for writing ([#17956](https://github.com/astral-sh/uv/pull/17956))
+- Make Windows trampoline error messages consistent with uv proper ([#17969](https://github.com/astral-sh/uv/pull/17969))
+- Log which preview features are enabled ([#17968](https://github.com/astral-sh/uv/pull/17968))
+
+### Preview features
+
+- Add support for ruff version constraints and `exclude-newer` in `uv format` ([#17651](https://github.com/astral-sh/uv/pull/17651))
+- Fix script path handling when `target-workspace-discovery` is enabled ([#17965](https://github.com/astral-sh/uv/pull/17965))
+- Use version constraints to select the default ruff version used by `uv format` ([#17977](https://github.com/astral-sh/uv/pull/17977))
+
+### Bug fixes
+
+- Avoid matching managed Python versions by prefixes, e.g. don't match CPython 3.10 when `cpython-3.1` is specified ([#17972](https://github.com/astral-sh/uv/pull/17972))
+- Fix handling of `--allow-existing` with minor version links on Windows ([#17978](https://github.com/astral-sh/uv/pull/17978))
+- Fix panic when encountering unmanaged workspace members ([#17974](https://github.com/astral-sh/uv/pull/17974))
+- Improve accuracy of request timing ([#18007](https://github.com/astral-sh/uv/pull/18007))
+- Reject `u64::MAX` in version segments to prevent overflow ([#17985](https://github.com/astral-sh/uv/pull/17985))
+
+### Documentation
+
+- Reference Debian Trixie instead of Bookworm ([#17991](https://github.com/astral-sh/uv/pull/17991))
+
 ## 0.10.2
 
 Released on 2026-02-10.
@@ -171,5 +278,3 @@ See [changelogs/0.2.x](./changelogs/0.2.x.md)
 See [changelogs/0.1.x](./changelogs/0.1.x.md)
 
 <!-- prettier-ignore-end -->
-
-

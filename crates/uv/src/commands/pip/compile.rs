@@ -540,7 +540,7 @@ pub(crate) async fn pip_compile(
         exclude_newer.clone(),
         sources,
         WorkspaceCache::default(),
-        concurrency,
+        concurrency.clone(),
         preview,
     );
 
@@ -580,7 +580,7 @@ pub(crate) async fn pip_compile(
         &flat_index,
         &top_level_index,
         &build_dispatch,
-        concurrency,
+        &concurrency,
         options,
         Box::new(DefaultResolveLogger),
         printer,

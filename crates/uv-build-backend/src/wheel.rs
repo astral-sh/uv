@@ -7,7 +7,6 @@ use std::fmt::{Display, Formatter};
 use std::io::{BufReader, Read, Seek, Write};
 use std::path::{Component, Path, PathBuf};
 use std::{io, mem};
-use tempfile::NamedTempFile;
 use tracing::{debug, trace};
 use walkdir::WalkDir;
 use zip::{CompressionMethod, ZipWriter};
@@ -58,7 +57,7 @@ pub fn build_wheel(
         fs_err::remove_file(&wheel_path)?;
     }
 
-    let temp_file = NamedTempFile::new_in(wheel_dir)?;
+    let temp_file = uv_fs::tempfile_in(wheel_dir)?;
     let wheel_writer = ZipDirectoryWriter::new_wheel(temp_file.as_file());
 
     write_wheel(
@@ -319,7 +318,7 @@ pub fn build_editable(
         fs_err::remove_file(&wheel_path)?;
     }
 
-    let temp_file = NamedTempFile::new_in(wheel_dir)?;
+    let temp_file = uv_fs::tempfile_in(wheel_dir)?;
     let mut wheel_writer = ZipDirectoryWriter::new_wheel(temp_file.as_file());
 
     debug!("Adding pth file to {}", wheel_path.user_display());
@@ -725,6 +724,7 @@ impl<W: Write + Seek> ZipDirectoryWriter<W> {
         // Set file permissions: 644 (rw-r--r--) for regular files, 755 (rwxr-xr-x) for executables
         let permissions = if executable_bit { 0o755 } else { 0o644 };
         let options = zip::write::SimpleFileOptions::default()
+            .system(zip::System::Unix)
             .unix_permissions(permissions)
             .compression_method(self.compression);
         self.writer.start_file(path, options)?;
@@ -737,6 +737,7 @@ impl<W: Write + Seek> DirectoryWriter for ZipDirectoryWriter<W> {
         trace!("Adding {}", path);
         // Set appropriate permissions for metadata files (644 = rw-r--r--)
         let options = zip::write::SimpleFileOptions::default()
+            .system(zip::System::Unix)
             .unix_permissions(0o644)
             .compression_method(self.compression);
         self.writer.start_file(path, options)?;
@@ -773,7 +774,9 @@ impl<W: Write + Seek> DirectoryWriter for ZipDirectoryWriter<W> {
 
     fn write_directory(&mut self, directory: &str) -> Result<(), Error> {
         trace!("Adding directory {}", directory);
-        let options = zip::write::SimpleFileOptions::default().compression_method(self.compression);
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(self.compression)
+            .system(zip::System::Unix);
         Ok(self.writer.add_directory(directory, options)?)
     }
 

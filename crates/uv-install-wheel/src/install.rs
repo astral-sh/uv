@@ -11,7 +11,7 @@ use uv_distribution_filename::WheelFilename;
 use uv_pep440::Version;
 use uv_pypi_types::{DirectUrl, Metadata10};
 
-use crate::linker::{LinkMode, Locks};
+use crate::linker::{InstallState, LinkMode, link_wheel_files};
 use crate::wheel::{
     LibKind, WheelFile, dist_info_metadata, find_dist_info, install_data, parse_scripts,
     read_record_file, write_installer_metadata, write_script_entrypoints,
@@ -37,7 +37,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
     installer: Option<&str>,
     installer_metadata: bool,
     link_mode: LinkMode,
-    locks: &Locks,
+    state: &InstallState,
 ) -> Result<(), Error> {
     let dist_info_prefix = find_dist_info(&wheel)?;
     let metadata = dist_info_metadata(&dist_info_prefix, &wheel)?;
@@ -74,7 +74,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
         LibKind::Pure => &layout.scheme.purelib,
         LibKind::Plat => &layout.scheme.platlib,
     };
-    let num_unpacked = link_mode.link_wheel_files(site_packages, &wheel, locks, filename)?;
+    let num_unpacked = link_wheel_files(link_mode, site_packages, &wheel, state, filename)?;
     trace!(?name, "Extracted {num_unpacked} files");
 
     // Read the RECORD file.

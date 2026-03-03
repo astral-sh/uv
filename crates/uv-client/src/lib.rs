@@ -2,7 +2,7 @@ pub use base_client::{
     AuthIntegration, BaseClient, BaseClientBuilder, DEFAULT_CONNECT_TIMEOUT, DEFAULT_MAX_REDIRECTS,
     DEFAULT_READ_TIMEOUT, DEFAULT_READ_TIMEOUT_UPLOAD, DEFAULT_RETRIES, ExtraMiddleware,
     RedirectClientWithMiddleware, RedirectPolicy, RequestBuilder, RetryParsingError, RetryState,
-    UvRetryableStrategy,
+    UvRetryableStrategy, retryable_on_request_failure,
 };
 pub use cached_client::{CacheControl, CachedClient, CachedClientError, DataWithCachePolicy};
 pub use error::{Error, ErrorKind, ProblemDetails, WrappedReqwestError};

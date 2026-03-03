@@ -24,7 +24,7 @@ use uv_test::{
 fn command(context: &TestContext, python_versions: &[&str]) -> Command {
     let python_path = python_path_with_versions(&context.temp_dir, python_versions)
         .expect("Failed to create Python test path");
-    let mut command = Command::new(get_bin());
+    let mut command = Command::new(get_bin!());
     command
         .arg("pip")
         .arg("compile")

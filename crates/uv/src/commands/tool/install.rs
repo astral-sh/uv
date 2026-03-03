@@ -3,7 +3,6 @@ use std::str::FromStr;
 
 use anyhow::{Result, bail};
 use owo_colors::OwoColorize;
-use tokio::sync::Semaphore;
 use tracing::{debug, trace};
 
 use uv_cache::{Cache, Refresh};
@@ -174,7 +173,7 @@ pub(crate) async fn install(
                 &settings,
                 &client_builder,
                 &state,
-                concurrency,
+                &concurrency,
                 &cache,
                 &workspace_cache,
                 printer,
@@ -275,7 +274,7 @@ pub(crate) async fn install(
 
         // Initialize the capabilities.
         let capabilities = IndexCapabilities::default();
-        let download_concurrency = Semaphore::new(concurrency.downloads);
+        let download_concurrency = concurrency.downloads_semaphore.clone();
 
         // Initialize the client to fetch the latest version.
         let latest_client = LatestClient {
@@ -362,7 +361,7 @@ pub(crate) async fn install(
                 &settings,
                 &client_builder,
                 &state,
-                concurrency,
+                &concurrency,
                 &cache,
                 &workspace_cache,
                 printer,
@@ -388,7 +387,7 @@ pub(crate) async fn install(
         &settings,
         &client_builder,
         &state,
-        concurrency,
+        &concurrency,
         &cache,
         &workspace_cache,
         printer,
@@ -581,7 +580,7 @@ pub(crate) async fn install(
             Box::new(DefaultResolveLogger),
             Box::new(DefaultInstallLogger),
             installer_metadata,
-            concurrency,
+            &concurrency,
             &cache,
             workspace_cache,
             DryRun::Disabled,
@@ -622,7 +621,7 @@ pub(crate) async fn install(
             &client_builder,
             &state,
             Box::new(DefaultResolveLogger),
-            concurrency,
+            &concurrency,
             &cache,
             printer,
             preview,
@@ -677,7 +676,7 @@ pub(crate) async fn install(
                         &client_builder,
                         &state,
                         Box::new(DefaultResolveLogger),
-                        concurrency,
+                        &concurrency,
                         &cache,
                         printer,
                         preview,
@@ -718,7 +717,7 @@ pub(crate) async fn install(
             &state,
             Box::new(DefaultInstallLogger),
             installer_metadata,
-            concurrency,
+            &concurrency,
             &cache,
             printer,
             preview,

@@ -647,6 +647,52 @@ fn init_bare_opt_in() {
     });
 }
 
+#[test]
+fn init_bare_env_var() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.init().arg("foo").env(EnvVars::UV_INIT_BARE, "true"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    ");
+
+    context
+        .temp_dir
+        .child("foo/README.md")
+        .assert(predicate::path::missing());
+    context
+        .temp_dir
+        .child("foo/hello.py")
+        .assert(predicate::path::missing());
+    context
+        .temp_dir
+        .child("foo/.python-version")
+        .assert(predicate::path::missing());
+    context
+        .temp_dir
+        .child("foo/.git")
+        .assert(predicate::path::missing());
+
+    let pyproject = context.read("foo/pyproject.toml");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#
+        );
+    });
+}
+
 // General init --script correctness test
 #[test]
 fn init_script() -> Result<()> {

@@ -186,7 +186,8 @@ fn compile_pyproject_toml() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[build-system]
-requires = ["setuptools>=42"]
+requires = ["uv_build>=0.7,<10000"]
+build-backend = "uv_build"
 
 [project]
 name = "project"
@@ -227,7 +228,8 @@ fn compile_pyproject_toml_dynamic_version() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[build-system]
-requires = ["setuptools>=42"]
+requires = ["uv_build>=0.7,<10000"]
+build-backend = "uv_build"
 
 [project]
 name = "project"
@@ -267,7 +269,8 @@ fn compile_pyproject_toml_with_line_annotation() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[build-system]
-requires = ["setuptools>=42"]
+requires = ["uv_build>=0.7,<10000"]
+build-backend = "uv_build"
 
 [project]
 name = "project"
@@ -698,7 +701,8 @@ fn compile_pyproject_toml_extra() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[build-system]
-requires = ["setuptools>=42"]
+requires = ["uv_build>=0.7,<10000"]
+build-backend = "uv_build"
 
 [project]
 name = "project"
@@ -741,7 +745,8 @@ fn compile_pyproject_toml_extra_name_normalization() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[build-system]
-requires = ["setuptools>=42"]
+requires = ["uv_build>=0.7,<10000"]
+build-backend = "uv_build"
 
 [project]
 name = "project"
@@ -784,7 +789,8 @@ fn compile_pyproject_toml_extra_missing() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[build-system]
-requires = ["setuptools>=42"]
+requires = ["uv_build>=0.7,<10000"]
+build-backend = "uv_build"
 
 [project]
 name = "project"
@@ -1151,7 +1157,8 @@ fn compile_pyproject_toml_invalid_name() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[build-system]
-requires = ["setuptools>=42"]
+requires = ["uv_build>=0.7,<10000"]
+build-backend = "uv_build"
 
 [project]
 name = "!project"
@@ -1169,9 +1176,9 @@ dependencies = [
 
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
-      Caused by: TOML parse error at line 5, column 8
+      Caused by: TOML parse error at line 6, column 8
       |
-    5 | name = "!project"
+    6 | name = "!project"
       |        ^^^^^^^^^^
     Not a valid package or extra name: "!project". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
     "#
@@ -1187,7 +1194,8 @@ fn compile_pyproject_toml_extras_missing() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[build-system]
-requires = ["setuptools>=42"]
+requires = ["uv_build>=0.7,<10000"]
+build-backend = "uv_build"
 
 [project]
 name = "project"
@@ -1249,7 +1257,8 @@ fn invalid_extra_name() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[build-system]
-requires = ["setuptools>=42"]
+requires = ["uv_build>=0.7,<10000"]
+build-backend = "uv_build"
 
 [project]
 name = "project"
@@ -2558,6 +2567,86 @@ fn compile_git_subdirectory_static_metadata() -> Result<()> {
     Ok(())
 }
 
+/// Verify that a pinned Git dependency in `pylock.toml` output is preserved (not upgraded)
+/// when re-running `uv pip compile`.
+///
+/// See: <https://github.com/astral-sh/uv/issues/18224>
+#[test]
+#[cfg(feature = "test-git")]
+fn pep_751_compile_git_preferences() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str(
+        "uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage",
+    )?;
+
+    // Write a pylock.toml with an old pinned commit SHA (no requested-revision since the source
+    // uses the default branch).
+    let pylock_toml = context.temp_dir.child("pylock.toml");
+    pylock_toml.write_str(indoc::indoc! {r#"
+        lock-version = "1.0"
+        created-by = "uv"
+        requires-python = ">=3.12"
+
+        [[packages]]
+        name = "uv-public-pypackage"
+        version = "0.1.0"
+        vcs = { type = "git", url = "https://github.com/astral-test/uv-public-pypackage", commit-id = "0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
+    "#})?;
+
+    // Re-running with `--output-file` should preserve the pinned commit.
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--universal")
+        .arg("-o")
+        .arg("pylock.toml"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --universal -o pylock.toml
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12"
+
+    [[packages]]
+    name = "uv-public-pypackage"
+    version = "0.1.0"
+    vcs = { type = "git", url = "https://github.com/astral-test/uv-public-pypackage", commit-id = "0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "#);
+
+    // With `--upgrade`, the commit should be upgraded to the latest.
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--universal")
+        .arg("-o")
+        .arg("pylock.toml")
+        .arg("--upgrade"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --universal -o pylock.toml
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12"
+
+    [[packages]]
+    name = "uv-public-pypackage"
+    version = "0.1.0"
+    vcs = { type = "git", url = "https://github.com/astral-test/uv-public-pypackage", commit-id = "b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "#);
+
+    Ok(())
+}
+
 /// Request Flask, but include a URL dependency for Werkzeug, which should avoid adding a
 /// duplicate dependency from `PyPI`.
 #[test]
@@ -3154,7 +3243,8 @@ fn compile_pyproject_toml_all_extras() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[build-system]
-requires = ["setuptools>=42"]
+requires = ["uv_build>=0.7,<10000"]
+build-backend = "uv_build"
 
 [project]
 name = "project"
@@ -3210,7 +3300,8 @@ fn compile_pyproject_toml_all_extras_annotation_line() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[build-system]
-requires = ["setuptools>=42"]
+requires = ["uv_build>=0.7,<10000"]
+build-backend = "uv_build"
 
 [project]
 name = "project"
@@ -3257,7 +3348,8 @@ fn compile_does_not_allow_both_extra_and_all_extras() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[build-system]
-requires = ["setuptools>=42"]
+requires = ["uv_build>=0.7,<10000"]
+build-backend = "uv_build"
 
 [project]
 name = "project"
@@ -3300,7 +3392,8 @@ fn compile_unsolvable_requirements() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[build-system]
-requires = ["setuptools>=42"]
+requires = ["uv_build>=0.7,<10000"]
+build-backend = "uv_build"
 
 [project]
 name = "my-project"
@@ -3332,7 +3425,8 @@ fn compile_unsolvable_requirements_version_not_available() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[build-system]
-requires = ["setuptools>=42"]
+requires = ["uv_build>=0.7,<10000"]
+build-backend = "uv_build"
 
 [project]
 name = "my-project"
@@ -3431,16 +3525,16 @@ fn compile_exclude_newer() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.in")
         .arg("--exclude-newer")
-        .arg("2022-04-04T26:00:00+00"), @r#"
+        .arg("2022-04-04T26:00:00+00"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value '2022-04-04T26:00:00+00' for '--exclude-newer <EXCLUDE_NEWER>': `2022-04-04T26:00:00+00` could not be parsed as a valid date: failed to parse hour in time: parsed hour is not valid: parameter 'hour' with value 26 is not in the required range of 0..=23
+    error: invalid value '2022-04-04T26:00:00+00' for '--exclude-newer <EXCLUDE_NEWER>': `2022-04-04T26:00:00+00` could not be parsed as a valid date: failed to parse hour in time: failed to parse two digit integer as hour: parameter 'hour' is not in the required range of 0..=23
 
     For more information, try '--help'.
-    "#
+    "
     );
 
     Ok(())
@@ -5876,6 +5970,100 @@ fn upgrade_constraint() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    "
+    );
+
+    Ok(())
+}
+
+/// Upgrade all packages with a constraint on a specific package (provided via `--upgrade-package`).
+#[test]
+fn upgrade_all_with_package_constraint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("iniconfig")?;
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc! {r"
+        # This file was autogenerated by uv via the following command:
+        #    uv pip compile requirements.in --python-version 3.12 --cache-dir [CACHE_DIR]
+        iniconfig==1.0.0
+    "})?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+            .arg("requirements.in")
+            .arg("--output-file")
+            .arg("requirements.txt")
+            .arg("--upgrade")
+            .arg("--upgrade-package")
+            .arg("iniconfig<2"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --output-file requirements.txt
+    iniconfig==1.1.1
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "
+    );
+
+    Ok(())
+}
+
+/// Upgrade all packages with a constraint on a specific package (provided via `--upgrade-package`).
+#[test]
+fn no_upgrade_with_package_constraint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("black==23.10.1")?;
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc! {r"
+        # This file was autogenerated by uv via the following command:
+        #    uv pip compile requirements.in --python-version 3.12 --cache-dir [CACHE_DIR]
+        black==23.10.1
+        click==8.1.2
+            # via black
+        mypy-extensions==1.0.0
+            # via black
+        packaging==23.2
+            # via black
+        pathspec==0.11.0
+            # via black
+        platformdirs==4.0.0
+            # via black
+    "})?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+            .arg("requirements.in")
+            .arg("--output-file")
+            .arg("requirements.txt")
+            .arg("--no-upgrade")
+            .arg("--upgrade-package")
+            .arg("click"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --output-file requirements.txt --no-upgrade
+    black==23.10.1
+        # via -r requirements.in
+    click==8.1.7
+        # via black
+    mypy-extensions==1.0.0
+        # via black
+    packaging==23.2
+        # via black
+    pathspec==0.11.0
+        # via black
+    platformdirs==4.0.0
+        # via black
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
     "
     );
 
@@ -10973,18 +11161,7 @@ requires-python = ">=3.13"
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(&format!("-e {}", editable_dir.path().display()))?;
 
-    let filters: Vec<_> = [
-        // 3.11 may not be installed
-        (
-            "warning: The requested Python version 3.11 is not available; .* will be used to build dependencies instead.\n",
-            "",
-        ),
-    ]
-        .into_iter()
-        .chain(context.filters())
-        .collect();
-
-    uv_snapshot!(filters, context.pip_compile()
+    uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("--python-version=3.11"), @"
     success: false
@@ -10992,9 +11169,65 @@ requires-python = ">=3.13"
     ----- stdout -----
 
     ----- stderr -----
+    warning: The requested Python version 3.11 is not available; 3.12.[X] will be used to build dependencies instead.
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
+      ╰─▶ Because the requested Python version (>=3.11) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
           And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
+
+          hint: The `--python-version` value (>=3.11) includes Python versions that are not supported by your dependencies (e.g., example==0.0.0 only supports >=3.13). Consider using a higher `--python-version` value.
+    "
+    );
+
+    Ok(())
+}
+
+/// Resolve successfully when an editable's `Requires-Python` is satisfied by
+/// `--python-version` but not by the installed interpreter.
+#[test]
+fn requires_python_editable_installed_incompatible() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Create an editable package with `requires-python >= 3.13`.
+    let editable_dir = context.temp_dir.child("editable");
+    editable_dir.create_dir_all()?;
+    let pyproject_toml = editable_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+name = "example"
+version = "0.0.0"
+dependencies = [
+  "anyio==4.0.0"
+]
+requires-python = ">=3.13"
+"#,
+    )?;
+
+    // Write to a requirements file.
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str(&format!("-e {}", editable_dir.path().display()))?;
+
+    // `--python-version 3.13` satisfies `requires-python >= 3.13`, so resolution succeeds
+    // even though the installed interpreter is 3.12.
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--python-version=3.13"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --python-version=3.13
+    -e [TEMP_DIR]/editable
+        # via -r requirements.in
+    anyio==4.0.0
+        # via example
+    idna==3.6
+        # via anyio
+    sniffio==1.3.1
+        # via anyio
+
+    ----- stderr -----
+    warning: The requested Python version 3.13 is not available; 3.12.[X] will be used to build dependencies instead.
+    Resolved 4 packages in [TIME]
     "
     );
 
@@ -13234,8 +13467,7 @@ fn git_source_refs() -> Result<()> {
 fn git_source_missing_tag() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
-    let mut filters = context.filters();
-    filters.push(("`.*/git fetch (.*)`", "`git fetch $1`"));
+    let context = context.with_filter(("`.*/git fetch (.*)`", "`git fetch $1`"));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -13250,7 +13482,7 @@ fn git_source_missing_tag() -> Result<()> {
         uv-public-pypackage = { git = "https://github.com/astral-test/uv-public-pypackage", tag = "missing" }
     "#})?;
 
-    uv_snapshot!(filters, context.pip_compile()
+    uv_snapshot!(context.filters(), context.pip_compile()
         .arg("pyproject.toml"), @"
     success: false
     exit_code: 1
@@ -18125,7 +18357,7 @@ fn compile_missing_python_version() -> Result<()> {
     uv_snapshot!(context
         .pip_compile()
         .arg("--python-version").arg("3.13")
-        .arg("requirements.in"), @r"
+        .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -18163,7 +18395,7 @@ fn compile_missing_python_version_patch_fallback() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .pip_compile()
         .arg("--python-version").arg("3.13.99")
-        .arg("requirements.in"), @r"
+        .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -18199,7 +18431,7 @@ fn compile_missing_python_version_default_fallback() -> Result<()> {
         .pip_compile()
         .env(EnvVars::UV_MANAGED_PYTHON, "1")
         .arg("--python-version").arg("3.99.99")
-        .arg("requirements.in"), @r"
+        .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -18250,7 +18482,7 @@ async fn compile_missing_python_download_error_warning() {
         .env("ALL_PROXY", server.uri())
         .env(EnvVars::UV_HTTP_RETRIES, "0")
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
-        .arg("requirements.in"), @r"
+        .arg("requirements.in"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -18275,7 +18507,7 @@ async fn compile_missing_python_download_error_warning() {
         .env("ALL_PROXY", server.uri())
         .env(EnvVars::UV_HTTP_RETRIES, "0")
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
-        .arg("requirements.in"), @r"
+        .arg("requirements.in"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -18300,7 +18532,7 @@ async fn compile_missing_python_download_error_warning() {
         .env("ALL_PROXY", server.uri())
         .env(EnvVars::UV_HTTP_RETRIES, "0")
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
-        .arg("requirements.in"), @r"
+        .arg("requirements.in"), @"
     success: false
     exit_code: 2
     ----- stdout -----
