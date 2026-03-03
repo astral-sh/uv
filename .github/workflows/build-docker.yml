@@ -286,7 +286,9 @@ jobs:
         env:
           VERSION: ${{ needs.docker-plan.outputs.tag }}
           PUSH_DEV: ${{ inputs.push-dev }}
-          UV_BASE_TAG: ${{ needs.docker-publish-base.outputs.image-version }}
+          # Use the tag from the base image we just pushed; fall back to `latest` on dry-runs
+          # since the base image isn't pushed to the registry.
+          UV_BASE_TAG: ${{ needs.docker-plan.outputs.push == 'true' && needs.docker-publish-base.outputs.image-version || 'latest' }}
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
