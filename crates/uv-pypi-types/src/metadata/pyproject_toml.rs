@@ -14,7 +14,7 @@ use crate::MetadataError;
 #[serde(rename_all = "kebab-case")]
 pub struct PyProjectToml {
     pub project: Option<Project>,
-    pub(super) tool: Option<Tool>,
+    pub tool: Option<Tool>,
 }
 
 impl PyProjectToml {
@@ -80,11 +80,12 @@ impl TryFrom<PyprojectTomlWire> for Project {
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
-pub(super) struct Tool {
-    pub(super) poetry: Option<ToolPoetry>,
+pub struct Tool {
+    pub poetry: Option<ToolPoetry>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
-#[expect(clippy::empty_structs_with_brackets)]
-pub(super) struct ToolPoetry {}
+pub struct ToolPoetry {
+    pub name: Option<PackageName>,
+}
