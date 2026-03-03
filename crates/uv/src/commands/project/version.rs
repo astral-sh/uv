@@ -2,7 +2,7 @@ use std::fmt::Write;
 use std::path::Path;
 use std::str::FromStr;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Result, anyhow};
 use owo_colors::OwoColorize;
 
 use tracing::debug;
@@ -21,12 +21,12 @@ use uv_pep440::{BumpCommand, PrereleaseKind, Version};
 use uv_preview::Preview;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_settings::PythonInstallMirrors;
+use uv_workspace::VirtualProject;
 use uv_workspace::pyproject_mut::Error;
 use uv_workspace::{
     DiscoveryOptions, WorkspaceCache, WorkspaceError,
     pyproject_mut::{DependencyTarget, PyProjectTomlMut},
 };
-use uv_workspace::{VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
@@ -375,20 +375,17 @@ async fn find_target(
     // Find the project in the workspace.
     // No workspace caching since `uv version` changes the workspace definition.
     let project = if let Some(package) = package {
-        VirtualProject::Project(
-            Workspace::discover(
-                project_dir,
-                &DiscoveryOptions {
-                    project: uv_workspace::ProjectDiscovery::Required,
-                    ..DiscoveryOptions::default()
-                },
-                &WorkspaceCache::default(),
-            )
-            .await
-            .map_err(|err| hint_uv_self_version(err, explicit_project))?
-            .with_current_project(package.clone())
-            .with_context(|| format!("Package `{package}` not found in workspace"))?,
+        VirtualProject::discover_with_package(
+            project_dir,
+            &DiscoveryOptions {
+                project: uv_workspace::ProjectDiscovery::Required,
+                ..DiscoveryOptions::default()
+            },
+            &WorkspaceCache::default(),
+            package.clone(),
         )
+        .await
+        .map_err(|err| hint_uv_self_version(err, explicit_project))?
     } else {
         VirtualProject::discover(
             project_dir,
