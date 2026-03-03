@@ -39,10 +39,18 @@ RUN rustup target add $(cat rust_target.txt)
 COPY crates crates
 COPY ./Cargo.toml Cargo.toml
 COPY ./Cargo.lock Cargo.lock
+
+# Install patched cargo-auditable with Zig linker support
+RUN cargo install \
+  --git https://github.com/rust-secure-code/cargo-auditable.git \
+  --rev caa964b714d8da6b1139b8e7a0a2ba5979235f22 \
+  --locked \
+  cargo-auditable
+
 RUN case "${TARGETPLATFORM}" in \
   "linux/arm64") export JEMALLOC_SYS_WITH_LG_PAGE=16;; \
   esac && \
-  cargo zigbuild --bin uv --bin uvx --target $(cat rust_target.txt) --release
+  cargo auditable zigbuild --bin uv --bin uvx --target $(cat rust_target.txt) --release
 RUN cp target/$(cat rust_target.txt)/release/uv /uv \
   && cp target/$(cat rust_target.txt)/release/uvx /uvx
 # TODO(konsti): Optimize binary size, with a version that also works when cross compiling
