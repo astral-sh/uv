@@ -230,8 +230,8 @@ fn python_reinstall_patch() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.12.12 in [TIME]
-     + cpython-3.12.12-[PLATFORM] (python3.12)
+    Installed Python 3.12.13 in [TIME]
+     + cpython-3.12.13-[PLATFORM] (python3.12)
     ");
 }
 
@@ -4229,8 +4229,8 @@ fn python_install_upgrade_build_version() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.12.12 in [TIME]
-     + cpython-3.12.12-[PLATFORM] (python3.12)
+    Installed Python 3.12.13 in [TIME]
+     + cpython-3.12.13-[PLATFORM] (python3.12)
     ");
 
     // Should be a no-op when already installed at latest version
@@ -4245,7 +4245,7 @@ fn python_install_upgrade_build_version() {
 
     // Overwrite the BUILD file with an older build version
     let installation_dir = context.temp_dir.child("managed").child(format!(
-        "cpython-3.12.12-{}",
+        "cpython-3.12.13-{}",
         platform_key_from_env().unwrap()
     ));
     let build_file = installation_dir.join("BUILD");
@@ -4258,8 +4258,8 @@ fn python_install_upgrade_build_version() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.12.12 in [TIME]
-     ~ cpython-3.12.12-[PLATFORM]
+    Installed Python 3.12.13 in [TIME]
+     ~ cpython-3.12.13-[PLATFORM]
     ");
 
     // Should be a no-op again after upgrade
