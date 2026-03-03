@@ -205,6 +205,13 @@ jobs:
           - python:3.12-trixie,python3.12-trixie
           - python:3.11-trixie,python3.11-trixie
           - python:3.10-trixie,python3.10-trixie
+          - dhi.io/alpine-base:3.23,alpine3.23-dhi,alpine-dhi
+          - dhi.io/debian-base:trixie-debian13,trixie-dhi,debian-dhi
+          - dhi.io/python:3.14,python3.14-dhi
+          - dhi.io/python:3.13,python3.13-dhi
+          - dhi.io/python:3.12,python3.12-dhi
+          - dhi.io/python:3.11,python3.11-dhi
+          - dhi.io/python:3.10,python3.10-dhi
           - python:3.9-trixie,python3.9-trixie
           - python:3.14-slim-trixie,python3.14-trixie-slim
           - python:3.13-slim-trixie,python3.13-trixie-slim
@@ -219,6 +226,13 @@ jobs:
         with:
           username: ${{ needs.docker-plan.outputs.push == 'true' && 'astral' || 'astralshbot' }}
           password: ${{ needs.docker-plan.outputs.push == 'true' && secrets.DOCKERHUB_TOKEN_RW || secrets.DOCKERHUB_TOKEN_RO }}
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        if: ${{ needs.docker-plan.outputs.login == 'true' }}
+        with:
+          registry: dhi.io
+          username: astralshbot
+          password: ${{ secrets.DOCKERHUB_TOKEN_RO }}
 
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:

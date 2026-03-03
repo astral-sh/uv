@@ -49,6 +49,18 @@ And the following derived images are available:
 - Based on `buildpack-deps:trixie`:
     - `ghcr.io/astral-sh/uv:debian`
     - `ghcr.io/astral-sh/uv:trixie`
+- Based on `dhi.io/alpine-base:3.23`:
+    - `ghcr.io/astral-sh/uv:alpine-dhi`
+    - `ghcr.io/astral-sh/uv:alpine3.23-dhi`
+- Based on `dhi.io/debian-base:trixie-debian13`:
+    - `ghcr.io/astral-sh/uv:debian-dhi`
+    - `ghcr.io/astral-sh/uv:trixie-dhi`
+- Based on `dhi/python:3.x`:
+    - `ghcr.io/astral-sh/uv:python3.14-dhi`
+    - `ghcr.io/astral-sh/uv:python3.13-dhi`
+    - `ghcr.io/astral-sh/uv:python3.12-dhi`
+    - `ghcr.io/astral-sh/uv:python3.11-dhi`
+    - `ghcr.io/astral-sh/uv:python3.10-dhi`
 - Based on `python3.x-alpine`:
     - `ghcr.io/astral-sh/uv:python3.14-alpine`
     - `ghcr.io/astral-sh/uv:python3.14-alpine3.23`
