@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 ## Install cargo extensions for release builds.
 ##
-## Installs cargo-auditable for SBOM embedding.
+## Installs cargo-auditable for SBOM embedding and cargo-code-sign for binary signing.
 ##
 ## Includes handling for cross-build containers in our release workflow.
 ##
@@ -20,6 +20,11 @@ CARGO_AUDITABLE_INSTALL="cargo install cargo-auditable \
     --git https://github.com/rust-secure-code/cargo-auditable.git \
     --rev 7df767ff9e844d742d7223c62b80353da0f18433"
 
+CARGO_CODE_SIGN_INSTALL="cargo install cargo-code-sign \
+    --locked \
+    --git https://github.com/zanieb/cargo-code-sign \
+    --rev 3448dce9525127604dc65db1dc2a5f4b67f214b6"
+
 # In Linux containers running on x86_64, build a static musl binary so the installed tool works in
 # musl-based environments (Alpine, etc.).
 #
@@ -29,6 +34,8 @@ if [ "$(uname -m 2>/dev/null)" = "x86_64" ] && [ "$(uname -s 2>/dev/null)" = "Li
     MUSL_TARGET="x86_64-unknown-linux-musl"
     rustup target add "$MUSL_TARGET"
     CC=gcc $CARGO_AUDITABLE_INSTALL --target "$MUSL_TARGET"
+    CC=gcc $CARGO_CODE_SIGN_INSTALL --target "$MUSL_TARGET"
 else
     $CARGO_AUDITABLE_INSTALL
+    $CARGO_CODE_SIGN_INSTALL
 fi
