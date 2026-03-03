@@ -108,7 +108,7 @@ impl PubGrubPackage {
         // extras end up having two distinct marker expressions, which in turn
         // makes them two distinct packages. This results in PubGrub being
         // unable to unify version constraints across such packages.
-        let marker = marker.simplify_extras_with(|_| true);
+        let marker = marker.without_extras();
         if let Some(extra) = extra {
             Self(Arc::new(PubGrubPackageInner::Extra {
                 name,
@@ -127,6 +127,28 @@ impl PubGrubPackage {
             Self(Arc::new(PubGrubPackageInner::Package {
                 name,
                 extra,
+                group: None,
+                marker,
+            }))
+        }
+    }
+
+    /// Create a [`PubGrubPackage`] from a URL requirement, preserving extra
+    /// expressions in markers so the resolver can fork on them.
+    ///
+    /// When a URL dependency is gated on `extra == "X"`, preserving the marker
+    /// creates a [`PubGrubPackageInner::Marker`] variant, enabling the resolver
+    /// to create separate forks for "extra enabled" and "extra disabled". This
+    /// prevents the URL from leaking into the non-extra fork.
+    ///
+    /// See: <https://github.com/astral-sh/uv/issues/18229>
+    pub(crate) fn from_package_url(name: PackageName, marker: MarkerTree) -> Self {
+        if !marker.is_true() {
+            Self(Arc::new(PubGrubPackageInner::Marker { name, marker }))
+        } else {
+            Self(Arc::new(PubGrubPackageInner::Package {
+                name,
+                extra: None,
                 group: None,
                 marker,
             }))

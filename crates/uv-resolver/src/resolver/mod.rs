@@ -26,7 +26,7 @@ use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, DistributionMetadata,
     IncompatibleDist, IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations,
     IndexMetadata, IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement,
-    ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
+    RequirementSource, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -1905,7 +1905,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     python_requirement,
                 );
 
-                requirements
+                let mut deps: Vec<_> = requirements
                     .filter(|requirement| !self.excludes.contains(&requirement.name))
                     .flat_map(|requirement| {
                         PubGrubDependency::from_requirement(
@@ -1916,7 +1916,102 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         )
                     })
                     .chain(system_dependencies)
-                    .collect()
+                    .collect();
+
+                // When `tool.uv.sources` maps a dependency to a URL with
+                // `extra = "X"`, lowering splits it into two requirements:
+                //
+                //   iniconfig ; extra != "X"        (registry)
+                //   iniconfig @ <url> ; extra == "X" (URL)
+                //
+                // `flatten_requirements` (via `is_requirement_applicable`)
+                // only keeps requirements whose markers are true without any
+                // extras active, so the URL requirement is dropped. That is
+                // normally fine — the `Extra` variant handles it — but
+                // `ForkUrls` is keyed by package name and shared across dep
+                // variants within a fork, so the URL ends up being used even
+                // when the extra is disabled.
+                //
+                // To fix this, we re-add the URL requirement as a `Marker`
+                // variant alongside the registry requirement. Having both as
+                // siblings with complementary markers (`extra == "X"` vs.
+                // `extra != "X"`) causes the resolver to fork, giving each
+                // side its own `ForkUrls` and keeping the URL isolated to the
+                // extra-enabled fork.
+                //
+                // See: <https://github.com/astral-sh/uv/issues/18229>
+                if extra.is_none() && group.is_none() {
+                    let python_marker = python_requirement.to_marker_tree();
+                    for requirement in self.overrides.apply(metadata.requires_dist.iter()) {
+                        // Already included via `flatten_requirements`.
+                        if requirement.evaluate_markers(env.marker_environment(), &[]) {
+                            continue;
+                        }
+                        // Only requirements with an explicit source (a URL
+                        // or a named index) participate in `ForkUrls` /
+                        // `ForkIndexes`. Plain registry deps without an
+                        // explicit index don't have shared per-fork state
+                        // that can leak.
+                        if matches!(
+                            requirement.source,
+                            RequirementSource::Registry { index: None, .. }
+                        ) {
+                            continue;
+                        }
+                        // Requirements that request extras or groups (e.g.,
+                        // `leaf[async]`) are gated by Extra/Group tracking,
+                        // not conditional source splits.
+                        if !requirement.extras.is_empty() || !requirement.groups.is_empty() {
+                            continue;
+                        }
+                        if python_marker.is_disjoint(requirement.marker) {
+                            continue;
+                        }
+                        if !env.included_by_marker(requirement.marker) {
+                            continue;
+                        }
+                        if self.excludes.contains(&requirement.name) {
+                            continue;
+                        }
+                        // A base dep (without a URL) for the same name must
+                        // already exist, confirming this is a conditional
+                        // source split rather than a dep that only appears in
+                        // optional-dependencies.
+                        let Some(base) = deps.iter_mut().find(|dep| {
+                            dep.package.name() == Some(&requirement.name) && dep.url.is_none()
+                        }) else {
+                            continue;
+                        };
+
+                        // Narrow the base dep's marker by intersecting it with
+                        // the negation of the URL requirement's marker. This
+                        // gives the resolver complementary `Marker` variants
+                        // to fork on (e.g., `extra == "X"` vs `extra != "X"`).
+                        //
+                        // `without_extras` in `from_package` strips all extra
+                        // expressions, so the base dep starts with marker TRUE.
+                        // The first URL dep narrows it to `extra != "X"`, a
+                        // second would further narrow to
+                        // `extra != "X" and extra != "Y"`, etc.
+                        let negated = requirement.marker.negate();
+                        let mut base_marker = base.package.marker();
+                        base_marker.and(negated);
+                        base.package =
+                            PubGrubPackage::from_package_url(requirement.name.clone(), base_marker);
+
+                        deps.push(PubGrubDependency {
+                            package: PubGrubPackage::from_package_url(
+                                requirement.name.clone(),
+                                requirement.marker,
+                            ),
+                            version: Ranges::full(),
+                            parent: package.name_no_root().cloned(),
+                            url: requirement.source.to_verbatim_parsed_url(),
+                        });
+                    }
+                }
+
+                deps
             }
 
             PubGrubPackageInner::Python(_) => return Ok(Dependencies::Unforkable(Vec::default())),
