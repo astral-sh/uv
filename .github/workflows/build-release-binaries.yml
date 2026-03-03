@@ -100,6 +100,46 @@ jobs:
       - name: "Install cargo extensions"
         shell: bash
         run: scripts/install-cargo-extensions.sh
+      - name: "Prepare macOS signing certificate"
+        run: |
+          set -euo pipefail
+
+          CERT_NAME="uv-codesign-ci"
+          CERT_DIR="$RUNNER_TEMP/codesign-cert"
+          mkdir -p "$CERT_DIR"
+
+          openssl req -x509 -newkey rsa:2048 -sha256 -days 7 -nodes \
+            -keyout "$CERT_DIR/key.pem" \
+            -out "$CERT_DIR/cert.pem" \
+            -subj "/CN=$CERT_NAME" \
+            -addext "extendedKeyUsage=codeSigning" \
+            -addext "keyUsage=digitalSignature"
+
+          P12_PASSWORD="$(uuidgen | tr -d '-')"
+
+          # LibreSSL (shipped with macOS) doesn't support -legacy; OpenSSL 3.x
+          # requires it for macOS keychain compatibility.
+          LEGACY_FLAG=""
+          if openssl version 2>&1 | grep -q "^OpenSSL 3"; then
+            LEGACY_FLAG="-legacy"
+          fi
+
+          openssl pkcs12 -export $LEGACY_FLAG \
+            -inkey "$CERT_DIR/key.pem" \
+            -in "$CERT_DIR/cert.pem" \
+            -name "$CERT_NAME" \
+            -out "$CERT_DIR/cert.p12" \
+            -passout pass:"$P12_PASSWORD"
+
+          CERT_B64="$(base64 < "$CERT_DIR/cert.p12" | tr -d '\n')"
+          CERT_SHA1="$(openssl x509 -in "$CERT_DIR/cert.pem" -noout -fingerprint -sha1 | cut -d= -f2 | tr -d ':')"
+
+          {
+            echo "CODESIGN_IDENTITY=$CERT_SHA1"
+            echo "CODESIGN_CERTIFICATE=$CERT_B64"
+            echo "CODESIGN_CERTIFICATE_PASSWORD=$P12_PASSWORD"
+            echo "CODESIGN_ALLOW_UNTRUSTED=1"
+          } >> "$GITHUB_ENV"
 
       # uv
       - name: "Build wheels - x86_64"
@@ -166,6 +206,46 @@ jobs:
       - name: "Install cargo extensions"
         shell: bash
         run: scripts/install-cargo-extensions.sh
+      - name: "Prepare macOS signing certificate"
+        run: |
+          set -euo pipefail
+
+          CERT_NAME="uv-codesign-ci"
+          CERT_DIR="$RUNNER_TEMP/codesign-cert"
+          mkdir -p "$CERT_DIR"
+
+          openssl req -x509 -newkey rsa:2048 -sha256 -days 7 -nodes \
+            -keyout "$CERT_DIR/key.pem" \
+            -out "$CERT_DIR/cert.pem" \
+            -subj "/CN=$CERT_NAME" \
+            -addext "extendedKeyUsage=codeSigning" \
+            -addext "keyUsage=digitalSignature"
+
+          P12_PASSWORD="$(uuidgen | tr -d '-')"
+
+          # LibreSSL (shipped with macOS) doesn't support -legacy; OpenSSL 3.x
+          # requires it for macOS keychain compatibility.
+          LEGACY_FLAG=""
+          if openssl version 2>&1 | grep -q "^OpenSSL 3"; then
+            LEGACY_FLAG="-legacy"
+          fi
+
+          openssl pkcs12 -export $LEGACY_FLAG \
+            -inkey "$CERT_DIR/key.pem" \
+            -in "$CERT_DIR/cert.pem" \
+            -name "$CERT_NAME" \
+            -out "$CERT_DIR/cert.p12" \
+            -passout pass:"$P12_PASSWORD"
+
+          CERT_B64="$(base64 < "$CERT_DIR/cert.p12" | tr -d '\n')"
+          CERT_SHA1="$(openssl x509 -in "$CERT_DIR/cert.pem" -noout -fingerprint -sha1 | cut -d= -f2 | tr -d ':')"
+
+          {
+            echo "CODESIGN_IDENTITY=$CERT_SHA1"
+            echo "CODESIGN_CERTIFICATE=$CERT_B64"
+            echo "CODESIGN_CERTIFICATE_PASSWORD=$P12_PASSWORD"
+            echo "CODESIGN_ALLOW_UNTRUSTED=1"
+          } >> "$GITHUB_ENV"
 
       # uv
       - name: "Build wheels - aarch64"
@@ -256,6 +336,35 @@ jobs:
       - name: "Install cargo extensions"
         shell: bash
         run: scripts/install-cargo-extensions.sh
+      - name: "Prepare Windows signing certificate"
+        shell: pwsh
+        run: |
+          $cert = New-SelfSignedCertificate `
+            -Type CodeSigningCert `
+            -Subject "CN=uv-codesign-ci" `
+            -CertStoreLocation "Cert:\CurrentUser\My" `
+            -NotAfter (Get-Date).AddDays(7)
+          $passwordPlain = [Guid]::NewGuid().ToString("N")
+          $password = ConvertTo-SecureString -String $passwordPlain -Force -AsPlainText
+          $pfxPath = Join-Path $env:RUNNER_TEMP "uv-codesign-ci.pfx"
+
+          Export-PfxCertificate `
+            -Cert "Cert:\CurrentUser\My\$($cert.Thumbprint)" `
+            -FilePath $pfxPath `
+            -Password $password | Out-Null
+
+          # Find signtool.exe — it's not on PATH on GitHub Actions runners.
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1 -ExpandProperty FullName
+
+          if (-not $signtool) {
+            throw "signtool.exe not found in Windows SDK"
+          }
+
+          "SIGNTOOL_PATH=$signtool" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "SIGNTOOL_CERTIFICATE_PATH=$pfxPath" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "SIGNTOOL_CERTIFICATE_PASSWORD=$passwordPlain" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       # uv
       - name: "Build wheels"
