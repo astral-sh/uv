@@ -1,14 +1,18 @@
-FROM --platform=$BUILDPLATFORM ubuntu AS build
+FROM --platform=$BUILDPLATFORM ubuntu:24.04@sha256:d1e2e92c075e5ca139d51a140fff46f84315c0fdce203eab2807c7e495eff4f9 AS build
+
+ARG UBUNTU_SNAPSHOT=20260301T000000Z
+
 ENV HOME="/root"
 WORKDIR $HOME
 
-RUN apt update \
-  && apt install -y --no-install-recommends \
+# Install dependencies using an Ubuntu snapshot for reproducibility.
+# ca-certificates are required for using the snapshot.
+RUN --mount=type=cache,target=/var/lib/apt/lists \
+  apt install -y --update ca-certificates && \
+  apt install -y --update --snapshot ${UBUNTU_SNAPSHOT} --no-install-recommends \
   build-essential \
   curl \
-  python3-venv \
-  && apt clean \
-  && rm -rf /var/lib/apt/lists/*
+  python3-venv
 
 # Setup zig as cross compiling linker
 RUN python3 -m venv $HOME/.venv
