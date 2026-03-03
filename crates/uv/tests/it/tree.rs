@@ -1124,6 +1124,104 @@ fn cycle_invert() -> Result<()> {
 }
 
 #[test]
+fn cycle_depth_boundary_no_premature_dedupe() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["testtools==2.3.0", "fixtures==3.0.0"]
+    "#,
+    )?;
+
+    // With --depth 3, packages at the depth boundary (depth 3) are shown but not
+    // marked as visited. Packages below the boundary (e.g., `fixtures` at depth 1)
+    // are correctly marked visited and show (*) on later appearances. Leaf packages
+    // like `pbr` (no children in this graph) appear without (*) even when visited,
+    // since there is nothing to deduplicate.
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--depth").arg("3"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── fixtures v3.0.0
+    │   ├── pbr v6.0.0
+    │   ├── six v1.16.0
+    │   └── testtools v2.3.0
+    │       ├── extras v1.0.0
+    │       ├── fixtures v3.0.0 (*)
+    │       ├── pbr v6.0.0
+    │       ├── python-mimeparse v1.6.0
+    │       ├── six v1.16.0
+    │       ├── traceback2 v1.4.0
+    │       └── unittest2 v1.1.0
+    └── testtools v2.3.0 (*)
+    (*) Package tree already displayed
+
+    ----- stderr -----
+    Resolved 11 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn cycle_invert_deep() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["testtools==2.3.0", "fixtures==3.0.0"]
+    "#,
+    )?;
+
+    // With --invert and --depth 2, cycles in the reversed graph should be
+    // detected and marked with (*) without causing infinite loops.
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert").arg("--depth").arg("2"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    argparse v1.4.0
+    └── unittest2 v1.1.0
+        └── testtools v2.3.0
+    extras v1.0.0
+    └── testtools v2.3.0
+        ├── fixtures v3.0.0
+        └── project v0.1.0
+    linecache2 v1.0.0
+    └── traceback2 v1.4.0
+        ├── testtools v2.3.0 (*)
+        └── unittest2 v1.1.0 (*)
+    pbr v6.0.0
+    ├── fixtures v3.0.0
+    │   ├── project v0.1.0
+    │   └── testtools v2.3.0 (*)
+    └── testtools v2.3.0 (*)
+    python-mimeparse v1.6.0
+    └── testtools v2.3.0 (*)
+    six v1.16.0
+    ├── fixtures v3.0.0 (*)
+    ├── testtools v2.3.0 (*)
+    └── unittest2 v1.1.0 (*)
+    (*) Package tree already displayed
+
+    ----- stderr -----
+    Resolved 11 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn cycle_depth_no_dedupe() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
