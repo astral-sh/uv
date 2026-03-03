@@ -24,10 +24,14 @@ on:
         required: false
         type: string
         default: ""
+      push-dev:
+        required: false
+        type: boolean
+        default: false
 
 env:
-  UV_GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/uv
-  UV_DOCKERHUB_IMAGE: docker.io/astral/uv
+  UV_GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/${{ inputs.push-dev && 'uv-dev' || 'uv' }}
+  UV_DOCKERHUB_IMAGE: ${{ !inputs.push-dev && 'docker.io/astral/uv' || '' }}
 
 permissions: {}
 
@@ -39,6 +43,7 @@ jobs:
     outputs:
       login: ${{ steps.plan.outputs.login }}
       push: ${{ steps.plan.outputs.push }}
+      push-version: ${{ steps.plan.outputs.push-version }}
       tag: ${{ steps.plan.outputs.tag }}
       action: ${{ steps.plan.outputs.action }}
     steps:
@@ -46,17 +51,26 @@ jobs:
         env:
           DRY_RUN: ${{ inputs.plan == '' || fromJson(inputs.plan).announcement_tag_is_implicit }}
           TAG: ${{ inputs.plan != '' && fromJson(inputs.plan).announcement_tag }}
+          PUSH_DEV: ${{ inputs.push-dev }}
           IS_LOCAL_PR: ${{ github.event.pull_request.head.repo.full_name == 'astral-sh/uv' }}
         id: plan
         run: |
-          if [ "${DRY_RUN}" == "false" ]; then
+          if [ "${PUSH_DEV}" == "true" ] && [ "${IS_LOCAL_PR}" == "true" ]; then
             echo "login=true" >> "$GITHUB_OUTPUT"
             echo "push=true" >> "$GITHUB_OUTPUT"
+            echo "push-version=false" >> "$GITHUB_OUTPUT"
+            echo "tag=sha" >> "$GITHUB_OUTPUT"
+            echo "action=build and publish to uv-dev" >> "$GITHUB_OUTPUT"
+          elif [ "${DRY_RUN}" == "false" ]; then
+            echo "login=true" >> "$GITHUB_OUTPUT"
+            echo "push=true" >> "$GITHUB_OUTPUT"
+            echo "push-version=true" >> "$GITHUB_OUTPUT"
             echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
             echo "action=build and publish" >> "$GITHUB_OUTPUT"
           else
             echo "login=${IS_LOCAL_PR}" >> "$GITHUB_OUTPUT"
             echo "push=false" >> "$GITHUB_OUTPUT"
+            echo "push-version=false" >> "$GITHUB_OUTPUT"
             echo "tag=dry-run" >> "$GITHUB_OUTPUT"
             echo "action=build" >> "$GITHUB_OUTPUT"
           fi
@@ -73,7 +87,7 @@ jobs:
       packages: write # for GHCR image pushes
       attestations: write # for GHCR attestations
     environment:
-      name: ${{ needs.docker-plan.outputs.push == 'true' && 'release' || '' }}
+      name: ${{ needs.docker-plan.outputs.push-version == 'true' && 'release' || (needs.docker-plan.outputs.push == 'true' && 'release-test' || '') }}
     outputs:
       image-tags: ${{ steps.meta.outputs.tags }}
       image-annotations: ${{ steps.meta.outputs.annotations }}
@@ -104,17 +118,22 @@ jobs:
       - name: Check tag consistency
         if: ${{ needs.docker-plan.outputs.push == 'true' }}
         run: |
+          if [ "${PUSH_DEV}" == "true" ]; then
+            echo "Building at $(git rev-parse HEAD)"
+            exit 0
+          fi
+
           version=$(grep "version = " pyproject.toml | sed -e 's/version = "\(.*\)"/\1/g')
           if [ "${TAG}" != "${version}" ]; then
             echo "The input tag does not match the version from pyproject.toml:" >&2
             echo "${TAG}" >&2
             echo "${version}" >&2
             exit 1
-          else
-            echo "Releasing ${version}"
           fi
+          echo "Releasing ${version}"
         env:
           TAG: ${{ needs.docker-plan.outputs.tag }}
+          PUSH_DEV: ${{ inputs.push-dev }}
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
@@ -128,8 +147,9 @@ jobs:
           # Defining this makes sure the org.opencontainers.image.version OCI label becomes the actual release version and not the branch name
           tags: |
             type=raw,value=dry-run,enable=${{ needs.docker-plan.outputs.push == 'false' }}
-            type=pep440,pattern={{ version }},value=${{ needs.docker-plan.outputs.tag }},enable=${{ needs.docker-plan.outputs.push }}
-            type=pep440,pattern={{ major }}.{{ minor }},value=${{ needs.docker-plan.outputs.tag }},enable=${{ needs.docker-plan.outputs.push }}
+            type=pep440,pattern={{ version }},value=${{ needs.docker-plan.outputs.tag }},enable=${{ needs.docker-plan.outputs.push-version == 'true' }}
+            type=pep440,pattern={{ major }}.{{ minor }},value=${{ needs.docker-plan.outputs.tag }},enable=${{ needs.docker-plan.outputs.push-version == 'true' }}
+            type=sha,enable=${{ inputs.push-dev }}
 
       - name: Build and push by digest
         id: build
@@ -156,7 +176,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment:
-      name: ${{ needs.docker-plan.outputs.push == 'true' && 'release' || '' }}
+      name: ${{ needs.docker-plan.outputs.push-version == 'true' && 'release' || (needs.docker-plan.outputs.push == 'true' && 'release-test' || '') }}
     needs:
       - docker-plan
       - docker-publish-base
@@ -219,7 +239,7 @@ jobs:
           # Generate Dockerfile content
           cat <<EOF > Dockerfile
           FROM ${BASE_IMAGE}
-          COPY --from=${UV_GHCR_IMAGE}:latest /uv /uvx /usr/local/bin/
+          COPY --from=${UV_GHCR_IMAGE}:${UV_BASE_TAG} /uv /uvx /usr/local/bin/
           ENV UV_TOOL_BIN_DIR="/usr/local/bin"
           ENTRYPOINT []
           CMD ["/usr/local/bin/uv"]
@@ -231,9 +251,13 @@ jobs:
           # Loop through all base tags and append its docker metadata pattern to the list
           # Order is on purpose such that the label org.opencontainers.image.version has the first pattern with the full version
           IFS=','; for TAG in ${BASE_TAGS}; do
-            TAG_PATTERNS="${TAG_PATTERNS}type=pep440,pattern={{ version }},suffix=-${TAG},value=${VERSION}\n"
-            TAG_PATTERNS="${TAG_PATTERNS}type=pep440,pattern={{ major }}.{{ minor }},suffix=-${TAG},value=${VERSION}\n"
-            TAG_PATTERNS="${TAG_PATTERNS}type=raw,value=${TAG}\n"
+            if [ "${PUSH_DEV}" == "true" ]; then
+              TAG_PATTERNS="${TAG_PATTERNS}type=sha,suffix=-${TAG}\n"
+            else
+              TAG_PATTERNS="${TAG_PATTERNS}type=pep440,pattern={{ version }},suffix=-${TAG},value=${VERSION}\n"
+              TAG_PATTERNS="${TAG_PATTERNS}type=pep440,pattern={{ major }}.{{ minor }},suffix=-${TAG},value=${VERSION}\n"
+              TAG_PATTERNS="${TAG_PATTERNS}type=raw,value=${TAG}\n"
+            fi
           done
 
           # Remove the trailing newline from the pattern list
@@ -247,6 +271,8 @@ jobs:
           } >> $GITHUB_ENV
         env:
           VERSION: ${{ needs.docker-plan.outputs.tag }}
+          PUSH_DEV: ${{ inputs.push-dev }}
+          UV_BASE_TAG: ${{ needs.docker-publish-base.outputs.image-version }}
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
@@ -338,7 +364,7 @@ jobs:
       packages: write # for GHCR image pushes
       attestations: write # for GHCR attestations
     environment:
-      name: ${{ needs.docker-plan.outputs.push == 'true' && 'release' || '' }}
+      name: ${{ needs.docker-plan.outputs.push-version == 'true' && 'release' || (needs.docker-plan.outputs.push == 'true' && 'release-test' || '') }}
     needs:
       - docker-plan
       - docker-publish-base

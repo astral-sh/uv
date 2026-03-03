@@ -30,6 +30,7 @@ jobs:
       test-system: ${{ steps.plan.outputs.test_system }}
       test-macos: ${{ steps.plan.outputs.test_macos }}
       build-docker: ${{ steps.plan.outputs.build_docker }}
+      push-docker: ${{ steps.plan.outputs.push_docker }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -51,6 +52,7 @@ jobs:
           HAS_BUILD_SKIP_DOCKER_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:skip-docker') }}
           HAS_BUILD_SKIP_RELEASE_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:skip-release') }}
           HAS_BUILD_RELEASE_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:release') }}
+          HAS_BUILD_PUSH_DOCKER_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:push-docker') }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           [[ "$GH_REF" == "refs/heads/main" ]] && on_main_branch=1
@@ -64,6 +66,7 @@ jobs:
           [[ "$HAS_BUILD_SKIP_DOCKER_LABEL" == "true" ]] && has_build_skip_docker_label=1
           [[ "$HAS_BUILD_SKIP_RELEASE_LABEL" == "true" ]] && has_build_skip_release_label=1
           [[ "$HAS_BUILD_RELEASE_LABEL" == "true" ]] && has_build_release_label=1
+          [[ "$HAS_BUILD_PUSH_DOCKER_LABEL" == "true" ]] && has_build_push_docker_label=1
 
           # Detect changed files
           while IFS= read -r file; do
@@ -109,7 +112,8 @@ jobs:
           [[ $has_integration_label || $has_extended_label || $on_main_branch ]] && test_integration=1
           [[ $has_system_label || $has_extended_label || $on_main_branch || $system_workflow_changed ]] && test_system=1
           [[ $has_macos_label || $has_extended_label || $on_main_branch ]] && test_macos=1
-          [[ ! $has_build_skip_label && ! $has_build_skip_docker_label && $docker_build_changed ]] && build_docker=1
+          [[ ! $has_build_skip_label && ! $has_build_skip_docker_label && ($docker_build_changed || $has_build_push_docker_label) ]] && build_docker=1
+          [[ $has_build_push_docker_label ]] && push_docker=1
 
           # Output (convert 1/empty to true/false for GHA)
           out() { [[ "$2" ]] && echo "$1=true" || echo "$1=false"; }
@@ -128,6 +132,7 @@ jobs:
             out test_system             "$test_system"
             out test_macos              "$test_macos"
             out build_docker            "$build_docker"
+            out push_docker             "$push_docker"
           } >> "$GITHUB_OUTPUT"
 
   check-fmt:
@@ -241,6 +246,8 @@ jobs:
     needs: plan
     if: ${{ needs.plan.outputs.build-docker == 'true' }}
     uses: ./.github/workflows/build-docker.yml
+    with:
+      push-dev: ${{ needs.plan.outputs.push-docker == 'true' }}
     secrets: inherit
     permissions:
       contents: read
