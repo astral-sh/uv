@@ -38,6 +38,7 @@ pub enum PreviewFeature {
     SpecialCondaEnvNames = 1 << 23,
     RelocatableEnvsDefault = 1 << 24,
     PublishRequireNormalized = 1 << 25,
+    CentralizedEnv = 1 << 26,
 }
 
 impl PreviewFeature {
@@ -70,6 +71,7 @@ impl PreviewFeature {
             Self::SpecialCondaEnvNames => "special-conda-env-names",
             Self::RelocatableEnvsDefault => "relocatable-envs-default",
             Self::PublishRequireNormalized => "publish-require-normalized",
+            Self::CentralizedEnv => "centralized-env",
         }
     }
 }
@@ -115,6 +117,7 @@ impl FromStr for PreviewFeature {
             "special-conda-env-names" => Self::SpecialCondaEnvNames,
             "relocatable-envs-default" => Self::RelocatableEnvsDefault,
             "publish-require-normalized" => Self::PublishRequireNormalized,
+            "centralized-env" => Self::CentralizedEnv,
             _ => return Err(PreviewFeatureParseError),
         })
     }

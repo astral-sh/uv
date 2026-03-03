@@ -1937,3 +1937,169 @@ fn no_clear_conflicts_with_allow_existing() {
     "
     );
 }
+
+/// Test that `uv venv --preview-features centralized-env` creates the environment
+/// in the cache and symlinks `.venv` to it.
+#[test]
+fn create_venv_centralized() {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(
+            r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+        )
+        .unwrap();
+
+    // Create a centralized environment (no explicit path arg).
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--python")
+        .arg("3.12")
+        .arg("--preview-features")
+        .arg("centralized-env"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+
+    // `.venv` should be a symlink.
+    assert!(context.temp_dir.child(".venv").is_symlink());
+
+    // The symlink should point into the environments cache.
+    let link_target = fs_err::read_link(context.temp_dir.child(".venv").path()).unwrap();
+    assert!(
+        link_target
+            .to_string_lossy()
+            .contains("environments-v2/project-"),
+        "Expected symlink to point into environments-v2, got: {link_target:?}"
+    );
+}
+
+/// Test that `uv venv --preview-features centralized-env` gives the same
+/// "already exists" error when the centralized environment already exists.
+#[test]
+fn create_venv_centralized_already_exists() {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(
+            r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+        )
+        .unwrap();
+
+    // Create a centralized environment.
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--python")
+        .arg("3.12")
+        .arg("--preview-features")
+        .arg("centralized-env"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+
+    // Running again should fail with "already exists".
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--python")
+        .arg("3.12")
+        .arg("--preview-features")
+        .arg("centralized-env"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    error: Failed to create virtual environment
+      Caused by: A virtual environment already exists at `[CACHE_DIR]/environments-v2/project-[HASH]`. Use `--clear` to replace it
+    "
+    );
+
+    // Running with `--clear` should succeed.
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--python")
+        .arg("3.12")
+        .arg("--preview-features")
+        .arg("centralized-env")
+        .arg("--clear"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+}
+
+/// Test that `uv venv --preview-features centralized-env` with an explicit path
+/// ignores centralized mode.
+#[test]
+fn create_venv_centralized_explicit_path() {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(
+            r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+        )
+        .unwrap();
+
+    let custom_path = context.temp_dir.child("my-env");
+
+    // Create a venv with an explicit path. Should create locally, not centralized.
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(custom_path.as_os_str())
+        .arg("--python")
+        .arg("3.12")
+        .arg("--preview-features")
+        .arg("centralized-env"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: my-env
+    Activate with: source my-env/[BIN]/activate
+    "
+    );
+
+    // `my-env` should be a real directory, not a symlink.
+    assert!(custom_path.is_dir());
+    assert!(!custom_path.is_symlink());
+
+    // `.venv` should not exist.
+    assert!(!context.temp_dir.child(".venv").exists());
+}

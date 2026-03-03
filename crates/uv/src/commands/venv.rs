@@ -21,7 +21,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_normalize::DefaultGroups;
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
@@ -112,18 +112,22 @@ pub(crate) async fn venv(
     };
 
     // Determine the default path; either the virtual environment for the project or `.venv`
-    let path = path.unwrap_or(
-        project
+    let centralized = preview.is_enabled(PreviewFeature::CentralizedEnv);
+    let (path, explicit_path) = if let Some(path) = path {
+        (path, true)
+    } else {
+        let default_path = project
             .as_ref()
             .and_then(|project| {
                 // Only use the project environment path if we're invoked from the root
                 // This isn't strictly necessary and we may want to change it later, but this
                 // avoids a breaking change when adding project environment support to `uv venv`.
                 (project.workspace().install_path() == project_dir)
-                    .then(|| project.workspace().venv(Some(false)))
+                    .then(|| project.workspace().venv(Some(false), cache, preview))
             })
-            .unwrap_or(PathBuf::from(".venv")),
-    );
+            .unwrap_or(PathBuf::from(".venv"));
+        (default_path, false)
+    };
 
     let reporter = PythonDownloadReporter::single(printer);
 
@@ -183,11 +187,26 @@ pub(crate) async fn venv(
         }
     }
 
+    // When using centralized environments, display the `.venv` link path to the user
+    // rather than the internal cache path for now...
+    // TODO(tk): Maybe we should not print anything for centralised envs for now
+    // until we have some activation helper?
+    // TODO(tk): This will also break with .venv files (when junctions don't
+    // work).
+    let display_path = if centralized && !explicit_path {
+        project
+            .as_ref()
+            .map(|p| p.workspace().install_path().join(".venv"))
+            .unwrap_or_else(|| path.clone())
+    } else {
+        path.clone()
+    };
+
     writeln!(
         printer.stderr(),
         "Creating virtual environment {}at: {}",
         if seed { "with seed packages " } else { "" },
-        path.user_display().cyan()
+        display_path.user_display().cyan()
     )?;
 
     let upgradeable = python_request
@@ -206,6 +225,18 @@ pub(crate) async fn venv(
         upgradeable,
     )
     .map_err(VenvError::Creation)?;
+
+    // If centralized environments are enabled and no explicit path was given, create a `.venv`
+    // symlink in the project directory pointing to the centralized environment.
+    // TODO(tk): This logic is weird and maybe we should return something more
+    // sophisticated from workspace().venv() so we don't have to rely on such a
+    // heuristic.
+    if centralized && !explicit_path {
+        if let Some(project) = &project {
+            let link_path = project.workspace().install_path().join(".venv");
+            uv_fs::replace_symlink(&path, &link_path)?;
+        }
+    }
 
     // Install seed packages.
     if seed {
@@ -312,29 +343,37 @@ pub(crate) async fn venv(
     }
 
     // Determine the appropriate activation command.
+    // Use the display path (e.g., `.venv`) rather than the real path so we don't
+    // leak internal cache paths to the user.
+    // TODO(tk): This is a hack more than anything, need to re-think this.
+    let scripts_dir = if cfg!(windows) {
+        display_path.join("Scripts")
+    } else {
+        display_path.join("bin")
+    };
     let activation = match Shell::from_env() {
         None => None,
         Some(Shell::Bash | Shell::Zsh | Shell::Ksh) => Some(format!(
             "source {}",
-            shlex_posix(venv.scripts().join("activate"))
+            shlex_posix(scripts_dir.join("activate"))
         )),
         Some(Shell::Fish) => Some(format!(
             "source {}",
-            shlex_posix(venv.scripts().join("activate.fish"))
+            shlex_posix(scripts_dir.join("activate.fish"))
         )),
         Some(Shell::Nushell) => Some(format!(
             "overlay use {}",
-            shlex_posix(venv.scripts().join("activate.nu"))
+            shlex_posix(scripts_dir.join("activate.nu"))
         )),
         Some(Shell::Csh) => Some(format!(
             "source {}",
-            shlex_posix(venv.scripts().join("activate.csh"))
+            shlex_posix(scripts_dir.join("activate.csh"))
         )),
         Some(Shell::Powershell) => Some(shlex_windows(
-            venv.scripts().join("activate"),
+            scripts_dir.join("activate"),
             Shell::Powershell,
         )),
-        Some(Shell::Cmd) => Some(shlex_windows(venv.scripts().join("activate"), Shell::Cmd)),
+        Some(Shell::Cmd) => Some(shlex_windows(scripts_dir.join("activate"), Shell::Cmd)),
     };
     if let Some(act) = activation {
         writeln!(printer.stderr(), "Activate with: {}", act.green())?;
