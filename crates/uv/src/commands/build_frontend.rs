@@ -70,6 +70,8 @@ enum Error {
     Join(#[from] tokio::task::JoinError),
     #[error(transparent)]
     BuildBackend(#[from] uv_build_backend::Error),
+    #[error("Code signing failed")]
+    CodeSign(#[source] uv_code_sign::Error),
     #[error(transparent)]
     BuildDispatch(AnyErrorBuild),
     #[error(transparent)]
@@ -112,6 +114,8 @@ pub(crate) async fn build_frontend(
     gitignore: bool,
     force_pep517: bool,
     clear: bool,
+    sign: bool,
+    sign_identity: Option<String>,
     build_constraints: Vec<RequirementsSource>,
     hash_checking: Option<HashCheckingMode>,
     python: Option<String>,
@@ -139,6 +143,8 @@ pub(crate) async fn build_frontend(
         gitignore,
         force_pep517,
         clear,
+        sign,
+        sign_identity.as_deref(),
         &build_constraints,
         hash_checking,
         python.as_deref(),
@@ -186,6 +192,8 @@ async fn build_impl(
     gitignore: bool,
     force_pep517: bool,
     clear: bool,
+    sign: bool,
+    sign_identity: Option<&str>,
     build_constraints: &[RequirementsSource],
     hash_checking: Option<HashCheckingMode>,
     python_request: Option<&str>,
@@ -336,6 +344,7 @@ async fn build_impl(
     };
 
     let results: Vec<_> = futures::future::join_all(packages.into_iter().map(|source| {
+        let sign_identity = sign_identity.map(str::to_owned);
         let future = build_package(
             source.clone(),
             output_dir,
@@ -354,6 +363,8 @@ async fn build_impl(
             gitignore,
             force_pep517,
             clear,
+            sign,
+            sign_identity,
             build_constraints,
             build_isolation,
             extra_build_dependencies,
@@ -463,6 +474,8 @@ async fn build_package(
     gitignore: bool,
     force_pep517: bool,
     clear: bool,
+    sign: bool,
+    sign_identity: Option<String>,
     build_constraints: &[RequirementsSource],
     build_isolation: &BuildIsolation,
     extra_build_dependencies: &ExtraBuildDependencies,
@@ -880,6 +893,36 @@ async fn build_package(
             )
             .await?;
             build_results.push(wheel_build);
+        }
+    }
+
+    // Sign wheels if requested.
+    if sign {
+        let sign_options = uv_code_sign::SignOptions {
+            identity: sign_identity.unwrap_or_else(|| "-".to_string()),
+            ..Default::default()
+        };
+        for message in &mut build_results {
+            if let BuildMessage::Build {
+                normalized_filename: DistFilename::WheelFilename(_),
+                raw_filename,
+                output_dir,
+            } = message
+            {
+                let wheel_path = output_dir.join(&*raw_filename);
+                let signed_path = wheel_path.clone();
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    format!("Signing {}...", wheel_path.user_display()).bold()
+                )?;
+                let opts = sign_options.clone();
+                tokio::task::spawn_blocking(move || {
+                    uv_code_sign::sign_wheel(&wheel_path, &signed_path, &opts)
+                })
+                .await?
+                .map_err(Error::CodeSign)?;
+            }
         }
     }
 

@@ -2967,6 +2967,23 @@ pub struct BuildArgs {
     #[arg(long, overrides_with("create_gitignore"))]
     pub no_create_gitignore: bool,
 
+    /// Sign Mach-O binaries inside built wheels using macOS `codesign`.
+    ///
+    /// When enabled, any Mach-O binaries (`.so`, `.dylib`, executables) found inside
+    /// built wheels will be signed with an ad-hoc signature (identity `-`), and the
+    /// wheel's `RECORD` file will be recomputed.
+    ///
+    /// Use `--sign-identity` to specify a different signing identity.
+    #[arg(long)]
+    pub sign: bool,
+
+    /// The signing identity to use when `--sign` is enabled.
+    ///
+    /// Defaults to `-` (ad-hoc signing). Pass a certificate name or SHA-1
+    /// hash of a code-signing identity in the keychain.
+    #[arg(long, requires = "sign")]
+    pub sign_identity: Option<String>,
+
     /// Constrain build dependencies using the given requirements files when building distributions.
     ///
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a

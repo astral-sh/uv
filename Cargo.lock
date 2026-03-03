@@ -5760,6 +5760,7 @@ dependencies = [
  "uv-cache-key",
  "uv-cli",
  "uv-client",
+ "uv-code-sign",
  "uv-configuration",
  "uv-console",
  "uv-dispatch",

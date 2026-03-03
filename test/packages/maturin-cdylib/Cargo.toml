@@ -1,0 +1,13 @@
+[package]
+name = "maturin-cdylib"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[lib]
+name = "maturin_cdylib"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.23", features = ["extension-module"] }

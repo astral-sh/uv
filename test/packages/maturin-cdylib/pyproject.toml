@@ -1,0 +1,11 @@
+[build-system]
+requires = ["maturin>=1,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "maturin-cdylib"
+requires-python = ">=3.12"
+dynamic = ["version"]
+
+[tool.maturin]
+bindings = "pyo3"

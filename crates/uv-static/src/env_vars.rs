@@ -597,6 +597,16 @@ impl EnvVars {
     #[attr_added_in("0.9.15")]
     pub const UV_INTERNAL__TEST_LFS_DISABLED: &'static str = "UV_INTERNAL__TEST_LFS_DISABLED";
 
+    /// Code-signing identity to use in integration tests for `uv build --sign`.
+    ///
+    /// When populated, uv will run macOS code-signing tests using this identity
+    /// (e.g., `"-"` for ad-hoc, or a Developer ID certificate name).
+    /// When unset, the signing tests are skipped.
+    #[attr_hidden]
+    #[attr_added_in("0.10.7")]
+    pub const UV_INTERNAL__TEST_CODESIGN_IDENTITY: &'static str =
+        "UV_INTERNAL__TEST_CODESIGN_IDENTITY";
+
     /// Marker variable to track whether `PYTHONHOME` was set by uv.
     /// Used by the Windows trampoline to distinguish uv-set values from user-set values.
     #[attr_hidden]

@@ -6,6 +6,7 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 
 /// Options for the `codesign` invocation.
+#[derive(Clone)]
 pub struct SignOptions {
     /// Signing identity. Defaults to `"-"` (ad-hoc).
     pub identity: String,

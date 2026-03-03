@@ -2357,3 +2357,337 @@ fn build_no_gitignore() -> Result<()> {
 
     Ok(())
 }
+
+/// Build a maturin cdylib (pyo3 extension module) with `--sign` and verify
+/// the `.so` inside the wheel is ad-hoc signed.
+#[cfg(target_os = "macos")]
+#[test]
+fn build_sign_adhoc_cdylib() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-06-03T00:00:00Z");
+
+    let maturin_cdylib = current_dir()?.join("../../test/packages/maturin-cdylib");
+    let output_dir = context.temp_dir.join("signed-cdylib");
+
+    // Build with --sign (ad-hoc, the default).
+    context
+        .build()
+        .arg(&maturin_cdylib)
+        .arg("--wheel")
+        .arg("--sign")
+        .arg("--python")
+        .arg("3.12")
+        .arg("--out-dir")
+        .arg(&output_dir)
+        .assert()
+        .success()
+        .stderr(predicates::str::contains("Signing"));
+
+    // Find the built wheel.
+    let wheel_path = fs_err::read_dir(&output_dir)?
+        .filter_map(Result::ok)
+        .find(|entry| entry.path().extension().is_some_and(|ext| ext == "whl"))
+        .expect("expected a .whl file in output")
+        .path();
+
+    // Unpack the wheel and find the .so file.
+    let unpack_dir = context.temp_dir.join("unpack-cdylib");
+    let file = File::open(&wheel_path)?;
+    let mut archive = ZipArchive::new(file)?;
+    archive.extract(&unpack_dir)?;
+
+    let so_path = find_file_by_extension(&unpack_dir, "so").expect("expected a .so file in wheel");
+
+    // Verify the binary is ad-hoc signed.
+    let codesign_output = std::process::Command::new("codesign")
+        .args(["-dvv"])
+        .arg(&so_path)
+        .output()?;
+    let stderr = String::from_utf8_lossy(&codesign_output.stderr);
+    assert!(
+        codesign_output.status.success(),
+        "codesign -dvv failed: {stderr}"
+    );
+    assert!(
+        stderr.contains("Signature=adhoc"),
+        "expected ad-hoc signature, got:\n{stderr}"
+    );
+
+    // Verify the RECORD file has correct hashes.
+    let record_path =
+        find_file_by_name(&unpack_dir, "RECORD").expect("expected a RECORD file in wheel");
+    let record = fs_err::read_to_string(&record_path)?;
+    let so_name = so_path.file_name().unwrap().to_str().unwrap();
+    assert!(
+        record
+            .lines()
+            .any(|line| line.contains(so_name) && line.contains("sha256=")),
+        "RECORD should contain a sha256 hash for {so_name}:\n{record}"
+    );
+
+    Ok(())
+}
+
+/// Build a maturin bin package (pure Rust binary) with `--sign` and verify
+/// the executable inside the wheel is ad-hoc signed.
+#[cfg(target_os = "macos")]
+#[test]
+fn build_sign_adhoc_bin() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-06-03T00:00:00Z");
+
+    let maturin_bin = current_dir()?.join("../../test/packages/maturin-bin");
+    let output_dir = context.temp_dir.join("signed-bin");
+
+    // Build with --sign (ad-hoc, the default).
+    context
+        .build()
+        .arg(&maturin_bin)
+        .arg("--wheel")
+        .arg("--sign")
+        .arg("--python")
+        .arg("3.12")
+        .arg("--out-dir")
+        .arg(&output_dir)
+        .assert()
+        .success()
+        .stderr(predicates::str::contains("Signing"));
+
+    // Find the built wheel.
+    let wheel_path = fs_err::read_dir(&output_dir)?
+        .filter_map(Result::ok)
+        .find(|entry| entry.path().extension().is_some_and(|ext| ext == "whl"))
+        .expect("expected a .whl file in output")
+        .path();
+
+    // Unpack the wheel and find the hello binary.
+    let unpack_dir = context.temp_dir.join("unpack-bin");
+    let file = File::open(&wheel_path)?;
+    let mut archive = ZipArchive::new(file)?;
+    archive.extract(&unpack_dir)?;
+
+    let hello_path =
+        find_file_by_name(&unpack_dir, "hello").expect("expected a 'hello' binary in wheel");
+
+    // Verify the binary is ad-hoc signed.
+    let codesign_output = std::process::Command::new("codesign")
+        .args(["-dvv"])
+        .arg(&hello_path)
+        .output()?;
+    let stderr = String::from_utf8_lossy(&codesign_output.stderr);
+    assert!(
+        codesign_output.status.success(),
+        "codesign -dvv failed: {stderr}"
+    );
+    assert!(
+        stderr.contains("Signature=adhoc"),
+        "expected ad-hoc signature, got:\n{stderr}"
+    );
+
+    // Verify the RECORD file has correct hashes.
+    let record_path =
+        find_file_by_name(&unpack_dir, "RECORD").expect("expected a RECORD file in wheel");
+    let record = fs_err::read_to_string(&record_path)?;
+    assert!(
+        record
+            .lines()
+            .any(|line| line.contains("hello") && line.contains("sha256=")),
+        "RECORD should contain a sha256 hash for hello:\n{record}"
+    );
+
+    Ok(())
+}
+
+/// Build a maturin cdylib (pyo3 extension module) with `--sign --sign-identity`
+/// and verify the `.so` inside the wheel is signed with the given identity.
+///
+/// Requires `UV_INTERNAL__TEST_CODESIGN_IDENTITY` to be set (e.g., to
+/// `"Mac Developer: Your Name (TEAM_ID)"`). Use
+/// `security find-identity -v -p codesigning` to list available identities.
+#[cfg(target_os = "macos")]
+#[test]
+fn build_sign_cdylib() -> Result<()> {
+    let Some(identity) = codesign_identity() else {
+        return Ok(());
+    };
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-06-03T00:00:00Z");
+
+    let maturin_cdylib = current_dir()?.join("../../test/packages/maturin-cdylib");
+    let output_dir = context.temp_dir.join("signed-cdylib");
+
+    // Build with --sign --sign-identity.
+    // Restore the real HOME so `codesign` can access the user's keychain.
+    let real_home = std::env::var("HOME").expect("HOME must be set to access the signing keychain");
+    context
+        .build()
+        .env("HOME", &real_home)
+        .arg(&maturin_cdylib)
+        .arg("--wheel")
+        .arg("--sign")
+        .arg("--sign-identity")
+        .arg(&identity)
+        .arg("--python")
+        .arg("3.12")
+        .arg("--out-dir")
+        .arg(&output_dir)
+        .assert()
+        .success()
+        .stderr(predicates::str::contains("Signing"));
+
+    // Find the built wheel.
+    let wheel_path = fs_err::read_dir(&output_dir)?
+        .filter_map(Result::ok)
+        .find(|entry| entry.path().extension().is_some_and(|ext| ext == "whl"))
+        .expect("expected a .whl file in output")
+        .path();
+
+    // Unpack the wheel and find the .so file.
+    let unpack_dir = context.temp_dir.join("unpack-cdylib");
+    let file = File::open(&wheel_path)?;
+    let mut archive = ZipArchive::new(file)?;
+    archive.extract(&unpack_dir)?;
+
+    let so_path = find_file_by_extension(&unpack_dir, "so").expect("expected a .so file in wheel");
+
+    // Verify the binary is signed with the requested identity (not ad-hoc).
+    let codesign_output = std::process::Command::new("codesign")
+        .args(["-dvv"])
+        .arg(&so_path)
+        .output()?;
+    let stderr = String::from_utf8_lossy(&codesign_output.stderr);
+    assert!(
+        codesign_output.status.success(),
+        "codesign -dvv failed: {stderr}"
+    );
+    assert!(
+        !stderr.contains("Signature=adhoc"),
+        "expected a real signature (not ad-hoc) for identity {identity}, got:\n{stderr}"
+    );
+    assert!(
+        stderr.contains(&format!("Authority={identity}")),
+        "expected Authority={identity} in codesign output:\n{stderr}"
+    );
+
+    // Verify the RECORD file has correct hashes.
+    let record_path =
+        find_file_by_name(&unpack_dir, "RECORD").expect("expected a RECORD file in wheel");
+    let record = fs_err::read_to_string(&record_path)?;
+    let so_name = so_path.file_name().unwrap().to_str().unwrap();
+    assert!(
+        record
+            .lines()
+            .any(|line| line.contains(so_name) && line.contains("sha256=")),
+        "RECORD should contain a sha256 hash for {so_name}:\n{record}"
+    );
+
+    Ok(())
+}
+
+/// Build a maturin bin package (pure Rust binary) with `--sign` and verify
+/// the executable inside the wheel is signed with the given identity.
+///
+/// Requires `UV_INTERNAL__TEST_CODESIGN_IDENTITY` to be set.
+#[cfg(target_os = "macos")]
+#[test]
+fn build_sign_bin() -> Result<()> {
+    let Some(identity) = codesign_identity() else {
+        return Ok(());
+    };
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-06-03T00:00:00Z");
+
+    let maturin_bin = current_dir()?.join("../../test/packages/maturin-bin");
+    let output_dir = context.temp_dir.join("signed-bin");
+
+    // Build with --sign --sign-identity.
+    // Restore the real HOME so `codesign` can access the user's keychain.
+    let real_home = std::env::var("HOME").expect("HOME must be set to access the signing keychain");
+    context
+        .build()
+        .env("HOME", &real_home)
+        .arg(&maturin_bin)
+        .arg("--wheel")
+        .arg("--sign")
+        .arg("--sign-identity")
+        .arg(&identity)
+        .arg("--python")
+        .arg("3.12")
+        .arg("--out-dir")
+        .arg(&output_dir)
+        .assert()
+        .success()
+        .stderr(predicates::str::contains("Signing"));
+
+    // Find the built wheel.
+    let wheel_path = fs_err::read_dir(&output_dir)?
+        .filter_map(Result::ok)
+        .find(|entry| entry.path().extension().is_some_and(|ext| ext == "whl"))
+        .expect("expected a .whl file in output")
+        .path();
+
+    // Unpack the wheel and find the hello binary.
+    let unpack_dir = context.temp_dir.join("unpack-bin");
+    let file = File::open(&wheel_path)?;
+    let mut archive = ZipArchive::new(file)?;
+    archive.extract(&unpack_dir)?;
+
+    let hello_path =
+        find_file_by_name(&unpack_dir, "hello").expect("expected a 'hello' binary in wheel");
+
+    // Verify the binary is signed with the requested identity (not ad-hoc).
+    let codesign_output = std::process::Command::new("codesign")
+        .args(["-dvv"])
+        .arg(&hello_path)
+        .output()?;
+    let stderr = String::from_utf8_lossy(&codesign_output.stderr);
+    assert!(
+        codesign_output.status.success(),
+        "codesign -dvv failed: {stderr}"
+    );
+    assert!(
+        !stderr.contains("Signature=adhoc"),
+        "expected a real signature (not ad-hoc) for identity {identity}, got:\n{stderr}"
+    );
+    assert!(
+        stderr.contains(&format!("Authority={identity}")),
+        "expected Authority={identity} in codesign output:\n{stderr}"
+    );
+
+    // Verify the RECORD file has correct hashes.
+    let record_path =
+        find_file_by_name(&unpack_dir, "RECORD").expect("expected a RECORD file in wheel");
+    let record = fs_err::read_to_string(&record_path)?;
+    assert!(
+        record
+            .lines()
+            .any(|line| line.contains("hello") && line.contains("sha256=")),
+        "RECORD should contain a sha256 hash for hello:\n{record}"
+    );
+
+    Ok(())
+}
+
+/// Read `UV_INTERNAL__TEST_CODESIGN_IDENTITY` from the environment.
+///
+/// Returns `None` when unset, causing the calling test to be skipped.
+#[cfg(target_os = "macos")]
+fn codesign_identity() -> Option<String> {
+    std::env::var(EnvVars::UV_INTERNAL__TEST_CODESIGN_IDENTITY).ok()
+}
+
+/// Find a file with the given extension under `dir`, recursively.
+#[cfg(target_os = "macos")]
+fn find_file_by_extension(dir: &std::path::Path, ext: &str) -> Option<std::path::PathBuf> {
+    walkdir::WalkDir::new(dir)
+        .into_iter()
+        .filter_map(Result::ok)
+        .find(|e| e.file_type().is_file() && e.path().extension().is_some_and(|e| e == ext))
+        .map(walkdir::DirEntry::into_path)
+}
+
+/// Find a file with the given name under `dir`, recursively.
+#[cfg(target_os = "macos")]
+fn find_file_by_name(dir: &std::path::Path, name: &str) -> Option<std::path::PathBuf> {
+    walkdir::WalkDir::new(dir)
+        .into_iter()
+        .filter_map(Result::ok)
+        .find(|e| e.file_type().is_file() && e.path().file_name().is_some_and(|n| n == name))
+        .map(walkdir::DirEntry::into_path)
+}

@@ -24,6 +24,7 @@ uv-cache-info = { workspace = true }
 uv-cache-key = { workspace = true }
 uv-cli = { workspace = true }
 uv-client = { workspace = true }
+uv-code-sign = { workspace = true }
 uv-configuration = { workspace = true }
 uv-console = { workspace = true }
 uv-dispatch = { workspace = true }

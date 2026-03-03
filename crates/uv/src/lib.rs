@@ -1169,6 +1169,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.gitignore,
                 args.force_pep517,
                 args.clear,
+                args.sign,
+                args.sign_identity,
                 build_constraints,
                 args.hash_checking,
                 args.python,
