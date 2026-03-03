@@ -1010,7 +1010,11 @@ fn test_tool_upgrade_additional_entrypoints() {
     ");
 }
 
-/// Upgrade a tool with an excluded dependency
+/// Upgrade a tool with an excluded dependency.
+///
+/// Compare with `tool_upgrade_respect_constraints`, which shows `pytz` being
+/// upgraded alongside `babel`. Here, `pytz` is excluded, so it should remain
+/// absent after the upgrade.
 #[test]
 fn tool_upgrade_excludes() {
     let context = uv_test::test_context!("3.12")
@@ -1023,9 +1027,9 @@ fn tool_upgrade_excludes() {
     excludes_txt.write_str("pytz").unwrap();
 
     // Install `babel` from Test PyPI, to get an outdated version.
-    // An outdated version of pytz won't be installed as it has been excluded.
+    // `pytz` is excluded, so it won't be installed despite being a dependency.
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("babel==2.6.0")
+        .arg("babel<2.10")
         .arg("--excludes")
         .arg("excludes.txt")
         .arg("--index-url")
@@ -1045,8 +1049,8 @@ fn tool_upgrade_excludes() {
     Installed 1 executable: pybabel
     ");
 
-    // Attempt to upgrade `babel`; nothing will be upgraded as babel is pinned
-    // and pytz has been excluded
+    // Upgrade `babel` from PyPI. Babel should be updated (within the `<2.10`
+    // constraint), but `pytz` should remain excluded.
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("--index-url")
@@ -1059,9 +1063,10 @@ fn tool_upgrade_excludes() {
     ----- stdout -----
 
     ----- stderr -----
-    Nothing to upgrade
-
-    hint: `babel` is pinned to `2.6.0` (installed with an exact version pin); reinstall with `uv tool install babel@latest` to upgrade to a new version.
+    Updated babel v2.6.0 -> v2.9.1
+     - babel==2.6.0
+     + babel==2.9.1
+    Installed 1 executable: pybabel
     ");
 }
 

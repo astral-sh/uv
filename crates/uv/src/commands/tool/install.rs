@@ -396,7 +396,7 @@ pub(crate) async fn install(
     )
     .await?;
 
-    // Get resolved excludes
+    // Resolve the excludes.
     let excludes = spec.excludes.clone();
 
     // Resolve the build constraints.
