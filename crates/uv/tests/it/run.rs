@@ -844,6 +844,43 @@ fn run_pep723_script_overrides() -> Result<()> {
     Ok(())
 }
 
+/// Run a PEP 723-compatible script with `tool.uv` excludes.
+#[test]
+fn run_pep723_script_excludes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "anyio>=3",
+        # ]
+        #
+        # [tool.uv]
+        # exclude-dependencies = ["idna"]
+        # ///
+
+        import anyio
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + anyio==4.3.0
+     + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
+
 /// Run a PEP 723-compatible script with `tool.uv` build constraints.
 #[test]
 fn run_pep723_script_build_constraints() -> Result<()> {
