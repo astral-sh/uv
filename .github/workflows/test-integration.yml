@@ -19,7 +19,7 @@ jobs:
   integration-test-nushell:
     name: "nushell"
     timeout-minutes: 10
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -66,7 +66,7 @@ jobs:
   integration-test-conda:
     name: "conda on linux"
     timeout-minutes: 10
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -98,7 +98,7 @@ jobs:
   integration-test-deadsnakes-39-linux:
     name: "deadsnakes python3.9 on ubuntu"
     timeout-minutes: 15
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - name: "Install python3.9"
         run: |
@@ -318,7 +318,7 @@ jobs:
   integration-test-pypy-linux:
     name: "pypy on linux"
     timeout-minutes: 10
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -442,7 +442,7 @@ jobs:
   integration-test-graalpy-linux:
     name: "graalpy on linux"
     timeout-minutes: 10
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -566,7 +566,7 @@ jobs:
   integration-test-pyodide-linux:
     name: "pyodide on linux"
     timeout-minutes: 10
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -655,7 +655,7 @@ jobs:
   integration-test-github-actions:
     name: "github actions"
     timeout-minutes: 10
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
@@ -712,7 +712,7 @@ jobs:
   integration-test-github-actions-freethreaded:
     name: "free-threaded on github actions"
     timeout-minutes: 10
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
@@ -801,7 +801,7 @@ jobs:
   integration-test-registries:
     name: "registries"
     timeout-minutes: 10
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     if: ${{ github.event.pull_request.head.repo.fork != true }}
     environment: uv-test-registries
     env:
@@ -909,7 +909,7 @@ jobs:
   integration-uv-build-backend:
     name: "uv_build"
     timeout-minutes: 10
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -958,7 +958,7 @@ jobs:
   cache-test-ubuntu:
     name: "cache on linux"
     timeout-minutes: 10
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
