@@ -13829,7 +13829,8 @@ fn install_with_system_interpreter() {
     let context = uv_test::test_context_with_versions!(&[])
         .with_python_download_cache()
         .with_managed_python_dirs()
-        .with_filtered_python_keys();
+        .with_filtered_python_keys()
+        .with_filtered_latest_python_versions();
 
     // We use a managed Python version here to ensure consistent output across systems
     context.python_install().arg("3.12").assert().success();
@@ -13842,8 +13843,8 @@ fn install_with_system_interpreter() {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.13 environment at: managed/cpython-3.12.13-[PLATFORM]
-    error: The interpreter at managed/cpython-3.12.13-[PLATFORM] is externally managed, and indicates the following:
+    Using Python 3.12.[LATEST] environment at: managed/cpython-3.12.[LATEST]-[PLATFORM]
+    error: The interpreter at managed/cpython-3.12.[LATEST]-[PLATFORM] is externally managed, and indicates the following:
 
       This Python installation is managed by uv and should not be modified.
 
@@ -13912,7 +13913,8 @@ fn install_missing_python_version_with_target() {
     // Create a context that only has Python 3.11 available.
     let context = uv_test::test_context!("3.11")
         .with_python_download_cache()
-        .with_managed_python_dirs();
+        .with_managed_python_dirs()
+        .with_filtered_latest_python_versions();
 
     let target_dir = context.temp_dir.child("target-dir");
 
@@ -13926,7 +13928,7 @@ fn install_missing_python_version_with_target() {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.13
+    Using CPython 3.12.[LATEST]
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
