@@ -1030,22 +1030,15 @@ jobs:
       - name: "Prepare binary"
         run: chmod +x ./uv
 
-      - name: "Create venv"
-        run: ./uv venv -v --python 3.11 test-venv
-
       - name: "Write requirements file"
         run: |
-          cat > requirements.txt <<'EOF'
+          cat > requirements.in <<'EOF'
           idna==3.10; platform_machine == '${{ matrix.native-arch }}'
           idna==3.9; platform_machine != '${{ matrix.native-arch }}'
           EOF
 
       - name: "Resolve with native arch (populates cache)"
-        run: |
-          ./uv pip install --python test-venv --dry-run -r requirements.txt 2>&1 | tee native-output.txt
-          grep 'idna==3.10' native-output.txt
+        run: ./uv pip compile --python 3.11 requirements.in 2>&1 | grep 'idna==3.10'
 
       - name: "Resolve under setarch (expect cache invalidation)"
-        run: |
-          setarch ${{ matrix.setarch }} ./uv pip install --python test-venv --dry-run -r requirements.txt 2>&1 | tee setarch-output.txt
-          grep 'idna==3.9' setarch-output.txt
+        run: setarch ${{ matrix.setarch }} ./uv pip compile --python 3.11 requirements.in 2>&1 | grep 'idna==3.9'
