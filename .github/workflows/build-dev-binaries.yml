@@ -24,7 +24,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+      - name: "Install mold"
+        run: ./scripts/install-mold.sh
 
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
@@ -51,7 +52,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+      - name: "Install mold"
+        run: ./scripts/install-mold.sh
 
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
@@ -78,7 +80,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+      - name: "Install mold"
+        run: ./scripts/install-mold.sh
 
       - name: "Setup musl"
         run: |
@@ -110,8 +113,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
-
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
@@ -135,8 +136,6 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-
-      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
 
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
@@ -241,7 +240,7 @@ jobs:
         env:
           MSRV: ${{ steps.msrv.outputs.value }}
       - name: "Install mold"
-        uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+        run: ./scripts/install-mold.sh
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
