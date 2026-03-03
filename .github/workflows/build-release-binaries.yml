@@ -1111,4 +1111,4 @@ jobs:
           path: wheels
           merge-multiple: true
       - name: "Check wheel contents"
-        run: uv run scripts/check_uv_wheel_contents.py wheels/*
+        run: uv run --no-project scripts/check_uv_wheel_contents.py wheels/*
