@@ -247,6 +247,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -458,6 +459,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -670,6 +672,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -914,6 +917,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -1091,6 +1095,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -1314,6 +1319,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -1581,6 +1587,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -1860,6 +1867,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -2094,6 +2102,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -2293,6 +2302,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -2552,6 +2562,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -2794,6 +2805,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -2992,6 +3004,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -3174,6 +3187,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -3356,6 +3370,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -3540,6 +3555,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -3723,6 +3739,7 @@ fn resolve_tool() -> anyhow::Result<()> {
                 upgrade: Upgrade {
                     strategy: None,
                     constraints: {},
+                    groups: {},
                 },
             },
             compile_bytecode: false,
@@ -3941,6 +3958,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -4193,6 +4211,7 @@ fn resolve_both() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -4450,6 +4469,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -4784,6 +4804,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -5059,6 +5080,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -5244,6 +5266,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -5448,6 +5471,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -5715,6 +5739,7 @@ fn index_priority() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -5961,6 +5986,7 @@ fn index_priority() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -6213,6 +6239,7 @@ fn index_priority() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -6460,6 +6487,7 @@ fn index_priority() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -6714,6 +6742,7 @@ fn index_priority() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -6961,6 +6990,7 @@ fn index_priority() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -7150,6 +7180,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -7323,6 +7354,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -7498,6 +7530,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -7671,6 +7704,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -7844,6 +7878,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -8020,6 +8055,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -8184,6 +8220,7 @@ fn preview_features() {
                 upgrade: Upgrade {
                     strategy: None,
                     constraints: {},
+                    groups: {},
                 },
             },
             compile_bytecode: false,
@@ -8305,6 +8342,7 @@ fn preview_features() {
                 upgrade: Upgrade {
                     strategy: None,
                     constraints: {},
+                    groups: {},
                 },
             },
             compile_bytecode: false,
@@ -8453,6 +8491,7 @@ fn preview_features() {
                 upgrade: Upgrade {
                     strategy: None,
                     constraints: {},
+                    groups: {},
                 },
             },
             compile_bytecode: false,
@@ -8577,6 +8616,7 @@ fn preview_features() {
                 upgrade: Upgrade {
                     strategy: None,
                     constraints: {},
+                    groups: {},
                 },
             },
             compile_bytecode: false,
@@ -8701,6 +8741,7 @@ fn preview_features() {
                 upgrade: Upgrade {
                     strategy: None,
                     constraints: {},
+                    groups: {},
                 },
             },
             compile_bytecode: false,
@@ -8824,6 +8865,7 @@ fn preview_features() {
                 upgrade: Upgrade {
                     strategy: None,
                     constraints: {},
+                    groups: {},
                 },
             },
             compile_bytecode: false,
@@ -9024,6 +9066,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
                     },
                 ),
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -9207,6 +9250,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -9390,6 +9434,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: All,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -9577,6 +9622,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
                     },
                 ),
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -9758,6 +9804,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
                     },
                 ),
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -9943,6 +9990,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
                     },
                 ),
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -10088,6 +10136,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
                     },
                 ),
                 constraints: {},
+                groups: {},
             },
         },
     }
@@ -10214,6 +10263,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
         },
     }
@@ -10340,6 +10390,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: All,
                 constraints: {},
+                groups: {},
             },
         },
     }
@@ -10470,6 +10521,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
                     },
                 ),
                 constraints: {},
+                groups: {},
             },
         },
     }
@@ -10590,6 +10642,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
                     },
                 ),
                 constraints: {},
+                groups: {},
             },
         },
     }
@@ -10714,6 +10767,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
                     },
                 ),
                 constraints: {},
+                groups: {},
             },
         },
     }
@@ -10909,6 +10963,7 @@ fn build_isolation_override() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },
@@ -11093,6 +11148,7 @@ fn build_isolation_override() -> anyhow::Result<()> {
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
+                groups: {},
             },
             reinstall: None,
         },

@@ -11468,6 +11468,232 @@ fn lock_upgrade_package() -> Result<()> {
     Ok(())
 }
 
+/// Upgrade all packages in a dependency group with `--upgrade-group`.
+#[test]
+fn lock_upgrade_group() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Constrain `anyio` and `idna` in both the main dependencies and a dev group.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["idna<=3"]
+
+        [dependency-groups]
+        dev = ["anyio<=2"]
+        "#,
+    )?;
+
+    // Lock the project.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    // Remove the constraints.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["idna"]
+
+        [dependency-groups]
+        dev = ["anyio"]
+        "#,
+    )?;
+
+    // Upgrade just the `dev` group; `idna` should remain pinned.
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade-group").arg("dev"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Updated anyio v2.0.0 -> v4.3.0
+    ");
+
+    Ok(())
+}
+
+/// `--upgrade-group` only upgrades direct dependencies of the group, not transitive dependencies.
+#[test]
+fn lock_upgrade_group_transitive() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Pin `anyio` in the dev group. `anyio` depends on `idna` and `sniffio` transitively.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["anyio<=2", "idna<=3"]
+        "#,
+    )?;
+
+    // Lock the project — `anyio` at 2.0.0, `idna` at 3.0, `sniffio` at 1.3.1.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    // Remove the version constraints.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["anyio", "idna"]
+        "#,
+    )?;
+
+    // Upgrade just `anyio` via `--upgrade-package`; `idna` should stay pinned at 3.0.
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade-package").arg("anyio"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Updated anyio v2.0.0 -> v4.3.0
+    ");
+
+    // Reset back to the constrained versions.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["anyio<=2", "idna<=3"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Updated anyio v4.3.0 -> v2.0.0
+    ");
+
+    // Remove the version constraints again.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["anyio", "idna"]
+        "#,
+    )?;
+
+    // Upgrade the `dev` group. Both `anyio` and `idna` are direct dependencies of the group,
+    // so both should be upgraded.
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade-group").arg("dev"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Updated anyio v2.0.0 -> v4.3.0
+    Updated idna v3.0 -> v3.6
+    ");
+
+    Ok(())
+}
+
+/// `--upgrade-group` works for projects without a `[project]` table (e.g., virtual workspace
+/// roots), where dependency groups are stored in the lock manifest rather than on a package.
+#[test]
+fn lock_upgrade_group_no_project_table() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv.workspace]
+        members = []
+
+        [dependency-groups]
+        dev = ["anyio<=2"]
+        "#,
+    )?;
+
+    // Lock the project.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 3 packages in [TIME]
+    ");
+
+    // Remove the constraint.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv.workspace]
+        members = []
+
+        [dependency-groups]
+        dev = ["anyio"]
+        "#,
+    )?;
+
+    // Upgrade the `dev` group.
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade-group").arg("dev"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 3 packages in [TIME]
+    Updated anyio v2.0.0 -> v4.3.0
+    ");
+
+    Ok(())
+}
+
 /// Check that we discard the fork marker from the lockfile when using `--upgrade`.
 #[test]
 fn lock_upgrade_drop_fork_markers() -> Result<()> {

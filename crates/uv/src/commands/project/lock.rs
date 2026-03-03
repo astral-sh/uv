@@ -1193,10 +1193,12 @@ impl ValidatedLock {
             return Ok(Self::Preferable(lock));
         }
 
-        // If the user specified `--upgrade-package`, then at best we can prefer some of
-        // the existing versions.
+        // If the user specified `--upgrade-package` or `--upgrade-group`, then at best we can
+        // prefer some of the existing versions.
         if !(upgrade.is_none() || upgrade.is_all()) {
-            debug!("Resolving despite existing lockfile due to `--upgrade-package`");
+            debug!(
+                "Resolving despite existing lockfile due to `--upgrade-package` or `--upgrade-group`"
+            );
             return Ok(Self::Preferable(lock));
         }
 

@@ -1,10 +1,12 @@
 use std::path::Path;
 
 use anyhow::Result;
+use rustc_hash::FxHashSet;
 
 use uv_configuration::Upgrade;
 use uv_fs::CWD;
 use uv_git::ResolvedRepositoryReference;
+use uv_normalize::PackageName;
 use uv_requirements_txt::RequirementsTxt;
 use uv_resolver::{Lock, LockError, Preference, PreferenceError, PylockToml, PylockTomlErrorKind};
 
@@ -71,12 +73,17 @@ pub fn read_lock_requirements(
         return Ok(LockedRequirements::default());
     }
 
+    // Resolve `--upgrade-group` to a set of package names by collecting all dependencies from
+    // the specified groups across all workspace member packages in the lock.
+    let group_packages = resolve_group_packages(lock, upgrade);
+
     let mut preferences = Vec::new();
     let mut git = Vec::new();
 
     for package in lock.packages() {
-        // Skip the distribution if it's not included in the upgrade strategy.
-        if upgrade.contains(package.name()) {
+        // Skip the distribution if it's included in the upgrade strategy or belongs to an
+        // upgraded group.
+        if upgrade.contains(package.name()) || group_packages.contains(package.name()) {
             continue;
         }
 
@@ -92,6 +99,41 @@ pub fn read_lock_requirements(
     }
 
     Ok(LockedRequirements { preferences, git })
+}
+
+/// Resolve the `--upgrade-group` group names to a set of package names by looking at the
+/// dependency groups defined on packages in the lockfile.
+fn resolve_group_packages(lock: &Lock, upgrade: &Upgrade) -> FxHashSet<PackageName> {
+    let groups = upgrade.groups();
+    if groups.is_empty() {
+        return FxHashSet::default();
+    }
+
+    let mut packages = FxHashSet::default();
+
+    // Check package-level dependency groups (the standard case for projects with a `[project]`
+    // table).
+    for package in lock.packages() {
+        for (group_name, dependencies) in package.resolved_dependency_groups() {
+            if groups.contains(group_name) {
+                for dependency in dependencies {
+                    packages.insert(dependency.package_name().clone());
+                }
+            }
+        }
+    }
+
+    // Check manifest-level dependency groups, which cover projects without a `[project]` table
+    // (e.g., virtual workspace roots or PEP 723 scripts).
+    for (group_name, requirements) in lock.dependency_groups() {
+        if groups.contains(group_name) {
+            for requirement in requirements {
+                packages.insert(requirement.name.clone());
+            }
+        }
+    }
+
+    packages
 }
 
 /// Load the preferred requirements from an existing `pylock.toml` file, applying the upgrade strategy.

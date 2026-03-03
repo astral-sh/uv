@@ -996,6 +996,7 @@ impl ToolUpgradeSettings {
             python_platform,
             upgrade,
             upgrade_package,
+            upgrade_group,
             index_args,
             all,
             reinstall,
@@ -1035,6 +1036,7 @@ impl ToolUpgradeSettings {
             upgrade: upgrade_package.is_empty(),
             no_upgrade: false,
             upgrade_package,
+            upgrade_group,
             reinstall,
             no_reinstall,
             reinstall_package,
@@ -4021,6 +4023,7 @@ impl PipSettings {
                     .flatten()
                     .map(Requirement::from)
                     .collect(),
+                Vec::new(),
             )
             .combine(Upgrade::from_args(
                 upgrade,
@@ -4029,6 +4032,7 @@ impl PipSettings {
                     .flatten()
                     .map(Requirement::from)
                     .collect(),
+                Vec::new(),
             ))
             .unwrap_or_default(),
             reinstall: Reinstall::from_args(

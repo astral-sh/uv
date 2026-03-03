@@ -555,6 +555,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
                     .flatten()
                     .map(Into::into)
                     .collect(),
+                Vec::new(),
             ),
             reinstall: Reinstall::from_args(reinstall, reinstall_package.unwrap_or_default()),
             no_build,
@@ -2006,6 +2007,7 @@ impl From<ResolverInstallerSchema> for ResolverOptions {
                     .flatten()
                     .map(Into::into)
                     .collect(),
+                Vec::new(),
             ),
             no_build: value.no_build,
             no_build_package: value.no_build_package,
