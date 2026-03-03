@@ -6205,7 +6205,7 @@ fn sync_with_target_installs_missing_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.12
+    Using CPython 3.12.13
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
