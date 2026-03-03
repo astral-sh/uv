@@ -215,7 +215,7 @@ reqwest = { version = "0.12.22", default-features = false, features = [
   "http2",
   "blocking",
 ] }
-reqwest-middleware = { version = "0.4.2", package = "astral-reqwest-middleware", features = [
+reqwest-middleware = { version = "0.5.0", package = "astral-reqwest-middleware", features = [
   "multipart",
 ] }
 reqwest-retry = { version = "0.8.0", package = "astral-reqwest-retry", features = [
