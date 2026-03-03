@@ -104,7 +104,7 @@ jobs:
       - name: "Build wheels - x86_64"
         run: >-
           uv build --wheel --out-dir dist
-          -C "build-args=--locked --features self-update --compatibility pypi --target x86_64"
+          -C "build-args=--locked --features self-update --compatibility pypi --target x86_64-apple-darwin"
       - name: "Upload wheels"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -133,7 +133,7 @@ jobs:
       - name: "Build wheels uv-build - x86_64"
         run: >-
           uv build --wheel --out-dir crates/uv-build/dist crates/uv-build
-          -C "build-args=--profile minimal-size --locked --compatibility pypi --target x86_64"
+          -C "build-args=--profile minimal-size --locked --compatibility pypi --target x86_64-apple-darwin"
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -161,7 +161,7 @@ jobs:
       - name: "Build wheels - aarch64"
         run: >-
           uv build --wheel --out-dir dist
-          -C "build-args=--locked --features self-update --compatibility pypi --target aarch64"
+          -C "build-args=--locked --features self-update --compatibility pypi --target aarch64-apple-darwin"
       - name: "Test wheel - aarch64"
         run: |
           pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
@@ -196,7 +196,7 @@ jobs:
       - name: "Build wheels uv-build - aarch64"
         run: >-
           uv build --wheel --out-dir crates/uv-build/dist crates/uv-build
-          -C "build-args=--profile minimal-size --locked --compatibility pypi --target aarch64"
+          -C "build-args=--profile minimal-size --locked --compatibility pypi --target aarch64-apple-darwin"
       - name: "Test wheel - aarch64"
         run: |
           pip install ${PACKAGE_NAME}_build --no-index --find-links crates/uv-build/dist --force-reinstall
