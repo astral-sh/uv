@@ -295,7 +295,7 @@ impl Workspace {
     /// Set the [`ProjectWorkspace`] for a given workspace member.
     ///
     /// Assumes that the project name is unchanged in the updated [`PyProjectToml`].
-    pub fn with_pyproject_toml(
+    pub fn update_member(
         self,
         package_name: &PackageName,
         pyproject_toml: PyProjectToml,
@@ -1364,13 +1364,13 @@ impl ProjectWorkspace {
     /// Set the `pyproject.toml` for the current project.
     ///
     /// Assumes that the project name is unchanged in the updated [`PyProjectToml`].
-    pub fn with_pyproject_toml(
+    pub fn update_member(
         self,
         pyproject_toml: PyProjectToml,
     ) -> Result<Option<Self>, WorkspaceError> {
         let Some(workspace) = self
             .workspace
-            .with_pyproject_toml(&self.project_name, pyproject_toml)?
+            .update_member(&self.project_name, pyproject_toml)?
         else {
             return Ok(None);
         };
@@ -1775,16 +1775,16 @@ impl VirtualProject {
         }
     }
 
-    /// Set the `pyproject.toml` for the current project.
+    /// Update the `pyproject.toml` for the current project.
     ///
     /// Assumes that the project name is unchanged in the updated [`PyProjectToml`].
-    pub fn with_pyproject_toml(
+    pub fn update_member(
         self,
         pyproject_toml: PyProjectToml,
     ) -> Result<Option<Self>, WorkspaceError> {
         Ok(match self {
             Self::Project(project) => {
-                let Some(project) = project.with_pyproject_toml(pyproject_toml)? else {
+                let Some(project) = project.update_member(pyproject_toml)? else {
                     return Ok(None);
                 };
                 Some(Self::Project(project))
