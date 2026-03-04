@@ -11,19 +11,15 @@ use uv_warnings::warn_user_once;
 
 /// Indicates how the preview was initialised, to distinguish between normal
 /// code and unit tests.
-#[cfg(feature = "testing")]
 enum PreviewMode {
-    /// Initialised by a call to `uv_preview::init`
+    /// Initialised by a call to [`init`].
     Normal(Preview),
-    /// Initialised by a call to `uv_preview::test::with_features`
+    /// Initialised by a call to [`test::with_features`].
+    #[cfg(feature = "testing")]
     Test(std::sync::RwLock<Option<Preview>>),
 }
 
-#[cfg(feature = "testing")]
 static PREVIEW: OnceLock<PreviewMode> = OnceLock::new();
-
-#[cfg(not(feature = "testing"))]
-static PREVIEW: OnceLock<Preview> = OnceLock::new();
 
 /// Error returned when [`init`] is called more than once.
 #[derive(Debug, Error)]
@@ -33,20 +29,9 @@ pub struct InitError;
 /// Initialize the global preview configuration.
 ///
 /// This should be called once at startup with the resolved preview settings.
-#[cfg(feature = "testing")]
 pub fn init(preview: Preview) -> Result<(), InitError> {
     PREVIEW
         .set(PreviewMode::Normal(preview))
-        .map_err(|_| InitError)
-}
-
-/// Initialize the global preview configuration.
-///
-/// This should be called once at startup with the resolved preview settings.
-#[cfg(not(feature = "testing"))]
-pub fn init(preview: Preview) -> Result<(), InitError> {
-    PREVIEW
-        .set(preview)
         .map_err(|_| InitError)
 }
 
@@ -54,12 +39,12 @@ pub fn init(preview: Preview) -> Result<(), InitError> {
 ///
 /// # Panics
 ///
-/// When called before [`init`] or when the current thread does not hold a
-/// [`test::with_features`] guard.
-#[cfg(feature = "testing")]
+/// When called before [`init`] or (with the `testing` feature) when the
+/// current thread does not hold a [`test::with_features`] guard.
 pub fn get() -> Preview {
     match PREVIEW.get() {
         Some(PreviewMode::Normal(preview)) => *preview,
+        #[cfg(feature = "testing")]
         Some(PreviewMode::Test(rwlock)) => {
             assert!(
                 test::HELD.get(),
@@ -74,23 +59,13 @@ pub fn get() -> Preview {
                 .unwrap()
                 .expect("FeaturesGuard is held but preview value is not set")
         }
+        #[cfg(feature = "testing")]
         None => panic!(
             "The preview configuration has not been initialized\nHint: Use `{}::init` or `{}::test::with_features` to initialize it",
             module_path!(),
             module_path!()
         ),
-    }
-}
-
-/// Get the current global preview configuration.
-///
-/// # Panics
-///
-/// When called before [`init`].
-#[cfg(not(feature = "testing"))]
-pub fn get() -> Preview {
-    match PREVIEW.get() {
-        Some(preview) => *preview,
+        #[cfg(not(feature = "testing"))]
         None => panic!("The preview configuration has not been initialized"),
     }
 }
