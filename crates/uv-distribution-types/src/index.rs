@@ -472,6 +472,37 @@ impl From<IndexUrl> for Index {
     }
 }
 
+/// Check if any indexes passed on the CLI by name refer to explicit indexes.
+///
+/// Exits with an error if an explicit index is found.
+pub fn check_for_explicit_indexes(indexes: &[Index]) {
+    // Hack to get `write_error_chain` to format things correctly
+    #[derive(Debug, Error)]
+    #[error(
+        "Explicit index `{0}` cannot be used on the command line. Explicit indexes are only usable when referenced by `[tool.uv.sources]`."
+    )]
+    struct WrapperError(String);
+
+    if let Some(index) = indexes.iter().find(|index| index.explicit) {
+        let name = index
+            .name
+            .as_ref()
+            .map_or_else(|| index.url.to_string(), ToString::to_string);
+        let mut error_chain = String::new();
+        // Writing to a string can't fail with errors (panics on allocation failure)
+        uv_warnings::write_error_chain(
+            &WrapperError(name),
+            &mut error_chain,
+            "error",
+            owo_colors::AnsiColors::Red,
+        )
+        .unwrap();
+        anstream::eprint!("{}", error_chain);
+        #[expect(clippy::exit)]
+        std::process::exit(2);
+    }
+}
+
 /// A potentially unresolved index.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IndexArg {

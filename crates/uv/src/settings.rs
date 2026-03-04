@@ -22,7 +22,7 @@ use uv_cli::{
     VersionBumpSpec, VersionFormat,
 };
 use uv_cli::{
-    AuthorFrom, BuildArgs, ExportArgs, FormatArgs, PublishArgs, PythonDirArgs,
+    AuthorFrom, BuildArgs, ExportArgs, FormatArgs, IndexArgs, PublishArgs, PythonDirArgs,
     ResolverInstallerArgs, ToolUpgradeArgs,
     options::{
         Flag, FlagSource, check_conflicts, flag, resolve_flag, resolver_installer_options,
@@ -39,7 +39,7 @@ use uv_configuration::{
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
-    PackageConfigSettings, Requirement,
+    PackageConfigSettings, Requirement, check_for_explicit_indexes,
 };
 use uv_install_wheel::LinkMode;
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
@@ -1939,7 +1939,6 @@ impl AddSettings {
             filesystem.as_ref(),
             package_indexes.clone(),
             preview,
-            true,
         )
         .into_iter()
         .flatten()
@@ -1949,6 +1948,12 @@ impl AddSettings {
         // `--index` or `--default-index`.
         for index in &indexes {
             index.url().warn_on_disambiguated_relative_path();
+        }
+
+        // We pin the package if there's only one index, so it's okay if it's
+        // explicit in that case.
+        if indexes.len() > 1 {
+            check_for_explicit_indexes(&indexes);
         }
 
         // If the user passed an `--index-url` or `--extra-index-url`, warn.
@@ -2005,6 +2010,24 @@ impl AddSettings {
         // Check for conflicts between no_sync and frozen.
         check_conflicts(no_sync, frozen);
 
+        // Clear index args to avoid redundant resolution and errors on explicit indexes.
+        let mut options = resolver_installer_options(
+            ResolverInstallerArgs {
+                index_args: IndexArgs {
+                    default_index: None,
+                    index: None,
+                    ..installer.index_args
+                },
+                ..installer
+            },
+            build,
+            filesystem.as_ref(),
+            package_indexes,
+            preview,
+        );
+        options.index = Some(indexes.clone());
+        let settings = ResolverInstallerSettings::combine(options, filesystem);
+
         Self {
             lock_check: resolve_lock_check(locked),
             frozen: resolve_frozen(frozen),
@@ -2040,16 +2063,7 @@ impl AddSettings {
             extras: extra.unwrap_or_default(),
             refresh: Refresh::from(refresh),
             indexes,
-            settings: ResolverInstallerSettings::combine(
-                resolver_installer_options(
-                    installer,
-                    build,
-                    filesystem.as_ref(),
-                    package_indexes,
-                    preview,
-                ),
-                filesystem,
-            ),
+            settings,
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
