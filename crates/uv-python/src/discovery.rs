@@ -20,6 +20,7 @@ use uv_pep440::{
     LowerBound, Prerelease, UpperBound, Version, VersionSpecifier, VersionSpecifiers,
     release_specifiers_to_ranges,
 };
+use uv_platform::Platform;
 use uv_preview::Preview;
 use uv_static::EnvVars;
 use uv_warnings::anstream;
@@ -366,7 +367,14 @@ fn python_executables_from_installed<'a>(
                     "Searching for managed installations at `{}`",
                     installed_installations.root().user_display()
                 );
-                let installations = installed_installations.find_matching_current_platform()?;
+                let installations: Box<dyn DoubleEndedIterator<Item = _>> =
+                    if platform.is_any() {
+                        Box::new(installed_installations.find_supported_on_platform(
+                            Platform::from_env().map_err(crate::managed::Error::from)?,
+                        )?)
+                    } else {
+                        Box::new(installed_installations.find_matching_platform(platform)?)
+                    };
 
                 let build_versions = python_build_versions_from_env()?;
 
@@ -814,7 +822,15 @@ fn python_interpreters_from_executables<'a>(
                 );
             })
             .map_err(|err| Error::Query(Box::new(err), path, source))
-            .inspect_err(|err| debug!("{err}")),
+            .inspect_err(|err| {
+                use std::error::Error;
+                use std::fmt::Write;
+                let mut msg = format!("{err}");
+                for source in std::iter::successors(err.source(), |&e| e.source()) {
+                    let _ = write!(msg, ": {source}");
+                }
+                debug!("{msg}");
+            }),
         Err(err) => Err(err),
     })
 }
@@ -1067,6 +1083,12 @@ impl Error {
                         false
                     }
                 }
+                InterpreterError::NotExecutable(_) => {
+                    // If we found a managed installation matching the request but
+                    // can't execute it, that's a definitive error (e.g., architecture
+                    // mismatch with no kernel support).
+                    matches!(source, PythonSource::Managed)
+                }
             },
             Self::VirtualEnv(VirtualEnvError::MissingPyVenvCfg(path)) => {
                 trace!("Skipping broken virtualenv at {}", path.display());
@@ -1130,13 +1152,15 @@ pub fn find_python_installations<'a>(
                 debug!("Checking for Python interpreter at {request}");
                 match python_installation_from_executable(path, cache) {
                     Ok(installation) => Ok(Ok(installation)),
-                    Err(InterpreterError::NotFound(_) | InterpreterError::BrokenSymlink(_)) => {
-                        Ok(Err(PythonNotFound {
-                            request: request.clone(),
-                            python_preference: preference,
-                            environment_preference: environments,
-                        }))
-                    }
+                    Err(
+                        InterpreterError::NotFound(_)
+                        | InterpreterError::BrokenSymlink(_)
+                        | InterpreterError::NotExecutable(_),
+                    ) => Ok(Err(PythonNotFound {
+                        request: request.clone(),
+                        python_preference: preference,
+                        environment_preference: environments,
+                    })),
                     Err(err) => Err(Error::Query(
                         Box::new(err),
                         path.clone(),
@@ -1156,13 +1180,15 @@ pub fn find_python_installations<'a>(
                 debug!("Checking for Python interpreter in {request}");
                 match python_installation_from_directory(path, cache) {
                     Ok(installation) => Ok(Ok(installation)),
-                    Err(InterpreterError::NotFound(_) | InterpreterError::BrokenSymlink(_)) => {
-                        Ok(Err(PythonNotFound {
-                            request: request.clone(),
-                            python_preference: preference,
-                            environment_preference: environments,
-                        }))
-                    }
+                    Err(
+                        InterpreterError::NotFound(_)
+                        | InterpreterError::BrokenSymlink(_)
+                        | InterpreterError::NotExecutable(_),
+                    ) => Ok(Err(PythonNotFound {
+                        request: request.clone(),
+                        python_preference: preference,
+                        environment_preference: environments,
+                    })),
                     Err(err) => Err(Error::Query(
                         Box::new(err),
                         path.clone(),
