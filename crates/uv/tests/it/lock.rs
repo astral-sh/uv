@@ -7741,24 +7741,25 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
 fn lock_constraint_dependency_absolute_path() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
-    // Create a constraint package at an absolute path.
-    let constraint_pkg = context.temp_dir.child("constraint_pkg");
-    constraint_pkg
-        .child("pyproject.toml")
-        .write_str(indoc! {r#"
+    // Create a local sniffio package at an absolute path.
+    // We use sniffio because anyio depends on it, so the constraint will
+    // actually be used in the resolution and its path will appear in the
+    // lockfile package list.
+    let sniffio_pkg = context.temp_dir.child("sniffio_local");
+    sniffio_pkg.child("pyproject.toml").write_str(indoc! {r#"
         [project]
-        name = "constraint-pkg"
-        version = "1.0.0"
+        name = "sniffio"
+        version = "1.3.1"
         requires-python = ">=3.12"
         dependencies = []
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
-    constraint_pkg
+    sniffio_pkg
         .child("src")
-        .child("constraint_pkg")
+        .child("sniffio")
         .child("__init__.py")
         .touch()?;
 
@@ -7772,9 +7773,9 @@ fn lock_constraint_dependency_absolute_path() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [tool.uv]
-        constraint-dependencies = ["constraint-pkg @ {}"]
+        constraint-dependencies = ["sniffio @ {}"]
         "#,
-        constraint_pkg.portable_display()
+        sniffio_pkg.portable_display()
     })?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(context.temp_dir.join("project")), @"
@@ -7787,7 +7788,8 @@ fn lock_constraint_dependency_absolute_path() -> Result<()> {
     Resolved 4 packages in [TIME]
     ");
 
-    // Check the lockfile - the absolute path should stay absolute.
+    // Check the lockfile - the absolute path should stay absolute, and sniffio
+    // should be resolved from the local path rather than PyPI.
     let lock = fs_err::read_to_string(context.temp_dir.join("project/uv.lock"))?;
 
     insta::with_settings!({
@@ -7803,7 +7805,7 @@ fn lock_constraint_dependency_absolute_path() -> Result<()> {
         exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
-        constraints = [{ name = "constraint-pkg", directory = "[TEMP_DIR]/constraint_pkg" }]
+        constraints = [{ name = "sniffio", directory = "[TEMP_DIR]/sniffio_local" }]
 
         [[package]]
         name = "anyio"
@@ -7841,11 +7843,7 @@ fn lock_constraint_dependency_absolute_path() -> Result<()> {
         [[package]]
         name = "sniffio"
         version = "1.3.1"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
-        ]
+        source = { directory = "[TEMP_DIR]/sniffio_local" }
         "#
         );
     });

@@ -3135,8 +3135,8 @@ fn add_relative_and_absolute_paths() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     relative_dep
         .child("src")
@@ -3154,8 +3154,8 @@ fn add_relative_and_absolute_paths() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     absolute_dep
         .child("src")
@@ -3173,8 +3173,8 @@ fn add_relative_and_absolute_paths() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     file_url_dep
         .child("src")
