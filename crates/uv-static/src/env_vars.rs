@@ -586,7 +586,7 @@ impl EnvVars {
     ///
     /// When populated, uv will run additional tests that exercise EMLINK recovery.
     #[attr_hidden]
-    #[attr_added_in("0.10.6")]
+    #[attr_added_in("next release")]
     pub const UV_INTERNAL__TEST_MAXLINKS_FS: &'static str = "UV_INTERNAL__TEST_MAXLINKS_FS";
 
     /// Used to force treating an interpreter as "managed" during tests.
