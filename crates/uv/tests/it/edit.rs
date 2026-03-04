@@ -11963,13 +11963,13 @@ fn add_index_by_name_directory_ambiguity() -> Result<()> {
     proxy_dir.create_dir_all()?;
 
     // Should warn about ambiguity and use the directory (which will fail since it's empty)
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("proxy"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("proxy"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: Relative paths passed to `--index` should be disambiguated from index names (use `./proxy`). In the future, this path will be treated as the index defined by the same name
+    warning: Relative paths passed to `--index` should be disambiguated from index names (use `./proxy`). Pass `--preview-features index-assume-name` to treat this as the named index. In the future, this will become the default.
     warning: Relative paths passed to `--index` or `--default-index` should be disambiguated from index names (use `./proxy`). Support for ambiguous values will be removed in the future
     warning: Index directory `file://[TEMP_DIR]/proxy` is empty, skipping
     Resolved 2 packages in [TIME]
