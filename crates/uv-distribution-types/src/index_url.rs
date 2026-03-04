@@ -13,6 +13,8 @@ use uv_auth::RealmRef;
 use uv_cache_key::CanonicalUrl;
 use uv_pep508::{Scheme, VerbatimUrl, VerbatimUrlError, split_scheme};
 use uv_redacted::DisplaySafeUrl;
+
+use crate::IndexName;
 use uv_warnings::warn_user;
 
 use crate::{Index, IndexStatusCodeStrategy, Verbatim};
@@ -167,7 +169,11 @@ fn is_disambiguated_path(path: &str) -> bool {
     if let Some((scheme, _)) = split_scheme(path) {
         return Scheme::parse(scheme).is_some();
     }
-    // This is an ambiguous relative path
+    // Values that are valid index names are handled by index name resolution,
+    // so only flag values that couldn't be an index name.
+    if IndexName::from_str(path).is_ok() {
+        return true;
+    }
     false
 }
 
@@ -717,9 +723,11 @@ mod tests {
 
     #[test]
     fn test_index_url_parse_ambiguous_paths() {
-        // Test single-segment ambiguous path
-        assert!(!is_disambiguated_path("index"));
-        // Test multi-segment ambiguous path
+        // Valid index names are not ambiguous (handled by index name resolution)
+        assert!(is_disambiguated_path("index"));
+        // Single-component paths with characters invalid for index names are ambiguous
+        assert!(!is_disambiguated_path("path with spaces"));
+        // Multi-segment relative paths without a leading `./` are ambiguous
         assert!(!is_disambiguated_path("relative/path"));
     }
 
