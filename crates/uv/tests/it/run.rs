@@ -6448,6 +6448,8 @@ async fn run_index_by_name() -> Result<()> {
     use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
 
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
     let server = MockServer::start().await;
 
     Mock::given(method("GET"))
@@ -6469,9 +6471,10 @@ async fn run_index_by_name() -> Result<()> {
 
         [[tool.uv.index]]
         name = "example"
-        url = "https://pypi-proxy.fly.dev/simple"
+        url = "{proxy_url}"
         "#,
         server_url = server.uri(),
+        proxy_url = proxy.url("/simple"),
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--index").arg("example").arg("python").arg("-c").arg("import iniconfig; print('ok')"), @r"
@@ -6502,7 +6505,7 @@ async fn run_index_by_name() -> Result<()> {
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
-        source = { registry = "https://pypi-proxy.fly.dev/simple" }
+        source = { registry = "http://[LOCALHOST]/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
