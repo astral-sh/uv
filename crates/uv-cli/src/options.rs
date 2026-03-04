@@ -7,16 +7,14 @@ use uv_cache::Refresh;
 use uv_configuration::{BuildIsolation, Reinstall, Upgrade};
 use uv_distribution_types::{
     ConfigSettings, Index, IndexArg, IndexArgStrategy, PackageConfigSettings, Requirement,
+    check_for_explicit_indexes,
 };
 use uv_preview::{Preview, PreviewFeature};
 use uv_resolver::{ExcludeNewer, ExcludeNewerPackage, PrereleaseMode};
 use uv_settings::{
     Combine, EnvFlag, FilesystemOptions, PipOptions, ResolverInstallerOptions, ResolverOptions,
 };
-use uv_warnings::{
-    owo_colors::{AnsiColors, OwoColorize},
-    warn_user_once,
-};
+use uv_warnings::owo_colors::{AnsiColors, OwoColorize};
 
 use crate::{
     BuildOptionsArgs, FetchArgs, IndexArgs, InstallerArgs, Maybe, RefreshArgs, ResolverArgs,
@@ -198,19 +196,12 @@ pub fn check_conflicts(flag_a: Flag, flag_b: Flag) {
 /// Indexes passed by name are resolved from the filesystem configuration
 /// prioritizing indexes from the workspace member, then the workspace, and then
 /// the configuration.
-///
-/// A warning is emitted for any names which resolve to an explicit index.
-///
-/// If `permit_single_explicit_index` is true, the warning is only emitted when
-/// more than one index is provided (this is intended for the `uv add` path
-/// where a single explicit index can be used to pin a package to a source).
 pub fn resolve_and_combine_indexes(
     default_index: Option<Maybe<Index>>,
     index: Option<Vec<Vec<Maybe<IndexArg>>>>,
     filesystem: Option<&FilesystemOptions>,
     package_indexes: Vec<Index>,
     preview: Preview,
-    permit_single_explicit_index: bool,
 ) -> Option<Vec<Index>> {
     let filesystem_indexes: Vec<Index> = package_indexes
         .into_iter()
@@ -258,23 +249,7 @@ pub fn resolve_and_combine_indexes(
             .collect()
     });
 
-    let combined = default_index.combine(index);
-
-    if let Some(ref indexes) = combined {
-        if !permit_single_explicit_index || indexes.len() > 1 {
-            if let Some(index) = indexes.iter().find(|index| index.explicit) {
-                let name = index
-                    .name
-                    .as_ref()
-                    .map_or_else(|| index.url.to_string(), ToString::to_string);
-                warn_user_once!(
-                    "Explicit index `{name}` will be ignored. Explicit indexes are only used when specified in `[tool.uv.sources]`."
-                );
-            }
-        }
-    }
-
-    combined
+    default_index.combine(index)
 }
 
 impl From<RefreshArgs> for Refresh {
@@ -543,15 +518,14 @@ impl Resolve<IndexArgs> for PipOptions {
             find_links,
         } = args;
 
+        let index =
+            resolve_and_combine_indexes(default_index, index, filesystem, package_indexes, preview);
+        if let Some(ref indexes) = index {
+            check_for_explicit_indexes(indexes);
+        }
+
         Self {
-            index: resolve_and_combine_indexes(
-                default_index,
-                index,
-                filesystem,
-                package_indexes,
-                preview,
-                false,
-            ),
+            index,
             index_url: index_url.and_then(Maybe::into_option),
             extra_index_url: extra_index_url.map(|extra_index_urls| {
                 extra_index_urls
@@ -612,15 +586,19 @@ pub fn resolver_options(
         no_binary_package,
     } = build_args;
 
+    let index = resolve_and_combine_indexes(
+        index_args.default_index,
+        index_args.index,
+        filesystem,
+        package_indexes,
+        preview,
+    );
+    if let Some(ref indexes) = index {
+        check_for_explicit_indexes(indexes);
+    }
+
     ResolverOptions {
-        index: resolve_and_combine_indexes(
-            index_args.default_index,
-            index_args.index,
-            filesystem,
-            package_indexes,
-            preview,
-            false,
-        ),
+        index,
         index_url: index_args.index_url.and_then(Maybe::into_option),
         extra_index_url: index_args.extra_index_url.map(|extra_index_url| {
             extra_index_url
@@ -728,15 +706,19 @@ pub fn resolver_installer_options(
         no_binary_package,
     } = build_args;
 
+    let index = resolve_and_combine_indexes(
+        index_args.default_index,
+        index_args.index,
+        filesystem,
+        package_indexes,
+        preview,
+    );
+    if let Some(ref indexes) = index {
+        check_for_explicit_indexes(indexes);
+    }
+
     ResolverInstallerOptions {
-        index: resolve_and_combine_indexes(
-            index_args.default_index,
-            index_args.index,
-            filesystem,
-            package_indexes,
-            preview,
-            false,
-        ),
+        index,
         index_url: index_args.index_url.and_then(Maybe::into_option),
         extra_index_url: index_args.extra_index_url.map(|extra_index_url| {
             extra_index_url

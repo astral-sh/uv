@@ -35493,7 +35493,7 @@ fn lock_index_by_name() -> Result<()> {
     Ok(())
 }
 
-/// Test that explicit indexes passed via CLI produce a warning.
+/// Test that explicit indexes passed via CLI produce an error.
 #[test]
 fn lock_index_by_name_explicit() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -35515,13 +35515,12 @@ fn lock_index_by_name_explicit() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--index").arg("explicit"), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    warning: Explicit index `explicit` will be ignored. Explicit indexes are only used when specified in `[tool.uv.sources]`.
-    Resolved 2 packages in [TIME]
+    error: Explicit index `explicit` cannot be used on the command line. Explicit indexes are only usable when referenced by `[tool.uv.sources]`.
     ");
 
     Ok(())
