@@ -15,13 +15,6 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{debug, trace, warn};
 
-use crate::implementation::LenientImplementationName;
-use crate::managed::ManagedPythonInstallations;
-use crate::pointer_size::PointerSize;
-use crate::{
-    Prefix, PyVenvConfiguration, PythonInstallationKey, PythonVariant, PythonVersion, Target,
-    VersionRequest, VirtualEnvironment,
-};
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness};
 use uv_cache_info::Timestamp;
 use uv_cache_key::cache_digest;
@@ -34,6 +27,14 @@ use uv_pep508::{MarkerEnvironment, StringVersion};
 use uv_platform::{Arch, Libc, Os};
 use uv_platform_tags::{Platform, Tags, TagsError};
 use uv_pypi_types::{ResolverMarkerEnvironment, Scheme};
+
+use crate::implementation::LenientImplementationName;
+use crate::managed::ManagedPythonInstallations;
+use crate::pointer_size::PointerSize;
+use crate::{
+    Prefix, PyVenvConfiguration, PythonInstallationKey, PythonVariant, PythonVersion, Target,
+    VersionRequest, VirtualEnvironment,
+};
 
 #[cfg(windows)]
 use windows::Win32::Foundation::{APPMODEL_ERROR_NO_PACKAGE, ERROR_CANT_ACCESS_FILE, WIN32_ERROR};
