@@ -8,6 +8,7 @@ use thiserror::Error;
 use url::Url;
 
 use uv_auth::{AuthPolicy, Credentials};
+use uv_preview::PreviewFeature;
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 use uv_warnings::warn_user_once;
@@ -621,7 +622,8 @@ impl IndexArg {
                                     format!("`./{unresolved}`")
                                 };
                                 warn_user_once!(
-                                    "Relative paths passed to `--index` should be disambiguated from index names (use {path_hint}). In the future, this path will be treated as the index defined by the same name."
+                                    "Relative paths passed to `--index` should be disambiguated from index names (use {path_hint}). Pass `--preview-features {feature}` to treat this as the named index. In the future, this will become the default.",
+                                    feature = PreviewFeature::IndexAssumeName
                                 );
                                 Ok(Index::new(url.clone()).with_origin(Origin::Cli))
                             } else {
