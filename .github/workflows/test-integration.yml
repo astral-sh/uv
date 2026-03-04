@@ -830,7 +830,6 @@ jobs:
     if: ${{ github.event.pull_request.head.repo.fork != true }}
 
     permissions:
-      contents: read
       id-token: write # for Trusted Access
 
     env:
