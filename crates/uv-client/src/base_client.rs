@@ -23,7 +23,7 @@ use reqwest_retry::{
     Jitter, RetryPolicy, RetryTransientMiddleware, Retryable, RetryableStrategy,
     default_on_request_error, default_on_request_success,
 };
-use std::future::Future;
+
 use thiserror::Error;
 
 use tracing::{debug, trace, warn};
@@ -1396,15 +1396,14 @@ pub trait RetriableError: std::error::Error + Sized + 'static {
 /// URLs are tried in sequence without any backoff between them. Backoff is only applied after all
 /// URLs have been exhausted. On the next retry attempt the full URL list is tried again from the
 /// beginning.
-pub async fn fetch_with_url_fallback<T, E, F, Fut>(
+pub async fn fetch_with_url_fallback<T, E, F>(
     urls: &[DisplaySafeUrl],
     retry_policy: ExponentialBackoff,
     subject: &str,
     mut attempt: F,
 ) -> Result<T, E>
 where
-    F: FnMut(DisplaySafeUrl) -> Fut,
-    Fut: Future<Output = Result<T, E>>,
+    F: AsyncFnMut(DisplaySafeUrl) -> Result<T, E>,
     E: RetriableError + From<SystemTimeError>,
 {
     let mut retry_state = RetryState::start(
