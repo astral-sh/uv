@@ -11775,7 +11775,6 @@ fn add_index_by_name_directory_ambiguity() -> Result<()> {
 
     ----- stderr -----
     warning: Relative paths passed to `--index` should be disambiguated from index names (use `./proxy`). Pass `--preview-features index-assume-name` to treat this as the named index. In the future, this will become the default.
-    warning: Relative paths passed to `--index` or `--default-index` should be disambiguated from index names (use `./proxy`). Support for ambiguous values will be removed in the future
     warning: Index directory `file://[TEMP_DIR]/proxy` is empty, skipping
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
