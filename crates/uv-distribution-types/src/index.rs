@@ -306,10 +306,11 @@ impl Index {
     /// Try to initialise an index from a CLI argument formatted as `<name>=<url>`,
     /// e.g., `example=https://pypi.org/simple`.
     ///
-    /// Returns `Ok(None)` if `s` didn't appear to match the right format.
-    pub fn try_from_named_cli(s: &str) -> Result<Option<Self>, IndexSourceError> {
-        if let Some((name, url)) = s.split_once('=')
-            && !name.chars().any(|c| c == ':')
+    /// Returns `Ok(None)` the provided parameter didn't appear to match the
+    /// required.
+    pub fn try_from_named_cli(param: &str) -> Result<Option<Self>, IndexSourceError> {
+        if let Some((name, url)) = param.split_once('=')
+            && !name.chars().any(|char| char == ':')
         {
             let name = IndexName::from_str(name)?;
             let url = IndexUrl::from_str(url)?;
