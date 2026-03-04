@@ -8,7 +8,7 @@ use assert_fs::{
     assert::PathAssert,
     fixture::{FileTouch, FileWriteStr, PathChild, PathCreateDir},
 };
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use uv_fs::copy_dir_all;
@@ -4916,29 +4916,45 @@ fn tool_install_removed_python() {
     ");
 }
 
-#[test]
-fn tool_install_index_by_name() {
+/// Install a tool using `--index <name>` to reference an index defined in user config.
+#[tokio::test]
+async fn tool_install_index_by_name() {
+    use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
+
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&server)
+        .await;
+
     let uv_dir = context.user_config_dir.child("uv");
     uv_dir.create_dir_all().unwrap();
     let user_config = uv_dir.child("uv.toml");
     user_config
-        .write_str(indoc! {r#"
+        .write_str(&formatdoc! {r#"
             [[index]]
-            name = "proxy"
+            name = "primary"
+            url = "{server_url}"
+
+            [[index]]
+            name = "example"
             url = "https://pypi-proxy.fly.dev/simple"
-        "#})
+        "#,
+            server_url = server.uri(),
+        })
         .unwrap();
 
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("pytest")
         .arg("--index")
-        .arg("proxy")
+        .arg("example")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
@@ -4969,7 +4985,7 @@ fn tool_install_index_by_name() {
         ]
 
         [tool.options]
-        index = [{ name = "proxy", url = "https://pypi-proxy.fly.dev/simple", explicit = false, default = false, format = "simple", authenticate = "auto" }, { name = "proxy", url = "https://pypi-proxy.fly.dev/simple", explicit = false, default = false, format = "simple", authenticate = "auto" }]
+        index = [{ name = "example", url = "https://pypi-proxy.fly.dev/simple", explicit = false, default = false, format = "simple", authenticate = "auto" }, { name = "primary", url = "http://[LOCALHOST]/", explicit = false, default = false, format = "simple", authenticate = "auto" }, { name = "example", url = "https://pypi-proxy.fly.dev/simple", explicit = false, default = false, format = "simple", authenticate = "auto" }]
         exclude-newer = "2024-03-25T00:00:00Z"
         "#);
     });

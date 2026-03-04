@@ -3,7 +3,7 @@
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::{fixture::ChildPath, prelude::*};
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use predicates::{prelude::predicate, str::contains};
 use std::path::Path;
@@ -5817,7 +5817,6 @@ fn run_without_overlay() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn detect_infinite_recursion() -> Result<()> {
-    use indoc::formatdoc;
     use std::os::unix::fs::PermissionsExt;
     use uv_test::get_bin;
 
@@ -6881,13 +6880,20 @@ fn run_project_file_no_ancestor_project() -> Result<()> {
 }
 
 /// Run using `--index <name>` to reference an index defined in `pyproject.toml`.
-#[test]
-fn run_index_by_name() -> Result<()> {
+#[tokio::test]
+async fn run_index_by_name() -> Result<()> {
+    use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
+
     let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&server)
+        .await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
-        r#"
+    pyproject_toml.write_str(&formatdoc! {r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -6895,12 +6901,17 @@ fn run_index_by_name() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [[tool.uv.index]]
-        name = "proxy"
+        name = "primary"
+        url = "{server_url}"
+
+        [[tool.uv.index]]
+        name = "example"
         url = "https://pypi-proxy.fly.dev/simple"
         "#,
-    )?;
+        server_url = server.uri(),
+    })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--index").arg("proxy").arg("python").arg("-c").arg("import iniconfig; print('ok')"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("--index").arg("example").arg("python").arg("-c").arg("import iniconfig; print('ok')"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
