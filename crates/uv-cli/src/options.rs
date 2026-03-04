@@ -267,7 +267,7 @@ impl From<RefreshArgs> for Refresh {
 /// Like [`From`] trait for conversions specifically to [`PipOptions`] from
 /// `*Args` types which contain [`uv_distribution_types::IndexArg`] elements and
 /// therefore need the filesystem options.
-pub trait Resolve<A>: Sized {
+pub trait ResolveOptions<A>: Sized {
     fn resolve(
         args: A,
         filesystem: Option<&FilesystemOptions>,
@@ -276,7 +276,7 @@ pub trait Resolve<A>: Sized {
     ) -> Self;
 }
 
-impl Resolve<ResolverArgs> for PipOptions {
+impl ResolveOptions<ResolverArgs> for PipOptions {
     fn resolve(
         args: ResolverArgs,
         filesystem: Option<&FilesystemOptions>,
@@ -348,7 +348,7 @@ impl Resolve<ResolverArgs> for PipOptions {
     }
 }
 
-impl Resolve<InstallerArgs> for PipOptions {
+impl ResolveOptions<InstallerArgs> for PipOptions {
     fn resolve(
         args: InstallerArgs,
         filesystem: Option<&FilesystemOptions>,
@@ -399,7 +399,7 @@ impl Resolve<InstallerArgs> for PipOptions {
     }
 }
 
-impl Resolve<ResolverInstallerArgs> for PipOptions {
+impl ResolveOptions<ResolverInstallerArgs> for PipOptions {
     fn resolve(
         args: ResolverInstallerArgs,
         filesystem: Option<&FilesystemOptions>,
@@ -479,7 +479,7 @@ impl Resolve<ResolverInstallerArgs> for PipOptions {
     }
 }
 
-impl Resolve<FetchArgs> for PipOptions {
+impl ResolveOptions<FetchArgs> for PipOptions {
     fn resolve(
         args: FetchArgs,
         filesystem: Option<&FilesystemOptions>,
@@ -502,7 +502,7 @@ impl Resolve<FetchArgs> for PipOptions {
     }
 }
 
-impl Resolve<IndexArgs> for PipOptions {
+impl ResolveOptions<IndexArgs> for PipOptions {
     fn resolve(
         args: IndexArgs,
         filesystem: Option<&FilesystemOptions>,
