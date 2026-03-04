@@ -1,7 +1,7 @@
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use uv_fs::copy_dir_all;
 use uv_static::EnvVars;
 use uv_test::{uv_snapshot, venv_bin_path};
@@ -3652,24 +3652,39 @@ async fn tool_run_latest_keyring_auth() {
 }
 
 /// Run a tool using `--index <name>` to reference an index defined in user config.
-#[test]
-fn tool_run_index_by_name() {
+#[tokio::test]
+async fn tool_run_index_by_name() {
+    use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
+
     let context = uv_test::test_context!("3.12").with_filtered_counts();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&server)
+        .await;
 
     let uv_dir = context.user_config_dir.child("uv");
     uv_dir.create_dir_all().unwrap();
     let user_config = uv_dir.child("uv.toml");
     user_config
-        .write_str(indoc! {r#"
+        .write_str(&formatdoc! {r#"
             [[index]]
-            name = "proxy"
+            name = "primary"
+            url = "{server_url}"
+
+            [[index]]
+            name = "example"
             url = "https://pypi-proxy.fly.dev/simple"
-        "#})
+        "#,
+            server_url = server.uri(),
+        })
         .unwrap();
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--index")
-        .arg("proxy")
+        .arg("example")
         .arg("pytest")
         .arg("--version"), @r"
     success: true
