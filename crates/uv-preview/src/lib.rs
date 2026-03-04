@@ -25,22 +25,29 @@ static PREVIEW: OnceLock<PreviewMode> = OnceLock::new();
 #[cfg(not(feature = "testing"))]
 static PREVIEW: OnceLock<Preview> = OnceLock::new();
 
+/// Error returned when [`init`] is called more than once.
+#[derive(Debug, Error)]
+#[error("The preview configuration has already been initialized")]
+pub struct InitError;
+
 /// Initialize the global preview configuration.
 ///
 /// This should be called once at startup with the resolved preview settings.
 #[cfg(feature = "testing")]
-#[expect(clippy::result_unit_err)]
-pub fn init(preview: Preview) -> Result<(), ()> {
-    PREVIEW.set(PreviewMode::Normal(preview)).map_err(|_| ())
+pub fn init(preview: Preview) -> Result<(), InitError> {
+    PREVIEW
+        .set(PreviewMode::Normal(preview))
+        .map_err(|_| InitError)
 }
 
 /// Initialize the global preview configuration.
 ///
 /// This should be called once at startup with the resolved preview settings.
 #[cfg(not(feature = "testing"))]
-#[expect(clippy::result_unit_err)]
-pub fn init(preview: Preview) -> Result<(), ()> {
-    PREVIEW.set(preview).map_err(|_| ())
+pub fn init(preview: Preview) -> Result<(), InitError> {
+    PREVIEW
+        .set(preview)
+        .map_err(|_| InitError)
 }
 
 /// Get the current global preview configuration.
