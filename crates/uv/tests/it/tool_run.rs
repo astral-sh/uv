@@ -3656,7 +3656,9 @@ async fn tool_run_latest_keyring_auth() {
 async fn tool_run_index_by_name() {
     use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
 
-    let context = uv_test::test_context!("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_exclude_newer("2025-01-18T00:00:00Z");
 
     let proxy = crate::pypi_proxy::start().await;
 
@@ -3688,20 +3690,19 @@ async fn tool_run_index_by_name() {
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--index")
         .arg("example")
-        .arg("pytest")
+        .arg("--from")
+        .arg("executable-application")
+        .arg("app")
         .arg("--version"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    pytest 8.1.1
+    app 0.3.0
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + iniconfig==2.0.0
-     + packaging==24.0
-     + pluggy==1.4.0
-     + pytest==8.1.1
+     + executable-application==0.3.0
     ");
 }
