@@ -1378,7 +1378,7 @@ impl ProjectWorkspace {
     }
 
     /// Find the workspace for a project.
-    pub async fn from_project(
+    async fn from_project(
         install_path: &Path,
         project: &Project,
         project_pyproject_toml: &PyProjectToml,
