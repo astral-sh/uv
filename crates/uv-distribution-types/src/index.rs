@@ -374,7 +374,7 @@ pub enum IndexFormat {
 }
 
 impl Index {
-    /// Initialize an [`Index`] from a url
+    /// Initialize an [`Index`] from a URL.
     pub fn new(url: IndexUrl) -> Self {
         Self {
             name: None,
@@ -406,10 +406,10 @@ impl Index {
         Self::new(url).with_format(IndexFormat::Flat)
     }
 
-    /// Try to initialise an index from a name and url CLI argument
+    /// Try to initialise an index from a CLI argument formatted as `<name>=<url>`,
+    /// e.g., `example=https://pypi.org/simple`.
     ///
     /// Returns `Ok(None)` if `s` didn't appear to match the right format.
-    /// e.g.: `name=https://pypi.org/simple`
     pub fn try_from_named_cli(s: &str) -> Result<Option<Self>, IndexSourceError> {
         if let Some((name, url)) = s.split_once('=')
             && !name.chars().any(|c| c == ':')
@@ -424,7 +424,7 @@ impl Index {
         }
     }
 
-    /// Parse a default index passed on the command line
+    /// Parse a default index passed on the command line.
     pub fn from_default_index(s: &str) -> Result<Self, IndexSourceError> {
         // See if it looks like a source prefixed with a name
         if let Some(index) = Self::try_from_named_cli(s)? {
@@ -443,7 +443,7 @@ impl Index {
         self
     }
 
-    /// Set the index as a default
+    /// Set the index as a default.
     #[must_use]
     pub fn with_default(mut self) -> Self {
         self.default = true;
@@ -606,9 +606,9 @@ pub fn check_for_explicit_indexes(indexes: &[Index]) {
 #[expect(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IndexArg {
-    /// A usable index (with a URL)
+    /// A usable index (with a URL).
     Resolved(Index),
-    /// An index name which must be looked up
+    /// An index name which must be looked up.
     Unresolved(IndexName),
 }
 
@@ -616,9 +616,9 @@ pub enum IndexArg {
 /// to both a directory and a named index.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum IndexArgStrategy {
-    /// Pick the directory over the name and warn
+    /// Pick the directory over the name and warn.
     PreferDirectory,
-    /// Pick the name and ignore the directory with no warning
+    /// Pick the name and ignore the directory with no warning.
     IgnoreDirectory,
 }
 
@@ -629,7 +629,7 @@ pub enum IndexArgStrategy {
 pub struct ResolveIndexArgError(IndexName);
 
 impl IndexArg {
-    /// Parse a non-default index passed on the command line
+    /// Parse a non-default index passed on the command line.
     pub fn from_cli(s: &str) -> Result<Self, IndexSourceError> {
         // See if it looks like a source prefixed with a name
         if let Some(index) = Index::try_from_named_cli(s)? {
@@ -656,9 +656,9 @@ impl IndexArg {
         }
     }
 
-    /// Attempt to look up the [`IndexArg`] in the passed list of indexes
+    /// Attempt to look up the [`IndexArg`] in the passed list of indexes.
     ///
-    /// The origin is inherited from the index
+    /// The [`Origin`] is inherited from the index.
     pub fn try_resolve<I>(
         self,
         indexes: I,
