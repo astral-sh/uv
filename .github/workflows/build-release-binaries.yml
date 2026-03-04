@@ -13,6 +13,10 @@ on:
       plan:
         required: false
         type: string
+      environment:
+        description: "GitHub environment for secrets (e.g., code signing certificates)"
+        required: false
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -86,6 +90,7 @@ jobs:
   macos-x86_64:
     name: x86_64-apple-darwin
     runs-on: depot-macos-14
+    environment: ${{ inputs.environment }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -100,46 +105,6 @@ jobs:
       - name: "Install cargo extensions"
         shell: bash
         run: scripts/install-cargo-extensions.sh
-      - name: "Prepare macOS signing certificate"
-        run: |
-          set -euo pipefail
-
-          CERT_NAME="uv-codesign-ci"
-          CERT_DIR="$RUNNER_TEMP/codesign-cert"
-          mkdir -p "$CERT_DIR"
-
-          openssl req -x509 -newkey rsa:2048 -sha256 -days 7 -nodes \
-            -keyout "$CERT_DIR/key.pem" \
-            -out "$CERT_DIR/cert.pem" \
-            -subj "/CN=$CERT_NAME" \
-            -addext "extendedKeyUsage=codeSigning" \
-            -addext "keyUsage=digitalSignature"
-
-          P12_PASSWORD="$(uuidgen | tr -d '-')"
-
-          # LibreSSL (shipped with macOS) doesn't support -legacy; OpenSSL 3.x
-          # requires it for macOS keychain compatibility.
-          LEGACY_FLAG=""
-          if openssl version 2>&1 | grep -q "^OpenSSL 3"; then
-            LEGACY_FLAG="-legacy"
-          fi
-
-          openssl pkcs12 -export $LEGACY_FLAG \
-            -inkey "$CERT_DIR/key.pem" \
-            -in "$CERT_DIR/cert.pem" \
-            -name "$CERT_NAME" \
-            -out "$CERT_DIR/cert.p12" \
-            -passout pass:"$P12_PASSWORD"
-
-          CERT_B64="$(base64 < "$CERT_DIR/cert.p12" | tr -d '\n')"
-          CERT_SHA1="$(openssl x509 -in "$CERT_DIR/cert.pem" -noout -fingerprint -sha1 | cut -d= -f2 | tr -d ':')"
-
-          {
-            echo "CODESIGN_IDENTITY=$CERT_SHA1"
-            echo "CODESIGN_CERTIFICATE=$CERT_B64"
-            echo "CODESIGN_CERTIFICATE_PASSWORD=$P12_PASSWORD"
-            echo "CODESIGN_ALLOW_UNTRUSTED=1"
-          } >> "$GITHUB_ENV"
 
       # uv
       - name: "Build wheels - x86_64"
@@ -150,6 +115,10 @@ jobs:
           args: --release --locked --out dist --features self-update --compatibility pypi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
+          CODESIGN_IDENTITY_MACOS: ${{ secrets.CODESIGN_IDENTITY_MACOS }}
+          CODESIGN_CERTIFICATE_MACOS: ${{ secrets.CODESIGN_CERTIFICATE_MACOS }}
+          CODESIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODESIGN_CERTIFICATE_PASSWORD }}
+          CODESIGN_ALLOW_UNTRUSTED_MACOS: ${{ vars.CODESIGN_ALLOW_UNTRUSTED_MACOS }}
       - name: "Upload wheels"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -183,6 +152,10 @@ jobs:
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
+          CODESIGN_IDENTITY_MACOS: ${{ secrets.CODESIGN_IDENTITY_MACOS }}
+          CODESIGN_CERTIFICATE_MACOS: ${{ secrets.CODESIGN_CERTIFICATE_MACOS }}
+          CODESIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODESIGN_CERTIFICATE_PASSWORD }}
+          CODESIGN_ALLOW_UNTRUSTED_MACOS: ${{ vars.CODESIGN_ALLOW_UNTRUSTED_MACOS }}
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -192,6 +165,7 @@ jobs:
   macos-aarch64:
     name: aarch64-apple-darwin
     runs-on: depot-macos-14
+    environment: ${{ inputs.environment }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -206,46 +180,6 @@ jobs:
       - name: "Install cargo extensions"
         shell: bash
         run: scripts/install-cargo-extensions.sh
-      - name: "Prepare macOS signing certificate"
-        run: |
-          set -euo pipefail
-
-          CERT_NAME="uv-codesign-ci"
-          CERT_DIR="$RUNNER_TEMP/codesign-cert"
-          mkdir -p "$CERT_DIR"
-
-          openssl req -x509 -newkey rsa:2048 -sha256 -days 7 -nodes \
-            -keyout "$CERT_DIR/key.pem" \
-            -out "$CERT_DIR/cert.pem" \
-            -subj "/CN=$CERT_NAME" \
-            -addext "extendedKeyUsage=codeSigning" \
-            -addext "keyUsage=digitalSignature"
-
-          P12_PASSWORD="$(uuidgen | tr -d '-')"
-
-          # LibreSSL (shipped with macOS) doesn't support -legacy; OpenSSL 3.x
-          # requires it for macOS keychain compatibility.
-          LEGACY_FLAG=""
-          if openssl version 2>&1 | grep -q "^OpenSSL 3"; then
-            LEGACY_FLAG="-legacy"
-          fi
-
-          openssl pkcs12 -export $LEGACY_FLAG \
-            -inkey "$CERT_DIR/key.pem" \
-            -in "$CERT_DIR/cert.pem" \
-            -name "$CERT_NAME" \
-            -out "$CERT_DIR/cert.p12" \
-            -passout pass:"$P12_PASSWORD"
-
-          CERT_B64="$(base64 < "$CERT_DIR/cert.p12" | tr -d '\n')"
-          CERT_SHA1="$(openssl x509 -in "$CERT_DIR/cert.pem" -noout -fingerprint -sha1 | cut -d= -f2 | tr -d ':')"
-
-          {
-            echo "CODESIGN_IDENTITY=$CERT_SHA1"
-            echo "CODESIGN_CERTIFICATE=$CERT_B64"
-            echo "CODESIGN_CERTIFICATE_PASSWORD=$P12_PASSWORD"
-            echo "CODESIGN_ALLOW_UNTRUSTED=1"
-          } >> "$GITHUB_ENV"
 
       # uv
       - name: "Build wheels - aarch64"
@@ -257,6 +191,10 @@ jobs:
           args: --release --locked --out dist --features self-update --compatibility pypi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
+          CODESIGN_IDENTITY_MACOS: ${{ secrets.CODESIGN_IDENTITY_MACOS }}
+          CODESIGN_CERTIFICATE_MACOS: ${{ secrets.CODESIGN_CERTIFICATE_MACOS }}
+          CODESIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODESIGN_CERTIFICATE_PASSWORD }}
+          CODESIGN_ALLOW_UNTRUSTED_MACOS: ${{ vars.CODESIGN_ALLOW_UNTRUSTED_MACOS }}
       - name: "Test wheel - aarch64"
         run: |
           pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
@@ -296,6 +234,10 @@ jobs:
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
+          CODESIGN_IDENTITY_MACOS: ${{ secrets.CODESIGN_IDENTITY_MACOS }}
+          CODESIGN_CERTIFICATE_MACOS: ${{ secrets.CODESIGN_CERTIFICATE_MACOS }}
+          CODESIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODESIGN_CERTIFICATE_PASSWORD }}
+          CODESIGN_ALLOW_UNTRUSTED_MACOS: ${{ vars.CODESIGN_ALLOW_UNTRUSTED_MACOS }}
       - name: "Test wheel - aarch64"
         run: |
           pip install ${PACKAGE_NAME}_build --no-index --find-links crates/uv-build/dist --force-reinstall
@@ -310,6 +252,7 @@ jobs:
   windows:
     name: ${{ matrix.platform.target }}
     runs-on: ${{ matrix.platform.runner }}
+    environment: ${{ inputs.environment }}
     strategy:
       matrix:
         platform:
@@ -339,19 +282,14 @@ jobs:
       - name: "Prepare Windows signing certificate"
         shell: pwsh
         run: |
-          $cert = New-SelfSignedCertificate `
-            -Type CodeSigningCert `
-            -Subject "CN=uv-codesign-ci" `
-            -CertStoreLocation "Cert:\CurrentUser\My" `
-            -NotAfter (Get-Date).AddDays(7)
-          $passwordPlain = [Guid]::NewGuid().ToString("N")
-          $password = ConvertTo-SecureString -String $passwordPlain -Force -AsPlainText
-          $pfxPath = Join-Path $env:RUNNER_TEMP "uv-codesign-ci.pfx"
+          if (-not $env:CODESIGN_CERTIFICATE_WINDOWS) {
+            Write-Host "No signing certificate configured, skipping."
+            return
+          }
 
-          Export-PfxCertificate `
-            -Cert "Cert:\CurrentUser\My\$($cert.Thumbprint)" `
-            -FilePath $pfxPath `
-            -Password $password | Out-Null
+          $certBytes = [Convert]::FromBase64String($env:CODESIGN_CERTIFICATE_WINDOWS)
+          $pfxPath = Join-Path $env:RUNNER_TEMP "codesign.pfx"
+          [IO.File]::WriteAllBytes($pfxPath, $certBytes)
 
           # Find signtool.exe — it's not on PATH on GitHub Actions runners.
           $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
@@ -362,9 +300,12 @@ jobs:
             throw "signtool.exe not found in Windows SDK"
           }
 
-          "SIGNTOOL_PATH=$signtool" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "SIGNTOOL_CERTIFICATE_PATH=$pfxPath" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "SIGNTOOL_CERTIFICATE_PASSWORD=$passwordPlain" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "CODESIGN_TOOL_PATH_WINDOWS=$signtool" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "CODESIGN_CERTIFICATE_PATH_WINDOWS=$pfxPath" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "CODESIGN_CERTIFICATE_PASSWORD=$($env:CODESIGN_CERTIFICATE_PASSWORD)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+        env:
+          CODESIGN_CERTIFICATE_WINDOWS: ${{ secrets.CODESIGN_CERTIFICATE_WINDOWS }}
+          CODESIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODESIGN_CERTIFICATE_PASSWORD }}
 
       # uv
       - name: "Build wheels"
