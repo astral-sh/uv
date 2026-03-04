@@ -370,7 +370,7 @@ async fn init_project(
         &VersionFileDiscoveryOptions::default()
             .with_stop_discovery_at(
                 workspace
-                    .as_ref()
+                    .as_deref()
                     .map(Workspace::install_path)
                     .map(PathBuf::as_ref),
             )
@@ -392,7 +392,7 @@ async fn init_project(
         python_preference,
         python_downloads,
         cache,
-        workspace.as_ref(),
+        workspace.as_deref(),
         &reporter,
         python_request,
     )
