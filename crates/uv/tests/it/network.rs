@@ -1051,7 +1051,7 @@ fn connect_timeout_stream() {
 
 #[tokio::test]
 async fn retry_read_timeout_index() {
-    let context = uv_test::test_context!("3.12").with_filter((r"in [0-9]+\.[0-9]s", "in [TIME]"));
+    let context = uv_test::test_context!("3.12");
 
     let (server, _guard) = read_timeout_server();
 
