@@ -12079,7 +12079,7 @@ async fn add_index_by_name_explicit_single() -> Result<()> {
         dependencies = []
 
         [[tool.uv.index]]
-        name = "explicit"
+        name = "example"
         explicit = true
         url = "{proxy_url}"
     "#,
@@ -12087,7 +12087,7 @@ async fn add_index_by_name_explicit_single() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.add()
-        .arg("--index").arg("explicit")
+        .arg("--index").arg("example")
         .arg("iniconfig"), @r"
     success: true
     exit_code: 0
@@ -12116,26 +12116,26 @@ fn add_index_by_name_explicit_multiple() -> Result<()> {
         dependencies = []
 
         [[tool.uv.index]]
-        name = "explicit"
+        name = "explicit-index"
         explicit = true
         url = "https://test.pypi.org/simple/"
 
         [[tool.uv.index]]
-        name = "implicit"
+        name = "implicit-index"
         url = "https://test.pypi.org/simple/"
     "#})?;
 
     // Multiple indexes with at least one explicit should produce an error
     uv_snapshot!(context.filters(), context.add()
-        .arg("--index").arg("explicit")
-        .arg("--index").arg("implicit")
+        .arg("--index").arg("explicit-index")
+        .arg("--index").arg("implicit-index")
         .arg("iniconfig"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Explicit index `explicit` cannot be used on the command line. Explicit indexes are only usable when referenced by `[tool.uv.sources]`.
+    error: Explicit index `explicit-index` cannot be used on the command line. Explicit indexes are only usable when referenced by `[tool.uv.sources]`.
     ");
 
     Ok(())
