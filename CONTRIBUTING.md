@@ -260,17 +260,11 @@ To preview any changes to the documentation locally:
 3. Run the development server with:
 
    ```shell
-   uvx --with-requirements docs/requirements.txt -- mkdocs serve -f mkdocs.yml
+   uv run --group docs mkdocs serve -f mkdocs.yml
    ```
 
 The documentation should then be available locally at
 [http://127.0.0.1:8000/uv/](http://127.0.0.1:8000/uv/).
-
-To update the documentation dependencies, edit `docs/requirements.in`, then run:
-
-```shell
-uv pip compile docs/requirements.in -o docs/requirements.txt --universal -p 3.12
-```
 
 Documentation is deployed automatically on release by publishing to the
 [Astral documentation](https://github.com/astral-sh/docs) repository, which itself deploys via
