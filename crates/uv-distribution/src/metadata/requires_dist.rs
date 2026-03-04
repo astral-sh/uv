@@ -437,36 +437,33 @@ impl IntoIterator for FlatRequiresDist {
 
 #[cfg(test)]
 mod test {
+    use std::fmt::Write;
     use std::path::Path;
     use std::str::FromStr;
 
-    use anyhow::Context;
     use indoc::indoc;
     use insta::assert_snapshot;
+    use tempfile::TempDir;
 
     use uv_auth::CredentialsCache;
     use uv_configuration::NoSources;
     use uv_distribution_types::IndexLocations;
     use uv_normalize::PackageName;
     use uv_pep508::Requirement;
-    use uv_workspace::pyproject::PyProjectToml;
     use uv_workspace::{DiscoveryOptions, ProjectWorkspace, WorkspaceCache};
 
     use crate::RequiresDist;
     use crate::metadata::requires_dist::FlatRequiresDist;
 
-    async fn requires_dist_from_pyproject_toml(contents: &str) -> anyhow::Result<RequiresDist> {
-        let pyproject_toml = PyProjectToml::from_string(contents.to_string())?;
-        let path = Path::new("pyproject.toml");
-        let project_workspace = ProjectWorkspace::from_project(
-            path,
-            pyproject_toml
-                .project
-                .as_ref()
-                .context("metadata field project not found")?,
-            &pyproject_toml,
+    async fn requires_dist_from_pyproject_toml(
+        temp_dir: &Path,
+        contents: &str,
+    ) -> anyhow::Result<RequiresDist> {
+        fs_err::write(temp_dir.join("pyproject.toml"), contents)?;
+        let project_workspace = ProjectWorkspace::discover(
+            temp_dir,
             &DiscoveryOptions {
-                stop_discovery_at: Some(path.to_path_buf()),
+                stop_discovery_at: Some(temp_dir.to_path_buf()),
                 ..DiscoveryOptions::default()
             },
             &WorkspaceCache::default(),
@@ -485,9 +482,10 @@ mod test {
     }
 
     async fn format_err(input: &str) -> String {
-        use std::fmt::Write;
-
-        let err = requires_dist_from_pyproject_toml(input).await.unwrap_err();
+        let temp_dir = TempDir::new().unwrap();
+        let err = requires_dist_from_pyproject_toml(temp_dir.path(), input)
+            .await
+            .unwrap_err();
         let mut causes = err.chain();
         let mut message = String::new();
         let _ = writeln!(message, "error: {}", causes.next().unwrap());
@@ -495,6 +493,8 @@ mod test {
             let _ = writeln!(message, "  Caused by: {err}");
         }
         message
+            .replace(&temp_dir.path().display().to_string(), "[PATH]")
+            .replace('\\', "/")
     }
 
     #[tokio::test]
@@ -511,7 +511,8 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @"
-        error: TOML parse error at line 8, column 8
+        error: Failed to parse: `[PATH]/pyproject.toml`
+          Caused by: TOML parse error at line 8, column 8
           |
         8 | tqdm = true
           |        ^^^^
@@ -533,7 +534,8 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r#"
-        error: TOML parse error at line 8, column 8
+        error: Failed to parse: `[PATH]/pyproject.toml`
+          Caused by: TOML parse error at line 8, column 8
           |
         8 | tqdm = { git = "https://github.com/tqdm/tqdm", rev = "baaaaaab", tag = "v1.0.0" }
           |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -555,7 +557,8 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r#"
-        error: TOML parse error at line 8, column 48
+        error: Failed to parse: `[PATH]/pyproject.toml`
+          Caused by: TOML parse error at line 8, column 48
           |
         8 | tqdm = { git = "https://github.com/tqdm/tqdm", ref = "baaaaaab" }
           |                                                ^^^
@@ -576,7 +579,8 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r#"
-        error: TOML parse error at line 7, column 8
+        error: Failed to parse: `[PATH]/pyproject.toml`
+          Caused by: TOML parse error at line 7, column 8
           |
         7 | tqdm = { git = "https://github.com/tqdm/tqdm", extra = "torch", group = "dev" }
           |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -598,7 +602,8 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r#"
-        error: TOML parse error at line 8, column 8
+        error: Failed to parse: `[PATH]/pyproject.toml`
+          Caused by: TOML parse error at line 8, column 8
           |
         8 | tqdm = { path = "tqdm", index = "torch" }
           |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -616,7 +621,12 @@ mod test {
               "tqdm",
             ]
         "#};
-        assert!(requires_dist_from_pyproject_toml(input).await.is_ok());
+        let temp_dir = TempDir::new().unwrap();
+        assert!(
+            requires_dist_from_pyproject_toml(temp_dir.path(), input)
+                .await
+                .is_ok()
+        );
     }
 
     #[tokio::test]
@@ -633,7 +643,8 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r#"
-        error: TOML parse error at line 8, column 16
+        error: Failed to parse: `[PATH]/pyproject.toml`
+          Caused by: TOML parse error at line 8, column 16
           |
         8 | tqdm = { url = invalid url to tqdm-4.66.0-py3-none-any.whl" }
           |                ^
@@ -655,7 +666,8 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r#"
-        error: TOML parse error at line 8, column 16
+        error: Failed to parse: `[PATH]/pyproject.toml`
+          Caused by: TOML parse error at line 8, column 16
           |
         8 | tqdm = { url = "§invalid#+#*Ä" }
           |                ^^^^^^^^^^^^^^^^^
@@ -724,7 +736,7 @@ mod test {
             tqdm = { workspace = true }
         "};
 
-        assert_snapshot!(format_err(input).await, @"error: metadata field project not found");
+        assert_snapshot!(format_err(input).await, @"error: No `project` table found in: `[PATH]/pyproject.toml`");
     }
 
     #[test]
