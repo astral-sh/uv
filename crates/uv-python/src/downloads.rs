@@ -1186,16 +1186,17 @@ impl ManagedPythonDownload {
                         if let Some(backoff) = retry_state.should_retry(&err, err.retries()) {
                             retry_state.sleep_backoff(backoff).await;
                             continue 'retry;
+                        }
+                        return if retry_state.total_retries() > 0 {
+                            Err(Error::NetworkErrorWithRetries {
+                                err: Box::new(err),
+                                retries: retry_state.total_retries(),
+                                duration: retry_state.duration()?,
+                            })
+                        } else {
+                            Err(err)
+                        };
                     }
-                    return if retry_state.total_retries() > 0 {
-                        Err(Error::NetworkErrorWithRetries {
-                            err: Box::new(err),
-                            retries: retry_state.total_retries(),
-                            duration: retry_state.duration()?,
-                        })
-                    } else {
-                        Err(err)
-                    };}
                 }
             }
             unreachable!("download_urls() must return at least one URL");
