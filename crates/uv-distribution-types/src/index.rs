@@ -652,15 +652,14 @@ impl IndexArg {
                                 && let Ok(path) = url.inner().as_path()
                                 && path.is_dir()
                             {
-                                if cfg!(windows) {
-                                    warn_user_once!(
-                                        "Relative paths passed to `--index` should be disambiguated from index names (use `.\\{unresolved}` or `./{unresolved}`). In the future, this path will be treated as the index defined by the same name"
-                                    );
+                                let path_hint = if cfg!(windows) {
+                                    format!("`.\\{unresolved}` or `./{unresolved}`")
                                 } else {
-                                    warn_user_once!(
-                                        "Relative paths passed to `--index` should be disambiguated from index names (use `./{unresolved}`). In the future, this path will be treated as the index defined by the same name"
-                                    );
-                                }
+                                    format!("`./{unresolved}`")
+                                };
+                                warn_user_once!(
+                                    "Relative paths passed to `--index` should be disambiguated from index names (use {path_hint}). In the future, this path will be treated as the index defined by the same name."
+                                );
                                 Ok(Index::new(url.clone()).with_origin(Origin::Cli))
                             } else {
                                 Ok(index.borrow().clone())
