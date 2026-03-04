@@ -11338,12 +11338,13 @@ fn add_index_by_name_missing() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn add_index_by_name() -> Result<()> {
+#[tokio::test]
+async fn add_index_by_name() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r#"
+    pyproject_toml.write_str(&formatdoc! {r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -11352,8 +11353,10 @@ fn add_index_by_name() -> Result<()> {
 
         [[tool.uv.index]]
         name = "test-index"
-        url = "https://pypi-proxy.fly.dev/simple"
-    "#})?;
+        url = "{proxy_url}"
+    "#,
+        proxy_url = proxy.url("/simple"),
+    })?;
 
     uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("test-index"), @r"
     success: true
@@ -11383,7 +11386,7 @@ fn add_index_by_name() -> Result<()> {
 
         [[tool.uv.index]]
         name = "test-index"
-        url = "https://pypi-proxy.fly.dev/simple"
+        url = "http://[LOCALHOST]/simple"
 
         [tool.uv.sources]
         iniconfig = { index = "test-index" }
@@ -11407,7 +11410,7 @@ fn add_index_by_name() -> Result<()> {
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
-        source = { registry = "https://pypi-proxy.fly.dev/simple" }
+        source = { registry = "http://[LOCALHOST]/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
@@ -11422,7 +11425,7 @@ fn add_index_by_name() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0", index = "https://pypi-proxy.fly.dev/simple" }]
+        requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0", index = "http://[LOCALHOST]/simple" }]
         "#
         );
     });
@@ -11430,12 +11433,13 @@ fn add_index_by_name() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn add_index_by_name_for_workspace() -> Result<()> {
+#[tokio::test]
+async fn add_index_by_name_for_workspace() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r#"
+    pyproject_toml.write_str(&formatdoc! {r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -11447,8 +11451,10 @@ fn add_index_by_name_for_workspace() -> Result<()> {
 
         [[tool.uv.index]]
         name = "test-index"
-        url = "https://pypi-proxy.fly.dev/simple"
-    "#})?;
+        url = "{proxy_url}"
+    "#,
+        proxy_url = proxy.url("/simple"),
+    })?;
 
     let child_dir = context.temp_dir.child("child");
     child_dir.create_dir_all()?;
@@ -11492,7 +11498,7 @@ fn add_index_by_name_for_workspace() -> Result<()> {
 
         [[tool.uv.index]]
         name = "test-index"
-        url = "https://pypi-proxy.fly.dev/simple"
+        url = "http://[LOCALHOST]/simple"
 
         [tool.uv.sources]
         iniconfig = { index = "test-index" }
@@ -11527,7 +11533,7 @@ fn add_index_by_name_for_workspace() -> Result<()> {
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
-        source = { registry = "https://pypi-proxy.fly.dev/simple" }
+        source = { registry = "http://[LOCALHOST]/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
@@ -11542,7 +11548,7 @@ fn add_index_by_name_for_workspace() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0", index = "https://pypi-proxy.fly.dev/simple" }]
+        requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0", index = "http://[LOCALHOST]/simple" }]
         "#
         );
     });
@@ -11550,19 +11556,22 @@ fn add_index_by_name_for_workspace() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn add_index_by_name_for_workspace_member() -> Result<()> {
+#[tokio::test]
+async fn add_index_by_name_for_workspace_member() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let workspace_toml = context.temp_dir.child("pyproject.toml");
-    workspace_toml.write_str(indoc! {r#"
+    workspace_toml.write_str(&formatdoc! {r#"
         [tool.uv.workspace]
         members = ["child"]
 
         [[tool.uv.index]]
         name = "test-index"
-        url = "https://pypi-proxy.fly.dev/simple"
-    "#})?;
+        url = "{proxy_url}"
+    "#,
+        proxy_url = proxy.url("/simple"),
+    })?;
 
     let child_dir = context.temp_dir.child("child");
     child_dir.create_dir_all()?;
@@ -11634,12 +11643,12 @@ fn add_index_by_name_for_workspace_member() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0", index = "https://pypi-proxy.fly.dev/simple" }]
+        requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0", index = "http://[LOCALHOST]/simple" }]
 
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
-        source = { registry = "https://pypi-proxy.fly.dev/simple" }
+        source = { registry = "http://[LOCALHOST]/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
@@ -11679,7 +11688,7 @@ fn add_index_by_name_no_cross_member_references() -> Result<()> {
 
         [[tool.uv.index]]
         name = "child1-index"
-        url = "https://pypi-proxy.fly.dev/simple"
+        url = "https://test.pypi.org/simple/"
     "#})?;
 
     let child2_dir = context.temp_dir.child("child2");
@@ -11705,25 +11714,29 @@ fn add_index_by_name_no_cross_member_references() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn add_index_by_name_precedence() -> Result<()> {
+#[tokio::test]
+async fn add_index_by_name_precedence() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+    let proxy_url = proxy.url("/simple");
 
     let uv_dir = context.user_config_dir.child("uv");
     uv_dir.create_dir_all()?;
     let user_config = uv_dir.child("uv.toml");
-    user_config.write_str(indoc! {r#"
+    user_config.write_str(&formatdoc! {r#"
         [[index]]
         name = "test-index-2"
         url = "https://pypi.org/simple"
 
         [[index]]
         name = "test-index-3"
-        url = "https://pypi-proxy.fly.dev/simple"
-    "#})?;
+        url = "{proxy_url}"
+    "#,
+        proxy_url = proxy_url,
+    })?;
 
     let workspace_toml = context.temp_dir.child("pyproject.toml");
-    workspace_toml.write_str(indoc! {r#"
+    workspace_toml.write_str(&formatdoc! {r#"
         [tool.uv.workspace]
         members = ["child"]
 
@@ -11733,13 +11746,15 @@ fn add_index_by_name_precedence() -> Result<()> {
 
         [[tool.uv.index]]
         name = "test-index-2"
-        url = "https://pypi-proxy.fly.dev/simple"
-    "#})?;
+        url = "{proxy_url}"
+    "#,
+        proxy_url = proxy_url,
+    })?;
 
     let child_dir = context.temp_dir.child("child");
     child_dir.create_dir_all()?;
     let child_pyproject = child_dir.child("pyproject.toml");
-    child_pyproject.write_str(indoc! {r#"
+    child_pyproject.write_str(&formatdoc! {r#"
         [project]
         name = "child"
         version = "0.1.0"
@@ -11748,8 +11763,10 @@ fn add_index_by_name_precedence() -> Result<()> {
 
         [[tool.uv.index]]
         name = "test-index"
-        url = "https://pypi-proxy.fly.dev/simple"
-    "#})?;
+        url = "{proxy_url}"
+    "#,
+        proxy_url = proxy_url,
+    })?;
 
     uv_snapshot!(context.filters(), context
         .add()
@@ -11795,12 +11812,12 @@ fn add_index_by_name_precedence() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0", index = "https://pypi-proxy.fly.dev/simple" }]
+        requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0", index = "http://[LOCALHOST]/simple" }]
 
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
-        source = { registry = "https://pypi-proxy.fly.dev/simple" }
+        source = { registry = "http://[LOCALHOST]/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
@@ -11858,12 +11875,12 @@ fn add_index_by_name_precedence() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0", index = "https://pypi-proxy.fly.dev/simple" }]
+        requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0", index = "http://[LOCALHOST]/simple" }]
 
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
-        source = { registry = "https://pypi-proxy.fly.dev/simple" }
+        source = { registry = "http://[LOCALHOST]/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
@@ -11923,12 +11940,12 @@ fn add_index_by_name_precedence() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0", index = "https://pypi-proxy.fly.dev/simple" }]
+        requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0", index = "http://[LOCALHOST]/simple" }]
 
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
-        source = { registry = "https://pypi-proxy.fly.dev/simple" }
+        source = { registry = "http://[LOCALHOST]/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
@@ -11941,12 +11958,13 @@ fn add_index_by_name_precedence() -> Result<()> {
 }
 
 /// When a directory exists with the same name as a configured index, warn and use the directory.
-#[test]
-fn add_index_by_name_directory_ambiguity() -> Result<()> {
+#[tokio::test]
+async fn add_index_by_name_directory_ambiguity() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r#"
+    pyproject_toml.write_str(&formatdoc! {r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -11955,8 +11973,10 @@ fn add_index_by_name_directory_ambiguity() -> Result<()> {
 
         [[tool.uv.index]]
         name = "proxy"
-        url = "https://pypi-proxy.fly.dev/simple"
-    "#})?;
+        url = "{proxy_url}"
+    "#,
+        proxy_url = proxy.url("/simple"),
+    })?;
 
     // Create a directory with the same name as the index
     let proxy_dir = context.temp_dir.child("proxy");
@@ -11981,12 +12001,13 @@ fn add_index_by_name_directory_ambiguity() -> Result<()> {
 }
 
 /// With preview enabled, prefer the index name over an ambiguous directory.
-#[test]
-fn add_index_by_name_directory_ambiguity_preview() -> Result<()> {
+#[tokio::test]
+async fn add_index_by_name_directory_ambiguity_preview() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r#"
+    pyproject_toml.write_str(&formatdoc! {r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -11995,8 +12016,10 @@ fn add_index_by_name_directory_ambiguity_preview() -> Result<()> {
 
         [[tool.uv.index]]
         name = "proxy"
-        url = "https://pypi-proxy.fly.dev/simple"
-    "#})?;
+        url = "{proxy_url}"
+    "#,
+        proxy_url = proxy.url("/simple"),
+    })?;
 
     // Create a directory with the same name as the index
     let proxy_dir = context.temp_dir.child("proxy");
@@ -12021,12 +12044,13 @@ fn add_index_by_name_directory_ambiguity_preview() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn add_index_by_name_explicit_single() -> Result<()> {
+#[tokio::test]
+async fn add_index_by_name_explicit_single() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r#"
+    pyproject_toml.write_str(&formatdoc! {r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -12036,8 +12060,10 @@ fn add_index_by_name_explicit_single() -> Result<()> {
         [[tool.uv.index]]
         name = "explicit"
         explicit = true
-        url = "https://pypi-proxy.fly.dev/simple"
-    "#})?;
+        url = "{proxy_url}"
+    "#,
+        proxy_url = proxy.url("/simple"),
+    })?;
 
     uv_snapshot!(context.filters(), context.add()
         .arg("--index").arg("explicit")
@@ -12071,11 +12097,11 @@ fn add_index_by_name_explicit_multiple() -> Result<()> {
         [[tool.uv.index]]
         name = "explicit"
         explicit = true
-        url = "https://pypi-proxy.fly.dev/simple"
+        url = "https://test.pypi.org/simple/"
 
         [[tool.uv.index]]
         name = "implicit"
-        url = "https://pypi-proxy.fly.dev/simple"
+        url = "https://test.pypi.org/simple/"
     "#})?;
 
     // Multiple indexes with at least one explicit should produce an error

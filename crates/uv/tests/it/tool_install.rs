@@ -4890,6 +4890,8 @@ async fn tool_install_index_by_name() {
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
+    let proxy = crate::pypi_proxy::start().await;
+
     let server = MockServer::start().await;
 
     Mock::given(method("GET"))
@@ -4908,9 +4910,10 @@ async fn tool_install_index_by_name() {
 
             [[index]]
             name = "example"
-            url = "https://pypi-proxy.fly.dev/simple"
+            url = "{proxy_url}"
         "#,
             server_url = server.uri(),
+            proxy_url = proxy.url("/simple"),
         })
         .unwrap();
 
@@ -4948,7 +4951,7 @@ async fn tool_install_index_by_name() {
         ]
 
         [tool.options]
-        index = [{ name = "example", url = "https://pypi-proxy.fly.dev/simple", explicit = false, default = false, format = "simple", authenticate = "auto" }, { name = "primary", url = "http://[LOCALHOST]/", explicit = false, default = false, format = "simple", authenticate = "auto" }, { name = "example", url = "https://pypi-proxy.fly.dev/simple", explicit = false, default = false, format = "simple", authenticate = "auto" }]
+        index = [{ name = "example", url = "http://[LOCALHOST]/simple", explicit = false, default = false, format = "simple", authenticate = "auto" }, { name = "primary", url = "http://[LOCALHOST]/", explicit = false, default = false, format = "simple", authenticate = "auto" }, { name = "example", url = "http://[LOCALHOST]/simple", explicit = false, default = false, format = "simple", authenticate = "auto" }]
         exclude-newer = "2024-03-25T00:00:00Z"
         "#);
     });
