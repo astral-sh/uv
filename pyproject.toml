@@ -106,6 +106,10 @@ docs = [
   "mdformat-mkdocs>=2.0.4",
   "mdformat-admon>=2.0.2",
 ]
+docker = [
+  "cargo-zigbuild>=0.19.8",
+]
 
 [tool.uv.dependency-groups]
 docs = { requires-python = ">=3.12" }
+docker = { requires-python = ">=3.12" }

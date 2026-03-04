@@ -12,12 +12,14 @@ RUN --mount=type=cache,target=/var/lib/apt/lists \
   apt install -y --update ca-certificates && \
   apt install -y --update --snapshot ${UBUNTU_SNAPSHOT} --no-install-recommends \
   build-essential \
-  curl \
-  python3-venv
+  curl
+
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # Setup zig as cross compiling linker
-RUN python3 -m venv $HOME/.venv
-RUN .venv/bin/pip install cargo-zigbuild
+COPY pyproject.toml uv.lock ./
+RUN uv sync --only-group docker --locked
 ENV PATH="$HOME/.venv/bin:$PATH"
 
 # Install rust
