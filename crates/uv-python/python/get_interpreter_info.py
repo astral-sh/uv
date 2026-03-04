@@ -550,6 +550,23 @@ def get_operating_system_and_architecture():
             "major": int(version[0]),
             "minor": int(version[1]),
         }
+    elif operating_system == "android":
+        # Python 3.13+ returns `sys.platform == 'android'` and
+        # `sysconfig.get_platform()` returns 'android-{api_level}-{abi}'
+        # instead of 'linux-{arch}' (see https://github.com/astral-sh/uv/issues/18285).
+        # Map Android ABI names back to standard architecture names.
+        android_abi_to_arch = {
+            "arm64_v8a": "aarch64",
+            "armeabi_v7a": "armv7l",
+            "x86": "i686",
+            "x86_64": "x86_64",
+        }
+        architecture = android_abi_to_arch.get(architecture, architecture)
+
+        operating_system = {
+            "name": "android",
+            "api_level": sys.getandroidapilevel(),
+        }
     elif operating_system in [
         "freebsd",
         "netbsd",
