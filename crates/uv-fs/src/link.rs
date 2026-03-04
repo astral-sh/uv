@@ -780,8 +780,8 @@ fn try_hardlink_file(src: &Path, dst: &Path) -> io::Result<()> {
     match fs_err::hard_link(src, dst) {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == io::ErrorKind::TooManyLinks => {
-            warn_user_once!(
-                "Resetting cache entry due to too many hardlinks: {}",
+            debug!(
+                "Hit link limit for {}, creating a fresh copy",
                 src.display()
             );
             let parent = src.parent().ok_or_else(|| {
@@ -789,6 +789,7 @@ fn try_hardlink_file(src: &Path, dst: &Path) -> io::Result<()> {
             })?;
             let temp = tempfile::NamedTempFile::new_in(parent)?;
             fs_err::copy(src, temp.path())?;
+            fs_err::set_permissions(temp.path(), fs_err::metadata(src)?.permissions())?;
             fs_err::hard_link(temp.path(), dst)?;
             fs_err::rename(temp.path(), src)?;
             Ok(())
