@@ -219,13 +219,13 @@ fn install_hardlink() -> Result<()> {
 /// This test exhausts the hardlink limit on a cached file, then verifies that
 /// a subsequent install still succeeds by resetting the file's inode.
 ///
-/// Requires `UV_INTERNAL__TEST_MAXLINKS_FS` pointing to a filesystem with a
+/// Requires `UV_INTERNAL__TEST_LOWLINKS_FS` pointing to a filesystem with a
 /// low hardlink limit (e.g., minix with ~250).
 #[test]
 fn install_hardlink_after_emlink() -> anyhow::Result<()> {
     use walkdir::WalkDir;
 
-    let Some(context) = uv_test::test_context!("3.12").with_cache_on_maxlinks_fs()? else {
+    let Some(context) = uv_test::test_context!("3.12").with_cache_on_lowlinks_fs()? else {
         return Ok(());
     };
 

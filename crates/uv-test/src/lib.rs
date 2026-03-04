@@ -712,14 +712,14 @@ impl TestContext {
     }
 
     /// Use a cache directory on the filesystem specified by
-    /// [`EnvVars::UV_INTERNAL__TEST_MAXLINKS_FS`].
+    /// [`EnvVars::UV_INTERNAL__TEST_LOWLINKS_FS`].
     ///
     /// Returns `Ok(None)` if the environment variable is not set.
-    pub fn with_cache_on_maxlinks_fs(self) -> anyhow::Result<Option<Self>> {
-        let Some(dir) = env::var(EnvVars::UV_INTERNAL__TEST_MAXLINKS_FS).ok() else {
+    pub fn with_cache_on_lowlinks_fs(self) -> anyhow::Result<Option<Self>> {
+        let Some(dir) = env::var(EnvVars::UV_INTERNAL__TEST_LOWLINKS_FS).ok() else {
             return Ok(None);
         };
-        self.with_cache_on_fs(&dir, "MAXLINKS_FS").map(Some)
+        self.with_cache_on_fs(&dir, "LOWLINKS_FS").map(Some)
     }
 
     /// Use a cache directory on the filesystem specified by
