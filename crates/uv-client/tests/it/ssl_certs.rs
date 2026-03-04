@@ -85,7 +85,9 @@ async fn ssl_env_vars() -> Result<()> {
     let (server_task, addr) = start_https_user_agent_server(&standalone_server_cert).await?;
     let url = DisplaySafeUrl::from_str(&format!("https://{addr}"))?;
     let cache = Cache::temp()?.init().await?;
-    let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache).build();
+    let client =
+        RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache)
+            .build();
     let res = client
         .cached_client()
         .uncached()
@@ -143,7 +145,9 @@ async fn ssl_env_vars() -> Result<()> {
     let (server_task, addr) = start_https_user_agent_server(&standalone_server_cert).await?;
     let url = DisplaySafeUrl::from_str(&format!("https://{addr}"))?;
     let cache = Cache::temp()?.init().await?;
-    let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache).build();
+    let client =
+        RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache)
+            .build();
     let res = client
         .cached_client()
         .uncached()
@@ -172,7 +176,9 @@ async fn ssl_env_vars() -> Result<()> {
     let (server_task, addr) = start_https_user_agent_server(&standalone_server_cert).await?;
     let url = DisplaySafeUrl::from_str(&format!("https://{addr}"))?;
     let cache = Cache::temp()?.init().await?;
-    let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache).build();
+    let client =
+        RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache)
+            .build();
     let res = client
         .cached_client()
         .uncached()
@@ -195,7 +201,9 @@ async fn ssl_env_vars() -> Result<()> {
     let (server_task, addr) = start_https_user_agent_server(&standalone_server_cert).await?;
     let url = DisplaySafeUrl::from_str(&format!("https://{addr}"))?;
     let cache = Cache::temp()?.init().await?;
-    let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache).build();
+    let client =
+        RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache)
+            .build();
     let res = client
         .cached_client()
         .uncached()
@@ -260,7 +268,9 @@ async fn ssl_env_vars() -> Result<()> {
     let (server_task, addr) = start_https_mtls_user_agent_server(&ca_cert, &server_cert).await?;
     let url = DisplaySafeUrl::from_str(&format!("https://{addr}"))?;
     let cache = Cache::temp()?.init().await?;
-    let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache).build();
+    let client =
+        RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache)
+            .build();
     let res = client
         .cached_client()
         .uncached()
@@ -284,7 +294,9 @@ async fn ssl_env_vars() -> Result<()> {
     let (server_task, addr) = start_https_mtls_user_agent_server(&ca_cert, &server_cert).await?;
     let url = DisplaySafeUrl::from_str(&format!("https://{addr}"))?;
     let cache = Cache::temp()?.init().await?;
-    let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache).build();
+    let client =
+        RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache)
+            .build();
     let res = client
         .cached_client()
         .uncached()
