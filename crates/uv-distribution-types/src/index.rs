@@ -631,42 +631,41 @@ impl IndexArg {
         I: IntoIterator,
         I::Item: Borrow<Index>,
     {
-        match self {
-            Self::Resolved(index) => Ok(index),
-            Self::Unresolved(unresolved) => {
-                if let Some(index) = indexes
-                    .into_iter()
-                    .find(|index| index.borrow().name.as_ref() == Some(&unresolved))
-                {
-                    match strategy {
-                        IndexArgStrategy::PreferDirectory => {
-                            // If a directory of the same name exists, treat it as a directory but
-                            // warn the user of the impending changes.
-                            if let Ok(url @ IndexUrl::Path(_)) =
-                                IndexUrl::from_str(unresolved.as_ref())
-                                && let Ok(path) = url.inner().as_path()
-                                && path.is_dir()
-                            {
-                                let path_hint = if cfg!(windows) {
-                                    format!("`.\\{unresolved}` or `./{unresolved}`")
-                                } else {
-                                    format!("`./{unresolved}`")
-                                };
-                                warn_user_once!(
-                                    "Relative paths passed to `--index` should be disambiguated from index names (use {path_hint}). Pass `--preview-features {feature}` to treat this as the named index. In the future, this will become the default.",
-                                    feature = PreviewFeature::IndexAssumeName
-                                );
-                                Ok(Index::new(url.clone()).with_origin(Origin::Cli))
-                            } else {
-                                Ok(index.borrow().clone())
-                            }
-                        }
-                        IndexArgStrategy::IgnoreDirectory => Ok(index.borrow().clone()),
-                    }
-                } else {
-                    Err(ResolveIndexArgError(unresolved))
-                }
-            }
+        let unresolved = match self {
+            Self::Resolved(index) => return Ok(index),
+            Self::Unresolved(unresolved) => unresolved,
+        };
+
+        let Some(index) = indexes
+            .into_iter()
+            .find(|index| index.borrow().name.as_ref() == Some(&unresolved))
+        else {
+            return Err(ResolveIndexArgError(unresolved));
+        };
+
+        match strategy {
+            IndexArgStrategy::IgnoreDirectory => return Ok(index.borrow().clone()),
+            IndexArgStrategy::PreferDirectory => (),
+        }
+
+        // If a directory of the same name exists, treat it as a directory but
+        // warn the user of the impending changes.
+        if let Ok(url @ IndexUrl::Path(_)) = IndexUrl::from_str(unresolved.as_ref())
+            && let Ok(path) = url.inner().as_path()
+            && path.is_dir()
+        {
+            let path_hint = if cfg!(windows) {
+                format!("`.\\{unresolved}` or `./{unresolved}`")
+            } else {
+                format!("`./{unresolved}`")
+            };
+            warn_user_once!(
+                "Relative paths passed to `--index` should be disambiguated from index names (use {path_hint}). Pass `--preview-features {feature}` to treat this as the named index. In the future, this will become the default.",
+                feature = PreviewFeature::IndexAssumeName
+            );
+            Ok(Index::new(url.clone()).with_origin(Origin::Cli))
+        } else {
+            Ok(index.borrow().clone())
         }
     }
 }
