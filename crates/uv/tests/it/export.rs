@@ -4631,8 +4631,8 @@ fn pep_751_relative_and_absolute_paths() -> Result<()> {
         c = {{ path = '{}' }}
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
         context.temp_dir.join("c").display()
     })?;
@@ -4649,8 +4649,8 @@ fn pep_751_relative_and_absolute_paths() -> Result<()> {
         license = {text = "MIT"}
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     context.temp_dir.child("b/b/__init__.py").touch()?;
     context
@@ -4665,8 +4665,8 @@ fn pep_751_relative_and_absolute_paths() -> Result<()> {
         license = {text = "MIT"}
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     context.temp_dir.child("c/c/__init__.py").touch()?;
 
