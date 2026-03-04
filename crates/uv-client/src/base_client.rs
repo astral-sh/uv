@@ -114,6 +114,8 @@ pub struct BaseClientBuilder<'a> {
     subcommand: Option<Vec<String>>,
     /// Optional name for this client, used in debug logging.
     client_name: Option<&'static str>,
+    /// Whether to disable retry delays (for testing).
+    no_retry_delay: bool,
 }
 
 /// The policy for handling HTTP redirects.
@@ -178,6 +180,7 @@ impl Default for BaseClientBuilder<'_> {
             custom_client: None,
             subcommand: None,
             client_name: None,
+            no_retry_delay: env::var_os(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY).is_some(),
         }
     }
 }
@@ -236,6 +239,12 @@ impl<'a> BaseClientBuilder<'a> {
     #[must_use]
     pub fn retries(mut self, retries: u32) -> Self {
         self.retries = retries;
+        self
+    }
+
+    #[must_use]
+    pub fn no_retry_delay(mut self, no_retry_delay: bool) -> Self {
+        self.no_retry_delay = no_retry_delay;
         self
     }
 
@@ -371,7 +380,7 @@ impl<'a> BaseClientBuilder<'a> {
 
     /// Create a [`RetryPolicy`] for the client.
     pub fn retry_policy(&self) -> ExponentialBackoff {
-        retry_policy(self.retries)
+        retry_policy(self.retries, self.no_retry_delay)
     }
 
     pub fn build(&self) -> BaseClient {
@@ -414,6 +423,7 @@ impl<'a> BaseClientBuilder<'a> {
             connectivity: self.connectivity,
             allow_insecure_host: self.allow_insecure_host.clone(),
             retries: self.retries,
+            no_retry_delay: self.no_retry_delay,
             client,
             raw_client,
             dangerous_client,
@@ -442,6 +452,7 @@ impl<'a> BaseClientBuilder<'a> {
             connectivity: self.connectivity,
             allow_insecure_host: self.allow_insecure_host.clone(),
             retries: self.retries,
+            no_retry_delay: self.no_retry_delay,
             client,
             dangerous_client,
             raw_client: existing.raw_client.clone(),
@@ -754,6 +765,8 @@ pub struct BaseClient {
     allow_insecure_host: Vec<TrustedHost>,
     /// The number of retries to attempt on transient errors.
     retries: u32,
+    /// Whether to disable retry delays (for testing).
+    no_retry_delay: bool,
     /// Global authentication cache for a uv invocation to share credentials across uv clients.
     credentials_cache: Arc<CredentialsCache>,
 }
@@ -806,7 +819,7 @@ impl BaseClient {
 
     /// The [`RetryPolicy`] for the client.
     pub fn retry_policy(&self) -> ExponentialBackoff {
-        retry_policy(self.retries)
+        retry_policy(self.retries, self.no_retry_delay)
     }
 
     pub fn credentials_cache(&self) -> &CredentialsCache {
@@ -1136,9 +1149,9 @@ impl<'a> RequestBuilder<'a> {
 }
 
 /// Create a [`RetryPolicy`] with the given number of retries.
-fn retry_policy(retries: u32) -> ExponentialBackoff {
+fn retry_policy(retries: u32, no_retry_delay: bool) -> ExponentialBackoff {
     let mut builder = ExponentialBackoff::builder();
-    if env::var_os(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY).is_some() {
+    if no_retry_delay {
         builder = builder.retry_bounds(Duration::from_millis(0), Duration::from_millis(0));
     } else {
         // Configure an effective minimum between attempts of 1s and a real maximum of 30s.
