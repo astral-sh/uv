@@ -15970,13 +15970,20 @@ fn sync_reinstalls_on_version_change() -> Result<()> {
 }
 
 /// Sync using `--index <name>` to reference an index defined in `pyproject.toml`.
-#[test]
-fn sync_index_by_name() -> Result<()> {
+#[tokio::test]
+async fn sync_index_by_name() -> Result<()> {
+    use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
+
     let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&server)
+        .await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
-        r#"
+    pyproject_toml.write_str(&formatdoc! {r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -15984,12 +15991,17 @@ fn sync_index_by_name() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [[tool.uv.index]]
-        name = "proxy"
+        name = "primary"
+        url = "{server_url}"
+
+        [[tool.uv.index]]
+        name = "example"
         url = "https://pypi-proxy.fly.dev/simple"
         "#,
-    )?;
+        server_url = server.uri(),
+    })?;
 
-    uv_snapshot!(context.filters(), context.sync().arg("--index").arg("proxy"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--index").arg("example"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
