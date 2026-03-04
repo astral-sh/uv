@@ -42,7 +42,7 @@ use uv_settings::PythonInstallMirrors;
 use uv_shell::runnable::WindowsRunnable;
 use uv_static::EnvVars;
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceCache, WorkspaceError};
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
 
 use crate::child::run_to_completion;
 
@@ -561,16 +561,14 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
         let project = if let Some(package) = package.as_ref() {
             // We need a workspace, but we don't need to have a current package, we can be e.g. in
             // the root of a virtual workspace and then switch into the selected package.
-            Some(VirtualProject::Project(
-                Workspace::discover(
-                    &discovery_dir,
-                    &DiscoveryOptions::default(),
-                    workspace_cache,
-                )
-                .await?
-                .with_current_project(package.clone())
-                .with_context(|| format!("Package `{package}` not found in workspace"))?,
-            ))
+            let project = VirtualProject::discover_with_package(
+                &discovery_dir,
+                &DiscoveryOptions::default(),
+                workspace_cache,
+                package.clone(),
+            )
+            .await?;
+            Some(project)
         } else {
             match VirtualProject::discover(
                 &discovery_dir,

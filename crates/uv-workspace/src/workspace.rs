@@ -57,6 +57,8 @@ pub enum WorkspaceError {
     NonWorkspace(PathBuf),
     #[error("Nested workspaces are not supported, but workspace member (`{}`) has a `uv.workspace` table", _0.simplified_display())]
     NestedWorkspace(PathBuf),
+    #[error("The workspace does not have a member `{0}`")]
+    NoSuchMember(PackageName),
     #[error("Two workspace members are both named `{name}`: `{}` and `{}`", first.simplified_display(), second.simplified_display())]
     DuplicatePackage {
         name: PackageName,
@@ -1773,6 +1775,20 @@ impl VirtualProject {
         } else {
             Err(WorkspaceError::MissingProject(pyproject_path))
         }
+    }
+
+    /// Discover a project workspace with the member package.
+    pub async fn discover_with_package(
+        path: &Path,
+        options: &DiscoveryOptions,
+        cache: &WorkspaceCache,
+        package: PackageName,
+    ) -> Result<Self, WorkspaceError> {
+        let workspace = Workspace::discover(path, options, cache).await?;
+        let project_workspace = Workspace::with_current_project(workspace, package.clone());
+        Ok(Self::Project(project_workspace.ok_or_else(|| {
+            WorkspaceError::NoSuchMember(package.clone())
+        })?))
     }
 
     /// Update the `pyproject.toml` for the current project.
