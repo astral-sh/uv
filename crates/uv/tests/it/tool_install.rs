@@ -4886,7 +4886,8 @@ async fn tool_install_index_by_name() {
 
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
+        .with_filtered_exe_suffix()
+        .with_exclude_newer("2025-01-18T00:00:00Z");
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -4918,7 +4919,7 @@ async fn tool_install_index_by_name() {
         .unwrap();
 
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("pytest")
+        .arg("executable-application")
         .arg("--index")
         .arg("example")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
@@ -4932,27 +4933,23 @@ async fn tool_install_index_by_name() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + iniconfig==2.0.0
-     + packaging==24.0
-     + pluggy==1.4.0
-     + pytest==8.1.1
-    Installed 2 executables: py.test, pytest
+     + executable-application==0.3.0
+    Installed 1 executable: app
     ");
 
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("pytest").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
-        requirements = [{ name = "pytest" }]
+        requirements = [{ name = "executable-application" }]
         entrypoints = [
-            { name = "py.test", install-path = "[TEMP_DIR]/bin/py.test", from = "pytest" },
-            { name = "pytest", install-path = "[TEMP_DIR]/bin/pytest", from = "pytest" },
+            { name = "app", install-path = "[TEMP_DIR]/bin/app", from = "executable-application" },
         ]
 
         [tool.options]
         index = [{ name = "example", url = "http://[LOCALHOST]/simple", explicit = false, default = false, format = "simple", authenticate = "auto" }, { name = "primary", url = "http://[LOCALHOST]/", explicit = false, default = false, format = "simple", authenticate = "auto" }, { name = "example", url = "http://[LOCALHOST]/simple", explicit = false, default = false, format = "simple", authenticate = "auto" }]
-        exclude-newer = "2024-03-25T00:00:00Z"
+        exclude-newer = "2025-01-18T00:00:00Z"
         "#);
     });
 }
