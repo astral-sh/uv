@@ -3732,6 +3732,8 @@ async fn tool_run_index_by_name() {
 
     let context = uv_test::test_context!("3.12").with_filtered_counts();
 
+    let proxy = crate::pypi_proxy::start().await;
+
     let server = MockServer::start().await;
 
     Mock::given(method("GET"))
@@ -3750,9 +3752,10 @@ async fn tool_run_index_by_name() {
 
             [[index]]
             name = "example"
-            url = "https://pypi-proxy.fly.dev/simple"
+            url = "{proxy_url}"
         "#,
             server_url = server.uri(),
+            proxy_url = proxy.url("/simple"),
         })
         .unwrap();
 
