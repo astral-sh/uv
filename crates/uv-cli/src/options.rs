@@ -225,11 +225,13 @@ pub fn resolve_and_combine_indexes(
                 index
             }
             Err(error) => {
+                // TODO(tk): Refactor
                 let mut error_chain = String::new();
                 // Writing to a string can't fail with errors (panics on allocation failure)
                 uv_warnings::write_error_chain(&error, &mut error_chain, "error", AnsiColors::Red)
                     .unwrap();
                 eprint!("{}", error_chain);
+                // Exit code 2 matches clap's convention for usage errors.
                 #[expect(clippy::exit)]
                 std::process::exit(2);
             }
