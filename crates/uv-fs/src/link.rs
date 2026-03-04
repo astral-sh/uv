@@ -784,9 +784,10 @@ fn try_hardlink_file(src: &Path, dst: &Path) -> io::Result<()> {
                 "Hit link limit for {}, creating a fresh copy",
                 src.display()
             );
-            let parent = src.parent().ok_or_else(|| {
-                io::Error::new(io::ErrorKind::InvalidInput, "path has no parent directory")
-            })?;
+            let mut parent = src.parent().unwrap_or(Path::new("."));
+            if parent.as_os_str().is_empty() {
+                parent = Path::new(".");
+            }
             let temp = tempfile::NamedTempFile::new_in(parent)?;
             fs_err::copy(src, temp.path())?;
             fs_err::set_permissions(temp.path(), fs_err::metadata(src)?.permissions())?;
