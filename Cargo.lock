@@ -6499,6 +6499,7 @@ dependencies = [
 name = "uv-distribution-types"
 version = "0.0.35"
 dependencies = [
+ "anstream 1.0.0",
  "arcstr",
  "astral-version-ranges",
  "bitflags 2.11.0",

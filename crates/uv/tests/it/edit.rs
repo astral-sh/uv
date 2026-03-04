@@ -12048,7 +12048,6 @@ fn add_index_by_name_explicit_single() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Explicit index `explicit` will be ignored. Explicit indexes are only used when specified in `[tool.uv.sources]`.
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -12080,21 +12079,17 @@ fn add_index_by_name_explicit_multiple() -> Result<()> {
         url = "https://pypi-proxy.fly.dev/simple"
     "#})?;
 
-    // Multiple indexes with at least one explicit should produce a warning
+    // Multiple indexes with at least one explicit should produce an error
     uv_snapshot!(context.filters(), context.add()
         .arg("--index").arg("explicit")
         .arg("--index").arg("implicit")
-        .arg("iniconfig"), @r"
-    success: true
-    exit_code: 0
+        .arg("iniconfig"), @"
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    warning: Explicit index `explicit` will be ignored. Explicit indexes are only used when specified in `[tool.uv.sources]`.
-    Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + iniconfig==2.0.0
+    error: Explicit index `explicit` cannot be used on the command line. Explicit indexes are only usable when referenced by `[tool.uv.sources]`.
     ");
 
     Ok(())
