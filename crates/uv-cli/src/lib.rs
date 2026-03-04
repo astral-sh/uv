@@ -1210,6 +1210,27 @@ pub enum ProjectCommand {
     Audit(AuditArgs),
 }
 
+impl ProjectCommand {
+    /// Return the (singular) `--package` argument, if any.
+    ///
+    /// Returns [`None`] for commands which take multiple packages.
+    pub fn package(&self) -> Option<&PackageName> {
+        match self {
+            Self::Run(args) => args.package.as_ref(),
+            Self::Add(args) => args.package.as_ref(),
+            Self::Remove(args) => args.package.as_ref(),
+            Self::Version(args) => args.package.as_ref(),
+            Self::Init(_)
+            | Self::Sync(_)
+            | Self::Lock(_)
+            | Self::Export(_)
+            | Self::Tree(_)
+            | Self::Format(_)
+            | Self::Audit(_) => None,
+        }
+    }
+}
+
 /// A re-implementation of `Option`, used to avoid Clap's automatic `Option` flattening in
 /// [`parse_index_url`].
 #[derive(Debug, Clone)]
