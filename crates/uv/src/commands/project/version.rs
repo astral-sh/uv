@@ -2,7 +2,7 @@ use std::fmt::Write;
 use std::path::Path;
 use std::str::FromStr;
 
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, bail};
 use owo_colors::OwoColorize;
 
 use tracing::debug;
@@ -386,26 +386,27 @@ async fn find_target(
     let project = if let Some(package) = package {
         VirtualProject::discover_with_package(
             project_dir,
-            &DiscoveryOptions {
-                project: uv_workspace::ProjectDiscovery::Required,
-                ..DiscoveryOptions::default()
-            },
+            &DiscoveryOptions::default(),
             workspace_cache,
             package.clone(),
         )
         .await
         .map_err(|err| hint_uv_self_version(err, explicit_project))?
     } else {
-        VirtualProject::discover(
-            project_dir,
-            &DiscoveryOptions {
-                project: uv_workspace::ProjectDiscovery::Required,
-                ..DiscoveryOptions::default()
-            },
-            workspace_cache,
-        )
-        .await
-        .map_err(|err| hint_uv_self_version(err, explicit_project))?
+        let project =
+            VirtualProject::discover(project_dir, &DiscoveryOptions::default(), workspace_cache)
+                .await
+                .map_err(|err| hint_uv_self_version(err, explicit_project))?;
+        match &project {
+            VirtualProject::Project(_) => project,
+            VirtualProject::NonProject(workspace) => bail!(
+                "No `project` table found in: {}",
+                workspace
+                    .install_path()
+                    .join("pyproject.toml")
+                    .simplified_display()
+            ),
+        }
     };
     Ok(project)
 }

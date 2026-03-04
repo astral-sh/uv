@@ -96,39 +96,12 @@ pub enum MemberDiscovery {
     Ignore(BTreeSet<PathBuf>),
 }
 
-/// Whether a "project" must be defined via a `[project]` table.
-#[derive(Debug, Default, Clone, Hash, PartialEq, Eq)]
-pub enum ProjectDiscovery {
-    /// The `[project]` table is optional; when missing, the target is treated as a virtual
-    /// project with only dependency groups.
-    #[default]
-    Optional,
-    /// A `[project]` table must be defined.
-    ///
-    /// If not defined, discovery will fail.
-    Required,
-}
-
-impl ProjectDiscovery {
-    /// Whether a `[project]` table is required.
-    pub fn allows_implicit_workspace(&self) -> bool {
-        matches!(self, Self::Optional)
-    }
-
-    /// Whether a non-project workspace root is allowed.
-    pub fn allows_non_project_workspace(&self) -> bool {
-        matches!(self, Self::Optional)
-    }
-}
-
 #[derive(Debug, Default, Clone, Hash, PartialEq, Eq)]
 pub struct DiscoveryOptions {
     /// The path to stop discovery at.
     pub stop_discovery_at: Option<PathBuf>,
     /// The strategy to use when discovering workspace members.
     pub members: MemberDiscovery,
-    /// The strategy to use when discovering the project.
-    pub project: ProjectDiscovery,
 }
 
 pub type RequiresPythonSources = BTreeMap<(PackageName, Option<GroupName>), VersionSpecifiers>;
@@ -1713,6 +1686,36 @@ impl VirtualProject {
             project_root.simplified_display()
         );
 
+        // Trim trailing slashes.
+        let project_root = project_root.components().collect::<PathBuf>();
+
+        // Fast path
+        if options.members == MemberDiscovery::All {
+            let cache = cache
+                .workspaces
+                .lock()
+                .expect("there was a panic in another thread");
+            for (key, workspace) in cache.iter() {
+                if key.discovery_options.members != options.members {
+                    continue;
+                }
+                if let Some((package_name, _member)) = workspace
+                    .packages
+                    .iter()
+                    .find(|(_package_name, member)| member.root == project_root)
+                {
+                    return Ok(Self::Project(ProjectWorkspace {
+                        project_root,
+                        project_name,
+                        workspace,
+                    }));
+                }
+                if workspace.install_path == project_root {
+                    return Ok(Self::NonProject(workspace.clone()));
+                }
+            }
+        }
+
         // Read the current `pyproject.toml`.
         let pyproject_path = project_root.join("pyproject.toml");
         let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
@@ -1735,7 +1738,6 @@ impl VirtualProject {
             .as_ref()
             .and_then(|tool| tool.uv.as_ref())
             .and_then(|uv| uv.workspace.as_ref())
-            .filter(|_| options.project.allows_non_project_workspace())
         {
             // Otherwise, if it contains a `tool.uv.workspace` table, it's a non-project workspace
             // root.
@@ -1754,7 +1756,7 @@ impl VirtualProject {
             .await?;
 
             Ok(Self::NonProject(workspace))
-        } else if options.project.allows_implicit_workspace() {
+        } else {
             // Otherwise it's a pyproject.toml that maybe contains dependency-groups
             // that we want to treat like a project/workspace to handle those uniformly
             let project_path = std::path::absolute(project_root)
@@ -1772,8 +1774,6 @@ impl VirtualProject {
             .await?;
 
             Ok(Self::NonProject(workspace))
-        } else {
-            Err(WorkspaceError::MissingProject(pyproject_path))
         }
     }
 
@@ -1785,10 +1785,15 @@ impl VirtualProject {
         package: PackageName,
     ) -> Result<Self, WorkspaceError> {
         let workspace = Workspace::discover(path, options, cache).await?;
-        let project_workspace = Workspace::with_current_project(workspace, package.clone());
-        Ok(Self::Project(project_workspace.ok_or_else(|| {
-            WorkspaceError::NoSuchMember(package.clone())
-        })?))
+        let Some(project_workspace) =
+            Workspace::with_current_project(workspace.clone(), package.clone())
+        else {
+            return Err(WorkspaceError::NoSuchMember(
+                package,
+                workspace.install_path.clone(),
+            ));
+        };
+        Ok(Self::Project(project_workspace))
     }
 
     /// Update the `pyproject.toml` for the current project.
