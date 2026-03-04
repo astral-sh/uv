@@ -550,6 +550,7 @@ pub fn check_for_explicit_indexes(indexes: &[Index]) {
             .name
             .as_ref()
             .map_or_else(|| index.url.to_string(), ToString::to_string);
+        // TODO(tk): Refactor this
         let mut error_chain = String::new();
         // Writing to a string can't fail with errors (panics on allocation failure)
         uv_warnings::write_error_chain(
@@ -560,6 +561,7 @@ pub fn check_for_explicit_indexes(indexes: &[Index]) {
         )
         .unwrap();
         anstream::eprint!("{}", error_chain);
+        // Exit code 2 matches clap's convention for usage errors.
         #[expect(clippy::exit)]
         std::process::exit(2);
     }
