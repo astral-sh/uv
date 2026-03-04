@@ -251,17 +251,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         // Extract the `--package` argument from commands that support it, to load indexes
         // from the workspace member's `pyproject.toml` for named index resolution.
         if let Commands::Project(command) = &*cli.command {
-            // Extract the package name from the command, if specified.
-            // Only commands with `Option<PackageName>` package field are considered.
-            let package = match &**command {
-                ProjectCommand::Version(args) => args.package.as_ref(),
-                ProjectCommand::Run(args) => args.package.as_ref(),
-                ProjectCommand::Add(args) => args.package.as_ref(),
-                ProjectCommand::Remove(args) => args.package.as_ref(),
-                _ => None,
-            };
-
-            if let Some(package) = package {
+            if let Some(package) = command.package() {
                 package_indexes = workspace.packages().get(package).and_then(|member| {
                     member
                         .pyproject_toml()
