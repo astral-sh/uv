@@ -342,7 +342,7 @@ async fn build_impl(
             python_request,
             install_mirrors.clone(),
             no_config,
-            workspace.as_ref(),
+            workspace.as_deref(),
             python_preference,
             python_downloads,
             cache,
