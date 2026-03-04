@@ -11175,6 +11175,7 @@ async fn add_index_by_name() -> Result<()> {
      + iniconfig==2.0.0
     ");
 
+    // Check that `iniconfig` is pinned to `test-index`.
     let pyproject = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
     insta::with_settings!({
         filters => context.filters(),
@@ -11199,6 +11200,7 @@ async fn add_index_by_name() -> Result<()> {
         );
     });
 
+    // Check that `iniconfig`'s source is the localhost proxy (`test-index`)
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
     insta::with_settings!({
         filters => context.filters(),
@@ -11284,6 +11286,7 @@ async fn add_index_by_name_for_workspace() -> Result<()> {
      + iniconfig==2.0.0
     ");
 
+    // Check that 'iniconfig' is pinned to 'test-index'.
     let pyproject = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
     insta::with_settings!({
         filters => context.filters(),
@@ -11311,6 +11314,7 @@ async fn add_index_by_name_for_workspace() -> Result<()> {
         );
     });
 
+    // Check that `iniconfig`'s source is the localhost proxy ('test-index').
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
     insta::with_settings!({
         filters => context.filters(),
@@ -11401,6 +11405,8 @@ async fn add_index_by_name_for_workspace_member() -> Result<()> {
      + iniconfig==2.0.0
     ");
 
+    // Check the child's `pyproject.toml` was edited to refer to the workspace's index, and that the
+    // index wasn't copied.
     let pyproject = fs_err::read_to_string(context.temp_dir.join("child").join("pyproject.toml"))?;
     insta::with_settings!({
         filters => context.filters(),
@@ -11421,6 +11427,7 @@ async fn add_index_by_name_for_workspace_member() -> Result<()> {
         );
     });
 
+    // Check that iniconfig's source is the localhost proxy (`test-index`)
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
     insta::with_settings!({
         filters => context.filters(),
@@ -11525,6 +11532,9 @@ async fn add_index_by_name_precedence() -> Result<()> {
     let proxy = crate::pypi_proxy::start().await;
     let proxy_url = proxy.url("/simple");
 
+    // The files are set up such that in the event of some issue, the `pypi.org` index would be
+    // picked over the named one.
+
     let uv_dir = context.user_config_dir.child("uv");
     uv_dir.create_dir_all()?;
     let user_config = uv_dir.child("uv.toml");
@@ -11590,6 +11600,9 @@ async fn add_index_by_name_precedence() -> Result<()> {
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     ");
+
+    // Verify that `iniconfig`'s source is the localhost proxy as defined by the child, as opposed
+    // to pypi itself, as defined by the parent.
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
     insta::with_settings!({
         filters => context.filters(),
@@ -11630,6 +11643,7 @@ async fn add_index_by_name_precedence() -> Result<()> {
         "#
         );
     });
+
     context
         .remove()
         .arg("--package")
@@ -11654,6 +11668,9 @@ async fn add_index_by_name_precedence() -> Result<()> {
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     ");
+
+    // Verify that `iniconfig`'s source is the localhost proxy as defined by the workspace, as
+    // opposed to pypi itself, as defined by uv.toml.
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -11693,6 +11710,7 @@ async fn add_index_by_name_precedence() -> Result<()> {
         "#
         );
     });
+
     context
         .remove()
         .arg("--package")
@@ -11718,6 +11736,9 @@ async fn add_index_by_name_precedence() -> Result<()> {
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     ");
+
+    // Verify that `iniconfig`'s source is picked up from `uv.toml` correctly as the localhost
+    // proxy.
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
     insta::with_settings!({
         filters => context.filters(),
