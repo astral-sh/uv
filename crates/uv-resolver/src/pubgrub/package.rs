@@ -96,7 +96,22 @@ pub enum PubGrubPackageInner {
 }
 
 impl PubGrubPackage {
-    /// Create a [`PubGrubPackage`] from a package name and extra.
+    /// Create a base [`PubGrubPackage`] from a package name and marker,
+    /// preserving the marker expression as-is.
+    pub(crate) fn from_base(name: PackageName, marker: MarkerTree) -> Self {
+        if !marker.is_true() {
+            Self(Arc::new(PubGrubPackageInner::Marker { name, marker }))
+        } else {
+            Self(Arc::new(PubGrubPackageInner::Package {
+                name,
+                extra: None,
+                group: None,
+                marker,
+            }))
+        }
+    }
+
+    /// Create a [`PubGrubPackage`] from a package name and extra/group.
     pub(crate) fn from_package(
         name: PackageName,
         extra: Option<ExtraName>,
@@ -121,39 +136,8 @@ impl PubGrubPackage {
                 group,
                 marker,
             }))
-        } else if !marker.is_true() {
-            Self(Arc::new(PubGrubPackageInner::Marker { name, marker }))
         } else {
-            Self(Arc::new(PubGrubPackageInner::Package {
-                name,
-                extra,
-                group: None,
-                marker,
-            }))
-        }
-    }
-
-    /// Create a [`PubGrubPackage`] from a package name and marker, preserving
-    /// extra expressions in the marker so the resolver can fork on them.
-    ///
-    /// Unlike [`from_package`], which strips extra expressions via
-    /// [`without_extras`], this constructor keeps them intact. When a
-    /// dependency is gated on `extra == "X"`, preserving the marker creates a
-    /// [`PubGrubPackageInner::Marker`] variant, enabling the resolver to
-    /// create separate forks for "extra enabled" and "extra disabled". This
-    /// prevents the URL from leaking into the non-extra fork.
-    ///
-    /// See: <https://github.com/astral-sh/uv/issues/18229>
-    pub(crate) fn from_package_preserving_extras(name: PackageName, marker: MarkerTree) -> Self {
-        if !marker.is_true() {
-            Self(Arc::new(PubGrubPackageInner::Marker { name, marker }))
-        } else {
-            Self(Arc::new(PubGrubPackageInner::Package {
-                name,
-                extra: None,
-                group: None,
-                marker,
-            }))
+            Self::from_base(name, marker)
         }
     }
 
@@ -173,12 +157,7 @@ impl PubGrubPackage {
                 None
             }
             PubGrubPackageInner::Extra { name, .. } | PubGrubPackageInner::Marker { name, .. } => {
-                Some(Self::from_package(
-                    name.clone(),
-                    None,
-                    None,
-                    MarkerTree::TRUE,
-                ))
+                Some(Self::from_base(name.clone(), MarkerTree::TRUE))
             }
         }
     }
@@ -346,7 +325,7 @@ impl PubGrubPackage {
 
     /// Returns a new [`PubGrubPackage`] representing the base package with the given name.
     pub(crate) fn base(name: &PackageName) -> Self {
-        Self::from_package(name.clone(), None, None, MarkerTree::TRUE)
+        Self::from_base(name.clone(), MarkerTree::TRUE)
     }
 }
 

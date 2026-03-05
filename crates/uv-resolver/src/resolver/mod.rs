@@ -1918,117 +1918,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .chain(system_dependencies)
                     .collect();
 
-                // When `tool.uv.sources` maps a dependency to a URL with
-                // `extra = "X"`, lowering splits it into two requirements:
-                //
-                //   iniconfig ; extra != "X"        (registry)
-                //   iniconfig @ <url> ; extra == "X" (URL)
-                //
-                // `flatten_requirements` (via `is_requirement_applicable`)
-                // only keeps requirements whose markers are true without any
-                // extras active, so the URL requirement is dropped. That is
-                // normally fine — the `Extra` variant handles it — but
-                // `ForkUrls` is keyed by package name and shared across dep
-                // variants within a fork, so the URL ends up being used even
-                // when the extra is disabled.
-                //
-                // To fix this, we re-add the URL requirement as a `Marker`
-                // variant alongside the registry requirement. Having both as
-                // siblings with complementary markers (`extra == "X"` vs.
-                // `extra != "X"`) causes the resolver to fork, giving each
-                // side its own `ForkUrls` and keeping the URL isolated to the
-                // extra-enabled fork.
-                //
-                // See: <https://github.com/astral-sh/uv/issues/18229>
                 if extra.is_none() && group.is_none() {
-                    let python_marker = python_requirement.to_marker_tree();
-                    for requirement in self.overrides.apply(metadata.requires_dist.iter()) {
-                        // Already included via `flatten_requirements`.
-                        if requirement.evaluate_markers(env.marker_environment(), &[]) {
-                            continue;
-                        }
-                        // Only requirements with an explicit source (a URL
-                        // or a named index) participate in `ForkUrls` /
-                        // `ForkIndexes`. Plain registry deps without an
-                        // explicit index don't have shared per-fork state
-                        // that can leak.
-                        if matches!(
-                            requirement.source,
-                            RequirementSource::Registry { index: None, .. }
-                        ) {
-                            continue;
-                        }
-                        // Requirements that request extras or groups (e.g.,
-                        // `leaf[async]`) are gated by Extra/Group tracking,
-                        // not conditional source splits.
-                        if !requirement.extras.is_empty() || !requirement.groups.is_empty() {
-                            continue;
-                        }
-                        if python_marker.is_disjoint(requirement.marker) {
-                            continue;
-                        }
-                        if !env.included_by_marker(requirement.marker) {
-                            continue;
-                        }
-                        if self.excludes.contains(&requirement.name) {
-                            continue;
-                        }
-                        // If the requirement's marker references extras that
-                        // are part of a declared conflict for this package,
-                        // the conflict system already handles proper forking
-                        // between them. Creating complementary deps would
-                        // interfere with conflict resolution.
-                        {
-                            let mut dominated_by_conflicts = false;
-                            requirement.marker.visit_extras(|op, extra_name| {
-                                if op == MarkerOperator::Equal
-                                    && self.conflicts.contains(name, extra_name)
-                                {
-                                    dominated_by_conflicts = true;
-                                }
-                            });
-                            if dominated_by_conflicts {
-                                continue;
-                            }
-                        }
-                        // A base dep (without a URL) for the same name must
-                        // already exist, confirming this is a conditional
-                        // source split rather than a dep that only appears in
-                        // optional-dependencies.
-                        let Some(base) = deps.iter_mut().find(|dep| {
-                            dep.package.name() == Some(&requirement.name) && dep.url.is_none()
-                        }) else {
-                            continue;
-                        };
-
-                        // Narrow the base dep's marker by intersecting it with
-                        // the negation of the URL requirement's marker. This
-                        // gives the resolver complementary `Marker` variants
-                        // to fork on (e.g., `extra == "X"` vs `extra != "X"`).
-                        //
-                        // `without_extras` in `from_package` strips all extra
-                        // expressions, so the base dep starts with marker TRUE.
-                        // The first URL dep narrows it to `extra != "X"`, a
-                        // second would further narrow to
-                        // `extra != "X" and extra != "Y"`, etc.
-                        let negated = requirement.marker.negate();
-                        let mut base_marker = base.package.marker();
-                        base_marker.and(negated);
-                        base.package = PubGrubPackage::from_package_preserving_extras(
-                            requirement.name.clone(),
-                            base_marker,
-                        );
-
-                        deps.push(PubGrubDependency {
-                            package: PubGrubPackage::from_package_preserving_extras(
-                                requirement.name.clone(),
-                                requirement.marker,
-                            ),
-                            version: Ranges::full(),
-                            parent: package.name_no_root().cloned(),
-                            url: requirement.source.to_verbatim_parsed_url(),
-                        });
-                    }
+                    self.add_complementary_source_dependencies(
+                        package,
+                        &metadata.requires_dist,
+                        env,
+                        python_requirement,
+                        &mut deps,
+                    );
                 }
 
                 deps
@@ -2113,6 +2010,85 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
         };
         Ok(Dependencies::Available(dependencies))
+    }
+
+    /// Re-add explicit-source requirements that are filtered out when no extra
+    /// is active (e.g., `name @ url ; extra == "x"`), so we can create
+    /// complementary marker forks and avoid leaking per-fork source state.
+    fn add_complementary_source_dependencies(
+        &self,
+        package: &PubGrubPackage,
+        requirements: &[Requirement],
+        env: &ResolverEnvironment,
+        python_requirement: &PythonRequirement,
+        deps: &mut Vec<PubGrubDependency>,
+    ) {
+        let python_marker = python_requirement.to_marker_tree();
+        for requirement in self.overrides.apply(requirements.iter()) {
+            let requirement = requirement.as_ref();
+            if !self.is_complementary_source_requirement(requirement, env, python_marker) {
+                continue;
+            }
+
+            // A base dep (without a URL) must already exist; otherwise this is
+            // an extra-only dependency and should remain as-is.
+            let Some(base) = deps
+                .iter_mut()
+                .find(|dep| dep.package.name() == Some(&requirement.name) && dep.url.is_none())
+            else {
+                continue;
+            };
+
+            let mut base_marker = base.package.marker();
+            base_marker.and(requirement.marker.negate());
+            base.package = PubGrubPackage::from_base(requirement.name.clone(), base_marker);
+
+            deps.push(PubGrubDependency {
+                package: PubGrubPackage::from_base(requirement.name.clone(), requirement.marker),
+                version: Ranges::full(),
+                parent: package.name_no_root().cloned(),
+                url: requirement.source.to_verbatim_parsed_url(),
+            });
+        }
+    }
+
+    fn is_complementary_source_requirement(
+        &self,
+        requirement: &Requirement,
+        env: &ResolverEnvironment,
+        python_marker: MarkerTree,
+    ) -> bool {
+        // Already included via `flatten_requirements`.
+        if requirement.evaluate_markers(env.marker_environment(), &[]) {
+            return false;
+        }
+        // Only explicit sources (URL or named index) have per-fork source
+        // state that can leak.
+        if matches!(
+            requirement.source,
+            RequirementSource::Registry { index: None, .. }
+        ) {
+            return false;
+        }
+        // Requirements with requested extras/groups are handled by the
+        // existing Extra/Group machinery.
+        if !requirement.extras.is_empty() || !requirement.groups.is_empty() {
+            return false;
+        }
+        if python_marker.is_disjoint(requirement.marker) {
+            return false;
+        }
+        if !env.included_by_marker(requirement.marker) {
+            return false;
+        }
+        if self.excludes.contains(&requirement.name) {
+            return false;
+        }
+        // This path is specifically for extra/group-gated source splits.
+        if requirement.marker.only_extras().is_true() {
+            return false;
+        }
+        true
     }
 
     /// The regular and dev dependencies filtered by Python version and the markers of this fork,
