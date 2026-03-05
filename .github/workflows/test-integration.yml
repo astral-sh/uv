@@ -930,6 +930,9 @@ jobs:
           UV_TEST_GITLAB_TOKEN: ${{ secrets.UV_TEST_GITLAB_TOKEN }}
           UV_TEST_GITLAB_URL: ${{ secrets.UV_TEST_GITLAB_URL }}
           UV_TEST_GITLAB_USERNAME: token
+          UV_TEST_PYX_TOKEN: ${{ secrets.UV_TEST_PYX_TOKEN }}
+          UV_TEST_PYX_URL: ${{ secrets.UV_TEST_PYX_URL }}
+          UV_TEST_PYX_PKG: ${{ secrets.UV_TEST_PYX_PKG }}
 
       - name: "Run registry tests with text store backend"
         run: ./uv run --no-project -p "${PYTHON_VERSION}" scripts/registries-test.py --uv ./uv --color always --all --auth-method text-store
