@@ -14,6 +14,7 @@ use uv_distribution_types::{
     BuildableSource, DirectSourceUrl, DirectorySourceUrl, GitSourceUrl, PathSourceUrl,
     RemoteSource, Requirement, SourceUrl, VersionId,
 };
+use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep508::{UnnamedRequirement, VersionOrUrl};
 use uv_pypi_types::{Metadata10, ParsedUrl, PyProjectToml, VerbatimParsedUrl};
@@ -164,9 +165,12 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
 
                 // Attempt to read a `pyproject.toml` file.
                 let project_path = parsed_directory_url.install_path.join("pyproject.toml");
-                if let Some(pyproject) = fs_err::read_to_string(project_path)
-                    .ok()
-                    .and_then(|contents| PyProjectToml::from_toml(&contents).ok())
+                if let Some(pyproject) =
+                    fs_err::read_to_string(&project_path)
+                        .ok()
+                        .and_then(|contents| {
+                            PyProjectToml::from_toml(&contents, project_path.user_display()).ok()
+                        })
                 {
                     // Read PEP 621 metadata from the `pyproject.toml`.
                     if let Some(project) = pyproject.project {

@@ -284,7 +284,7 @@ impl RequirementsSpecification {
                         ));
                     }
                 };
-                let pyproject_toml = PyProjectToml::from_toml(&content)
+                let pyproject_toml = PyProjectToml::from_toml(&content, path.user_display())
                     .with_context(|| format!("Failed to parse: `{}`", path.user_display()))?;
 
                 Self {

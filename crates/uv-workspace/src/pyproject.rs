@@ -20,7 +20,7 @@ use rustc_hash::{FxBuildHasher, FxHashSet};
 use serde::de::{IntoDeserializer, SeqAccess};
 use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
-
+use tracing::instrument;
 use uv_build_backend::BuildBackendSettings;
 use uv_configuration::GitLfsSetting;
 use uv_distribution_types::{Index, IndexName, RequirementSource};
@@ -123,7 +123,8 @@ pub struct PyProjectToml {
 
 impl PyProjectToml {
     /// Parse a `PyProjectToml` from a raw TOML string.
-    pub fn from_string(raw: String) -> Result<Self, PyprojectTomlError> {
+    #[instrument("toml::from_str workspace", skip_all, fields(path = %_path.as_ref().display()))]
+    pub fn from_string(raw: String, _path: impl AsRef<Path>) -> Result<Self, PyprojectTomlError> {
         let pyproject =
             toml_edit::Document::from_str(&raw).map_err(PyprojectTomlError::TomlSyntax)?;
         let pyproject = Self::deserialize(pyproject.into_deserializer())
