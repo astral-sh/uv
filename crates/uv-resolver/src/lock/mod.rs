@@ -1747,43 +1747,6 @@ impl Lock {
         }
 
         while let Some(package) = queue.pop_front() {
-            // Add any explicit indexes to the list of known locals or remotes. These indexes may
-            // not be available as top-level configuration (i.e., if they're defined within a
-            // workspace member), but once the package is selected as reachable we can consider
-            // those indexes available to its descendants.
-            for requirement in package
-                .metadata
-                .requires_dist
-                .iter()
-                .chain(package.metadata.dependency_groups.values().flatten())
-            {
-                if let RequirementSource::Registry {
-                    index: Some(index), ..
-                } = &requirement.source
-                {
-                    match &index.url {
-                        IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
-                            if let Some(remotes) = remotes.as_mut() {
-                                remotes.insert(UrlString::from(
-                                    index.url().without_credentials().as_ref(),
-                                ));
-                            }
-                        }
-                        IndexUrl::Path(url) => {
-                            if let Some(locals) = locals.as_mut() {
-                                if let Some(path) = url.to_file_path().ok().and_then(|path| {
-                                    relative_to(&path, root)
-                                        .or_else(|_| std::path::absolute(path))
-                                        .ok()
-                                }) {
-                                    locals.insert(path.into_boxed_path());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
             // If the lockfile references an index that was not provided, we can't validate it.
             if let Source::Registry(index) = &package.id.source {
                 match index {
@@ -1820,7 +1783,6 @@ impl Lock {
                 continue;
             }
 
-            // Validate mutable package metadata and requirements.
             if let Some(version) = package.id.version.as_ref() {
                 // For a non-dynamic package, fetch the metadata from the distribution database.
                 let HashedDist { dist, .. } = package.to_dist(
@@ -1936,44 +1898,37 @@ impl Lock {
                     };
 
                 let satisfied = metadata.is_some_and(|metadata| {
-                        // Validate that the package is still dynamic.
-                        if !metadata.dynamic {
+                    // Validate that the package is still dynamic.
+                    if !metadata.dynamic {
+                        debug!("Static `requires-dist` for `{}` is out-of-date; falling back to distribution database", package.id);
+                        return false;
+                    }
+
+                    // Validate that the extras are unchanged.
+                    if let SatisfiesResult::Satisfied = self.satisfies_provides_extra(metadata.provides_extra, package, ) {
+                        debug!("Static `provides-extra` for `{}` is up-to-date", package.id);
+                    } else {
+                        debug!("Static `provides-extra` for `{}` is out-of-date; falling back to distribution database", package.id);
+                        return false;
+                    }
+
+                    // Validate that the requirements are unchanged.
+                    match self.satisfies_requires_dist(metadata.requires_dist, metadata.dependency_groups, package, root) {
+                        Ok(SatisfiesResult::Satisfied) => {
+                            debug!("Static `requires-dist` for `{}` is up-to-date", package.id);
+                        },
+                        Ok(..) => {
                             debug!("Static `requires-dist` for `{}` is out-of-date; falling back to distribution database", package.id);
                             return false;
-                        }
-
-                        // Validate that the extras are unchanged.
-                        if let SatisfiesResult::Satisfied =
-                            self.satisfies_provides_extra(metadata.provides_extra, package)
-                        {
-                            debug!("Static `provides-extra` for `{}` is up-to-date", package.id);
-                        } else {
-                            debug!("Static `provides-extra` for `{}` is out-of-date; falling back to distribution database", package.id);
+                        },
+                        Err(..) => {
+                            debug!("Static `requires-dist` for `{}` is invalid; falling back to distribution database", package.id);
                             return false;
-                        }
+                        },
+                    }
 
-                        // Validate that the requirements are unchanged.
-                        match self.satisfies_requires_dist(
-                            metadata.requires_dist,
-                            metadata.dependency_groups,
-                            package,
-                            root,
-                        ) {
-                            Ok(SatisfiesResult::Satisfied) => {
-                                debug!("Static `requires-dist` for `{}` is up-to-date", package.id);
-                            }
-                            Ok(..) => {
-                                debug!("Static `requires-dist` for `{}` is out-of-date; falling back to distribution database", package.id);
-                                return false;
-                            }
-                            Err(..) => {
-                                debug!("Static `requires-dist` for `{}` is invalid; falling back to distribution database", package.id);
-                                return false;
-                            }
-                        }
-
-                        true
-                    });
+                    true
+                });
 
                 // If the `requires-dist` metadata matches the requirements, we're done; otherwise,
                 // fetch the "full" metadata, which may involve invoking the build system. In some
@@ -2050,6 +2005,43 @@ impl Lock {
                 }
             } else {
                 return Ok(SatisfiesResult::MissingVersion(&package.id.name));
+            }
+
+            // Add any explicit indexes to the list of known locals or remotes. These indexes may
+            // not be available as top-level configuration (i.e., if they're defined within a
+            // workspace member), but we already validated that the dependencies are up-to-date, so
+            // we can consider them "available".
+            for requirement in package
+                .metadata
+                .requires_dist
+                .iter()
+                .chain(package.metadata.dependency_groups.values().flatten())
+            {
+                if let RequirementSource::Registry {
+                    index: Some(index), ..
+                } = &requirement.source
+                {
+                    match &index.url {
+                        IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
+                            if let Some(remotes) = remotes.as_mut() {
+                                remotes.insert(UrlString::from(
+                                    index.url().without_credentials().as_ref(),
+                                ));
+                            }
+                        }
+                        IndexUrl::Path(url) => {
+                            if let Some(locals) = locals.as_mut() {
+                                if let Some(path) = url.to_file_path().ok().and_then(|path| {
+                                    relative_to(&path, root)
+                                        .or_else(|_| std::path::absolute(path))
+                                        .ok()
+                                }) {
+                                    locals.insert(path.into_boxed_path());
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             // Recurse.

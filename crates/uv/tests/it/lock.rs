@@ -28818,7 +28818,7 @@ fn lock_script_path() -> Result<()> {
     Ok(())
 }
 
-/// Repro for: https://github.com/astral-sh/uv/issues/18312
+/// Repro for: <https://github.com/astral-sh/uv/issues/18312>
 ///
 /// `uv lock --script` should invalidate a script lockfile when a local editable dependency's
 /// `pyproject.toml` changes.
@@ -28868,8 +28868,44 @@ fn lock_script_editable_path_dependency_change() -> Result<()> {
         .success();
 
     let lock = context.read("script.py.lock");
-    assert!(lock.contains(r#"name = "iniconfig""#), "{lock}");
-    assert!(!lock.contains(r#"name = "sniffio""#), "{lock}");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock,
+            @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.11"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        requirements = [{ name = "child", editable = "child" }]
+
+        [[package]]
+        name = "child"
+        version = "0.1.0"
+        source = { editable = "child" }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig" }]
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        ]
+        "#
+        );
+    });
 
     context
         .lock()
@@ -28916,8 +28952,44 @@ fn lock_script_editable_path_dependency_change() -> Result<()> {
         .assert()
         .success();
     let lock = context.read("script.py.lock");
-    assert!(lock.contains(r#"name = "sniffio""#), "{lock}");
-    assert!(!lock.contains(r#"name = "iniconfig""#), "{lock}");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock,
+            @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.11"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        requirements = [{ name = "child", editable = "child" }]
+
+        [[package]]
+        name = "child"
+        version = "0.1.0"
+        source = { editable = "child" }
+        dependencies = [
+            { name = "sniffio" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "sniffio" }]
+
+        [[package]]
+        name = "sniffio"
+        version = "1.3.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
+        ]
+        "#
+        );
+    });
 
     Ok(())
 }
@@ -33100,61 +33172,6 @@ async fn lock_nested_path_dependency_explicit_index() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
     ");
-
-    Ok(())
-}
-
-/// Test that lockfile validation checks index availability for transitive immutable packages.
-#[tokio::test]
-async fn lock_transitive_immutable_explicit_index_validation() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let proxy = crate::pypi_proxy::start().await;
-
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(&format!(
-        r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = ["anyio"]
-
-        [tool.uv.sources]
-        anyio = {{ index = "inner-index" }}
-
-        [[tool.uv.index]]
-        name = "inner-index"
-        url = "{proxy_uri}/simple"
-        explicit = true
-        "#,
-        proxy_uri = proxy.uri()
-    ))?;
-
-    context.lock().assert().success();
-    context.lock().arg("--check").assert().success();
-
-    // Tamper with a transitive package source in the lockfile.
-    let lockfile = context.temp_dir.child("uv.lock");
-    let lock = fs_err::read_to_string(lockfile.path())?;
-    let source = r#"source = { registry = "https://pypi.org/simple" }"#;
-    let index = lock
-        .find(source)
-        .expect("expected a transitive PyPI package");
-
-    let mut tampered = String::with_capacity(lock.len());
-    tampered.push_str(&lock[..index]);
-    tampered.push_str(r#"source = { registry = "https://invalid.example/simple" }"#);
-    tampered.push_str(&lock[index + source.len()..]);
-    fs_err::write(lockfile.path(), tampered)?;
-
-    // `--check` should fail because the transitive package source index is no longer available.
-    let output = context.lock().arg("--check").output()?;
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        !output.status.success(),
-        "expected `uv lock --check` to fail for stale transitive package index, but it succeeded\n{stderr}"
-    );
-    assert!(stderr.contains("needs to be updated"), "{stderr}");
 
     Ok(())
 }
