@@ -759,25 +759,29 @@ impl AuthMiddleware {
                         return None;
                     };
 
-                    let mut token_state_map = self.pyx_token_state.lock().await;
+                    // NOTE: new scope here to avoid holding the token state lock
+                    // for the entire function body.
+                    let token = {
+                        let mut token_state_map = self.pyx_token_state.lock().await;
 
-                    let token = if let Some(token) = token_state_map.get(&workspace) {
-                        token.clone()
-                    } else {
-                        trace!("Initializing token store for {url}");
-                        let generated = match token_store
-                            .access_token(base_client, DEFAULT_TOLERANCE_SECS, Some(&workspace))
-                            .await
-                        {
-                            Ok(Some(token)) => Some(token),
-                            Ok(None) => None,
-                            Err(err) => {
-                                warn!("Failed to generate access tokens: {err}");
-                                None
-                            }
-                        };
-                        token_state_map.insert(workspace, generated.clone());
-                        generated
+                        if let Some(token) = token_state_map.get(&workspace) {
+                            token.clone()
+                        } else {
+                            trace!("Initializing token store for {url}");
+                            let generated = match token_store
+                                .access_token(base_client, DEFAULT_TOLERANCE_SECS, Some(&workspace))
+                                .await
+                            {
+                                Ok(Some(token)) => Some(token),
+                                Ok(None) => None,
+                                Err(err) => {
+                                    warn!("Failed to generate access tokens: {err}");
+                                    None
+                                }
+                            };
+                            token_state_map.insert(workspace, generated.clone());
+                            generated
+                        }
                     };
 
                     let credentials = token.map(|token| {
