@@ -28860,7 +28860,12 @@ fn lock_script_editable_path_dependency_change() -> Result<()> {
         "#,
     )?;
 
-    context.lock().arg("--script").arg("script.py").assert().success();
+    context
+        .lock()
+        .arg("--script")
+        .arg("script.py")
+        .assert()
+        .success();
 
     let lock = context.read("script.py.lock");
     assert!(lock.contains(r#"name = "iniconfig""#), "{lock}");
@@ -28904,7 +28909,12 @@ fn lock_script_editable_path_dependency_change() -> Result<()> {
     assert!(stderr.contains("needs to be updated"), "{stderr}");
 
     // Expected behavior: re-locking should pick up the new transitive dependency.
-    context.lock().arg("--script").arg("script.py").assert().success();
+    context
+        .lock()
+        .arg("--script")
+        .arg("script.py")
+        .assert()
+        .success();
     let lock = context.read("script.py.lock");
     assert!(lock.contains(r#"name = "sniffio""#), "{lock}");
     assert!(!lock.contains(r#"name = "iniconfig""#), "{lock}");
@@ -33090,6 +33100,61 @@ async fn lock_nested_path_dependency_explicit_index() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
     ");
+
+    Ok(())
+}
+
+/// Test that lockfile validation checks index availability for transitive immutable packages.
+#[tokio::test]
+async fn lock_transitive_immutable_explicit_index_validation() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
+
+        [tool.uv.sources]
+        anyio = {{ index = "inner-index" }}
+
+        [[tool.uv.index]]
+        name = "inner-index"
+        url = "{proxy_uri}/simple"
+        explicit = true
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
+
+    context.lock().assert().success();
+    context.lock().arg("--check").assert().success();
+
+    // Tamper with a transitive package source in the lockfile.
+    let lockfile = context.temp_dir.child("uv.lock");
+    let lock = fs_err::read_to_string(lockfile.path())?;
+    let source = r#"source = { registry = "https://pypi.org/simple" }"#;
+    let index = lock
+        .find(source)
+        .expect("expected a transitive PyPI package");
+
+    let mut tampered = String::with_capacity(lock.len());
+    tampered.push_str(&lock[..index]);
+    tampered.push_str(r#"source = { registry = "https://invalid.example/simple" }"#);
+    tampered.push_str(&lock[index + source.len()..]);
+    fs_err::write(lockfile.path(), tampered)?;
+
+    // `--check` should fail because the transitive package source index is no longer available.
+    let output = context.lock().arg("--check").output()?;
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !output.status.success(),
+        "expected `uv lock --check` to fail for stale transitive package index, but it succeeded\n{stderr}"
+    );
+    assert!(stderr.contains("needs to be updated"), "{stderr}");
 
     Ok(())
 }

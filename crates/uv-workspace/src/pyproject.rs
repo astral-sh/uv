@@ -648,10 +648,11 @@ pub struct ToolUv {
         default = "[]",
         value_type = "str | list[str]",
         example = r#"
-            # Require that the package is available for macOS ARM and x86 (Intel).
+            # Require that the package is available on the following platforms:
             required-environments = [
                 "sys_platform == 'darwin' and platform_machine == 'arm64'",
-                "sys_platform == 'darwin' and platform_machine == 'x86_64'",
+                "sys_platform == 'linux' and platform_machine == 'x86_64'",
+                "sys_platform == 'win32' and platform_machine == 'AMD64'",
             ]
         "#
     )]
