@@ -5786,6 +5786,16 @@ pub struct ToolListArgs {
     #[arg(long)]
     pub show_python: bool,
 
+    /// List outdated tools.
+    ///
+    /// The latest version of each tool will be shown alongside the installed version. Up-to-date
+    /// tools will be omitted from the output.
+    #[arg(long, overrides_with("no_outdated"))]
+    pub outdated: bool,
+
+    #[arg(long, overrides_with("outdated"), hide = true)]
+    pub no_outdated: bool,
+
     // Hide unused global Python options.
     #[arg(long, hide = true)]
     pub python_preference: Option<PythonPreference>,

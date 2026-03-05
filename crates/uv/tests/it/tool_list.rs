@@ -115,6 +115,57 @@ fn tool_list_empty() {
 }
 
 #[test]
+fn tool_list_outdated_empty() {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // With no tools installed, `--outdated` should produce the same output as the base case.
+    uv_snapshot!(context.filters(), context.tool_list()
+    .arg("--outdated")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    No tools installed
+    ");
+}
+
+#[test]
+fn tool_list_outdated() {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install an older version of `black`.
+    context
+        .tool_install()
+        .arg("black==24.2.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    // With `--outdated`, the installed (older) version should be listed with the latest version.
+    let result = context
+        .tool_list()
+        .arg("--outdated")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    let stdout = String::from_utf8(result.get_output().stdout.clone()).unwrap();
+    assert!(
+        stdout.contains("black v24.2.0") && stdout.contains("[latest:"),
+        "Expected outdated output with latest version, got: {stdout}"
+    );
+}
+
+#[test]
 fn tool_list_missing_receipt() {
     let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
