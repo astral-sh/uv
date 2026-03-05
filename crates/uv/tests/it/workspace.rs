@@ -220,7 +220,7 @@ fn test_albatross_project_in_excluded() {
     ----- stdout -----
 
     ----- stderr -----
-    error: The project is marked as unmanaged: `[TEMP_DIR]/workspace/albatross-project-in-excluded/packages/seeds`
+    error: The project is marked as unmanaged: [TEMP_DIR]/workspace/albatross-project-in-excluded/packages/seeds
     "
     );
 }

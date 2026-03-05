@@ -2066,7 +2066,7 @@ fn version_get_fallback_unmanaged() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The project is marked as unmanaged: `[TEMP_DIR]/`
+    error: The project is marked as unmanaged: [TEMP_DIR]/
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -2117,7 +2117,7 @@ fn version_get_fallback_unmanaged_short() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The project is marked as unmanaged: `[TEMP_DIR]/`
+    error: The project is marked as unmanaged: [TEMP_DIR]/
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -2177,7 +2177,7 @@ fn version_get_fallback_unmanaged_strict() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The project is marked as unmanaged: `[TEMP_DIR]/`
+    error: The project is marked as unmanaged: [TEMP_DIR]/
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
