@@ -456,7 +456,7 @@ def get_operating_system_and_architecture():
         )
         sys.exit(0)
 
-    if operating_system == "linux":
+    if operating_system in ["linux", "android"]:
         # noinspection PyProtectedMember
         from .packaging._manylinux import _get_glibc_version
 
@@ -487,6 +487,15 @@ def get_operating_system_and_architecture():
                 "minor": glibc_version[1],
             }
         elif hasattr(sys, "getandroidapilevel"):
+            # For Python 3.13+ (for instance Termux)
+            android_abi_to_arch = {
+                "arm64_v8a": "aarch64",
+                "armeabi_v7a": "armv7l",
+                "x86": "i686",
+            }
+
+            architecture = android_abi_to_arch.get(architecture, architecture)
+
             operating_system = {
                 "name": "android",
                 "api_level": sys.getandroidapilevel(),
