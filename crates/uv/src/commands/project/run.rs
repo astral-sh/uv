@@ -1332,9 +1332,30 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited
     // TODO(zanieb): Throw a nicer error message if the command is not found
-    let handle = process
-        .spawn()
-        .with_context(|| format!("Failed to spawn: `{}`", command.display_executable()))?;
+    let handle = match process.spawn() {
+        Ok(handle) => Ok(handle),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            // Check if the error is due to a missing Python interpreter in the script's shebang.
+            let script_path = interpreter.scripts().join(command.executable());
+            if script_path.exists() {
+                if let Some(python_path) = crate::commands::diagnostics::extract_python_from_shebang(&script_path) {
+                    if !python_path.exists() {
+                        writeln!(
+                            printer.stderr(),
+                            "{}: `{}` uses a Python interpreter at `{}` which no longer exists",
+                            "hint".cyan().bold(),
+                            command.display_executable(),
+                            python_path.display(),
+                        )?;
+                    }
+                }
+            }
+
+            Err(err)
+        }
+        Err(err) => Err(err),
+    }
+    .with_context(|| format!("Failed to spawn command `{}`", command.display_executable()))?;
 
     run_to_completion(handle).await
 }
