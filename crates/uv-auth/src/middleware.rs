@@ -751,8 +751,7 @@ impl AuthMiddleware {
                 if token_store.is_known_url(url) {
                     // Derive the workspace from the URL. All known pyx URL shapes — Simple API
                     // (`/simple/{workspace}/{view}`) and CDN — encode the workspace name.
-                    let Some(workspace) = token_store.workspace_for_url(url).map(str::to_owned)
-                    else {
+                    let Some(workspace) = token_store.workspace_for_url(url) else {
                         // URL is recognized as pyx but workspace isn't extractable (shouldn't
                         // happen in practice); fall through to other auth methods.
                         debug!("Could not extract workspace from pyx URL {url}");
