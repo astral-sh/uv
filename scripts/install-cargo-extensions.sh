@@ -13,12 +13,9 @@
 
 set -eu
 
-# TODO(zanieb): Use the upstream once https://github.com/rust-secure-code/cargo-auditable/pull/245
-# is released.
 CARGO_AUDITABLE_INSTALL="cargo install cargo-auditable \
     --locked \
-    --git https://github.com/rust-secure-code/cargo-auditable.git \
-    --rev 7df767ff9e844d742d7223c62b80353da0f18433"
+    --version 0.7.4"
 
 # In Linux containers running on x86_64, build a static musl binary so the installed tool works in
 # musl-based environments (Alpine, etc.).
