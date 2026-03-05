@@ -262,7 +262,7 @@ impl PyxTokenStore {
     /// - CDN files: `https://files.{cdn}/{workspace}/{path}`
     ///
     /// Returns `None` if the URL does not match any known shape for this store.
-    pub fn workspace_for_url<'a>(&self, url: &'a DisplaySafeUrl) -> Option<&'a str> {
+    pub fn workspace_for_url(&self, url: &DisplaySafeUrl) -> Option<String> {
         workspace_from_simple_url(url, &self.api).or_else(|| workspace_from_cdn_url(url, &self.cdn))
     }
 
@@ -772,7 +772,7 @@ fn is_known_domain(url: &Url, api: &DisplaySafeUrl, cdn: &str) -> bool {
 /// Pyx CDN URLs come in two forms:
 /// - `https://views.{cdn}/v1/{shard}/{workspace}/{view}/{viewSignature}/{filePath}`
 /// - `https://files.{cdn}/{workspace}/{path}`
-fn workspace_from_cdn_url<'a>(url: &'a DisplaySafeUrl, cdn: &str) -> Option<&'a str> {
+fn workspace_from_cdn_url(url: &DisplaySafeUrl, cdn: &str) -> Option<String> {
     // Must be HTTPS on a known CDN subdomain.
     if url.scheme() != "https" {
         return None;
@@ -789,7 +789,7 @@ fn workspace_from_cdn_url<'a>(url: &'a DisplaySafeUrl, cdn: &str) -> Option<&'a 
         let workspace = segments.next().filter(|s| !s.is_empty())?;
         // Must have at least a view segment after the workspace.
         segments.next().filter(|s| !s.is_empty())?;
-        return Some(workspace);
+        return Some(workspace.to_owned());
     }
 
     // files.{cdn}/{workspace}/{path}
@@ -797,7 +797,7 @@ fn workspace_from_cdn_url<'a>(url: &'a DisplaySafeUrl, cdn: &str) -> Option<&'a 
         let workspace = segments.next().filter(|s| !s.is_empty())?;
         // Must have at least one path segment after the workspace.
         segments.next().filter(|s| !s.is_empty())?;
-        return Some(workspace);
+        return Some(workspace.to_owned());
     }
 
     None
@@ -808,7 +808,7 @@ fn workspace_from_cdn_url<'a>(url: &'a DisplaySafeUrl, cdn: &str) -> Option<&'a 
 /// Pyx Simple API URLs have the form `{api}/simple/{workspace}/{view}` (e.g.,
 /// `https://api.pyx.dev/simple/acme/main`). Returns the workspace segment when
 /// the URL matches the given `api` base URL.
-fn workspace_from_simple_url<'a>(url: &'a DisplaySafeUrl, api: &DisplaySafeUrl) -> Option<&'a str> {
+fn workspace_from_simple_url(url: &DisplaySafeUrl, api: &DisplaySafeUrl) -> Option<String> {
     // The URL must be on the same host/port as the API.
     if url.scheme() != api.scheme()
         || url.host_str() != api.host_str()
@@ -824,7 +824,7 @@ fn workspace_from_simple_url<'a>(url: &'a DisplaySafeUrl, api: &DisplaySafeUrl) 
     let workspace = segments.next().filter(|s| !s.is_empty())?;
     // There must be at least a view segment after the workspace.
     segments.next().filter(|s| !s.is_empty())?;
-    Some(workspace)
+    Some(workspace.to_owned())
 }
 
 /// Returns `true` if the URL is on the default pyx domain.
@@ -1097,7 +1097,7 @@ mod tests {
 
         for (url, cdn, expected) in cases {
             assert_eq!(
-                workspace_from_cdn_url(&DisplaySafeUrl::parse(url).unwrap(), cdn),
+                workspace_from_cdn_url(&DisplaySafeUrl::parse(url).unwrap(), cdn).as_deref(),
                 *expected,
                 "url={url}"
             );
@@ -1132,7 +1132,7 @@ mod tests {
 
         for (api, url, expected) in cases {
             assert_eq!(
-                workspace_from_simple_url(&DisplaySafeUrl::parse(url).unwrap(), api),
+                workspace_from_simple_url(&DisplaySafeUrl::parse(url).unwrap(), api).as_deref(),
                 *expected,
                 "url={url}"
             );
