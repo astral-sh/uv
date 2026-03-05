@@ -414,6 +414,13 @@ pub(crate) async fn run(
     .context("Failed to build new PATH variable")?;
     process.env(EnvVars::PATH, new_path);
 
+    // If we're not in a virtual environment already, set `VIRTUAL_ENV`.
+    // This is a little defense, e.g., we could always set `VIRTUAL_ENV` but it could break a tool
+    // that you're using to target your current virtual environment.
+    if std::env::var_os(EnvVars::VIRTUAL_ENV).is_none() {
+        process.env(EnvVars::VIRTUAL_ENV, environment.root());
+    }
+
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited
     let space = if args.is_empty() { "" } else { " " };
