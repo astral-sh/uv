@@ -11982,6 +11982,7 @@ async fn add_index_by_name_precedence() -> Result<()> {
 #[tokio::test]
 async fn add_index_by_name_directory_ambiguity() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+
     let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -12004,7 +12005,10 @@ async fn add_index_by_name_directory_ambiguity() -> Result<()> {
     proxy_dir.create_dir_all()?;
 
     // Should warn about ambiguity and use the directory (which will fail since it's empty)
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("proxy"), @"
+    let mut filters = context.filters();
+    // On Windows the hint includes both `.\\proxy` (normalised to `./proxy`) and `./proxy`.
+    filters.push(("`./proxy` or ", ""));
+    uv_snapshot!(filters, context.add().arg("iniconfig").arg("--index").arg("proxy"), @"
     success: true
     exit_code: 0
     ----- stdout -----
