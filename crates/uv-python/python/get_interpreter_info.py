@@ -487,6 +487,8 @@ def get_operating_system_and_architecture():
                 "minor": glibc_version[1],
             }
         elif hasattr(sys, "getandroidapilevel"):
+            # On Python <3.13, Android reports itself as "linux"
+            # See `operation_system == "android"` branch for Python 3.13+ below
             operating_system = {
                 "name": "android",
                 "api_level": sys.getandroidapilevel(),
@@ -551,10 +553,13 @@ def get_operating_system_and_architecture():
             "minor": int(version[1]),
         }
     elif operating_system == "android":
-        # Python 3.13+ returns `sys.platform == 'android'` and
-        # `sysconfig.get_platform()` returns 'android-{api_level}-{abi}'
-        # instead of 'linux-{arch}' (see https://github.com/astral-sh/uv/issues/18285).
-        # Map Android ABI names back to standard architecture names.
+        # Python 3.13+ supports Android. We map the Android ABIs to our standard architectures.
+        #
+        # See:
+        #
+        # - https://peps.python.org/pep-0738/
+        # - https://packaging.python.org/en/latest/specifications/platform-compatibility-tags/#android
+        # - https://developer.android.com/ndk/guides/abis#sa
         android_abi_to_arch = {
             "arm64_v8a": "aarch64",
             "armeabi_v7a": "armv7l",
