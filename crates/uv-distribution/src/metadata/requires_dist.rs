@@ -736,7 +736,7 @@ mod test {
             tqdm = { workspace = true }
         "};
 
-        assert_snapshot!(format_err(input).await, @"error: No `project` table found in: `[PATH]/pyproject.toml`");
+        assert_snapshot!(format_err(input).await, @"error: No `project` table found in: [PATH]/pyproject.toml");
     }
 
     #[test]
