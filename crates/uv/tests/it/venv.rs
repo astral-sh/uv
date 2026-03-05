@@ -1307,6 +1307,29 @@ fn verify_pyvenv_cfg_relocatable() {
     activate_csh.assert(predicates::path::missing());
 }
 
+/// With `UV_VENV_RELOCATABLE=1`, the virtual environment is relocatable.
+#[test]
+fn verify_pyvenv_cfg_relocatable_env_var() {
+    let context = uv_test::test_context!("3.12");
+
+    // Create a virtual environment at `.venv` with the env var.
+    context
+        .venv()
+        .arg(context.venv.as_os_str())
+        .arg("--clear")
+        .arg("--python")
+        .arg("3.12")
+        .env("UV_VENV_RELOCATABLE", "1")
+        .assert()
+        .success();
+
+    let pyvenv_cfg = context.venv.child("pyvenv.cfg");
+    pyvenv_cfg.assert(predicates::path::is_file());
+
+    // Relocatable flag is set.
+    pyvenv_cfg.assert(predicates::str::contains("relocatable = true"));
+}
+
 /// With `relocatable-envs-default` preview feature, venvs are relocatable by default.
 #[test]
 fn relocatable_envs_default_preview() {

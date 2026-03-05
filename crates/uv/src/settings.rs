@@ -3489,6 +3489,7 @@ impl VenvSettings {
         // Resolve flags from CLI and environment variables.
         let seed = seed || environment.venv_seed.value == Some(true);
         let clear = clear || environment.venv_clear.value == Some(true);
+        let relocatable = relocatable || environment.venv_relocatable.value == Some(true);
 
         Self {
             seed,
