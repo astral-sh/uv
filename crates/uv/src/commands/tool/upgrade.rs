@@ -51,6 +51,7 @@ pub(crate) async fn upgrade(
     installer_metadata: bool,
     concurrency: Concurrency,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
@@ -131,6 +132,7 @@ pub(crate) async fn upgrade(
             &args,
             &client_builder,
             cache,
+            workspace_cache,
             &filesystem,
             installer_metadata,
             &concurrency,
@@ -266,6 +268,7 @@ async fn upgrade_tool(
     args: &ResolverInstallerOptions,
     client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     filesystem: &ResolverInstallerOptions,
     installer_metadata: bool,
     concurrency: &Concurrency,
@@ -337,7 +340,6 @@ async fn upgrade_tool(
 
     // Initialize any shared state.
     let state = PlatformState::default();
-    let workspace_cache = WorkspaceCache::default();
 
     // Check if we need to create a new environment — if so, resolve it first, then
     // install the requested tool
@@ -356,6 +358,7 @@ async fn upgrade_tool(
             Box::new(SummaryResolveLogger),
             concurrency,
             cache,
+            workspace_cache,
             printer,
             preview,
         )

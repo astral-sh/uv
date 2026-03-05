@@ -36,6 +36,7 @@ pub(crate) async fn find(
     python_downloads_json_url: Option<&str>,
     client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
@@ -45,11 +46,10 @@ pub(crate) async fn find(
         EnvironmentPreference::Any
     };
 
-    let workspace_cache = WorkspaceCache::default();
     let project = if no_project {
         None
     } else {
-        match VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
+        match VirtualProject::discover(project_dir, &DiscoveryOptions::default(), workspace_cache)
             .await
         {
             Ok(project) => Some(project),

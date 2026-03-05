@@ -89,6 +89,7 @@ pub(crate) async fn pip_sync(
     python_preference: PythonPreference,
     concurrency: Concurrency,
     cache: Cache,
+    workspace_cache: WorkspaceCache,
     dry_run: DryRun,
     printer: Printer,
     preview: Preview,
@@ -392,7 +393,7 @@ pub(crate) async fn pip_sync(
         &build_hasher,
         exclude_newer.clone(),
         sources.clone(),
-        WorkspaceCache::default(),
+        workspace_cache.clone(),
         concurrency.clone(),
         preview,
     );
@@ -532,7 +533,7 @@ pub(crate) async fn pip_sync(
         &build_hasher,
         exclude_newer.clone(),
         sources,
-        WorkspaceCache::default(),
+        workspace_cache,
         concurrency.clone(),
         preview,
     );
