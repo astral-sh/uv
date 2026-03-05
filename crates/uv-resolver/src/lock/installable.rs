@@ -90,6 +90,18 @@ pub trait Installable<'lock> {
                     activated_groups.push((&dist.id.name, group));
                 }
             }
+
+            // Deactivate project entries that are suppressed by an
+            // active extra in the same (single-package) conflict set.
+            let activated_extras_set: FxHashSet<(&PackageName, &ExtraName)> =
+                activated_extras.iter().copied().collect();
+            activated_projects.retain(|project| {
+                !self.lock().conflicts().iter().any(|set| {
+                    set.is_project_suppressed_by_extra(project, |extra| {
+                        activated_extras_set.contains(&(*project, extra))
+                    })
+                })
+            });
         }
 
         // Initialize the workspace roots.
