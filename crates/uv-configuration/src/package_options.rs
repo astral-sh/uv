@@ -5,7 +5,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use uv_cache::Refresh;
 use uv_cache_info::Timestamp;
 use uv_distribution_types::{Requirement, RequirementSource};
-use uv_normalize::PackageName;
+use uv_normalize::{GroupName, PackageName};
 
 /// Whether to reinstall packages.
 #[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
@@ -153,6 +153,9 @@ pub struct Upgrade {
 
     /// Additional version constraints for specific packages.
     constraints: FxHashMap<PackageName, Vec<Requirement>>,
+
+    /// Dependency groups whose packages should be upgraded.
+    groups: FxHashSet<GroupName>,
 }
 
 impl Upgrade {
@@ -161,6 +164,7 @@ impl Upgrade {
         Self {
             strategy: UpgradeStrategy::None,
             constraints: FxHashMap::default(),
+            groups: FxHashSet::default(),
         }
     }
 
@@ -169,15 +173,22 @@ impl Upgrade {
         Self {
             strategy: UpgradeStrategy::All,
             constraints: FxHashMap::default(),
+            groups: FxHashSet::default(),
         }
     }
 
     /// Determine the upgrade selection strategy from the command-line arguments.
-    pub fn from_args(upgrade: Option<bool>, upgrade_package: Vec<Requirement>) -> Option<Self> {
+    pub fn from_args(
+        upgrade: Option<bool>,
+        upgrade_package: Vec<Requirement>,
+        upgrade_group: Vec<GroupName>,
+    ) -> Option<Self> {
+        let groups: FxHashSet<GroupName> = upgrade_group.into_iter().collect();
+
         let strategy = match upgrade {
             Some(true) => UpgradeStrategy::All,
             Some(false) => {
-                if upgrade_package.is_empty() {
+                if upgrade_package.is_empty() && groups.is_empty() {
                     return Some(Self::none());
                 }
                 // `--no-upgrade` with `--upgrade-package` allows selecting the specified packages for upgrade.
@@ -185,7 +196,7 @@ impl Upgrade {
                 UpgradeStrategy::Packages(packages)
             }
             None => {
-                if upgrade_package.is_empty() {
+                if upgrade_package.is_empty() && groups.is_empty() {
                     return None;
                 }
                 let packages = upgrade_package.iter().map(|req| req.name.clone()).collect();
@@ -210,6 +221,7 @@ impl Upgrade {
         Some(Self {
             strategy,
             constraints,
+            groups,
         })
     }
 
@@ -220,12 +232,13 @@ impl Upgrade {
         Self {
             strategy: UpgradeStrategy::Packages(packages),
             constraints: FxHashMap::default(),
+            groups: FxHashSet::default(),
         }
     }
 
     /// Returns `true` if no packages should be upgraded.
     pub fn is_none(&self) -> bool {
-        matches!(self.strategy, UpgradeStrategy::None)
+        matches!(self.strategy, UpgradeStrategy::None) && self.groups.is_empty()
     }
 
     /// Returns `true` if all packages should be upgraded.
@@ -249,6 +262,11 @@ impl Upgrade {
         self.constraints
             .values()
             .flat_map(|requirements| requirements.iter())
+    }
+
+    /// Returns the set of dependency groups whose packages should be upgraded.
+    pub fn groups(&self) -> &FxHashSet<GroupName> {
+        &self.groups
     }
 
     /// Combine a set of [`Upgrade`] values.
@@ -277,9 +295,14 @@ impl Upgrade {
                 .extend(requirements);
         }
 
+        // For `groups`: always merge.
+        let mut combined_groups = self.groups;
+        combined_groups.extend(other.groups);
+
         Self {
             strategy,
             constraints: combined_constraints,
+            groups: combined_groups,
         }
     }
 }

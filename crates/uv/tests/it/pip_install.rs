@@ -14488,3 +14488,21 @@ fn install_no_copy_on_write_fs() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+/// `--upgrade-group` is not supported in pip commands.
+#[test]
+fn upgrade_group_not_supported() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.pip_install()
+        .arg("anyio")
+        .arg("--upgrade-group")
+        .arg("dev"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `--upgrade-group` is not supported in `uv pip` commands
+    ");
+}
