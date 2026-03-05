@@ -35,6 +35,13 @@ and make up smart sounding but ultimately wrong claims. Instead, phrase issue an
 comments in your own words. It's not important to sound perfect, but that we can follow what problem
 you're trying to solve and why the pull request uses a correct approach.
 
+When using LLMs, there must always be a human in the loop that fully understands the code. You need
+to be able to explain all changes and how they interact with the rest of the codebase without LLM,
+as LLMs cannot (yet) correctly reason about complex codebases. Generally, this requires doing the
+design of how the change yourself and understanding all involved datastructures, formats and
+algorithms, while only use the LLM for directed coding. Autonomous contributions from AI agents are
+not allowed.
+
 ## Setup
 
 [Rust](https://rustup.rs/) (and a C compiler) are required to build uv.
