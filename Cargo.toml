@@ -228,6 +228,7 @@ rustc-hash = { version = "2.0.0" }
 rustix = { version = "1.0.0", default-features = false, features = [
   "fs",
   "std",
+  "system",
 ] }
 same-file = { version = "1.0.6" }
 schemars = { version = "1.0.0", features = ["url2"] }
@@ -242,7 +243,6 @@ sha2 = { version = "0.10.8" }
 smallvec = { version = "1.13.2" }
 spdx = { version = "0.13.0" }
 syn = { version = "2.0.77" }
-sys-info = { version = "0.9.1" }
 tar = { version = "0.4.43" }
 target-lexicon = { version = "0.13.0" }
 tempfile = { version = "3.14.0" }
