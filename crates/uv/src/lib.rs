@@ -99,7 +99,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         .map(Cow::Owned)
         .unwrap_or_else(|| Cow::Borrowed(&*CWD));
 
-    // Validate that the project directory exists if explicitly provided via --project.
+    // Validate that the project directory exists if explicitly provided via --project, except for
+    // `uv init`, which creates the project directory (separate deprecation).
     let skip_project_validation = matches!(
         &*cli.command,
         Commands::Project(command) if matches!(**command, ProjectCommand::Init(_))
@@ -121,7 +122,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     );
                 }
                 warn_user_once!(
-                    "Project directory `{}` does not exist. Use `--preview-features project-directory-must-exist` to error on this.",
+                    "Project directory `{}` does not exist. \
+                    This will become an error in a future release. \
+                    Use `--preview-features project-directory-must-exist` to error on this now.",
                     project_path.user_display()
                 );
             } else if !project_dir.is_dir() {
