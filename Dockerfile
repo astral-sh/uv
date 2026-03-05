@@ -6,6 +6,9 @@ ARG RUSTUP_VERSION=1.28.1
 ENV HOME="/root"
 WORKDIR $HOME
 
+# Retry apt downloads to handle transient mirror failures (e.g., 503s from snapshot.ubuntu.com).
+RUN echo 'Acquire::Retries "3";' > /etc/apt/apt.conf.d/80-retries
+
 # Install dependencies using an Ubuntu snapshot for reproducibility.
 # ca-certificates are required for using the snapshot.
 RUN --mount=type=cache,target=/var/lib/apt/lists \
