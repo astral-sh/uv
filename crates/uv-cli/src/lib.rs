@@ -3166,7 +3166,7 @@ pub struct VenvArgs {
     #[arg(long)]
     pub system_site_packages: bool,
 
-    /// Make the virtual environment relocatable.
+    /// Make the virtual environment relocatable [env: UV_VENV_RELOCATABLE=]
     ///
     /// A relocatable virtual environment can be moved around and redistributed without invalidating
     /// its associated entrypoint and activation scripts.
@@ -3179,6 +3179,7 @@ pub struct VenvArgs {
     /// absolute paths), the entrypoints and scripts themselves will _not_ be relocatable. In other
     /// words, copying those entrypoints and scripts to a location outside the environment will not
     /// work, as they reference paths relative to the environment itself.
+    #[expect(clippy::doc_markdown)]
     #[arg(long, overrides_with("no_relocatable"))]
     pub relocatable: bool,
 

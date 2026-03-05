@@ -477,6 +477,11 @@ impl EnvVars {
     #[attr_added_in("0.8.0")]
     pub const UV_VENV_CLEAR: &'static str = "UV_VENV_CLEAR";
 
+    /// Equivalent to the `--relocatable` command-line argument. If set, the virtual
+    /// environment will be relocatable.
+    #[attr_added_in("0.10.8")]
+    pub const UV_VENV_RELOCATABLE: &'static str = "UV_VENV_RELOCATABLE";
+
     /// Install seed packages (one or more of: `pip`, `setuptools`, and `wheel`) into the virtual environment
     /// created by `uv venv`.
     ///
