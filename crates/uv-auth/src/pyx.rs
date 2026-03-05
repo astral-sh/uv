@@ -813,12 +813,10 @@ fn workspace_from_cdn_url(url: &DisplaySafeUrl, cdn: &str) -> Option<String> {
 /// the URL matches the given `api` base URL.
 fn workspace_from_simple_url(url: &DisplaySafeUrl, api: &DisplaySafeUrl) -> Option<String> {
     // The URL must be on the same host/port as the API.
-    if url.scheme() != api.scheme()
-        || url.host_str() != api.host_str()
-        || url.port_or_known_default() != api.port_or_known_default()
-    {
+    if url.origin() != api.origin() {
         return None;
     }
+
     // Path must be `/simple/{workspace}/{view}[/]`.
     let mut segments = url.path_segments()?;
     if segments.next()? != "simple" {
