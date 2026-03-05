@@ -28818,6 +28818,100 @@ fn lock_script_path() -> Result<()> {
     Ok(())
 }
 
+/// Repro for: https://github.com/astral-sh/uv/issues/18312
+///
+/// `uv lock --script` should invalidate a script lockfile when a local editable dependency's
+/// `pyproject.toml` changes.
+#[test]
+fn lock_script_editable_path_dependency_change() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "child",
+        # ]
+        #
+        # [tool.uv.sources]
+        # child = { path = "child", editable = true }
+        # ///
+
+        import child
+       "#
+    })?;
+
+    let child = context.temp_dir.child("child");
+    fs_err::create_dir_all(&child)?;
+
+    let child_pyproject_toml = child.child("pyproject.toml");
+    child_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+
+    context.lock().arg("--script").arg("script.py").assert().success();
+
+    let lock = context.read("script.py.lock");
+    assert!(lock.contains(r#"name = "iniconfig""#), "{lock}");
+    assert!(!lock.contains(r#"name = "sniffio""#), "{lock}");
+
+    context
+        .lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--locked")
+        .assert()
+        .success();
+
+    // Update the editable dependency's transitive requirements.
+    child_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["sniffio"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+
+    // Expected behavior: this should fail because the script lockfile is stale.
+    let output = context
+        .lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--locked")
+        .output()?;
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !output.status.success(),
+        "expected `uv lock --script script.py --locked` to fail after editable dependency changes, but it succeeded\n{stderr}"
+    );
+    assert!(stderr.contains("needs to be updated"), "{stderr}");
+
+    // Expected behavior: re-locking should pick up the new transitive dependency.
+    context.lock().arg("--script").arg("script.py").assert().success();
+    let lock = context.read("script.py.lock");
+    assert!(lock.contains(r#"name = "sniffio""#), "{lock}");
+    assert!(!lock.contains(r#"name = "iniconfig""#), "{lock}");
+
+    Ok(())
+}
+
 /// `uv lock --script` should add a PEP 723 tag, if it doesn't exist already.
 #[test]
 fn lock_script_initialize() -> Result<()> {
