@@ -49,16 +49,16 @@ pub enum WorkspaceError {
     MissingPyprojectToml,
     #[error("Workspace member `{}` is missing a `pyproject.toml` (matches: `{}`)", _0.simplified_display(), _1)]
     MissingPyprojectTomlMember(PathBuf, String),
-    #[error("No `project` table found in: `{}`", _0.simplified_display())]
+    #[error("No `project` table found in: {}", _0.simplified_display())]
     MissingProject(PathBuf),
-    #[error("No workspace found for: `{}`", _0.simplified_display())]
+    #[error("No workspace found for: {}", _0.simplified_display())]
     MissingWorkspace(PathBuf),
-    #[error("The project is marked as unmanaged: `{}`", _0.simplified_display())]
+    #[error("The project is marked as unmanaged: {}", _0.simplified_display())]
     NonWorkspace(PathBuf),
-    #[error("Nested workspaces are not supported, but workspace member (`{}`) has a `uv.workspace` table", _0.simplified_display())]
+    #[error("Nested workspaces are not supported, but workspace member has a `tool.uv.workspace` table: {}", _0.simplified_display())]
     NestedWorkspace(PathBuf),
-    #[error("The workspace does not have a member `{0}`")]
-    NoSuchMember(PackageName),
+    #[error("The workspace does not have a member {}: {}", _0, _1.simplified_display())]
+    NoSuchMember(PackageName, PathBuf),
     #[error("Two workspace members are both named `{name}`: `{}` and `{}`", first.simplified_display(), second.simplified_display())]
     DuplicatePackage {
         name: PackageName,
@@ -2867,7 +2867,7 @@ bar = ["b"]
         insta::with_settings!({filters => filters}, {
             assert_snapshot!(
                 error,
-            @"Nested workspaces are not supported, but workspace member (`[ROOT]/packages/seeds`) has a `uv.workspace` table");
+            @"Nested workspaces are not supported, but workspace member has a `tool.uv.workspace` table: [ROOT]/packages/seeds");
         });
 
         Ok(())
