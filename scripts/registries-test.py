@@ -63,6 +63,7 @@ KNOWN_REGISTRIES = [
     "gcp",
     "gemfury",
     "gitlab",
+    "pyx",
 ]
 
 
