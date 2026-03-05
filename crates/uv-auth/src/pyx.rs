@@ -1046,170 +1046,96 @@ mod tests {
     fn test_workspace_from_cdn_url() {
         let cdn = "astralhosted.com";
 
-        // views CDN URL.
-        assert_eq!(
-            workspace_from_cdn_url(
-                &DisplaySafeUrl::parse(
-                    "https://views.astralhosted.com/v1/abc123/acme/main/sig/pkg-1.0-py3-none-any.whl"
-                )
-                .unwrap(),
-                cdn
+        let cases: &[(&str, &str, Option<&str>)] = &[
+            // views CDN URL.
+            (
+                "https://views.astralhosted.com/v1/abc123/acme/main/sig/pkg-1.0-py3-none-any.whl",
+                cdn,
+                Some("acme"),
             ),
-            Some("acme")
-        );
+            // files CDN URL.
+            (
+                "https://files.astralhosted.com/acme/pkg-1.0-py3-none-any.whl",
+                cdn,
+                Some("acme"),
+            ),
+            // views CDN URL must have enough path segments (missing view).
+            ("https://views.astralhosted.com/v1/abc123/acme", cdn, None),
+            // files CDN URL must have a path after the workspace.
+            ("https://files.astralhosted.com/acme", cdn, None),
+            // views CDN must start with /v1/.
+            (
+                "https://views.astralhosted.com/v2/abc123/acme/main/sig/file",
+                cdn,
+                None,
+            ),
+            // HTTP is rejected.
+            (
+                "http://files.astralhosted.com/acme/pkg-1.0-py3-none-any.whl",
+                cdn,
+                None,
+            ),
+            // Unknown CDN subdomain returns None.
+            (
+                "https://other.astralhosted.com/acme/pkg-1.0-py3-none-any.whl",
+                cdn,
+                None,
+            ),
+            // Wrong CDN domain entirely.
+            (
+                "https://files.other.com/acme/pkg-1.0-py3-none-any.whl",
+                cdn,
+                None,
+            ),
+            // Custom CDN domain works the same way.
+            (
+                "https://files.example-cdn.com/myorg/file.whl",
+                "example-cdn.com",
+                Some("myorg"),
+            ),
+        ];
 
-        // files CDN URL.
-        assert_eq!(
-            workspace_from_cdn_url(
-                &DisplaySafeUrl::parse(
-                    "https://files.astralhosted.com/acme/pkg-1.0-py3-none-any.whl"
-                )
-                .unwrap(),
-                cdn
-            ),
-            Some("acme")
-        );
-
-        // views CDN URL must have enough path segments.
-        assert_eq!(
-            workspace_from_cdn_url(
-                &DisplaySafeUrl::parse("https://views.astralhosted.com/v1/abc123/acme").unwrap(),
-                cdn
-            ),
-            None
-        );
-
-        // files CDN URL must have a path after workspace.
-        assert_eq!(
-            workspace_from_cdn_url(
-                &DisplaySafeUrl::parse("https://files.astralhosted.com/acme").unwrap(),
-                cdn
-            ),
-            None
-        );
-
-        // views CDN must start with /v1/.
-        assert_eq!(
-            workspace_from_cdn_url(
-                &DisplaySafeUrl::parse(
-                    "https://views.astralhosted.com/v2/abc123/acme/main/sig/file"
-                )
-                .unwrap(),
-                cdn
-            ),
-            None
-        );
-
-        // HTTP is rejected.
-        assert_eq!(
-            workspace_from_cdn_url(
-                &DisplaySafeUrl::parse(
-                    "http://files.astralhosted.com/acme/pkg-1.0-py3-none-any.whl"
-                )
-                .unwrap(),
-                cdn
-            ),
-            None
-        );
-
-        // Unknown CDN subdomain returns None.
-        assert_eq!(
-            workspace_from_cdn_url(
-                &DisplaySafeUrl::parse(
-                    "https://other.astralhosted.com/acme/pkg-1.0-py3-none-any.whl"
-                )
-                .unwrap(),
-                cdn
-            ),
-            None
-        );
-
-        // Wrong CDN domain entirely.
-        assert_eq!(
-            workspace_from_cdn_url(
-                &DisplaySafeUrl::parse("https://files.other.com/acme/pkg-1.0-py3-none-any.whl")
-                    .unwrap(),
-                cdn
-            ),
-            None
-        );
-
-        // Custom CDN domain works the same way.
-        assert_eq!(
-            workspace_from_cdn_url(
-                &DisplaySafeUrl::parse("https://files.example-cdn.com/myorg/file.whl").unwrap(),
-                "example-cdn.com"
-            ),
-            Some("myorg")
-        );
+        for (url, cdn, expected) in cases {
+            assert_eq!(
+                workspace_from_cdn_url(&DisplaySafeUrl::parse(url).unwrap(), cdn),
+                *expected,
+                "url={url}"
+            );
+        }
     }
 
     #[test]
     fn test_workspace_from_simple_url() {
         let api = DisplaySafeUrl::parse("https://api.pyx.dev").unwrap();
-
-        // Standard pyx simple index URL.
-        assert_eq!(
-            workspace_from_simple_url(
-                &DisplaySafeUrl::parse("https://api.pyx.dev/simple/acme/main").unwrap(),
-                &api
-            ),
-            Some("acme")
-        );
-
-        // Trailing slash is fine.
-        assert_eq!(
-            workspace_from_simple_url(
-                &DisplaySafeUrl::parse("https://api.pyx.dev/simple/acme/main/").unwrap(),
-                &api
-            ),
-            Some("acme")
-        );
-
-        // Must have a view segment after the workspace (bare /simple/acme is not a full index URL).
-        assert_eq!(
-            workspace_from_simple_url(
-                &DisplaySafeUrl::parse("https://api.pyx.dev/simple/acme").unwrap(),
-                &api
-            ),
-            None
-        );
-
-        // Non-simple path returns None.
-        assert_eq!(
-            workspace_from_simple_url(
-                &DisplaySafeUrl::parse("https://api.pyx.dev/v1/upload/acme/main").unwrap(),
-                &api
-            ),
-            None
-        );
-
-        // Different host returns None.
-        assert_eq!(
-            workspace_from_simple_url(
-                &DisplaySafeUrl::parse("https://other.pyx.dev/simple/acme/main").unwrap(),
-                &api
-            ),
-            None
-        );
-
-        // Different scheme returns None.
-        assert_eq!(
-            workspace_from_simple_url(
-                &DisplaySafeUrl::parse("http://api.pyx.dev/simple/acme/main").unwrap(),
-                &api
-            ),
-            None
-        );
-
-        // Custom API URL works the same way.
         let custom_api = DisplaySafeUrl::parse("https://staging.example.com").unwrap();
-        assert_eq!(
-            workspace_from_simple_url(
-                &DisplaySafeUrl::parse("https://staging.example.com/simple/myorg/prod").unwrap(),
-                &custom_api
+
+        let cases: &[(&DisplaySafeUrl, &str, Option<&str>)] = &[
+            // Standard pyx simple index URL.
+            (&api, "https://api.pyx.dev/simple/acme/main", Some("acme")),
+            // Trailing slash is fine.
+            (&api, "https://api.pyx.dev/simple/acme/main/", Some("acme")),
+            // Must have a view segment after the workspace (bare /simple/acme is not a full index URL).
+            (&api, "https://api.pyx.dev/simple/acme", None),
+            // Non-simple path returns None.
+            (&api, "https://api.pyx.dev/v1/upload/acme/main", None),
+            // Different host returns None.
+            (&api, "https://other.pyx.dev/simple/acme/main", None),
+            // Different scheme returns None.
+            (&api, "http://api.pyx.dev/simple/acme/main", None),
+            // Custom API URL works the same way.
+            (
+                &custom_api,
+                "https://staging.example.com/simple/myorg/prod",
+                Some("myorg"),
             ),
-            Some("myorg")
-        );
+        ];
+
+        for (api, url, expected) in cases {
+            assert_eq!(
+                workspace_from_simple_url(&DisplaySafeUrl::parse(url).unwrap(), api),
+                *expected,
+                "url={url}"
+            );
+        }
     }
 }
