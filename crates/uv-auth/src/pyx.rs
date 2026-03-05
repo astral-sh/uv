@@ -633,8 +633,7 @@ impl PyxTokenStore {
                         // This can only happen if we're in an environment that previously
                         // offered us an OIDC token, but is no longer detected.
                         // This strongly suggests some kind of runtime meddling by the user.
-                        // TODO: Custom error type here?
-                        TokenStoreError::Io(io::Error::other("could not refresh Trusted Access token: no ambient OIDC credentials detected"))
+                        TokenStoreError::TrustedAccessRefresh
                     })?
             }
         };
@@ -680,6 +679,10 @@ pub enum TokenStoreError {
     Jwt(#[from] JwtError),
     #[error(transparent)]
     TrustedAccess(#[from] ambient_id::Error),
+    #[error(
+        "Failed to refresh Trusted Access token due to unexpected runtime change (e.g., process environment changed)"
+    )]
+    TrustedAccessRefresh,
 }
 
 impl TokenStoreError {
