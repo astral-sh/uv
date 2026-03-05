@@ -10603,11 +10603,11 @@ fn sync_build_tag() -> Result<()> {
         [[package]]
         name = "build-tag"
         version = "1.0.0"
-        source = { registry = "links" }
+        source = { registry = "[TEMP_DIR]/links" }
         wheels = [
-            { path = "build_tag-1.0.0-1-py2.py3-none-any.whl" },
-            { path = "build_tag-1.0.0-3-py2.py3-none-any.whl" },
-            { path = "build_tag-1.0.0-5-py2.py3-none-any.whl" },
+            { path = "[TEMP_DIR]/links/build_tag-1.0.0-1-py2.py3-none-any.whl" },
+            { path = "[TEMP_DIR]/links/build_tag-1.0.0-3-py2.py3-none-any.whl" },
+            { path = "[TEMP_DIR]/links/build_tag-1.0.0-5-py2.py3-none-any.whl" },
         ]
 
         [[package]]
