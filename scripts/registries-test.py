@@ -193,8 +193,12 @@ def run_test(
     print(f"\nAttempting to install {package}")
 
     if auth_method == "env":
-        env[f"UV_INDEX_{registry_name.upper()}_USERNAME"] = username
-        env[f"UV_INDEX_{registry_name.upper()}_PASSWORD"] = token
+        if registry_name == "pyx":
+            # Special case: uv takes PYX_API_KEY for pyx.
+            env["PYX_API_KEY"] = token
+        else:
+            env[f"UV_INDEX_{registry_name.upper()}_USERNAME"] = username
+            env[f"UV_INDEX_{registry_name.upper()}_PASSWORD"] = token
     elif auth_method == "text-store":
         # Use uv's text store for authentication
         subprocess.check_call(
