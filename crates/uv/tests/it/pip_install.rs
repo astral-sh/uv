@@ -179,7 +179,8 @@ fn invalid_pyproject_toml_option_schema() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.pip_install()
-        .arg("iniconfig"), @"
+        .arg("iniconfig")
+        .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -193,8 +194,8 @@ fn invalid_pyproject_toml_option_schema() -> Result<()> {
       invalid type: boolean `true`, expected a string
 
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Would download 1 package
+    Would install 1 package
      + iniconfig==2.0.0
     "
     );
@@ -328,15 +329,16 @@ async fn cache_uv_toml_credentials() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("iniconfig")
         .arg("--extra-index-url")
-        .arg(proxy.username_url("public", "/basic-auth/simple/")), @"
+        .arg(proxy.username_url("public", "/basic-auth/simple/"))
+        .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Would download 1 package
+    Would install 1 package
      + iniconfig==2.0.0
     "
     );
@@ -777,7 +779,8 @@ fn install_unsupported_flag() -> Result<()> {
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
-        .arg("--strict"), @"
+        .arg("--strict")
+        .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -786,8 +789,8 @@ fn install_unsupported_flag() -> Result<()> {
     warning: Ignoring unsupported option in `requirements.txt`: `--pre` (hint: pass `--pre` on the command line instead)
     warning: Ignoring unsupported option in `requirements.txt`: `--prefer-binary`
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Would download 1 package
+    Would install 1 package
      + iniconfig==2.0.0
     "
     );
@@ -930,15 +933,16 @@ build-backend = "poetry.core.masonry.api"
             .arg("-r")
             .arg("pyproject.toml")
             .arg("--extra")
-            .arg("test"), @"
+            .arg("test")
+            .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Prepared 4 packages in [TIME]
-    Installed 4 packages in [TIME]
+    Would download 4 packages
+    Would install 4 packages
      + anyio==3.7.1
      + idna==3.6
      + iniconfig==2.0.0
@@ -2089,7 +2093,8 @@ async fn install_deduplicated_indices() {
         .arg("--default-index")
         .arg(redirect_server.uri())
         .arg("--index-strategy")
-        .arg("unsafe-first-match"),  // Anything but "first-index"
+        .arg("unsafe-first-match")  // Anything but "first-index"
+        .arg("--dry-run"),
         @"
     success: true
     exit_code: 0
@@ -2097,8 +2102,8 @@ async fn install_deduplicated_indices() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Would download 1 package
+    Would install 1 package
      + sniffio==1.3.1
     ");
 }
@@ -2242,6 +2247,7 @@ async fn install_git_public_rate_limited_by_github_rest_api_403_response() {
     uv_snapshot!(context.filters(), context
         .pip_install()
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage")
+        .arg("--dry-run")
         .env(EnvVars::UV_GITHUB_FAST_PATH_URL, server.uri()), @"
     success: true
     exit_code: 0
@@ -2249,9 +2255,9 @@ async fn install_git_public_rate_limited_by_github_rest_api_403_response() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+    Would download 1 package
+    Would install 1 package
+     + uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389
     ");
 }
 
@@ -2272,6 +2278,7 @@ async fn install_git_public_rate_limited_by_github_rest_api_429_response() {
     uv_snapshot!(context.filters(), context
         .pip_install()
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage")
+        .arg("--dry-run")
         .env(EnvVars::UV_GITHUB_FAST_PATH_URL, server.uri())
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     success: true
@@ -2280,9 +2287,9 @@ async fn install_git_public_rate_limited_by_github_rest_api_429_response() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+    Would download 1 package
+    Would install 1 package
+     + uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389
     ");
 }
 
@@ -2741,7 +2748,8 @@ fn install_no_binary_overrides_only_binary_all() {
         .arg(":all:")
         .arg("--no-binary")
         .arg("idna")
-        .arg("--strict");
+        .arg("--strict")
+        .arg("--dry-run");
     uv_snapshot!(
         command,
         @"
@@ -2751,15 +2759,13 @@ fn install_no_binary_overrides_only_binary_all() {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Would download 3 packages
+    Would install 3 packages
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
     "
     );
-
-    context.assert_command("import anyio").success();
 }
 
 /// Accept comma-separated values for `--no-binary` (pip compatibility)
@@ -2772,7 +2778,8 @@ fn install_no_binary_comma_separated() {
     command
         .arg("anyio")
         .arg("--no-binary=idna,sniffio")
-        .arg("--strict");
+        .arg("--strict")
+        .arg("--dry-run");
     uv_snapshot!(
         command,
         @"
@@ -2782,15 +2789,13 @@ fn install_no_binary_comma_separated() {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Would download 3 packages
+    Would install 3 packages
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
     "
     );
-
-    context.assert_command("import anyio").success();
 }
 
 /// Disable binaries with an environment variable
@@ -2914,7 +2919,8 @@ fn install_only_binary_comma_separated() {
     command
         .arg("anyio")
         .arg("--only-binary=idna,sniffio")
-        .arg("--strict");
+        .arg("--strict")
+        .arg("--dry-run");
     uv_snapshot!(
         command,
         @"
@@ -2924,15 +2930,13 @@ fn install_only_binary_comma_separated() {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Would download 3 packages
+    Would install 3 packages
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
     "
     );
-
-    context.assert_command("import anyio").success();
 }
 
 /// Overlapping usage of `--no-binary` and `--only-binary`
@@ -3662,15 +3666,16 @@ fn install_constraints_txt() -> Result<()> {
             .arg("-r")
             .arg("requirements.txt")
             .arg("--constraint")
-            .arg("constraints.txt"), @"
+            .arg("constraints.txt")
+            .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Would download 3 packages
+    Would install 3 packages
      + anyio==3.7.0
      + idna==3.3
      + sniffio==1.3.1
@@ -3696,6 +3701,7 @@ fn install_constraints_txt_from_stdin() -> Result<()> {
             .arg("requirements.txt")
             .arg("--constraint")
             .arg("-")
+            .arg("--dry-run")
             .stdin(std::fs::File::open(constraints_txt)?), @"
     success: true
     exit_code: 0
@@ -3703,8 +3709,8 @@ fn install_constraints_txt_from_stdin() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Would download 3 packages
+    Would install 3 packages
      + anyio==3.7.0
      + idna==3.3
      + sniffio==1.3.1
@@ -3736,15 +3742,16 @@ fn install_constraints_from_pyproject() -> Result<()> {
 
     uv_snapshot!(context.pip_install()
             .arg("-r")
-            .arg("pyproject.toml"), @"
+            .arg("pyproject.toml")
+            .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Would download 3 packages
+    Would install 3 packages
      + anyio==3.7.0
      + idna==3.3
      + sniffio==1.3.1
@@ -3766,15 +3773,16 @@ fn install_constraints_inline() -> Result<()> {
 
     uv_snapshot!(context.pip_install()
             .arg("-r")
-            .arg("requirements.txt"), @"
+            .arg("requirements.txt")
+            .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Would download 3 packages
+    Would install 3 packages
      + anyio==3.7.0
      + idna==3.3
      + sniffio==1.3.1
@@ -3792,15 +3800,16 @@ fn install_constraints_remote() {
     uv_snapshot!(context.pip_install()
             .arg("-c")
             .arg("https://raw.githubusercontent.com/apache/airflow/constraints-2-6/constraints-3.11.txt")
-            .arg("typing_extensions>=4.0"), @"
+            .arg("typing_extensions>=4.0")
+            .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Would download 1 package
+    Would install 1 package
      + typing-extensions==4.7.1
     "
     ); // would yield typing-extensions==4.8.2 without constraint file
@@ -3816,15 +3825,16 @@ fn install_constraints_inline_remote() -> Result<()> {
 
     uv_snapshot!(context.pip_install()
             .arg("-r")
-            .arg("requirements.txt"), @"
+            .arg("requirements.txt")
+            .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Would download 1 package
+    Would install 1 package
      + typing-extensions==4.7.1
     " // would yield typing-extensions==4.8.2 without constraint file
     );
@@ -3847,15 +3857,16 @@ fn install_constraints_extra() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("-c")
-        .arg("constraints.txt"), @"
+        .arg("constraints.txt")
+        .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    Prepared 8 packages in [TIME]
-    Installed 8 packages in [TIME]
+    Would download 8 packages
+    Would install 8 packages
      + blinker==1.7.0
      + click==8.1.7
      + flask==3.0.2
@@ -4016,9 +4027,10 @@ fn install_constraints_with_markers() -> Result<()> {
 fn install_pinned_polars_invalid_metadata() {
     let context = uv_test::test_context!("3.12");
 
-    // Install Flask.
+    // Install polars.
     uv_snapshot!(context.pip_install()
-        .arg("polars==0.14.0"),
+        .arg("polars==0.14.0")
+        .arg("--dry-run"),
         @"
     success: true
     exit_code: 0
@@ -4026,13 +4038,11 @@ fn install_pinned_polars_invalid_metadata() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Would download 1 package
+    Would install 1 package
      + polars==0.14.0
     "
     );
-
-    context.assert_command("import polars").success();
 }
 
 /// Install a source distribution with `--resolution=lowest-direct`, to ensure that the build
@@ -4046,16 +4056,17 @@ fn install_sdist_resolution_lowest() -> Result<()> {
     uv_snapshot!(context.pip_install()
             .arg("-r")
             .arg("requirements.in")
-            .arg("--resolution=lowest-direct"), @"
+            .arg("--resolution=lowest-direct")
+            .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     + anyio==4.2.0 (from https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz)
+    Would download 3 packages
+    Would install 3 packages
+     + anyio @ https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz
      + idna==3.6
      + sniffio==1.3.1
     "
@@ -5309,15 +5320,16 @@ fn requires_python_source_dist_installed_incompatible_registry() {
         .arg("--python-version=3.10")
         .arg("--no-binary")
         .arg("iniconfig")
-        .arg("iniconfig==2.3.0"), @"
+        .arg("iniconfig==2.3.0")
+        .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Would download 1 package
+    Would install 1 package
      + iniconfig==2.3.0
     "
     );
@@ -5480,15 +5492,16 @@ fn install_utf16le_requirements() -> Result<()> {
 
     uv_snapshot!(context.pip_install()
         .arg("-r")
-        .arg("requirements.txt"), @"
+        .arg("requirements.txt")
+        .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Would download 1 package
+    Would install 1 package
      + tomli==2.0.1
     "
     );
@@ -5506,15 +5519,16 @@ fn install_utf16be_requirements() -> Result<()> {
 
     uv_snapshot!(context.pip_install()
         .arg("-r")
-        .arg("requirements.txt"), @"
+        .arg("requirements.txt")
+        .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Would download 1 package
+    Would install 1 package
      + tomli==2.0.1
     "
     );
@@ -5851,22 +5865,21 @@ async fn install_package_basic_auth_from_url() {
         .arg("anyio")
         .arg("--index-url")
         .arg(index_url)
-        .arg("--strict"), @"
+        .arg("--strict")
+        .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Would download 3 packages
+    Would install 3 packages
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
     "
     );
-
-    context.assert_command("import anyio").success();
 }
 
 /// Install a package from an index that requires authentication
@@ -5882,22 +5895,21 @@ async fn install_package_basic_auth_from_netrc_default() -> Result<()> {
         .arg("--index-url")
         .arg(proxy.url("/basic-auth/simple"))
         .env(EnvVars::NETRC, netrc.to_str().unwrap())
-        .arg("--strict"), @"
+        .arg("--strict")
+        .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Would download 3 packages
+    Would install 3 packages
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
     "
     );
-
-    context.assert_command("import anyio").success();
 
     Ok(())
 }
@@ -5918,22 +5930,21 @@ async fn install_package_basic_auth_from_netrc() -> Result<()> {
         .arg("--index-url")
         .arg(proxy.url("/basic-auth/simple"))
         .env(EnvVars::NETRC, netrc.to_str().unwrap())
-        .arg("--strict"), @"
+        .arg("--strict")
+        .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Would download 3 packages
+    Would install 3 packages
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
     "
     );
-
-    context.assert_command("import anyio").success();
 
     Ok(())
 }
@@ -5960,22 +5971,21 @@ async fn install_package_basic_auth_from_netrc_index_in_requirements() -> Result
         .arg("-r")
         .arg("requirements.txt")
         .env(EnvVars::NETRC, netrc.to_str().unwrap())
-        .arg("--strict"), @"
+        .arg("--strict")
+        .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Would download 3 packages
+    Would install 3 packages
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
     "
     );
-
-    context.assert_command("import anyio").success();
 
     Ok(())
 }
@@ -5990,22 +6000,21 @@ async fn install_index_with_relative_links() {
         .arg("anyio")
         .arg("--index-url")
         .arg(proxy.url("/relative/simple"))
-        .arg("--strict"), @"
+        .arg("--strict")
+        .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Would download 3 packages
+    Would install 3 packages
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
     "
     );
-
-    context.assert_command("import anyio").success();
 }
 
 /// Install a package from an index that requires authentication from the keyring.
@@ -6035,7 +6044,8 @@ async fn install_package_basic_auth_from_keyring() {
         .arg("subprocess")
         .arg("--strict")
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, format!(r#"{{"{host}": {{"public": "heron"}}}}"#, host = proxy.host_port()))
-        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @"
+        .env(EnvVars::PATH, venv_bin_path(&context.venv))
+        .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6044,15 +6054,13 @@ async fn install_package_basic_auth_from_keyring() {
     Keyring request for public@http://[LOCALHOST]/basic-auth/simple
     Keyring request for public@[LOCALHOST]
     Resolved 3 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Would download 3 packages
+    Would install 3 packages
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
     "
     );
-
-    context.assert_command("import anyio").success();
 }
 
 /// Install a package from an index that requires authentication
@@ -6991,15 +6999,16 @@ fn find_links() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("tqdm")
         .arg("--find-links")
-        .arg(context.workspace_root.join("test/links/")), @"
+        .arg(context.workspace_root.join("test/links/"))
+        .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Would download 1 package
+    Would install 1 package
      + tqdm==1000.0.0
     "
     );
@@ -7015,15 +7024,16 @@ fn find_links_no_binary() {
         .arg("--no-binary")
         .arg(":all:")
         .arg("--find-links")
-        .arg(context.workspace_root.join("test/links/")), @"
+        .arg(context.workspace_root.join("test/links/"))
+        .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Would download 1 package
+    Would install 1 package
      + tqdm==999.0.0
     "
     );
@@ -7560,6 +7570,7 @@ fn install_with_overrides_from_stdin() -> Result<()> {
         .arg("anyio==4.0.1")
         .arg("--override")
         .arg("-")
+        .arg("--dry-run")
         .stdin(std::fs::File::open(overrides_txt)?), @"
     success: true
     exit_code: 0
@@ -7567,8 +7578,8 @@ fn install_with_overrides_from_stdin() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Would download 3 packages
+    Would install 3 packages
      + anyio==4.0.0
      + idna==3.6
      + sniffio==1.3.1
@@ -8005,15 +8016,16 @@ fn double_quoted_arguments() -> Result<()> {
 
     uv_snapshot!(context.pip_install()
         .arg("-r")
-        .arg("requirements.in"), @"
+        .arg("requirements.in")
+        .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Would download 1 package
+    Would install 1 package
      + iniconfig==1.0.0
     "
     );
@@ -8040,15 +8052,16 @@ fn single_quoted_arguments() -> Result<()> {
 
     uv_snapshot!(context.pip_install()
         .arg("-r")
-        .arg("requirements.in"), @"
+        .arg("requirements.in")
+        .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Would download 1 package
+    Would install 1 package
      + iniconfig==1.0.0
     "
     );
@@ -8075,15 +8088,16 @@ fn unquoted_arguments() -> Result<()> {
 
     uv_snapshot!(context.pip_install()
         .arg("-r")
-        .arg("requirements.in"), @"
+        .arg("requirements.in")
+        .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Would download 1 package
+    Would install 1 package
      + iniconfig==1.0.0
     "
     );
@@ -8110,15 +8124,16 @@ fn concatenated_quoted_arguments() -> Result<()> {
 
     uv_snapshot!(context.pip_install()
         .arg("-r")
-        .arg("requirements.in"), @"
+        .arg("requirements.in")
+        .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Would download 1 package
+    Would install 1 package
      + iniconfig==1.0.0
     "
     );
@@ -8236,16 +8251,17 @@ fn tool_uv_sources_is_in_preview() -> Result<()> {
     // Install the editable packages.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
-        .arg("pyproject.toml"), @"
+        .arg("pyproject.toml")
+        .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+    Would download 1 package
+    Would install 1 package
+     + iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl
     "
     );
 
@@ -8274,17 +8290,18 @@ fn recursive_extra_transitive_url() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(".[all]"), @"
+        .arg(".[all]")
+        .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
-     + project==0.0.0 (from file://[TEMP_DIR]/)
+    Would download 2 packages
+    Would install 2 packages
+     + iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl
+     + project @ file://[TEMP_DIR]/
     ");
 
     Ok(())
@@ -8381,15 +8398,16 @@ fn local_index_absolute() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("tqdm")
         .arg("--index-url")
-        .arg(Url::from_directory_path(root).unwrap().as_str()), @"
+        .arg(Url::from_directory_path(root).unwrap().as_str())
+        .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Would download 1 package
+    Would install 1 package
      + tqdm==1000.0.0
     "
     );
@@ -8432,15 +8450,16 @@ fn local_index_relative() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("tqdm")
         .arg("--index-url")
-        .arg("./simple-html"), @"
+        .arg("./simple-html")
+        .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Would download 1 package
+    Would install 1 package
      + tqdm==1000.0.0
     "
     );
@@ -8488,15 +8507,16 @@ fn local_index_requirements_txt_absolute() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("-r")
-        .arg("requirements.txt"), @"
+        .arg("requirements.txt")
+        .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Would download 1 package
+    Would install 1 package
      + tqdm==1000.0.0
     "
     );
@@ -8546,15 +8566,16 @@ fn local_index_requirements_txt_relative() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("-r")
-        .arg("requirements.txt"), @"
+        .arg("requirements.txt")
+        .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Would download 1 package
+    Would install 1 package
      + tqdm==1000.0.0
     "
     );
@@ -8592,15 +8613,16 @@ fn local_index_fallback() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("iniconfig")
         .arg("--extra-index-url")
-        .arg(Url::from_directory_path(root).unwrap().as_str()), @"
+        .arg(Url::from_directory_path(root).unwrap().as_str())
+        .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Would download 1 package
+    Would install 1 package
      + iniconfig==2.0.0
     "
     );
@@ -9805,15 +9827,16 @@ fn static_metadata_pyproject_toml() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
-        .arg("pyproject.toml"), @"
+        .arg("pyproject.toml")
+        .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Would download 2 packages
+    Would install 2 packages
      + anyio==3.7.0
      + typing-extensions==4.10.0
     "
@@ -10316,15 +10339,16 @@ fn virtual_dependency_group() -> Result<()> {
     // 'bar' using path sugar
     let context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("--group").arg("bar"), @"
+        .arg("--group").arg("bar")
+        .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Would download 1 package
+    Would install 1 package
      + iniconfig==2.0.0
     ");
 
