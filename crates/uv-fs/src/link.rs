@@ -767,15 +767,6 @@ where
 
 /// Try to create a hard link, handling `TooManyLinks` (EMLINK/`ERROR_TOO_MANY_LINKS`)
 /// by copying the source to a fresh inode and retrying.
-///
-/// When a file has too many hardlinks (e.g., 65000 on ext4, ~177 on AWS EFS),
-/// this copies the source to a temp file (fresh inode), links the temp to the
-/// destination, then renames the temp over the source. Linking before renaming
-/// avoids a race where another process could exhaust the fresh inode's links
-/// between the rename and our link.
-///
-/// If two processes hit this simultaneously, both may copy the source file;
-/// this is benign — the rename is atomic, so the source simply gets reset twice.
 fn try_hardlink_file(src: &Path, dst: &Path) -> io::Result<()> {
     match fs_err::hard_link(src, dst) {
         Ok(()) => Ok(()),
@@ -789,8 +780,11 @@ fn try_hardlink_file(src: &Path, dst: &Path) -> io::Result<()> {
                 parent = Path::new(".");
             }
             let temp = tempfile::NamedTempFile::new_in(parent)?;
+            // This is a benign race. It can effectively lead to the destination being an
+            // independent copy.
             fs_err::copy(src, temp.path())?;
-            fs_err::set_permissions(temp.path(), fs_err::metadata(src)?.permissions())?;
+            // Linking a copy before renaming avoids the unlikely race where another process could
+            // exhaust the fresh inode's links between the rename and our link.
             fs_err::hard_link(temp.path(), dst)?;
             fs_err::rename(temp.path(), src)?;
             Ok(())
