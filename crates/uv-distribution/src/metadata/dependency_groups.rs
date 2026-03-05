@@ -80,7 +80,6 @@ impl SourcedDependencyGroups {
             } else {
                 MemberDiscovery::None
             },
-            ..DiscoveryOptions::default()
         };
 
         // The subsequent API takes an absolute path to the dir the pyproject is in
