@@ -46,6 +46,7 @@ jobs:
       push-version: ${{ steps.plan.outputs.push-version }}
       tag: ${{ steps.plan.outputs.tag }}
       action: ${{ steps.plan.outputs.action }}
+      extra-images: ${{ steps.extra-images.outputs.matrix }}
     steps:
       - name: Set push variable
         env:
@@ -74,6 +75,54 @@ jobs:
             echo "tag=dry-run" >> "$GITHUB_OUTPUT"
             echo "action=build" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Generate extra image matrix
+        id: extra-images
+        env:
+          LOGIN: ${{ steps.plan.outputs.login }}
+        run: |
+          # Each entry is: base-image,tag1,tag2,...
+          # DHI (Docker Hardened Images) require authentication to pull, so they
+          # are excluded when login is unavailable (e.g., PRs from forks).
+          images=(
+            "alpine:3.23,alpine3.23,alpine"
+            "alpine:3.22,alpine3.22"
+            "debian:trixie-slim,trixie-slim,debian-slim"
+            "buildpack-deps:trixie,trixie,debian"
+            "python:3.14-alpine3.23,python3.14-alpine3.23,python3.14-alpine"
+            "python:3.13-alpine3.23,python3.13-alpine3.23,python3.13-alpine"
+            "python:3.12-alpine3.23,python3.12-alpine3.23,python3.12-alpine"
+            "python:3.11-alpine3.23,python3.11-alpine3.23,python3.11-alpine"
+            "python:3.10-alpine3.23,python3.10-alpine3.23,python3.10-alpine"
+            "python:3.9-alpine3.22,python3.9-alpine3.22,python3.9-alpine"
+            "python:3.14-trixie,python3.14-trixie"
+            "python:3.13-trixie,python3.13-trixie"
+            "python:3.12-trixie,python3.12-trixie"
+            "python:3.11-trixie,python3.11-trixie"
+            "python:3.10-trixie,python3.10-trixie"
+            "python:3.9-trixie,python3.9-trixie"
+            "python:3.14-slim-trixie,python3.14-trixie-slim"
+            "python:3.13-slim-trixie,python3.13-trixie-slim"
+            "python:3.12-slim-trixie,python3.12-trixie-slim"
+            "python:3.11-slim-trixie,python3.11-trixie-slim"
+            "python:3.10-slim-trixie,python3.10-trixie-slim"
+            "python:3.9-slim-trixie,python3.9-trixie-slim"
+          )
+
+          if [ "${LOGIN}" == "true" ]; then
+            images+=(
+              "dhi.io/alpine-base:3.23,alpine3.23-dhi,alpine-dhi"
+              "dhi.io/debian-base:trixie-debian13,trixie-dhi,debian-dhi"
+              "dhi.io/python:3.14,python3.14-dhi"
+              "dhi.io/python:3.13,python3.13-dhi"
+              "dhi.io/python:3.12,python3.12-dhi"
+              "dhi.io/python:3.11,python3.11-dhi"
+              "dhi.io/python:3.10,python3.10-dhi"
+            )
+          fi
+
+          json=$(printf '%s\n' "${images[@]}" | jq -R . | jq -sc '{"image-mapping": .}')
+          echo "matrix=${json}" >> "$GITHUB_OUTPUT"
 
   docker-publish-base:
     name: ${{ needs.docker-plan.outputs.action }} uv
@@ -188,39 +237,7 @@ jobs:
       attestations: write # for GHCR attestations
     strategy:
       fail-fast: false
-      matrix:
-        # Mapping of base image followed by a comma followed by one or more base tags (comma separated)
-        # Note, org.opencontainers.image.version label will use the first base tag (use the most specific tag first)
-        image-mapping:
-          - alpine:3.23,alpine3.23,alpine
-          - alpine:3.22,alpine3.22
-          - debian:trixie-slim,trixie-slim,debian-slim
-          - buildpack-deps:trixie,trixie,debian
-          - python:3.14-alpine3.23,python3.14-alpine3.23,python3.14-alpine
-          - python:3.13-alpine3.23,python3.13-alpine3.23,python3.13-alpine
-          - python:3.12-alpine3.23,python3.12-alpine3.23,python3.12-alpine
-          - python:3.11-alpine3.23,python3.11-alpine3.23,python3.11-alpine
-          - python:3.10-alpine3.23,python3.10-alpine3.23,python3.10-alpine
-          - python:3.9-alpine3.22,python3.9-alpine3.22,python3.9-alpine
-          - python:3.14-trixie,python3.14-trixie
-          - python:3.13-trixie,python3.13-trixie
-          - python:3.12-trixie,python3.12-trixie
-          - python:3.11-trixie,python3.11-trixie
-          - python:3.10-trixie,python3.10-trixie
-          - dhi.io/alpine-base:3.23,alpine3.23-dhi,alpine-dhi
-          - dhi.io/debian-base:trixie-debian13,trixie-dhi,debian-dhi
-          - dhi.io/python:3.14,python3.14-dhi
-          - dhi.io/python:3.13,python3.13-dhi
-          - dhi.io/python:3.12,python3.12-dhi
-          - dhi.io/python:3.11,python3.11-dhi
-          - dhi.io/python:3.10,python3.10-dhi
-          - python:3.9-trixie,python3.9-trixie
-          - python:3.14-slim-trixie,python3.14-trixie-slim
-          - python:3.13-slim-trixie,python3.13-trixie-slim
-          - python:3.12-slim-trixie,python3.12-trixie-slim
-          - python:3.11-slim-trixie,python3.11-trixie-slim
-          - python:3.10-slim-trixie,python3.10-trixie-slim
-          - python:3.9-slim-trixie,python3.9-trixie-slim
+      matrix: ${{ fromJson(needs.docker-plan.outputs.extra-images) }}
     steps:
       # Login to DockerHub (when not pushing, it's to avoid rate-limiting)
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
