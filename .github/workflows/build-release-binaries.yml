@@ -115,10 +115,10 @@ jobs:
           args: --release --locked --out dist --features self-update --compatibility pypi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-          CODESIGN_IDENTITY_MACOS: ${{ secrets.CODESIGN_IDENTITY_MACOS }}
-          CODESIGN_CERTIFICATE_MACOS: ${{ secrets.CODESIGN_CERTIFICATE_MACOS }}
-          CODESIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODESIGN_CERTIFICATE_PASSWORD }}
-          CODESIGN_ALLOW_UNTRUSTED_MACOS: ${{ vars.CODESIGN_ALLOW_UNTRUSTED_MACOS }}
+          CODE_SIGN_IDENTITY: ${{ secrets.CODE_SIGN_IDENTITY }}
+          CODE_SIGN_CERTIFICATE: ${{ secrets.CODE_SIGN_CERTIFICATE }}
+          CODE_SIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODE_SIGN_CERTIFICATE_PASSWORD }}
+          CODE_SIGN_ALLOW_UNTRUSTED: ${{ vars.CODE_SIGN_ALLOW_UNTRUSTED }}
       - name: "Upload wheels"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -152,10 +152,10 @@ jobs:
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-          CODESIGN_IDENTITY_MACOS: ${{ secrets.CODESIGN_IDENTITY_MACOS }}
-          CODESIGN_CERTIFICATE_MACOS: ${{ secrets.CODESIGN_CERTIFICATE_MACOS }}
-          CODESIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODESIGN_CERTIFICATE_PASSWORD }}
-          CODESIGN_ALLOW_UNTRUSTED_MACOS: ${{ vars.CODESIGN_ALLOW_UNTRUSTED_MACOS }}
+          CODE_SIGN_IDENTITY: ${{ secrets.CODE_SIGN_IDENTITY }}
+          CODE_SIGN_CERTIFICATE: ${{ secrets.CODE_SIGN_CERTIFICATE }}
+          CODE_SIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODE_SIGN_CERTIFICATE_PASSWORD }}
+          CODE_SIGN_ALLOW_UNTRUSTED: ${{ vars.CODE_SIGN_ALLOW_UNTRUSTED }}
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -191,10 +191,10 @@ jobs:
           args: --release --locked --out dist --features self-update --compatibility pypi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-          CODESIGN_IDENTITY_MACOS: ${{ secrets.CODESIGN_IDENTITY_MACOS }}
-          CODESIGN_CERTIFICATE_MACOS: ${{ secrets.CODESIGN_CERTIFICATE_MACOS }}
-          CODESIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODESIGN_CERTIFICATE_PASSWORD }}
-          CODESIGN_ALLOW_UNTRUSTED_MACOS: ${{ vars.CODESIGN_ALLOW_UNTRUSTED_MACOS }}
+          CODE_SIGN_IDENTITY: ${{ secrets.CODE_SIGN_IDENTITY }}
+          CODE_SIGN_CERTIFICATE: ${{ secrets.CODE_SIGN_CERTIFICATE }}
+          CODE_SIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODE_SIGN_CERTIFICATE_PASSWORD }}
+          CODE_SIGN_ALLOW_UNTRUSTED: ${{ vars.CODE_SIGN_ALLOW_UNTRUSTED }}
       - name: "Test wheel - aarch64"
         run: |
           pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
@@ -234,10 +234,10 @@ jobs:
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-          CODESIGN_IDENTITY_MACOS: ${{ secrets.CODESIGN_IDENTITY_MACOS }}
-          CODESIGN_CERTIFICATE_MACOS: ${{ secrets.CODESIGN_CERTIFICATE_MACOS }}
-          CODESIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODESIGN_CERTIFICATE_PASSWORD }}
-          CODESIGN_ALLOW_UNTRUSTED_MACOS: ${{ vars.CODESIGN_ALLOW_UNTRUSTED_MACOS }}
+          CODE_SIGN_IDENTITY: ${{ secrets.CODE_SIGN_IDENTITY }}
+          CODE_SIGN_CERTIFICATE: ${{ secrets.CODE_SIGN_CERTIFICATE }}
+          CODE_SIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODE_SIGN_CERTIFICATE_PASSWORD }}
+          CODE_SIGN_ALLOW_UNTRUSTED: ${{ vars.CODE_SIGN_ALLOW_UNTRUSTED }}
       - name: "Test wheel - aarch64"
         run: |
           pip install ${PACKAGE_NAME}_build --no-index --find-links crates/uv-build/dist --force-reinstall
@@ -282,12 +282,12 @@ jobs:
       - name: "Prepare Windows signing certificate"
         shell: pwsh
         run: |
-          if (-not $env:CODESIGN_CERTIFICATE_WINDOWS) {
+          if (-not $env:CODE_SIGN_CERTIFICATE_BASE64) {
             Write-Host "No signing certificate configured, skipping."
             return
           }
 
-          $certBytes = [Convert]::FromBase64String($env:CODESIGN_CERTIFICATE_WINDOWS)
+          $certBytes = [Convert]::FromBase64String($env:CODE_SIGN_CERTIFICATE_BASE64)
           $pfxPath = Join-Path $env:RUNNER_TEMP "codesign.pfx"
           [IO.File]::WriteAllBytes($pfxPath, $certBytes)
 
@@ -300,12 +300,12 @@ jobs:
             throw "signtool.exe not found in Windows SDK"
           }
 
-          "CODESIGN_TOOL_PATH_WINDOWS=$signtool" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "CODESIGN_CERTIFICATE_PATH_WINDOWS=$pfxPath" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "CODESIGN_CERTIFICATE_PASSWORD=$($env:CODESIGN_CERTIFICATE_PASSWORD)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "CODE_SIGN_TOOL_PATH=$signtool" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "CODE_SIGN_CERTIFICATE_PATH=$pfxPath" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "CODE_SIGN_CERTIFICATE_PASSWORD=$($env:CODE_SIGN_CERTIFICATE_PASSWORD)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
         env:
-          CODESIGN_CERTIFICATE_WINDOWS: ${{ secrets.CODESIGN_CERTIFICATE_WINDOWS }}
-          CODESIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODESIGN_CERTIFICATE_PASSWORD }}
+          CODE_SIGN_CERTIFICATE_BASE64: ${{ secrets.CODE_SIGN_CERTIFICATE_BASE64 }}
+          CODE_SIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODE_SIGN_CERTIFICATE_PASSWORD }}
 
       # uv
       - name: "Build wheels"

@@ -19,8 +19,7 @@ CARGO_AUDITABLE_INSTALL="cargo install cargo-auditable \
 
 CARGO_CODE_SIGN_INSTALL="cargo install cargo-code-sign \
     --locked \
-    --git https://github.com/zanieb/cargo-code-sign \
-    --rev 5d3dea1e1f4319a37dfa18d8018703a04050a561"
+    --version 0.2.0"
 
 # In Linux containers running on x86_64, build a static musl binary so the installed tool works in
 # musl-based environments (Alpine, etc.).

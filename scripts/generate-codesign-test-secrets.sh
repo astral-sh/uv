@@ -2,9 +2,9 @@
 ## Generate a self-signed code signing certificate and populate a GitHub
 ## environment with the resulting secrets and variables via the `gh` CLI.
 ##
-## Secrets: CODESIGN_CERTIFICATE_PASSWORD, CODESIGN_IDENTITY_MACOS,
-##   CODESIGN_CERTIFICATE_MACOS, CODESIGN_CERTIFICATE_WINDOWS
-## Variables: CODESIGN_ALLOW_UNTRUSTED_MACOS
+## Secrets: CODE_SIGN_CERTIFICATE_PASSWORD, CODE_SIGN_IDENTITY,
+##   CODE_SIGN_CERTIFICATE, CODE_SIGN_CERTIFICATE_BASE64
+## Variables: CODE_SIGN_ALLOW_UNTRUSTED
 ##
 ## Usage:
 ##
@@ -68,25 +68,33 @@ CERT_SHA1="$(openssl x509 -in "$CERT_DIR/cert.pem" -noout -fingerprint -sha1 \
 
 echo "Setting secrets and variables in '${ENV_NAME}' environment for ${REPO}..."
 
-gh secret set CODESIGN_CERTIFICATE_PASSWORD \
+# Shared password for the .p12/.pfx certificate.
+gh secret set CODE_SIGN_CERTIFICATE_PASSWORD \
   --repo "$REPO" --env "$ENV_NAME" --body "$P12_PASSWORD"
 
-gh secret set CODESIGN_IDENTITY_MACOS \
+# macOS: identity (SHA1 fingerprint) and base64-encoded .p12 certificate.
+# These are passed directly to cargo-code-sign as CODE_SIGN_IDENTITY and
+# CODE_SIGN_CERTIFICATE.
+gh secret set CODE_SIGN_IDENTITY \
   --repo "$REPO" --env "$ENV_NAME" --body "$CERT_SHA1"
 
-gh secret set CODESIGN_CERTIFICATE_MACOS \
+gh secret set CODE_SIGN_CERTIFICATE \
   --repo "$REPO" --env "$ENV_NAME" --body "$CERT_B64"
 
-gh secret set CODESIGN_CERTIFICATE_WINDOWS \
+# Windows: base64-encoded .pfx certificate. The workflow decodes this to a
+# file and sets CODE_SIGN_CERTIFICATE_PATH for cargo-code-sign.
+gh secret set CODE_SIGN_CERTIFICATE_BASE64 \
   --repo "$REPO" --env "$ENV_NAME" --body "$CERT_B64"
 
-gh variable set CODESIGN_ALLOW_UNTRUSTED_MACOS \
+# Self-signed certs aren't trusted by the macOS keychain, so cargo-code-sign
+# needs this to find the identity.
+gh variable set CODE_SIGN_ALLOW_UNTRUSTED \
   --repo "$REPO" --env "$ENV_NAME" --body "1"
 
 echo ""
 echo "Done. Set in '${ENV_NAME}' environment for ${REPO}:"
-echo "  CODESIGN_CERTIFICATE_PASSWORD"
-echo "  CODESIGN_IDENTITY_MACOS"
-echo "  CODESIGN_CERTIFICATE_MACOS"
-echo "  CODESIGN_CERTIFICATE_WINDOWS"
-echo "  CODESIGN_ALLOW_UNTRUSTED_MACOS"
+echo "  CODE_SIGN_CERTIFICATE_PASSWORD"
+echo "  CODE_SIGN_IDENTITY"
+echo "  CODE_SIGN_CERTIFICATE"
+echo "  CODE_SIGN_CERTIFICATE_BASE64"
+echo "  CODE_SIGN_ALLOW_UNTRUSTED"
