@@ -847,9 +847,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
     let workspace = context.temp_dir.child("workspace");
 
     copy_dir_ignore(
-        context
-            .workspace_root
-            .join("test/ecosystem/packse"),
+        context.workspace_root.join("test/ecosystem/packse"),
         &workspace,
     )?;
 
