@@ -32516,7 +32516,7 @@ fn lock_exclude_newer_hint() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because there are no versions of iniconfig and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2000-01-01T00:00:00Z. Consider using `exclude-newer-package` to override the cutoff for this package.
+          hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2000-01-01T00:00:00Z. The earliest available version was published on 2010-10-12T17:42:07Z. Consider using `exclude-newer-package` to override the cutoff for this package.
     ");
 
     Ok(())

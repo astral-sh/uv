@@ -30,7 +30,8 @@ use crate::resolver::{
     UnavailableVersion,
 };
 use crate::{
-    ExcludeNewerValue, Flexibility, InMemoryIndex, Options, ResolverEnvironment, VersionsResponse,
+    ExcludeNewerValue, Flexibility, InMemoryIndex, Options, ResolverEnvironment, VersionMap,
+    VersionsResponse,
 };
 
 #[derive(Debug)]
@@ -648,10 +649,16 @@ impl PubGrubReportFormatter<'_> {
                             .is_some_and(BTreeSet::is_empty)
                             && Self::has_versions_in_index(name, index, fork_indexes)
                         {
+                            let earliest_upload_time = Self::earliest_upload_time_in_index(
+                                name,
+                                index,
+                                fork_indexes,
+                            );
                             output_hints.insert(PubGrubHint::ExcludeNewer {
                                 package: name.clone(),
                                 per_package: options.exclude_newer.package.contains_key(name),
                                 exclude_newer,
+                                earliest_upload_time,
                             });
                         }
                     }
@@ -1077,6 +1084,31 @@ impl PubGrubReportFormatter<'_> {
             .iter()
             .any(|vm| vm.iter(&Ranges::full()).next().is_some())
     }
+
+    /// Return the earliest upload timestamp (in milliseconds) across all versions in the index
+    /// for a given package.
+    fn earliest_upload_time_in_index(
+        name: &PackageName,
+        index: &InMemoryIndex,
+        fork_indexes: &ForkIndexes,
+    ) -> Option<i64> {
+        let response = if let Some(url) = fork_indexes.get(name).map(IndexMetadata::url) {
+            index.explicit().get(&(name.clone(), url.clone()))
+        } else {
+            index.implicit().get(name)
+        };
+
+        let response = response?;
+
+        let VersionsResponse::Found(ref version_maps) = *response else {
+            return None;
+        };
+
+        version_maps
+            .iter()
+            .filter_map(VersionMap::earliest_upload_time)
+            .min()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1251,6 +1283,8 @@ pub(crate) enum PubGrubHint {
         per_package: bool,
         // excluded from `PartialEq` and `Hash`
         exclude_newer: ExcludeNewerValue,
+        // excluded from `PartialEq` and `Hash`
+        earliest_upload_time: Option<i64>,
     },
     /// The resolution failed for a Python version that is different from the current Python version.
     DisjointPythonVersion {
@@ -1851,12 +1885,22 @@ impl std::fmt::Display for PubGrubHint {
                 package,
                 per_package,
                 exclude_newer,
+                earliest_upload_time,
             } => {
+                let earliest_date_hint = earliest_upload_time
+                    .and_then(|ms| jiff::Timestamp::from_millisecond(ms).ok())
+                    .map(|ts| {
+                        format!(
+                            " The earliest available version was published on {}.",
+                            ts.strftime("%Y-%m-%dT%H:%M:%SZ").cyan(),
+                        )
+                    })
+                    .unwrap_or_default();
                 if *per_package {
                     write!(
                         f,
                         "{}{} `{}` was filtered by `{}` to only include packages uploaded \
-                        before {}. Consider removing the setting or updating it to a later date.",
+                        before {}.{earliest_date_hint} Consider removing the setting or updating it to a later date.",
                         "hint".bold().cyan(),
                         ":".bold(),
                         package.cyan(),
@@ -1867,7 +1911,7 @@ impl std::fmt::Display for PubGrubHint {
                     write!(
                         f,
                         "{}{} `{}` was filtered by `{}` to only include packages uploaded \
-                        before {}. Consider using `{}` to override the cutoff for this package.",
+                        before {}.{earliest_date_hint} Consider using `{}` to override the cutoff for this package.",
                         "hint".bold().cyan(),
                         ":".bold(),
                         package.cyan(),
