@@ -221,6 +221,7 @@ jobs:
       - build-dev-binaries
     if: ${{ needs.plan.outputs.test-integration == 'true' }}
     uses: ./.github/workflows/test-registries.yml
+    secrets: inherit
     permissions:
       id-token: write
     with:
