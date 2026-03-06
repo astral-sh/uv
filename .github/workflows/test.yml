@@ -9,6 +9,18 @@ on:
         required: false
         type: string
         default: "false"
+      runner-ubuntu-x86_64-16:
+        required: true
+        type: string
+      runner-macos-aarch64-8:
+        required: true
+        type: string
+      runner-windows-x86_64-16:
+        required: true
+        type: string
+      is-fork:
+        required: true
+        type: boolean
 
 permissions: {}
 
@@ -25,8 +37,8 @@ jobs:
   # See: https://docs.github.com/en/actions/using-github-hosted-runners/about-larger-runners/about-larger-runners#about-ubuntu-and-windows-larger-runners
 
   cargo-test-linux:
-    timeout-minutes: 10
-    runs-on: depot-ubuntu-24.04-16
+    timeout-minutes: ${{ inputs.is-fork && 40 || 10 }}
+    runs-on: ${{ inputs.runner-ubuntu-x86_64-16 }}
     name: "cargo test on linux"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -77,7 +89,11 @@ jobs:
           sudo chown "$(id -u):$(id -g)" /tmpfs
 
       - name: "Create minix filesystem (low hardlink limit)"
+        id: minix
+        # The minix kernel module is not available on GitHub runners
+        continue-on-error: ${{ inputs.is-fork }}
         run: |
+          sudo modprobe minix
           truncate -s 16M /tmp/minix.img
           mkfs.minix /tmp/minix.img
           sudo mkdir /minix
@@ -97,19 +113,19 @@ jobs:
           UV_INTERNAL__TEST_COW_FS: /btrfs
           UV_INTERNAL__TEST_NOCOW_FS: /tmpfs
           UV_INTERNAL__TEST_ALT_FS: /tmpfs
-          UV_INTERNAL__TEST_LOWLINKS_FS: /minix
+          UV_INTERNAL__TEST_LOWLINKS_FS: ${{ steps.minix.outcome == 'success' && '/minix' || '' }}
         run: |
           cargo nextest run \
             --cargo-profile fast-build \
             --features test-python-patch,native-auth,secret-service \
             --workspace \
-            --profile ci-linux
+            --profile ${{ inputs.is-fork && 'ci-linux-free' || 'ci-linux' }}
 
   cargo-test-macos:
-    timeout-minutes: 20
+    timeout-minutes: ${{ inputs.is-fork && 60 || 20 }}
     # Only run macOS tests on main without opt-in
     if: ${{ inputs.test-macos == 'true' }}
-    runs-on: depot-macos-14
+    runs-on: ${{ inputs.runner-macos-aarch64-8 }}
     name: "cargo test on macos"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -157,11 +173,11 @@ jobs:
             --no-default-features \
             --features test-python,test-python-managed,test-pypi,test-git,test-git-lfs,performance,test-crates-io,native-auth,apple-native \
             --workspace \
-            --profile ci-macos
+            --profile ${{ inputs.is-fork && 'ci-macos-free' || 'ci-macos' }}
 
   cargo-test-windows:
-    timeout-minutes: 15
-    runs-on: github-windows-2025-x86_64-16
+    timeout-minutes: ${{ inputs.is-fork && 60 || 15 }}
+    runs-on: ${{ inputs.runner-windows-x86_64-16 }}
     name: "cargo test on windows ${{ matrix.partition }} of 3"
     strategy:
       fail-fast: false
@@ -223,5 +239,5 @@ jobs:
             --no-default-features \
             --features test-python,test-pypi,test-python-managed,native-auth,windows-native \
             --workspace \
-            --profile ci-windows \
+            --profile ${{ inputs.is-fork && 'ci-windows-free' || 'ci-windows' }} \
             --partition hash:${{ matrix.partition }}/3

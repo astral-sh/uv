@@ -8,6 +8,12 @@ on:
         required: false
         type: string
         default: "true"
+      runner-ubuntu-x86_64-1:
+        required: true
+        type: string
+      is-fork:
+        required: true
+        type: boolean
 
 permissions: {}
 
@@ -19,8 +25,8 @@ env:
 
 jobs:
   ruff:
-    timeout-minutes: 10
-    runs-on: ubuntu-slim
+    timeout-minutes: ${{ inputs.is-fork && 20 || 10 }}
+    runs-on: ${{ inputs.runner-ubuntu-x86_64-1 }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -32,8 +38,8 @@ jobs:
       - run: uvx ruff check .
 
   ty:
-    timeout-minutes: 10
-    runs-on: ubuntu-slim
+    timeout-minutes: ${{ inputs.is-fork && 20 || 10 }}
+    runs-on: ${{ inputs.runner-ubuntu-x86_64-1 }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -50,8 +56,8 @@ jobs:
             ty check --python-version 3.13 fetch-download-metadata.py
 
   shellcheck:
-    timeout-minutes: 10
-    runs-on: ubuntu-slim
+    timeout-minutes: ${{ inputs.is-fork && 20 || 10 }}
+    runs-on: ${{ inputs.runner-ubuntu-x86_64-1 }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -66,8 +72,8 @@ jobs:
         run: find . -name '*.sh' -type f | xargs shellcheck --shell bash --severity style
 
   validate-pyproject:
-    timeout-minutes: 10
-    runs-on: ubuntu-slim
+    timeout-minutes: ${{ inputs.is-fork && 20 || 10 }}
+    runs-on: ${{ inputs.runner-ubuntu-x86_64-1 }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -79,8 +85,8 @@ jobs:
       - run: uvx --from 'validate-pyproject[all,store]' validate-pyproject pyproject.toml
 
   readme:
-    timeout-minutes: 10
-    runs-on: ubuntu-slim
+    timeout-minutes: ${{ inputs.is-fork && 20 || 10 }}
+    runs-on: ${{ inputs.runner-ubuntu-x86_64-1 }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -92,7 +98,7 @@ jobs:
 
   clippy-ubuntu:
     name: "clippy on linux"
-    timeout-minutes: 10
+    timeout-minutes: ${{ inputs.is-fork && 20 || 10 }}
     if: ${{ inputs.code-changed == 'true' || github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     steps:
@@ -114,7 +120,7 @@ jobs:
 
   clippy-windows:
     name: "clippy on windows"
-    timeout-minutes: 15
+    timeout-minutes: ${{ inputs.is-fork && 30 || 15 }}
     if: ${{ inputs.code-changed == 'true' || github.ref == 'refs/heads/main' }}
     runs-on: windows-latest
     steps:
@@ -144,7 +150,7 @@ jobs:
 
   shear:
     name: "cargo shear"
-    timeout-minutes: 10
+    timeout-minutes: ${{ inputs.is-fork && 20 || 10 }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -157,7 +163,7 @@ jobs:
       - run: cargo shear
 
   typos:
-    runs-on: ubuntu-slim
+    runs-on: ${{ inputs.runner-ubuntu-x86_64-1 }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:

@@ -5,6 +5,15 @@ on:
         description: "The commit SHA to use for artifact names"
         required: true
         type: string
+      runner-ubuntu-aarch64-2:
+        required: true
+        type: string
+      runner-windows-aarch64:
+        required: true
+        type: string
+      is-fork:
+        required: true
+        type: boolean
 
 permissions: {}
 
@@ -17,7 +26,7 @@ env:
 jobs:
   smoke-test-linux:
     name: "linux"
-    timeout-minutes: 10
+    timeout-minutes: ${{ inputs.is-fork && 20 || 10 }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -45,8 +54,8 @@ jobs:
 
   smoke-test-linux-aarch64:
     name: "linux aarch64"
-    timeout-minutes: 10
-    runs-on: github-ubuntu-24.04-aarch64-2
+    timeout-minutes: ${{ inputs.is-fork && 20 || 10 }}
+    runs-on: ${{ inputs.runner-ubuntu-aarch64-2 }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -73,7 +82,7 @@ jobs:
 
   smoke-test-linux-musl:
     name: "linux musl"
-    timeout-minutes: 10
+    timeout-minutes: ${{ inputs.is-fork && 20 || 10 }}
     runs-on: ubuntu-latest
     container: alpine:latest
     steps:
@@ -97,7 +106,7 @@ jobs:
 
   smoke-test-macos:
     name: "macos"
-    timeout-minutes: 10
+    timeout-minutes: ${{ inputs.is-fork && 20 || 10 }}
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -125,7 +134,7 @@ jobs:
 
   smoke-test-windows-x86_64:
     name: "windows x86_64"
-    timeout-minutes: 10
+    timeout-minutes: ${{ inputs.is-fork && 20 || 10 }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -154,8 +163,8 @@ jobs:
 
   smoke-test-windows-aarch64:
     name: "windows aarch64"
-    timeout-minutes: 10
-    runs-on: windows-11-arm
+    timeout-minutes: ${{ inputs.is-fork && 20 || 10 }}
+    runs-on: ${{ inputs.runner-windows-aarch64 }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
