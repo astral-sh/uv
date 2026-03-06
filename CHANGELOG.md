@@ -3,6 +3,44 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.10.9
+
+Released on 2026-03-06.
+
+### Enhancements
+
+- Add `fbgemm-gpu`, `fbgemm-gpu-genai`, `torchrec`, and `torchtune` to the PyTorch list ([#18338](https://github.com/astral-sh/uv/pull/18338))
+- Add torchcodec to PyTorch List ([#18336](https://github.com/astral-sh/uv/pull/18336))
+- Log the duration we took before erroring ([#18231](https://github.com/astral-sh/uv/pull/18231))
+- Warn when using `uv_build` settings without `uv_build` ([#15750](https://github.com/astral-sh/uv/pull/15750))
+- Add fallback to `/usr/lib/os-release` on Linux system lookup failure ([#18349](https://github.com/astral-sh/uv/pull/18349))
+- Use `cargo auditable` to include SBOM in uv builds ([#18276](https://github.com/astral-sh/uv/pull/18276))
+
+
+### Configuration
+
+- Add an environment variable for `UV_VENV_RELOCATABLE` ([#18331](https://github.com/astral-sh/uv/pull/18331))
+
+### Performance
+
+- Avoid toml `Document` overhead ([#18306](https://github.com/astral-sh/uv/pull/18306))
+- Use a single global workspace cache ([#18307](https://github.com/astral-sh/uv/pull/18307))
+
+### Bug fixes
+
+- Continue on trampoline job assignment failures ([#18291](https://github.com/astral-sh/uv/pull/18291))
+- Handle the hard link limit gracefully instead of failing ([#17699](https://github.com/astral-sh/uv/pull/17699))
+- Respect build constraints for workspace members ([#18350](https://github.com/astral-sh/uv/pull/18350))
+- Revalidate editables and other dependencies in scripts ([#18328](https://github.com/astral-sh/uv/pull/18328))
+- Support Python 3.13+ on Android ([#18301](https://github.com/astral-sh/uv/pull/18301))
+- Support `cp3-none-any` ([#17064](https://github.com/astral-sh/uv/pull/17064))
+- Skip tool environments with broken links to Python on Windows ([#17176](https://github.com/astral-sh/uv/pull/17176))
+
+### Documentation
+
+- Add documentation for common marker values ([#18327](https://github.com/astral-sh/uv/pull/18327))
+- Improve documentation on virtual dependencies ([#18346](https://github.com/astral-sh/uv/pull/18346))
+
 ## 0.10.8
 
 Released on 2026-03-03.
@@ -318,4 +356,5 @@ See [changelogs/0.2.x](./changelogs/0.2.x.md)
 See [changelogs/0.1.x](./changelogs/0.1.x.md)
 
 <!-- prettier-ignore-end -->
+
 
