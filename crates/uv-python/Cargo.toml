@@ -73,6 +73,9 @@ junction = { workspace = true }
 windows-registry = { workspace = true }
 windows = { workspace = true }
 
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true, features = ["feature"] }  # "feature" gates `nix::sys::utsname`
+
 [dev-dependencies]
 anyhow = { workspace = true }
 assert_fs = { workspace = true }
