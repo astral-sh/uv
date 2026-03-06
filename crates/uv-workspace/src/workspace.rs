@@ -49,14 +49,16 @@ pub enum WorkspaceError {
     MissingPyprojectToml,
     #[error("Workspace member `{}` is missing a `pyproject.toml` (matches: `{}`)", _0.simplified_display(), _1)]
     MissingPyprojectTomlMember(PathBuf, String),
-    #[error("No `project` table found in: `{}`", _0.simplified_display())]
+    #[error("No `project` table found in: {}", _0.simplified_display())]
     MissingProject(PathBuf),
-    #[error("No workspace found for: `{}`", _0.simplified_display())]
+    #[error("No workspace found for: {}", _0.simplified_display())]
     MissingWorkspace(PathBuf),
-    #[error("The project is marked as unmanaged: `{}`", _0.simplified_display())]
+    #[error("The project is marked as unmanaged: {}", _0.simplified_display())]
     NonWorkspace(PathBuf),
-    #[error("Nested workspaces are not supported, but workspace member (`{}`) has a `uv.workspace` table", _0.simplified_display())]
+    #[error("Nested workspaces are not supported, but workspace member has a `tool.uv.workspace` table: {}", _0.simplified_display())]
     NestedWorkspace(PathBuf),
+    #[error("The workspace does not have a member {}: {}", _0, _1.simplified_display())]
+    NoSuchMember(PackageName, PathBuf),
     #[error("Two workspace members are both named `{name}`: `{}` and `{}`", first.simplified_display(), second.simplified_display())]
     DuplicatePackage {
         name: PackageName,
@@ -295,7 +297,7 @@ impl Workspace {
     /// Set the [`ProjectWorkspace`] for a given workspace member.
     ///
     /// Assumes that the project name is unchanged in the updated [`PyProjectToml`].
-    pub fn with_pyproject_toml(
+    pub fn update_member(
         self,
         package_name: &PackageName,
         pyproject_toml: PyProjectToml,
@@ -1364,13 +1366,13 @@ impl ProjectWorkspace {
     /// Set the `pyproject.toml` for the current project.
     ///
     /// Assumes that the project name is unchanged in the updated [`PyProjectToml`].
-    pub fn with_pyproject_toml(
+    pub fn update_member(
         self,
         pyproject_toml: PyProjectToml,
     ) -> Result<Option<Self>, WorkspaceError> {
         let Some(workspace) = self
             .workspace
-            .with_pyproject_toml(&self.project_name, pyproject_toml)?
+            .update_member(&self.project_name, pyproject_toml)?
         else {
             return Ok(None);
         };
@@ -1775,16 +1777,30 @@ impl VirtualProject {
         }
     }
 
-    /// Set the `pyproject.toml` for the current project.
+    /// Discover a project workspace with the member package.
+    pub async fn discover_with_package(
+        path: &Path,
+        options: &DiscoveryOptions,
+        cache: &WorkspaceCache,
+        package: PackageName,
+    ) -> Result<Self, WorkspaceError> {
+        let workspace = Workspace::discover(path, options, cache).await?;
+        let project_workspace = Workspace::with_current_project(workspace.clone(), package.clone());
+        Ok(Self::Project(project_workspace.ok_or_else(|| {
+            WorkspaceError::NoSuchMember(package.clone(), workspace.install_path)
+        })?))
+    }
+
+    /// Update the `pyproject.toml` for the current project.
     ///
     /// Assumes that the project name is unchanged in the updated [`PyProjectToml`].
-    pub fn with_pyproject_toml(
+    pub fn update_member(
         self,
         pyproject_toml: PyProjectToml,
     ) -> Result<Option<Self>, WorkspaceError> {
         Ok(match self {
             Self::Project(project) => {
-                let Some(project) = project.with_pyproject_toml(pyproject_toml)? else {
+                let Some(project) = project.update_member(pyproject_toml)? else {
                     return Ok(None);
                 };
                 Some(Self::Project(project))
@@ -2851,7 +2867,7 @@ bar = ["b"]
         insta::with_settings!({filters => filters}, {
             assert_snapshot!(
                 error,
-            @"Nested workspaces are not supported, but workspace member (`[ROOT]/packages/seeds`) has a `uv.workspace` table");
+            @"Nested workspaces are not supported, but workspace member has a `tool.uv.workspace` table: [ROOT]/packages/seeds");
         });
 
         Ok(())
