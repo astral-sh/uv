@@ -56,6 +56,12 @@ jobs:
       tag: ${{ (inputs.tag != 'dry-run' && inputs.tag) || '' }}
       tag-flag: ${{ inputs.tag && inputs.tag != 'dry-run' && format('--tag={0}', inputs.tag) || '' }}
       publishing: ${{ inputs.tag && inputs.tag != 'dry-run' }}
+      runner-ubuntu-x86_64-1: ${{ steps.runners.outputs.runner_ubuntu_x86_64_1 }}
+      runner-ubuntu-x86_64-4: ${{ steps.runners.outputs.runner_ubuntu_x86_64_4 }}
+      runner-ubuntu-x86_64-8: ${{ steps.runners.outputs.runner_ubuntu_x86_64_8 }}
+      runner-macos-aarch64-8: ${{ steps.runners.outputs.runner_macos_aarch64_8 }}
+      runner-windows-x86_64-8: ${{ steps.runners.outputs.runner_windows_x86_64_8 }}
+      runner-windows-aarch64-8: ${{ steps.runners.outputs.runner_windows_aarch64_8 }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -63,6 +69,16 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
+      - name: "Determine runners"
+        id: runners
+        shell: bash
+        run: |
+          jq -r '
+            to_entries[] |
+            .key as $role |
+            .value[0].label as $label |
+            "runner_\($role | gsub("-";"_"))=\($label)"
+          ' .github/runners.json >> "$GITHUB_OUTPUT"
       - name: Install dist
         # we specify bash to get pipefail; it guards against the `curl` command
         # failing. otherwise `sh` won't catch that `curl` returned non-0
@@ -97,6 +113,12 @@ jobs:
     uses: ./.github/workflows/build-release-binaries.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
+      runner-ubuntu-x86_64-1: ${{ needs.plan.outputs.runner-ubuntu-x86_64-1 }}
+      runner-ubuntu-x86_64-4: ${{ needs.plan.outputs.runner-ubuntu-x86_64-4 }}
+      runner-ubuntu-x86_64-8: ${{ needs.plan.outputs.runner-ubuntu-x86_64-8 }}
+      runner-macos-aarch64-8: ${{ needs.plan.outputs.runner-macos-aarch64-8 }}
+      runner-windows-x86_64-8: ${{ needs.plan.outputs.runner-windows-x86_64-8 }}
+      runner-windows-aarch64-8: ${{ needs.plan.outputs.runner-windows-aarch64-8 }}
     secrets: inherit
 
   custom-build-docker:

@@ -8,6 +8,9 @@ on:
         required: false
         type: string
         default: "true"
+      runner-ubuntu-x86_64-1:
+        required: true
+        type: string
 
 permissions: {}
 
@@ -20,7 +23,7 @@ env:
 jobs:
   ruff:
     timeout-minutes: 10
-    runs-on: ubuntu-slim
+    runs-on: ${{ inputs.runner-ubuntu-x86_64-1 }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -33,7 +36,7 @@ jobs:
 
   ty:
     timeout-minutes: 10
-    runs-on: ubuntu-slim
+    runs-on: ${{ inputs.runner-ubuntu-x86_64-1 }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -51,7 +54,7 @@ jobs:
 
   shellcheck:
     timeout-minutes: 10
-    runs-on: ubuntu-slim
+    runs-on: ${{ inputs.runner-ubuntu-x86_64-1 }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -67,7 +70,7 @@ jobs:
 
   validate-pyproject:
     timeout-minutes: 10
-    runs-on: ubuntu-slim
+    runs-on: ${{ inputs.runner-ubuntu-x86_64-1 }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -80,7 +83,7 @@ jobs:
 
   readme:
     timeout-minutes: 10
-    runs-on: ubuntu-slim
+    runs-on: ${{ inputs.runner-ubuntu-x86_64-1 }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -157,7 +160,7 @@ jobs:
       - run: cargo shear
 
   typos:
-    runs-on: ubuntu-slim
+    runs-on: ${{ inputs.runner-ubuntu-x86_64-1 }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:

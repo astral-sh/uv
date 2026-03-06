@@ -5,6 +5,24 @@ on:
         required: false
         type: string
         default: "true"
+      runner-ubuntu-x86_64-8:
+        required: true
+        type: string
+      runner-ubuntu-aarch64-4:
+        required: true
+        type: string
+      runner-macos-aarch64:
+        required: true
+        type: string
+      runner-macos-x86_64-12:
+        required: true
+        type: string
+      runner-windows-x86_64:
+        required: true
+        type: string
+      runner-windows-aarch64:
+        required: true
+        type: string
 
 permissions: {}
 
@@ -18,7 +36,7 @@ jobs:
   build-binary-linux-libc:
     name: "linux libc"
     timeout-minutes: 10
-    runs-on: github-ubuntu-24.04-x86_64-8
+    runs-on: ${{ inputs.runner-ubuntu-x86_64-8 }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -46,7 +64,7 @@ jobs:
   build-binary-linux-aarch64:
     name: "linux aarch64"
     timeout-minutes: 10
-    runs-on: github-ubuntu-24.04-aarch64-4
+    runs-on: ${{ inputs.runner-ubuntu-aarch64-4 }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -74,7 +92,7 @@ jobs:
   build-binary-linux-musl:
     name: "linux musl"
     timeout-minutes: 10
-    runs-on: github-ubuntu-24.04-x86_64-8
+    runs-on: ${{ inputs.runner-ubuntu-x86_64-8 }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -107,7 +125,7 @@ jobs:
   build-binary-macos-aarch64:
     name: "macos aarch64"
     timeout-minutes: 10
-    runs-on: macos-14 # github-macos-14-aarch64-3
+    runs-on: ${{ inputs.runner-macos-aarch64 }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -131,7 +149,7 @@ jobs:
   build-binary-macos-x86_64:
     name: "macos x86_64"
     timeout-minutes: 10
-    runs-on: macos-latest-large # github-macos-14-x86_64-12
+    runs-on: ${{ inputs.runner-macos-x86_64-12 }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -155,7 +173,7 @@ jobs:
   build-binary-windows-x86_64:
     name: "windows x86_64"
     timeout-minutes: 10
-    runs-on: windows-latest
+    runs-on: ${{ inputs.runner-windows-x86_64 }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -190,7 +208,7 @@ jobs:
   build-binary-windows-aarch64:
     name: "windows aarch64"
     timeout-minutes: 10
-    runs-on: windows-11-arm
+    runs-on: ${{ inputs.runner-windows-aarch64 }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -224,7 +242,7 @@ jobs:
 
   build-binary-msrv:
     name: "msrv"
-    runs-on: github-ubuntu-24.04-x86_64-8
+    runs-on: ${{ inputs.runner-ubuntu-x86_64-8 }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -252,7 +270,7 @@ jobs:
   build-binary-android-aarch64:
     name: "android aarch64"
     timeout-minutes: 10
-    runs-on: github-ubuntu-24.04-x86_64-8
+    runs-on: ${{ inputs.runner-ubuntu-x86_64-8 }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
