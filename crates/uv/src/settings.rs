@@ -3364,6 +3364,7 @@ pub(crate) struct BuildSettings {
     pub(crate) force_pep517: bool,
     pub(crate) clear: bool,
     pub(crate) build_constraints: Vec<PathBuf>,
+    pub(crate) build_constraints_from_workspace: Vec<Requirement>,
     pub(crate) hash_checking: Option<HashCheckingMode>,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
@@ -3406,6 +3407,19 @@ impl BuildSettings {
             Some(fs) => fs.install_mirrors.clone(),
             None => PythonInstallMirrors::default(),
         };
+        let build_constraints_from_workspace = if let Some(configuration) = &filesystem {
+            configuration
+                .build_constraint_dependencies
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|requirement| {
+                    Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
 
         Self {
             src,
@@ -3424,6 +3438,7 @@ impl BuildSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            build_constraints_from_workspace,
             hash_checking: HashCheckingMode::from_args(
                 flag(require_hashes, no_require_hashes, "require-hashes"),
                 flag(verify_hashes, no_verify_hashes, "verify-hashes"),
