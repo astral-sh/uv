@@ -35,12 +35,12 @@ and make up smart sounding but ultimately wrong claims. Instead, phrase issue an
 comments in your own words. It's not important to sound perfect, but that we can follow what problem
 you're trying to solve and why the pull request uses a correct approach.
 
-When using LLMs, there must always be a human in the loop who fully understands the code. You need
-to be able to explain all changes and how they interact with the rest of the codebase without LLM
-assistance, as LLMs cannot (yet) correctly reason about complex codebases. Generally, this requires
-designing the change yourself and understanding all involved data structures, formats, and
-algorithms, while only using the LLM for directed coding. Autonomous contributions from AI agents
-are not allowed.
+When using LLMs, there must always be a human in the loop who fully understands the work the LLM is
+doing. Since LLMs cannot (yet) correctly reason about complex codebases, you need to be able to
+explain all changes and how they interact with the rest of the codebase in your own words, without
+relying on the LLM to do so. Generally, this requires designing the change yourself and
+understanding all involved data structures, formats, and algorithms, while only using the LLM to aid
+in rather than drive these tasks. Autonomous contributions from AI agents are not allowed.
 
 ## Setup
 
