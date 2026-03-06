@@ -212,7 +212,15 @@ jobs:
       - build-dev-binaries
     if: ${{ needs.plan.outputs.test-integration == 'true' }}
     uses: ./.github/workflows/test-integration.yml
-    secrets: inherit
+    with:
+      sha: ${{ github.sha }}
+
+  test-registries:
+    needs:
+      - plan
+      - build-dev-binaries
+    if: ${{ needs.plan.outputs.test-integration == 'true' }}
+    uses: ./.github/workflows/test-registries.yml
     permissions:
       id-token: write
     with:
