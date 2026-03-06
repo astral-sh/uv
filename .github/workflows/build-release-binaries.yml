@@ -91,20 +91,22 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098 # v7.3.1
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
+      - name: "Install cross-compilation target"
+        run: rustup target add x86_64-apple-darwin
       - name: "Prep README.md"
         run: python scripts/transform_readme.py --target pypi
 
       # uv
       - name: "Build wheels - x86_64"
-        uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
-        with:
-          maturin-version: v1.12.4
-          target: x86_64
-          args: --release --locked --out dist --features self-update --compatibility pypi
+        run: >-
+          uv build --wheel --out-dir dist
+          -C "build-args=--locked --features self-update --compatibility pypi --target x86_64-apple-darwin"
       - name: "Upload wheels"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -131,11 +133,9 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build - x86_64"
-        uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
-        with:
-          maturin-version: v1.12.4
-          target: x86_64
-          args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
+        run: >-
+          uv build --wheel --out-dir crates/uv-build/dist crates/uv-build
+          -C "build-args=--profile minimal-size --locked --compatibility pypi --target x86_64-apple-darwin"
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -150,6 +150,8 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098 # v7.3.1
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -159,12 +161,9 @@ jobs:
 
       # uv
       - name: "Build wheels - aarch64"
-        uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
-        with:
-          maturin-version: v1.12.4
-          target: aarch64
-          manylinux: 2_17
-          args: --release --locked --out dist --features self-update --compatibility pypi
+        run: >-
+          uv build --wheel --out-dir dist
+          -C "build-args=--locked --features self-update --compatibility pypi --target aarch64-apple-darwin"
       - name: "Test wheel - aarch64"
         run: |
           pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
@@ -197,11 +196,9 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build - aarch64"
-        uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
-        with:
-          maturin-version: v1.12.4
-          target: aarch64
-          args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
+        run: >-
+          uv build --wheel --out-dir crates/uv-build/dist crates/uv-build
+          -C "build-args=--profile minimal-size --locked --compatibility pypi --target aarch64-apple-darwin"
       - name: "Test wheel - aarch64"
         run: |
           pip install ${PACKAGE_NAME}_build --no-index --find-links crates/uv-build/dist --force-reinstall
