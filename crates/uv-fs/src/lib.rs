@@ -78,6 +78,63 @@ pub async fn read_to_string_transcode(path: impl AsRef<Path>) -> std::io::Result
     Ok(buf)
 }
 
+/// Create a junction at `path` pointing to `target`.
+///
+/// Junctions can be silently broken when involving network paths or non-NTFS filesystems.
+///
+/// If creation fails but leaves behind an empty directory, it is cleaned up and the original
+/// creation error is propagated.
+#[cfg(windows)]
+fn create_junction(target: &Path, path: &Path) -> std::io::Result<()> {
+    use windows::Win32::Foundation::{
+        ERROR_ALREADY_EXISTS, ERROR_INVALID_NAME, ERROR_INVALID_PARAMETER,
+        ERROR_INVALID_REPARSE_DATA, ERROR_NOT_A_REPARSE_POINT, WIN32_ERROR,
+    };
+
+    let create_result = junction::create(target, path);
+
+    match path.metadata() {
+        Ok(_) if create_result.is_ok() => Ok(()),
+        Ok(_) => {
+            // Creation failed but left behind an empty directory. Only clean
+            // it up if the directory wasn't already there before we tried.
+            if let Err(ref create_err) = create_result {
+                if !matches!(
+                    create_err
+                        .raw_os_error()
+                        .map(|err| WIN32_ERROR(err.cast_unsigned())),
+                    Some(ERROR_ALREADY_EXISTS)
+                ) {
+                    // Not a junction (metadata succeeded normally), just
+                    // an empty directory left behind by junction::create.
+                    let _ = fs_err::remove_dir(path);
+                }
+            }
+            create_result
+        }
+        Err(err)
+            if matches!(
+                err.raw_os_error()
+                    .map(|err| WIN32_ERROR(err.cast_unsigned())),
+                Some(
+                    ERROR_INVALID_PARAMETER
+                        | ERROR_INVALID_NAME
+                        | ERROR_NOT_A_REPARSE_POINT
+                        | ERROR_INVALID_REPARSE_DATA
+                )
+            ) =>
+        {
+            // Broken reparse point. Once junction::delete strips the reparse data, only an empty
+            // directory shell remains.
+            if junction::delete(path).is_ok() {
+                let _ = fs_err::remove_dir(path);
+            }
+            Err(create_result.err().unwrap_or(err))
+        }
+        Err(err) => Err(create_result.err().unwrap_or(err)),
+    }
+}
+
 /// Create a symlink at `dst` pointing to `src`, replacing any existing symlink.
 ///
 /// On Windows, this uses the `junction` crate to create a junction point. The
@@ -111,11 +168,8 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
         Err(err) => return Err(err),
     }
 
-    // Replace it with a new symlink.
-    junction::create(
-        dunce::simplified(src.as_ref()),
-        dunce::simplified(dst.as_ref()),
-    )
+    // Replace it with a new junction.
+    create_junction(src.as_ref(), dst.as_ref())
 }
 
 /// Create a symlink at `dst` pointing to `src`, replacing any existing symlink if necessary.
@@ -161,10 +215,7 @@ pub fn create_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::
         ));
     }
 
-    junction::create(
-        dunce::simplified(src.as_ref()),
-        dunce::simplified(dst.as_ref()),
-    )
+    create_junction(src.as_ref(), dst.as_ref())
 }
 
 /// Create a symlink at `dst` pointing to `src`.
