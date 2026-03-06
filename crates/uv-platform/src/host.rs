@@ -106,18 +106,18 @@ pub struct LinuxOsRelease {
 }
 
 impl LinuxOsRelease {
-    /// Reads and parses `/etc/os-release` on Linux.
+    /// Reads and parses `/etc/os-release` on Linux, falling back to `/usr/lib/os-release`.
+    ///
+    /// See <https://www.freedesktop.org/software/systemd/man/latest/os-release.html>.
     ///
     /// Returns `None` on non-Linux platforms or if the file cannot be read.
     pub fn from_env() -> Option<Self> {
         #[cfg(target_os = "linux")]
         {
-            Some(
-                fs_err::read_to_string("/etc/os-release")
-                    .ok()?
-                    .parse()
-                    .unwrap(),
-            )
+            let content = fs_err::read_to_string("/etc/os-release")
+                .or_else(|_| fs_err::read_to_string("/usr/lib/os-release"))
+                .ok()?;
+            Some(content.parse().unwrap())
         }
         #[cfg(not(target_os = "linux"))]
         {
