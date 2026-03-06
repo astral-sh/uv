@@ -859,9 +859,9 @@ uv allows dependencies to be "virtual", in which the dependency itself is not in
 By default, dependencies are never virtual.
 
 A dependency with a [`path` source](#path) can be virtual if it explicitly sets
-[`tool.uv.package = false`](../../reference/settings.md#package). 
-Without this setting, uv treats the path dependency as a normal package and will attempt to
-build it, even if the project does not declare a [build system](./config.md#build-systems).
+[`tool.uv.package = false`](../../reference/settings.md#package). Without this setting, uv treats
+the path dependency as a normal package and will attempt to build it, even if the project does not
+declare a [build system](./config.md#build-systems).
 
 To treat a dependency as virtual, set `package = false` on the source:
 
@@ -885,9 +885,9 @@ bar = { path = "../projects/bar", package = true }
 ```
 
 Similarly, a dependency with a [`workspace` source](#workspace-member) can be virtual if it
-explicitly sets [`tool.uv.package = false`](../../reference/settings.md#package). 
-Without this setting, the workspace member will be built even if
-a [build system](./config.md#build-systems) is not declared.
+explicitly sets [`tool.uv.package = false`](../../reference/settings.md#package). Without this
+setting, the workspace member will be built even if a [build system](./config.md#build-systems) is
+not declared.
 
 Workspace members that are _not_ dependencies can be virtual by default, e.g., if the parent
 `pyproject.toml` is:
