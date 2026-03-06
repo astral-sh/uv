@@ -28,6 +28,7 @@ uv-static = { workspace = true }
 
 clap = { workspace = true, features = ["derive", "env"], optional = true }
 fs-err = { workspace = true, features = ["tokio"] }
+tokio = { workspace = true }
 nanoid = { workspace = true }
 rmp-serde = { workspace = true }
 rustc-hash = { workspace = true }
@@ -37,3 +38,6 @@ tempfile = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 walkdir = { workspace = true }
+
+[dev-dependencies]
+filetime = { workspace = true }
