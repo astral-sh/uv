@@ -1173,6 +1173,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.force_pep517,
                 args.clear,
                 build_constraints,
+                args.build_constraints_from_workspace,
                 args.hash_checking,
                 args.python,
                 args.install_mirrors,

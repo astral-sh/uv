@@ -7,7 +7,7 @@ use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use std::env::current_dir;
 use uv_static::EnvVars;
-use uv_test::{DEFAULT_PYTHON_VERSION, uv_snapshot};
+use uv_test::{DEFAULT_PYTHON_VERSION, apply_filters, uv_snapshot};
 use zip::ZipArchive;
 
 #[test]
@@ -890,6 +890,190 @@ fn build_constraints() -> Result<()> {
         .child("dist")
         .child("project-0.1.0-py3-none-any.whl")
         .assert(predicate::path::missing());
+
+    Ok(())
+}
+
+/// Regression test for <https://github.com/astral-sh/uv/issues/18283>.
+///
+/// `uv build --all` should respect `tool.uv.build-constraint-dependencies` declared at the
+/// workspace root.
+#[test]
+fn build_all_respects_workspace_build_constraint_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"\\\.", ""), (r"\[member\]", "[PKG]")])
+        .collect::<Vec<_>>();
+
+    let project = context.temp_dir.child("project");
+
+    project.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        build-constraint-dependencies = ["hatchling==0.1.0"]
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+        "#,
+    )?;
+
+    project
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+    project.child("README").touch()?;
+
+    let member = project.child("packages").child("member");
+    fs_err::create_dir_all(member.path())?;
+
+    member.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling>=1.0"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    member
+        .child("src")
+        .child("member")
+        .child("__init__.py")
+        .touch()?;
+    member.child("README").touch()?;
+
+    let output = context
+        .build()
+        .arg("--all")
+        .arg("--no-build-logs")
+        .current_dir(&project)
+        .output()?;
+
+    let stderr = apply_filters(
+        String::from_utf8_lossy(&output.stderr).into_owned(),
+        &filters,
+    );
+
+    assert!(
+        !output.status.success(),
+        "expected `uv build --all` to fail when workspace build constraints make `hatchling` \
+         unsatisfiable, but it succeeded:\n{stderr}"
+    );
+    assert_eq!(output.status.code(), Some(2));
+    assert!(
+        stderr.contains("Failed to resolve requirements from `build-system.requires`"),
+        "expected build constraint failure in stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains(
+            "Because you require hatchling>=1.0 and hatchling==0.1.0, we can conclude that your requirements are unsatisfiable."
+        ),
+        "expected incompatible build constraints in stderr:\n{stderr}"
+    );
+
+    project
+        .child("dist")
+        .child("member-0.1.0.tar.gz")
+        .assert(predicate::path::missing());
+    project
+        .child("dist")
+        .child("member-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::missing());
+
+    Ok(())
+}
+
+/// Limitation: when `uv build` is invoked with an explicit source path, configuration is still
+/// loaded from the invocation directory instead of the source workspace. As a result, workspace
+/// `build-constraint-dependencies` are not applied here.
+#[test]
+fn build_source_path_ignores_workspace_build_constraint_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"\\\.", ""), (r"\[member\]", "[PKG]")])
+        .collect::<Vec<_>>();
+
+    let project = context.temp_dir.child("project");
+
+    project.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        build-constraint-dependencies = ["hatchling==0.1.0"]
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+        "#,
+    )?;
+
+    project
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+    project.child("README").touch()?;
+
+    let member = project.child("packages").child("member");
+    fs_err::create_dir_all(member.path())?;
+
+    member.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling>=1.0"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    member
+        .child("src")
+        .child("member")
+        .child("__init__.py")
+        .touch()?;
+    member.child("README").touch()?;
+
+    uv_snapshot!(&filters, context.build().arg("./project").arg("--all").arg("--no-build-logs"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    [PKG] Building source distribution...
+    [PKG] Building wheel from source distribution...
+    Successfully built project/dist/member-0.1.0.tar.gz
+    Successfully built project/dist/member-0.1.0-py3-none-any.whl
+    ");
+
+    project
+        .child("dist")
+        .child("member-0.1.0.tar.gz")
+        .assert(predicate::path::is_file());
+    project
+        .child("dist")
+        .child("member-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::is_file());
 
     Ok(())
 }

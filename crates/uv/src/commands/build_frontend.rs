@@ -24,7 +24,7 @@ use uv_distribution_filename::{
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations,
-    PackageConfigSettings, RequiresPython, SourceDist,
+    PackageConfigSettings, Requirement, RequiresPython, SourceDist,
 };
 use uv_fs::{Simplified, relative_to};
 use uv_install_wheel::LinkMode;
@@ -113,6 +113,7 @@ pub(crate) async fn build_frontend(
     force_pep517: bool,
     clear: bool,
     build_constraints: Vec<RequirementsSource>,
+    build_constraints_from_workspace: Vec<Requirement>,
     hash_checking: Option<HashCheckingMode>,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
@@ -141,6 +142,7 @@ pub(crate) async fn build_frontend(
         force_pep517,
         clear,
         &build_constraints,
+        &build_constraints_from_workspace,
         hash_checking,
         python.as_deref(),
         install_mirrors,
@@ -189,6 +191,7 @@ async fn build_impl(
     force_pep517: bool,
     clear: bool,
     build_constraints: &[RequirementsSource],
+    build_constraints_from_workspace: &[Requirement],
     hash_checking: Option<HashCheckingMode>,
     python_request: Option<&str>,
     install_mirrors: PythonInstallMirrors,
@@ -358,6 +361,7 @@ async fn build_impl(
             force_pep517,
             clear,
             build_constraints,
+            build_constraints_from_workspace,
             build_isolation,
             extra_build_dependencies,
             extra_build_variables,
@@ -468,6 +472,7 @@ async fn build_package(
     force_pep517: bool,
     clear: bool,
     build_constraints: &[RequirementsSource],
+    build_constraints_from_workspace: &[Requirement],
     build_isolation: &BuildIsolation,
     extra_build_dependencies: &ExtraBuildDependencies,
     extra_build_variables: &ExtraBuildVariables,
@@ -571,7 +576,8 @@ async fn build_package(
     let build_constraints = Constraints::from_requirements(
         build_constraints
             .into_iter()
-            .map(|constraint| constraint.requirement),
+            .map(|constraint| constraint.requirement)
+            .chain(build_constraints_from_workspace.iter().cloned()),
     );
 
     // Initialize the registry client.

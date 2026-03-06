@@ -12342,6 +12342,102 @@ fn sync_build_constraints() -> Result<()> {
     Ok(())
 }
 
+/// `uv sync --package <member>` should respect workspace build constraints for the selected
+/// member's transitive build dependencies.
+///
+/// See: <https://github.com/astral-sh/uv/issues/12434>
+#[test]
+fn sync_workspace_member_build_constraints() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_exclude_newer("2025-03-24T19:00:00Z")
+        .with_filtered_counts();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv]
+        build-constraint-dependencies = ["setuptools<78"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["child"]
+        "#,
+    )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("root")
+        .child("__init__.py")
+        .touch()?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["json-merge-patch"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+    child
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child").arg("--no-binary-package").arg("json-merge-patch"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + json-merge-patch==0.2
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(
+        lock.contains(r#"build-constraints = [{ name = "setuptools", specifier = "<78" }]"#),
+        "expected workspace build constraints to be recorded in the lockfile:\n{lock}"
+    );
+
+    fs_err::remove_dir_all(&context.cache_dir)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child").arg("--locked").arg("--no-binary-package").arg("json-merge-patch"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + json-merge-patch==0.2
+    ");
+
+    Ok(())
+}
+
 // Test that we recreate a virtual environment when `pyvenv.cfg` version
 // is incompatible with the interpreter version.
 #[test]
