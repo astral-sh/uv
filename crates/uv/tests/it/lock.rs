@@ -18944,6 +18944,7 @@ fn lock_explicit_default_index() -> Result<()> {
     DEBUG Searching for a compatible version of project @ file://[TEMP_DIR]/ (*)
     DEBUG Adding direct dependency: anyio*
     DEBUG Searching for a compatible version of anyio (*)
+    DEBUG Excluding candidates for anyio published after 2024-03-25T00:00:00Z
     DEBUG No compatible version found for: anyio
     DEBUG Recording unit propagation conflict of anyio from incompatibility of (project)
     DEBUG Searching for a compatible version of project @ file://[TEMP_DIR]/ (<0.1.0 | >0.1.0)
