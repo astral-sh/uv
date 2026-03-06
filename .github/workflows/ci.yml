@@ -240,6 +240,8 @@ jobs:
     needs: plan
     if: ${{ needs.plan.outputs.build-release-binaries == 'true' }}
     uses: ./.github/workflows/build-release-binaries.yml
+    with:
+      environment: release-test
     secrets: inherit
 
   build-docker:
