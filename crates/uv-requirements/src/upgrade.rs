@@ -104,10 +104,9 @@ pub fn read_lock_requirements(
 /// Resolve the `--upgrade-group` group names to a set of package names by looking at the
 /// dependency groups defined on packages in the lockfile.
 fn resolve_group_packages(lock: &Lock, upgrade: &Upgrade) -> FxHashSet<PackageName> {
-    let groups = upgrade.groups();
-    if groups.is_empty() {
+    let Some(groups) = upgrade.groups() else {
         return FxHashSet::default();
-    }
+    };
 
     let mut packages = FxHashSet::default();
 
