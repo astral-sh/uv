@@ -100,7 +100,7 @@ pub(crate) async fn metadata(
             Box::new(DefaultResolveLogger),
             &concurrency,
             cache,
-            &workspace_cache,
+            workspace_cache,
             printer,
             preview,
         )
