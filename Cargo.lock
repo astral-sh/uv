@@ -4830,16 +4830,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sys-info"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b3a0d0aba8bf96a0e1ddfdc352fc53b3df7f39318c71854910c3c4b024ae52c"
-dependencies = [
- "cc",
- "libc",
-]
-
-[[package]]
 name = "system-configuration"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6141,7 +6131,6 @@ dependencies = [
  "rustls",
  "serde",
  "serde_json",
- "sys-info",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -6160,6 +6149,7 @@ dependencies = [
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
+ "uv-platform",
  "uv-platform-tags",
  "uv-preview",
  "uv-pypi-types",
@@ -6751,14 +6741,17 @@ dependencies = [
  "fs-err",
  "goblin",
  "indoc",
+ "insta",
  "procfs",
  "regex",
+ "rustix",
  "target-lexicon",
  "thiserror 2.0.18",
  "tracing",
  "uv-fs",
  "uv-platform-tags",
  "uv-static",
+ "windows-registry",
 ]
 
 [[package]]
@@ -6888,7 +6881,6 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
- "sys-info",
  "target-lexicon",
  "temp-env",
  "tempfile",

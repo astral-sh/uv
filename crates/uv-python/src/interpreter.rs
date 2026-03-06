@@ -1137,8 +1137,12 @@ impl InterpreterInfo {
             // invalidate the cache (e.g.) on OS upgrades.
             cache_digest(&(
                 ARCH,
-                sys_info::os_type().unwrap_or_default(),
-                sys_info::os_release().unwrap_or_default(),
+                uv_platform::host::OsType::from_env()
+                    .map(|os_type| os_type.to_string())
+                    .unwrap_or_default(),
+                uv_platform::host::OsRelease::from_env()
+                    .map(|os_release| os_release.to_string())
+                    .unwrap_or_default(),
             )),
             // We use the absolute path for the cache entry to avoid cache collisions for relative
             // paths. But we don't want to query the executable with symbolic links resolved because
