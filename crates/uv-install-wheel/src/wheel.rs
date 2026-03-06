@@ -855,7 +855,7 @@ pub fn validate_and_heal_record<'a>(
             return true;
         }
         // Allow non-canonical spellings such as `./foo`.
-        if files.remove(dunce::simplified(path)).is_some() {
+        if files.remove(uv_fs::normalize_path(path).as_ref()).is_some() {
             return true;
         }
         extra_record_entries.push(path.to_path_buf());
