@@ -50,11 +50,10 @@ COPY crates crates
 COPY ./Cargo.toml Cargo.toml
 COPY ./Cargo.lock Cargo.lock
 
-# Install patched cargo-auditable with Zig linker support
+# Install cargo-auditable
 RUN cargo install \
-  --git https://github.com/rust-secure-code/cargo-auditable.git \
-  --rev caa964b714d8da6b1139b8e7a0a2ba5979235f22 \
   --locked \
+  --version 0.7.4 \
   cargo-auditable
 
 RUN case "${TARGETPLATFORM}" in \
