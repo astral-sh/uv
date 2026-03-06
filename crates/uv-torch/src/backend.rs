@@ -320,7 +320,9 @@ impl TorchStrategy {
             TorchSource::PyTorch => {
                 matches!(
                     package_name.as_str(),
-                    "pytorch-triton"
+                    "fbgemm-gpu"
+                        | "fbgemm-gpu-genai"
+                        | "pytorch-triton"
                         | "pytorch-triton-rocm"
                         | "pytorch-triton-xpu"
                         | "torch"
@@ -332,16 +334,21 @@ impl TorchStrategy {
                         | "torchcsprng"
                         | "torchdata"
                         | "torchdistx"
+                        | "torchrec"
                         | "torchserve"
                         | "torchtext"
+                        | "torchtune"
                         | "torchvision"
                         | "triton"
+                        | "xformers"
                 )
             }
             TorchSource::Pyx => {
                 matches!(
                     package_name.as_str(),
                     "deepspeed"
+                        | "fbgemm-gpu"
+                        | "fbgemm-gpu-genai"
                         | "flash-attn"
                         | "flash-attn-3"
                         | "megablocks"
@@ -363,11 +370,14 @@ impl TorchStrategy {
                         | "torchcsprng"
                         | "torchdata"
                         | "torchdistx"
+                        | "torchrec"
                         | "torchserve"
                         | "torchtext"
+                        | "torchtune"
                         | "torchvision"
                         | "triton"
                         | "vllm"
+                        | "xformers"
                 )
             }
         }
@@ -382,6 +392,8 @@ impl TorchStrategy {
         matches!(
             package_name.as_str(),
             "deepspeed"
+                | "fbgemm-gpu"
+                | "fbgemm-gpu-genai"
                 | "flash-attn"
                 | "flash-attn-3"
                 | "megablocks"
@@ -395,7 +407,9 @@ impl TorchStrategy {
                 | "torchcsprng"
                 | "torchdata"
                 | "torchdistx"
+                | "torchrec"
                 | "torchtext"
+                | "torchtune"
                 | "torchvision"
                 | "vllm"
         )
