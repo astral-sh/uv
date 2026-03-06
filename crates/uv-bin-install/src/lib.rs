@@ -20,7 +20,7 @@ use url::Url;
 use uv_distribution_filename::SourceDistExtension;
 
 use uv_cache::{Cache, CacheBucket, CacheEntry, Error as CacheError};
-use uv_client::{BaseClient, RetriableError, RetryState, fetch_with_url_fallback};
+use uv_client::{BaseClient, RetriableError, fetch_with_url_fallback};
 use uv_extract::{Error as ExtractError, stream};
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_platform::Platform;
@@ -85,6 +85,17 @@ impl Binary {
                 ])
             }
         }
+    }
+
+    /// Return the ordered list of manifest URLs to try: the default Astral mirror first, then the
+    /// canonical URL as a fallback.
+    fn manifest_urls(self) -> Vec<DisplaySafeUrl> {
+        let name = self.name();
+        // These are static strings so parsing cannot fail.
+        vec![
+            DisplaySafeUrl::parse(&format!("{VERSIONS_MANIFEST_MIRROR}/{name}.ndjson")).unwrap(),
+            DisplaySafeUrl::parse(&format!("{VERSIONS_MANIFEST_URL}/{name}.ndjson")).unwrap(),
+        ]
     }
 
     /// Given a canonical artifact URL (e.g., from the versions manifest), return an ordered list
@@ -191,8 +202,11 @@ const RUFF_GITHUB_URL_PREFIX: &str = "https://github.com/astral-sh/ruff/releases
 /// GitHub URL.
 const RUFF_DEFAULT_MIRROR: &str = "https://releases.astral.sh/github/ruff/releases/download/";
 
-/// Base URL for the versions manifest.
+/// The canonical base URL for the versions manifest.
 const VERSIONS_MANIFEST_URL: &str = "https://raw.githubusercontent.com/astral-sh/versions/main/v1";
+
+/// The default Astral mirror for the versions manifest.
+const VERSIONS_MANIFEST_MIRROR: &str = "https://releases.astral.sh/github/versions/main/v1";
 
 /// Binary version information from the versions manifest.
 #[derive(Debug, Deserialize)]
@@ -350,7 +364,7 @@ impl RetriableError for Error {
     /// found) return `false` because switching to a different host would not fix them.
     fn should_try_next_url(&self) -> bool {
         match self {
-            Self::Download { .. } => true,
+            Self::Download { .. } | Self::ManifestFetch { .. } => true,
             Self::RetriedError { err, .. } => err.should_try_next_url(),
             _ => false,
         }
@@ -384,61 +398,38 @@ pub async fn find_matching_version(
     let platform = Platform::from_env()?;
     let platform_name = platform.as_cargo_dist_triple();
 
-    let manifest_url = format!("{}/{}.ndjson", VERSIONS_MANIFEST_URL, binary.name());
-    let manifest_url_parsed =
-        DisplaySafeUrl::parse(&manifest_url).map_err(|source| Error::UrlParse {
-            url: manifest_url.clone(),
-            source,
-        })?;
-
-    let mut retry_state = RetryState::start(*retry_policy, manifest_url_parsed.clone());
-
-    loop {
-        let result = fetch_and_find_matching_version(
-            binary,
-            constraints,
-            exclude_newer,
-            &platform_name,
-            &manifest_url_parsed,
-            client,
-        )
-        .await;
-
-        match result {
-            Ok(resolved) => return Ok(resolved),
-            Err(err) => {
-                if let Some(backoff) = retry_state.should_retry(&err, err.retries()) {
-                    retry_state.sleep_backoff(backoff).await;
-                    continue;
-                }
-                return if retry_state.total_retries() > 0 {
-                    Err(Error::RetriedError {
-                        err: Box::new(err),
-                        retries: retry_state.total_retries(),
-                        duration: retry_state.duration()?,
-                    })
-                } else {
-                    Err(err)
-                };
-            }
-        }
-    }
+    fetch_with_url_fallback(
+        &binary.manifest_urls(),
+        *retry_policy,
+        &format!("manifest for `{binary}`"),
+        |url| {
+            fetch_and_find_matching_version(
+                binary,
+                constraints,
+                exclude_newer,
+                &platform_name,
+                url,
+                client,
+            )
+        },
+    )
+    .await
 }
 
-/// Inner function that fetches the manifest and finds a matching version.
+/// Fetch the manifest from a single URL and find a matching version.
 ///
-/// This is separated from [`find_matching_version`] to allow retry logic to wrap
-/// the entire streaming operation.
+/// Separated from [`find_matching_version`] so that [`fetch_with_url_fallback`] can call it
+/// independently for each URL in the fallback list.
 async fn fetch_and_find_matching_version(
     binary: Binary,
     constraints: Option<&uv_pep440::VersionSpecifiers>,
     exclude_newer: Option<jiff::Timestamp>,
     platform_name: &str,
-    manifest_url: &DisplaySafeUrl,
+    manifest_url: DisplaySafeUrl,
     client: &BaseClient,
 ) -> Result<ResolvedVersion, Error> {
     let response = client
-        .for_host(manifest_url)
+        .for_host(&manifest_url)
         .get(Url::from(manifest_url.clone()))
         .send()
         .await
