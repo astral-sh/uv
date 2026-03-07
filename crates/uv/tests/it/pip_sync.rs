@@ -5871,10 +5871,11 @@ fn pep_751() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
     "
     );
@@ -5887,7 +5888,7 @@ fn pep_751() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 3 packages in [TIME]
+    Audited 4 packages in [TIME]
     "
     );
 
@@ -5917,12 +5918,13 @@ fn pep_751() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 1 package in [TIME]
-    Uninstalled 3 packages in [TIME]
-    Installed 1 package in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 4 packages in [TIME]
+    Installed 2 packages in [TIME]
      - anyio==4.3.0
      - idna==3.6
      + iniconfig==2.0.0
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
      - sniffio==1.3.1
     "
     );
@@ -5969,14 +5971,15 @@ fn pep_751_wheel_only() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Would download 9 packages
-    Would install 9 packages
+    Would download 10 packages
+    Would install 10 packages
      + filelock==3.13.1
      + fsspec==2024.3.1
      + jinja2==3.1.3
      + markupsafe==2.1.5
      + mpmath==1.3.0
      + networkx==3.2.1
+     + project @ file://[TEMP_DIR]/
      + sympy==1.12
      + torch==2.2.1
      + typing-extensions==4.10.0
@@ -6040,10 +6043,11 @@ fn pep_751_build_options() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 4 packages in [TIME]
-    Installed 4 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
      + anyio==4.8.0
      + idna==3.10
+     + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
      + typing-extensions==4.12.2
     "
@@ -6123,11 +6127,12 @@ fn pep_751_build_options() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 1 package in [TIME]
-    Uninstalled 4 packages in [TIME]
-    Installed 1 package in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 5 packages in [TIME]
+    Installed 2 packages in [TIME]
      - anyio==4.8.0
      - idna==3.10
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
      - sniffio==1.3.1
      + source-distribution==0.0.3
      - typing-extensions==4.12.2
@@ -6186,8 +6191,10 @@ fn pep_751_direct_url_tags() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Installed 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 2 packages in [TIME]
      + markupsafe==3.0.2 (from https://files.pythonhosted.org/packages/6b/b0/18f76bba336fa5aecf79d45dcd6c806c280ec44538b3c13671d49099fdd0/MarkupSafe-3.0.2-cp312-cp312-macosx_11_0_arm64.whl)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
     "
     );
 
