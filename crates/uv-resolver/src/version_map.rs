@@ -188,6 +188,30 @@ impl VersionMap {
         }
     }
 
+    /// Return the earliest upload timestamp (in milliseconds) across all files in this map.
+    pub(crate) fn earliest_upload_time(&self) -> Option<i64> {
+        match &self.inner {
+            VersionMapInner::Eager(_) => None,
+            VersionMapInner::Lazy(lazy) => {
+                let mut earliest: Option<i64> = None;
+                for datum in lazy.simple_metadata.iter() {
+                    let files =
+                        rkyv::deserialize::<VersionFiles, rkyv::rancor::Error>(&datum.files)
+                            .expect("archived version files always deserializes");
+                    for (_filename, file) in files.all() {
+                        if let Some(upload_time) = file.upload_time_utc_ms {
+                            earliest = Some(match earliest {
+                                Some(current) => current.min(upload_time),
+                                None => upload_time,
+                            });
+                        }
+                    }
+                }
+                earliest
+            }
+        }
+    }
+
     /// Return an iterator over the versions and distributions.
     ///
     /// Note that the value returned in this iterator is a [`VersionMapDist`],
