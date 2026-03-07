@@ -1917,6 +1917,22 @@ impl PythonRequest {
         if let Ok(request) = PythonDownloadRequest::from_str(value) {
             return Self::Key(request);
         }
+        // Check if the value is current active pyenv virtualenv
+        // It mean that name is end of path provided by PYENV_VIRTUAL_ENV variable
+        if let Some(pyenv_virtual_env) = std::env::var_os("PYENV_VIRTUAL_ENV") {
+            if let Some(pyenv_virtual_env) = pyenv_virtual_env.to_str() {
+                if value
+                    == Path::new(pyenv_virtual_env)
+                        .file_name()
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                {
+                    return Self::Directory(PathBuf::from(pyenv_virtual_env));
+                }
+            }
+        }
+
         // Finally, we'll treat it as the name of an executable (i.e. in the search PATH)
         // e.g. foo.exe
         Self::ExecutableName(value.to_string())
