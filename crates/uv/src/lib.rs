@@ -362,6 +362,12 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     )?;
 
     debug!("uv {}", uv_cli::version::uv_self_version());
+    if let Some(config_file) = cli.top_level.config_file.as_ref() {
+        debug!(
+            "Using explicit configuration file at `{}`",
+            config_file.display()
+        );
+    }
     if globals.preview.all_enabled() {
         debug!("All preview features are enabled");
     } else if globals.preview.any_enabled() {
