@@ -147,8 +147,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     //    If found, this file is combined with the user configuration file.
     // 3. The nearest configuration file (`uv.toml` or `pyproject.toml`) in the directory tree,
     //    starting from the current directory.
+    let config_file = cli.top_level.config_file.clone();
+
     let workspace_cache = WorkspaceCache::default();
-    let filesystem = if let Some(config_file) = cli.top_level.config_file.as_ref() {
+    let filesystem = if let Some(config_file) = config_file.as_ref() {
         if config_file
             .file_name()
             .is_some_and(|file_name| file_name == "pyproject.toml")
@@ -362,6 +364,12 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     )?;
 
     debug!("uv {}", uv_cli::version::uv_self_version());
+    if let Some(config_file) = config_file.as_ref() {
+        debug!(
+            "Using `--config-file` / `UV_CONFIG_FILE` at `{}`, ignoring discovered project, user, and system configuration files",
+            config_file.user_display()
+        );
+    }
     if globals.preview.all_enabled() {
         debug!("All preview features are enabled");
     } else if globals.preview.any_enabled() {

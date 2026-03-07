@@ -36,6 +36,31 @@ fn clean_all() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn clean_all_with_config_file_logs_override() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
+
+    let config = context.temp_dir.child("uv.toml");
+    config.write_str("")?;
+
+    uv_snapshot!(context.filters(), context.clean()
+        .arg("--verbose")
+        .arg("--config-file")
+        .arg(config.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    DEBUG uv [VERSION] ([COMMIT] DATE)
+    DEBUG Using `--config-file` / `UV_CONFIG_FILE` at `uv.toml`, ignoring discovered project, user, and system configuration files
+    Clearing cache at: [CACHE_DIR]/
+    Removed [N] files ([SIZE])
+    ");
+
+    Ok(())
+}
+
 #[tokio::test]
 async fn clean_force() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_counts();
