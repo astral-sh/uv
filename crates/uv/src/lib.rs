@@ -157,6 +157,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 "The `--config-file` argument expects to receive a `uv.toml` file, not a `pyproject.toml`. If you're trying to run a command from another project, use the `--project` argument instead."
             );
         }
+        tracing::info!("Using configuration file at: `{}`", config_file.display());
         Some(FilesystemOptions::from_file(config_file)?)
     } else if deprecated_isolated || cli.top_level.no_config {
         None
