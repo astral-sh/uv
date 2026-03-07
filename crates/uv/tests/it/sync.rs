@@ -258,16 +258,18 @@ fn package() -> Result<()> {
         .child("__init__.py")
         .touch()?;
 
-    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child").arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    Would use project environment at: .venv
     Resolved 6 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+    Would create lockfile at: uv.lock
+    Would download 2 packages
+    Would install 2 packages
+     + child @ file://[TEMP_DIR]/child
      + iniconfig==2.0.0
     ");
 
@@ -3639,16 +3641,18 @@ fn sync_dev_group() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.sync(), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
+    Would use project environment at: .venv
     Resolved 6 packages in [TIME]
-    Prepared 5 packages in [TIME]
-    Installed 5 packages in [TIME]
+    Found up-to-date lockfile at: uv.lock
+    Would download 5 packages
+    Would install 5 packages
      + anyio==4.3.0
      + idna==3.6
      + iniconfig==2.0.0
@@ -4663,16 +4667,18 @@ fn sync_group_member() -> Result<()> {
     // Generate a lockfile.
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.sync().arg("--only-group").arg("foo"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--only-group").arg("foo").arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    Would use project environment at: .venv
     Resolved 4 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+    Found up-to-date lockfile at: uv.lock
+    Would download 3 packages
+    Would install 3 packages
+     + child @ file://[TEMP_DIR]/child
      + iniconfig==2.0.0
      + typing-extensions==4.10.0
     ");
@@ -5683,15 +5689,17 @@ fn no_install_local() -> Result<()> {
     )?;
 
     context.lock().assert().success();
-    uv_snapshot!(context.filters(), context.sync().arg("--no-install-local"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-install-local").arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    Would use project environment at: .venv
     Resolved 7 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Found up-to-date lockfile at: uv.lock
+    Would download 3 packages
+    Would install 3 packages
      + anyio==3.7.0
      + idna==3.6
      + sniffio==1.3.1
@@ -8165,18 +8173,20 @@ fn transitive_dev() -> Result<()> {
         .child("__init__.py")
         .touch()?;
 
-    uv_snapshot!(context.filters(), context.sync().arg("--dev"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--dev").arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     warning: The `tool.uv.dev-dependencies` field (used in `child/pyproject.toml`, `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
+    Would use project environment at: .venv
     Resolved 6 packages in [TIME]
-    Prepared 4 packages in [TIME]
-    Installed 4 packages in [TIME]
+    Would create lockfile at: uv.lock
+    Would download 4 packages
+    Would install 4 packages
      + anyio==4.3.0
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child @ file://[TEMP_DIR]/child
      + idna==3.6
      + sniffio==1.3.1
     ");
@@ -9256,20 +9266,22 @@ fn sync_all() -> Result<()> {
     context.lock().assert().success();
 
     // Sync all workspace members.
-    uv_snapshot!(context.filters(), context.sync().arg("--all-packages"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    Would use project environment at: .venv
     Resolved 6 packages in [TIME]
-    Prepared 6 packages in [TIME]
-    Installed 6 packages in [TIME]
+    Found up-to-date lockfile at: uv.lock
+    Would download 6 packages
+    Would install 6 packages
      + anyio==4.3.0
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child @ file://[TEMP_DIR]/child
      + idna==3.6
      + iniconfig==2.0.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + project @ file://[TEMP_DIR]/
      + sniffio==1.3.1
     ");
 
@@ -9442,15 +9454,17 @@ fn sync_extra_comma_separated() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("types,async"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("types,async").arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    Would use project environment at: .venv
     Resolved 5 packages in [TIME]
-    Prepared 4 packages in [TIME]
-    Installed 4 packages in [TIME]
+    Found up-to-date lockfile at: uv.lock
+    Would download 4 packages
+    Would install 4 packages
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
@@ -9740,15 +9754,17 @@ fn sync_multiple_sources_index_disjoint_extras() -> Result<()> {
     // Generate a lockfile.
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("cu124"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("cu124").arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    Would use project environment at: .venv
     Resolved 4 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Found up-to-date lockfile at: uv.lock
+    Would download 2 packages
+    Would install 2 packages
      + jinja2==3.1.3
      + markupsafe==2.1.5
     ");
@@ -12762,14 +12778,16 @@ fn direct_url_dependency_metadata() -> Result<()> {
         "#
     )?;
 
-    uv_snapshot!(context.sync(), @"
+    uv_snapshot!(context.sync().arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    Would use project environment at: .venv
     Resolved 2 packages in [TIME]
-    Installed 1 package in [TIME]
+    Would create lockfile at: uv.lock
+    Would install 1 package
      + tqdm==4.67.1 (from https://files.pythonhosted.org/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
     ");
 
@@ -12844,16 +12862,18 @@ fn sync_url_with_query_parameters() -> Result<()> {
         "#
     )?;
 
-    uv_snapshot!(context.filters(), context.sync(), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    Would use project environment at: .venv
     Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + source-distribution==0.0.3 (from https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz?foo=bar)
+    Would create lockfile at: uv.lock
+    Would download 1 package
+    Would install 1 package
+     + source-distribution @ https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz?foo=bar
     ");
 
     Ok(())
@@ -13082,15 +13102,17 @@ fn sync_python_platform() -> Result<()> {
     context.lock().assert().success();
 
     // Sync with a specific platform should filter packages
-    uv_snapshot!(context.filters(), context.sync().arg("--python-platform").arg("linux"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--python-platform").arg("linux").arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    Would use project environment at: .venv
     Resolved 8 packages in [TIME]
-    Prepared 6 packages in [TIME]
-    Installed 6 packages in [TIME]
+    Found up-to-date lockfile at: uv.lock
+    Would download 6 packages
+    Would install 6 packages
      + black==24.3.0
      + click==8.1.7
      + mypy-extensions==1.0.0
