@@ -12501,6 +12501,404 @@ fn multiple_index_cli() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn remove_preserves_comment_on_first_dep() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            # top comment
+            "anyio==3.7.0", # this is anyio
+            "sniffio==1.3.1", # this is sniffio
+            "urllib3==2.2.1", # this is urllib3
+            # bottom comment
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--no-sync"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            # top comment
+            "sniffio==1.3.1", # this is sniffio
+            "urllib3==2.2.1", # this is urllib3
+            # bottom comment
+        ]
+        "###
+        );
+    });
+    Ok(())
+}
+
+#[test]
+fn remove_preserves_comment_on_middle_deps() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            # top comment
+            "anyio==3.7.0", # this is anyio
+            "sniffio==1.3.1", # this is sniffio
+            "urllib3==2.2.1", # this is urllib3
+            # bottom comment
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.remove().arg("sniffio").arg("--no-sync"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            # top comment
+            "anyio==3.7.0", # this is anyio
+            "urllib3==2.2.1", # this is urllib3
+            # bottom comment
+        ]
+        "###
+        );
+    });
+    Ok(())
+}
+
+#[test]
+fn remove_preserves_comment_on_final_dep() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            # top comment
+            "anyio==3.7.0", # this is anyio
+            "sniffio==1.3.1", # this is sniffio
+            "urllib3==2.2.1", # this is urllib3
+            # bottom comment
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.remove().arg("urllib3").arg("--no-sync"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            # top comment
+            "anyio==3.7.0", # this is anyio
+            "sniffio==1.3.1", # this is sniffio
+            # bottom comment
+        ]
+        "###
+        );
+    });
+    Ok(())
+}
+
+/// `toml_edit` treats the trailing comments differently
+#[test]
+fn remove_preserves_comment_on_final_dep_without_trailing_comma() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            # top comment
+            "anyio==3.7.0", # this is anyio
+            "sniffio==1.3.1", # this is sniffio
+            "urllib3==2.2.1" # this is urllib3
+            # bottom comment
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.remove().arg("urllib3").arg("--no-sync"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            # top comment
+            "anyio==3.7.0", # this is anyio
+            "sniffio==1.3.1", # this is sniffio
+            # bottom comment
+        ]
+        "###
+        );
+    });
+    Ok(())
+}
+
+#[test]
+fn remove_handle_oddly_placed_trailing_comma() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            # top comment
+            "anyio==3.7.0", # this is anyio
+            "sniffio==1.3.1"  # this is inside sniffio (end of line)
+            # this is inside sniffio (own line)
+            , # this is outside sniffio (end of line)
+            # this is outside sniffio (own line)
+            "urllib3==2.2.1" # this is urllib3
+            # bottom comment
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.remove().arg("sniffio").arg("--no-sync"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            # top comment
+            "anyio==3.7.0", # this is anyio
+            # this is outside sniffio (own line) # this is urllib3
+            # bottom comment
+            "urllib3==2.2.1",
+        ]
+        "#
+        );
+    });
+    Ok(())
+}
+
+#[test]
+fn remove_preserves_comments_around_single_dep() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            # top comment
+            "sniffio==1.3.1", # this is sniffio
+            # bottom comment
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.remove().arg("sniffio").arg("--no-sync"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            # top comment
+            # bottom comment
+        ]
+        "#
+        );
+    });
+    Ok(())
+}
+
+#[test]
+fn remove_preserves_sole_top_comment() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            # top comment
+            "urllib3==2.2.1" # this is urllib3
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.remove().arg("urllib3").arg("--no-sync"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            # top comment
+        ]
+        "#
+        );
+    });
+    Ok(())
+}
+
+#[test]
+fn remove_preserves_sole_bottom_comment() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "urllib3==2.2.1" # this is urllib3
+            ,
+            # bottom comment
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.remove().arg("urllib3").arg("--no-sync"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            # bottom comment
+        ]
+        "#
+        );
+    });
+    Ok(())
+}
+
 /// If an index is repeated by the CLI and an environment variable, the CLI value should take
 /// precedence.
 ///
