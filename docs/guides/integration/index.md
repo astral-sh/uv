@@ -10,6 +10,7 @@ Learn how to integrate uv with other software:
 - [Using in GitLab CI/CD](./gitlab.md)
 - [Using with alternative package indexes](./alternative-indexes.md)
 - [Installing PyTorch](./pytorch.md)
+- [Using with MLflow](./mlflow.md)
 - [Building a FastAPI application](./fastapi.md)
 - [Using with AWS Lambda](./aws-lambda.md)
 - [Using with Coiled](./coiled.md)

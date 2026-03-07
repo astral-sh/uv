@@ -115,6 +115,7 @@ plugins:
           - guides/integration/gitlab.md
           - guides/integration/pre-commit.md
           - guides/integration/pytorch.md
+          - guides/integration/mlflow.md
           - guides/integration/fastapi.md
           - guides/integration/alternative-indexes.md
           - guides/integration/dependency-bots.md
@@ -196,6 +197,7 @@ nav:
           - GitLab CI/CD: guides/integration/gitlab.md
           - Pre-commit: guides/integration/pre-commit.md
           - PyTorch: guides/integration/pytorch.md
+          - MLflow: guides/integration/mlflow.md
           - FastAPI: guides/integration/fastapi.md
           - Alternative indexes: guides/integration/alternative-indexes.md
           - Dependency bots: guides/integration/dependency-bots.md
