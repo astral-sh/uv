@@ -218,7 +218,7 @@ reqwest = { version = "0.12.22", default-features = false, features = [
 reqwest-middleware = { version = "0.4.2", package = "astral-reqwest-middleware", features = [
   "multipart",
 ] }
-reqwest-retry = { version = "0.8.0", package = "astral-reqwest-retry", features = [
+reqwest-retry = { version = "0.9.0", package = "astral-reqwest-retry", features = [
   "tracing",
 ] }
 rkyv = { version = "0.8.14", features = ["bytecheck"] }
