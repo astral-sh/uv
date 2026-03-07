@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   plan:
-    runs-on: depot-ubuntu-24.04
+    runs-on: ubuntu-slim
     outputs:
       test-code: ${{ steps.plan.outputs.test_code }}
       check-schema: ${{ steps.plan.outputs.check_schema }}
@@ -31,6 +31,25 @@ jobs:
       test-macos: ${{ steps.plan.outputs.test_macos }}
       build-docker: ${{ steps.plan.outputs.build_docker }}
       push-docker: ${{ steps.plan.outputs.push_docker }}
+      is-fork: ${{ steps.plan.outputs.is_fork }}
+      is-external-pr: ${{ steps.plan.outputs.is_external_pr }}
+      runner-ubuntu-x86_64-1: ${{ steps.runners.outputs.runner_ubuntu_x86_64_1 }}
+      runner-ubuntu-x86_64-4-github: ${{ steps.runners.outputs.runner_ubuntu_x86_64_4_github }}
+      runner-ubuntu-x86_64-4: ${{ steps.runners.outputs.runner_ubuntu_x86_64_4 }}
+      runner-ubuntu-x86_64-8: ${{ steps.runners.outputs.runner_ubuntu_x86_64_8 }}
+      runner-ubuntu-x86_64-16: ${{ steps.runners.outputs.runner_ubuntu_x86_64_16 }}
+      runner-ubuntu-aarch64-2: ${{ steps.runners.outputs.runner_ubuntu_aarch64_2 }}
+      runner-ubuntu-aarch64-4: ${{ steps.runners.outputs.runner_ubuntu_aarch64_4 }}
+      runner-macos-aarch64: ${{ steps.runners.outputs.runner_macos_aarch64 }}
+      runner-macos-aarch64-8: ${{ steps.runners.outputs.runner_macos_aarch64_8 }}
+      runner-macos-x86_64: ${{ steps.runners.outputs.runner_macos_x86_64 }}
+      runner-macos-x86_64-12: ${{ steps.runners.outputs.runner_macos_x86_64_12 }}
+      runner-windows-x86_64: ${{ steps.runners.outputs.runner_windows_x86_64 }}
+      runner-windows-x86_64-16: ${{ steps.runners.outputs.runner_windows_x86_64_16 }}
+      runner-windows-aarch64: ${{ steps.runners.outputs.runner_windows_aarch64 }}
+      runner-windows-x86_64-8: ${{ steps.runners.outputs.runner_windows_x86_64_8 }}
+      runner-windows-aarch64-8: ${{ steps.runners.outputs.runner_windows_aarch64_8 }}
+      runner-ubuntu-22-04-aarch64-4: ${{ steps.runners.outputs.runner_ubuntu_22_04_aarch64_4 }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -41,6 +60,8 @@ jobs:
         id: plan
         shell: bash
         env:
+          GH_REPOSITORY: ${{ github.repository }}
+          IS_EXTERNAL_PR: ${{ github.event.pull_request.head.repo.fork == true }}
           GH_REF: ${{ github.ref }}
           HAS_SKIP_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:skip') }}
           HAS_INTEGRATION_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:integration') }}
@@ -135,6 +156,38 @@ jobs:
             out push_docker             "$push_docker"
           } >> "$GITHUB_OUTPUT"
 
+          # Fork detection
+          if [[ "$GH_REPOSITORY" == "astral-sh/uv" ]]; then
+            echo "is_fork=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_fork=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "is_external_pr=$IS_EXTERNAL_PR" >> "$GITHUB_OUTPUT"
+
+      - name: "Determine runners"
+        id: runners
+        shell: bash
+        env:
+          GH_REPOSITORY: ${{ github.repository }}
+        run: |
+          if [[ "$GH_REPOSITORY" == "astral-sh/uv" ]]; then
+            # Use the first runner for each role
+            jq -r '
+              to_entries[] |
+              .key as $role |
+              .value[0].label as $label |
+              "runner_\($role | gsub("-";"_"))=\($label)"
+            ' .github/runners.json >> "$GITHUB_OUTPUT"
+          else
+            # Use the first free runner for each role
+            jq -r '
+              to_entries[] |
+              .key as $role |
+              (.value | map(select(.free)) | .[0].label) as $label |
+              "runner_\($role | gsub("-";"_"))=\($label)"
+            ' .github/runners.json >> "$GITHUB_OUTPUT"
+          fi
+
   check-fmt:
     uses: ./.github/workflows/check-fmt.yml
 
@@ -144,6 +197,7 @@ jobs:
     with:
       code-changed: ${{ needs.plan.outputs.test-code }}
       save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
+      runner-ubuntu-x86_64-1: ${{ needs.plan.outputs.runner-ubuntu-x86_64-1 }}
 
   check-docs:
     needs: plan
@@ -163,6 +217,8 @@ jobs:
     needs: plan
     if: ${{ needs.plan.outputs.test-code == 'true' }}
     uses: ./.github/workflows/check-publish.yml
+    with:
+      runner-ubuntu-x86_64-8: ${{ needs.plan.outputs.runner-ubuntu-x86_64-8 }}
 
   check-release:
     needs: plan
@@ -184,6 +240,10 @@ jobs:
     with:
       save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
       test-macos: ${{ needs.plan.outputs.test-macos }}
+      runner-ubuntu-x86_64-16: ${{ needs.plan.outputs.runner-ubuntu-x86_64-16 }}
+      runner-macos-aarch64-8: ${{ needs.plan.outputs.runner-macos-aarch64-8 }}
+      runner-windows-x86_64-16: ${{ needs.plan.outputs.runner-windows-x86_64-16 }}
+      is-fork: ${{ needs.plan.outputs.is-fork == 'true' }}
 
   test-windows-trampolines:
     needs: plan
@@ -196,6 +256,12 @@ jobs:
     uses: ./.github/workflows/build-dev-binaries.yml
     with:
       save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
+      runner-ubuntu-x86_64-8: ${{ needs.plan.outputs.runner-ubuntu-x86_64-8 }}
+      runner-ubuntu-aarch64-4: ${{ needs.plan.outputs.runner-ubuntu-aarch64-4 }}
+      runner-macos-aarch64: ${{ needs.plan.outputs.runner-macos-aarch64 }}
+      runner-macos-x86_64-12: ${{ needs.plan.outputs.runner-macos-x86_64-12 }}
+      runner-windows-x86_64: ${{ needs.plan.outputs.runner-windows-x86_64 }}
+      runner-windows-aarch64: ${{ needs.plan.outputs.runner-windows-aarch64 }}
 
   test-smoke:
     needs:
@@ -205,6 +271,8 @@ jobs:
     uses: ./.github/workflows/test-smoke.yml
     with:
       sha: ${{ github.sha }}
+      runner-ubuntu-aarch64-2: ${{ needs.plan.outputs.runner-ubuntu-aarch64-2 }}
+      runner-windows-aarch64: ${{ needs.plan.outputs.runner-windows-aarch64 }}
 
   test-integration:
     needs:
@@ -241,6 +309,13 @@ jobs:
     if: ${{ needs.plan.outputs.build-release-binaries == 'true' }}
     uses: ./.github/workflows/build-release-binaries.yml
     secrets: inherit
+    with:
+      runner-ubuntu-x86_64-1: ${{ needs.plan.outputs.runner-ubuntu-x86_64-1 }}
+      runner-ubuntu-x86_64-4: ${{ needs.plan.outputs.runner-ubuntu-x86_64-4 }}
+      runner-ubuntu-x86_64-8: ${{ needs.plan.outputs.runner-ubuntu-x86_64-8 }}
+      runner-macos-aarch64-8: ${{ needs.plan.outputs.runner-macos-aarch64-8 }}
+      runner-windows-x86_64-8: ${{ needs.plan.outputs.runner-windows-x86_64-8 }}
+      runner-windows-aarch64-8: ${{ needs.plan.outputs.runner-windows-aarch64-8 }}
 
   build-docker:
     needs: plan
@@ -262,6 +337,8 @@ jobs:
     secrets: inherit
     with:
       save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
+      is-fork: ${{ needs.plan.outputs.is-fork == 'true' }}
+      runner-ubuntu-22-04-aarch64-4: ${{ needs.plan.outputs.runner-ubuntu-22-04-aarch64-4 }}
 
   # This job cannot be moved into a reusable workflow because it includes coverage for uploading
   # attestations and PyPI does not support attestations in reusable workflows.
@@ -273,7 +350,7 @@ jobs:
       - build-dev-binaries
     runs-on: ubuntu-latest
     # Only the main repository is a trusted publisher
-    if: ${{ github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.fork != true && needs.plan.outputs.test-publish == 'true' }}
+    if: ${{ needs.plan.outputs.is-fork != 'true' && needs.plan.outputs.is-external-pr != 'true' && needs.plan.outputs.test-publish == 'true' }}
     environment: uv-test-publish
     env:
       # No dbus in GitHub Actions
