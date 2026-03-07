@@ -1174,6 +1174,22 @@ pub enum CacheBucket {
     Python,
     /// Downloaded tool binaries (e.g., Ruff).
     Binaries,
+    /// Pre-compiled bytecode (`.pyc`) files, keyed by Python implementation tag and package
+    /// identity.
+    ///
+    /// Cache structure:
+    ///  * `bytecode-v0/<impl><major><minor>/<package_name>-<version>/...`
+    ///
+    /// For example:
+    /// ```text
+    /// bytecode-v0/
+    /// └── cpython312/
+    ///     └── markupsafe-3.0.2/
+    ///         └── markupsafe/
+    ///             └── __pycache__/
+    ///                 └── __init__.cpython-312.pyc
+    /// ```
+    Bytecode,
 }
 
 impl CacheBucket {
@@ -1198,6 +1214,7 @@ impl CacheBucket {
             Self::Environments => "environments-v2",
             Self::Python => "python-v0",
             Self::Binaries => "binaries-v0",
+            Self::Bytecode => "bytecode-v0",
         }
     }
 
@@ -1305,7 +1322,8 @@ impl CacheBucket {
             | Self::Builds
             | Self::Environments
             | Self::Python
-            | Self::Binaries => {
+            | Self::Binaries
+            | Self::Bytecode => {
                 // Nothing to do.
             }
         }
@@ -1325,6 +1343,7 @@ impl CacheBucket {
             Self::Builds,
             Self::Environments,
             Self::Binaries,
+            Self::Bytecode,
         ]
         .iter()
         .copied()
