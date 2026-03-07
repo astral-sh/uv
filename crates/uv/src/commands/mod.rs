@@ -6,9 +6,6 @@ use std::{fmt::Write, process::ExitCode};
 
 use anstream::AutoStream;
 use anyhow::Context;
-use owo_colors::OwoColorize;
-use tracing::debug;
-
 pub(crate) use auth::dir::dir as auth_dir;
 pub(crate) use auth::helper::helper as auth_helper;
 pub(crate) use auth::login::login as auth_login;
@@ -20,6 +17,7 @@ pub(crate) use cache_dir::cache_dir;
 pub(crate) use cache_prune::cache_prune;
 pub(crate) use cache_size::cache_size;
 pub(crate) use help::help;
+use owo_colors::OwoColorize;
 pub(crate) use pip::check::pip_check;
 pub(crate) use pip::compile::pip_compile;
 pub(crate) use pip::freeze::pip_freeze;
@@ -60,11 +58,14 @@ pub(crate) use tool::run::run as tool_run;
 pub(crate) use tool::uninstall::uninstall as tool_uninstall;
 pub(crate) use tool::update_shell::update_shell as tool_update_shell;
 pub(crate) use tool::upgrade::upgrade as tool_upgrade;
+use tracing::debug;
 use uv_cache::Cache;
 use uv_configuration::Concurrency;
 pub(crate) use uv_console::human_readable_bytes;
+use uv_distribution_types::CachedDist;
 use uv_fs::{CWD, Simplified};
-use uv_installer::compile_tree;
+use uv_install_wheel::read_record_file;
+use uv_installer::{compile_files, compile_tree};
 use uv_python::PythonEnvironment;
 use uv_scripts::Pep723Script;
 pub(crate) use venv::venv;
@@ -153,10 +154,10 @@ pub(super) struct ChangeEvent<'a> {
     kind: ChangeEventKind,
 }
 
-/// Compile all Python source files in site-packages to bytecode, to speed up the
-/// initial run of any subsequent executions.
+/// Compile all Python source files in site-packages to bytecode.
 ///
-/// See the `--compile` option on `pip sync` and `pip install`.
+/// This is used as a fallback when no install information is available, e.g., when
+/// `--compile` is passed but nothing new was installed.
 pub(super) async fn compile_bytecode(
     venv: &PythonEnvironment,
     concurrency: &Concurrency,
@@ -200,6 +201,114 @@ pub(super) async fn compile_bytecode(
         .dimmed()
     )?;
     Ok(())
+}
+
+/// Compile bytecode only for the given installed distributions.
+///
+/// Reads each distribution's `RECORD` file to find installed `.py` files, then compiles only
+/// those files. This avoids recompiling the entire `site-packages` directory when only a few
+/// packages were installed or updated.
+pub(super) async fn compile_bytecode_for_installs(
+    venv: &PythonEnvironment,
+    installs: &[CachedDist],
+    concurrency: &Concurrency,
+    cache: &Cache,
+    printer: Printer,
+) -> anyhow::Result<()> {
+    if installs.is_empty() {
+        return Ok(());
+    }
+
+    let start = std::time::Instant::now();
+    let mut py_files: Vec<PathBuf> = Vec::new();
+
+    for site_packages in venv.site_packages() {
+        let site_packages = CWD.join(site_packages);
+        if !site_packages.exists() {
+            continue;
+        }
+
+        for dist in installs {
+            // Find the dist-info directory from the cached wheel. The installer
+            // preserves the original directory names from the wheel, which may
+            // differ in case from the normalized package name (e.g.,
+            // `MarkupSafe-2.1.3.dist-info` vs. `markupsafe-2.1.3.dist-info`).
+            let dist_info_dir = find_dist_info_dir(dist.path());
+            let dist_info_name = match dist_info_dir {
+                Some(name) => format!("{name}.dist-info"),
+                None => {
+                    // Fall back to the normalized name.
+                    format!(
+                        "{}-{}.dist-info",
+                        dist.filename().name.as_dist_info_name(),
+                        dist.filename().version,
+                    )
+                }
+            };
+            let record_path = site_packages.join(&dist_info_name).join("RECORD");
+
+            let record = match fs_err::File::open(&record_path) {
+                Ok(mut file) => read_record_file(&mut file)?,
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(err) => return Err(err.into()),
+            };
+
+            for entry in &record {
+                if Path::new(&entry.path)
+                    .extension()
+                    .is_some_and(|ext| ext == "py")
+                {
+                    let full_path = site_packages.join(&entry.path);
+                    if full_path.exists() {
+                        py_files.push(full_path);
+                    }
+                }
+            }
+        }
+    }
+
+    if py_files.is_empty() {
+        return Ok(());
+    }
+
+    let files = compile_files(
+        py_files,
+        venv.python_executable(),
+        concurrency,
+        cache.root(),
+    )
+    .await
+    .context("Failed to bytecode-compile installed packages")?;
+
+    let s = if files == 1 { "" } else { "s" };
+    writeln!(
+        printer.stderr(),
+        "{}",
+        format!(
+            "Bytecode compiled {} {}",
+            format!("{files} file{s}").bold(),
+            format!("in {}", elapsed(start.elapsed())).dimmed()
+        )
+        .dimmed()
+    )?;
+    Ok(())
+}
+
+/// Find the `.dist-info` directory prefix in a cached wheel directory.
+///
+/// Returns the stem (e.g., `MarkupSafe-2.1.3`) preserving the original case from the wheel.
+fn find_dist_info_dir(wheel_dir: &Path) -> Option<String> {
+    let read_dir = fs_err::read_dir(wheel_dir).ok()?;
+    for entry in read_dir {
+        let entry = entry.ok()?;
+        let path = entry.path();
+        if path.extension().is_some_and(|ext| ext == "dist-info") {
+            if let Some(stem) = path.file_stem() {
+                return Some(stem.to_string_lossy().into_owned());
+            }
+        }
+    }
+    None
 }
 
 /// A multicasting writer that writes to both the standard output and an output file, if present.

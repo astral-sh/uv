@@ -211,6 +211,120 @@ pub async fn compile_tree(
     Ok(source_files)
 }
 
+/// Bytecode compile a specific list of `.py` files.
+///
+/// Unlike [`compile_tree`], which walks entire directory trees, this function compiles only the
+/// given files. This is used for targeted compilation of newly installed packages.
+#[instrument(skip(python_executable, files))]
+pub async fn compile_files(
+    files: Vec<PathBuf>,
+    python_executable: &Path,
+    concurrency: &Concurrency,
+    cache: &Path,
+) -> Result<usize, CompileError> {
+    if files.is_empty() {
+        return Ok(0);
+    }
+
+    let worker_count = concurrency.installs;
+    let (sender, receiver) = async_channel::bounded::<PathBuf>(worker_count * 10);
+
+    // Running Python with an actual file will produce better error messages.
+    let tempdir = tempdir_in(cache).map_err(CompileError::TempFile)?;
+    let pip_compileall_py = tempdir.path().join("pip_compileall.py");
+
+    let timeout: Option<Duration> = match env::var(EnvVars::UV_COMPILE_BYTECODE_TIMEOUT) {
+        Ok(value) => match value.as_str() {
+            "0" => None,
+            _ => match value.parse::<u64>().map(Duration::from_secs) {
+                Ok(duration) => Some(duration),
+                Err(_) => {
+                    return Err(CompileError::EnvironmentError {
+                        var: EnvVars::UV_COMPILE_BYTECODE_TIMEOUT,
+                        message: format!("Expected an integer number of seconds, got \"{value}\""),
+                    });
+                }
+            },
+        },
+        Err(_) => Some(DEFAULT_COMPILE_TIMEOUT),
+    };
+    if let Some(duration) = timeout {
+        debug!(
+            "Using bytecode compilation timeout of {}s",
+            duration.as_secs()
+        );
+    } else {
+        debug!("Disabling bytecode compilation timeout");
+    }
+
+    debug!("Starting {} bytecode compilation workers", worker_count);
+    let mut worker_handles = Vec::new();
+    for _ in 0..worker_count {
+        let (tx, rx) = oneshot::channel();
+
+        let worker = worker(
+            // Use cache dir as working directory since we're sending absolute paths.
+            cache.to_path_buf(),
+            python_executable.to_path_buf(),
+            pip_compileall_py.clone(),
+            receiver.clone(),
+            timeout,
+        );
+
+        std::thread::Builder::new()
+            .name("uv-compile".to_owned())
+            .spawn(move || {
+                let result = panic::catch_unwind(AssertUnwindSafe(|| {
+                    tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .expect("Failed to build runtime")
+                        .block_on(worker)
+                }));
+
+                let _ = tx.send(result);
+            })
+            .expect("Failed to start compilation worker");
+
+        worker_handles.push(async { rx.await.unwrap() });
+    }
+    // Make sure the channel gets closed when all workers exit.
+    drop(receiver);
+
+    // Send all file paths to workers.
+    let source_files = files.len();
+    let mut send_error = None;
+    for file in files {
+        debug_assert!(
+            file.is_absolute(),
+            "compileall doesn't work with relative paths: `{}`",
+            file.display()
+        );
+        if let Err(err) = sender.send(file).await {
+            send_error = Some(err);
+            break;
+        }
+    }
+
+    // All workers will receive an error after the last item.
+    drop(sender);
+
+    // Make sure all workers exit regularly, avoid hiding errors.
+    for result in futures::future::join_all(worker_handles).await {
+        match result {
+            Err(_) => return Err(CompileError::Join),
+            Ok(Err(compile_error)) => return Err(compile_error),
+            Ok(Ok(())) => {}
+        }
+    }
+
+    if let Some(send_error) = send_error {
+        return Err(CompileError::WorkerDisappeared(send_error));
+    }
+
+    Ok(source_files)
+}
+
 async fn worker(
     dir: PathBuf,
     interpreter: PathBuf,
