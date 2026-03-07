@@ -11893,6 +11893,112 @@ fn lock_find_links_relative_url() -> Result<()> {
     Ok(())
 }
 
+/// Ensure that flat indices preserve relative paths in lockfiles (issue with flat index portability).
+#[test]
+fn lock_find_links_relative_path_preserved() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Populate the `--find-links` entries in a subdirectory.
+    fs_err::create_dir_all(context.temp_dir.join("local_packages"))?;
+
+    for entry in fs_err::read_dir(context.workspace_root.join("scripts/links"))? {
+        let entry = entry?;
+        let path = entry.path();
+        if path
+            .file_name()
+            .and_then(|file_name| file_name.to_str())
+            .is_some_and(|file_name| file_name.starts_with("tqdm-"))
+        {
+            let dest = context
+                .temp_dir
+                .join("local_packages")
+                .join(path.file_name().unwrap());
+            fs_err::copy(&path, &dest)?;
+        }
+    }
+
+    let workspace = context.temp_dir.child("workspace");
+
+    let pyproject_toml = workspace.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["tqdm"]
+
+        [[tool.uv.index]]
+        name = "local"
+        format = "flat"
+        url = "../local_packages"
+        explicit = true
+
+        [tool.uv.sources]
+        tqdm = { index = "local" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = fs_err::read_to_string(workspace.join("uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "tqdm" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "tqdm", index = "../local_packages" }]
+
+        [[package]]
+        name = "tqdm"
+        version = "1000.0.0"
+        source = { registry = "../local_packages" }
+        wheels = [
+            { path = "tqdm-1000.0.0-py3-none-any.whl" },
+        ]
+        "#
+        );
+    });
+
+    // Re-run with `--locked` to ensure the lockfile is valid.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").current_dir(&workspace), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Lock a local source distribution via `--find-links`.
 #[test]
 fn lock_find_links_local_sdist() -> Result<()> {
