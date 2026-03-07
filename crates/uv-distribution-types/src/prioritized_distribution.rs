@@ -32,7 +32,10 @@ struct PrioritizedDistInner {
     /// The hashes for each distribution.
     hashes: Vec<HashDigest>,
     /// The set of supported platforms for the distribution, described in terms of their markers.
-    markers: MarkerTree,
+    platform_markers: MarkerTree,
+    /// The set of supported Python versions for the distribution, described in terms of their
+    /// markers.
+    python_markers: MarkerTree,
 }
 
 impl Default for PrioritizedDistInner {
@@ -42,7 +45,8 @@ impl Default for PrioritizedDistInner {
             best_wheel_index: None,
             wheels: Vec::new(),
             hashes: Vec::new(),
-            markers: MarkerTree::FALSE,
+            platform_markers: MarkerTree::FALSE,
+            python_markers: MarkerTree::FALSE,
         }
     }
 }
@@ -101,10 +105,31 @@ impl CompatibleDist<'_> {
         }
     }
 
-    /// Return the set of supported platform the distribution, in terms of their markers.
+    /// Return the set of supported platforms the distribution, in terms of their markers.
+    pub fn implied_platform_markers(&self) -> MarkerTree {
+        match self.prioritized() {
+            Some(prioritized) => prioritized.0.platform_markers,
+            None => MarkerTree::TRUE,
+        }
+    }
+
+    /// Return the set of supported Python versions for the distribution, in terms of their markers.
+    pub fn implied_python_markers(&self) -> MarkerTree {
+        match self.prioritized() {
+            Some(prioritized) => prioritized.0.python_markers,
+            None => MarkerTree::TRUE,
+        }
+    }
+
+    /// Return the combined set of supported markers for the distribution.
     pub fn implied_markers(&self) -> MarkerTree {
         match self.prioritized() {
-            Some(prioritized) => prioritized.0.markers,
+            Some(prioritized) => {
+                let mut markers = MarkerTree::TRUE;
+                markers.and(prioritized.0.platform_markers);
+                markers.and(prioritized.0.python_markers);
+                markers
+            }
             None => MarkerTree::TRUE,
         }
     }
@@ -347,7 +372,8 @@ impl PrioritizedDist {
         compatibility: WheelCompatibility,
     ) -> Self {
         Self(Box::new(PrioritizedDistInner {
-            markers: implied_markers(&dist.filename),
+            platform_markers: implied_platform_markers(&dist.filename),
+            python_markers: implied_python_markers(&dist.filename),
             best_wheel_index: Some(0),
             wheels: vec![(dist, compatibility)],
             source: None,
@@ -362,7 +388,8 @@ impl PrioritizedDist {
         compatibility: SourceDistCompatibility,
     ) -> Self {
         Self(Box::new(PrioritizedDistInner {
-            markers: MarkerTree::TRUE,
+            python_markers: MarkerTree::TRUE,
+            platform_markers: MarkerTree::TRUE,
             best_wheel_index: None,
             wheels: vec![],
             source: Some((dist, compatibility)),
@@ -379,8 +406,15 @@ impl PrioritizedDist {
     ) {
         // Track the implied markers.
         if compatibility.is_compatible() {
-            if !self.0.markers.is_true() {
-                self.0.markers.or(implied_markers(&dist.filename));
+            if !self.0.python_markers.is_true() {
+                self.0
+                    .python_markers
+                    .or(implied_python_markers(&dist.filename));
+            }
+            if !self.0.platform_markers.is_true() {
+                self.0
+                    .platform_markers
+                    .or(implied_platform_markers(&dist.filename));
             }
         }
         // Track the hashes.
@@ -407,7 +441,8 @@ impl PrioritizedDist {
     ) {
         // Track the implied markers.
         if compatibility.is_compatible() {
-            self.0.markers = MarkerTree::TRUE;
+            self.0.python_markers = MarkerTree::TRUE;
+            self.0.platform_markers = MarkerTree::TRUE;
         }
         // Track the hashes.
         if !compatibility.is_excluded() {
@@ -807,14 +842,6 @@ impl IncompatibleWheel {
     }
 }
 
-/// Given a wheel filename, determine the set of supported markers.
-pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
-    let mut marker = implied_platform_markers(filename);
-    marker.and(implied_python_markers(filename));
-
-    marker
-}
-
 /// Given a wheel filename, determine the set of supported platforms, in terms of their markers.
 ///
 /// This is roughly the inverse of platform tag generation: given a tag, we want to infer the
@@ -1030,15 +1057,6 @@ mod tests {
         );
     }
 
-    #[track_caller]
-    fn assert_implied_markers(filename: &str, expected: &str) {
-        let filename = WheelFilename::from_str(filename).unwrap();
-        assert_eq!(
-            implied_markers(&filename),
-            expected.parse::<MarkerTree>().unwrap()
-        );
-    }
-
     #[test]
     fn test_implied_platform_markers() {
         let filename = WheelFilename::from_str("example-1.0-py3-none-any.whl").unwrap();
@@ -1122,30 +1140,6 @@ mod tests {
         assert_python_markers(
             "example-1.0-py311.py312-none-any.whl",
             "python_full_version >= '3.11' and python_full_version < '3.13'",
-        );
-    }
-
-    #[test]
-    fn test_implied_markers() {
-        assert_implied_markers(
-            "numpy-1.0-cp310-cp310-win32.whl",
-            "python_full_version == '3.10.*' and platform_python_implementation == 'CPython' and sys_platform == 'win32' and platform_machine == 'x86'",
-        );
-        assert_implied_markers(
-            "pywin32-311-cp314-cp314-win_arm64.whl",
-            "python_full_version == '3.14.*' and platform_python_implementation == 'CPython' and sys_platform == 'win32' and platform_machine == 'ARM64'",
-        );
-        assert_implied_markers(
-            "numpy-1.0-cp311-cp311-macosx_10_9_x86_64.whl",
-            "python_full_version == '3.11.*' and platform_python_implementation == 'CPython' and sys_platform == 'darwin' and platform_machine == 'x86_64'",
-        );
-        assert_implied_markers(
-            "numpy-1.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
-            "python_full_version == '3.12.*' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and platform_machine == 'aarch64'",
-        );
-        assert_implied_markers(
-            "example-1.0-py3-none-any.whl",
-            "python_full_version >= '3' and python_full_version < '4'",
         );
     }
 }
