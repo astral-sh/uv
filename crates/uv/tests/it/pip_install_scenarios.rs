@@ -3797,7 +3797,7 @@ fn no_sdist_no_wheels_with_matching_platform() {
       ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels with a matching platform tag (e.g., `manylinux_2_17_x86_64`), we can conclude that all versions of package-a cannot be used.
           And because you require package-a, we can conclude that your requirements are unsatisfiable.
 
-          hint: Wheels are available for `package-a` (v1.0.0) on the following platform: `macosx_10_0_ppc64`
+          hint: You require Linux (`manylinux_2_17_x86_64`), but we only found wheels for `package-a` (v1.0.0) on the following platform: `macosx_10_0_ppc64`
     ");
 
     context.assert_not_installed("no_sdist_no_wheels_with_matching_platform_a");

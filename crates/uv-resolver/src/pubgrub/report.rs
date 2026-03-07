@@ -829,6 +829,7 @@ impl PubGrubReportFormatter<'_> {
                 // So, instead, we only show the platforms that are linked to otherwise-compatible
                 // wheels (e.g., `manylinux2014` in `cp313-cp313-manylinux2014`). In other words,
                 // we only show platforms for ABI-compatible wheels.
+                let best = tags.and_then(Tags::platform_tag).cloned();
                 let tags = prioritized
                     .platform_tags(self.tags?)
                     .cloned()
@@ -840,6 +841,7 @@ impl PubGrubReportFormatter<'_> {
                         package: name.clone(),
                         version: candidate.version().clone(),
                         tags,
+                        best,
                     })
                 }
             }
@@ -1244,6 +1246,8 @@ pub(crate) enum PubGrubHint {
         version: Version,
         // excluded from `PartialEq` and `Hash`
         tags: BTreeSet<PlatformTag>,
+        // excluded from `PartialEq` and `Hash`
+        best: Option<PlatformTag>,
     },
     /// All versions of a package were excluded by `exclude-newer`.
     ExcludeNewer {
@@ -1833,19 +1837,41 @@ impl std::fmt::Display for PubGrubHint {
                 package,
                 version,
                 tags,
+                best,
             } => {
-                let s = if tags.len() == 1 { "" } else { "s" };
-                write!(
-                    f,
-                    "{}{} Wheels are available for `{}` ({}) on the following platform{s}: {}",
-                    "hint".bold().cyan(),
-                    ":".bold(),
-                    package.cyan(),
-                    format!("v{version}").cyan(),
-                    tags.iter()
-                        .map(|tag| format!("`{}`", tag.cyan()))
-                        .join(", "),
-                )
+                if let Some(best) = best {
+                    let s = if tags.len() == 1 { "" } else { "s" };
+                    let best = if let Some(pretty) = best.pretty() {
+                        format!("{} (`{}`)", pretty.cyan(), best.cyan())
+                    } else {
+                        format!("`{}`", best.cyan())
+                    };
+                    write!(
+                        f,
+                        "{}{} You require {}, but we only found wheels for `{}` ({}) on the following platform{s}: {}",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        best,
+                        package.cyan(),
+                        format!("v{version}").cyan(),
+                        tags.iter()
+                            .map(|tag| format!("`{}`", tag.cyan()))
+                            .join(", "),
+                    )
+                } else {
+                    let s = if tags.len() == 1 { "" } else { "s" };
+                    write!(
+                        f,
+                        "{}{} Wheels are available for `{}` ({}) on the following platform{s}: {}",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        package.cyan(),
+                        format!("v{version}").cyan(),
+                        tags.iter()
+                            .map(|tag| format!("`{}`", tag.cyan()))
+                            .join(", "),
+                    )
+                }
             }
             Self::ExcludeNewer {
                 package,

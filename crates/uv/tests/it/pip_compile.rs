@@ -15150,7 +15150,7 @@ fn invalid_platform() -> Result<()> {
 
           hint: You require CPython 3.10 (`cp310`), but we only found wheels for `open3d` (v0.15.2) with the following Python ABI tags: `cp36m`, `cp37m`, `cp38`, `cp39`
 
-          hint: Wheels are available for `open3d` (v0.18.0) on the following platforms: `manylinux_2_27_aarch64`, `manylinux_2_27_x86_64`, `macosx_11_0_x86_64`, `macosx_13_0_arm64`, `win_amd64`
+          hint: You require Linux (`manylinux_2_17_x86_64`), but we only found wheels for `open3d` (v0.18.0) on the following platforms: `manylinux_2_27_aarch64`, `manylinux_2_27_x86_64`, `macosx_11_0_x86_64`, `macosx_13_0_arm64`, `win_amd64`
     ");
 
     Ok(())
