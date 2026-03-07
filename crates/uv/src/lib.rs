@@ -1121,8 +1121,15 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: CacheCommand::Clean(args),
         })
         | Commands::Clean(args) => {
+            // Handle internal daemon mode: the spawned background process re-invokes
+            // `uv clean --background-daemon-target <dir>` to perform the actual deletion.
+            if let Some(dir) = &args.background_daemon_target {
+                commands::cache_clean_daemon::run_background_clean(dir)?;
+                return Ok(ExitStatus::Success);
+            }
+
             show_settings!(args);
-            commands::cache_clean(&args.package, args.force, cache, printer).await
+            commands::cache_clean(&args.package, args.force, args.background, cache, printer).await
         }
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Prune(args),
@@ -2633,9 +2640,12 @@ where
         }
     }
 
+    // Collect args into a vector for inspection
+    let args: Vec<OsString> = args.into_iter().map(Into::into).collect();
+
     // `std::env::args` is not `Send` so we parse before passing to our runtime
     // https://github.com/rust-lang/rust/pull/48005
-    let cli = match Cli::try_parse_from(args) {
+    let cli = match Cli::try_parse_from(&args) {
         Ok(cli) => cli,
         Err(mut err) => {
             if let Some(ContextValue::String(subcommand)) = err.get(ContextKind::InvalidSubcommand)
