@@ -345,6 +345,10 @@ impl RequirementsTxt {
         visited: &mut VisitedFiles<'_>,
         cache: &mut SourceCache,
     ) -> Result<Self, RequirementsTxtParserError> {
+        if looks_like_uv_lockfile(content) {
+            return Err(RequirementsTxtParserError::UvLockfile);
+        }
+
         let mut s = Scanner::new(content);
 
         let mut data = Self::default();
@@ -595,6 +599,18 @@ impl RequirementsTxt {
         self.no_binary.extend(no_binary);
         self.only_binary.extend(only_binary);
     }
+}
+
+fn looks_like_uv_lockfile(content: &str) -> bool {
+    let first_significant_line = content
+        .lines()
+        .map(str::trim_start)
+        .find(|line| !line.is_empty() && !line.starts_with('#'));
+
+    first_significant_line.is_some_and(|line| line.starts_with("version ="))
+        && content
+            .lines()
+            .any(|line| line.trim_start().starts_with("[[package]]"))
 }
 
 /// An unsupported option (e.g., `--trusted-host`).
@@ -1142,6 +1158,7 @@ pub enum RequirementsTxtParserError {
     },
     UrlConversion(String),
     UnsupportedUrl(String),
+    UvLockfile,
     MissingRequirementPrefix(String),
     NonEditable {
         source: EditableError,
@@ -1217,6 +1234,12 @@ impl Display for RequirementsTxtParserError {
             Self::UnsupportedUrl(url) => {
                 write!(f, "Unsupported URL (expected a `file://` scheme): `{url}`")
             }
+            Self::UvLockfile => {
+                write!(
+                    f,
+                    "Input appears to be a `uv.lock` file, but a requirements.txt-style file was expected"
+                )
+            }
             Self::NonEditable { .. } => {
                 write!(f, "Unsupported editable requirement")
             }
@@ -1290,6 +1313,7 @@ impl std::error::Error for RequirementsTxtParserError {
             Self::VerbatimUrl { source, .. } => Some(source),
             Self::UrlConversion(_) => None,
             Self::UnsupportedUrl(_) => None,
+            Self::UvLockfile => None,
             Self::NonEditable { source, .. } => Some(source),
             Self::MissingRequirementPrefix(_) => None,
             Self::NoBinary { source, .. } => Some(source),
@@ -1345,6 +1369,13 @@ impl Display for RequirementsTxtFileError {
                 write!(
                     f,
                     "Unsupported URL (expected a `file://` scheme) in `{}`: `{url}`",
+                    self.file.user_display(),
+                )
+            }
+            RequirementsTxtParserError::UvLockfile => {
+                write!(
+                    f,
+                    "Input file `{}` appears to be a `uv.lock` file, but a requirements.txt-style file was expected. Did you pass a lockfile to `-r`?",
                     self.file.user_display(),
                 )
             }
@@ -1768,6 +1799,38 @@ mod test {
             Expected an alphanumeric character starting the extra name, found `ö`
             numpy[ö]==1.29
                   ^
+            ");
+        });
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn detect_uv_lockfile_input() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+        let requirements_txt = temp_dir.child("requirements.txt");
+        requirements_txt.write_str(indoc! {r#"
+            version = 1
+            revision = 3
+
+            [[package]]
+            name = "demo"
+            version = "0.1.0"
+            source = { registry = "https://pypi.org/simple" }
+        "#})?;
+
+        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path())
+            .await
+            .unwrap_err();
+        let errors = anyhow::Error::new(error).chain().join("\n");
+
+        let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
+        let filters = vec![(requirement_txt.as_str(), "<REQUIREMENTS_TXT>")];
+        insta::with_settings!({
+            filters => filters
+        }, {
+            insta::assert_snapshot!(errors, @"
+            Input file `<REQUIREMENTS_TXT>` appears to be a `uv.lock` file, but a requirements.txt-style file was expected. Did you pass a lockfile to `-r`?
             ");
         });
 
