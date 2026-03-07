@@ -5825,6 +5825,7 @@ dependencies = [
 name = "uv-auth"
 version = "0.0.29"
 dependencies = [
+ "ambient-id",
  "anyhow",
  "arcstr",
  "astral-reqwest-middleware",
