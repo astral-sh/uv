@@ -59,37 +59,8 @@ pub enum CompileError {
     EnvironmentError { var: &'static str, message: String },
 }
 
-/// Bytecode compile all file in `dir` using a pool of Python interpreters running a Python script
-/// that calls `compileall.compile_file`.
-///
-/// All compilation errors are muted (like pip). There is a 60s timeout for each file to handle
-/// a broken `python`.
-///
-/// We only compile all files, but we don't update the RECORD, relying on PEP 491:
-/// > Uninstallers should be smart enough to remove .pyc even if it is not mentioned in RECORD.
-///
-/// We've confirmed that both uv and pip (as of 24.0.0) remove the `__pycache__` directory.
-#[instrument(skip(python_executable))]
-pub async fn compile_tree(
-    dir: &Path,
-    python_executable: &Path,
-    concurrency: &Concurrency,
-    cache: &Path,
-) -> Result<usize, CompileError> {
-    debug_assert!(
-        dir.is_absolute(),
-        "compileall doesn't work with relative paths: `{}`",
-        dir.display()
-    );
-    let worker_count = concurrency.installs;
-
-    // A larger buffer is significantly faster than just 1 or the worker count.
-    let (sender, receiver) = async_channel::bounded::<PathBuf>(worker_count * 10);
-
-    // Running Python with an actual file will produce better error messages.
-    let tempdir = tempdir_in(cache).map_err(CompileError::TempFile)?;
-    let pip_compileall_py = tempdir.path().join("pip_compileall.py");
-
+/// Parse the bytecode compilation timeout from the environment.
+fn parse_compile_timeout() -> Result<Option<Duration>, CompileError> {
     let timeout: Option<Duration> = match env::var(EnvVars::UV_COMPILE_BYTECODE_TIMEOUT) {
         Ok(value) => match value.as_str() {
             "0" => None,
@@ -113,6 +84,23 @@ pub async fn compile_tree(
     } else {
         debug!("Disabling bytecode compilation timeout");
     }
+    Ok(timeout)
+}
+
+/// Spawn compilation workers and wait for them to finish after all files have been sent.
+async fn spawn_workers_and_wait(
+    working_dir: &Path,
+    python_executable: &Path,
+    receiver: async_channel::Receiver<PathBuf>,
+    sender: async_channel::Sender<PathBuf>,
+    concurrency: &Concurrency,
+    cache: &Path,
+    timeout: Option<Duration>,
+    send_error: Option<SendError<PathBuf>>,
+) -> Result<(), CompileError> {
+    let worker_count = concurrency.installs;
+    let tempdir = tempdir_in(cache).map_err(CompileError::TempFile)?;
+    let pip_compileall_py = tempdir.path().join("pip_compileall.py");
 
     debug!("Starting {} bytecode compilation workers", worker_count);
     let mut worker_handles = Vec::new();
@@ -120,7 +108,7 @@ pub async fn compile_tree(
         let (tx, rx) = oneshot::channel();
 
         let worker = worker(
-            dir.to_path_buf(),
+            working_dir.to_path_buf(),
             python_executable.to_path_buf(),
             pip_compileall_py.clone(),
             receiver.clone(),
@@ -149,6 +137,59 @@ pub async fn compile_tree(
     }
     // Make sure the channel gets closed when all workers exit.
     drop(receiver);
+
+    // All workers will receive an error after the last item. Note that there are still
+    // up to worker_count * 10 items in the queue.
+    drop(sender);
+
+    // Make sure all workers exit regularly, avoid hiding errors.
+    for result in futures::future::join_all(worker_handles).await {
+        match result {
+            // There spawning earlier errored due to a panic in a task.
+            Err(_) => return Err(CompileError::Join),
+            // The worker reports an error.
+            Ok(Err(compile_error)) => return Err(compile_error),
+            Ok(Ok(())) => {}
+        }
+    }
+
+    if let Some(send_error) = send_error {
+        // This is suspicious: Why did the channel stop working, but all workers exited
+        // successfully?
+        return Err(CompileError::WorkerDisappeared(send_error));
+    }
+
+    Ok(())
+}
+
+/// Bytecode compile all file in `dir` using a pool of Python interpreters running a Python script
+/// that calls `compileall.compile_file`.
+///
+/// All compilation errors are muted (like pip). There is a 60s timeout for each file to handle
+/// a broken `python`.
+///
+/// We only compile all files, but we don't update the RECORD, relying on PEP 491:
+/// > Uninstallers should be smart enough to remove .pyc even if it is not mentioned in RECORD.
+///
+/// We've confirmed that both uv and pip (as of 24.0.0) remove the `__pycache__` directory.
+#[instrument(skip(python_executable))]
+pub async fn compile_tree(
+    dir: &Path,
+    python_executable: &Path,
+    concurrency: &Concurrency,
+    cache: &Path,
+) -> Result<usize, CompileError> {
+    debug_assert!(
+        dir.is_absolute(),
+        "compileall doesn't work with relative paths: `{}`",
+        dir.display()
+    );
+    let worker_count = concurrency.installs;
+
+    // A larger buffer is significantly faster than just 1 or the worker count.
+    let (sender, receiver) = async_channel::bounded::<PathBuf>(worker_count * 10);
+
+    let timeout = parse_compile_timeout()?;
 
     // Start the producer, sending all `.py` files to workers.
     let mut source_files = 0;
@@ -187,26 +228,17 @@ pub async fn compile_tree(
         }
     }
 
-    // All workers will receive an error after the last item. Note that there are still
-    // up to worker_count * 10 items in the queue.
-    drop(sender);
-
-    // Make sure all workers exit regularly, avoid hiding errors.
-    for result in futures::future::join_all(worker_handles).await {
-        match result {
-            // There spawning earlier errored due to a panic in a task.
-            Err(_) => return Err(CompileError::Join),
-            // The worker reports an error.
-            Ok(Err(compile_error)) => return Err(compile_error),
-            Ok(Ok(())) => {}
-        }
-    }
-
-    if let Some(send_error) = send_error {
-        // This is suspicious: Why did the channel stop working, but all workers exited
-        // successfully?
-        return Err(CompileError::WorkerDisappeared(send_error));
-    }
+    spawn_workers_and_wait(
+        dir,
+        python_executable,
+        receiver,
+        sender,
+        concurrency,
+        cache,
+        timeout,
+        send_error,
+    )
+    .await?;
 
     Ok(source_files)
 }
@@ -229,67 +261,7 @@ pub async fn compile_files(
     let worker_count = concurrency.installs;
     let (sender, receiver) = async_channel::bounded::<PathBuf>(worker_count * 10);
 
-    // Running Python with an actual file will produce better error messages.
-    let tempdir = tempdir_in(cache).map_err(CompileError::TempFile)?;
-    let pip_compileall_py = tempdir.path().join("pip_compileall.py");
-
-    let timeout: Option<Duration> = match env::var(EnvVars::UV_COMPILE_BYTECODE_TIMEOUT) {
-        Ok(value) => match value.as_str() {
-            "0" => None,
-            _ => match value.parse::<u64>().map(Duration::from_secs) {
-                Ok(duration) => Some(duration),
-                Err(_) => {
-                    return Err(CompileError::EnvironmentError {
-                        var: EnvVars::UV_COMPILE_BYTECODE_TIMEOUT,
-                        message: format!("Expected an integer number of seconds, got \"{value}\""),
-                    });
-                }
-            },
-        },
-        Err(_) => Some(DEFAULT_COMPILE_TIMEOUT),
-    };
-    if let Some(duration) = timeout {
-        debug!(
-            "Using bytecode compilation timeout of {}s",
-            duration.as_secs()
-        );
-    } else {
-        debug!("Disabling bytecode compilation timeout");
-    }
-
-    debug!("Starting {} bytecode compilation workers", worker_count);
-    let mut worker_handles = Vec::new();
-    for _ in 0..worker_count {
-        let (tx, rx) = oneshot::channel();
-
-        let worker = worker(
-            // Use cache dir as working directory since we're sending absolute paths.
-            cache.to_path_buf(),
-            python_executable.to_path_buf(),
-            pip_compileall_py.clone(),
-            receiver.clone(),
-            timeout,
-        );
-
-        std::thread::Builder::new()
-            .name("uv-compile".to_owned())
-            .spawn(move || {
-                let result = panic::catch_unwind(AssertUnwindSafe(|| {
-                    tokio::runtime::Builder::new_current_thread()
-                        .enable_all()
-                        .build()
-                        .expect("Failed to build runtime")
-                        .block_on(worker)
-                }));
-
-                let _ = tx.send(result);
-            })
-            .expect("Failed to start compilation worker");
-
-        worker_handles.push(async { rx.await.unwrap() });
-    }
-    // Make sure the channel gets closed when all workers exit.
-    drop(receiver);
+    let timeout = parse_compile_timeout()?;
 
     // Send all file paths to workers.
     let source_files = files.len();
@@ -306,21 +278,17 @@ pub async fn compile_files(
         }
     }
 
-    // All workers will receive an error after the last item.
-    drop(sender);
-
-    // Make sure all workers exit regularly, avoid hiding errors.
-    for result in futures::future::join_all(worker_handles).await {
-        match result {
-            Err(_) => return Err(CompileError::Join),
-            Ok(Err(compile_error)) => return Err(compile_error),
-            Ok(Ok(())) => {}
-        }
-    }
-
-    if let Some(send_error) = send_error {
-        return Err(CompileError::WorkerDisappeared(send_error));
-    }
+    spawn_workers_and_wait(
+        cache,
+        python_executable,
+        receiver,
+        sender,
+        concurrency,
+        cache,
+        timeout,
+        send_error,
+    )
+    .await?;
 
     Ok(source_files)
 }
