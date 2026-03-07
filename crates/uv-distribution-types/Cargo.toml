@@ -25,6 +25,7 @@ uv-git-types = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
+uv-preview = { workspace = true }
 uv-install-wheel = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
@@ -32,6 +33,7 @@ uv-redacted = { workspace = true }
 uv-small-str = { workspace = true }
 uv-warnings = { workspace = true }
 
+anstream = { workspace = true }
 arcstr = { workspace = true }
 bitflags = { workspace = true }
 fs-err = { workspace = true }

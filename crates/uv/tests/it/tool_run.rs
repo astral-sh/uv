@@ -1,7 +1,7 @@
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use uv_fs::copy_dir_all;
 use uv_static::EnvVars;
 use uv_test::{uv_snapshot, venv_bin_path};
@@ -3648,5 +3648,61 @@ async fn tool_run_latest_keyring_auth() {
     Installed [N] packages in [TIME]
      + executable-application==0.3.0
     Installed 1 executable: app
+    ");
+}
+
+/// Run a tool using `--index <name>` to reference an index defined in user config.
+#[tokio::test]
+async fn tool_run_index_by_name() {
+    use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
+
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_exclude_newer("2025-01-18T00:00:00Z");
+
+    let proxy = crate::pypi_proxy::start().await;
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&server)
+        .await;
+
+    let uv_dir = context.user_config_dir.child("uv");
+    uv_dir.create_dir_all().unwrap();
+    let user_config = uv_dir.child("uv.toml");
+    user_config
+        .write_str(&formatdoc! {r#"
+            [[index]]
+            name = "primary"
+            url = "{server_url}"
+
+            [[index]]
+            name = "example"
+            url = "{proxy_url}"
+        "#,
+            server_url = server.uri(),
+            proxy_url = proxy.url("/simple"),
+        })
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--index")
+        .arg("example")
+        .arg("--from")
+        .arg("executable-application")
+        .arg("app")
+        .arg("--version"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    app 0.3.0
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + executable-application==0.3.0
     ");
 }

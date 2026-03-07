@@ -18,8 +18,8 @@ use uv_configuration::{
     ProjectBuildBackend, TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
 };
 use uv_distribution_types::{
-    ConfigSettingEntry, ConfigSettingPackageEntry, Index, IndexUrl, Origin, PipExtraIndex,
-    PipFindLinks, PipIndex,
+    ConfigSettingEntry, ConfigSettingPackageEntry, Index, IndexArg, IndexUrl, Origin,
+    PipExtraIndex, PipFindLinks, PipIndex,
 };
 use uv_normalize::{ExtraName, GroupName, PackageName, PipGroupName};
 use uv_pep508::{MarkerTree, Requirement};
@@ -1191,6 +1191,27 @@ pub enum ProjectCommand {
     Audit(AuditArgs),
 }
 
+impl ProjectCommand {
+    /// Return the (singular) `--package` argument, if any.
+    ///
+    /// Returns [`None`] for commands which take multiple packages.
+    pub fn package(&self) -> Option<&PackageName> {
+        match self {
+            Self::Run(args) => args.package.as_ref(),
+            Self::Add(args) => args.package.as_ref(),
+            Self::Remove(args) => args.package.as_ref(),
+            Self::Version(args) => args.package.as_ref(),
+            Self::Init(_)
+            | Self::Sync(_)
+            | Self::Lock(_)
+            | Self::Export(_)
+            | Self::Tree(_)
+            | Self::Format(_)
+            | Self::Audit(_) => None,
+        }
+    }
+}
+
 /// A re-implementation of `Option`, used to avoid Clap's automatic `Option` flattening in
 /// [`parse_index_url`].
 #[derive(Debug, Clone)]
@@ -1219,10 +1240,7 @@ fn parse_index_url(input: &str) -> Result<Maybe<PipIndex>, String> {
     } else {
         IndexUrl::from_str(input)
             .map(Index::from_index_url)
-            .map(|index| Index {
-                origin: Some(Origin::Cli),
-                ..index
-            })
+            .map(|index| index.with_origin(Origin::Cli))
             .map(PipIndex::from)
             .map(Maybe::Some)
             .map_err(|err| err.to_string())
@@ -1236,10 +1254,7 @@ fn parse_extra_index_url(input: &str) -> Result<Maybe<PipExtraIndex>, String> {
     } else {
         IndexUrl::from_str(input)
             .map(Index::from_extra_index_url)
-            .map(|index| Index {
-                origin: Some(Origin::Cli),
-                ..index
-            })
+            .map(|index| index.with_origin(Origin::Cli))
             .map(PipExtraIndex::from)
             .map(Maybe::Some)
             .map_err(|err| err.to_string())
@@ -1253,33 +1268,26 @@ fn parse_find_links(input: &str) -> Result<Maybe<PipFindLinks>, String> {
     } else {
         IndexUrl::from_str(input)
             .map(Index::from_find_links)
-            .map(|index| Index {
-                origin: Some(Origin::Cli),
-                ..index
-            })
+            .map(|index| index.with_origin(Origin::Cli))
             .map(PipFindLinks::from)
             .map(Maybe::Some)
             .map_err(|err| err.to_string())
     }
 }
 
-/// Parse an `--index` argument into a [`Vec<Index>`], mapping the empty string to an empty Vec.
+/// Parse an `--index` argument into a [`Vec<IndexArg>`], mapping the empty string to an empty Vec.
 ///
 /// This function splits the input on all whitespace characters rather than a single delimiter,
 /// which is necessary to parse environment variables like `PIP_EXTRA_INDEX_URL`.
 /// The standard `clap::Args` `value_delimiter` only supports single-character delimiters.
-fn parse_indices(input: &str) -> Result<Vec<Maybe<Index>>, String> {
+fn parse_indices(input: &str) -> Result<Vec<Maybe<IndexArg>>, String> {
     if input.trim().is_empty() {
         return Ok(Vec::new());
     }
     let mut indices = Vec::new();
     for token in input.split_whitespace() {
-        match Index::from_str(token) {
-            Ok(index) => indices.push(Maybe::Some(Index {
-                default: false,
-                origin: Some(Origin::Cli),
-                ..index
-            })),
+        match IndexArg::from_cli(token) {
+            Ok(index) => indices.push(Maybe::Some(index)),
             Err(e) => return Err(e.to_string()),
         }
     }
@@ -1291,12 +1299,8 @@ fn parse_default_index(input: &str) -> Result<Maybe<Index>, String> {
     if input.is_empty() {
         Ok(Maybe::None)
     } else {
-        match Index::from_str(input) {
-            Ok(index) => Ok(Maybe::Some(Index {
-                default: true,
-                origin: Some(Origin::Cli),
-                ..index
-            })),
+        match Index::from_default_index(input) {
+            Ok(index) => Ok(Maybe::Some(index)),
             Err(err) => Err(err.to_string()),
         }
     }
@@ -6810,10 +6814,12 @@ pub struct IndexArgs {
     /// `--default-index` (which defaults to PyPI). When multiple `--index` flags are provided,
     /// earlier values take priority.
     ///
-    /// Index names are not supported as values. Relative paths must be disambiguated from index
-    /// names with `./` or `../` on Unix or `.\\`, `..\\`, `./` or `../` on Windows.
+    /// Index names can be used to reference indexes defined in the project, workspace, user, or
+    /// system configuration. If a directory exists with the same name as a defined index, the
+    /// directory will be used (with a warning). Use `./` or `../` on Unix or `.\\`, `..\\`, `./`
+    /// or `../` on Windows to disambiguate relative paths from index names.
     //
-    // The nested Vec structure (`Vec<Vec<Maybe<Index>>>`) is required for clap's
+    // The nested Vec structure (`Vec<Vec<Maybe<IndexArg>>>`) is required for clap's
     // value parsing mechanism, which processes one value at a time, in order to handle
     // `UV_INDEX` the same way pip handles `PIP_EXTRA_INDEX_URL`.
     #[arg(
@@ -6823,7 +6829,7 @@ pub struct IndexArgs {
         value_parser = parse_indices,
         help_heading = "Index options"
     )]
-    pub index: Option<Vec<Vec<Maybe<Index>>>>,
+    pub index: Option<Vec<Vec<Maybe<IndexArg>>>>,
 
     /// The URL of the default package index (by default: <https://pypi.org/simple>).
     ///

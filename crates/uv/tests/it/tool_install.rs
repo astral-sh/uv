@@ -6,9 +6,9 @@ use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::{
     assert::PathAssert,
-    fixture::{FileTouch, FileWriteStr, PathChild},
+    fixture::{FileTouch, FileWriteStr, PathChild, PathCreateDir},
 };
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use uv_fs::copy_dir_all;
@@ -4759,4 +4759,79 @@ fn tool_install_removed_python() {
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
     ");
+}
+
+/// Install a tool using `--index <name>` to reference an index defined in user config.
+#[tokio::test]
+async fn tool_install_index_by_name() {
+    use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
+
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix()
+        .with_exclude_newer("2025-01-18T00:00:00Z");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let proxy = crate::pypi_proxy::start().await;
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&server)
+        .await;
+
+    let uv_dir = context.user_config_dir.child("uv");
+    uv_dir.create_dir_all().unwrap();
+    let user_config = uv_dir.child("uv.toml");
+    user_config
+        .write_str(&formatdoc! {r#"
+            [[index]]
+            name = "primary"
+            url = "{server_url}"
+
+            [[index]]
+            name = "example"
+            url = "{proxy_url}"
+        "#,
+            server_url = server.uri(),
+            proxy_url = proxy.url("/simple"),
+        })
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("executable-application")
+        .arg("--index")
+        .arg("example")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + executable-application==0.3.0
+    Installed 1 executable: app
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r#"
+        [tool]
+        requirements = [{ name = "executable-application" }]
+        entrypoints = [
+            { name = "app", install-path = "[TEMP_DIR]/bin/app", from = "executable-application" },
+        ]
+
+        [tool.options]
+        index = [{ name = "example", url = "http://[LOCALHOST]/simple", explicit = false, default = false, format = "simple", authenticate = "auto" }, { name = "primary", url = "http://[LOCALHOST]/", explicit = false, default = false, format = "simple", authenticate = "auto" }, { name = "example", url = "http://[LOCALHOST]/simple", explicit = false, default = false, format = "simple", authenticate = "auto" }]
+        exclude-newer = "2025-01-18T00:00:00Z"
+        "#);
+    });
 }

@@ -1,13 +1,20 @@
 use std::fmt;
 
-use anstream::eprintln;
+use anstream::{eprint, eprintln};
 
+use tracing::debug;
 use uv_cache::Refresh;
 use uv_configuration::{BuildIsolation, Reinstall, Upgrade};
-use uv_distribution_types::{ConfigSettings, PackageConfigSettings, Requirement};
+use uv_distribution_types::{
+    ConfigSettings, Index, IndexArg, IndexArgStrategy, PackageConfigSettings, Requirement,
+    check_for_explicit_indexes,
+};
+use uv_preview::{Preview, PreviewFeature};
 use uv_resolver::{ExcludeNewer, ExcludeNewerPackage, PrereleaseMode};
-use uv_settings::{Combine, EnvFlag, PipOptions, ResolverInstallerOptions, ResolverOptions};
-use uv_warnings::owo_colors::OwoColorize;
+use uv_settings::{
+    Combine, EnvFlag, FilesystemOptions, PipOptions, ResolverInstallerOptions, ResolverOptions,
+};
+use uv_warnings::owo_colors::{AnsiColors, OwoColorize};
 
 use crate::{
     BuildOptionsArgs, FetchArgs, IndexArgs, InstallerArgs, Maybe, RefreshArgs, ResolverArgs,
@@ -183,6 +190,70 @@ pub fn check_conflicts(flag_a: Flag, flag_b: Flag) {
     }
 }
 
+/// Resolve CLI index arguments from `--index` and `--default-index` into a
+/// single list of indexes.
+///
+/// Indexes passed by name are resolved from the filesystem configuration
+/// prioritizing indexes from the workspace member, then the workspace, and then
+/// the configuration.
+pub fn resolve_and_combine_indexes(
+    default_index: Option<Maybe<Index>>,
+    index: Option<Vec<Vec<Maybe<IndexArg>>>>,
+    filesystem: Option<&FilesystemOptions>,
+    package_indexes: Vec<Index>,
+    preview: Preview,
+) -> Option<Vec<Index>> {
+    let filesystem_indexes: Vec<Index> = package_indexes
+        .into_iter()
+        .chain(
+            filesystem
+                .map(|filesystem| filesystem.top_level.indexes())
+                .into_iter()
+                .flatten(),
+        )
+        .collect();
+
+    let strategy = if preview.is_enabled(PreviewFeature::IndexAssumeName) {
+        IndexArgStrategy::IgnoreDirectory
+    } else {
+        IndexArgStrategy::PreferDirectory
+    };
+    let resolve = |index_arg: IndexArg| -> Index {
+        match index_arg.try_resolve(&filesystem_indexes, strategy) {
+            Ok(index) => {
+                debug!("Resolved index by name: {:?}", index);
+                index
+            }
+            Err(error) => {
+                // TODO(tk): Refactor
+                let mut error_chain = String::new();
+                // Writing to a string can't fail with errors (panics on allocation failure)
+                uv_warnings::write_error_chain(&error, &mut error_chain, "error", AnsiColors::Red)
+                    .unwrap();
+                eprint!("{}", error_chain);
+                // Exit code 2 matches clap's convention for usage errors.
+                #[expect(clippy::exit)]
+                std::process::exit(2);
+            }
+        }
+    };
+
+    let default_index = default_index
+        .and_then(Maybe::into_option)
+        .map(|default_index| vec![default_index]);
+
+    let index = index.map(|index| {
+        index
+            .into_iter()
+            .flat_map(|v| v.clone())
+            .filter_map(Maybe::into_option)
+            .map(resolve)
+            .collect()
+    });
+
+    default_index.combine(index)
+}
+
 impl From<RefreshArgs> for Refresh {
     fn from(value: RefreshArgs) -> Self {
         let RefreshArgs {
@@ -195,8 +266,25 @@ impl From<RefreshArgs> for Refresh {
     }
 }
 
-impl From<ResolverArgs> for PipOptions {
-    fn from(args: ResolverArgs) -> Self {
+/// Like [`From`] trait for conversions specifically to [`PipOptions`] from
+/// `*Args` types which contain [`uv_distribution_types::IndexArg`] elements and
+/// therefore need the filesystem options.
+pub trait ResolveOptions<A>: Sized {
+    fn resolve(
+        args: A,
+        filesystem: Option<&FilesystemOptions>,
+        package_indexes: Vec<Index>,
+        preview: Preview,
+    ) -> Self;
+}
+
+impl ResolveOptions<ResolverArgs> for PipOptions {
+    fn resolve(
+        args: ResolverArgs,
+        filesystem: Option<&FilesystemOptions>,
+        package_indexes: Vec<Index>,
+        preview: Preview,
+    ) -> Self {
         let ResolverArgs {
             index_args,
             upgrade,
@@ -246,13 +334,18 @@ impl From<ResolverArgs> for PipOptions {
             link_mode,
             no_sources: if no_sources { Some(true) } else { None },
             no_sources_package: Some(no_sources_package),
-            ..Self::from(index_args)
+            ..Self::resolve(index_args, filesystem, package_indexes, preview)
         }
     }
 }
 
-impl From<InstallerArgs> for PipOptions {
-    fn from(args: InstallerArgs) -> Self {
+impl ResolveOptions<InstallerArgs> for PipOptions {
+    fn resolve(
+        args: InstallerArgs,
+        filesystem: Option<&FilesystemOptions>,
+        package_indexes: Vec<Index>,
+        preview: Preview,
+    ) -> Self {
         let InstallerArgs {
             index_args,
             reinstall,
@@ -292,13 +385,18 @@ impl From<InstallerArgs> for PipOptions {
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode"),
             no_sources: if no_sources { Some(true) } else { None },
             no_sources_package: Some(no_sources_package),
-            ..Self::from(index_args)
+            ..Self::resolve(index_args, filesystem, package_indexes, preview)
         }
     }
 }
 
-impl From<ResolverInstallerArgs> for PipOptions {
-    fn from(args: ResolverInstallerArgs) -> Self {
+impl ResolveOptions<ResolverInstallerArgs> for PipOptions {
+    fn resolve(
+        args: ResolverInstallerArgs,
+        filesystem: Option<&FilesystemOptions>,
+        package_indexes: Vec<Index>,
+        preview: Preview,
+    ) -> Self {
         let ResolverInstallerArgs {
             index_args,
             upgrade,
@@ -356,13 +454,18 @@ impl From<ResolverInstallerArgs> for PipOptions {
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode"),
             no_sources: if no_sources { Some(true) } else { None },
             no_sources_package: Some(no_sources_package),
-            ..Self::from(index_args)
+            ..Self::resolve(index_args, filesystem, package_indexes, preview)
         }
     }
 }
 
-impl From<FetchArgs> for PipOptions {
-    fn from(args: FetchArgs) -> Self {
+impl ResolveOptions<FetchArgs> for PipOptions {
+    fn resolve(
+        args: FetchArgs,
+        filesystem: Option<&FilesystemOptions>,
+        package_indexes: Vec<Index>,
+        preview: Preview,
+    ) -> Self {
         let FetchArgs {
             index_args,
             index_strategy,
@@ -374,13 +477,18 @@ impl From<FetchArgs> for PipOptions {
             index_strategy,
             keyring_provider,
             exclude_newer,
-            ..Self::from(index_args)
+            ..Self::resolve(index_args, filesystem, package_indexes, preview)
         }
     }
 }
 
-impl From<IndexArgs> for PipOptions {
-    fn from(args: IndexArgs) -> Self {
+impl ResolveOptions<IndexArgs> for PipOptions {
+    fn resolve(
+        args: IndexArgs,
+        filesystem: Option<&FilesystemOptions>,
+        package_indexes: Vec<Index>,
+        preview: Preview,
+    ) -> Self {
         let IndexArgs {
             default_index,
             index,
@@ -390,17 +498,14 @@ impl From<IndexArgs> for PipOptions {
             find_links,
         } = args;
 
+        let index =
+            resolve_and_combine_indexes(default_index, index, filesystem, package_indexes, preview);
+        if let Some(ref indexes) = index {
+            check_for_explicit_indexes(indexes);
+        }
+
         Self {
-            index: default_index
-                .and_then(Maybe::into_option)
-                .map(|default_index| vec![default_index])
-                .combine(index.map(|index| {
-                    index
-                        .iter()
-                        .flat_map(std::clone::Clone::clone)
-                        .filter_map(Maybe::into_option)
-                        .collect()
-                })),
+            index,
             index_url: index_url.and_then(Maybe::into_option),
             extra_index_url: extra_index_url.map(|extra_index_urls| {
                 extra_index_urls
@@ -424,6 +529,9 @@ impl From<IndexArgs> for PipOptions {
 pub fn resolver_options(
     resolver_args: ResolverArgs,
     build_args: BuildOptionsArgs,
+    filesystem: Option<&FilesystemOptions>,
+    package_indexes: Vec<Index>,
+    preview: Preview,
 ) -> ResolverOptions {
     let ResolverArgs {
         index_args,
@@ -457,18 +565,19 @@ pub fn resolver_options(
         no_binary_package,
     } = build_args;
 
+    let index = resolve_and_combine_indexes(
+        index_args.default_index,
+        index_args.index,
+        filesystem,
+        package_indexes,
+        preview,
+    );
+    if let Some(ref indexes) = index {
+        check_for_explicit_indexes(indexes);
+    }
+
     ResolverOptions {
-        index: index_args
-            .default_index
-            .and_then(Maybe::into_option)
-            .map(|default_index| vec![default_index])
-            .combine(index_args.index.map(|index| {
-                index
-                    .into_iter()
-                    .flat_map(|v| v.clone())
-                    .filter_map(Maybe::into_option)
-                    .collect()
-            })),
+        index,
         index_url: index_args.index_url.and_then(Maybe::into_option),
         extra_index_url: index_args.extra_index_url.map(|extra_index_url| {
             extra_index_url
@@ -533,6 +642,9 @@ pub fn resolver_options(
 pub fn resolver_installer_options(
     resolver_installer_args: ResolverInstallerArgs,
     build_args: BuildOptionsArgs,
+    filesystem: Option<&FilesystemOptions>,
+    package_indexes: Vec<Index>,
+    preview: Preview,
 ) -> ResolverInstallerOptions {
     let ResolverInstallerArgs {
         index_args,
@@ -571,20 +683,19 @@ pub fn resolver_installer_options(
         no_binary_package,
     } = build_args;
 
-    let default_index = index_args
-        .default_index
-        .and_then(Maybe::into_option)
-        .map(|default_index| vec![default_index]);
-    let index = index_args.index.map(|index| {
-        index
-            .into_iter()
-            .flat_map(|v| v.clone())
-            .filter_map(Maybe::into_option)
-            .collect()
-    });
+    let index = resolve_and_combine_indexes(
+        index_args.default_index,
+        index_args.index,
+        filesystem,
+        package_indexes,
+        preview,
+    );
+    if let Some(ref indexes) = index {
+        check_for_explicit_indexes(indexes);
+    }
 
     ResolverInstallerOptions {
-        index: default_index.combine(index),
+        index,
         index_url: index_args.index_url.and_then(Maybe::into_option),
         extra_index_url: index_args.extra_index_url.map(|extra_index_url| {
             extra_index_url
