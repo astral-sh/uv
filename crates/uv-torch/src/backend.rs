@@ -232,9 +232,10 @@ impl TorchStrategy {
         mode: TorchMode,
         source: TorchSource,
         os: &Os,
+        cuda_driver_version: Option<String>,
     ) -> Result<Self, AcceleratorError> {
         let backend = match mode {
-            TorchMode::Auto => match Accelerator::detect()? {
+            TorchMode::Auto => match Accelerator::detect(cuda_driver_version)? {
                 Some(Accelerator::Cuda { driver_version }) => {
                     return Ok(Self::Cuda {
                         os: os.clone(),
