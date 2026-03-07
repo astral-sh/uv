@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use anyhow::Context;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use tracing::{Level, debug, enabled, warn};
+use tracing::{Level, debug, enabled, info_span, warn};
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -100,6 +100,7 @@ pub(crate) async fn pip_install(
     python_preference: PythonPreference,
     concurrency: Concurrency,
     cache: Cache,
+    workspace_cache: WorkspaceCache,
     dry_run: DryRun,
     printer: Printer,
     preview: Preview,
@@ -485,7 +486,7 @@ pub(crate) async fn pip_install(
         &build_hasher,
         exclude_newer.clone(),
         sources.clone(),
-        WorkspaceCache::default(),
+        workspace_cache.clone(),
         concurrency.clone(),
         preview,
     );
@@ -513,9 +514,11 @@ pub(crate) async fn pip_install(
                 let content = fs_err::tokio::read_to_string(&pylock).await?;
                 (install_path, content)
             };
-        let lock = toml::from_str::<PylockToml>(&content).with_context(|| {
-            format!("Not a valid `pylock.toml` file: {}", pylock.user_display())
-        })?;
+        let lock = info_span!("toml::from_str pip install", path = %pylock.display())
+            .in_scope(|| toml::from_str::<PylockToml>(&content))
+            .with_context(|| {
+                format!("Not a valid `pylock.toml` file: {}", pylock.user_display())
+            })?;
 
         // Verify that the Python version is compatible with the lock file.
         if let Some(requires_python) = lock.requires_python.as_ref() {
@@ -639,7 +642,7 @@ pub(crate) async fn pip_install(
         &build_hasher,
         exclude_newer.clone(),
         sources,
-        WorkspaceCache::default(),
+        workspace_cache,
         concurrency.clone(),
         preview,
     );

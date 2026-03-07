@@ -221,7 +221,7 @@ fn tool_install_python_from_global_version_file() {
     ");
 
     // It should use the version from the global file
-    uv_snapshot!(context.filters(), Command::new("flask").arg("--version").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    uv_snapshot!(context.filters(), Command::new("flask").arg("--version").env(EnvVars::PATH, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1813,6 +1813,10 @@ fn tool_install_uninstallable() {
             (r"bdist\.[^/\\\s]+(-[^/\\\s]+)?", "bdist.linux-x86_64"),
             (r"\\\.", ""),
             (r"#+", "#"),
+            (
+                "Please read the installation instructions at:\n ",
+                "Please read the installation instructions at:\n",
+            ),
         ])
         .collect::<Vec<_>>();
     uv_snapshot!(filters, context.tool_install()
@@ -1841,7 +1845,7 @@ fn tool_install_uninstallable() {
           We are sorry, but this package is not installable with pip.
 
           Please read the installation instructions at:
-     
+
           https://github.com/pyenv/pyenv#installation
           #
 
@@ -4249,7 +4253,7 @@ async fn tool_install_credentials() {
         ]
 
         [tool.options]
-        index = [{ url = "http://[LOCALHOST]/basic-auth/simple", explicit = false, default = false, format = "simple", authenticate = "auto" }]
+        index = [{ url = "http://[LOCALHOST]/basic-auth/simple", explicit = false, default = false, format = "simple", authenticate = "always" }]
         exclude-newer = "2025-01-18T00:00:00Z"
         "#);
     });
@@ -4675,6 +4679,84 @@ fn tool_install_python_platform() {
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
      ~ black==24.3.0
+    Installed 2 executables: black, blackd
+    ");
+}
+
+/// Reinstalling a tool after the underlying Python has been removed.
+///
+/// Regression test for <https://github.com/astral-sh/uv/issues/16252>.
+#[test]
+fn tool_install_removed_python() {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let (_, python_executable) = context.python_versions.first().unwrap();
+    let install_root = if cfg!(unix) {
+        // <root>/bin/python3.12
+        python_executable.parent().unwrap().parent().unwrap()
+    } else {
+        // <root>/python.exe
+        python_executable.parent().unwrap()
+    };
+
+    let temp_python_dir = context.temp_dir.child("temp-python");
+    copy_dir_all(install_root, &temp_python_dir).unwrap();
+
+    let relative_path = python_executable.strip_prefix(install_root).unwrap();
+    let temp_python = temp_python_dir.join(relative_path);
+
+    // Install `black` using the temporary Python.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--python")
+        .arg(&temp_python)
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    ");
+
+    fs_err::remove_dir_all(&temp_python_dir).unwrap();
+
+    // Reinstalling should skip the broken Python install.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--reinstall")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
     Installed 2 executables: black, blackd
     ");
 }

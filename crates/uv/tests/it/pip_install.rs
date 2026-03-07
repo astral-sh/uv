@@ -132,6 +132,7 @@ fn invalid_pyproject_toml_syntax() -> Result<()> {
       key with no value, expected `=`
 
     error: Failed to parse: `pyproject.toml`
+      Caused by: Invalid `pyproject.toml`
       Caused by: TOML parse error at line 1, column 5
       |
     1 | 123 - 456
@@ -5245,6 +5246,82 @@ requires-python = ">=3.13"
     );
 
     Ok(())
+}
+
+/// Resolve successfully when `--python-version` satisfies `Requires-Python` but the installed
+/// interpreter does not. The `installed()` check is not applied in the resolver — the resolution
+/// target is what matters.
+#[test]
+fn requires_python_source_dist_installed_incompatible() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Create a source distribution with `requires-python >= 3.13`.
+    let child_dir = context.temp_dir.child("child");
+    child_dir.create_dir_all()?;
+    child_dir.child("pyproject.toml").write_str(
+        r#"[project]
+name = "example"
+version = "0.0.0"
+dependencies = []
+requires-python = ">=3.13"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+"#,
+    )?;
+    child_dir.child("src").child("example").create_dir_all()?;
+    child_dir
+        .child("src")
+        .child("example")
+        .child("__init__.py")
+        .touch()?;
+
+    // `--python-version 3.13` satisfies `requires-python >= 3.13`, so resolution succeeds
+    // even though the installed interpreter is 3.12.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--python-version=3.13")
+        .arg(child_dir.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + example==0.0.0 (from file://[TEMP_DIR]/child)
+    "
+    );
+
+    Ok(())
+}
+
+/// Like [`requires_python_source_dist_installed_incompatible`], but using a registry package
+/// (`iniconfig`) instead of a direct URL, with `--no-binary` to force building from source.
+#[test]
+fn requires_python_source_dist_installed_incompatible_registry() {
+    let context = uv_test::test_context!("3.9").with_exclude_newer("2025-11-01T00:00:00Z");
+
+    // `--python-version 3.10` satisfies `requires-python >= 3.10`, so resolution succeeds
+    // even though the installed interpreter is 3.9. This should arguably fail, and some build
+    // backends would likely error in this scenario.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--python-version=3.10")
+        .arg("--no-binary")
+        .arg("iniconfig")
+        .arg("iniconfig==2.3.0"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.3.0
+    "
+    );
 }
 
 /// Install with `--no-build-isolation`, to disable isolation during PEP 517 builds.
@@ -11053,7 +11130,7 @@ fn pip_install_no_sources_package() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--no-sources-package")
         .arg("anyio")
-        .arg("."), @r###"
+        .arg("."), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11067,7 +11144,7 @@ fn pip_install_no_sources_package() -> Result<()> {
      + iniconfig==2.0.0 (from git+https://github.com/pytest-dev/iniconfig@93f5930e668c0d1ddf4597e38dd0dea4e2665e7a)
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
-    "###);
+    ");
 
     Ok(())
 }
@@ -13075,7 +13152,7 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
     "#})?;
 
     // The child should be built with anyio 4.0
-    uv_snapshot!(context.filters(), context.pip_install().arg(".").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @r"
+    uv_snapshot!(context.filters(), context.pip_install().arg(".").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13108,7 +13185,7 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
 
     // The child should be rebuilt with anyio 3.7, without `--reinstall`
     uv_snapshot!(context.filters(), context.pip_install().arg(".")
-        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @r"
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -13127,7 +13204,7 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.pip_install().arg(".")
-        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "3.7"), @r"
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "3.7"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13753,7 +13830,8 @@ fn install_with_system_interpreter() {
     let context = uv_test::test_context_with_versions!(&[])
         .with_python_download_cache()
         .with_managed_python_dirs()
-        .with_filtered_python_keys();
+        .with_filtered_python_keys()
+        .with_filtered_latest_python_versions();
 
     // We use a managed Python version here to ensure consistent output across systems
     context.python_install().arg("3.12").assert().success();
@@ -13766,8 +13844,8 @@ fn install_with_system_interpreter() {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.12 environment at: managed/cpython-3.12.12-[PLATFORM]
-    error: The interpreter at managed/cpython-3.12.12-[PLATFORM] is externally managed, and indicates the following:
+    Using Python 3.12.[LATEST] environment at: managed/cpython-3.12.[LATEST]-[PLATFORM]
+    error: The interpreter at managed/cpython-3.12.[LATEST]-[PLATFORM] is externally managed, and indicates the following:
 
       This Python installation is managed by uv and should not be modified.
 
@@ -13836,7 +13914,8 @@ fn install_missing_python_version_with_target() {
     // Create a context that only has Python 3.11 available.
     let context = uv_test::test_context!("3.11")
         .with_python_download_cache()
-        .with_managed_python_dirs();
+        .with_managed_python_dirs()
+        .with_filtered_latest_python_versions();
 
     let target_dir = context.temp_dir.child("target-dir");
 
@@ -13850,7 +13929,7 @@ fn install_missing_python_version_with_target() {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.12
+    Using CPython 3.12.[LATEST]
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -13961,7 +14040,7 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
         .arg("3.13")
         .assert()
         .success();
-    uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.13").arg("./child"), @r"
+    uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.13").arg("./child"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14156,7 +14235,7 @@ fn abi_compatibility_on_freethreaded_python() {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--python-platform").arg("linux")
-        .arg(wheel_path), @r"
+        .arg(wheel_path), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -14176,7 +14255,7 @@ fn abi_compatibility_on_freethreaded_python() {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--python-platform").arg("linux")
-        .arg(wheel_path), @r"
+        .arg(wheel_path), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -14196,7 +14275,7 @@ fn abi_compatibility_on_freethreaded_python() {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--python-platform").arg("linux")
-        .arg(wheel_path), @r"
+        .arg(wheel_path), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14217,7 +14296,7 @@ fn warn_on_bz2_wheel() {
         context.filters(),
         context.pip_install()
             .arg("futzed_bz2 @ https://github.com/astral-sh/futzed-wheels/releases/download/v2026.02.09.2/futzed_bz2-0.1.0-py3-none-any.whl"),
-        @r"
+        @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14240,14 +14319,14 @@ fn warn_on_lzma_wheel() {
         context.filters(),
         context.pip_install()
             .arg("futzed_lzma @ https://github.com/astral-sh/futzed-wheels/releases/download/v2026.02.09.2/futzed_lzma-0.1.0-py3-none-any.whl"),
-        @r"
+        @"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
       × Failed to download `futzed-lzma @ https://github.com/astral-sh/futzed-wheels/releases/download/v2026.02.09.2/futzed_lzma-0.1.0-py3-none-any.whl`
-      ├─▶ Request failed after 3 retries
+      ├─▶ Request failed after 3 retries in [TIME]
       ├─▶ Failed to read metadata: `https://github.com/astral-sh/futzed-wheels/releases/download/v2026.02.09.2/futzed_lzma-0.1.0-py3-none-any.whl`
       ├─▶ Failed to read from zip file
       ├─▶ an upstream reader returned an error: stream/file format not recognized

@@ -1111,7 +1111,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .arg("--exclude-newer")
-        .arg("P4Z"), @r#"
+        .arg("P4Z"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1120,7 +1120,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     error: invalid value 'P4Z' for '--exclude-newer <EXCLUDE_NEWER>': `P4Z` could not be parsed as an ISO 8601 duration: expected to find date unit designator suffix (`Y`, `M`, `W` or `D`), but found `Z` instead
 
     For more information, try '--help'.
-    "#);
+    ");
 
     uv_snapshot!(context.filters(), context
         .lock()

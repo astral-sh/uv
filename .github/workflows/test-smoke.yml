@@ -36,7 +36,7 @@ jobs:
 
       - name: "Smoke test"
         run: |
-          ./uv run scripts/smoke-test
+          ./uv run --no-project scripts/smoke-test
 
       - name: "Test shell completions"
         run: |
@@ -64,7 +64,7 @@ jobs:
 
       - name: "Smoke test"
         run: |
-          ./uv run scripts/smoke-test
+          ./uv run --no-project scripts/smoke-test
 
       - name: "Test shell completions"
         run: |
@@ -93,7 +93,7 @@ jobs:
 
       - name: "Smoke test"
         run: |
-          ./uv run scripts/smoke-test
+          ./uv run --no-project scripts/smoke-test
 
   smoke-test-macos:
     name: "macos"
@@ -116,7 +116,7 @@ jobs:
 
       - name: "Smoke test"
         run: |
-          ./uv run scripts/smoke-test
+          ./uv run --no-project scripts/smoke-test
 
       - name: "Test shell completions"
         run: |
@@ -140,7 +140,7 @@ jobs:
       - name: "Smoke test"
         working-directory: ${{ env.UV_WORKSPACE }}
         run: |
-          ./uv run scripts/smoke-test
+          ./uv run --no-project scripts/smoke-test
 
       - name: "Test uv shell completions"
         working-directory: ${{ env.UV_WORKSPACE }}
@@ -169,7 +169,7 @@ jobs:
       - name: "Smoke test"
         working-directory: ${{ env.UV_WORKSPACE }}
         run: |
-          ./uv run scripts/smoke-test
+          ./uv run --no-project scripts/smoke-test
 
       - name: "Test uv shell completions"
         working-directory: ${{ env.UV_WORKSPACE }}

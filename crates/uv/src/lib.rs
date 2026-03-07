@@ -689,6 +689,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.concurrency,
                 globals.quiet > 0,
                 cache,
+                workspace_cache,
                 printer,
                 globals.preview,
             )
@@ -774,6 +775,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.python_preference,
                 globals.concurrency,
                 cache,
+                workspace_cache,
                 args.dry_run,
                 printer,
                 globals.preview,
@@ -932,6 +934,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.python_preference,
                 globals.concurrency,
                 cache,
+                workspace_cache,
                 args.dry_run,
                 printer,
                 globals.preview,
@@ -1170,6 +1173,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.force_pep517,
                 args.clear,
                 build_constraints,
+                args.build_constraints_from_workspace,
                 args.hash_checking,
                 args.python,
                 args.install_mirrors,
@@ -1180,6 +1184,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.python_downloads,
                 globals.concurrency,
                 &cache,
+                &workspace_cache,
                 printer,
                 globals.preview,
             )
@@ -1256,6 +1261,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 cli.top_level.no_config,
                 args.no_project,
                 &cache,
+                &workspace_cache,
                 printer,
                 args.relocatable
                     || (globals
@@ -1278,6 +1284,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 client_builder,
                 filesystem,
                 cache,
+                &workspace_cache,
                 printer,
             ))
             .await
@@ -1452,6 +1459,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.installer_metadata,
                 globals.concurrency,
                 cache,
+                workspace_cache,
                 printer,
                 args.env_file,
                 args.no_env_file,
@@ -1553,6 +1561,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.concurrency,
                 cli.top_level.no_config,
                 cache,
+                &workspace_cache,
                 printer,
                 globals.preview,
             ))
@@ -1605,6 +1614,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.installer_metadata,
                 globals.concurrency,
                 &cache,
+                &workspace_cache,
                 printer,
                 globals.preview,
             ))
@@ -1780,6 +1790,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     args.python_downloads_json_url.as_deref(),
                     &client_builder.subcommand(vec!["python".to_owned(), "find".to_owned()]),
                     &cache,
+                    &workspace_cache,
                     printer,
                     globals.preview,
                 )
@@ -1807,6 +1818,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.install_mirrors,
                 client_builder.subcommand(vec!["python".to_owned(), "pin".to_owned()]),
                 &cache,
+                &workspace_cache,
                 printer,
                 globals.preview,
             )
@@ -1880,10 +1892,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         }
         Commands::Workspace(WorkspaceNamespace { command }) => match command {
             WorkspaceCommand::Metadata(_args) => {
-                commands::metadata(&project_dir, globals.preview, printer).await
+                commands::metadata(&project_dir, globals.preview, &workspace_cache, printer).await
             }
-            WorkspaceCommand::Dir(args) => commands::dir(args.package, &project_dir, printer).await,
-            WorkspaceCommand::List(args) => commands::list(&project_dir, args.paths, printer).await,
+            WorkspaceCommand::Dir(args) => {
+                commands::dir(args.package, &project_dir, &workspace_cache, printer).await
+            }
+            WorkspaceCommand::List(args) => {
+                commands::list(&project_dir, args.paths, &workspace_cache, printer).await
+            }
         },
         Commands::BuildBackend { command } => spawn_blocking(move || match command {
             BuildBackendCommand::BuildSdist { sdist_directory } => {
@@ -1945,6 +1961,7 @@ async fn run_project(
     client_builder: BaseClientBuilder<'_>,
     filesystem: Option<FilesystemOptions>,
     cache: Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
 ) -> Result<ExitStatus> {
     // Write out any resolved settings.
@@ -2081,6 +2098,7 @@ async fn run_project(
                 globals.installer_metadata,
                 globals.concurrency,
                 cache,
+                workspace_cache,
                 printer,
                 args.env_file,
                 globals.preview,
@@ -2137,6 +2155,7 @@ async fn run_project(
                 globals.concurrency,
                 no_config,
                 &cache,
+                workspace_cache,
                 printer,
                 globals.preview,
                 args.output_format,
@@ -2189,6 +2208,7 @@ async fn run_project(
                 globals.concurrency,
                 no_config,
                 &cache,
+                workspace_cache,
                 printer,
                 globals.preview,
             ))
@@ -2417,6 +2437,7 @@ async fn run_project(
                 globals.concurrency,
                 no_config,
                 &cache,
+                workspace_cache,
                 printer,
                 globals.preview,
             ))
@@ -2536,6 +2557,42 @@ async fn run_project(
                 printer,
                 globals.preview,
                 args.no_project,
+            ))
+            .await
+        }
+        ProjectCommand::Audit(audit_args) => {
+            let args = settings::AuditSettings::resolve(audit_args, filesystem, environment);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init().await?;
+
+            // Unwrap the script.
+            let script = script.map(|script| match script {
+                Pep723Item::Script(script) => script,
+                Pep723Item::Stdin(..) => unreachable!("`uv audit` does not support stdin"),
+                Pep723Item::Remote(..) => unreachable!("`uv audit` does not support remote files"),
+            });
+
+            Box::pin(commands::audit(
+                project_dir,
+                args.extras,
+                args.groups,
+                args.lock_check,
+                args.frozen,
+                script,
+                args.python_version,
+                args.python_platform,
+                args.install_mirrors,
+                args.settings,
+                client_builder.subcommand(vec!["audit".to_owned()]),
+                globals.python_preference,
+                globals.python_downloads,
+                globals.concurrency,
+                no_config,
+                cache,
+                printer,
+                globals.preview,
             ))
             .await
         }

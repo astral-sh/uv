@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use anyhow::Result;
+use tracing::info_span;
 
 use uv_configuration::Upgrade;
 use uv_fs::CWD;
@@ -48,16 +49,15 @@ pub async fn read_requirements_txt(
         .collect::<Result<Vec<_>, PreferenceError>>()?;
 
     // Apply the upgrade strategy to the requirements.
-    Ok(match upgrade {
+    Ok(if upgrade.is_none() {
         // Respect all pinned versions from the existing lockfile.
-        Upgrade::None => preferences,
-        // Ignore all pinned versions from the existing lockfile.
-        Upgrade::All => vec![],
-        // Ignore pinned versions for the specified packages.
-        Upgrade::Packages(packages) => preferences
+        preferences
+    } else {
+        // Ignore all pinned versions for packages that should be upgraded.
+        preferences
             .into_iter()
-            .filter(|preference| !packages.contains_key(preference.name()))
-            .collect(),
+            .filter(|preference| !upgrade.contains(preference.name()))
+            .collect()
     })
 }
 
@@ -107,7 +107,8 @@ pub async fn read_pylock_toml_requirements(
 
     // Read the `pylock.toml` from disk, and deserialize it from TOML.
     let content = fs_err::tokio::read_to_string(&output_file).await?;
-    let lock = toml::from_str::<PylockToml>(&content)?;
+    let lock = info_span!("toml::from_str upgrade", path = %output_file.display())
+        .in_scope(|| toml::from_str::<PylockToml>(&content))?;
 
     let mut preferences = Vec::new();
     let mut git = Vec::new();

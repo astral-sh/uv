@@ -1,3 +1,4 @@
+use std::time::{Duration, Instant};
 use std::{borrow::Cow, path::Path};
 
 use futures::FutureExt;
@@ -105,7 +106,11 @@ pub enum CachedClientError<CallbackError: std::error::Error + 'static> {
     Client(Error),
     /// Track retries before a callback explicitly, as we can't attach them to the callback error
     /// type.
-    Callback { retries: u32, err: CallbackError },
+    Callback {
+        retries: u32,
+        err: CallbackError,
+        duration: Duration,
+    },
 }
 
 impl<CallbackError: std::error::Error + 'static> CachedClientError<CallbackError> {
@@ -113,7 +118,15 @@ impl<CallbackError: std::error::Error + 'static> CachedClientError<CallbackError
     fn with_retries(self, retries: u32) -> Self {
         match self {
             Self::Client(err) => Self::Client(err.with_retries(retries)),
-            Self::Callback { retries: _, err } => Self::Callback { retries, err },
+            Self::Callback {
+                retries: _,
+                err,
+                duration,
+            } => Self::Callback {
+                retries,
+                err,
+                duration,
+            },
         }
     }
 
@@ -151,9 +164,11 @@ impl<E: Into<Self> + std::error::Error + 'static> From<CachedClientError<E>> for
     fn from(error: CachedClientError<E>) -> Self {
         match error {
             CachedClientError::Client(error) => error,
-            CachedClientError::Callback { retries, err } => {
-                Self::new(err.into().into_kind(), retries)
-            }
+            CachedClientError::Callback {
+                retries,
+                err,
+                duration,
+            } => Self::new(err.into().into_kind(), retries, duration),
         }
     }
 }
@@ -261,6 +276,7 @@ impl CachedClient {
         response_callback: Callback,
     ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
         let fresh_req = req.try_clone().expect("HTTP request must be cloneable");
+        let start = Instant::now();
         let cached_response = if let Some(cached) = Self::read_cache(cache_entry).await {
             self.send_cached(req, cache_control, cached)
                 .boxed_local()
@@ -339,6 +355,7 @@ impl CachedClient {
                     self.run_response_callback(
                         cache_entry,
                         cache_policy,
+                        start,
                         response,
                         response_callback,
                     )
@@ -360,10 +377,11 @@ impl CachedClient {
         cache_control: CacheControl<'_>,
         response_callback: Callback,
     ) -> Result<Payload, CachedClientError<CallBackError>> {
+        let start = Instant::now();
         let (response, cache_policy) = self.fresh_request(req, cache_control).await?;
 
         let payload = self
-            .run_response_callback(cache_entry, cache_policy, response, async |resp| {
+            .run_response_callback(cache_entry, cache_policy, start, response, async |resp| {
                 let payload = response_callback(resp).await?;
                 Ok(SerdeCacheable { inner: payload })
             })
@@ -384,9 +402,16 @@ impl CachedClient {
         response_callback: Callback,
     ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
         let _ = fs_err::tokio::remove_file(&cache_entry.path()).await;
+        let start = Instant::now();
         let (response, cache_policy) = self.fresh_request(req, cache_control).await?;
-        self.run_response_callback(cache_entry, cache_policy, response, response_callback)
-            .await
+        self.run_response_callback(
+            cache_entry,
+            cache_policy,
+            start,
+            response,
+            response_callback,
+        )
+        .await
     }
 
     async fn run_response_callback<
@@ -397,6 +422,7 @@ impl CachedClient {
         &self,
         cache_entry: &CacheEntry,
         cache_policy: Option<Box<CachePolicy>>,
+        start: Instant,
         response: Response,
         response_callback: Callback,
     ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
@@ -410,7 +436,11 @@ impl CachedClient {
         let data = response_callback(response)
             .boxed_local()
             .await
-            .map_err(|err| CachedClientError::Callback { retries, err })?;
+            .map_err(|err| CachedClientError::Callback {
+                retries,
+                err,
+                duration: start.elapsed(),
+            })?;
         let Some(cache_policy) = cache_policy else {
             return Ok(data.into_target());
         };
@@ -516,12 +546,13 @@ impl CachedClient {
     ) -> Result<CachedResponse, Error> {
         let url = DisplaySafeUrl::from_url(req.url().clone());
         debug!("Sending revalidation request for: {url}");
+        let start = Instant::now();
         let mut response = self
             .0
             .execute(req)
             .instrument(info_span!("revalidation_request", url = url.as_str()))
             .await
-            .map_err(|err| Error::from_reqwest_middleware(url.clone(), err))?;
+            .map_err(|err| Error::from_reqwest_middleware(url.clone(), err, start))?;
         trace!(
             "Received response for revalidation request with status {} for: {}",
             response.status(),
@@ -581,11 +612,12 @@ impl CachedClient {
         let url = DisplaySafeUrl::from_url(req.url().clone());
         debug!("Sending fresh {} request for: {}", req.method(), url);
         let cache_policy_builder = CachePolicyBuilder::new(&req);
+        let start = Instant::now();
         let mut response = self
             .0
             .execute(req)
             .await
-            .map_err(|err| Error::from_reqwest_middleware(url.clone(), err))?;
+            .map_err(|err| Error::from_reqwest_middleware(url.clone(), err, start))?;
         trace!(
             "Received response for fresh request with status {} for: {}",
             response.status(),
@@ -611,6 +643,7 @@ impl CachedClient {
             return Err(Error::new(
                 ErrorKind::from_reqwest_with_problem_details(url, status_error, problem_details),
                 retry_count.unwrap_or_default(),
+                start.elapsed(),
             ));
         }
 

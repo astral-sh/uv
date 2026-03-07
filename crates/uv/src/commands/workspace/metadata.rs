@@ -53,6 +53,7 @@ struct MetadataReport {
 pub(crate) async fn metadata(
     project_dir: &Path,
     preview: Preview,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
 ) -> Result<ExitStatus> {
     if !preview.is_enabled(PreviewFeature::WorkspaceMetadata) {
@@ -62,9 +63,8 @@ pub(crate) async fn metadata(
         );
     }
 
-    let workspace_cache = WorkspaceCache::default();
     let workspace =
-        Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache).await?;
+        Workspace::discover(project_dir, &DiscoveryOptions::default(), workspace_cache).await?;
 
     let members = workspace
         .packages()

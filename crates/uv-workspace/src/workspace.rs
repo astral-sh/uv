@@ -49,14 +49,16 @@ pub enum WorkspaceError {
     MissingPyprojectToml,
     #[error("Workspace member `{}` is missing a `pyproject.toml` (matches: `{}`)", _0.simplified_display(), _1)]
     MissingPyprojectTomlMember(PathBuf, String),
-    #[error("No `project` table found in: `{}`", _0.simplified_display())]
+    #[error("No `project` table found in: {}", _0.simplified_display())]
     MissingProject(PathBuf),
-    #[error("No workspace found for: `{}`", _0.simplified_display())]
+    #[error("No workspace found for: {}", _0.simplified_display())]
     MissingWorkspace(PathBuf),
-    #[error("The project is marked as unmanaged: `{}`", _0.simplified_display())]
+    #[error("The project is marked as unmanaged: {}", _0.simplified_display())]
     NonWorkspace(PathBuf),
-    #[error("Nested workspaces are not supported, but workspace member (`{}`) has a `uv.workspace` table", _0.simplified_display())]
+    #[error("Nested workspaces are not supported, but workspace member has a `tool.uv.workspace` table: {}", _0.simplified_display())]
     NestedWorkspace(PathBuf),
+    #[error("The workspace does not have a member {}: {}", _0, _1.simplified_display())]
+    NoSuchMember(PackageName, PathBuf),
     #[error("Two workspace members are both named `{name}`: `{}` and `{}`", first.simplified_display(), second.simplified_display())]
     DuplicatePackage {
         name: PackageName,
@@ -202,7 +204,7 @@ impl Workspace {
 
         let pyproject_path = project_path.join("pyproject.toml");
         let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
-        let pyproject_toml = PyProjectToml::from_string(contents)
+        let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
             .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
         // Check if the project is explicitly marked as unmanaged.
@@ -295,7 +297,7 @@ impl Workspace {
     /// Set the [`ProjectWorkspace`] for a given workspace member.
     ///
     /// Assumes that the project name is unchanged in the updated [`PyProjectToml`].
-    pub fn with_pyproject_toml(
+    pub fn update_member(
         self,
         package_name: &PackageName,
         pyproject_toml: PyProjectToml,
@@ -953,7 +955,7 @@ impl Workspace {
         if let Some(project) = &workspace_pyproject_toml.project {
             let pyproject_path = workspace_root.join("pyproject.toml");
             let contents = fs_err::read_to_string(&pyproject_path)?;
-            let pyproject_toml = PyProjectToml::from_string(contents)
+            let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
                 .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
             debug!(
@@ -1069,7 +1071,7 @@ impl Workspace {
                         return Err(err.into());
                     }
                 };
-                let pyproject_toml = PyProjectToml::from_string(contents)
+                let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
                     .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
                 // Check if the current project is explicitly marked as unmanaged.
@@ -1299,7 +1301,7 @@ impl ProjectWorkspace {
         // Read the current `pyproject.toml`.
         let pyproject_path = project_root.join("pyproject.toml");
         let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
-        let pyproject_toml = PyProjectToml::from_string(contents)
+        let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
             .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
         // It must have a `[project]` table.
@@ -1324,7 +1326,7 @@ impl ProjectWorkspace {
             // No `pyproject.toml`, but there may still be a `setup.py` or `setup.cfg`.
             return Ok(None);
         };
-        let pyproject_toml = PyProjectToml::from_string(contents)
+        let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
             .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
         // Extract the `[project]` metadata.
@@ -1364,13 +1366,13 @@ impl ProjectWorkspace {
     /// Set the `pyproject.toml` for the current project.
     ///
     /// Assumes that the project name is unchanged in the updated [`PyProjectToml`].
-    pub fn with_pyproject_toml(
+    pub fn update_member(
         self,
         pyproject_toml: PyProjectToml,
     ) -> Result<Option<Self>, WorkspaceError> {
         let Some(workspace) = self
             .workspace
-            .with_pyproject_toml(&self.project_name, pyproject_toml)?
+            .update_member(&self.project_name, pyproject_toml)?
         else {
             return Ok(None);
         };
@@ -1378,7 +1380,7 @@ impl ProjectWorkspace {
     }
 
     /// Find the workspace for a project.
-    pub async fn from_project(
+    async fn from_project(
         install_path: &Path,
         project: &Project,
         project_pyproject_toml: &PyProjectToml,
@@ -1517,7 +1519,7 @@ async fn find_workspace(
 
         // Read the `pyproject.toml`.
         let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
-        let pyproject_toml = PyProjectToml::from_string(contents)
+        let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
             .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
         return if let Some(workspace) = pyproject_toml
@@ -1714,7 +1716,7 @@ impl VirtualProject {
         // Read the current `pyproject.toml`.
         let pyproject_path = project_root.join("pyproject.toml");
         let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
-        let pyproject_toml = PyProjectToml::from_string(contents)
+        let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
             .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
         if let Some(project) = pyproject_toml.project.as_ref() {
@@ -1775,16 +1777,30 @@ impl VirtualProject {
         }
     }
 
-    /// Set the `pyproject.toml` for the current project.
+    /// Discover a project workspace with the member package.
+    pub async fn discover_with_package(
+        path: &Path,
+        options: &DiscoveryOptions,
+        cache: &WorkspaceCache,
+        package: PackageName,
+    ) -> Result<Self, WorkspaceError> {
+        let workspace = Workspace::discover(path, options, cache).await?;
+        let project_workspace = Workspace::with_current_project(workspace.clone(), package.clone());
+        Ok(Self::Project(project_workspace.ok_or_else(|| {
+            WorkspaceError::NoSuchMember(package.clone(), workspace.install_path)
+        })?))
+    }
+
+    /// Update the `pyproject.toml` for the current project.
     ///
     /// Assumes that the project name is unchanged in the updated [`PyProjectToml`].
-    pub fn with_pyproject_toml(
+    pub fn update_member(
         self,
         pyproject_toml: PyProjectToml,
     ) -> Result<Option<Self>, WorkspaceError> {
         Ok(match self {
             Self::Project(project) => {
-                let Some(project) = project.with_pyproject_toml(pyproject_toml)? else {
+                let Some(project) = project.update_member(pyproject_toml)? else {
                     return Ok(None);
                 };
                 Some(Self::Project(project))
@@ -2782,8 +2798,8 @@ foo = ["a", {include-group = "bar"}]
 bar = ["b"]
 "#;
 
-        let result =
-            PyProjectToml::from_string(toml.to_string()).expect("Deserialization should succeed");
+        let result = PyProjectToml::from_string(toml.to_string(), "pyproject.toml")
+            .expect("Deserialization should succeed");
 
         let groups = result
             .dependency_groups
@@ -2851,7 +2867,7 @@ bar = ["b"]
         insta::with_settings!({filters => filters}, {
             assert_snapshot!(
                 error,
-            @"Nested workspaces are not supported, but workspace member (`[ROOT]/packages/seeds`) has a `uv.workspace` table");
+            @"Nested workspaces are not supported, but workspace member has a `tool.uv.workspace` table: [ROOT]/packages/seeds");
         });
 
         Ok(())

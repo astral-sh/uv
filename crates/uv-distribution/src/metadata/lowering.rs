@@ -790,7 +790,7 @@ fn path_source(
                 let pyproject_path = install_path.join("pyproject.toml");
                 fs_err::read_to_string(&pyproject_path)
                     .ok()
-                    .and_then(|contents| PyProjectToml::from_string(contents).ok())
+                    .and_then(|contents| PyProjectToml::from_string(contents, pyproject_path).ok())
                     // We don't require a build system for path dependencies
                     .map(|pyproject_toml| pyproject_toml.is_package(false))
                     .unwrap_or(true)

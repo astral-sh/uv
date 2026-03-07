@@ -592,23 +592,23 @@ fn freeze_exclude() {
         .success();
 
     // Run `pip freeze --exclude MarkupSafe`.
-    uv_snapshot!(context.filters(), context.pip_freeze().arg("--exclude").arg("MarkupSafe").arg("--prefix").arg(prefix.path()), @r###"
+    uv_snapshot!(context.filters(), context.pip_freeze().arg("--exclude").arg("MarkupSafe").arg("--prefix").arg(prefix.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
     tomli==2.0.1
 
     ----- stderr -----
-    "###
+    "
     );
 
     // Run `pip freeze --exclude MarkupSafe --exclude tomli`.
-    uv_snapshot!(context.filters(), context.pip_freeze().arg("--exclude").arg("MarkupSafe").arg("--exclude").arg("tomli").arg("--prefix").arg(prefix.path()), @r###"
+    uv_snapshot!(context.filters(), context.pip_freeze().arg("--exclude").arg("MarkupSafe").arg("--exclude").arg("tomli").arg("--prefix").arg(prefix.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    "###
+    "
     );
 }

@@ -120,6 +120,7 @@ pub(crate) async fn pip_compile(
     concurrency: Concurrency,
     quiet: bool,
     cache: Cache,
+    workspace_cache: WorkspaceCache,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
@@ -539,7 +540,7 @@ pub(crate) async fn pip_compile(
         &build_hashes,
         exclude_newer.clone(),
         sources,
-        WorkspaceCache::default(),
+        workspace_cache,
         concurrency.clone(),
         preview,
     );

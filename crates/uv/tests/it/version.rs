@@ -2066,7 +2066,7 @@ fn version_get_fallback_unmanaged() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The project is marked as unmanaged: `[TEMP_DIR]/`
+    error: The project is marked as unmanaged: [TEMP_DIR]/
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -2117,7 +2117,7 @@ fn version_get_fallback_unmanaged_short() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The project is marked as unmanaged: `[TEMP_DIR]/`
+    error: The project is marked as unmanaged: [TEMP_DIR]/
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -2177,7 +2177,7 @@ fn version_get_fallback_unmanaged_strict() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The project is marked as unmanaged: `[TEMP_DIR]/`
+    error: The project is marked as unmanaged: [TEMP_DIR]/
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -2478,7 +2478,7 @@ fn version_get_workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No `project` table found in: `[TEMP_DIR]/pyproject.toml`
+    error: No `project` table found in: [TEMP_DIR]/pyproject.toml
     ");
 
     Ok(())
@@ -3092,7 +3092,7 @@ fn virtual_empty() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No `project` table found in: `[TEMP_DIR]/pyproject.toml`
+    error: No `project` table found in: [TEMP_DIR]/pyproject.toml
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -3116,7 +3116,7 @@ fn virtual_empty() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No `project` table found in: `[TEMP_DIR]/pyproject.toml`
+    error: No `project` table found in: [TEMP_DIR]/pyproject.toml
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -3157,7 +3157,7 @@ fn add_virtual_dependency_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No `project` table found in: `[TEMP_DIR]/pyproject.toml`
+    error: No `project` table found in: [TEMP_DIR]/pyproject.toml
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -3183,7 +3183,7 @@ fn add_virtual_dependency_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No `project` table found in: `[TEMP_DIR]/pyproject.toml`
+    error: No `project` table found in: [TEMP_DIR]/pyproject.toml
     ");
 
     let pyproject_toml = context.read("pyproject.toml");

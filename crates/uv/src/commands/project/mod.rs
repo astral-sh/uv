@@ -30,9 +30,10 @@ use uv_pep508::MarkerTreeContents;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts};
 use uv_python::{
-    EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads, PythonEnvironment,
-    PythonInstallation, PythonPreference, PythonRequest, PythonSource, PythonVariant,
-    PythonVersionFile, VersionFileDiscoveryOptions, VersionRequest, satisfies_python_preference,
+    BrokenLink, EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads,
+    PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, PythonSource,
+    PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions, VersionRequest,
+    satisfies_python_preference,
 };
 use uv_requirements::upgrade::{LockedRequirements, read_lock_requirements};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
@@ -63,6 +64,7 @@ use crate::settings::{
 };
 
 pub(crate) mod add;
+pub(crate) mod audit;
 pub(crate) mod environment;
 pub(crate) mod export;
 pub(crate) mod format;
@@ -1034,15 +1036,24 @@ impl ProjectInterpreter {
                 }
             }
             Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(_))) => {}
-            Err(uv_python::Error::Query(uv_python::InterpreterError::BrokenSymlink(
-                broken_symlink,
-            ))) => {
-                let target_path = fs_err::read_link(&broken_symlink.path)?;
-                warn_user!(
-                    "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
-                    broken_symlink.path.user_display().cyan(),
-                    target_path.user_display().cyan(),
-                );
+            Err(uv_python::Error::Query(uv_python::InterpreterError::BrokenLink(BrokenLink {
+                path,
+                unix,
+                venv: _,
+            }))) => {
+                if unix {
+                    let target_path = fs_err::read_link(&path)?;
+                    warn_user!(
+                        "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
+                        path.user_display().cyan(),
+                        target_path.user_display().cyan(),
+                    );
+                } else {
+                    warn_user!(
+                        "Ignoring existing virtual environment linked to non-existent Python interpreter: {}",
+                        path.user_display().cyan(),
+                    );
+                }
             }
             Err(err) => return Err(err.into()),
         }
@@ -1993,6 +2004,7 @@ pub(crate) async fn resolve_environment(
     logger: Box<dyn ResolveLogger>,
     concurrency: &Concurrency,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
 ) -> Result<ResolverOutput, ProjectError> {
@@ -2130,8 +2142,6 @@ pub(crate) async fn resolve_environment(
         FlatIndex::from_entries(entries, Some(&tags), &hasher, build_options)
     };
 
-    let workspace_cache = WorkspaceCache::default();
-
     // Lower the extra build dependencies, if any.
     let extra_build_requires =
         LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
@@ -2158,7 +2168,7 @@ pub(crate) async fn resolve_environment(
         &build_hasher,
         exclude_newer.clone(),
         sources.clone(),
-        workspace_cache,
+        workspace_cache.clone(),
         concurrency.clone(),
         preview,
     );
@@ -2366,7 +2376,7 @@ pub(crate) async fn update_environment(
     installer_metadata: bool,
     concurrency: &Concurrency,
     cache: &Cache,
-    workspace_cache: WorkspaceCache,
+    workspace_cache: &WorkspaceCache,
     dry_run: DryRun,
     printer: Printer,
     preview: Preview,
@@ -2553,7 +2563,7 @@ pub(crate) async fn update_environment(
         &build_hasher,
         exclude_newer.clone(),
         sources.clone(),
-        workspace_cache,
+        workspace_cache.clone(),
         concurrency.clone(),
         preview,
     );
@@ -2826,11 +2836,22 @@ pub(crate) fn script_specification(
             .map_ok(LoweredRequirement::into_inner)
         })
         .collect::<Result<Vec<_>, _>>()?;
+    let excludes = script
+        .metadata()
+        .tool
+        .as_ref()
+        .and_then(|tool| tool.uv.as_ref())
+        .and_then(|uv| uv.exclude_dependencies.as_ref())
+        .into_iter()
+        .flatten()
+        .cloned()
+        .collect::<Vec<_>>();
 
-    Ok(Some(RequirementsSpecification::from_overrides(
+    Ok(Some(RequirementsSpecification::from_excludes(
         requirements,
         constraints,
         overrides,
+        excludes,
     )))
 }
 

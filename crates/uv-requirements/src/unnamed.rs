@@ -5,7 +5,6 @@ use std::sync::Arc;
 
 use configparser::ini::Ini;
 use futures::{TryStreamExt, stream::FuturesOrdered};
-use serde::Deserialize;
 use tracing::debug;
 use url::Host;
 
@@ -15,10 +14,10 @@ use uv_distribution_types::{
     BuildableSource, DirectSourceUrl, DirectorySourceUrl, GitSourceUrl, PathSourceUrl,
     RemoteSource, Requirement, SourceUrl, VersionId,
 };
+use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep508::{UnnamedRequirement, VersionOrUrl};
-use uv_pypi_types::Metadata10;
-use uv_pypi_types::{ParsedUrl, VerbatimParsedUrl};
+use uv_pypi_types::{Metadata10, ParsedUrl, PyProjectToml, VerbatimParsedUrl};
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
 
@@ -166,9 +165,12 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
 
                 // Attempt to read a `pyproject.toml` file.
                 let project_path = parsed_directory_url.install_path.join("pyproject.toml");
-                if let Some(pyproject) = fs_err::read_to_string(project_path)
-                    .ok()
-                    .and_then(|contents| toml::from_str::<PyProjectToml>(&contents).ok())
+                if let Some(pyproject) =
+                    fs_err::read_to_string(&project_path)
+                        .ok()
+                        .and_then(|contents| {
+                            PyProjectToml::from_toml(&contents, project_path.user_display()).ok()
+                        })
                 {
                     // Read PEP 621 metadata from the `pyproject.toml`.
                     if let Some(project) = pyproject.project {
@@ -239,7 +241,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
 
                 SourceUrl::Directory(DirectorySourceUrl {
                     url: &requirement.url.verbatim,
-                    install_path: Cow::Borrowed(&parsed_directory_url.install_path),
+                    install_path: &parsed_directory_url.install_path,
                     editable: parsed_directory_url.editable,
                 })
             }
@@ -314,30 +316,4 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
             origin: requirement.origin,
         })
     }
-}
-
-/// A pyproject.toml as specified in PEP 517.
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "kebab-case")]
-struct PyProjectToml {
-    project: Option<Project>,
-    tool: Option<Tool>,
-}
-
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "kebab-case")]
-struct Project {
-    name: PackageName,
-}
-
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "kebab-case")]
-struct Tool {
-    poetry: Option<ToolPoetry>,
-}
-
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "kebab-case")]
-struct ToolPoetry {
-    name: Option<PackageName>,
 }

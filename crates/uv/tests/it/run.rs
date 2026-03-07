@@ -519,7 +519,7 @@ fn run_pep723_script_requires_python() -> Result<()> {
 
     // The `.python-version` (3.11) is incompatible with the script's `requires-python` (>=3.12),
     // so uv should ignore it and discover a compatible Python (3.12) instead.
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -531,7 +531,7 @@ fn run_pep723_script_requires_python() -> Result<()> {
     // Deleting the `.python-version` file should not change the behavior.
     fs_err::remove_file(&python_version)?;
 
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -565,7 +565,7 @@ fn run_pep723_script_requires_python_compatible() -> Result<()> {
 
     // The `.python-version` (3.11) is compatible with the script's `requires-python` (>=3.11),
     // so it should be used.
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -597,7 +597,7 @@ fn run_pep723_script_requires_python_incompatible_range() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -838,6 +838,43 @@ fn run_pep723_script_overrides() -> Result<()> {
     Installed 3 packages in [TIME]
      + anyio==4.3.0
      + idna==2.0
+     + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
+
+/// Run a PEP 723-compatible script with `tool.uv` excludes.
+#[test]
+fn run_pep723_script_excludes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "anyio>=3",
+        # ]
+        #
+        # [tool.uv]
+        # exclude-dependencies = ["idna"]
+        # ///
+
+        import anyio
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + anyio==4.3.0
      + sniffio==1.3.1
     ");
 

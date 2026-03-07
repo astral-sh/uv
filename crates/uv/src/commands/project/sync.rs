@@ -3,7 +3,7 @@ use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use serde::Serialize;
@@ -81,6 +81,7 @@ pub(crate) async fn sync(
     concurrency: Concurrency,
     no_config: bool,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
     output_format: SyncFormat,
@@ -93,7 +94,6 @@ pub(crate) async fn sync(
     }
 
     // Identify the target.
-    let workspace_cache = WorkspaceCache::default();
     let target = if let Some(script) = script {
         SyncTarget::Script(script)
     } else {
@@ -105,21 +105,22 @@ pub(crate) async fn sync(
                     members: MemberDiscovery::None,
                     ..DiscoveryOptions::default()
                 },
-                &workspace_cache,
+                workspace_cache,
             )
             .await?
         } else if let [name] = package.as_slice() {
-            VirtualProject::Project(
-                Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
-                    .await?
-                    .with_current_project(name.clone())
-                    .with_context(|| format!("Package `{name}` not found in workspace"))?,
+            VirtualProject::discover_with_package(
+                project_dir,
+                &DiscoveryOptions::default(),
+                workspace_cache,
+                name.clone(),
             )
+            .await?
         } else {
             let project = VirtualProject::discover(
                 project_dir,
                 &DiscoveryOptions::default(),
-                &workspace_cache,
+                workspace_cache,
             )
             .await?;
 
@@ -285,7 +286,7 @@ pub(crate) async fn sync(
                 installer_metadata,
                 &concurrency,
                 cache,
-                workspace_cache.clone(),
+                workspace_cache,
                 dry_run,
                 printer,
                 preview,
@@ -352,7 +353,7 @@ pub(crate) async fn sync(
             Box::new(DefaultResolveLogger),
             &concurrency,
             cache,
-            &workspace_cache,
+            workspace_cache,
             printer,
             preview,
         )
@@ -615,7 +616,7 @@ pub(super) async fn do_sync(
     installer_metadata: bool,
     concurrency: &Concurrency,
     cache: &Cache,
-    workspace_cache: WorkspaceCache,
+    workspace_cache: &WorkspaceCache,
     dry_run: DryRun,
     printer: Printer,
     preview: Preview,

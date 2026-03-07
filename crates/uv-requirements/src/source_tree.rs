@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -183,7 +182,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         };
         let source = SourceUrl::Directory(DirectorySourceUrl {
             url: &url,
-            install_path: Cow::Borrowed(path),
+            install_path: path,
             editable: None,
         });
 

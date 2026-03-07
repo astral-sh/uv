@@ -75,6 +75,7 @@ pub(crate) async fn install(
     concurrency: Concurrency,
     no_config: bool,
     cache: Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
@@ -125,7 +126,6 @@ pub(crate) async fn install(
 
     // Initialize any shared state.
     let state = PlatformState::default();
-    let workspace_cache = WorkspaceCache::default();
 
     // Parse the input requirement.
     let request = ToolRequest::parse(&package, from.as_deref())?;
@@ -175,7 +175,7 @@ pub(crate) async fn install(
                 &state,
                 &concurrency,
                 &cache,
-                &workspace_cache,
+                workspace_cache,
                 printer,
                 preview,
                 lfs,
@@ -363,7 +363,7 @@ pub(crate) async fn install(
                 &state,
                 &concurrency,
                 &cache,
-                &workspace_cache,
+                workspace_cache,
                 printer,
                 preview,
                 lfs,
@@ -389,12 +389,15 @@ pub(crate) async fn install(
         &state,
         &concurrency,
         &cache,
-        &workspace_cache,
+        workspace_cache,
         printer,
         preview,
         lfs,
     )
     .await?;
+
+    // Resolve the excludes.
+    let excludes = spec.excludes.clone();
 
     // Resolve the build constraints.
     let build_constraints: Vec<Requirement> =
@@ -620,6 +623,7 @@ pub(crate) async fn install(
             Box::new(DefaultResolveLogger),
             &concurrency,
             &cache,
+            workspace_cache,
             printer,
             preview,
         )
@@ -675,6 +679,7 @@ pub(crate) async fn install(
                         Box::new(DefaultResolveLogger),
                         &concurrency,
                         &cache,
+                        workspace_cache,
                         printer,
                         preview,
                     )
@@ -753,6 +758,7 @@ pub(crate) async fn install(
         requirements,
         constraints,
         overrides,
+        excludes,
         build_constraints,
         printer,
     )?;

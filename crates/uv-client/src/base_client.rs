@@ -4,7 +4,7 @@ use std::fmt::Write;
 use std::num::ParseIntError;
 use std::path::Path;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, SystemTime, SystemTimeError};
 use std::{env, io, iter};
 
 use anyhow::anyhow;
@@ -20,8 +20,8 @@ use reqwest::{Client, ClientBuilder, IntoUrl, NoProxy, Proxy, Request, Response,
 use reqwest_middleware::{ClientWithMiddleware, Middleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{
-    RetryPolicy, RetryTransientMiddleware, Retryable, RetryableStrategy, default_on_request_error,
-    default_on_request_success,
+    Jitter, RetryPolicy, RetryTransientMiddleware, Retryable, RetryableStrategy,
+    default_on_request_error, default_on_request_success,
 };
 use thiserror::Error;
 use tracing::{debug, trace};
@@ -114,6 +114,8 @@ pub struct BaseClientBuilder<'a> {
     subcommand: Option<Vec<String>>,
     /// Optional name for this client, used in debug logging.
     client_name: Option<&'static str>,
+    /// Whether to disable retry delays (for testing).
+    no_retry_delay: bool,
 }
 
 /// The policy for handling HTTP redirects.
@@ -178,6 +180,7 @@ impl Default for BaseClientBuilder<'_> {
             custom_client: None,
             subcommand: None,
             client_name: None,
+            no_retry_delay: env::var_os(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY).is_some(),
         }
     }
 }
@@ -236,6 +239,12 @@ impl<'a> BaseClientBuilder<'a> {
     #[must_use]
     pub fn retries(mut self, retries: u32) -> Self {
         self.retries = retries;
+        self
+    }
+
+    #[must_use]
+    pub fn no_retry_delay(mut self, no_retry_delay: bool) -> Self {
+        self.no_retry_delay = no_retry_delay;
         self
     }
 
@@ -371,11 +380,7 @@ impl<'a> BaseClientBuilder<'a> {
 
     /// Create a [`RetryPolicy`] for the client.
     pub fn retry_policy(&self) -> ExponentialBackoff {
-        let mut builder = ExponentialBackoff::builder();
-        if env::var_os(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY).is_some() {
-            builder = builder.retry_bounds(Duration::from_millis(0), Duration::from_millis(0));
-        }
-        builder.build_with_max_retries(self.retries)
+        retry_policy(self.retries, self.no_retry_delay)
     }
 
     pub fn build(&self) -> BaseClient {
@@ -418,6 +423,7 @@ impl<'a> BaseClientBuilder<'a> {
             connectivity: self.connectivity,
             allow_insecure_host: self.allow_insecure_host.clone(),
             retries: self.retries,
+            no_retry_delay: self.no_retry_delay,
             client,
             raw_client,
             dangerous_client,
@@ -446,6 +452,7 @@ impl<'a> BaseClientBuilder<'a> {
             connectivity: self.connectivity,
             allow_insecure_host: self.allow_insecure_host.clone(),
             retries: self.retries,
+            no_retry_delay: self.no_retry_delay,
             client,
             dangerous_client,
             raw_client: existing.raw_client.clone(),
@@ -758,6 +765,8 @@ pub struct BaseClient {
     allow_insecure_host: Vec<TrustedHost>,
     /// The number of retries to attempt on transient errors.
     retries: u32,
+    /// Whether to disable retry delays (for testing).
+    no_retry_delay: bool,
     /// Global authentication cache for a uv invocation to share credentials across uv clients.
     credentials_cache: Arc<CredentialsCache>,
 }
@@ -810,11 +819,7 @@ impl BaseClient {
 
     /// The [`RetryPolicy`] for the client.
     pub fn retry_policy(&self) -> ExponentialBackoff {
-        let mut builder = ExponentialBackoff::builder();
-        if env::var_os(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY).is_some() {
-            builder = builder.retry_bounds(Duration::from_millis(0), Duration::from_millis(0));
-        }
-        builder.build_with_max_retries(self.retries)
+        retry_policy(self.retries, self.no_retry_delay)
     }
 
     pub fn credentials_cache(&self) -> &CredentialsCache {
@@ -1143,6 +1148,20 @@ impl<'a> RequestBuilder<'a> {
     }
 }
 
+/// Create a [`RetryPolicy`] with the given number of retries.
+fn retry_policy(retries: u32, no_retry_delay: bool) -> ExponentialBackoff {
+    let mut builder = ExponentialBackoff::builder();
+    if no_retry_delay {
+        builder = builder.retry_bounds(Duration::from_millis(0), Duration::from_millis(0));
+    } else {
+        // Configure an effective minimum between attempts of 1s and a real maximum of 30s.
+        builder = builder
+            .jitter(Jitter::Bounded)
+            .retry_bounds(Duration::from_secs(2), Duration::from_secs(30));
+    }
+    builder.build_with_max_retries(retries)
+}
+
 /// An extension over [`DefaultRetryableStrategy`] that logs transient request failures and
 /// adds additional retry cases.
 pub struct UvRetryableStrategy;
@@ -1183,7 +1202,7 @@ impl RetryableStrategy for UvRetryableStrategy {
 /// * When streaming a response, a reqwest error may be hidden several layers behind errors
 ///   of different crates processing the stream, including `io::Error` layers
 /// * Any `h2` error
-fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retryable> {
+pub fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retryable> {
     // First, try to show a nice trace log
     if let Some((Some(status), Some(url))) = find_source::<WrappedReqwestError>(&err)
         .map(|request_err| (request_err.status(), request_err.url()))
@@ -1221,19 +1240,19 @@ fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retryable
             has_known_error = true;
             // Ignore the default retry strategy returning fatal.
             if default_on_request_error(reqwest_err) == Some(Retryable::Transient) {
-                trace!("Retrying nested reqwest error");
+                trace!("Transient nested reqwest error");
                 return Some(Retryable::Transient);
             }
             if is_retryable_status_error(reqwest_err) {
-                trace!("Retrying nested reqwest status code error");
+                trace!("Transient nested reqwest status code error");
                 return Some(Retryable::Transient);
             }
 
-            trace!("Cannot retry nested reqwest error");
+            trace!("Fatal nested reqwest error");
         } else if source.downcast_ref::<h2::Error>().is_some() {
             // All h2 errors look like errors that should be retried
             // https://github.com/astral-sh/uv/issues/15916
-            trace!("Retrying nested h2 error");
+            trace!("Transient nested h2 error");
             return Some(Retryable::Transient);
         } else if let Some(io_err) = source.downcast_ref::<io::Error>() {
             has_known_error = true;
@@ -1252,12 +1271,12 @@ fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retryable
                 io::ErrorKind::UnexpectedEof,
             ];
             if retryable_io_err_kinds.contains(&io_err.kind()) {
-                trace!("Retrying error: `{}`", io_err.kind());
+                trace!("Transient IO error: `{}`", io_err.kind());
                 return Some(Retryable::Transient);
             }
 
             trace!(
-                "Cannot retry IO error `{}`, not a retryable IO error kind",
+                "Fatal IO error `{}`, not a transient IO error kind",
                 io_err.kind()
             );
         }
@@ -1266,7 +1285,7 @@ fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retryable
     }
 
     if !has_known_error {
-        trace!("Cannot retry error: Neither an IO error nor a reqwest error");
+        trace!("Cannot retry error: neither an IO error nor a reqwest error");
     }
 
     None
@@ -1296,6 +1315,11 @@ impl RetryState {
     /// After a failed retryable request, this equals the maximum number of retries.
     pub fn total_retries(&self) -> u32 {
         self.total_retries
+    }
+
+    /// The total duration from the first request to the (failure) of the last request.
+    pub fn duration(&self) -> Result<Duration, SystemTimeError> {
+        self.start_time.elapsed()
     }
 
     /// Determines whether request should be retried.
@@ -1627,7 +1651,7 @@ mod tests {
             }
         }
 
-        assert_debug_snapshot!(retried, @r"
+        assert_debug_snapshot!(retried, @"
         [
             100,
             102,

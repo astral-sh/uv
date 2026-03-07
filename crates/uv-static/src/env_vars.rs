@@ -477,6 +477,11 @@ impl EnvVars {
     #[attr_added_in("0.8.0")]
     pub const UV_VENV_CLEAR: &'static str = "UV_VENV_CLEAR";
 
+    /// Equivalent to the `--relocatable` command-line argument. If set, the virtual
+    /// environment will be relocatable.
+    #[attr_added_in("0.10.8")]
+    pub const UV_VENV_RELOCATABLE: &'static str = "UV_VENV_RELOCATABLE";
+
     /// Install seed packages (one or more of: `pip`, `setuptools`, and `wheel`) into the virtual environment
     /// created by `uv venv`.
     ///
@@ -586,6 +591,13 @@ impl EnvVars {
     #[attr_hidden]
     #[attr_added_in("0.10.5")]
     pub const UV_INTERNAL__TEST_ALT_FS: &'static str = "UV_INTERNAL__TEST_ALT_FS";
+
+    /// Path to a directory on a filesystem with a low hardlink limit (e.g., minix with ~250).
+    ///
+    /// When populated, uv will run additional tests that exercise EMLINK recovery.
+    #[attr_hidden]
+    #[attr_added_in("0.10.9")]
+    pub const UV_INTERNAL__TEST_LOWLINKS_FS: &'static str = "UV_INTERNAL__TEST_LOWLINKS_FS";
 
     /// Used to force treating an interpreter as "managed" during tests.
     #[attr_hidden]

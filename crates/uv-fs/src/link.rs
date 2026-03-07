@@ -765,9 +765,32 @@ where
         })
 }
 
-/// Try to create a hard link, returning the `io::Error` on failure.
+/// Try to create a hard link, handling `TooManyLinks` (EMLINK/`ERROR_TOO_MANY_LINKS`)
+/// by copying the source to a fresh inode and retrying.
 fn try_hardlink_file(src: &Path, dst: &Path) -> io::Result<()> {
-    fs_err::hard_link(src, dst)
+    match fs_err::hard_link(src, dst) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == io::ErrorKind::TooManyLinks => {
+            debug!(
+                "Hit link limit for {}, creating a fresh copy",
+                src.display()
+            );
+            let mut parent = src.parent().unwrap_or(Path::new("."));
+            if parent.as_os_str().is_empty() {
+                parent = Path::new(".");
+            }
+            let temp = tempfile::NamedTempFile::new_in(parent)?;
+            // This is a benign race. It can effectively lead to the destination being an
+            // independent copy.
+            fs_err::copy(src, temp.path())?;
+            // Linking a copy before renaming avoids the unlikely race where another process could
+            // exhaust the fresh inode's links between the rename and our link.
+            fs_err::hard_link(temp.path(), dst)?;
+            fs_err::rename(temp.path(), src)?;
+            Ok(())
+        }
+        Err(err) => Err(err),
+    }
 }
 
 /// Atomically overwrite an existing file with a hard link.
@@ -786,7 +809,7 @@ where
     let tempdir = tempfile::tempdir_in(parent)?;
     let tempfile = tempdir.path().join(dst.file_name().unwrap());
 
-    if fs_err::hard_link(src, &tempfile).is_ok() {
+    if try_hardlink_file(src, &tempfile).is_ok() {
         fs_err::rename(&tempfile, dst)?;
         Ok(state.mode_working())
     } else {
