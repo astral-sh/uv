@@ -26,7 +26,7 @@ use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, DistributionMetadata,
     IncompatibleDist, IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations,
     IndexMetadata, IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement,
-    ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
+    RequirementSource, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -1905,7 +1905,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     python_requirement,
                 );
 
-                requirements
+                let mut deps: Vec<_> = requirements
                     .filter(|requirement| !self.excludes.contains(&requirement.name))
                     .flat_map(|requirement| {
                         PubGrubDependency::from_requirement(
@@ -1916,7 +1916,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         )
                     })
                     .chain(system_dependencies)
-                    .collect()
+                    .collect();
+
+                if extra.is_none() && group.is_none() {
+                    self.add_complementary_source_dependencies(
+                        package,
+                        &metadata.requires_dist,
+                        env,
+                        python_requirement,
+                        &mut deps,
+                    );
+                }
+
+                deps
             }
 
             PubGrubPackageInner::Python(_) => return Ok(Dependencies::Unforkable(Vec::default())),
@@ -1998,6 +2010,85 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
         };
         Ok(Dependencies::Available(dependencies))
+    }
+
+    /// Re-add explicit-source requirements that are filtered out when no extra
+    /// is active (e.g., `name @ url ; extra == "x"`), so we can create
+    /// complementary marker forks and avoid leaking per-fork source state.
+    fn add_complementary_source_dependencies(
+        &self,
+        package: &PubGrubPackage,
+        requirements: &[Requirement],
+        env: &ResolverEnvironment,
+        python_requirement: &PythonRequirement,
+        deps: &mut Vec<PubGrubDependency>,
+    ) {
+        let python_marker = python_requirement.to_marker_tree();
+        for requirement in self.overrides.apply(requirements.iter()) {
+            let requirement = requirement.as_ref();
+            if !self.is_complementary_source_requirement(requirement, env, python_marker) {
+                continue;
+            }
+
+            // A base dep (without a URL) must already exist; otherwise this is
+            // an extra-only dependency and should remain as-is.
+            let Some(base) = deps
+                .iter_mut()
+                .find(|dep| dep.package.name() == Some(&requirement.name) && dep.url.is_none())
+            else {
+                continue;
+            };
+
+            let mut base_marker = base.package.marker();
+            base_marker.and(requirement.marker.negate());
+            base.package = PubGrubPackage::from_base(requirement.name.clone(), base_marker);
+
+            deps.push(PubGrubDependency {
+                package: PubGrubPackage::from_base(requirement.name.clone(), requirement.marker),
+                version: Ranges::full(),
+                parent: package.name_no_root().cloned(),
+                url: requirement.source.to_verbatim_parsed_url(),
+            });
+        }
+    }
+
+    fn is_complementary_source_requirement(
+        &self,
+        requirement: &Requirement,
+        env: &ResolverEnvironment,
+        python_marker: MarkerTree,
+    ) -> bool {
+        // Already included via `flatten_requirements`.
+        if requirement.evaluate_markers(env.marker_environment(), &[]) {
+            return false;
+        }
+        // Only explicit sources (URL or named index) have per-fork source
+        // state that can leak.
+        if matches!(
+            requirement.source,
+            RequirementSource::Registry { index: None, .. }
+        ) {
+            return false;
+        }
+        // Requirements with requested extras/groups are handled by the
+        // existing Extra/Group machinery.
+        if !requirement.extras.is_empty() || !requirement.groups.is_empty() {
+            return false;
+        }
+        if python_marker.is_disjoint(requirement.marker) {
+            return false;
+        }
+        if !env.included_by_marker(requirement.marker) {
+            return false;
+        }
+        if self.excludes.contains(&requirement.name) {
+            return false;
+        }
+        // This path is specifically for extra/group-gated source splits.
+        if requirement.marker.only_extras().is_true() {
+            return false;
+        }
+        true
     }
 
     /// The regular and dev dependencies filtered by Python version and the markers of this fork,
