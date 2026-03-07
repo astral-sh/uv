@@ -405,6 +405,13 @@ impl EnvVars {
     #[attr_added_in("0.2.22")]
     pub const UV_PYTHON_INSTALL_DIR: &'static str = "UV_PYTHON_INSTALL_DIR";
 
+    /// Specifies additional directories to search for managed Python installations.
+    ///
+    /// Directories should be separated by the platform-specific path separator, i.e.,
+    /// `:` on Unix and `;` on Windows.
+    #[attr_added_in("next release")]
+    pub const UV_PYTHON_EXTRA_INSTALL_DIRS: &'static str = "UV_PYTHON_EXTRA_INSTALL_DIRS";
+
     /// Whether to install the Python executable into the `UV_PYTHON_BIN_DIR` directory.
     #[attr_added_in("0.8.0")]
     pub const UV_PYTHON_INSTALL_BIN: &'static str = "UV_PYTHON_INSTALL_BIN";
