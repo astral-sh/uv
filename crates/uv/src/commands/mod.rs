@@ -237,7 +237,7 @@ fn restore_cached_bytecode(cache_dir: &Path, site_packages: &Path) -> anyhow::Re
         if !entry.file_type().is_file() {
             continue;
         }
-        let Some(relative) = entry.path().strip_prefix(cache_dir).ok() else {
+        let Ok(relative) = entry.path().strip_prefix(cache_dir) else {
             continue;
         };
         let target = site_packages.join(relative);
@@ -264,7 +264,7 @@ fn save_bytecode_to_cache(
     fs_err::create_dir_all(cache_dir)?;
 
     for py_file in py_files {
-        let Some(relative) = py_file.strip_prefix(site_packages).ok() else {
+        let Ok(relative) = py_file.strip_prefix(site_packages) else {
             continue;
         };
 
@@ -289,7 +289,7 @@ fn save_bytecode_to_cache(
                 let name = entry.file_name();
                 let name_str = name.to_string_lossy();
                 if name_str.starts_with(&*stem) && name_str.ends_with(".pyc") {
-                    if let Some(relative_pycache) = pycache_dir.strip_prefix(site_packages).ok() {
+                    if let Ok(relative_pycache) = pycache_dir.strip_prefix(site_packages) {
                         let cache_target = cache_dir.join(relative_pycache).join(&name);
                         if let Some(parent) = cache_target.parent() {
                             fs_err::create_dir_all(parent)?;
