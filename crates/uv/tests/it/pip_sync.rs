@@ -3521,6 +3521,79 @@ fn compile_incremental() -> Result<()> {
     Ok(())
 }
 
+/// Install a package with bytecode compilation, reset the venv, reinstall, and verify
+/// that the bytecode cache is used (the "(N cached)" annotation appears in output).
+#[test]
+fn compile_bytecode_cache() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+
+    // First install — should compile and populate the bytecode cache.
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--compile")
+        .arg("--strict"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Bytecode compiled 2 files in [TIME]
+     + markupsafe==2.1.3
+    "
+    );
+
+    // Verify the bytecode cache directory was created.
+    assert!(
+        context
+            .cache_dir
+            .join("bytecode-v0")
+            .join("cpython312")
+            .join("markupsafe-2.1.3")
+            .to_path_buf()
+            .is_dir()
+    );
+
+    // Reset the venv to simulate a fresh install.
+    context.reset_venv();
+
+    // Second install — should restore bytecode from cache.
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--compile")
+        .arg("--strict"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Bytecode compiled 2 files in [TIME] (2 cached)
+     + markupsafe==2.1.3
+    "
+    );
+
+    // Verify .pyc files exist in the fresh venv.
+    assert!(
+        context
+            .site_packages()
+            .join("markupsafe")
+            .join("__pycache__")
+            .join("__init__.cpython-312.pyc")
+            .exists()
+    );
+
+    context.assert_command("import markupsafe").success();
+
+    Ok(())
+}
+
 /// Raise an error when an editable's `Requires-Python` constraint is not met.
 #[test]
 fn requires_python_editable() -> Result<()> {
