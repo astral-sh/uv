@@ -1449,6 +1449,7 @@ fn build_with_all_metadata() -> Result<()> {
 /// Warn for cases where `tool.uv.build-backend` is used without the corresponding build backend
 /// entry.
 #[test]
+#[cfg(feature = "test-pypi")]
 fn tool_uv_build_backend_without_build_backend() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -1512,6 +1513,7 @@ fn tool_uv_build_backend_without_build_backend() -> Result<()> {
 /// Warn for cases where `tool.uv.build-backend` is used without the corresponding build backend
 /// entry.
 #[test]
+#[cfg(feature = "test-pypi")]
 fn tool_uv_build_backend_wrong_build_backend() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
