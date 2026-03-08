@@ -204,3 +204,43 @@ to install that member in a separate virtual environment.
 !!! note
 
     As Python does not provide dependency isolation, uv can't ensure that a package uses its declared dependencies and nothing else. For workspaces specifically, uv can't ensure that packages don't import dependencies declared by another workspace member.
+
+## Workspace commands
+
+uv provides several commands for managing workspaces:
+
+### `uv workspace list`
+
+List all workspace members in the current workspace.
+
+```bash
+$ uv workspace list
+albatross
+packages/bird-feeder
+packages/seeds
+```
+
+### `uv workspace add`
+
+Add a new member to the workspace.
+
+```bash
+$ uv workspace add packages/new-package
+```
+
+This will update the `pyproject.toml` in the workspace root to include the new member.
+
+### `uv workspace remove`
+
+Remove a member from the workspace.
+
+```bash
+$ uv workspace remove packages/old-package
+```
+
+This will update the `pyproject.toml` in the workspace root to exclude the member.
+
+## See also
+
+- [Workspace configuration](./config.md)
+- [Dependencies](./dependencies.md)
