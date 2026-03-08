@@ -64,12 +64,11 @@ explicitly created or updated using `uv lock`:
 $ uv lock
 ```
 
-uv uses [universal resolution](../../resolution/#universal-resolution) when creating the
-lockfile, meaning all dependency groups and supported platforms are resolved simultaneously
-into a single lockfile. If any dependency groups have mutually incompatible requirements,
-they must be declared explicitly using
-[`tool.uv.conflicts`](../config/#conflicting-dependencies). See the
-[resolution concepts](../../resolution/) page for more details.
+uv uses [universal resolution](../resolution/#universal-resolution) when creating the lockfile,
+meaning all dependency groups and supported platforms are resolved simultaneously into a single
+lockfile. If any dependency groups have mutually incompatible requirements, they must be declared
+explicitly using [`tool.uv.conflicts`](config/#conflicting-dependencies). See the
+[resolution concepts](../resolution/) page for more details.
 
 ## Syncing the environment
 
