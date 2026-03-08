@@ -22,8 +22,8 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
-    Index, IndexName, IndexUrl, IndexUrls, NameRequirementSpecification, Requirement,
-    RequirementSource, UnresolvedRequirement, VersionId,
+    Identifier, Index, IndexName, IndexUrl, IndexUrls, NameRequirementSpecification, Requirement,
+    RequirementSource, UnresolvedRequirement,
 };
 use uv_fs::{LockedFile, LockedFileError, Simplified};
 use uv_git::GIT_STORE;
@@ -1116,8 +1116,8 @@ async fn lock_and_sync(
             if let AddTarget::Project(VirtualProject::Project(ref project), _) = target {
                 let url = DisplaySafeUrl::from_file_path(project.project_root())
                     .expect("project root is a valid URL");
-                let version_id = VersionId::from_url(&url);
-                let existing = lock_state.index().distributions().remove(&version_id);
+                let distribution_id = url.distribution_id();
+                let existing = lock_state.index().distributions().remove(&distribution_id);
                 debug_assert!(existing.is_some(), "distribution should exist");
             }
 

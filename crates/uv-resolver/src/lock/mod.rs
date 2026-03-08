@@ -26,9 +26,9 @@ use uv_distribution_filename::{
 };
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
-    Dist, DistributionMetadata, FileLocation, GitSourceDist, IndexLocations, IndexMetadata,
-    IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
+    Dist, FileLocation, GitSourceDist, Identifier, IndexLocations, IndexMetadata, IndexUrl, Name,
+    PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
+    RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
     SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, relative_to};
@@ -1794,7 +1794,7 @@ impl Lock {
                 )?;
 
                 let metadata = {
-                    let id = dist.version_id();
+                    let id = dist.distribution_id();
                     if let Some(archive) =
                         index
                             .distributions()
@@ -1946,7 +1946,7 @@ impl Lock {
                     )?;
 
                     let metadata = {
-                        let id = dist.version_id();
+                        let id = dist.distribution_id();
                         if let Some(archive) =
                             index
                                 .distributions()

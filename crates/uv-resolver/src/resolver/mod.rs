@@ -23,10 +23,10 @@ use tracing::{Level, debug, info, instrument, trace, warn};
 use uv_configuration::{Constraints, Excludes, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
-    BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, DistributionMetadata,
-    IncompatibleDist, IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations,
-    IndexMetadata, IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement,
-    ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
+    BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier, IncompatibleDist,
+    IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations, IndexMetadata,
+    IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement, ResolvedDist,
+    ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -50,8 +50,7 @@ use crate::manifest::Manifest;
 use crate::pins::FilePins;
 use crate::preferences::{PreferenceSource, Preferences};
 use crate::pubgrub::{
-    PubGrubDependency, PubGrubDistribution, PubGrubPackage, PubGrubPackageInner, PubGrubPriorities,
-    PubGrubPython,
+    PubGrubDependency, PubGrubPackage, PubGrubPackageInner, PubGrubPriorities, PubGrubPython,
 };
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolverOutput;
@@ -1004,7 +1003,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
             // Emit a request to fetch the metadata for this distribution.
             let dist = Dist::from_url(name.clone(), url.clone())?;
-            if self.index.distributions().register(dist.version_id()) {
+            if self.index.distributions().register(dist.distribution_id()) {
                 request_sink.blocking_send(Request::Dist(dist))?;
             }
         } else if let Some(index) = index {
@@ -1150,12 +1149,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             url.verbatim
         );
 
-        let dist = PubGrubDistribution::from_url(name, url);
+        let dist = Dist::from_url(name.clone(), url.clone())?;
+        let distribution_id = dist.distribution_id();
         let response = self
             .index
             .distributions()
-            .wait_blocking(&dist.version_id())
-            .ok_or_else(|| ResolveError::UnregisteredTask(dist.version_id().to_string()))?;
+            .wait_blocking(&distribution_id)
+            .ok_or_else(|| ResolveError::UnregisteredTask(dist.to_string()))?;
 
         // If we failed to fetch the metadata for a URL, we can't proceed.
         let metadata = match &*response {
@@ -1186,8 +1186,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         // If the URL points to a pre-built wheel, and the wheel's supported Python versions don't
         // match our `Requires-Python`, mark it as incompatible.
-        let dist = Dist::from_url(name.clone(), url.clone())?;
-        if let Dist::Built(dist) = dist {
+        if let Dist::Built(dist) = &dist {
             let filename = match &dist {
                 BuiltDist::Registry(dist) => &dist.best_wheel().filename,
                 BuiltDist::DirectUrl(dist) => &dist.filename,
@@ -1668,7 +1667,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // Emit a request to fetch the metadata for this version.
         if matches!(&**package, PubGrubPackageInner::Package { .. }) {
             if self.dependency_mode.is_transitive() {
-                if self.index.distributions().register(candidate.version_id()) {
+                let dist = dist.for_resolution();
+                if self.index.distributions().register(dist.distribution_id()) {
                     if name != dist.name() {
                         return Err(ResolveError::MismatchedPackageName {
                             request: "distribution",
@@ -1684,7 +1684,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         return Err(ResolveError::UnhashedPackage(candidate.name().clone()));
                     }
 
-                    let request = Request::from(dist.for_resolution());
+                    let request = Request::from(dist);
                     request_sink.blocking_send(request)?;
                 }
             }
@@ -1774,7 +1774,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
     ) -> Result<Dependencies, ResolveError> {
-        let url = package.name().and_then(|name| fork_urls.get(name));
         let dependencies = match &**package {
             PubGrubPackageInner::Root(_) => {
                 let no_dev_deps = BTreeMap::default();
@@ -1811,12 +1810,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     return Ok(Dependencies::Unforkable(Vec::default()));
                 }
 
-                // Determine the distribution to lookup.
-                let dist = match url {
-                    Some(url) => PubGrubDistribution::from_url(name, url),
-                    None => PubGrubDistribution::from_registry(name, version),
+                let (distribution_id, task) = if let Some(pinned) = pins.get(name, version) {
+                    (pinned.distribution_id(), pinned.to_string())
+                } else if let Some(url) = fork_urls.get(name) {
+                    let dist = Dist::from_url(name.clone(), url.clone())?;
+                    (dist.distribution_id(), dist.to_string())
+                } else {
+                    debug_assert!(
+                        false,
+                        "Dependencies were requested for a package without a pinned distribution"
+                    );
+                    return Err(ResolveError::UnregisteredTask(format!("{name}{version}")));
                 };
-                let version_id = dist.version_id();
 
                 // If the package does not exist in the registry or locally, we cannot fetch its dependencies
                 if self.dependency_mode.is_transitive()
@@ -1834,8 +1839,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let response = self
                     .index
                     .distributions()
-                    .wait_blocking(&version_id)
-                    .ok_or_else(|| ResolveError::UnregisteredTask(version_id.to_string()))?;
+                    .wait_blocking(&distribution_id)
+                    .ok_or_else(|| ResolveError::UnregisteredTask(task))?;
 
                 let metadata = match &*response {
                     MetadataResponse::Found(archive) => &archive.metadata,
@@ -2361,7 +2366,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     trace!("Received installed distribution metadata for: {dist}");
                     self.index
                         .distributions()
-                        .done(dist.version_id(), Arc::new(metadata));
+                        .done(dist.distribution_id(), Arc::new(metadata));
                 }
                 Some(Response::Dist { dist, metadata }) => {
                     let dist_kind = match dist {
@@ -2380,7 +2385,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                     self.index
                         .distributions()
-                        .done(dist.version_id(), Arc::new(metadata));
+                        .done(dist.distribution_id(), Arc::new(metadata));
                 }
                 None => {}
             }
@@ -2630,8 +2635,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
 
                 // Emit a request to fetch the metadata for this version.
-                if self.index.distributions().register(candidate.version_id()) {
-                    let dist = dist.for_resolution().to_owned();
+                let dist = dist.for_resolution();
+                if self.index.distributions().register(dist.distribution_id()) {
+                    let dist = dist.to_owned();
                     if &package_name != dist.name() {
                         return Err(ResolveError::MismatchedPackageName {
                             request: "distribution",

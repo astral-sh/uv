@@ -10,7 +10,7 @@ use uv_configuration::ExtrasSpecification;
 use uv_distribution::{DistributionDatabase, FlatRequiresDist, Reporter, RequiresDist};
 use uv_distribution_types::Requirement;
 use uv_distribution_types::{
-    BuildableSource, DirectorySourceUrl, HashGeneration, HashPolicy, SourceUrl, VersionId,
+    BuildableSource, DirectorySourceUrl, HashGeneration, HashPolicy, Identifier, SourceUrl,
 };
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
@@ -202,7 +202,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
 
         // Fetch the metadata for the distribution.
         let metadata = {
-            let id = VersionId::from_url(source.url());
+            let id = source.distribution_id();
             if self.index.distributions().register(id.clone()) {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let source = BuildableSource::Url(source);
