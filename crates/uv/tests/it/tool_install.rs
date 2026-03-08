@@ -4693,27 +4693,13 @@ fn tool_install_removed_python() {
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
-
     let (_, python_executable) = context.python_versions.first().unwrap();
-    let install_root = if cfg!(unix) {
-        // <root>/bin/python3.12
-        python_executable.parent().unwrap().parent().unwrap()
-    } else {
-        // <root>/python.exe
-        python_executable.parent().unwrap()
-    };
 
-    let temp_python_dir = context.temp_dir.child("temp-python");
-    copy_dir_all(install_root, &temp_python_dir).unwrap();
-
-    let relative_path = python_executable.strip_prefix(install_root).unwrap();
-    let temp_python = temp_python_dir.join(relative_path);
-
-    // Install `black` using the temporary Python.
+    // Install `black` with an explicit Python request.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
         .arg("--python")
-        .arg(&temp_python)
+        .arg(python_executable)
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
@@ -4734,7 +4720,36 @@ fn tool_install_removed_python() {
     Installed 2 executables: black, blackd
     ");
 
-    fs_err::remove_dir_all(&temp_python_dir).unwrap();
+    let tool_root = tool_dir.child("black");
+
+    // Simulate the tool's interpreter disappearing without copying an arbitrary system prefix
+    // like `/usr` into the test directory.
+    #[cfg(unix)]
+    {
+        let tool_python = tool_root.child("bin").child("python");
+        fs_err::remove_file(&tool_python).unwrap();
+        fs_err::os::unix::fs::symlink(context.temp_dir.join("missing-python"), &tool_python)
+            .unwrap();
+    }
+
+    #[cfg(windows)]
+    {
+        let pyvenv_cfg = tool_root.child("pyvenv.cfg");
+        let broken_home = context.temp_dir.join("missing-python");
+        let contents = fs_err::read_to_string(&pyvenv_cfg).unwrap();
+        let contents = contents
+            .lines()
+            .map(|line| {
+                if line.starts_with("home = ") {
+                    format!("home = {}", broken_home.display())
+                } else {
+                    line.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        fs_err::write(&pyvenv_cfg, format!("{contents}\n")).unwrap();
+    }
 
     // Reinstalling should skip the broken Python install.
     uv_snapshot!(context.filters(), context.tool_install()
