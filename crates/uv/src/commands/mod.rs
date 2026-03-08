@@ -225,22 +225,21 @@ fn bytecode_cache_dir(cache: &Cache, tag: &str, dist: &CachedDist) -> PathBuf {
 
 /// Try to restore cached `.pyc` files for a distribution into `site_packages`.
 ///
-/// Returns `true` if cached bytecode was found and restored.
-fn restore_cached_bytecode(cache_dir: &Path, site_packages: &Path) -> anyhow::Result<bool> {
+/// Returns the number of files restored, or `0` if no cache entry exists.
+fn restore_cached_bytecode(cache_dir: &Path, site_packages: &Path) -> anyhow::Result<usize> {
     if !cache_dir.is_dir() {
-        return Ok(false);
+        return Ok(0);
     }
 
-    let mut restored = false;
+    let mut count = 0usize;
     for entry in walkdir::WalkDir::new(cache_dir) {
         let entry = entry?;
         if !entry.file_type().is_file() {
             continue;
         }
-        let relative = entry
-            .path()
-            .strip_prefix(cache_dir)
-            .expect("walkdir starts with cache_dir");
+        let Some(relative) = entry.path().strip_prefix(cache_dir).ok() else {
+            continue;
+        };
         let target = site_packages.join(relative);
         if let Some(parent) = target.parent() {
             fs_err::create_dir_all(parent)?;
@@ -249,9 +248,9 @@ fn restore_cached_bytecode(cache_dir: &Path, site_packages: &Path) -> anyhow::Re
         // the cache is a long-lived directory and we don't want venv cleanup to
         // affect it.
         fs_err::copy(entry.path(), &target)?;
-        restored = true;
+        count += 1;
     }
-    Ok(restored)
+    Ok(count)
 }
 
 /// Save compiled `.pyc` files from `site_packages` into the bytecode cache.
@@ -265,21 +264,23 @@ fn save_bytecode_to_cache(
     fs_err::create_dir_all(cache_dir)?;
 
     for py_file in py_files {
-        let relative = py_file
-            .strip_prefix(site_packages)
-            .expect("py_file should be under site_packages");
+        let Some(relative) = py_file.strip_prefix(site_packages).ok() else {
+            continue;
+        };
 
         // Find __pycache__/*.pyc files for this source file.
-        let parent = py_file.parent().expect("py file has parent");
+        let Some(parent) = py_file.parent() else {
+            continue;
+        };
         let pycache_dir = parent.join("__pycache__");
         if !pycache_dir.is_dir() {
             continue;
         }
 
-        let stem = relative
-            .file_stem()
-            .expect("py file has stem")
-            .to_string_lossy();
+        let Some(stem) = relative.file_stem() else {
+            continue;
+        };
+        let stem = stem.to_string_lossy();
 
         // Match files like `__init__.cpython-312.pyc` for source `__init__.py`.
         if let Ok(entries) = fs_err::read_dir(&pycache_dir) {
@@ -288,14 +289,13 @@ fn save_bytecode_to_cache(
                 let name = entry.file_name();
                 let name_str = name.to_string_lossy();
                 if name_str.starts_with(&*stem) && name_str.ends_with(".pyc") {
-                    let relative_pycache = pycache_dir
-                        .strip_prefix(site_packages)
-                        .expect("pycache under site_packages");
-                    let cache_target = cache_dir.join(relative_pycache).join(&name);
-                    if let Some(parent) = cache_target.parent() {
-                        fs_err::create_dir_all(parent)?;
+                    if let Some(relative_pycache) = pycache_dir.strip_prefix(site_packages).ok() {
+                        let cache_target = cache_dir.join(relative_pycache).join(&name);
+                        if let Some(parent) = cache_target.parent() {
+                            fs_err::create_dir_all(parent)?;
+                        }
+                        fs_err::copy(entry.path(), &cache_target)?;
                     }
-                    fs_err::copy(entry.path(), &cache_target)?;
                 }
             }
         }
@@ -342,18 +342,13 @@ pub(super) async fn compile_bytecode_for_installs(
             let cache_dir = bytecode_cache_dir(cache, &tag, dist);
 
             // Try to restore cached bytecode.
-            if restore_cached_bytecode(&cache_dir, &site_packages)? {
-                // Count the cached .pyc files for reporting.
-                let count = walkdir::WalkDir::new(&cache_dir)
-                    .into_iter()
-                    .filter_map(Result::ok)
-                    .filter(|e| e.file_type().is_file())
-                    .count();
-                cached_files += count;
-                total_files += count;
+            let restored = restore_cached_bytecode(&cache_dir, &site_packages)?;
+            if restored > 0 {
+                cached_files += restored;
+                total_files += restored;
                 debug!(
                     "Restored {} cached bytecode files for {}-{}",
-                    count,
+                    restored,
                     dist.filename().name,
                     dist.filename().version
                 );
