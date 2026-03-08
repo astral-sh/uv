@@ -2519,6 +2519,8 @@ async fn run_project(
                 args.frozen,
                 args.include_annotations,
                 args.include_header,
+                args.include_index_url,
+                args.include_find_links,
                 script,
                 args.python,
                 args.install_mirrors,
