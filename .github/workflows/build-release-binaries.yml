@@ -603,8 +603,12 @@ jobs:
           rust-toolchain: ${{ matrix.platform.toolchain || null }}
           before-script-linux: |
             scripts/install-cargo-extensions.sh
+            # Install the s390x cross target on x86_64
+            rustup target add ${{ matrix.platform.target }}
+            apt-get update && apt-get install -y gcc-s390x-linux-gnu binutils-s390x-linux-gnu
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
+          CFLAGS_s390x_unknown_linux_gnu: -march=z10
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         name: "Test wheel"
         with:
