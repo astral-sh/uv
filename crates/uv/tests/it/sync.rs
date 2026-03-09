@@ -8327,6 +8327,8 @@ fn sync_scripts_without_build_system() -> Result<()> {
 }
 
 #[test]
+/// Check warning message for <https://github.com/astral-sh/uv/issues/6998>
+/// if the project is marked as `package = false`.
 fn sync_scripts_project_not_packaged() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
