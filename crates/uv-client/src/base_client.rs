@@ -257,9 +257,8 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     #[must_use]
-    pub fn native_tls(mut self, native_tls: bool) -> Self {
-        self.native_tls = native_tls;
-        self
+    pub fn is_native_tls(&self) -> bool {
+        self.tls_backend.is_native_tls()
     }
 
     #[must_use]

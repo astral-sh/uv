@@ -244,7 +244,10 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
