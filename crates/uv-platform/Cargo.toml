@@ -34,7 +34,7 @@ rustix = { workspace = true }
 procfs = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows-registry = { workspace = true }
+windows-version = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }

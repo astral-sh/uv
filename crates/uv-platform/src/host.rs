@@ -11,8 +11,8 @@ pub enum OsType {
     Linux(String),
     /// macOS / Darwin.
     Darwin,
-    /// Windows NT.
-    WindowsNt,
+    /// Windows.
+    Windows,
 }
 
 impl OsType {
@@ -32,7 +32,7 @@ impl OsType {
         }
         #[cfg(target_os = "windows")]
         {
-            Some(Self::WindowsNt)
+            Some(Self::Windows)
         }
         #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
         {
@@ -46,7 +46,7 @@ impl fmt::Display for OsType {
         match self {
             Self::Linux(os_type) => f.write_str(os_type),
             Self::Darwin => f.write_str("Darwin"),
-            Self::WindowsNt => f.write_str("Windows_NT"),
+            Self::Windows => f.write_str("Windows"),
         }
     }
 }
@@ -56,8 +56,13 @@ impl fmt::Display for OsType {
 pub enum OsRelease {
     /// Unix kernel release from `uname -r` (e.g., `"6.8.0-90-generic"`).
     Unix(String),
-    /// Windows build number from the registry (e.g., `"22631"`).
-    Windows(String),
+    /// Windows version major.minor.build.revision (e.g., `"10.0.26100.6901"`).
+    Windows {
+        major: u32,
+        minor: u32,
+        build: u32,
+        revision: u32,
+    },
 }
 
 impl OsRelease {
@@ -73,10 +78,13 @@ impl OsRelease {
         }
         #[cfg(windows)]
         {
-            let key = windows_registry::LOCAL_MACHINE
-                .open(r"SOFTWARE\Microsoft\Windows NT\CurrentVersion")
-                .ok()?;
-            Some(Self::Windows(key.get_string("CurrentBuildNumber").ok()?))
+            let os_version = windows_version::OsVersion::current();
+            Some(Self::Windows {
+                major: os_version.major,
+                minor: os_version.minor,
+                build: os_version.build,
+                revision: windows_version::revision(),
+            })
         }
         #[cfg(not(any(unix, windows)))]
         {
@@ -89,7 +97,12 @@ impl fmt::Display for OsRelease {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Unix(release) => f.write_str(release),
-            Self::Windows(build) => f.write_str(build),
+            Self::Windows {
+                major,
+                minor,
+                build,
+                revision,
+            } => write!(f, "{major}.{minor}.{build}.{revision}"),
         }
     }
 }
@@ -232,7 +245,7 @@ VERSION_ID=40
         #[cfg(target_os = "macos")]
         assert_eq!(os_type, OsType::Darwin);
         #[cfg(target_os = "windows")]
-        assert_eq!(os_type, OsType::WindowsNt);
+        assert_eq!(os_type, OsType::Windows);
     }
 
     #[test]
@@ -242,6 +255,6 @@ VERSION_ID=40
         #[cfg(unix)]
         assert!(matches!(os_release, OsRelease::Unix(_)));
         #[cfg(windows)]
-        assert!(matches!(os_release, OsRelease::Windows(_)));
+        assert!(matches!(os_release, OsRelease::Windows { .. }));
     }
 }

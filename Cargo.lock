@@ -6751,7 +6751,7 @@ dependencies = [
  "uv-fs",
  "uv-platform-tags",
  "uv-static",
- "windows-registry",
+ "windows-version",
 ]
 
 [[package]]
@@ -7851,6 +7851,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b66463ad2e0ea3bbf808b7f1d371311c80e115c0b71d60efc142cafbcfb057a6"
 dependencies = [
  "windows-link 0.1.3",
+]
+
+[[package]]
+name = "windows-version"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "700dad7c058606087f6fdc1f88da5841e06da40334413c6cd4367b25ef26d24e"
+dependencies = [
+ "windows-link 0.2.0",
 ]
 
 [[package]]
