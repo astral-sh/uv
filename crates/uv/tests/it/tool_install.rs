@@ -4734,6 +4734,8 @@ fn tool_install_removed_python() {
 
     #[cfg(windows)]
     {
+        use uv_fs::Simplified;
+
         let pyvenv_cfg = tool_root.child("pyvenv.cfg");
         let broken_home = context.temp_dir.join("missing-python");
         let contents = fs_err::read_to_string(&pyvenv_cfg).unwrap();
