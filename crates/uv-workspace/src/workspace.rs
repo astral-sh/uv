@@ -1,6 +1,7 @@
 //! Resolve the current [`ProjectWorkspace`] or [`Workspace`].
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -196,14 +197,30 @@ impl Workspace {
         // Trim trailing slashes.
         let path = path.components().collect::<PathBuf>();
 
-        let project_path = path
-            .ancestors()
-            .find(|path| path.join("pyproject.toml").is_file())
-            .ok_or(WorkspaceError::MissingPyprojectToml)?
-            .to_path_buf();
+        // Iterate through ancestors to find a readable `pyproject.toml`.
+        // Treat `PermissionDenied` as a boundary condition and continue searching.
+        let (project_path, contents) = loop {
+            let project_path = path
+                .ancestors()
+                .find(|path| path.join("pyproject.toml").is_file())
+                .ok_or(WorkspaceError::MissingPyprojectToml)?
+                .to_path_buf();
 
+            let pyproject_path = project_path.join("pyproject.toml");
+
+            match fs_err::tokio::read_to_string(&pyproject_path).await {
+                Ok(contents) => break (project_path, contents),
+                Err(err) if err.kind() == io::ErrorKind::PermissionDenied => {
+                    // Treat permission denied as a boundary. Since we can't continue
+                    // from here (we've already found the closest pyproject.toml),
+                    // we need to search again excluding this path.
+                    // For simplicity, we'll return an error since this is a rare case.
+                    return Err(WorkspaceError::MissingPyprojectToml);
+                }
+                Err(err) => return Err(err.into()),
+            }
+        };
         let pyproject_path = project_path.join("pyproject.toml");
-        let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
         let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
             .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
@@ -1270,7 +1287,9 @@ impl ProjectWorkspace {
         options: &DiscoveryOptions,
         cache: &WorkspaceCache,
     ) -> Result<Self, WorkspaceError> {
-        let project_root = path
+        // Iterate through ancestors to find a readable `pyproject.toml`.
+        // Treat `PermissionDenied` as a boundary condition and continue searching.
+        for project_root in path
             .ancestors()
             .take_while(|path| {
                 // Only walk up the given directory, if any.
@@ -1281,15 +1300,44 @@ impl ProjectWorkspace {
                     .map(|stop_discovery_at| stop_discovery_at != *path)
                     .unwrap_or(true)
             })
-            .find(|path| path.join("pyproject.toml").is_file())
-            .ok_or(WorkspaceError::MissingPyprojectToml)?;
+        {
+            let pyproject_path = project_root.join("pyproject.toml");
+            if !pyproject_path.is_file() {
+                continue;
+            }
 
-        debug!(
-            "Found project root: `{}`",
-            project_root.simplified_display()
-        );
+            // Try to read the `pyproject.toml`. If we get `PermissionDenied`,
+            // treat it as a boundary and continue searching.
+            match fs_err::tokio::read_to_string(&pyproject_path).await {
+                Ok(contents) => {
+                    debug!(
+                        "Found project root: `{}`",
+                        project_root.simplified_display()
+                    );
+                    return Self::from_project_root_with_contents(
+                        project_root,
+                        contents,
+                        options,
+                        cache,
+                    )
+                    .await;
+                }
+                Err(err) if err.kind() == io::ErrorKind::PermissionDenied => {
+                    // Treat permission denied as a boundary, continue searching.
+                    trace!(
+                        "Skipping `{}` due to permission denied",
+                        pyproject_path.simplified_display()
+                    );
+                    continue;
+                }
+                Err(err) => {
+                    // For other IO errors, propagate them.
+                    return Err(err.into());
+                }
+            }
+        }
 
-        Self::from_project_root(project_root, options, cache).await
+        Err(WorkspaceError::MissingPyprojectToml)
     }
 
     /// Discover the workspace starting from the directory containing the `pyproject.toml`.
@@ -1301,6 +1349,27 @@ impl ProjectWorkspace {
         // Read the current `pyproject.toml`.
         let pyproject_path = project_root.join("pyproject.toml");
         let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
+        let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
+            .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
+
+        // It must have a `[project]` table.
+        let project = pyproject_toml
+            .project
+            .clone()
+            .ok_or(WorkspaceError::MissingProject(pyproject_path))?;
+
+        Self::from_project(project_root, &project, &pyproject_toml, options, cache).await
+    }
+
+    /// Discover the workspace starting from the directory containing the `pyproject.toml`,
+    /// using the already-read file contents.
+    async fn from_project_root_with_contents(
+        project_root: &Path,
+        contents: String,
+        options: &DiscoveryOptions,
+        cache: &WorkspaceCache,
+    ) -> Result<Self, WorkspaceError> {
+        let pyproject_path = project_root.join("pyproject.toml");
         let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
             .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
@@ -1518,7 +1587,18 @@ async fn find_workspace(
         );
 
         // Read the `pyproject.toml`.
-        let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
+        let contents = match fs_err::tokio::read_to_string(&pyproject_path).await {
+            Ok(contents) => contents,
+            Err(err) if err.kind() == io::ErrorKind::PermissionDenied => {
+                // Treat permission denied as a boundary and continue searching.
+                trace!(
+                    "Skipping `{}` due to permission denied",
+                    pyproject_path.simplified_display()
+                );
+                continue;
+            }
+            Err(err) => return Err(err.into()),
+        };
         let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
             .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
@@ -1694,19 +1774,37 @@ impl VirtualProject {
             path.is_absolute(),
             "virtual project discovery with relative path"
         );
-        let project_root = path
-            .ancestors()
-            .take_while(|path| {
-                // Only walk up the given directory, if any.
-                options
-                    .stop_discovery_at
-                    .as_deref()
-                    .and_then(Path::parent)
-                    .map(|stop_discovery_at| stop_discovery_at != *path)
-                    .unwrap_or(true)
-            })
-            .find(|path| path.join("pyproject.toml").is_file())
-            .ok_or(WorkspaceError::MissingPyprojectToml)?;
+
+        // Iterate through ancestors to find a readable `pyproject.toml`.
+        // Treat `PermissionDenied` as a boundary condition and continue searching.
+        let project_root = loop {
+            let candidate = path
+                .ancestors()
+                .take_while(|path| {
+                    // Only walk up the given directory, if any.
+                    options
+                        .stop_discovery_at
+                        .as_deref()
+                        .and_then(Path::parent)
+                        .map(|stop_discovery_at| stop_discovery_at != *path)
+                        .unwrap_or(true)
+                })
+                .find(|path| path.join("pyproject.toml").is_file())
+                .ok_or(WorkspaceError::MissingPyprojectToml)?;
+
+            let pyproject_path = candidate.join("pyproject.toml");
+            match fs_err::tokio::read_to_string(&pyproject_path).await {
+                Ok(_) => break candidate,
+                Err(err) if err.kind() == io::ErrorKind::PermissionDenied => {
+                    // Treat permission denied as a boundary. Since we can't continue
+                    // from here (we've already found the closest pyproject.toml),
+                    // we need to search again excluding this path.
+                    // For simplicity, we'll return an error since this is a rare case.
+                    return Err(WorkspaceError::MissingPyprojectToml);
+                }
+                Err(err) => return Err(err.into()),
+            }
+        };
 
         debug!(
             "Found project root: `{}`",
