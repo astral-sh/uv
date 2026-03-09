@@ -1810,8 +1810,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     return Ok(Dependencies::Unforkable(Vec::default()));
                 }
 
-                let (distribution_id, task) = if let Some(pinned) = pins.get(name, version) {
-                    (pinned.distribution_id(), pinned.to_string())
+                let (distribution_id, task) = if let Some(distribution_id) =
+                    pins.metadata_id(name, version)
+                {
+                    (
+                        distribution_id.clone(),
+                        pins.get(name, version)
+                            .map_or_else(|| format!("{name}=={version}"), ToString::to_string),
+                    )
                 } else if let Some(url) = fork_urls.get(name) {
                     let dist = Dist::from_url(name.clone(), url.clone())?;
                     (dist.distribution_id(), dist.to_string())
@@ -1820,7 +1826,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         false,
                         "Dependencies were requested for a package without a pinned distribution"
                     );
-                    return Err(ResolveError::UnregisteredTask(format!("{name}{version}")));
+                    return Err(ResolveError::UnregisteredTask(format!("{name}=={version}")));
                 };
 
                 // If the package does not exist in the registry or locally, we cannot fetch its dependencies
@@ -2842,11 +2848,10 @@ pub(crate) struct ForkState {
     ///
     /// The key of this map is a package name, and each package name maps to
     /// a set of versions for that package. Each version in turn is mapped
-    /// to a single [`ResolvedDist`]. That [`ResolvedDist`] represents, at time
-    /// of writing (2024/05/09), at most one wheel. The idea here is that
-    /// [`FilePins`] tracks precisely which wheel was selected during resolution.
-    /// After resolution is finished, this maps is consulted in order to select
-    /// the wheel chosen during resolution.
+    /// to the concrete distribution selected for installation, along with the
+    /// concrete distribution whose metadata was used during resolution.
+    /// After resolution is finished, this map is consulted to recover both the
+    /// locked artifact and the metadata backing the resolved dependency edges.
     pins: FilePins,
     /// Ensure we don't have duplicate URLs in any branch.
     ///

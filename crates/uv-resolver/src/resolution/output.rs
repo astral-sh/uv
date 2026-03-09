@@ -414,16 +414,18 @@ impl ResolverOutput {
         git: &GitResolver,
     ) -> Result<(ResolvedDist, HashDigests, Option<Metadata>), ResolveError> {
         Ok(if let Some(url) = url {
-            // Create the distribution.
+            // Create the locked distribution and recover the metadata using the original URL that
+            // was requested during resolution.
             let dist = Dist::from_url(name.clone(), url_to_precise(url.clone(), git))?;
-            let metadata_id = dist.distribution_id();
+            let hashes_id = dist.distribution_id();
+            let metadata_id = Dist::from_url(name.clone(), url.clone())?.distribution_id();
 
             // Extract the hashes.
             let hashes = Self::get_hashes(
                 name,
                 index,
                 Some(url),
-                &metadata_id,
+                &hashes_id,
                 version,
                 preferences,
                 in_memory,
@@ -458,7 +460,10 @@ impl ResolverOutput {
                 .get(name, version)
                 .expect("Every package should be pinned")
                 .clone();
-            let metadata_id = dist.distribution_id();
+            let hashes_id = dist.distribution_id();
+            let metadata_id = pins
+                .metadata_id(name, version)
+                .expect("Every package should have pinned metadata");
 
             // Track yanks for any registry distributions.
             match dist.yanked() {
@@ -482,7 +487,7 @@ impl ResolverOutput {
                 name,
                 index,
                 None,
-                &metadata_id,
+                &hashes_id,
                 version,
                 preferences,
                 in_memory,
@@ -492,7 +497,7 @@ impl ResolverOutput {
             let metadata = {
                 in_memory
                     .distributions()
-                    .get(&metadata_id)
+                    .get(metadata_id)
                     .and_then(|response| {
                         if let MetadataResponse::Found(archive) = &*response {
                             Some(archive.metadata.clone())
