@@ -8318,7 +8318,7 @@ fn sync_scripts_without_build_system() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Skipping installation of entry points (`project.scripts`) because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`
+    warning: Skipping installation of entry points (`project.scripts`) for package `foo` because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`
     Resolved 1 package in [TIME]
     Audited in [TIME]
     ");
@@ -8327,8 +8327,6 @@ fn sync_scripts_without_build_system() -> Result<()> {
 }
 
 #[test]
-/// Check warning message for <https://github.com/astral-sh/uv/issues/6998>
-/// if the project is marked as `package = false`.
 fn sync_scripts_project_not_packaged() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -8367,8 +8365,59 @@ fn sync_scripts_project_not_packaged() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Skipping installation of entry points (`project.scripts`) because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`
+    warning: Skipping installation of entry points (`project.scripts`) for package `foo` because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`
     Resolved 1 package in [TIME]
+    Audited in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
+/// Check warning message for <https://github.com/astral-sh/uv/issues/18388>
+/// if a workspace member has scripts but no `build-system`.
+fn sync_scripts_workspace_member_not_packaged() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv.workspace]
+        members = ["member"]
+        "#,
+    )?;
+
+    let member = context.temp_dir.child("member");
+    fs_err::create_dir_all(&member)?;
+
+    let member_pyproject_toml = member.child("pyproject.toml");
+    member_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        member = "main:main"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Skipping installation of entry points (`project.scripts`) for package `member` because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`
+    Resolved 2 packages in [TIME]
     Audited in [TIME]
     ");
 
