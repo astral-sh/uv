@@ -774,10 +774,6 @@ impl AuditReporter {
         self
     }
 
-    pub(crate) fn on_audit_progress(&self) {
-        self.progress.inc(1);
-    }
-
     pub(crate) fn on_audit_package(&self, name: &PackageName, version: &Version) {
         self.progress.set_message(format!("{name} {version}"));
         self.progress.inc(1);

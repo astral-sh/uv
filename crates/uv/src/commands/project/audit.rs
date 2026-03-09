@@ -183,31 +183,48 @@ pub(crate) async fn audit(
 
     // TODO: validate the sets of requested extras/groups against the lockfile?
 
+    // Build the list of auditable packages, skipping workspace members. Workspace members are
+    // local by definition and have no meaningful external package identity to look up in a vuln
+    // service. We also skip packages without a version, since we can't query for them.
+    //
+    // This mirrors the logic in `TreeDisplay::new`: for single-member workspaces, `lock.members()`
+    // is empty and the root package (source at path "") is the implicit member.
+    let workspace_root_name = lock.root().map(uv_resolver::Package::name);
+    let auditable: Vec<_> = lock
+        .packages()
+        .iter()
+        .filter(|p| {
+            if lock.members().is_empty() {
+                // Single-member workspace: skip the implicit root.
+                workspace_root_name != Some(p.name())
+            } else {
+                !lock.members().contains(p.name())
+            }
+        })
+        .filter_map(|p| {
+            let Some(version) = p.version() else {
+                trace!(
+                    "Skipping audit for {} because it has no version information",
+                    p.name()
+                );
+                return None;
+            };
+            Some((p.name(), version))
+        })
+        .collect();
+
     // Perform the audit.
     // TODO: Use `client_builder` to produce an HTTP client through our normal process here.
     let service = osv::Osv::default();
-    trace!(
-        "Auditing {n} dependencies against OSV",
-        n = lock.packages().len()
-    );
+    trace!("Auditing {n} dependencies against OSV", n = auditable.len());
 
-    let reporter = AuditReporter::from(printer).with_length(lock.packages().len() as u64);
+    let reporter = AuditReporter::from(printer).with_length(auditable.len() as u64);
 
     // TODO: Replace this loop with bulk auditing.
     let mut all_findings = vec![];
-    for package in lock.packages() {
-        let Some(version) = package.version() else {
-            trace!(
-                "Skipping audit for {} because it has no version information",
-                package.name()
-            );
-            reporter.on_audit_progress();
-            continue;
-        };
-
-        reporter.on_audit_package(package.name(), version);
-
-        let dependency = Dependency::new(package.name().clone(), version.clone());
+    for (name, version) in &auditable {
+        reporter.on_audit_package(name, version);
+        let dependency = Dependency::new((*name).clone(), (*version).clone());
         all_findings.extend(service.query(&dependency).await?);
     }
 
