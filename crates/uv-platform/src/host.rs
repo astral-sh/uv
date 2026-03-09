@@ -46,7 +46,7 @@ impl fmt::Display for OsType {
         match self {
             Self::Linux(os_type) => f.write_str(os_type),
             Self::Darwin => f.write_str("Darwin"),
-            Self::WindowsNt => f.write_str("Windows_NT"),
+            Self::WindowsNt => f.write_str("Windows"),
         }
     }
 }
@@ -56,8 +56,12 @@ impl fmt::Display for OsType {
 pub enum OsRelease {
     /// Unix kernel release from `uname -r` (e.g., `"6.8.0-90-generic"`).
     Unix(String),
-    /// Windows build number from the registry (e.g., `"22631"`).
-    Windows(String),
+    /// Windows version from the registry (e.g., `10, 0, 22631`).
+    Windows {
+        major: u32,
+        minor: u32,
+        build: String,
+    },
 }
 
 impl OsRelease {
@@ -76,7 +80,14 @@ impl OsRelease {
             let key = windows_registry::LOCAL_MACHINE
                 .open(r"SOFTWARE\Microsoft\Windows NT\CurrentVersion")
                 .ok()?;
-            Some(Self::Windows(key.get_string("CurrentBuildNumber").ok()?))
+            let major = key.get_u32("CurrentMajorVersionNumber").ok()?;
+            let minor = key.get_u32("CurrentMinorVersionNumber").ok()?;
+            let build = key.get_string("CurrentBuildNumber").ok()?;
+            Some(Self::Windows {
+                major,
+                minor,
+                build,
+            })
         }
         #[cfg(not(any(unix, windows)))]
         {
@@ -89,7 +100,11 @@ impl fmt::Display for OsRelease {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Unix(release) => f.write_str(release),
-            Self::Windows(build) => f.write_str(build),
+            Self::Windows {
+                major,
+                minor,
+                build,
+            } => write!(f, "{major}.{minor}.{build}"),
         }
     }
 }
@@ -242,6 +257,6 @@ VERSION_ID=40
         #[cfg(unix)]
         assert!(matches!(os_release, OsRelease::Unix(_)));
         #[cfg(windows)]
-        assert!(matches!(os_release, OsRelease::Windows(_)));
+        assert!(matches!(os_release, OsRelease::Windows { .. }));
     }
 }
