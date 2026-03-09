@@ -4741,7 +4741,7 @@ fn tool_install_removed_python() {
             .lines()
             .map(|line| {
                 if line.starts_with("home = ") {
-                    format!("home = {}", broken_home.display())
+                    format!("home = {}", broken_home.simplified_display())
                 } else {
                     line.to_string()
                 }
