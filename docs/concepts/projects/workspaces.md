@@ -82,7 +82,8 @@ build-backend = "uv_build"
 In this example, the `albatross` project depends on the `bird-feeder` project, which is a member of
 the workspace. The `workspace = true` key-value pair in the `tool.uv.sources` table indicates the
 `bird-feeder` dependency should be provided by the workspace, rather than fetched from PyPI or
-another registry.
+another registry. The `workspace` field can also be set to a path string to resolve a dependency
+from a different workspace.
 
 !!! note
 

@@ -505,24 +505,28 @@ async fn do_lock(
         requirements,
         index_locations,
         sources,
+        workspace_cache,
         client_builder.credentials_cache(),
     )?;
     let overrides = target.lower(
         overrides,
         index_locations,
         sources,
+        workspace_cache,
         client_builder.credentials_cache(),
     )?;
     let constraints = target.lower(
         constraints,
         index_locations,
         sources,
+        workspace_cache,
         client_builder.credentials_cache(),
     )?;
     let build_constraints = target.lower(
         build_constraints,
         index_locations,
         sources,
+        workspace_cache,
         client_builder.credentials_cache(),
     )?;
     let dependency_groups = dependency_groups
@@ -532,6 +536,7 @@ async fn do_lock(
                 group.requirements,
                 index_locations,
                 sources,
+                workspace_cache,
                 client_builder.credentials_cache(),
             )?;
             Ok((name, requirements))
@@ -748,11 +753,17 @@ async fn do_lock(
             workspace,
             index_locations,
             sources,
+            workspace_cache,
             client.credentials_cache(),
         )?,
         LockTarget::Script(script) => {
             // Try to get extra build dependencies from the script metadata
-            script_extra_build_requires((*script).into(), settings, client.credentials_cache())?
+            script_extra_build_requires(
+                (*script).into(),
+                settings,
+                workspace_cache,
+                client.credentials_cache(),
+            )?
         }
     }
     .into_inner();

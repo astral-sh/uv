@@ -22,6 +22,7 @@ use uv_warnings::warn_user_once;
 use crate::dependency_groups::{DependencyGroupError, FlatDependencyGroup, FlatDependencyGroups};
 use crate::pyproject::{
     Project, PyProjectToml, PyprojectTomlError, Source, Sources, ToolUvSources, ToolUvWorkspace,
+    WorkspaceReference,
 };
 
 type WorkspaceMembers = Arc<BTreeMap<PackageName, WorkspaceMember>>;
@@ -282,6 +283,95 @@ impl Workspace {
         .await
     }
 
+    /// Find the workspace containing the given path from sync code.
+    pub fn discover_blocking(
+        path: &Path,
+        options: &DiscoveryOptions,
+        cache: &WorkspaceCache,
+    ) -> Result<Self, WorkspaceError> {
+        let path = std::path::absolute(path)
+            .map_err(WorkspaceError::Normalize)?
+            .clone();
+        let path = uv_fs::normalize_path(&path);
+        let path = path.components().collect::<PathBuf>();
+
+        let project_path = path
+            .ancestors()
+            .find(|path| path.join("pyproject.toml").is_file())
+            .ok_or(WorkspaceError::MissingPyprojectToml)?
+            .to_path_buf();
+
+        let pyproject_path = project_path.join("pyproject.toml");
+        let contents = fs_err::read_to_string(&pyproject_path)?;
+        let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
+            .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
+
+        if pyproject_toml
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.managed)
+            == Some(false)
+        {
+            debug!(
+                "Project `{}` is marked as unmanaged",
+                project_path.simplified_display()
+            );
+            return Err(WorkspaceError::NonWorkspace(project_path));
+        }
+
+        let explicit_root = pyproject_toml
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.workspace.as_ref())
+            .map(|workspace| {
+                (
+                    project_path.clone(),
+                    workspace.clone(),
+                    pyproject_toml.clone(),
+                )
+            });
+
+        let (workspace_root, workspace_definition, workspace_pyproject_toml) =
+            if let Some(workspace) = explicit_root {
+                workspace
+            } else if pyproject_toml.project.is_none() {
+                return Err(WorkspaceError::MissingProject(pyproject_path));
+            } else if let Some(workspace) = find_workspace_blocking(&project_path, options)? {
+                workspace
+            } else {
+                (
+                    project_path.clone(),
+                    ToolUvWorkspace::default(),
+                    pyproject_toml.clone(),
+                )
+            };
+
+        debug!(
+            "Found workspace root: `{}`",
+            workspace_root.simplified_display()
+        );
+
+        let current_project = pyproject_toml
+            .project
+            .clone()
+            .map(|project| WorkspaceMember {
+                root: project_path,
+                project,
+                pyproject_toml,
+            });
+
+        Self::collect_members_blocking(
+            workspace_root,
+            &workspace_definition,
+            workspace_pyproject_toml,
+            current_project,
+            options,
+            cache,
+        )
+    }
+
     /// Set the current project to the given workspace member.
     ///
     /// Returns `None` if the package is not part of the workspace.
@@ -450,7 +540,12 @@ impl Workspace {
             )
         {
             for source in sources.iter() {
-                let Source::Workspace { editable, .. } = &source else {
+                let Source::Workspace {
+                    workspace: WorkspaceReference::Bool(true),
+                    editable,
+                    ..
+                } = &source
+                else {
                     continue;
                 };
                 let existing = required_members.insert(package.clone(), *editable);
@@ -940,6 +1035,108 @@ impl Workspace {
         })
     }
 
+    fn collect_members_blocking(
+        workspace_root: PathBuf,
+        workspace_definition: &ToolUvWorkspace,
+        workspace_pyproject_toml: PyProjectToml,
+        current_project: Option<WorkspaceMember>,
+        options: &DiscoveryOptions,
+        cache: &WorkspaceCache,
+    ) -> Result<Self, WorkspaceError> {
+        let cache_key = WorkspaceCacheKey {
+            workspace_root: workspace_root.clone(),
+            discovery_options: options.clone(),
+        };
+        let cache_entry = {
+            let cache = cache.0.lock().expect("there was a panic in another thread");
+            cache.get(&cache_key).cloned()
+        };
+        let mut workspace_members = if let Some(workspace_members) = cache_entry {
+            trace!(
+                "Cached workspace members for: `{}`",
+                &workspace_root.simplified_display()
+            );
+            workspace_members
+        } else {
+            trace!(
+                "Discovering workspace members for: `{}`",
+                &workspace_root.simplified_display()
+            );
+            let workspace_members = Self::collect_members_only_blocking(
+                &workspace_root,
+                workspace_definition,
+                &workspace_pyproject_toml,
+                options,
+            )?;
+            {
+                let mut cache = cache.0.lock().expect("there was a panic in another thread");
+                cache.insert(cache_key, Arc::new(workspace_members.clone()));
+            }
+            Arc::new(workspace_members)
+        };
+
+        if let Some(root_member) = current_project {
+            if !workspace_members.contains_key(&root_member.project.name) {
+                debug!(
+                    "Adding current workspace member: `{}`",
+                    root_member.root.simplified_display()
+                );
+
+                Arc::make_mut(&mut workspace_members)
+                    .insert(root_member.project.name.clone(), root_member);
+            }
+        }
+
+        let workspace_sources = workspace_pyproject_toml
+            .tool
+            .clone()
+            .and_then(|tool| tool.uv)
+            .and_then(|uv| uv.sources)
+            .map(ToolUvSources::into_inner)
+            .unwrap_or_default();
+
+        let workspace_indexes = workspace_pyproject_toml
+            .tool
+            .clone()
+            .and_then(|tool| tool.uv)
+            .and_then(|uv| uv.index)
+            .unwrap_or_default();
+
+        let required_members = Self::collect_required_members(
+            &workspace_members,
+            &workspace_sources,
+            &workspace_pyproject_toml,
+        )?;
+
+        let dev_dependencies_members = workspace_members
+            .iter()
+            .filter_map(|(_, member)| {
+                member
+                    .pyproject_toml
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|uv| uv.dev_dependencies.as_ref())
+                    .map(|_| format!("`{}`", member.root().join("pyproject.toml").user_display()))
+            })
+            .join(", ");
+        if !dev_dependencies_members.is_empty() {
+            warn_user_once!(
+                "The `tool.uv.dev-dependencies` field (used in {}) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead",
+                dev_dependencies_members
+            );
+        }
+
+        Ok(Self {
+            install_path: workspace_root,
+            packages: workspace_members,
+            required_members,
+            sources: workspace_sources,
+            indexes: workspace_indexes,
+            pyproject_toml: workspace_pyproject_toml,
+        })
+    }
+
     async fn collect_members_only(
         workspace_root: &PathBuf,
         workspace_definition: &ToolUvWorkspace,
@@ -1137,6 +1334,192 @@ impl Workspace {
                 return Err(WorkspaceError::NestedWorkspace(member.root.clone()));
             }
         }
+        Ok(workspace_members)
+    }
+
+    fn collect_members_only_blocking(
+        workspace_root: &PathBuf,
+        workspace_definition: &ToolUvWorkspace,
+        workspace_pyproject_toml: &PyProjectToml,
+        options: &DiscoveryOptions,
+    ) -> Result<BTreeMap<PackageName, WorkspaceMember>, WorkspaceError> {
+        let mut workspace_members = BTreeMap::new();
+        let mut seen = FxHashSet::default();
+
+        if let Some(project) = &workspace_pyproject_toml.project {
+            let pyproject_path = workspace_root.join("pyproject.toml");
+            let contents = fs_err::read_to_string(&pyproject_path)?;
+            let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
+                .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
+
+            debug!(
+                "Adding root workspace member: `{}`",
+                workspace_root.simplified_display()
+            );
+
+            seen.insert(workspace_root.clone());
+            workspace_members.insert(
+                project.name.clone(),
+                WorkspaceMember {
+                    root: workspace_root.clone(),
+                    project: project.clone(),
+                    pyproject_toml,
+                },
+            );
+        }
+
+        for member_glob in workspace_definition.clone().members.unwrap_or_default() {
+            let normalized_glob = uv_fs::normalize_path(Path::new(member_glob.as_str()));
+            let absolute_glob = PathBuf::from(glob::Pattern::escape(
+                workspace_root.simplified().to_string_lossy().as_ref(),
+            ))
+            .join(normalized_glob.as_ref())
+            .to_string_lossy()
+            .to_string();
+            for member_root in glob(&absolute_glob)
+                .map_err(|err| WorkspaceError::Pattern(absolute_glob.clone(), err))?
+            {
+                let member_root = member_root
+                    .map_err(|err| WorkspaceError::GlobWalk(absolute_glob.clone(), err))?;
+                if !seen.insert(member_root.clone()) {
+                    continue;
+                }
+                let member_root = std::path::absolute(&member_root)
+                    .map_err(WorkspaceError::Normalize)?
+                    .clone();
+
+                let skip = match &options.members {
+                    MemberDiscovery::All => false,
+                    MemberDiscovery::None => true,
+                    MemberDiscovery::Ignore(ignore) => ignore.contains(member_root.as_path()),
+                };
+                if skip {
+                    debug!(
+                        "Ignoring workspace member: `{}`",
+                        member_root.simplified_display()
+                    );
+                    continue;
+                }
+
+                if is_excluded_from_workspace(&member_root, workspace_root, workspace_definition)? {
+                    debug!(
+                        "Ignoring workspace member: `{}`",
+                        member_root.simplified_display()
+                    );
+                    continue;
+                }
+
+                trace!(
+                    "Processing workspace member: `{}`",
+                    member_root.user_display()
+                );
+
+                let pyproject_path = member_root.join("pyproject.toml");
+                let contents = match fs_err::read_to_string(&pyproject_path) {
+                    Ok(contents) => contents,
+                    Err(err) => {
+                        if !fs_err::metadata(&member_root)?.is_dir() {
+                            warn!(
+                                "Ignoring non-directory workspace member: `{}`",
+                                member_root.simplified_display()
+                            );
+                            continue;
+                        }
+
+                        if err.kind() == std::io::ErrorKind::NotFound {
+                            if member_root
+                                .file_name()
+                                .map(|name| name.as_encoded_bytes().starts_with(b"."))
+                                .unwrap_or(false)
+                            {
+                                debug!(
+                                    "Ignoring hidden workspace member: `{}`",
+                                    member_root.simplified_display()
+                                );
+                                continue;
+                            }
+
+                            if has_only_gitignored_files(&member_root) {
+                                debug!(
+                                    "Ignoring workspace member with only gitignored files: `{}`",
+                                    member_root.simplified_display()
+                                );
+                                continue;
+                            }
+
+                            return Err(WorkspaceError::MissingPyprojectTomlMember(
+                                member_root,
+                                member_glob.to_string(),
+                            ));
+                        }
+
+                        return Err(err.into());
+                    }
+                };
+                let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
+                    .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
+
+                if pyproject_toml
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|uv| uv.managed)
+                    == Some(false)
+                {
+                    if let Some(project) = pyproject_toml.project.as_ref() {
+                        debug!(
+                            "Project `{}` is marked as unmanaged; omitting from workspace members",
+                            project.name
+                        );
+                    } else {
+                        debug!(
+                            "Workspace member at `{}` is marked as unmanaged; omitting from workspace members",
+                            member_root.simplified_display()
+                        );
+                    }
+                    continue;
+                }
+
+                let Some(project) = pyproject_toml.project.clone() else {
+                    return Err(WorkspaceError::MissingProject(pyproject_path));
+                };
+
+                debug!(
+                    "Adding discovered workspace member: `{}`",
+                    member_root.simplified_display()
+                );
+
+                if let Some(existing) = workspace_members.insert(
+                    project.name.clone(),
+                    WorkspaceMember {
+                        root: member_root.clone(),
+                        project,
+                        pyproject_toml,
+                    },
+                ) {
+                    return Err(WorkspaceError::DuplicatePackage {
+                        name: existing.project.name,
+                        first: existing.root.clone(),
+                        second: member_root,
+                    });
+                }
+            }
+        }
+
+        for member in workspace_members.values() {
+            if member.root() != workspace_root
+                && member
+                    .pyproject_toml
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|uv| uv.workspace.as_ref())
+                    .is_some()
+            {
+                return Err(WorkspaceError::NestedWorkspace(member.root.clone()));
+            }
+        }
+
         Ok(workspace_members)
     }
 }
@@ -1576,6 +1959,80 @@ async fn find_workspace(
             Ok(None)
         } else {
             // We require that a `project.toml` file either declares a workspace or a project.
+            warn!(
+                "`pyproject.toml` does not contain a `project` table: `{}`",
+                pyproject_path.simplified_display()
+            );
+            Ok(None)
+        };
+    }
+
+    Ok(None)
+}
+
+fn find_workspace_blocking(
+    project_root: &Path,
+    options: &DiscoveryOptions,
+) -> Result<Option<(PathBuf, ToolUvWorkspace, PyProjectToml)>, WorkspaceError> {
+    for workspace_root in project_root
+        .ancestors()
+        .take_while(|path| {
+            options
+                .stop_discovery_at
+                .as_deref()
+                .and_then(Path::parent)
+                .map(|stop_discovery_at| stop_discovery_at != *path)
+                .unwrap_or(true)
+        })
+        .skip(1)
+    {
+        let pyproject_path = workspace_root.join("pyproject.toml");
+        if !pyproject_path.is_file() {
+            continue;
+        }
+        trace!(
+            "Found `pyproject.toml` at: `{}`",
+            pyproject_path.simplified_display()
+        );
+
+        let contents = fs_err::read_to_string(&pyproject_path)?;
+        let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
+            .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
+
+        return if let Some(workspace) = pyproject_toml
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.workspace.as_ref())
+        {
+            if !is_included_in_workspace(project_root, workspace_root, workspace)? {
+                debug!(
+                    "Found workspace root `{}`, but project is not included",
+                    workspace_root.simplified_display()
+                );
+                return Ok(None);
+            }
+
+            if is_excluded_from_workspace(project_root, workspace_root, workspace)? {
+                debug!(
+                    "Found workspace root `{}`, but project is excluded",
+                    workspace_root.simplified_display()
+                );
+                return Ok(None);
+            }
+
+            Ok(Some((
+                workspace_root.to_path_buf(),
+                workspace.clone(),
+                pyproject_toml,
+            )))
+        } else if pyproject_toml.project.is_some() {
+            debug!(
+                "Project is contained in non-workspace project: `{}`",
+                workspace_root.simplified_display()
+            );
+            Ok(None)
+        } else {
             warn!(
                 "`pyproject.toml` does not contain a `project` table: `{}`",
                 pyproject_path.simplified_display()
