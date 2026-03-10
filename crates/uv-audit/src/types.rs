@@ -3,6 +3,7 @@
 use jiff::Timestamp;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 
 /// Represents a resolved dependency, with a normalized name and PEP 440 version.
@@ -78,6 +79,8 @@ pub struct Vulnerability {
     pub summary: Option<String>,
     /// A full-length description of the vulnerability, if available.
     pub description: Option<String>,
+    /// A link to more information about the vulnerability, if available.
+    pub link: Option<DisplaySafeUrl>,
     /// Zero or more versions that fix the vulnerability.
     pub fix_versions: Vec<Version>,
     /// Zero or more aliases for this vulnerability in other databases.
@@ -94,6 +97,7 @@ impl Vulnerability {
         id: VulnerabilityID,
         summary: Option<String>,
         description: Option<String>,
+        link: Option<DisplaySafeUrl>,
         fix_versions: Vec<Version>,
         aliases: Vec<VulnerabilityID>,
         published: Option<Timestamp>,
@@ -108,6 +112,7 @@ impl Vulnerability {
             id,
             summary,
             description,
+            link,
             fix_versions,
             aliases,
             published,
@@ -144,6 +149,6 @@ pub struct ProjectStatus {
 /// Represents a finding on a dependency.
 #[derive(Debug)]
 pub enum Finding {
-    Vulnerability(Vulnerability),
+    Vulnerability(Box<Vulnerability>),
     ProjectStatus(ProjectStatus),
 }

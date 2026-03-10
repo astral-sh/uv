@@ -105,6 +105,34 @@ struct Affected {
     // database_specific: Option<serde_json::Value>,
 }
 
+/// The type of a reference in an OSV vulnerability record.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+enum ReferenceType {
+    Advisory,
+    Article,
+    Detection,
+    Discussion,
+    Report,
+    Fix,
+    Introduced,
+    Package,
+    Evidence,
+    Web,
+    /// Some other reference type. We don't expect these in OSV v1 records,
+    /// but we include it for forward compatibility.
+    #[serde(other)]
+    Other,
+}
+
+/// A reference for more information about a vulnerability.
+#[derive(Debug, Clone, Deserialize)]
+struct Reference {
+    #[serde(rename = "type")]
+    reference_type: ReferenceType,
+    url: DisplaySafeUrl,
+}
+
 /// A full vulnerability record from OSV.
 #[derive(Debug, Clone, Deserialize)]
 struct Vulnerability {
@@ -122,6 +150,7 @@ struct Vulnerability {
     published: Option<Timestamp>,
     affected: Option<Vec<Affected>>,
     aliases: Option<Vec<String>>,
+    references: Option<Vec<Reference>>,
 }
 
 /// Response from a single query.
@@ -223,6 +252,29 @@ impl Osv {
         dependency: &types::Dependency,
         vuln: Vulnerability,
     ) -> types::Finding {
+        // Extract a link for the advisory. We prefer the first
+        // `ADVISORY` reference, then the first `WEB` reference, and then
+        // finally we synthesize a URL of `https://osv.dev/vulnerability/<id>`
+        // where `<id>` is the vulnerability's ID.
+        let link = vuln
+            .references
+            .as_ref()
+            .and_then(|references| {
+                references
+                    .iter()
+                    .find(|reference| matches!(reference.reference_type, ReferenceType::Advisory))
+                    .or_else(|| {
+                        references.iter().find(|reference| {
+                            matches!(reference.reference_type, ReferenceType::Web)
+                        })
+                    })
+                    .map(|reference| reference.url.clone())
+            })
+            .unwrap_or_else(|| {
+                DisplaySafeUrl::parse(&format!("https://osv.dev/vulnerability/{}", vuln.id))
+                    .expect("impossible: synthesized URL is invalid")
+            });
+
         // Extract fix versions from affected ranges
         let fix_versions = vuln
             .affected
@@ -258,16 +310,20 @@ impl Osv {
             .map(types::VulnerabilityID::new)
             .collect();
 
-        types::Finding::Vulnerability(types::Vulnerability::new(
-            dependency.clone(),
-            types::VulnerabilityID::new(vuln.id),
-            vuln.summary,
-            vuln.details,
-            fix_versions,
-            aliases,
-            vuln.published,
-            Some(vuln.modified),
-        ))
+        types::Finding::Vulnerability(
+            types::Vulnerability::new(
+                dependency.clone(),
+                types::VulnerabilityID::new(vuln.id),
+                vuln.summary,
+                vuln.details,
+                Some(link),
+                fix_versions,
+                aliases,
+                vuln.published,
+                Some(vuln.modified),
+            )
+            .into(),
+        )
     }
 }
 
@@ -419,6 +475,23 @@ mod tests {
                     ),
                     summary: None,
                     description: None,
+                    link: Some(
+                        DisplaySafeUrl {
+                            scheme: "https",
+                            cannot_be_a_base: false,
+                            username: "",
+                            password: None,
+                            host: Some(
+                                Domain(
+                                    "osv.dev",
+                                ),
+                            ),
+                            port: None,
+                            path: "/vulnerability/VULN-1",
+                            query: None,
+                            fragment: None,
+                        },
+                    ),
                     fix_versions: [],
                     aliases: [],
                     published: Some(
@@ -442,6 +515,23 @@ mod tests {
                     ),
                     summary: None,
                     description: None,
+                    link: Some(
+                        DisplaySafeUrl {
+                            scheme: "https",
+                            cannot_be_a_base: false,
+                            username: "",
+                            password: None,
+                            host: Some(
+                                Domain(
+                                    "osv.dev",
+                                ),
+                            ),
+                            port: None,
+                            path: "/vulnerability/VULN-2",
+                            query: None,
+                            fragment: None,
+                        },
+                    ),
                     fix_versions: [],
                     aliases: [],
                     published: Some(
@@ -504,6 +594,23 @@ mod tests {
                 ),
                 description: Some(
                     "## Vulnerability Summary\n\nThe `public_key_from_numbers` (or `EllipticCurvePublicNumbers.public_key()`), `EllipticCurvePublicNumbers.public_key()`, `load_der_public_key()` and `load_pem_public_key()` functions do not verify that the point belongs to the expected prime-order subgroup of the curve.\n\nThis missing validation allows an attacker to provide a public key point `P` from a small-order subgroup.  This can lead to security issues in various situations, such as the most commonly used signature verification (ECDSA) and shared key negotiation (ECDH). When the victim computes the shared secret as `S = [victim_private_key]P` via ECDH,  this leaks information about `victim_private_key mod (small_subgroup_order)`. For curves with cofactor > 1, this reveals the least significant bits of the private key.  When these weak public keys are used in ECDSA , it's easy to forge signatures on the small subgroup.\n\nOnly SECT curves are impacted by this.\n\n## Credit\n\nThis vulnerability was discovered by:\n- XlabAI Team of Tencent Xuanwu Lab\n- Atuin Automated Vulnerability Discovery Engine",
+                ),
+                link: Some(
+                    DisplaySafeUrl {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "nvd.nist.gov",
+                            ),
+                        ),
+                        port: None,
+                        path: "/vuln/detail/CVE-2026-26007",
+                        query: None,
+                        fragment: None,
+                    },
                 ),
                 fix_versions: [
                     "46.0.5",
