@@ -851,6 +851,97 @@ fn tool_upgrade_python() {
     });
 }
 
+/// Regression test for <https://github.com/astral-sh/uv/issues/17907>.
+#[test]
+fn tool_upgrade_python_removed_interpreter() {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_install()
+    .arg("babel==2.6.0")
+    .arg("--index-url")
+    .arg("https://test.pypi.org/simple/")
+    .arg("--python").arg("3.11")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+    .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + babel==2.6.0
+     + pytz==2018.5
+    Installed 1 executable: pybabel
+    ");
+
+    let tool_root = tool_dir.child("babel");
+
+    #[cfg(unix)]
+    {
+        let tool_python = tool_root.child("bin").child("python");
+        fs_err::remove_file(&tool_python).unwrap();
+        fs_err::os::unix::fs::symlink(context.temp_dir.join("missing-python"), &tool_python)
+            .unwrap();
+    }
+
+    #[cfg(windows)]
+    {
+        use uv_fs::Simplified;
+
+        let pyvenv_cfg = tool_root.child("pyvenv.cfg");
+        let broken_home = context.temp_dir.join("missing-python");
+        let contents = fs_err::read_to_string(&pyvenv_cfg).unwrap();
+        let contents = contents
+            .lines()
+            .map(|line| {
+                if line.starts_with("home = ") {
+                    format!("home = {}", broken_home.simplified_display())
+                } else {
+                    line.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        fs_err::write(&pyvenv_cfg, format!("{contents}\n")).unwrap();
+    }
+
+    uv_snapshot!(
+        context.filters(),
+        context.tool_upgrade().arg("babel")
+        .arg("--python").arg("3.12")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + babel==2.6.0
+     + pytz==2018.5
+    Installed 1 executable: pybabel
+    Upgraded tool environment for `babel` to Python 3.12
+    "
+    );
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        let content = fs_err::read_to_string(tool_dir.join("babel").join("pyvenv.cfg")).unwrap();
+        let lines: Vec<&str> = content.split('\n').collect();
+        assert_snapshot!(lines[lines.len() - 3], @"version_info = 3.12.[X]");
+    });
+}
+
 #[test]
 fn tool_upgrade_python_with_all() {
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
