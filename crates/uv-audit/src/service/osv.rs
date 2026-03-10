@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use uv_pep440::Version;
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 
-use crate::types::{Dependency, Finding, VulnerabilityID};
+use crate::types;
 
 const API_BASE: &str = "https://api.osv.dev/";
 
@@ -161,7 +161,10 @@ impl Osv {
     }
 
     /// Query OSV for vulnerabilities affecting the given dependency.
-    pub async fn query(&self, dependency: &Dependency) -> Result<Vec<Finding>, Error> {
+    pub async fn query(
+        &self,
+        dependency: &types::Dependency,
+    ) -> Result<Vec<types::Finding>, Error> {
         let mut all_vulnerabilities = Vec::new();
         let mut page_token: Option<String> = None;
 
@@ -216,7 +219,10 @@ impl Osv {
     }
 
     /// Convert an OSV Vulnerability record to a Finding.
-    fn vulnerability_to_finding(dependency: &Dependency, vuln: Vulnerability) -> Finding {
+    fn vulnerability_to_finding(
+        dependency: &types::Dependency,
+        vuln: Vulnerability,
+    ) -> types::Finding {
         // Extract fix versions from affected ranges
         let fix_versions = vuln
             .affected
@@ -249,20 +255,19 @@ impl Osv {
             .aliases
             .unwrap_or_default()
             .into_iter()
-            .map(VulnerabilityID::new)
+            .map(types::VulnerabilityID::new)
             .collect();
 
-        let description = vuln.summary.or(vuln.details).unwrap_or(vuln.id.clone());
-
-        Finding::Vulnerability {
-            dependency: dependency.clone(),
-            id: VulnerabilityID::new(vuln.id),
-            description,
+        types::Finding::Vulnerability(types::Vulnerability::new(
+            dependency.clone(),
+            types::VulnerabilityID::new(vuln.id),
+            vuln.summary,
+            vuln.details,
             fix_versions,
             aliases,
-            published: vuln.published,
-            modified: Some(vuln.modified),
-        }
+            vuln.published,
+            Some(vuln.modified),
+        ))
     }
 }
 
@@ -401,46 +406,52 @@ mod tests {
 
         insta::assert_debug_snapshot!(findings, @r#"
         [
-            Vulnerability {
-                dependency: Dependency {
-                    name: PackageName(
-                        "foobar",
+            Vulnerability(
+                Vulnerability {
+                    dependency: Dependency {
+                        name: PackageName(
+                            "foobar",
+                        ),
+                        version: "1.2.3",
+                    },
+                    id: VulnerabilityID(
+                        "VULN-1",
                     ),
-                    version: "1.2.3",
-                },
-                id: VulnerabilityID(
-                    "VULN-1",
-                ),
-                description: "VULN-1",
-                fix_versions: [],
-                aliases: [],
-                published: Some(
-                    2026-01-01T00:00:00Z,
-                ),
-                modified: Some(
-                    2026-01-01T00:00:00Z,
-                ),
-            },
-            Vulnerability {
-                dependency: Dependency {
-                    name: PackageName(
-                        "foobar",
+                    summary: None,
+                    description: None,
+                    fix_versions: [],
+                    aliases: [],
+                    published: Some(
+                        2026-01-01T00:00:00Z,
                     ),
-                    version: "1.2.3",
+                    modified: Some(
+                        2026-01-01T00:00:00Z,
+                    ),
                 },
-                id: VulnerabilityID(
-                    "VULN-2",
-                ),
-                description: "VULN-2",
-                fix_versions: [],
-                aliases: [],
-                published: Some(
-                    2026-01-02T00:00:00Z,
-                ),
-                modified: Some(
-                    2026-01-02T00:00:00Z,
-                ),
-            },
+            ),
+            Vulnerability(
+                Vulnerability {
+                    dependency: Dependency {
+                        name: PackageName(
+                            "foobar",
+                        ),
+                        version: "1.2.3",
+                    },
+                    id: VulnerabilityID(
+                        "VULN-2",
+                    ),
+                    summary: None,
+                    description: None,
+                    fix_versions: [],
+                    aliases: [],
+                    published: Some(
+                        2026-01-02T00:00:00Z,
+                    ),
+                    modified: Some(
+                        2026-01-02T00:00:00Z,
+                    ),
+                },
+            ),
         ]
         "#);
 
@@ -471,38 +482,45 @@ mod tests {
         let finding = findings
             .iter()
             .find(|finding| match finding {
-                Finding::Vulnerability { id, .. } => id.as_str() == "GHSA-r6ph-v2qm-q3c2",
-                Finding::ProjectStatus { .. } => false,
+                Finding::Vulnerability(vuln) => vuln.id.as_str() == "GHSA-r6ph-v2qm-q3c2",
+                Finding::ProjectStatus(_) => false,
             })
             .expect("Expected to find GHSA-r6ph-v2qm-q3c2 vulnerability");
 
-        insta::assert_debug_snapshot!(finding, @r#"
-        Vulnerability {
-            dependency: Dependency {
-                name: PackageName(
-                    "cryptography",
+        insta::assert_debug_snapshot!(finding, @r###"
+        Vulnerability(
+            Vulnerability {
+                dependency: Dependency {
+                    name: PackageName(
+                        "cryptography",
+                    ),
+                    version: "46.0.4",
+                },
+                id: VulnerabilityID(
+                    "GHSA-r6ph-v2qm-q3c2",
                 ),
-                version: "46.0.4",
+                summary: Some(
+                    "cryptography Vulnerable to a Subgroup Attack Due to Missing Subgroup Validation for SECT Curves",
+                ),
+                description: Some(
+                    "## Vulnerability Summary\n\nThe `public_key_from_numbers` (or `EllipticCurvePublicNumbers.public_key()`), `EllipticCurvePublicNumbers.public_key()`, `load_der_public_key()` and `load_pem_public_key()` functions do not verify that the point belongs to the expected prime-order subgroup of the curve.\n\nThis missing validation allows an attacker to provide a public key point `P` from a small-order subgroup.  This can lead to security issues in various situations, such as the most commonly used signature verification (ECDSA) and shared key negotiation (ECDH). When the victim computes the shared secret as `S = [victim_private_key]P` via ECDH,  this leaks information about `victim_private_key mod (small_subgroup_order)`. For curves with cofactor > 1, this reveals the least significant bits of the private key.  When these weak public keys are used in ECDSA , it's easy to forge signatures on the small subgroup.\n\nOnly SECT curves are impacted by this.\n\n## Credit\n\nThis vulnerability was discovered by:\n- XlabAI Team of Tencent Xuanwu Lab\n- Atuin Automated Vulnerability Discovery Engine",
+                ),
+                fix_versions: [
+                    "46.0.5",
+                ],
+                aliases: [
+                    VulnerabilityID(
+                        "CVE-2026-26007",
+                    ),
+                ],
+                published: Some(
+                    2026-02-10T21:27:06Z,
+                ),
+                modified: Some(
+                    2026-02-11T15:58:46.005582Z,
+                ),
             },
-            id: VulnerabilityID(
-                "GHSA-r6ph-v2qm-q3c2",
-            ),
-            description: "cryptography Vulnerable to a Subgroup Attack Due to Missing Subgroup Validation for SECT Curves",
-            fix_versions: [
-                "46.0.5",
-            ],
-            aliases: [
-                VulnerabilityID(
-                    "CVE-2026-26007",
-                ),
-            ],
-            published: Some(
-                2026-02-10T21:27:06Z,
-            ),
-            modified: Some(
-                2026-02-11T15:58:46.005582Z,
-            ),
-        }
-        "#);
+        )
+        "###);
     }
 }
