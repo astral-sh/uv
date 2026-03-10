@@ -759,8 +759,11 @@ pub(crate) struct AuditReporter {
 impl From<Printer> for AuditReporter {
     fn from(printer: Printer) -> Self {
         let progress = ProgressBar::with_draw_target(None, printer.target());
+        progress.enable_steady_tick(Duration::from_millis(200));
         progress.set_style(
-            ProgressStyle::with_template("{bar:20} [{pos}/{len}] {wide_msg:.dim}").unwrap(),
+            ProgressStyle::with_template("{spinner:.white} {wide_msg:.dim}")
+                .unwrap()
+                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
         );
         progress.set_message("Auditing dependencies...");
         Self { progress }
@@ -768,17 +771,6 @@ impl From<Printer> for AuditReporter {
 }
 
 impl AuditReporter {
-    #[must_use]
-    pub(crate) fn with_length(self, length: u64) -> Self {
-        self.progress.set_length(length);
-        self
-    }
-
-    pub(crate) fn on_audit_package(&self, name: &PackageName, version: &Version) {
-        self.progress.set_message(format!("{name} {version}"));
-        self.progress.inc(1);
-    }
-
     pub(crate) fn on_audit_complete(&self) {
         self.progress.set_message("");
         self.progress.finish_and_clear();

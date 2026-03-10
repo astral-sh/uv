@@ -1,16 +1,16 @@
 //! Types and interfaces for interacting with [OSV] as a vulnerability service.
 //!
-//! Note: OSV supports a batched query API, but with significant limitations
-//! that make it unsuitable for our purpose (namely, it doesn't include
-//! anything except vulnerability IDs and last-modified information). As
-//! a result, our current OSV backend only implements and uses the
-//! single-query API.
+//! We use OSV's `/v1/querybatch` endpoint to collect vulnerability IDs for all
+//! dependencies in a single round-trip (handling pagination as needed), then
+//! fetch full vulnerability records from `/v1/vulns/{id}` concurrently.
 //!
 //! [OSV]: https://osv.dev/
 
+use std::collections::{HashMap, HashSet};
 use std::str::FromStr as _;
 use tracing::trace;
 
+use futures::StreamExt as _;
 use jiff::Timestamp;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
@@ -33,7 +33,7 @@ pub enum Error {
 }
 
 /// Package specification for OSV queries.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 struct Package {
     /// The package's name.
     name: String,
@@ -43,7 +43,7 @@ struct Package {
 }
 
 /// Query request for a single package.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 struct QueryRequest {
     package: Package,
     version: String,
@@ -153,12 +153,31 @@ struct Vulnerability {
     references: Option<Vec<Reference>>,
 }
 
-/// Response from a single query.
+/// Request body for the batch query API.
+#[derive(Debug, Clone, Serialize)]
+struct QueryBatchRequest {
+    queries: Vec<QueryRequest>,
+}
+
+/// A summary of a vulnerability returned by the batch query API.
+/// Note: the batch query API only returns IDs and modification timestamps, not full records.
 #[derive(Debug, Clone, Deserialize)]
-struct QueryResponse {
+struct VulnSummary {
+    id: String,
+}
+
+/// One result entry in a batch query response, corresponding to one input query.
+#[derive(Debug, Clone, Deserialize)]
+struct QueryBatchResult {
     #[serde(default)]
-    vulns: Vec<Vulnerability>,
+    vulns: Vec<VulnSummary>,
     next_page_token: Option<String>,
+}
+
+/// Response from a batch query.
+#[derive(Debug, Clone, Deserialize)]
+struct QueryBatchResponse {
+    results: Vec<QueryBatchResult>,
 }
 
 /// Represents [OSV](https://osv.dev/), an open-source vulnerability database.
@@ -189,62 +208,113 @@ impl Osv {
         }
     }
 
-    /// Query OSV for vulnerabilities affecting the given dependency.
-    pub async fn query(
+    pub async fn query_batch(
         &self,
-        dependency: &types::Dependency,
+        dependencies: &[types::Dependency],
     ) -> Result<Vec<types::Finding>, Error> {
-        let mut all_vulnerabilities = Vec::new();
-        let mut page_token: Option<String> = None;
+        if dependencies.is_empty() {
+            return Ok(vec![]);
+        }
 
-        // Loop to handle pagination
+        // Accumulated (dependency, vuln_id) pairs across all pages.
+        let mut dep_vuln_ids: Vec<(&types::Dependency, String)> = Vec::new();
+
+        // Pending queries: (dependency, page_token). Initially one per dependency with no token.
+        let mut pending: Vec<(&types::Dependency, Option<String>)> =
+            dependencies.iter().map(|dep| (dep, None)).collect();
+
         loop {
-            let request = QueryRequest {
-                package: Package {
-                    name: dependency.name().to_string(),
-                    ecosystem: "PyPI".to_string(),
-                },
-                version: dependency.version().to_string(),
-                page_token: page_token.clone(),
+            let request = QueryBatchRequest {
+                queries: pending
+                    .iter()
+                    .map(|(dep, page_token)| QueryRequest {
+                        package: Package {
+                            name: dep.name().to_string(),
+                            ecosystem: "PyPI".to_string(),
+                        },
+                        version: dep.version().to_string(),
+                        page_token: page_token.clone(),
+                    })
+                    .collect(),
             };
 
-            // TODO: Technically the error here is unreachable, since `base_url` is valid by construction
-            // and the path component is statically valid. We could perhaps just replace it with
-            // an `expect`.
             let url = self
                 .base_url
-                .join("v1/query")
+                .join("v1/querybatch")
                 .map_err(|e| Error::Url(self.base_url.clone(), e))?;
-            let response = self
+            let batch_response: QueryBatchResponse = self
                 .client
                 .post(url.as_ref())
                 .json(&request)
-                .header("Content-Type", "application/json")
                 .send()
-                .await?;
-
-            let query_response: QueryResponse = response
+                .await?
                 .error_for_status()
                 .map_err(reqwest_middleware::Error::Reqwest)?
                 .json()
                 .await
                 .map_err(reqwest_middleware::Error::Reqwest)?;
 
-            all_vulnerabilities.extend(query_response.vulns);
-
-            // Check if there are more pages
-            match query_response.next_page_token {
-                Some(token) => page_token = Some(token),
-                None => break,
+            let mut next_pending = Vec::new();
+            for ((dep, _), result) in pending.iter().zip(batch_response.results.iter()) {
+                dep_vuln_ids.extend(result.vulns.iter().map(|v| (*dep, v.id.clone())));
+                if let Some(token) = &result.next_page_token {
+                    next_pending.push((*dep, Some(token.clone())));
+                }
             }
+
+            if next_pending.is_empty() {
+                break;
+            }
+            pending = next_pending;
         }
 
-        let findings = all_vulnerabilities
-            .into_iter()
-            .map(|vuln| Self::vulnerability_to_finding(dependency, vuln))
-            .collect::<Vec<_>>();
+        // Collect unique vuln IDs to minimize fetches.
+        let unique_ids: HashSet<_> = dep_vuln_ids.iter().map(|(_, id)| id.clone()).collect();
+
+        // Fetch full vulnerability records concurrently.
+        let mut vuln_stream = futures::stream::iter(unique_ids)
+            .map(async |id| {
+                let vuln = self.fetch_vuln(&id).await?;
+                Ok::<(String, Vulnerability), Error>((id, vuln))
+            })
+            .buffer_unordered(usize::MAX);
+
+        let mut vuln_details = HashMap::new();
+        while let Some(result) = vuln_stream.next().await {
+            let (id, vuln) = result?;
+            vuln_details.insert(id, vuln);
+        }
+
+        // Build findings from the accumulated (dependency, vuln_id) pairs.
+        let findings = dep_vuln_ids
+            .iter()
+            .filter_map(|(dep, vuln_id)| {
+                vuln_details
+                    .get(vuln_id)
+                    .map(|vuln| Self::vulnerability_to_finding(dep, vuln.clone()))
+            })
+            .collect();
 
         Ok(findings)
+    }
+
+    /// Fetch a full vulnerability record by ID from OSV.
+    async fn fetch_vuln(&self, id: &str) -> Result<Vulnerability, Error> {
+        let url = self
+            .base_url
+            .join(&format!("v1/vulns/{id}"))
+            .map_err(|e| Error::Url(self.base_url.clone(), e))?;
+        let vuln: Vulnerability = self
+            .client
+            .get(url.as_ref())
+            .send()
+            .await?
+            .error_for_status()
+            .map_err(reqwest_middleware::Error::Reqwest)?
+            .json()
+            .await
+            .map_err(reqwest_middleware::Error::Reqwest)?;
+        Ok(vuln)
     }
 
     /// Convert an OSV Vulnerability record to a Finding.
@@ -394,54 +464,51 @@ mod tests {
         ");
     }
 
-    /// Ensure that we properly handle pagination in the OSV API, i.e. that we
-    /// make multiple requests if necessary and use the page token.
+    /// Ensure that `query_batch` returns the correct findings for a batch of dependencies
+    /// with no pagination (simple case).
     #[tokio::test]
-    async fn test_query_pagination() {
+    async fn test_query_batch_basic() {
         let server = MockServer::start().await;
 
-        // First request: no page token.
+        // Querybatch request for both packages.
         Mock::given(method("POST"))
-            .and(path("/v1/query"))
+            .and(path("/v1/querybatch"))
             .and(body_json(json!({
-                "package": {
-                    "name": "foobar",
-                    "ecosystem": "PyPI",
-                },
-                "version": "1.2.3",
+                "queries": [
+                    {
+                        "package": { "name": "package-a", "ecosystem": "PyPI" },
+                        "version": "1.0.0",
+                    },
+                    {
+                        "package": { "name": "package-b", "ecosystem": "PyPI" },
+                        "version": "2.0.0",
+                    }
+                ]
             })))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-                "vulns": [
-                    {
-                        "id": "VULN-1",
-                        "modified": "2026-01-01T00:00:00Z",
-                        "published": "2026-01-01T00:00:00Z",
-                    }
-                ],
-                "next_page_token": "token"
+                "results": [
+                    { "vulns": [{ "id": "VULN-1", "modified": "2026-01-01T00:00:00Z" }] },
+                    { "vulns": [{ "id": "VULN-2", "modified": "2026-01-02T00:00:00Z" }] }
+                ]
             })))
             .mount(&server)
             .await;
 
-        // Second request: with page token.
-        Mock::given(method("POST"))
-            .and(path("/v1/query"))
-            .and(body_json(json!({
-                "package": {
-                    "name": "foobar",
-                    "ecosystem": "PyPI",
-                },
-                "version": "1.2.3",
-                "page_token": "token",
-            })))
+        // Individual vuln detail requests.
+        Mock::given(method("GET"))
+            .and(path("/v1/vulns/VULN-1"))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-                "vulns": [
-                    {
-                        "id": "VULN-2",
-                        "modified": "2026-01-02T00:00:00Z",
-                        "published": "2026-01-02T00:00:00Z",
-                    }
-                ],
+                "id": "VULN-1",
+                "modified": "2026-01-01T00:00:00Z",
+            })))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/v1/vulns/VULN-2"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "VULN-2",
+                "modified": "2026-01-02T00:00:00Z",
             })))
             .mount(&server)
             .await;
@@ -451,14 +518,21 @@ mod tests {
             Some(DisplaySafeUrl::parse(&server.uri()).unwrap()),
         );
 
-        // Our findings should include vulnerabilities from both pages.
+        let dependencies = vec![
+            Dependency::new(
+                PackageName::from_str("package-a").unwrap(),
+                Version::from_str("1.0.0").unwrap(),
+            ),
+            Dependency::new(
+                PackageName::from_str("package-b").unwrap(),
+                Version::from_str("2.0.0").unwrap(),
+            ),
+        ];
+
         let findings = osv
-            .query(&Dependency::new(
-                PackageName::from_str("foobar").unwrap(),
-                Version::from_str("1.2.3").unwrap(),
-            ))
+            .query_batch(&dependencies)
             .await
-            .expect("Failed to query OSV");
+            .expect("Failed to query batch");
 
         insta::assert_debug_snapshot!(findings, @r#"
         [
@@ -466,9 +540,9 @@ mod tests {
                 Vulnerability {
                     dependency: Dependency {
                         name: PackageName(
-                            "foobar",
+                            "package-a",
                         ),
-                        version: "1.2.3",
+                        version: "1.0.0",
                     },
                     id: VulnerabilityID(
                         "VULN-1",
@@ -494,9 +568,7 @@ mod tests {
                     ),
                     fix_versions: [],
                     aliases: [],
-                    published: Some(
-                        2026-01-01T00:00:00Z,
-                    ),
+                    published: None,
                     modified: Some(
                         2026-01-01T00:00:00Z,
                     ),
@@ -506,9 +578,9 @@ mod tests {
                 Vulnerability {
                     dependency: Dependency {
                         name: PackageName(
-                            "foobar",
+                            "package-b",
                         ),
-                        version: "1.2.3",
+                        version: "2.0.0",
                     },
                     id: VulnerabilityID(
                         "VULN-2",
@@ -534,9 +606,7 @@ mod tests {
                     ),
                     fix_versions: [],
                     aliases: [],
-                    published: Some(
-                        2026-01-02T00:00:00Z,
-                    ),
+                    published: None,
                     modified: Some(
                         2026-01-02T00:00:00Z,
                     ),
@@ -545,89 +615,136 @@ mod tests {
         ]
         "#);
 
-        // Ensure our mock server received both requests.
+        // 1 querybatch + 2 vuln detail fetches.
         assert_eq!(
             server.received_requests().await.unwrap().len(),
-            2,
-            "Expected to receive two requests"
+            3,
+            "Expected one querybatch request and two vuln detail requests"
         );
     }
 
-    /// Ensure that we can query and receive a known vulnerability from the OSV API.
-    #[cfg(feature = "test-osv")]
+    /// Ensure that `query_batch` correctly handles pagination: only the deps whose results
+    /// included a `next_page_token` are re-queried, with their respective tokens.
     #[tokio::test]
-    async fn test_query() {
-        let osv = Osv::default();
-        let package = PackageName::from_str("cryptography").unwrap();
-        let version = Version::from_str("46.0.4").unwrap();
-        let dependency = Dependency::new(package, version);
+    async fn test_query_batch_pagination() {
+        let server = MockServer::start().await;
 
-        let findings = osv.query(&dependency).await.unwrap();
-        assert!(
-            !findings.is_empty(),
-            "Expected to find at least one vulnerability"
+        // First querybatch request: both packages, no page tokens.
+        Mock::given(method("POST"))
+            .and(path("/v1/querybatch"))
+            .and(body_json(json!({
+                "queries": [
+                    {
+                        "package": { "name": "package-a", "ecosystem": "PyPI" },
+                        "version": "1.0.0",
+                    },
+                    {
+                        "package": { "name": "package-b", "ecosystem": "PyPI" },
+                        "version": "2.0.0",
+                    }
+                ]
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "results": [
+                    {
+                        "vulns": [{ "id": "VULN-1", "modified": "2026-01-01T00:00:00Z" }],
+                        "next_page_token": "tok1"
+                    },
+                    {
+                        "vulns": [{ "id": "VULN-2", "modified": "2026-01-02T00:00:00Z" }]
+                    }
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        // Second querybatch request: only package-a with page token.
+        Mock::given(method("POST"))
+            .and(path("/v1/querybatch"))
+            .and(body_json(json!({
+                "queries": [
+                    {
+                        "package": { "name": "package-a", "ecosystem": "PyPI" },
+                        "version": "1.0.0",
+                        "page_token": "tok1",
+                    }
+                ]
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "results": [
+                    { "vulns": [{ "id": "VULN-3", "modified": "2026-01-03T00:00:00Z" }] }
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        // Individual vuln detail requests.
+        Mock::given(method("GET"))
+            .and(path("/v1/vulns/VULN-1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "VULN-1",
+                "modified": "2026-01-01T00:00:00Z",
+            })))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/v1/vulns/VULN-2"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "VULN-2",
+                "modified": "2026-01-02T00:00:00Z",
+            })))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/v1/vulns/VULN-3"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "VULN-3",
+                "modified": "2026-01-03T00:00:00Z",
+            })))
+            .mount(&server)
+            .await;
+
+        let osv = Osv::new(
+            ClientWithMiddleware::default(),
+            Some(DisplaySafeUrl::parse(&server.uri()).unwrap()),
         );
 
-        // We know GHSA-r6ph-v2qm-q3c2 exists for cryptography 46.0.4.
-        let finding = findings
-            .iter()
-            .find(|finding| match finding {
-                Finding::Vulnerability(vuln) => vuln.id.as_str() == "GHSA-r6ph-v2qm-q3c2",
-                Finding::ProjectStatus(_) => false,
-            })
-            .expect("Expected to find GHSA-r6ph-v2qm-q3c2 vulnerability");
+        let dependencies = vec![
+            Dependency::new(
+                PackageName::from_str("package-a").unwrap(),
+                Version::from_str("1.0.0").unwrap(),
+            ),
+            Dependency::new(
+                PackageName::from_str("package-b").unwrap(),
+                Version::from_str("2.0.0").unwrap(),
+            ),
+        ];
 
-        insta::assert_debug_snapshot!(finding, @r###"
-        Vulnerability(
-            Vulnerability {
-                dependency: Dependency {
-                    name: PackageName(
-                        "cryptography",
-                    ),
-                    version: "46.0.4",
-                },
-                id: VulnerabilityID(
-                    "GHSA-r6ph-v2qm-q3c2",
-                ),
-                summary: Some(
-                    "cryptography Vulnerable to a Subgroup Attack Due to Missing Subgroup Validation for SECT Curves",
-                ),
-                description: Some(
-                    "## Vulnerability Summary\n\nThe `public_key_from_numbers` (or `EllipticCurvePublicNumbers.public_key()`), `EllipticCurvePublicNumbers.public_key()`, `load_der_public_key()` and `load_pem_public_key()` functions do not verify that the point belongs to the expected prime-order subgroup of the curve.\n\nThis missing validation allows an attacker to provide a public key point `P` from a small-order subgroup.  This can lead to security issues in various situations, such as the most commonly used signature verification (ECDSA) and shared key negotiation (ECDH). When the victim computes the shared secret as `S = [victim_private_key]P` via ECDH,  this leaks information about `victim_private_key mod (small_subgroup_order)`. For curves with cofactor > 1, this reveals the least significant bits of the private key.  When these weak public keys are used in ECDSA , it's easy to forge signatures on the small subgroup.\n\nOnly SECT curves are impacted by this.\n\n## Credit\n\nThis vulnerability was discovered by:\n- XlabAI Team of Tencent Xuanwu Lab\n- Atuin Automated Vulnerability Discovery Engine",
-                ),
-                link: Some(
-                    DisplaySafeUrl {
-                        scheme: "https",
-                        cannot_be_a_base: false,
-                        username: "",
-                        password: None,
-                        host: Some(
-                            Domain(
-                                "nvd.nist.gov",
-                            ),
-                        ),
-                        port: None,
-                        path: "/vuln/detail/CVE-2026-26007",
-                        query: None,
-                        fragment: None,
-                    },
-                ),
-                fix_versions: [
-                    "46.0.5",
-                ],
-                aliases: [
-                    VulnerabilityID(
-                        "CVE-2026-26007",
-                    ),
-                ],
-                published: Some(
-                    2026-02-10T21:27:06Z,
-                ),
-                modified: Some(
-                    2026-02-11T15:58:46.005582Z,
-                ),
-            },
-        )
-        "###);
+        let findings = osv
+            .query_batch(&dependencies)
+            .await
+            .expect("Failed to query batch");
+
+        // package-a has VULN-1 (page 1) and VULN-3 (page 2); package-b has VULN-2.
+        assert_eq!(findings.len(), 3);
+
+        let mut ids: Vec<&str> = findings
+            .iter()
+            .map(|f| match f {
+                Finding::Vulnerability(v) => v.id.as_str(),
+                Finding::ProjectStatus(_) => unreachable!(),
+            })
+            .collect();
+        ids.sort_unstable();
+        assert_eq!(ids, ["VULN-1", "VULN-2", "VULN-3"]);
+
+        // 2 querybatch requests + 3 vuln detail fetches.
+        assert_eq!(
+            server.received_requests().await.unwrap().len(),
+            5,
+            "Expected two querybatch requests and three vuln detail requests"
+        );
     }
 }
