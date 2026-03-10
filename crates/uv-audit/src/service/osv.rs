@@ -310,17 +310,20 @@ impl Osv {
             .map(types::VulnerabilityID::new)
             .collect();
 
-        types::Finding::Vulnerability(types::Vulnerability::new(
-            dependency.clone(),
-            types::VulnerabilityID::new(vuln.id),
-            vuln.summary,
-            vuln.details,
-            Some(link),
-            fix_versions,
-            aliases,
-            vuln.published,
-            Some(vuln.modified),
-        ))
+        types::Finding::Vulnerability(
+            types::Vulnerability::new(
+                dependency.clone(),
+                types::VulnerabilityID::new(vuln.id),
+                vuln.summary,
+                vuln.details,
+                Some(link),
+                fix_versions,
+                aliases,
+                vuln.published,
+                Some(vuln.modified),
+            )
+            .into(),
+        )
     }
 }
 

@@ -149,6 +149,6 @@ pub struct ProjectStatus {
 /// Represents a finding on a dependency.
 #[derive(Debug)]
 pub enum Finding {
-    Vulnerability(Vulnerability),
+    Vulnerability(Box<Vulnerability>),
     ProjectStatus(ProjectStatus),
 }
