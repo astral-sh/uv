@@ -8318,8 +8318,8 @@ fn sync_scripts_without_build_system() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Skipping installation of entry points (`project.scripts`) for package `foo` because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`
     Resolved 1 package in [TIME]
+    warning: Skipping installation of entry points (`project.scripts`) for package `foo` because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`
     Audited in [TIME]
     ");
 
@@ -8367,8 +8367,8 @@ fn sync_scripts_project_not_packaged() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Skipping installation of entry points (`project.scripts`) for package `foo` because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`
     Resolved 1 package in [TIME]
+    warning: Skipping installation of entry points (`project.scripts`) for package `foo` because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`
     Audited in [TIME]
     ");
 
@@ -8418,7 +8418,56 @@ fn sync_scripts_workspace_member_not_packaged() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 2 packages in [TIME]
     warning: Skipping installation of entry points (`project.scripts`) for package `member` because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`
+    Audited in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
+/// Check that the warning is not emitted for workspace members that are not being synced.
+fn sync_scripts_workspace_member_not_packaged_not_synced() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv.workspace]
+        members = ["member"]
+        "#,
+    )?;
+
+    let member = context.temp_dir.child("member");
+    fs_err::create_dir_all(&member)?;
+
+    let member_pyproject_toml = member.child("pyproject.toml");
+    member_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        member = "main:main"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
     Resolved 2 packages in [TIME]
     Audited in [TIME]
     ");

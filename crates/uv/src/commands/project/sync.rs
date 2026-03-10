@@ -6,6 +6,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use rustc_hash::FxHashSet;
 use serde::Serialize;
 use tracing::warn;
 use uv_cache::Cache;
@@ -132,17 +133,6 @@ pub(crate) async fn sync(
 
             project
         };
-
-        // TODO(lucab): improve warning content
-        // <https://github.com/astral-sh/uv/issues/7428>
-        for member in project.workspace().packages().values() {
-            if member.pyproject_toml().has_scripts() && !member.pyproject_toml().is_package(true) {
-                warn_user!(
-                    "Skipping installation of entry points (`project.scripts`) for package `{}` because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`",
-                    member.project().name
-                );
-            }
-        }
 
         SyncTarget::Project(project)
     };
@@ -394,6 +384,23 @@ pub(crate) async fn sync(
 
     // Identify the installation target.
     let sync_target = identify_installation_target(&target, outcome.lock(), all_packages, &package);
+
+    // TODO(lucab): improve warning content
+    // <https://github.com/astral-sh/uv/issues/7428>
+    if let SyncTarget::Project(project) = &target {
+        let roots = sync_target.roots().collect::<FxHashSet<_>>();
+        for (name, member) in project.workspace().packages() {
+            if roots.contains(name)
+                && member.pyproject_toml().has_scripts()
+                && !member.pyproject_toml().is_package(true)
+            {
+                warn_user!(
+                    "Skipping installation of entry points (`project.scripts`) for package `{}` because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`",
+                    name
+                );
+            }
+        }
+    }
 
     let state = state.fork();
 
