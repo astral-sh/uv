@@ -36,6 +36,7 @@ use uv_warnings::warn_user;
 use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
+use crate::commands::ExitStatus;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations::{ChangedDist, Changelog, Modifications};
 use crate::commands::pip::resolution_markers;
@@ -48,7 +49,6 @@ use crate::commands::project::{
     UniversalState, default_dependency_groups, detect_conflicts, script_extra_build_requires,
     script_specification, update_environment,
 };
-use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
 use crate::settings::{
     FrozenSource, InstallerSettingsRef, LockCheck, LockCheckSource, ResolverInstallerSettings,
@@ -313,14 +313,7 @@ pub(crate) async fn sync(
                     return Ok(ExitStatus::Success);
                 }
                 // TODO(zanieb): We should respect `--output-format json` for the error case
-                Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::native_tls(
-                        client_builder.is_native_tls(),
-                    )
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-                }
-                Err(err) => return Err(err.into()),
+                Err(err) => return err.report(&client_builder),
             }
         }
     }
@@ -362,11 +355,6 @@ pub(crate) async fn sync(
     .await
     {
         Ok(result) => Outcome::Success(result),
-        Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-        }
         Err(ProjectError::LockMismatch(prev, cur, lock_source)) => {
             if dry_run.enabled() {
                 // The lockfile is mismatched, but we're in dry-run mode. We should proceed with the
@@ -383,7 +371,7 @@ pub(crate) async fn sync(
                 return Ok(ExitStatus::Failure);
             }
         }
-        Err(err) => return Err(err.into()),
+        Err(err) => return err.report(&client_builder),
     };
 
     let lock_report = LockReport::from((&lock_target, &mode, &outcome));
@@ -421,12 +409,7 @@ pub(crate) async fn sync(
     .await
     {
         Ok(changelog) => changelog,
-        Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-        }
-        Err(err) => return Err(err.into()),
+        Err(err) => return err.report(&client_builder),
     };
 
     let report = Report {

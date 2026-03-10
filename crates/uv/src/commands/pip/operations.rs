@@ -47,7 +47,9 @@ use uv_tool::InstalledTools;
 use uv_types::{BuildContext, HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
 
+use crate::commands::ExitStatus;
 use crate::commands::compile_bytecode;
+use crate::commands::diagnostics;
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::reporters::{InstallReporter, PrepareReporter, ResolverReporter};
 use crate::printer::Printer;
@@ -1121,4 +1123,16 @@ pub(crate) enum Error {
 
     #[error("The environment is outdated; run `{}` to update the environment", "uv sync".cyan())]
     OutdatedEnvironment,
+}
+
+impl Error {
+    /// Report the error with rich diagnostics and convert to an exit status.
+    pub(crate) fn report(
+        self,
+        client_builder: &BaseClientBuilder<'_>,
+    ) -> anyhow::Result<ExitStatus> {
+        diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
+            .report(self)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+    }
 }

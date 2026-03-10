@@ -41,11 +41,11 @@ use crate::commands::project::{
     EnvironmentSpecification, PlatformState, ProjectError, resolve_environment, resolve_names,
     sync_environment, update_environment,
 };
+use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::{
     finalize_tool_install, refine_interpreter, remove_entrypoints,
 };
 use crate::commands::tool::{Target, ToolRequest};
-use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
 use crate::printer::Printer;
 use crate::settings::{ResolverInstallerSettings, ResolverSettings};
 
@@ -590,14 +590,7 @@ pub(crate) async fn install(
         .await
         {
             Ok(update) => update.into_environment(),
-            Err(ProjectError::Operation(err)) => {
-                return diagnostics::OperationDiagnostic::native_tls(
-                    client_builder.is_native_tls(),
-                )
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-            }
-            Err(err) => return Err(err.into()),
+            Err(err) => return err.report(&client_builder),
         };
 
         // At this point, we updated the existing environment, so we should remove any of its
@@ -655,11 +648,7 @@ pub(crate) async fn install(
                     .await
                     .ok()
                     .flatten() else {
-                        return diagnostics::OperationDiagnostic::native_tls(
-                            client_builder.is_native_tls(),
-                        )
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                        return err.report(&client_builder);
                     };
 
                     debug!(
@@ -686,17 +675,10 @@ pub(crate) async fn install(
                     .await
                     {
                         Ok(resolution) => (resolution, interpreter),
-                        Err(ProjectError::Operation(err)) => {
-                            return diagnostics::OperationDiagnostic::native_tls(
-                                client_builder.is_native_tls(),
-                            )
-                            .report(err)
-                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-                        }
-                        Err(err) => return Err(err.into()),
+                        Err(err) => return err.report(&client_builder),
                     }
                 }
-                err => return Err(err.into()),
+                err => return err.report(&client_builder),
             },
         };
 
@@ -731,14 +713,7 @@ pub(crate) async fn install(
             let _ = installed_tools.remove_environment(package_name);
         }) {
             Ok(environment) => environment,
-            Err(ProjectError::Operation(err)) => {
-                return diagnostics::OperationDiagnostic::native_tls(
-                    client_builder.is_native_tls(),
-                )
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-            }
-            Err(err) => return Err(err.into()),
+            Err(err) => return err.report(&client_builder),
         }
     };
 

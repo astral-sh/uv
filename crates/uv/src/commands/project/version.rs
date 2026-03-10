@@ -36,7 +36,7 @@ use crate::commands::project::lock::LockMode;
 use crate::commands::project::{
     ProjectEnvironment, ProjectError, ProjectInterpreter, UniversalState, default_dependency_groups,
 };
-use crate::commands::{ExitStatus, diagnostics, project};
+use crate::commands::{ExitStatus, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
@@ -496,12 +496,7 @@ async fn print_frozen_version(
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-        }
-        Err(err) => return Err(err.into()),
+        Err(err) => return err.report(&client_builder),
     };
 
     // Try to find the package of interest in the lock
@@ -637,12 +632,7 @@ async fn lock_and_sync(
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-        }
-        Err(err) => return Err(err.into()),
+        Err(err) => return err.report(&client_builder),
     };
 
     let AddTarget::Project(project, environment) = target else {
@@ -696,12 +686,7 @@ async fn lock_and_sync(
     .await
     {
         Ok(_) => {}
-        Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-        }
-        Err(err) => return Err(err.into()),
+        Err(err) => return err.report(&client_builder),
     }
 
     Ok(ExitStatus::Success)

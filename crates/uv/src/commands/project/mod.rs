@@ -56,7 +56,7 @@ use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::{Changelog, Modifications};
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{capitalize, conjunction, pip};
+use crate::commands::{ExitStatus, capitalize, conjunction, pip};
 use crate::printer::Printer;
 use crate::settings::{
     FrozenSource, InstallerSettingsRef, LockCheckSource, ResolverInstallerSettings,
@@ -341,6 +341,23 @@ pub(crate) enum ProjectError {
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
+}
+
+impl ProjectError {
+    /// Report the error with rich diagnostics and convert to an exit status.
+    ///
+    /// If the error is an operation error that can be reported with diagnostics,
+    /// it is printed and `Ok(ExitStatus::Failure)` is returned. Otherwise, the
+    /// error is returned as `Err`.
+    pub(crate) fn report(
+        self,
+        client_builder: &BaseClientBuilder<'_>,
+    ) -> anyhow::Result<ExitStatus> {
+        match self {
+            Self::Operation(err) => err.report(client_builder),
+            err => Err(err.into()),
+        }
+    }
 }
 
 #[derive(Debug)]

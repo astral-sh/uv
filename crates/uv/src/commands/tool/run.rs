@@ -357,7 +357,7 @@ pub(crate) async fn run(
             eprint!("{err:?}");
             return Ok(ExitStatus::Failure);
         }
-        Err(err) => return Err(err.into()),
+        Err(err) => return err.report(&client_builder),
     };
 
     // TODO(zanieb): Determine the executable command via the package entry points

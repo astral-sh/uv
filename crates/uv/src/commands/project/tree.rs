@@ -17,6 +17,7 @@ use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
+use crate::commands::ExitStatus;
 use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::resolution_markers;
@@ -26,7 +27,6 @@ use crate::commands::project::{
     ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, default_dependency_groups,
 };
 use crate::commands::reporters::LatestVersionReporter;
-use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
 use crate::settings::FrozenSource;
 use crate::settings::LockCheck;
@@ -157,12 +157,7 @@ pub(crate) async fn tree(
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-        }
-        Err(err) => return Err(err.into()),
+        Err(err) => return err.report(&client_builder),
     };
 
     // Determine the markers to use for resolution.

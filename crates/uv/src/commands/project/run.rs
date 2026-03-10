@@ -301,7 +301,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     .report(err)
                     .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
-                Err(err) => return Err(err.into()),
+                Err(err) => return err.report(&client_builder),
             };
 
             // Sync the environment.
@@ -348,7 +348,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     .report(err)
                     .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
-                Err(err) => return Err(err.into()),
+                Err(err) => return err.report(&client_builder),
             }
 
             // Respect any locked preferences when resolving `--with` dependencies downstream.
@@ -465,7 +465,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         .report(err)
                         .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     }
-                    Err(err) => return Err(err.into()),
+                    Err(err) => return err.report(&client_builder),
                 }
             } else {
                 // Create a virtual environment.
@@ -793,14 +793,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 .await
                 {
                     Ok(result) => result,
-                    Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::native_tls(
-                            client_builder.is_native_tls(),
-                        )
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-                    }
-                    Err(err) => return Err(err.into()),
+                    Err(err) => return err.report(&client_builder),
                 };
 
                 // Identify the installation target.
@@ -881,14 +874,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 .await
                 {
                     Ok(_) => {}
-                    Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::native_tls(
-                            client_builder.is_native_tls(),
-                        )
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-                    }
-                    Err(err) => return Err(err.into()),
+                    Err(err) => return err.report(&client_builder),
                 }
 
                 base_lock = Some((
@@ -1044,7 +1030,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     .report(err)
                     .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
-                Err(err) => return Err(err.into()),
+                Err(err) => return err.report(&client_builder),
             };
 
             Some(PythonEnvironment::from(environment))
