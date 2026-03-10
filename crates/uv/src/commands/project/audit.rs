@@ -324,6 +324,14 @@ impl AuditResults {
                                 .blue()
                         )?;
                     }
+
+                    if let Some(link) = &vuln.link {
+                        writeln!(
+                            self.printer.stdout_important(),
+                            "  Advisory information: {link}\n",
+                            link = link.as_str().blue()
+                        )?;
+                    }
                 }
 
                 writeln!(self.printer.stdout_important())?;
