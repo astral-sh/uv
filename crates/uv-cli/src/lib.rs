@@ -5704,7 +5704,8 @@ pub struct ToolInstallArgs {
 
     /// Force installation of the tool.
     ///
-    /// Will replace any existing entry points with the same name in the executable directory.
+    /// Will recreate any existing environment for the tool and replace any existing entry points
+    /// with the same name in the executable directory.
     #[arg(long)]
     pub force: bool,
 
