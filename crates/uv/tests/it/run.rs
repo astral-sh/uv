@@ -1396,6 +1396,134 @@ fn run_with() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn run_with_local_wheel_refreshes_rebuilt_wheel() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+
+    let package = context.temp_dir.child("foo");
+    package.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#
+    })?;
+    let init = package.child("src").child("foo").child("__init__.py");
+    init.write_str(indoc! { r#"
+        def hello() -> str:
+            return "Hello from foo!"
+        "#
+    })?;
+
+    context
+        .build()
+        .arg("--wheel")
+        .current_dir(package.path())
+        .assert()
+        .success();
+
+    let wheel = package.child("dist").child("foo-0.1.0-py3-none-any.whl");
+    filetime::set_file_mtime(
+        wheel.path(),
+        filetime::FileTime::from_unix_time(1_700_000_000, 0),
+    )
+    .unwrap();
+
+    // First run: install the original wheel.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--refresh")
+        .arg("--with")
+        .arg(wheel.as_os_str())
+        .arg("python")
+        .arg("-c")
+        .arg("import foo; print(foo.hello())")
+        .env_remove(EnvVars::VIRTUAL_ENV), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from foo!
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo/dist/foo-0.1.0-py3-none-any.whl)
+    ");
+
+    init.write_str(indoc! { r#"
+        def hello() -> str:
+            return "Updated code!"
+        "#
+    })?;
+    fs_err::remove_file(wheel.path())?;
+
+    context
+        .build()
+        .arg("--wheel")
+        .current_dir(package.path())
+        .assert()
+        .success();
+
+    filetime::set_file_mtime(
+        wheel.path(),
+        filetime::FileTime::from_unix_time(1_700_000_001, 0),
+    )
+    .unwrap();
+
+    // Second run: should pick up the rebuilt wheel due to `--refresh`.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--refresh")
+        .arg("--with")
+        .arg(wheel.as_os_str())
+        .arg("python")
+        .arg("-c")
+        .arg("import foo; print(foo.hello())")
+        .env_remove(EnvVars::VIRTUAL_ENV), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Updated code!
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo/dist/foo-0.1.0-py3-none-any.whl)
+    ");
+
+    context.prune().assert().success();
+
+    // Third run: after cache prune, should still see the updated code.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--refresh")
+        .arg("--with")
+        .arg(wheel.as_os_str())
+        .arg("python")
+        .arg("-c")
+        .arg("import foo; print(foo.hello())")
+        .env_remove(EnvVars::VIRTUAL_ENV), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Updated code!
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo/dist/foo-0.1.0-py3-none-any.whl)
+    ");
+
+    Ok(())
+}
+
 /// Test that an ephemeral environment writes the path of its parent environment to the `extends-environment` key
 /// of its `pyvenv.cfg` file. This feature makes it easier for static-analysis tools like ty to resolve which import
 /// search paths are available in these ephemeral environments.

@@ -11,10 +11,13 @@ use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
 use uv_cache::{Cache, CacheBucket};
+use uv_cache_info::CacheInfo;
 use uv_cache_key::{cache_digest, hash_digest};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, TargetTriple};
-use uv_distribution_types::{Name, Resolution};
+use uv_distribution_types::{
+    BuiltDist, Dist, Identifier, Node, Resolution, ResolvedDist, SourceDist,
+};
 use uv_fs::PythonExt;
 use uv_preview::Preview;
 use uv_python::{Interpreter, PythonEnvironment, canonicalize_executable};
@@ -107,6 +110,13 @@ impl From<CachedEnvironment> for PythonEnvironment {
     }
 }
 
+#[derive(Debug, Clone, Hash)]
+struct CachedEnvironmentDist {
+    dist: ResolvedDist,
+    hashes: uv_pypi_types::HashDigests,
+    cache_info: Option<CacheInfo>,
+}
+
 impl CachedEnvironment {
     /// Get or create an [`CachedEnvironment`] based on a given set of requirements.
     pub(crate) async fn from_spec(
@@ -149,11 +159,31 @@ impl CachedEnvironment {
         );
 
         // Hash the resolution by hashing the generated lockfile.
-        // TODO(charlie): If the resolution contains any mutable metadata (like a path or URL
-        // dependency), skip this step.
         let resolution_hash = {
-            let mut distributions = resolution.distributions().collect::<Vec<_>>();
-            distributions.sort_unstable_by_key(|dist| dist.name());
+            let mut distributions = resolution
+                .graph()
+                .node_weights()
+                .filter_map(|node| match node {
+                    Node::Dist {
+                        dist,
+                        hashes,
+                        install: true,
+                    } => Some((dist, hashes)),
+                    Node::Dist { install: false, .. } | Node::Root => None,
+                })
+                .map(|(dist, hashes)| {
+                    Ok(CachedEnvironmentDist {
+                        dist: dist.clone(),
+                        hashes: hashes.clone(),
+                        cache_info: Self::cache_info(dist).map_err(ProjectError::from)?,
+                    })
+                })
+                .collect::<Result<Vec<_>, ProjectError>>()?;
+            distributions.sort_unstable_by(|left, right| {
+                left.dist
+                    .distribution_id()
+                    .cmp(&right.dist.distribution_id())
+            });
             hash_digest(&distributions)
         };
 
@@ -218,6 +248,22 @@ impl CachedEnvironment {
         let root = cache.archive(&id);
 
         Ok(Self(PythonEnvironment::from_root(root, cache)?))
+    }
+
+    /// Return any mutable cache info that should invalidate a cached environment for a given
+    /// distribution.
+    fn cache_info(dist: &ResolvedDist) -> Result<Option<CacheInfo>, uv_cache_info::CacheInfoError> {
+        let path = match dist {
+            ResolvedDist::Installed { .. } => return Ok(None),
+            ResolvedDist::Installable { dist, .. } => match dist.as_ref() {
+                Dist::Built(BuiltDist::Path(wheel)) => wheel.install_path.as_ref(),
+                Dist::Source(SourceDist::Path(sdist)) => sdist.install_path.as_ref(),
+                Dist::Source(SourceDist::Directory(directory)) => directory.install_path.as_ref(),
+                _ => return Ok(None),
+            },
+        };
+
+        Ok(Some(CacheInfo::from_path(path)?))
     }
 
     /// Return the [`Interpreter`] to use for the cached environment, based on a given
