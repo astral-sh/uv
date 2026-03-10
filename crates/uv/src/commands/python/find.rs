@@ -85,7 +85,7 @@ pub(crate) async fn find(
         &python_request.unwrap_or_default(),
         environment_preference,
         python_preference,
-        &download_list,
+        Some(&download_list),
         cache,
         preview,
     )?;

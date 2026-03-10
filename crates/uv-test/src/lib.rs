@@ -2091,7 +2091,7 @@ pub fn python_installations_for_versions(
                 &PythonRequest::parse(python_version),
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::Managed,
-                download_list,
+                Some(download_list),
                 &cache,
                 Preview::default(),
             ) {
