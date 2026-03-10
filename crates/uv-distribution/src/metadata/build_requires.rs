@@ -74,6 +74,7 @@ impl BuildRequires {
             locations,
             sources,
             editable,
+            workspace_cache,
             credentials_cache,
         )
         .await
@@ -86,6 +87,7 @@ impl BuildRequires {
         locations: &IndexLocations,
         sources: &NoSources,
         editable: bool,
+        cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
@@ -142,6 +144,7 @@ impl BuildRequires {
                     project_workspace.workspace(),
                     None,
                     editable,
+                    cache,
                     credentials_cache,
                 )
                 .await
@@ -168,6 +171,7 @@ impl BuildRequires {
         workspace: &Workspace,
         locations: &IndexLocations,
         sources: &NoSources,
+        cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
@@ -214,6 +218,7 @@ impl BuildRequires {
                     workspace,
                     None,
                     true,
+                    cache,
                     credentials_cache,
                 )
                 .await
@@ -254,6 +259,7 @@ impl LoweredExtraBuildDependencies {
         workspace: &Workspace,
         index_locations: &IndexLocations,
         source_strategy: &NoSources,
+        cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         match source_strategy {
@@ -301,6 +307,7 @@ impl LoweredExtraBuildDependencies {
                                 workspace,
                                 None,
                                 true,
+                                cache,
                                 credentials_cache,
                             )
                             .await

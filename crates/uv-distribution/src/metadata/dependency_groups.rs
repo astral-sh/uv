@@ -164,6 +164,7 @@ impl SourcedDependencyGroups {
                         project.workspace(),
                         git_member,
                         true,
+                        workspace_cache,
                         credentials_cache,
                     )
                     .await
