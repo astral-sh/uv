@@ -304,8 +304,14 @@ impl Interpreter {
         let Ok(installations) = ManagedPythonInstallations::from_settings(None) else {
             return false;
         };
+        let Ok(root) = installations.absolute_root() else {
+            return false;
+        };
+        let sys_base_prefix = dunce::canonicalize(&self.sys_base_prefix)
+            .unwrap_or_else(|_| self.sys_base_prefix.clone());
+        let root = dunce::canonicalize(&root).unwrap_or(root);
 
-        let Ok(suffix) = self.sys_base_prefix.strip_prefix(installations.root()) else {
+        let Ok(suffix) = sys_base_prefix.strip_prefix(&root) else {
             return false;
         };
 
