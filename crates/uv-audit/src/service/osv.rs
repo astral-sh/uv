@@ -10,7 +10,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use std::str::FromStr as _;
 use tracing::trace;
 
-use futures::StreamExt as _;
+use futures::{StreamExt as _, TryStreamExt as _};
 use jiff::Timestamp;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
@@ -272,18 +272,14 @@ impl Osv {
         let unique_ids: FxHashSet<_> = dep_vuln_ids.iter().map(|(_, id)| id.clone()).collect();
 
         // Fetch full vulnerability records concurrently.
-        let mut vuln_stream = futures::stream::iter(unique_ids)
+        let vuln_details = futures::stream::iter(unique_ids)
             .map(async |id| {
                 let vuln = self.fetch_vuln(&id).await?;
                 Ok::<(String, Vulnerability), Error>((id, vuln))
             })
-            .buffer_unordered(usize::MAX);
-
-        let mut vuln_details = FxHashMap::default();
-        while let Some(result) = vuln_stream.next().await {
-            let (id, vuln) = result?;
-            vuln_details.insert(id, vuln);
-        }
+            .buffer_unordered(usize::MAX)
+            .try_collect::<FxHashMap<String, Vulnerability>>()
+            .await?;
 
         // Build findings from the accumulated (dependency, vuln_id) pairs.
         let findings = dep_vuln_ids
