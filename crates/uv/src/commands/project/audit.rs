@@ -218,15 +218,13 @@ pub(crate) async fn audit(
     let service = osv::Osv::default();
     trace!("Auditing {n} dependencies against OSV", n = auditable.len());
 
-    let reporter = AuditReporter::from(printer).with_length(auditable.len() as u64);
+    let reporter = AuditReporter::from(printer);
 
-    // TODO: Replace this loop with bulk auditing.
-    let mut all_findings = vec![];
-    for (name, version) in &auditable {
-        reporter.on_audit_package(name, version);
-        let dependency = Dependency::new((*name).clone(), (*version).clone());
-        all_findings.extend(service.query(&dependency).await?);
-    }
+    let dependencies: Vec<Dependency> = auditable
+        .iter()
+        .map(|(name, version)| Dependency::new((*name).clone(), (*version).clone()))
+        .collect();
+    let all_findings = service.query_batch(&dependencies).await?;
 
     reporter.on_audit_complete();
 
