@@ -3064,7 +3064,7 @@ fn add_path_adjacent_directory() -> Result<()> {
         ]
 
         [tool.uv.sources]
-        dependency = { path = "[TEMP_DIR]/dependency" }
+        dependency = { path = "../dependency" }
         "#
         );
     });
@@ -3087,7 +3087,7 @@ fn add_path_adjacent_directory() -> Result<()> {
         [[package]]
         name = "dependency"
         version = "0.1.0"
-        source = { directory = "[TEMP_DIR]/dependency" }
+        source = { directory = "../dependency" }
 
         [[package]]
         name = "project"
@@ -3098,7 +3098,7 @@ fn add_path_adjacent_directory() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "dependency", directory = "[TEMP_DIR]/dependency" }]
+        requires-dist = [{ name = "dependency", directory = "../dependency" }]
         "#
         );
     });
@@ -3108,10 +3108,7 @@ fn add_path_adjacent_directory() -> Result<()> {
 
 /// Check relative and absolute path handling with `uv add`.
 ///
-/// When a user provides an absolute path or `file://` URL, it should be preserved as absolute
-/// in pyproject.toml and uv.lock. Relative paths should remain relative.
-///
-/// See: <https://github.com/astral-sh/uv/issues/17307>
+/// BUG: Currently `uv add` always relativizes paths in `pyproject.toml`
 #[test]
 fn add_relative_and_absolute_paths() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -3224,8 +3221,7 @@ fn add_relative_and_absolute_paths() -> Result<()> {
      + file-url-dep==0.1.0 (from file://[TEMP_DIR]/file_url_dep)
     ");
 
-    // Check pyproject.toml - relative paths stay relative, absolute paths and file:// URLs
-    // stay absolute.
+    // Check pyproject.toml.
     let pyproject_toml = fs_err::read_to_string(project.join("pyproject.toml"))?;
 
     insta::with_settings!({
@@ -3245,13 +3241,13 @@ fn add_relative_and_absolute_paths() -> Result<()> {
 
         [tool.uv.sources]
         relative-dep = { path = "../relative_dep" }
-        absolute-dep = { path = "[TEMP_DIR]/absolute_dep" }
-        file-url-dep = { path = "[TEMP_DIR]/file_url_dep" }
+        absolute-dep = { path = "../absolute_dep" }
+        file-url-dep = { path = "../file_url_dep" }
         "#
         );
     });
 
-    // Check uv.lock - relative paths stay relative, absolute paths stay absolute.
+    // Check uv.lock.
     let lock = fs_err::read_to_string(project.join("uv.lock"))?;
 
     insta::with_settings!({
@@ -3269,12 +3265,12 @@ fn add_relative_and_absolute_paths() -> Result<()> {
         [[package]]
         name = "absolute-dep"
         version = "0.1.0"
-        source = { directory = "[TEMP_DIR]/absolute_dep" }
+        source = { directory = "../absolute_dep" }
 
         [[package]]
         name = "file-url-dep"
         version = "0.1.0"
-        source = { directory = "[TEMP_DIR]/file_url_dep" }
+        source = { directory = "../file_url_dep" }
 
         [[package]]
         name = "project"
@@ -3288,8 +3284,8 @@ fn add_relative_and_absolute_paths() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "absolute-dep", directory = "[TEMP_DIR]/absolute_dep" },
-            { name = "file-url-dep", directory = "[TEMP_DIR]/file_url_dep" },
+            { name = "absolute-dep", directory = "../absolute_dep" },
+            { name = "file-url-dep", directory = "../file_url_dep" },
             { name = "relative-dep", directory = "../relative_dep" },
         ]
 

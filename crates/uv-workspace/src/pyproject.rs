@@ -24,7 +24,7 @@ use tracing::instrument;
 use uv_build_backend::BuildBackendSettings;
 use uv_configuration::GitLfsSetting;
 use uv_distribution_types::{Index, IndexName, RequirementSource};
-use uv_fs::{PortablePathBuf, try_relative_to_if};
+use uv_fs::{PortablePathBuf, relative_to};
 use uv_git_types::GitReference;
 use uv_macros::OptionsMetadata;
 use uv_normalize::{DefaultGroups, ExtraName, GroupName, PackageName};
@@ -1724,13 +1724,12 @@ impl Source {
                     return Ok(None);
                 }
             }
-            RequirementSource::Path {
-                install_path, url, ..
-            } => Self::Path {
+            RequirementSource::Path { install_path, .. } => Self::Path {
                 editable: None,
                 package: None,
                 path: PortablePathBuf::from(
-                    try_relative_to_if(&install_path, root, !url.was_given_absolute())
+                    relative_to(&install_path, root)
+                        .or_else(|_| std::path::absolute(&install_path))
                         .map_err(SourceError::Absolute)?
                         .into_boxed_path(),
                 ),
@@ -1741,13 +1740,13 @@ impl Source {
             RequirementSource::Directory {
                 install_path,
                 editable: is_editable,
-                url,
                 ..
             } => Self::Path {
                 editable: editable.or(is_editable),
                 package: None,
                 path: PortablePathBuf::from(
-                    try_relative_to_if(&install_path, root, !url.was_given_absolute())
+                    relative_to(&install_path, root)
+                        .or_else(|_| std::path::absolute(&install_path))
                         .map_err(SourceError::Absolute)?
                         .into_boxed_path(),
                 ),
