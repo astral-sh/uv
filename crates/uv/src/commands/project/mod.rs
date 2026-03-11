@@ -1582,7 +1582,7 @@ impl ProjectEnvironment {
                 if centralized {
                     writeln!(
                         printer.stderr(),
-                        "Creating virtual environment in centralised location"
+                        "Creating virtual environment in the centralized store"
                     )?;
                 } else {
                     writeln!(
