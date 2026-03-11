@@ -311,8 +311,19 @@ impl PythonEnvironment {
         }
 
         // Fall back to writing a file containing the path.
-        // TODO(tk): Make this not lossy. Encode wide?
-        match fs_err::write(&link_path, target.to_string_lossy().as_bytes()) {
+        let file_result = target
+            .to_str()
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!(
+                        "Path `{}` cannot be represented as UTF-8",
+                        target.simplified_display()
+                    ),
+                )
+            })
+            .and_then(|s| fs_err::write(&link_path, s.as_bytes()));
+        match file_result {
             Ok(()) => {
                 if warn {
                     warn_user_once!(
