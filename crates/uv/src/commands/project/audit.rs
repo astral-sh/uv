@@ -27,6 +27,7 @@ use uv_configuration::{Concurrency, DependencyGroups, ExtrasSpecification, Targe
 use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
+use uv_redacted::DisplaySafeUrl;
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user;
@@ -214,8 +215,14 @@ pub(crate) async fn audit(
         .collect();
 
     // Perform the audit.
-    // TODO: Use `client_builder` to produce an HTTP client through our normal process here.
-    let service = osv::Osv::default();
+    let base_client = client_builder.build();
+    let osv_url =
+        DisplaySafeUrl::parse(osv::API_BASE).expect("impossible: embedded URL is invalid");
+    let service = osv::Osv::new(
+        base_client.for_host(&osv_url).raw_client().clone(),
+        None,
+        concurrency,
+    );
     trace!("Auditing {n} dependencies against OSV", n = auditable.len());
 
     let reporter = AuditReporter::from(printer);

@@ -19,7 +19,7 @@ use uv_configuration::Concurrency;
 use uv_pep440::Version;
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 
-const API_BASE: &str = "https://api.osv.dev/";
+pub const API_BASE: &str = "https://api.osv.dev/";
 
 /// Errors during OSV service interactions.
 #[derive(Debug, thiserror::Error)]
@@ -185,16 +185,6 @@ pub struct Osv {
     base_url: DisplaySafeUrl,
     client: ClientWithMiddleware,
     concurrency: Concurrency,
-}
-
-impl Default for Osv {
-    fn default() -> Self {
-        Self {
-            base_url: DisplaySafeUrl::parse(API_BASE).expect("impossible: embedded URL is invalid"),
-            client: ClientWithMiddleware::default(),
-            concurrency: Concurrency::default(),
-        }
-    }
 }
 
 impl Osv {
@@ -416,16 +406,8 @@ mod tests {
     use crate::service::osv::RangeType;
     use crate::types::{Dependency, Finding};
 
-    use super::API_BASE;
     use super::Event;
     use super::Osv;
-
-    /// Ensures that the default OSV client is configured with our default OSV API base URL.
-    #[test]
-    fn test_osv_default() {
-        let osv = Osv::default();
-        assert_eq!(osv.base_url.as_str(), API_BASE);
-    }
 
     #[test]
     fn test_deserialize_events() {
