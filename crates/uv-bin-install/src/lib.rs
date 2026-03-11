@@ -3,7 +3,9 @@
 //! These utilities are specifically for consuming distributions that are _not_ Python packages,
 //! e.g., `ruff` (which does have a Python package, but also has standalone binaries on GitHub).
 
+use std::error::Error as _;
 use std::fmt;
+use std::io;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::str::FromStr;
@@ -11,19 +13,18 @@ use std::task::{Context, Poll};
 use std::time::{Duration, SystemTimeError};
 
 use futures::{StreamExt, TryStreamExt};
+use reqwest_retry::Retryable;
 use reqwest_retry::policies::ExponentialBackoff;
 use serde::Deserialize;
 use thiserror::Error;
 use tokio::io::{AsyncRead, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use url::Url;
+use uv_client::retryable_on_request_failure;
 use uv_distribution_filename::SourceDistExtension;
 
-use reqwest_retry::Retryable;
 use uv_cache::{Cache, CacheBucket, CacheEntry, Error as CacheError};
-use uv_client::{
-    BaseClient, RetriableError, RetryState, fetch_with_url_fallback, retryable_on_request_failure,
-};
+use uv_client::{BaseClient, RetriableError, RetryState, fetch_with_url_fallback};
 use uv_extract::{Error as ExtractError, stream};
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_platform::Platform;
@@ -265,6 +266,13 @@ pub enum Error {
         source: reqwest_middleware::Error,
     },
 
+    #[error("Failed to read from: {url}")]
+    Stream {
+        url: DisplaySafeUrl,
+        #[source]
+        source: reqwest::Error,
+    },
+
     #[error("Failed to parse URL: {url}")]
     UrlParse {
         url: String,
@@ -349,18 +357,33 @@ impl RetriableError for Error {
 
     /// Returns `true` if trying an alternative URL makes sense after this error.
     ///
-    /// Network-level failures return `true`. Extraction failures also return `true`
-    /// if the underlying error is retryable, since we stream the download and unpack
-    /// concurrently: network errors can surface as extraction failures. All other
-    /// failures return `false`.
+    /// All errors arising from downloading (including streaming during extraction)
+    /// qualify.
     fn should_try_next_url(&self) -> bool {
         match self {
             Self::Download { .. } => true,
+            Self::Stream { .. } => true,
             Self::RetriedError { err, .. } => err.should_try_next_url(),
-            Self::Extract { source } => {
-                retryable_on_request_failure(source) == Some(Retryable::Transient)
+            err => {
+                // Walk the error chain to see if there's a nested download or streaming error.
+                let mut source = err.source();
+                while let Some(err) = source {
+                    if let Some(io_err) = err.downcast_ref::<io::Error>() {
+                        if io_err
+                            .get_ref()
+                            .and_then(|e| e.downcast_ref::<Self>() as Option<&Self>)
+                            .is_some_and(|e| {
+                                matches!(e, Self::Stream { .. } | Self::Download { .. })
+                            })
+                        {
+                            return true;
+                        }
+                    }
+                    source = err.source();
+                }
+                // Make sure all retriable errors also trigger a fallback to the next URL.
+                retryable_on_request_failure(err) == Some(Retryable::Transient)
             }
-            _ => false,
         }
     }
 
@@ -724,7 +747,12 @@ async fn download_and_unpack(
     // Stream download directly to extraction
     let reader = response
         .bytes_stream()
-        .map_err(std::io::Error::other)
+        .map_err(|err| {
+            std::io::Error::other(Error::Stream {
+                url: download_url.clone(),
+                source: err,
+            })
+        })
         .into_async_read()
         .compat();
 
@@ -810,5 +838,64 @@ where
                 self.reporter
                     .on_download_progress(self.index, buf.filled().len() as u64);
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Write;
+    use std::net::TcpListener;
+    use uv_client::{BaseClientBuilder, retryable_on_request_failure};
+    use uv_redacted::DisplaySafeUrl;
+
+    use super::*;
+
+    /// Verify that `should_try_next_url` returns `true` even for streaming errors
+    /// that `retryable_on_request_failure` does not recognise as transient.
+    ///
+    /// This exercises a realistic body-streaming protocol failure: the server
+    /// advertises chunked transfer encoding but sends an invalid chunk size.
+    #[tokio::test]
+    async fn test_non_retryable_stream_error_triggers_url_fallback() {
+        use futures::TryStreamExt;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buf = [0u8; 4096];
+            let _ = std::io::Read::read(&mut stream, &mut buf);
+            stream
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\nZZZ\r\nhello\r\n0\r\n\r\n",
+                )
+                .unwrap();
+        });
+
+        let url = DisplaySafeUrl::parse(&format!("http://{addr}/ruff.tar.gz")).unwrap();
+        let client = BaseClientBuilder::default().build();
+        let response = client
+            .for_host(&url)
+            .get(Url::from(url.clone()))
+            .send()
+            .await
+            .unwrap();
+
+        let reqwest_err = response.bytes_stream().try_next().await.unwrap_err();
+        assert!(reqwest_err.is_body() || reqwest_err.is_decode());
+
+        let err = Error::Extract {
+            source: ExtractError::Io(io::Error::other(Error::Stream {
+                url,
+                source: reqwest_err,
+            })),
+        };
+
+        assert!(retryable_on_request_failure(&err).is_none());
+        assert!(
+            err.should_try_next_url(),
+            "non-retryable streaming error should still trigger URL fallback, got: {err}"
+        );
     }
 }
