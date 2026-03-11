@@ -22,8 +22,8 @@ use uv_pep440::{
 };
 use uv_preview::Preview;
 use uv_static::EnvVars;
-use uv_warnings::anstream;
-use uv_warnings::warn_user_once;
+use uv_warnings::warn_user;
+use uv_warnings::{DisplayChainExt, warn_user_once};
 use which::{which, which_all};
 
 use crate::downloads::{ManagedPythonDownloadList, PlatformRequest, PythonDownloadRequest};
@@ -1566,19 +1566,11 @@ pub(crate) async fn find_best_python_installation(
                     return Err(error);
                 }
 
-                let mut error_chain = String::new();
-                // Writing to a string can't fail with errors (panics on allocation failure)
                 let error = anyhow::Error::from(error).context(format!(
                     "A managed Python download is available for {request}, but an error occurred when attempting to download it."
                 ));
-                uv_warnings::write_error_chain(
-                    error.as_ref(),
-                    &mut error_chain,
-                    "warning",
-                    AnsiColors::Yellow,
-                )
-                .unwrap();
-                anstream::eprint!("{}", error_chain);
+                warn_user!("{}", error.display_chain(AnsiColors::Yellow));
+
                 previous_fetch_failed = true;
             }
         }
