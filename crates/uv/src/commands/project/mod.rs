@@ -981,7 +981,6 @@ impl ProjectInterpreter {
 
         let venv_path = workspace.venv(active);
 
-        // If centralised environments are enabled and applicable here,
         // Centralized mode is only active when the venv path is the default (.venv),
         // the preview flag is enabled, and .venv is not already a real directory.
         //
