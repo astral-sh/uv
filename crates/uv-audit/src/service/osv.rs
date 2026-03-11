@@ -6,7 +6,7 @@
 //!
 //! [OSV]: https://osv.dev/
 
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::str::FromStr as _;
 use tracing::trace;
 
@@ -269,7 +269,7 @@ impl Osv {
         }
 
         // Collect unique vuln IDs to minimize fetches.
-        let unique_ids: HashSet<_> = dep_vuln_ids.iter().map(|(_, id)| id.clone()).collect();
+        let unique_ids: FxHashSet<_> = dep_vuln_ids.iter().map(|(_, id)| id.clone()).collect();
 
         // Fetch full vulnerability records concurrently.
         let mut vuln_stream = futures::stream::iter(unique_ids)
@@ -279,7 +279,7 @@ impl Osv {
             })
             .buffer_unordered(usize::MAX);
 
-        let mut vuln_details = HashMap::new();
+        let mut vuln_details = FxHashMap::default();
         while let Some(result) = vuln_stream.next().await {
             let (id, vuln) = result?;
             vuln_details.insert(id, vuln);
