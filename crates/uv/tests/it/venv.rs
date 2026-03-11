@@ -2056,7 +2056,7 @@ fn create_venv_centralized_already_exists() {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment in the centralized store
     error: Failed to create virtual environment
-      Caused by: A virtual environment already exists at `[CACHE_DIR]/environments-v2/project-[HASH]`. Use `--clear` to replace it
+      Caused by: A virtual environment already exists in the centralized environment store. Use `--clear` to replace it
     "
     );
 

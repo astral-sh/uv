@@ -225,6 +225,7 @@ pub(crate) async fn venv(
         relocatable,
         seed,
         upgradeable,
+        centralized,
     )
     .map_err(VenvError::Creation)?
     .with_centralized(centralized);
