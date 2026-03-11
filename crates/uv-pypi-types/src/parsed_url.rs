@@ -158,6 +158,16 @@ impl UnnamedRequirementUrl for VerbatimParsedUrl {
         }
     }
 
+    fn with_expanded(self, expanded: bool) -> Self {
+        Self {
+            verbatim: <VerbatimUrl as UnnamedRequirementUrl>::with_expanded(
+                self.verbatim,
+                expanded,
+            ),
+            ..self
+        }
+    }
+
     fn given(&self) -> Option<&str> {
         self.verbatim.given()
     }
