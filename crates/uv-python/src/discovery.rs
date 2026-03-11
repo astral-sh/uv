@@ -1559,13 +1559,6 @@ pub(crate) async fn find_best_python_installation(
             // Errors encountered here are either network errors or quirky
             // configuration problems.
             if let Err(error) = result {
-                // This is a hack to get `write_error_chain` to format things the way we want.
-                #[derive(Debug, thiserror::Error)]
-                #[error(
-                    "A managed Python download is available for {0}, but an error occurred when attempting to download it."
-                )]
-                struct WrappedError<'a>(&'a PythonRequest, #[source] crate::Error);
-
                 // If the request was for the default or any version, propagate
                 // the error as nothing else we are about to do will help the
                 // situation.
@@ -1575,8 +1568,11 @@ pub(crate) async fn find_best_python_installation(
 
                 let mut error_chain = String::new();
                 // Writing to a string can't fail with errors (panics on allocation failure)
+                let error = anyhow::Error::from(error).context(format!(
+                    "A managed Python download is available for {request}, but an error occurred when attempting to download it."
+                ));
                 uv_warnings::write_error_chain(
-                    &WrappedError(request, error),
+                    error.as_ref(),
                     &mut error_chain,
                     "warning",
                     AnsiColors::Yellow,
