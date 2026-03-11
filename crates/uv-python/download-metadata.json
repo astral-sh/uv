@@ -62810,7 +62810,7 @@
     "patch": 0,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-aarch64-apple-darwin-pgo%2Blto-20211017T1616.tar.zst",
-    "sha256": null,
+    "sha256": "0167e226696209a5e830b7bc4963d3797bc788938a9abe00cc8617eea88afb53",
     "variant": null,
     "build": "20211017"
   },
@@ -62827,7 +62827,7 @@
     "patch": 0,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-x86_64-apple-darwin-pgo%2Blto-20211017T1616.tar.zst",
-    "sha256": null,
+    "sha256": "743dfc710d5f6b0fba9183962341e890794b943931acd1f3d0f76a33ebf34983",
     "variant": null,
     "build": "20211017"
   },
@@ -62844,7 +62844,7 @@
     "patch": 0,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-aarch64-unknown-linux-gnu-lto-20211017T1616.tar.zst",
-    "sha256": null,
+    "sha256": "89d512b56dba0d54cba2a52da8a193a60a52007ec076a9c906e453336569e326",
     "variant": null,
     "build": "20211017"
   },
@@ -62861,7 +62861,7 @@
     "patch": 0,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-i686-unknown-linux-gnu-pgo%2Blto-20211017T1616.tar.zst",
-    "sha256": null,
+    "sha256": "11e1cf01f3e9c8474968db79b95974b03326cc4a1fd700ade6e49fef0e75d377",
     "variant": null,
     "build": "20211017"
   },
@@ -62878,7 +62878,7 @@
     "patch": 0,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-x86_64-unknown-linux-gnu-pgo%2Blto-20211017T1616.tar.zst",
-    "sha256": null,
+    "sha256": "ba898cb849b02e9f6f567a3151435d5f6ba4dd3962890a2e45503677c6bd203c",
     "variant": null,
     "build": "20211017"
   },
@@ -62895,7 +62895,7 @@
     "patch": 0,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-i686-pc-windows-msvc-shared-pgo-20211017T1616.tar.zst",
-    "sha256": null,
+    "sha256": "0e0d2e392895b688a7abbb696a465f7a2dc7d3addf9111ab9b67114ce0fdfe9f",
     "variant": null,
     "build": "20211017"
   },
@@ -62912,7 +62912,7 @@
     "patch": 0,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-x86_64-pc-windows-msvc-shared-pgo-20211017T1616.tar.zst",
-    "sha256": null,
+    "sha256": "82e7a6526ac11c158e17798f95967f5e86a1bbd6de15167d46f2f289ff1742dd",
     "variant": null,
     "build": "20211017"
   },
@@ -62929,7 +62929,7 @@
     "patch": 0,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-aarch64-apple-darwin-debug-20211017T1616.tar.zst",
-    "sha256": null,
+    "sha256": "b7c35d76dffd9312e4fbe92853cb99fcd92419cdbe797c1790c09cd4ef2a6db1",
     "variant": "debug",
     "build": "20211017"
   },
@@ -62946,7 +62946,7 @@
     "patch": 0,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-x86_64-apple-darwin-debug-20211017T1616.tar.zst",
-    "sha256": null,
+    "sha256": "9c72be650e682ee966d50648534595a4f42404f254f97f86f026b0c118e0c70c",
     "variant": "debug",
     "build": "20211017"
   },
@@ -62963,7 +62963,7 @@
     "patch": 0,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-aarch64-unknown-linux-gnu-debug-20211017T1616.tar.zst",
-    "sha256": null,
+    "sha256": "551d5e0518e2587c7c76f330f22783db23f7faa1fe2e566e93c85b09bdf67dad",
     "variant": "debug",
     "build": "20211017"
   },
@@ -62980,7 +62980,7 @@
     "patch": 0,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-i686-unknown-linux-gnu-debug-20211017T1616.tar.zst",
-    "sha256": null,
+    "sha256": "41aa6e4488d918de9c0b934595181741c64736bfe77df315e3181f7d394a8e50",
     "variant": "debug",
     "build": "20211017"
   },
@@ -62997,7 +62997,7 @@
     "patch": 0,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-x86_64-unknown-linux-gnu-debug-20211017T1616.tar.zst",
-    "sha256": null,
+    "sha256": "7613e77f0c5146215993d939bc4f6d87473efd113662d74dd88fe2ceafd4cdec",
     "variant": "debug",
     "build": "20211017"
   },
@@ -69746,7 +69746,7 @@
     "patch": 7,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.9.7-aarch64-apple-darwin-pgo%2Blto-20211017T1616.tar.zst",
-    "sha256": null,
+    "sha256": "d75cfebb74df7c5195970e4ea77466e16cc0057ffd9c8442477b941b517f1639",
     "variant": null,
     "build": "20211017"
   },
@@ -69763,7 +69763,7 @@
     "patch": 7,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.9.7-x86_64-apple-darwin-pgo%2Blto-20211017T1616.tar.zst",
-    "sha256": null,
+    "sha256": "12c5bce1b48d2b896049ec2524648d5429eba982539bc571d43c1a2ec3997630",
     "variant": null,
     "build": "20211017"
   },
@@ -69780,7 +69780,7 @@
     "patch": 7,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.9.7-aarch64-unknown-linux-gnu-lto-20211017T1616.tar.zst",
-    "sha256": null,
+    "sha256": "ddbfd78b596bb3b48a57d94bf59a7d9a691501a38f1b97c1d7fd86f6d8119478",
     "variant": null,
     "build": "20211017"
   },
@@ -69797,7 +69797,7 @@
     "patch": 7,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.9.7-i686-unknown-linux-gnu-pgo%2Blto-20211017T1616.tar.zst",
-    "sha256": null,
+    "sha256": "c71a71836fcb90b750144a5431c8dcfa21e934caefb3f801ad0af09f52e844ee",
     "variant": null,
     "build": "20211017"
   },
@@ -69814,7 +69814,7 @@
     "patch": 7,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.9.7-x86_64-unknown-linux-gnu-pgo%2Blto-20211017T1616.tar.zst",
-    "sha256": null,
+    "sha256": "33cb6a4895418b9de2b770f8ab72d1fd2dbebb95747a81f6d1824c1900062df8",
     "variant": null,
     "build": "20211017"
   },
@@ -69831,7 +69831,7 @@
     "patch": 7,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.9.7-i686-pc-windows-msvc-shared-pgo-20211017T1616.tar.zst",
-    "sha256": null,
+    "sha256": "562a59c1cb74728ba5225503426e7a0c969dcd13fefb31f1e95f8035377165d6",
     "variant": null,
     "build": "20211017"
   },
@@ -69848,7 +69848,7 @@
     "patch": 7,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.9.7-x86_64-pc-windows-msvc-shared-pgo-20211017T1616.tar.zst",
-    "sha256": null,
+    "sha256": "634a4ed5a05c1bc9f158954bc4849de69d6b7c2c42d9483a875006f33eb0f17c",
     "variant": null,
     "build": "20211017"
   },
@@ -69865,7 +69865,7 @@
     "patch": 7,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.9.7-aarch64-apple-darwin-debug-20211017T1616.tar.zst",
-    "sha256": null,
+    "sha256": "ef1b2e38300e9c13b0471bfc34455a55e8205589e72ce522d5e10fc388a89746",
     "variant": "debug",
     "build": "20211017"
   },
@@ -69882,7 +69882,7 @@
     "patch": 7,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.9.7-x86_64-apple-darwin-debug-20211017T1616.tar.zst",
-    "sha256": null,
+    "sha256": "e68722558c2c5a0614c2af3530cf59f8a817436e06c26dd69407cd9f67ca16d3",
     "variant": "debug",
     "build": "20211017"
   },
@@ -69899,7 +69899,7 @@
     "patch": 7,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.9.7-aarch64-unknown-linux-gnu-debug-20211017T1616.tar.zst",
-    "sha256": null,
+    "sha256": "1de6791a2ce0f00e73f5723df3d0f0f3e19ae3a824a66e455d7df657df172fe6",
     "variant": "debug",
     "build": "20211017"
   },
@@ -69916,7 +69916,7 @@
     "patch": 7,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.9.7-i686-unknown-linux-gnu-debug-20211017T1616.tar.zst",
-    "sha256": null,
+    "sha256": "b71e552a5fea2c07312608f89604cfdfeeec96bf03def2dc855add95b4d3aecd",
     "variant": "debug",
     "build": "20211017"
   },
@@ -69933,7 +69933,7 @@
     "patch": 7,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.9.7-x86_64-unknown-linux-gnu-debug-20211017T1616.tar.zst",
-    "sha256": null,
+    "sha256": "fef29234e6540b32ca4830c3b88e3dbb18cc13b2d0844818f34fb2eb18281a69",
     "variant": "debug",
     "build": "20211017"
   },
@@ -69950,7 +69950,7 @@
     "patch": 6,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210724/cpython-3.9.6-aarch64-apple-darwin-pgo%2Blto-20210724T1424.tar.zst",
-    "sha256": null,
+    "sha256": "a75a672088bf38f0e84b57c8efa4a083a262c0a6d5ae9e51f1e75d591db4f70c",
     "variant": null,
     "build": "20210724"
   },
@@ -69967,7 +69967,7 @@
     "patch": 6,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210724/cpython-3.9.6-x86_64-apple-darwin-pgo%2Blto-20210724T1424.tar.zst",
-    "sha256": null,
+    "sha256": "63b99e71d43718ed62ef250b45921f23f04d3bd2d4e03920e49e1cf8d23c538e",
     "variant": null,
     "build": "20210724"
   },
@@ -69984,7 +69984,7 @@
     "patch": 6,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210724/cpython-3.9.6-aarch64-unknown-linux-gnu-lto-20210724T1424.tar.zst",
-    "sha256": null,
+    "sha256": "d6525051630fa1dece99b033906d07c2878ca8ae1f95072aff4bcfdf3eaabd66",
     "variant": null,
     "build": "20210724"
   },
@@ -70001,7 +70001,7 @@
     "patch": 6,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210724/cpython-3.9.6-i686-unknown-linux-gnu-pgo%2Blto-20210724T1424.tar.zst",
-    "sha256": null,
+    "sha256": "25f70a17d3ea2d6e1f36dd42a54e83cf45aa7af87496b90c1401599f7f552f90",
     "variant": null,
     "build": "20210724"
   },
@@ -70018,7 +70018,7 @@
     "patch": 6,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210724/cpython-3.9.6-x86_64-unknown-linux-gnu-pgo%2Blto-20210724T1424.tar.zst",
-    "sha256": null,
+    "sha256": "8064db853bce9ab7afe5eafdf12fb2e1df7c39471f2cecdb1a9c84ae6a7a1793",
     "variant": null,
     "build": "20210724"
   },
@@ -70035,7 +70035,7 @@
     "patch": 6,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210724/cpython-3.9.6-i686-pc-windows-msvc-shared-pgo-20210724T1424.tar.zst",
-    "sha256": null,
+    "sha256": "0cc12b92d6fa427bbb5e14d2a9f05d90d651558887566dab9391adddcadd9e15",
     "variant": null,
     "build": "20210724"
   },
@@ -70052,7 +70052,7 @@
     "patch": 6,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210724/cpython-3.9.6-x86_64-pc-windows-msvc-shared-pgo-20210724T1424.tar.zst",
-    "sha256": null,
+    "sha256": "6525f62ce45d1629b68b08836d0ab681cf3c6d2cf9c3fd63c8fd6b36a90fb9db",
     "variant": null,
     "build": "20210724"
   },
@@ -70069,7 +70069,7 @@
     "patch": 6,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210724/cpython-3.9.6-aarch64-apple-darwin-debug-20210724T1424.tar.zst",
-    "sha256": null,
+    "sha256": "7b2a08672236083518a10ccbb702a20b2e3637e9166060cd2e2759e8028ce6a4",
     "variant": "debug",
     "build": "20210724"
   },
@@ -70086,7 +70086,7 @@
     "patch": 6,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210724/cpython-3.9.6-x86_64-apple-darwin-debug-20210724T1424.tar.zst",
-    "sha256": null,
+    "sha256": "e420f4653453959c00437ef161a9fce12ce50223cc83444c3239c2b4b861dea4",
     "variant": "debug",
     "build": "20210724"
   },
@@ -70103,7 +70103,7 @@
     "patch": 6,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210724/cpython-3.9.6-aarch64-unknown-linux-gnu-debug-20210724T1424.tar.zst",
-    "sha256": null,
+    "sha256": "8d280669c1087c78bb6c3cd1a0946b4190297a4ca248d83008b12811122b740a",
     "variant": "debug",
     "build": "20210724"
   },
@@ -70120,7 +70120,7 @@
     "patch": 6,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210724/cpython-3.9.6-i686-unknown-linux-gnu-debug-20210724T1424.tar.zst",
-    "sha256": null,
+    "sha256": "7677ef0e458cae892b4808233d845d494a6a74e45582c87ab83cb864e44b58cb",
     "variant": "debug",
     "build": "20210724"
   },
@@ -70137,7 +70137,7 @@
     "patch": 6,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210724/cpython-3.9.6-x86_64-unknown-linux-gnu-debug-20210724T1424.tar.zst",
-    "sha256": null,
+    "sha256": "20d2805f0d9c5a7bff50dfe59bb73db906d4c0616b74264f006f82a681648a5e",
     "variant": "debug",
     "build": "20210724"
   },
@@ -70154,7 +70154,7 @@
     "patch": 5,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210506/cpython-3.9.5-aarch64-apple-darwin-pgo%2Blto-20210506T0943.tar.zst",
-    "sha256": null,
+    "sha256": "aa371f302ca7be78957adbe1e350feb443176682e398637a1229a0d683c5b425",
     "variant": null,
     "build": "20210506"
   },
@@ -70171,7 +70171,7 @@
     "patch": 5,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210506/cpython-3.9.5-x86_64-apple-darwin-pgo%2Blto-20210506T0943.tar.zst",
-    "sha256": null,
+    "sha256": "4449347b5c7ffd842487d553d9f4393c3655a6971389f2c5f5f41444b4824cd8",
     "variant": null,
     "build": "20210506"
   },
@@ -70188,7 +70188,7 @@
     "patch": 5,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210506/cpython-3.9.5-i686-unknown-linux-gnu-pgo%2Blto-20210506T0943.tar.zst",
-    "sha256": null,
+    "sha256": "48c69edb405f49c0498f77bfaca8f9dfef2618db48ad9f4866eb8cedd8e7a2ec",
     "variant": null,
     "build": "20210506"
   },
@@ -70205,7 +70205,7 @@
     "patch": 5,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210506/cpython-3.9.5-x86_64-unknown-linux-gnu-pgo%2Blto-20210506T0943.tar.zst",
-    "sha256": null,
+    "sha256": "b9d61ecb4a496de0e56ea209b4b23a2e3260a7e31adb0fabf3d28b1975480b59",
     "variant": null,
     "build": "20210506"
   },
@@ -70222,7 +70222,7 @@
     "patch": 5,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210506/cpython-3.9.5-i686-pc-windows-msvc-shared-pgo-20210506T0943.tar.zst",
-    "sha256": null,
+    "sha256": "d34fed52264e3eeb58dc72432dbe3000b6bdc5b8e1b20f4b01d56db109072a39",
     "variant": null,
     "build": "20210506"
   },
@@ -70239,7 +70239,7 @@
     "patch": 5,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210506/cpython-3.9.5-x86_64-pc-windows-msvc-shared-pgo-20210506T0943.tar.zst",
-    "sha256": null,
+    "sha256": "4956b8c29ab2841f04cd9aa465e3073be2107ced59636e2a82d35b0c8815e217",
     "variant": null,
     "build": "20210506"
   },
@@ -70256,7 +70256,7 @@
     "patch": 5,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210506/cpython-3.9.5-aarch64-apple-darwin-debug-20210506T0943.tar.zst",
-    "sha256": null,
+    "sha256": "fd4c8693244b8cfc6ddcfb19ae88b81f5fab6dfca5799421757911bb6576dfff",
     "variant": "debug",
     "build": "20210506"
   },
@@ -70273,7 +70273,7 @@
     "patch": 5,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210506/cpython-3.9.5-x86_64-apple-darwin-debug-20210506T0943.tar.zst",
-    "sha256": null,
+    "sha256": "d99072568f2e4db30f5051b26cb888a4b36ac928d76b335634547e0bb20b68a7",
     "variant": "debug",
     "build": "20210506"
   },
@@ -70290,7 +70290,7 @@
     "patch": 5,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210506/cpython-3.9.5-i686-unknown-linux-gnu-debug-20210506T0943.tar.zst",
-    "sha256": null,
+    "sha256": "de6a5cf63c48455168e9a3940d22b994fb8ae922338f02695bea965ce402edbb",
     "variant": "debug",
     "build": "20210506"
   },
@@ -70307,7 +70307,7 @@
     "patch": 5,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210506/cpython-3.9.5-x86_64-unknown-linux-gnu-debug-20210506T0943.tar.zst",
-    "sha256": null,
+    "sha256": "cb2984fb3fac1ec991d520ac43b0c5f296ddefba16ee12dc476d666b03098932",
     "variant": "debug",
     "build": "20210506"
   },
@@ -70324,7 +70324,7 @@
     "patch": 4,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210415/cpython-3.9.4-aarch64-apple-darwin-pgo%2Blto-20210414T1515.tar.zst",
-    "sha256": null,
+    "sha256": "2aecad02a122e4e3a02cf5f85d25e49ae2d2c4e5f07c7a2748a08aab7548afa1",
     "variant": null,
     "build": "20210415"
   },
@@ -70341,7 +70341,7 @@
     "patch": 4,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210415/cpython-3.9.4-x86_64-apple-darwin-pgo%2Blto-20210414T1515.tar.zst",
-    "sha256": null,
+    "sha256": "7d0fc70fec47ff001f192fb12d3070b89e4d84e21745c8f303501a1dc3becde0",
     "variant": null,
     "build": "20210415"
   },
@@ -70358,7 +70358,7 @@
     "patch": 4,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210415/cpython-3.9.4-i686-unknown-linux-gnu-pgo%2Blto-20210414T1515.tar.zst",
-    "sha256": null,
+    "sha256": "852c265e8516f7b34f4eb90447a3a71e365c35206ea70593a0b1d9ac549337be",
     "variant": null,
     "build": "20210415"
   },
@@ -70375,7 +70375,7 @@
     "patch": 4,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210415/cpython-3.9.4-x86_64-unknown-linux-gnu-pgo%2Blto-20210414T1515.tar.zst",
-    "sha256": null,
+    "sha256": "30ba4d7192e7d74b7d8b35e4b26622576a81091e08147169d989e15fc892e8d5",
     "variant": null,
     "build": "20210415"
   },
@@ -70392,7 +70392,7 @@
     "patch": 4,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210415/cpython-3.9.4-i686-pc-windows-msvc-shared-pgo-20210414T1515.tar.zst",
-    "sha256": null,
+    "sha256": "a609ee67d1079a425da989806fdc747a7b3ba4244029e72a10b02eb068b63276",
     "variant": null,
     "build": "20210415"
   },
@@ -70409,7 +70409,7 @@
     "patch": 4,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210415/cpython-3.9.4-x86_64-pc-windows-msvc-shared-pgo-20210414T1515.tar.zst",
-    "sha256": null,
+    "sha256": "ebf4acc5dff238f8adff18e5b60420f05c688896f4020a0b78e5c484190691fa",
     "variant": null,
     "build": "20210415"
   },
@@ -70426,7 +70426,7 @@
     "patch": 4,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210415/cpython-3.9.4-aarch64-apple-darwin-debug-20210414T1515.tar.zst",
-    "sha256": null,
+    "sha256": "f74b31bbb697d31230367a38d4df2c4e776067f1bb2865b4f7a92974cb2fb971",
     "variant": "debug",
     "build": "20210415"
   },
@@ -70443,7 +70443,7 @@
     "patch": 4,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210415/cpython-3.9.4-x86_64-apple-darwin-debug-20210414T1515.tar.zst",
-    "sha256": null,
+    "sha256": "36b8cb6a92e355bf9629eb065a2ad7fb14575e13928dd0dd39657d7cf6bdbcbf",
     "variant": "debug",
     "build": "20210415"
   },
@@ -70460,7 +70460,7 @@
     "patch": 4,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210415/cpython-3.9.4-i686-unknown-linux-gnu-debug-20210414T1515.tar.zst",
-    "sha256": null,
+    "sha256": "ff861f4fe4136f34eefe948d93e03c697d2cba2474b38f003b4f9ea99f5226fc",
     "variant": "debug",
     "build": "20210415"
   },
@@ -70477,7 +70477,7 @@
     "patch": 4,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210415/cpython-3.9.4-x86_64-unknown-linux-gnu-debug-20210414T1515.tar.zst",
-    "sha256": null,
+    "sha256": "368a10895efb2ea351fb0abf83e6b2b69cb4296a0b6d9f48c39427f43ad2fe98",
     "variant": "debug",
     "build": "20210415"
   },
@@ -70494,7 +70494,7 @@
     "patch": 3,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210414/cpython-3.9.3-aarch64-apple-darwin-pgo%2Blto-20210413T2055.tar.zst",
-    "sha256": null,
+    "sha256": "08f0de57a577dd323b6c23262e14db8a2142114c4151923a01336364d500e539",
     "variant": null,
     "build": "20210414"
   },
@@ -70511,7 +70511,7 @@
     "patch": 3,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210414/cpython-3.9.3-x86_64-apple-darwin-pgo%2Blto-20210413T2055.tar.zst",
-    "sha256": null,
+    "sha256": "8ade79886c530da64fed998114bf3c9e00c7ff9707a74400a5fef6e57768eeef",
     "variant": null,
     "build": "20210414"
   },
@@ -70528,7 +70528,7 @@
     "patch": 3,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210414/cpython-3.9.3-x86_64-unknown-linux-gnu-pgo%2Blto-20210413T2055.tar.zst",
-    "sha256": null,
+    "sha256": "3df2e2a2d1f5ad0a85a2458edb1c953b49cbcde84801806d46a125fe471bb416",
     "variant": null,
     "build": "20210414"
   },
@@ -70545,7 +70545,7 @@
     "patch": 3,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210414/cpython-3.9.3-i686-pc-windows-msvc-shared-pgo-20210413T2055.tar.zst",
-    "sha256": null,
+    "sha256": "2b213b468295b059936cf9293cf06a5fa987ec589efec2e5d780e047d1288b07",
     "variant": null,
     "build": "20210414"
   },
@@ -70562,7 +70562,7 @@
     "patch": 3,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210414/cpython-3.9.3-x86_64-pc-windows-msvc-shared-pgo-20210413T2055.tar.zst",
-    "sha256": null,
+    "sha256": "d4877279e4efe20be430624346c83d82db7ef4c379b249ad829b974ddf0f1f86",
     "variant": null,
     "build": "20210414"
   },
@@ -70579,7 +70579,7 @@
     "patch": 3,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210414/cpython-3.9.3-aarch64-apple-darwin-debug-20210413T2055.tar.zst",
-    "sha256": null,
+    "sha256": "dff753b2728cae26c7eadadc19cc18091b04b1ed249584b759b9b9e6770b13eb",
     "variant": "debug",
     "build": "20210414"
   },
@@ -70596,7 +70596,7 @@
     "patch": 3,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210414/cpython-3.9.3-x86_64-apple-darwin-debug-20210413T2055.tar.zst",
-    "sha256": null,
+    "sha256": "d5d136d1e1e77ee3d4d3077bfce5af56629856bdc0fa97c9990b0f8934469ea7",
     "variant": "debug",
     "build": "20210414"
   },
@@ -70613,7 +70613,7 @@
     "patch": 3,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210414/cpython-3.9.3-x86_64-unknown-linux-gnu-debug-20210413T2055.tar.zst",
-    "sha256": null,
+    "sha256": "90cb363f7679419332d9c46e126c9e16c0587f81a8c341d1a9e7054c4e810dcc",
     "variant": "debug",
     "build": "20210414"
   },
@@ -70630,7 +70630,7 @@
     "patch": 2,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210327/cpython-3.9.2-aarch64-apple-darwin-pgo%2Blto-20210327T1202.tar.zst",
-    "sha256": null,
+    "sha256": "49d3d0628fe09cf97dd15c19ed33359e7b9307c8ab8f40f145806386a72ba036",
     "variant": null,
     "build": "20210327"
   },
@@ -70647,7 +70647,7 @@
     "patch": 2,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210327/cpython-3.9.2-x86_64-apple-darwin-pgo%2Blto-20210327T1202.tar.zst",
-    "sha256": null,
+    "sha256": "748f8e17c4bd178360cbbc8d259573134c48ec624ef2d0cf41ffe31a3ee03c4b",
     "variant": null,
     "build": "20210327"
   },
@@ -70664,7 +70664,7 @@
     "patch": 2,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210327/cpython-3.9.2-i686-unknown-linux-gnu-pgo%2Blto-20210327T1202.tar.zst",
-    "sha256": null,
+    "sha256": "1f07347e222162481244e067edcaef8f39bf8e2b954251e24e105428a219e901",
     "variant": null,
     "build": "20210327"
   },
@@ -70681,7 +70681,7 @@
     "patch": 2,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210327/cpython-3.9.2-x86_64-unknown-linux-gnu-pgo%2Blto-20210327T1202.tar.zst",
-    "sha256": null,
+    "sha256": "455b63a8985ada9977d75463349bd58f56d72016a4b637c73ab3fe576db2b68b",
     "variant": null,
     "build": "20210327"
   },
@@ -70698,7 +70698,7 @@
     "patch": 2,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210327/cpython-3.9.2-i686-pc-windows-msvc-shared-pgo-20210327T1202.tar.zst",
-    "sha256": null,
+    "sha256": "258cf1f4887bc161062948c479398b5f6b21c11316d0ce09608a8f894d1c8e4e",
     "variant": null,
     "build": "20210327"
   },
@@ -70715,7 +70715,7 @@
     "patch": 2,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210327/cpython-3.9.2-x86_64-pc-windows-msvc-shared-pgo-20210327T1202.tar.zst",
-    "sha256": null,
+    "sha256": "ab812dd3ce372d99db1fc75430998b0bf54d38384dca68ba4b425faa94373378",
     "variant": null,
     "build": "20210327"
   },
@@ -70732,7 +70732,7 @@
     "patch": 2,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210327/cpython-3.9.2-aarch64-apple-darwin-debug-20210327T1202.tar.zst",
-    "sha256": null,
+    "sha256": "347827a561c316e6bd0485cbc9a4cd53d99249e2a697548fc1337c4d04553798",
     "variant": "debug",
     "build": "20210327"
   },
@@ -70749,7 +70749,7 @@
     "patch": 2,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210327/cpython-3.9.2-x86_64-apple-darwin-debug-20210327T1202.tar.zst",
-    "sha256": null,
+    "sha256": "68b24234623cd10569ba71cd5aca3c435330b0ef4ab82c09beb7f9080adf4b81",
     "variant": "debug",
     "build": "20210327"
   },
@@ -70766,7 +70766,7 @@
     "patch": 2,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210327/cpython-3.9.2-i686-unknown-linux-gnu-debug-20210327T1202.tar.zst",
-    "sha256": null,
+    "sha256": "d9bb5ad6d608e3400066382bae5cd3d2e8bbae916dc3dc521d6a1d4165d4d006",
     "variant": "debug",
     "build": "20210327"
   },
@@ -70783,7 +70783,7 @@
     "patch": 2,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210327/cpython-3.9.2-x86_64-unknown-linux-gnu-debug-20210327T1202.tar.zst",
-    "sha256": null,
+    "sha256": "7fc0b0024f0c0c76bdb9e3ee75225387df898c196e4473cdcc546c867d336c18",
     "variant": "debug",
     "build": "20210327"
   },
@@ -70800,7 +70800,7 @@
     "patch": 1,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210103/cpython-3.9.1-x86_64-apple-darwin-pgo-20210103T1125.tar.zst",
-    "sha256": null,
+    "sha256": "3dac2b81542180e119899c94ea55edc77e3a210a87f56686b38718322e8c6fb5",
     "variant": null,
     "build": "20210103"
   },
@@ -70817,7 +70817,7 @@
     "patch": 1,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210103/cpython-3.9.1-x86_64-unknown-linux-gnu-pgo-20210103T1125.tar.zst",
-    "sha256": null,
+    "sha256": "cff5b10fab51f9e774bb9e0f9878f1ba2703d005618ce0899905d0a1dac31b45",
     "variant": null,
     "build": "20210103"
   },
@@ -70834,7 +70834,7 @@
     "patch": 1,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210103/cpython-3.9.1-i686-pc-windows-msvc-shared-pgo-20210103T1125.tar.zst",
-    "sha256": null,
+    "sha256": "e31dbf2fee5f0be6992088b925b8e11c651b7afbcf5111cb888d069bb3273575",
     "variant": null,
     "build": "20210103"
   },
@@ -70851,7 +70851,7 @@
     "patch": 1,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210103/cpython-3.9.1-x86_64-pc-windows-msvc-shared-pgo-20210103T1125.tar.zst",
-    "sha256": null,
+    "sha256": "a98f2c0e03d2aeac71d956e3a83c550552d069dde3a4c3b11308504979c5db35",
     "variant": null,
     "build": "20210103"
   },
@@ -70868,7 +70868,7 @@
     "patch": 1,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210103/cpython-3.9.1-x86_64-apple-darwin-debug-20210103T1125.tar.zst",
-    "sha256": null,
+    "sha256": "31bbedea0a6d16987405b22fbdd1bebb8bcf6804c01fc4d8477fa70b37671657",
     "variant": "debug",
     "build": "20210103"
   },
@@ -70885,7 +70885,7 @@
     "patch": 1,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210103/cpython-3.9.1-x86_64-unknown-linux-gnu-debug-20210103T1125.tar.zst",
-    "sha256": null,
+    "sha256": "7e1376e7e2c30a10775af94ae187feb211244de368de648abaae6c2357400a8b",
     "variant": "debug",
     "build": "20210103"
   },
@@ -70902,7 +70902,7 @@
     "patch": 0,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20201020/cpython-3.9.0-x86_64-apple-darwin-pgo-20201020T0626.tar.zst",
-    "sha256": null,
+    "sha256": "d1ec23459f6eebf881a7c5bf0e77377c67d60add67d57ece6316e425abe69494",
     "variant": null,
     "build": "20201020"
   },
@@ -70919,7 +70919,7 @@
     "patch": 0,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20201020/cpython-3.9.0-x86_64-unknown-linux-gnu-pgo-20201020T0627.tar.zst",
-    "sha256": null,
+    "sha256": "d66a271932b763b6aad36a7f23e15263d67248d4828ef90b0278de959938eadc",
     "variant": null,
     "build": "20201020"
   },
@@ -70936,7 +70936,7 @@
     "patch": 0,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20201020/cpython-3.9.0-i686-pc-windows-msvc-shared-pgo-20201021T0245.tar.zst",
-    "sha256": null,
+    "sha256": "c91d0c7de157b871aaf4a34cfee4008fe6467b8b2a73e0c518f3fcff42c39752",
     "variant": null,
     "build": "20201020"
   },
@@ -70953,7 +70953,7 @@
     "patch": 0,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20201020/cpython-3.9.0-x86_64-pc-windows-msvc-shared-pgo-20201021T0245.tar.zst",
-    "sha256": null,
+    "sha256": "0690cc61ce749b2188cc9380955378a83e2ca95247fe92c754e5c8256c1d32c6",
     "variant": null,
     "build": "20201020"
   },
@@ -70970,7 +70970,7 @@
     "patch": 0,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20201020/cpython-3.9.0-x86_64-apple-darwin-debug-20201020T0626.tar.zst",
-    "sha256": null,
+    "sha256": "8d5735833ba441e85a4f663204bf81d192653ec3eed361bd8cfdb2e738805a5d",
     "variant": "debug",
     "build": "20201020"
   },
@@ -70987,7 +70987,7 @@
     "patch": 0,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20201020/cpython-3.9.0-x86_64-unknown-linux-gnu-debug-20201020T0627.tar.zst",
-    "sha256": null,
+    "sha256": "eae61a429d5682253c72456eb8af2f4bd5f08debafb4d6fd62487c40213144c1",
     "variant": "debug",
     "build": "20201020"
   },
@@ -72704,7 +72704,7 @@
     "patch": 11,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210724/cpython-3.8.11-x86_64-apple-darwin-pgo%2Blto-20210724T1424.tar.zst",
-    "sha256": null,
+    "sha256": "a42bd8f23236cfd247de5e4356b18f9039857577c17b5e73bf62dbcabc5d96ba",
     "variant": null,
     "build": "20210724"
   },
@@ -72721,7 +72721,7 @@
     "patch": 11,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210724/cpython-3.8.11-i686-unknown-linux-gnu-pgo%2Blto-20210724T1424.tar.zst",
-    "sha256": null,
+    "sha256": "8ed6ef207635e5a316f92116907aed2f5d2a20e2794f3dfa3b693b3be31ecbbd",
     "variant": null,
     "build": "20210724"
   },
@@ -72738,7 +72738,7 @@
     "patch": 11,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210724/cpython-3.8.11-x86_64-unknown-linux-gnu-pgo%2Blto-20210724T1424.tar.zst",
-    "sha256": null,
+    "sha256": "2b278f81ff7cd8b9ed32a2150dd76bb08c0ab2491957d3c3aa60a2b79c7457eb",
     "variant": null,
     "build": "20210724"
   },
@@ -72755,7 +72755,7 @@
     "patch": 11,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210724/cpython-3.8.11-i686-pc-windows-msvc-shared-pgo-20210724T1424.tar.zst",
-    "sha256": null,
+    "sha256": "af5eeaccfb6ab9f1f894d82100c542db29324d703d7dd5d2c433c45b369e3da2",
     "variant": null,
     "build": "20210724"
   },
@@ -72772,7 +72772,7 @@
     "patch": 11,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210724/cpython-3.8.11-x86_64-pc-windows-msvc-shared-pgo-20210724T1424.tar.zst",
-    "sha256": null,
+    "sha256": "ad7a3f64383ff92bbf56478521bae602e6e4a6be6936b0f50e42e83575b4e527",
     "variant": null,
     "build": "20210724"
   },
@@ -72789,7 +72789,7 @@
     "patch": 11,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210724/cpython-3.8.11-x86_64-apple-darwin-debug-20210724T1424.tar.zst",
-    "sha256": null,
+    "sha256": "960e990918fcc85060ff94b80d4097407af3de05056c8337dc4d007e53f0e3c2",
     "variant": "debug",
     "build": "20210724"
   },
@@ -72806,7 +72806,7 @@
     "patch": 11,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210724/cpython-3.8.11-i686-unknown-linux-gnu-debug-20210724T1424.tar.zst",
-    "sha256": null,
+    "sha256": "5871c9ee637d4e5dfd2a5042bad1ee9ce11405a0d5053f0d533c90e36f3f7982",
     "variant": "debug",
     "build": "20210724"
   },
@@ -72823,7 +72823,7 @@
     "patch": 11,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210724/cpython-3.8.11-x86_64-unknown-linux-gnu-debug-20210724T1424.tar.zst",
-    "sha256": null,
+    "sha256": "908ade71f7d00c368da34dcab8b083472231e12a92e80a99e06f830db2bb0fc1",
     "variant": "debug",
     "build": "20210724"
   },
@@ -72840,7 +72840,7 @@
     "patch": 10,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210506/cpython-3.8.10-x86_64-apple-darwin-pgo%2Blto-20210506T0943.tar.zst",
-    "sha256": null,
+    "sha256": "8d06bec08db8cdd0f64f4f05ee892cf2fcbc58cfb1dd69da2caab78fac420238",
     "variant": null,
     "build": "20210506"
   },
@@ -72857,7 +72857,7 @@
     "patch": 10,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210506/cpython-3.8.10-i686-unknown-linux-gnu-pgo%2Blto-20210506T0943.tar.zst",
-    "sha256": null,
+    "sha256": "a1f112f28b3bfb357820c3dbfb604b7a3fbdc2562418e8bb7fbfed99401884a7",
     "variant": null,
     "build": "20210506"
   },
@@ -72874,7 +72874,7 @@
     "patch": 10,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210506/cpython-3.8.10-x86_64-unknown-linux-gnu-pgo%2Blto-20210506T0943.tar.zst",
-    "sha256": null,
+    "sha256": "aec8c4c53373b90be7e2131093caa26063be6d9d826f599c935c0e1042af3355",
     "variant": null,
     "build": "20210506"
   },
@@ -72891,7 +72891,7 @@
     "patch": 10,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210506/cpython-3.8.10-i686-pc-windows-msvc-shared-pgo-20210506T0943.tar.zst",
-    "sha256": null,
+    "sha256": "6b7d19fc862a41f7d1d009b231e4b151cff5bbabf08ae72d46fc384ffa40df47",
     "variant": null,
     "build": "20210506"
   },
@@ -72908,7 +72908,7 @@
     "patch": 10,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210506/cpython-3.8.10-x86_64-pc-windows-msvc-shared-pgo-20210506T0943.tar.zst",
-    "sha256": null,
+    "sha256": "d0c9d473ff189baee2e214b6fa6ff81ab7865adf85f3360cc95798c4f44a2128",
     "variant": null,
     "build": "20210506"
   },
@@ -72925,7 +72925,7 @@
     "patch": 10,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210506/cpython-3.8.10-x86_64-apple-darwin-debug-20210506T0943.tar.zst",
-    "sha256": null,
+    "sha256": "c7fea9df4d3203713919791cf139c1095a042ba59fe58cf80a865428fad930f5",
     "variant": "debug",
     "build": "20210506"
   },
@@ -72942,7 +72942,7 @@
     "patch": 10,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210506/cpython-3.8.10-i686-unknown-linux-gnu-debug-20210506T0943.tar.zst",
-    "sha256": null,
+    "sha256": "e90139573b23cf3c3b4133d78957109bed33e65a3e4bb7d977cfde6552537387",
     "variant": "debug",
     "build": "20210506"
   },
@@ -72959,7 +72959,7 @@
     "patch": 10,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210506/cpython-3.8.10-x86_64-unknown-linux-gnu-debug-20210506T0943.tar.zst",
-    "sha256": null,
+    "sha256": "e62eb98aedb15dcf48c2a7d3c4c54213f2aa6026033fb1ee83d4cd0a5b0da250",
     "variant": "debug",
     "build": "20210506"
   },
@@ -72976,7 +72976,7 @@
     "patch": 9,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210415/cpython-3.8.9-x86_64-apple-darwin-pgo%2Blto-20210414T1515.tar.zst",
-    "sha256": null,
+    "sha256": "e915b2c7824d1ed930a314912a40daaf4672200b9a068bb7542baeb48adf29fb",
     "variant": null,
     "build": "20210415"
   },
@@ -72993,7 +72993,7 @@
     "patch": 9,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210415/cpython-3.8.9-i686-unknown-linux-gnu-pgo%2Blto-20210414T1515.tar.zst",
-    "sha256": null,
+    "sha256": "8299223800382208396b6f7554b43562b34698b5ac50d2bd4e10721237da3fc6",
     "variant": null,
     "build": "20210415"
   },
@@ -73010,7 +73010,7 @@
     "patch": 9,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210415/cpython-3.8.9-x86_64-unknown-linux-gnu-pgo%2Blto-20210414T1515.tar.zst",
-    "sha256": null,
+    "sha256": "bc78885e35fd71a44b4469d56251454a1fe48dd812374b9afe9d1dfc1e00e9af",
     "variant": null,
     "build": "20210415"
   },
@@ -73027,7 +73027,7 @@
     "patch": 9,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210415/cpython-3.8.9-i686-pc-windows-msvc-shared-pgo-20210414T1515.tar.zst",
-    "sha256": null,
+    "sha256": "1061523a122911504b525eae1bdf402e4cb129e7658c8fa041bd44032d22dc71",
     "variant": null,
     "build": "20210415"
   },
@@ -73044,7 +73044,7 @@
     "patch": 9,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210415/cpython-3.8.9-x86_64-pc-windows-msvc-shared-pgo-20210414T1515.tar.zst",
-    "sha256": null,
+    "sha256": "09f7f405ba86155fded44c0821f05eddebab1008336e0952347e53f09b2d561c",
     "variant": null,
     "build": "20210415"
   },
@@ -73061,7 +73061,7 @@
     "patch": 9,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210415/cpython-3.8.9-x86_64-apple-darwin-debug-20210414T1515.tar.zst",
-    "sha256": null,
+    "sha256": "93f96d3f75b4bafe7a333fb2739f4ffb4bea298f2d2a7c7d2af249152560fbe8",
     "variant": "debug",
     "build": "20210415"
   },
@@ -73078,7 +73078,7 @@
     "patch": 9,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210415/cpython-3.8.9-i686-unknown-linux-gnu-debug-20210414T1515.tar.zst",
-    "sha256": null,
+    "sha256": "e1d8ca069612a368aeda7949691dd2dce8eba33a0f5f85a3064c7958cc5cf06f",
     "variant": "debug",
     "build": "20210415"
   },
@@ -73095,7 +73095,7 @@
     "patch": 9,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210415/cpython-3.8.9-x86_64-unknown-linux-gnu-debug-20210414T1515.tar.zst",
-    "sha256": null,
+    "sha256": "0e4f6779c88804c1c447621e23835f5f297ccac8968d2df7efc0c9e1ec8f3627",
     "variant": "debug",
     "build": "20210415"
   },
@@ -73112,7 +73112,7 @@
     "patch": 8,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210327/cpython-3.8.8-x86_64-apple-darwin-pgo%2Blto-20210327T1202.tar.zst",
-    "sha256": null,
+    "sha256": "3c350707370e94b362f06fd2bcb7dfcbf52541dd01a3a9f0d005e25b68538d07",
     "variant": null,
     "build": "20210327"
   },
@@ -73129,7 +73129,7 @@
     "patch": 8,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210327/cpython-3.8.8-i686-unknown-linux-gnu-pgo%2Blto-20210327T1202.tar.zst",
-    "sha256": null,
+    "sha256": "94384ecbf357d4f1e9039a06bed978078bded9fb98855e98e6906b1a1561d0f1",
     "variant": null,
     "build": "20210327"
   },
@@ -73146,7 +73146,7 @@
     "patch": 8,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210327/cpython-3.8.8-x86_64-unknown-linux-gnu-pgo%2Blto-20210327T1202.tar.zst",
-    "sha256": null,
+    "sha256": "489d1ee8bc8fd2f2768bcff47adbb4f5f21efe512f13df6b936d2f33c099e02e",
     "variant": null,
     "build": "20210327"
   },
@@ -73163,7 +73163,7 @@
     "patch": 8,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210327/cpython-3.8.8-i686-pc-windows-msvc-shared-pgo-20210327T1202.tar.zst",
-    "sha256": null,
+    "sha256": "e30ae5f136e6fd2fb822ee61f699fd800c3aadddd22603fae81197a24b8f00c1",
     "variant": null,
     "build": "20210327"
   },
@@ -73180,7 +73180,7 @@
     "patch": 8,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210327/cpython-3.8.8-x86_64-pc-windows-msvc-shared-pgo-20210327T1202.tar.zst",
-    "sha256": null,
+    "sha256": "0c7576adb299eb4b4943589fec517000f4056cfff8d3d8a3d4fe6f957fcd12b4",
     "variant": null,
     "build": "20210327"
   },
@@ -73197,7 +73197,7 @@
     "patch": 8,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210325/cpython-3.8.8-x86_64-apple-darwin-debug-20210325T0901.tar.zst",
-    "sha256": null,
+    "sha256": "3c6b09019b3a26beb2bd961d582bb20ce4e7b3d53210adfb950fcffc8972a5de",
     "variant": "debug",
     "build": "20210325"
   },
@@ -73214,7 +73214,7 @@
     "patch": 8,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210327/cpython-3.8.8-i686-unknown-linux-gnu-debug-20210327T1202.tar.zst",
-    "sha256": null,
+    "sha256": "2578adc67a28ecff055585ff6b95b09ad73e876fba54baac0cca7b66a5162e8e",
     "variant": "debug",
     "build": "20210327"
   },
@@ -73231,7 +73231,7 @@
     "patch": 8,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210327/cpython-3.8.8-x86_64-unknown-linux-gnu-debug-20210327T1202.tar.zst",
-    "sha256": null,
+    "sha256": "5790f751dc210893d28bf3cfa1153918fc48ffd73e9080d0093c078f9224f0de",
     "variant": "debug",
     "build": "20210327"
   },
@@ -73248,7 +73248,7 @@
     "patch": 7,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210103/cpython-3.8.7-x86_64-apple-darwin-pgo-20210103T1125.tar.zst",
-    "sha256": null,
+    "sha256": "d76300bb7967b7e5e361a092964d8623141fd5b1e41abae20d7ac6fb87e56c92",
     "variant": null,
     "build": "20210103"
   },
@@ -73265,7 +73265,7 @@
     "patch": 7,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210103/cpython-3.8.7-x86_64-unknown-linux-gnu-pgo-20210103T1125.tar.zst",
-    "sha256": null,
+    "sha256": "d578b5583cb907eac2a02707e6f43ee0a38b0491f9db5b8e0f23b4f2d3042260",
     "variant": null,
     "build": "20210103"
   },
@@ -73282,7 +73282,7 @@
     "patch": 7,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210103/cpython-3.8.7-i686-pc-windows-msvc-shared-pgo-20210103T1125.tar.zst",
-    "sha256": null,
+    "sha256": "c4d577718d02faf508b53458a7039ce6f947897f8be0b689fb138acbf41b496c",
     "variant": null,
     "build": "20210103"
   },
@@ -73299,7 +73299,7 @@
     "patch": 7,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210103/cpython-3.8.7-x86_64-pc-windows-msvc-shared-pgo-20210103T1125.tar.zst",
-    "sha256": null,
+    "sha256": "8fbd66f2ff97192f7c48fd3d00de3330f894531ccbe01205d86b6ed5f4108faa",
     "variant": null,
     "build": "20210103"
   },
@@ -73316,7 +73316,7 @@
     "patch": 7,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210103/cpython-3.8.7-x86_64-apple-darwin-debug-20210103T1125.tar.zst",
-    "sha256": null,
+    "sha256": "a3a7d4496c928c639d98632df4910d092a5a1428253ea7a364dd09124d3524e1",
     "variant": "debug",
     "build": "20210103"
   },
@@ -73333,7 +73333,7 @@
     "patch": 7,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20210103/cpython-3.8.7-x86_64-unknown-linux-gnu-debug-20210103T1125.tar.zst",
-    "sha256": null,
+    "sha256": "58eafcb2dfc7a8ff115b3d5888afcada697ff3e343e91933e25ea896a3d49a08",
     "variant": "debug",
     "build": "20210103"
   },
@@ -73350,7 +73350,7 @@
     "patch": 6,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20201020/cpython-3.8.6-x86_64-apple-darwin-pgo-20201020T0626.tar.zst",
-    "sha256": null,
+    "sha256": "e06807ed4d68928634b2690a86ea7a13d339c0fff3808816e98c646bbdc1f79a",
     "variant": null,
     "build": "20201020"
   },
@@ -73367,7 +73367,7 @@
     "patch": 6,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20201020/cpython-3.8.6-x86_64-unknown-linux-gnu-pgo-20201020T0627.tar.zst",
-    "sha256": null,
+    "sha256": "789f58ece3ab4ee599e9fd7f6bd9665157ba1a57dca210739df0687ce3757b55",
     "variant": null,
     "build": "20201020"
   },
@@ -73384,7 +73384,7 @@
     "patch": 6,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20201020/cpython-3.8.6-i686-pc-windows-msvc-shared-pgo-20201021T0233.tar.zst",
-    "sha256": null,
+    "sha256": "64209ccf373aba15e7577f538e20df9b65bf3c7fb4086d79e2cd5d93ff8ec8fd",
     "variant": null,
     "build": "20201020"
   },
@@ -73401,7 +73401,7 @@
     "patch": 6,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20201020/cpython-3.8.6-x86_64-pc-windows-msvc-shared-pgo-20201021T0232.tar.zst",
-    "sha256": null,
+    "sha256": "b842ddc51a3611b574bd5aba8e233bb9a7a52b0479388187f31723ece09bf898",
     "variant": null,
     "build": "20201020"
   },
@@ -73418,7 +73418,7 @@
     "patch": 6,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20201020/cpython-3.8.6-x86_64-apple-darwin-debug-20201020T0626.tar.zst",
-    "sha256": null,
+    "sha256": "13ee5a7d756dcb7565ec709d5054630b47e23494976b792600d506a077ac6039",
     "variant": "debug",
     "build": "20201020"
   },
@@ -73435,7 +73435,7 @@
     "patch": 6,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20201020/cpython-3.8.6-x86_64-unknown-linux-gnu-debug-20201020T0627.tar.zst",
-    "sha256": null,
+    "sha256": "12344cefc43db0167d6a385bda27c100f647e7250f1c43f7d4a867c0b629161e",
     "variant": "debug",
     "build": "20201020"
   },
@@ -73452,7 +73452,7 @@
     "patch": 5,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20200823/cpython-3.8.5-x86_64-apple-darwin-pgo-20200823T2228.tar.zst",
-    "sha256": null,
+    "sha256": "5b0d28496cecced067616f46b006f0f193f12d00d6fa3111b4b59180f1ac1c56",
     "variant": null,
     "build": "20200823"
   },
@@ -73469,7 +73469,7 @@
     "patch": 5,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20200822/cpython-3.8.5-x86_64-unknown-linux-gnu-pgo-20200823T0036.tar.zst",
-    "sha256": null,
+    "sha256": "30841db814a7837780b7161b13ad94e4da5a5425c054cedceb07052abf20c4c2",
     "variant": null,
     "build": "20200822"
   },
@@ -73486,7 +73486,7 @@
     "patch": 5,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20200830/cpython-3.8.5-i686-pc-windows-msvc-shared-pgo-20200830T2311.tar.zst",
-    "sha256": null,
+    "sha256": "f4069091e13b1cd79a107c0f6abb4b568f45b4a0363e0486c034f264627f0be7",
     "variant": null,
     "build": "20200830"
   },
@@ -73503,7 +73503,7 @@
     "patch": 5,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20200830/cpython-3.8.5-x86_64-pc-windows-msvc-shared-pgo-20200830T2254.tar.zst",
-    "sha256": null,
+    "sha256": "38fae4ef0e1eb3c87b761e0911d12cda9f36274ea6610266b3bfccbb8cb9ad9e",
     "variant": null,
     "build": "20200830"
   },
@@ -73520,7 +73520,7 @@
     "patch": 5,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20200823/cpython-3.8.5-x86_64-apple-darwin-debug-20200823T2228.tar.zst",
-    "sha256": null,
+    "sha256": "7dfd23001d5bc0a1dc2ece0c36fd65ac1f6350afa1ecfc6067d6058b1be13487",
     "variant": "debug",
     "build": "20200823"
   },
@@ -73537,7 +73537,7 @@
     "patch": 5,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20200822/cpython-3.8.5-x86_64-unknown-linux-gnu-debug-20200823T0036.tar.zst",
-    "sha256": null,
+    "sha256": "724ebc5782b26ecc41a022c972a665b9438f2d592370ef9e5dcbce290a1c495d",
     "variant": "debug",
     "build": "20200822"
   },
@@ -73554,7 +73554,7 @@
     "patch": 3,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20200530/cpython-3.8.3-x86_64-apple-darwin-pgo-20200530T1845.tar.zst",
-    "sha256": null,
+    "sha256": "adf98af0f0ba8f55a84476e0800210b59edd67bb98800be3ebc5d1f0157ff01e",
     "variant": null,
     "build": "20200530"
   },
@@ -73571,7 +73571,7 @@
     "patch": 3,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20200517/cpython-3.8.3-x86_64-unknown-linux-gnu-pgo-20200518T0040.tar.zst",
-    "sha256": null,
+    "sha256": "a9aee0f0bd2f8aab09b386915daea508e6713ad43a45fa13afe43fd3e1b1fd9b",
     "variant": null,
     "build": "20200517"
   },
@@ -73588,7 +73588,7 @@
     "patch": 3,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20200517/cpython-3.8.3-i686-pc-windows-msvc-shared-pgo-20200518T0154.tar.zst",
-    "sha256": null,
+    "sha256": "5293cc4f247ac26f4a4be101cc7562e53a43896a33ed464cd0bd31ef760a89d9",
     "variant": null,
     "build": "20200517"
   },
@@ -73605,7 +73605,7 @@
     "patch": 3,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20200517/cpython-3.8.3-x86_64-pc-windows-msvc-shared-pgo-20200517T2207.tar.zst",
-    "sha256": null,
+    "sha256": "da40fadb58d91358c05093220fad201a42ceac320244667b00715d0cd57208c2",
     "variant": null,
     "build": "20200517"
   },
@@ -73622,7 +73622,7 @@
     "patch": 3,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20200530/cpython-3.8.3-x86_64-apple-darwin-debug-20200530T1845.tar.zst",
-    "sha256": null,
+    "sha256": "0af244cd62a447fb0b71f51ddec7040505a630b9622b50eef85a037da31d56a3",
     "variant": "debug",
     "build": "20200530"
   },
@@ -73639,7 +73639,7 @@
     "patch": 3,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20200517/cpython-3.8.3-x86_64-unknown-linux-gnu-debug-20200518T0040.tar.zst",
-    "sha256": null,
+    "sha256": "6ba99888ba8cda8573b072238d216ed78240f85001ac7877fe71754f29b01895",
     "variant": "debug",
     "build": "20200517"
   },
@@ -73656,7 +73656,7 @@
     "patch": 2,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20200418/cpython-3.8.2-x86_64-apple-darwin-pgo-20200418T2238.tar.zst",
-    "sha256": null,
+    "sha256": "f6e11a18c3fe841a1a45fc3a786ef54c1540c48aa75b6d47ad8d6ae74b44ce1d",
     "variant": null,
     "build": "20200418"
   },
@@ -73673,7 +73673,7 @@
     "patch": 2,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20200418/cpython-3.8.2-x86_64-unknown-linux-gnu-pgo-20200418T2243.tar.zst",
-    "sha256": null,
+    "sha256": "c7aa51b5deb220e2254a7e32ae7106748d5854b978762f8eb83468c8946dcdbb",
     "variant": null,
     "build": "20200418"
   },
@@ -73690,7 +73690,7 @@
     "patch": 2,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20200418/cpython-3.8.2-i686-pc-windows-msvc-shared-pgo-20200418T2315.tar.zst",
-    "sha256": null,
+    "sha256": "9b449b079cce7837cd60f1d0d4d0bcbf421018f972555e02f5bd4e219a059220",
     "variant": null,
     "build": "20200418"
   },
@@ -73707,7 +73707,7 @@
     "patch": 2,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20200418/cpython-3.8.2-x86_64-pc-windows-msvc-shared-pgo-20200418T2315.tar.zst",
-    "sha256": null,
+    "sha256": "022b3630265a05475d554ca97d1d85c2d7270cc0c95fb4af1b2155bec7e5bd5d",
     "variant": null,
     "build": "20200418"
   },
@@ -73724,7 +73724,7 @@
     "patch": 2,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20200418/cpython-3.8.2-x86_64-apple-darwin-debug-20200418T2258.tar.zst",
-    "sha256": null,
+    "sha256": "abc050287f8d6b8c200d2c94529b5a980b44df773a08240ef06205356d585655",
     "variant": "debug",
     "build": "20200418"
   },
@@ -73741,7 +73741,7 @@
     "patch": 2,
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20200418/cpython-3.8.2-x86_64-unknown-linux-gnu-debug-20200418T2305.tar.zst",
-    "sha256": null,
+    "sha256": "a9bfef8296d2d7a7c348d9b968623cd0a070876918a454c3d57ab57299ff84d4",
     "variant": "debug",
     "build": "20200418"
   },
