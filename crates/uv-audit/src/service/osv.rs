@@ -10,14 +10,14 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use std::str::FromStr as _;
 use tracing::trace;
 
+use crate::types;
 use futures::{StreamExt as _, TryStreamExt as _};
 use jiff::Timestamp;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
+use uv_configuration::Concurrency;
 use uv_pep440::Version;
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
-
-use crate::types;
 
 const API_BASE: &str = "https://api.osv.dev/";
 
@@ -184,6 +184,7 @@ struct QueryBatchResponse {
 pub struct Osv {
     base_url: DisplaySafeUrl,
     client: ClientWithMiddleware,
+    concurrency: Concurrency,
 }
 
 impl Default for Osv {
@@ -191,6 +192,7 @@ impl Default for Osv {
         Self {
             base_url: DisplaySafeUrl::parse(API_BASE).expect("impossible: embedded URL is invalid"),
             client: ClientWithMiddleware::default(),
+            concurrency: Concurrency::default(),
         }
     }
 }
@@ -199,12 +201,17 @@ impl Osv {
     /// Create a new OSV client with the given HTTP client and optional base URL.
     ///
     /// If no base URL is provided, the client will default to the official OSV API endpoint.
-    pub fn new(client: ClientWithMiddleware, base_url: Option<DisplaySafeUrl>) -> Self {
+    pub fn new(
+        client: ClientWithMiddleware,
+        base_url: Option<DisplaySafeUrl>,
+        concurrency: Concurrency,
+    ) -> Self {
         Self {
             base_url: base_url.unwrap_or_else(|| {
                 DisplaySafeUrl::parse(API_BASE).expect("impossible: embedded URL is invalid")
             }),
             client,
+            concurrency,
         }
     }
 
@@ -277,7 +284,7 @@ impl Osv {
                 let vuln = self.fetch_vuln(&id).await?;
                 Ok::<(String, Vulnerability), Error>((id, vuln))
             })
-            .buffer_unordered(usize::MAX)
+            .buffer_unordered(self.concurrency.downloads)
             .try_collect::<FxHashMap<String, Vulnerability>>()
             .await?;
 
@@ -399,6 +406,7 @@ mod tests {
 
     use reqwest_middleware::ClientWithMiddleware;
     use serde_json::json;
+    use uv_configuration::Concurrency;
     use uv_normalize::PackageName;
     use uv_pep440::Version;
     use uv_redacted::DisplaySafeUrl;
@@ -512,6 +520,7 @@ mod tests {
         let osv = Osv::new(
             ClientWithMiddleware::default(),
             Some(DisplaySafeUrl::parse(&server.uri()).unwrap()),
+            Concurrency::default(),
         );
 
         let dependencies = vec![
@@ -705,6 +714,7 @@ mod tests {
         let osv = Osv::new(
             ClientWithMiddleware::default(),
             Some(DisplaySafeUrl::parse(&server.uri()).unwrap()),
+            Concurrency::default(),
         );
 
         let dependencies = vec![

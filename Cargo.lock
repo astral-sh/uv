@@ -5817,6 +5817,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+ "uv-configuration",
  "uv-normalize",
  "uv-pep440",
  "uv-redacted",

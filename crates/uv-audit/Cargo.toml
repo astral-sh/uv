@@ -16,6 +16,7 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-configuration = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-normalize = { workspace = true }
 uv-redacted = { workspace = true }
