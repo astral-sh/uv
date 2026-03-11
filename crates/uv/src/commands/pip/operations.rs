@@ -47,7 +47,7 @@ use uv_tool::InstalledTools;
 use uv_types::{BuildContext, HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
 
-use crate::commands::ExitStatus;
+use crate::commands::UvReport;
 use crate::commands::compile_bytecode;
 use crate::commands::diagnostics;
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
@@ -1126,13 +1126,11 @@ pub(crate) enum Error {
 }
 
 impl Error {
-    /// Report the error with rich diagnostics and convert to an exit status.
-    pub(crate) fn report(
-        self,
-        client_builder: &BaseClientBuilder<'_>,
-    ) -> anyhow::Result<ExitStatus> {
-        diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
-            .report(self)
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+    /// Convert to a report (always becomes `Ok(UvReport::OperationDiagnostic)`).
+    #[expect(clippy::unnecessary_wraps)]
+    pub(crate) fn into_report(self) -> anyhow::Result<UvReport> {
+        Ok(UvReport::OperationDiagnostic(
+            diagnostics::OperationDiagnostic::from(self),
+        ))
     }
 }

@@ -46,20 +46,20 @@ use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
 
 use crate::child::run_to_completion;
-use crate::commands::ExitStatus;
 use crate::commands::pip;
 use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
 use crate::commands::pip::operations;
+use crate::commands::project::environment::CachedEnvironment;
 use crate::commands::project::{
     EnvironmentSpecification, PlatformState, ProjectError, resolve_names,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::{matching_packages, refine_interpreter};
 use crate::commands::tool::{Target, ToolRequest};
-use crate::commands::{diagnostics, project::environment::CachedEnvironment};
+use crate::commands::{ExitStatus, UvReport};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 use crate::settings::ResolverSettings;
@@ -125,7 +125,7 @@ pub(crate) async fn run(
     env_file: Vec<PathBuf>,
     no_env_file: bool,
     preview: Preview,
-) -> anyhow::Result<ExitStatus> {
+) -> anyhow::Result<UvReport> {
     /// Whether or not a path looks like a Python script based on the file extension.
     fn has_python_script_ext(path: &Path) -> bool {
         path.extension()
@@ -180,7 +180,7 @@ pub(crate) async fn run(
         // When a command isn't provided, we'll show a brief help including available tools
         show_help(invocation_source, &cache, printer).await?;
         // Exit as Clap would after displaying help
-        return Ok(ExitStatus::Error);
+        return Ok(ExitStatus::Error.into());
     };
 
     let (target, args) = command.split();
@@ -319,24 +319,19 @@ pub(crate) async fn run(
             // If the user ran `uvx run ...`, the `run` is likely a mistake. Show a dedicated hint.
             if from.is_none() && invocation_source == ToolRunCommand::Uvx && target == "run" {
                 let rest = args.iter().map(|s| s.to_string_lossy()).join(" ");
-                return diagnostics::OperationDiagnostic::native_tls(
-                    client_builder.is_native_tls(),
-                )
-                .with_hint(format!(
-                    "`{}` invokes the `{}` package. Did you mean `{}`?",
-                    format!("uvx run {rest}").green(),
-                    "run".cyan(),
-                    format!("uvx {rest}").green()
-                ))
-                .with_context("tool")
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                return Ok(UvReport::OperationDiagnostic(
+                    err.with_hint(format!(
+                        "`{}` invokes the `{}` package. Did you mean `{}`?",
+                        format!("uvx run {rest}").green(),
+                        "run".cyan(),
+                        format!("uvx {rest}").green()
+                    ))
+                    .with_context("tool"),
+                ));
             }
 
-            let diagnostic =
-                diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls());
-            let diagnostic = if let Some(verbose_flag) = find_verbose_flag(args) {
-                diagnostic.with_hint(format!(
+            let err = if let Some(verbose_flag) = find_verbose_flag(args) {
+                err.with_hint(format!(
                     "You provided `{}` to `{}`. Did you mean to provide it to `{}`? e.g., `{}`",
                     verbose_flag.cyan(),
                     target.cyan(),
@@ -344,20 +339,18 @@ pub(crate) async fn run(
                     format!("{invocation_source} {verbose_flag} {target}").green()
                 ))
             } else {
-                diagnostic.with_context("tool")
+                err.with_context("tool")
             };
-            return diagnostic
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return Ok(UvReport::OperationDiagnostic(err));
         }
 
         Err(ProjectError::Requirements(err)) => {
             let err = miette::Report::msg(format!("{err}"))
                 .context("Failed to resolve `--with` requirement");
             eprint!("{err:?}");
-            return Ok(ExitStatus::Failure);
+            return Ok(ExitStatus::Failure.into());
         }
-        Err(err) => return err.report(&client_builder),
+        Err(err) => return err.into_report(),
     };
 
     // TODO(zanieb): Determine the executable command via the package entry points
@@ -382,7 +375,7 @@ pub(crate) async fn run(
                 // If the user didn't use `--from` and the command isn't in the environment, we're now
                 // just invoking an arbitrary executable on the `PATH` and should exit instead.
                 writeln!(printer.stderr(), "{provider_hints}")?;
-                return Ok(ExitStatus::Failure);
+                return Ok(ExitStatus::Failure.into());
             }
             // In the case where `--from` is used, we'll warn on failure if the command is not found
             // TODO(zanieb): Consider if we should require `--with` instead of `--from` in this case?
@@ -434,7 +427,7 @@ pub(crate) async fn run(
                     // could have come from the `PATH`. Display a more helpful message instead of the
                     // OS error.
                     writeln!(printer.stderr(), "{provider_hints}")?;
-                    return Ok(ExitStatus::Failure);
+                    return Ok(ExitStatus::Failure.into());
                 }
             }
             Err(err)
@@ -443,7 +436,7 @@ pub(crate) async fn run(
     }
     .with_context(|| format!("Failed to spawn: `{executable}`"))?;
 
-    run_to_completion(handle).await
+    Ok(run_to_completion(handle).await?.into())
 }
 
 /// Return the entry points for the specified package.
@@ -1170,7 +1163,7 @@ async fn get_or_create_environment(
                 let Some(interpreter) = refine_interpreter(
                     &interpreter,
                     python_request.as_ref(),
-                    &err,
+                    &err.err,
                     client_builder,
                     &reporter,
                     &install_mirrors,
@@ -1182,7 +1175,7 @@ async fn get_or_create_environment(
                 .await
                 .ok()
                 .flatten() else {
-                    return Err(err.into());
+                    return Err(ProjectError::Operation(err));
                 };
 
                 debug!(

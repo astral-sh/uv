@@ -36,7 +36,7 @@ use crate::commands::project::lock::LockMode;
 use crate::commands::project::{
     ProjectEnvironment, ProjectError, ProjectInterpreter, UniversalState, default_dependency_groups,
 };
-use crate::commands::{ExitStatus, project};
+use crate::commands::{ExitStatus, UvReport, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
@@ -45,11 +45,11 @@ pub(crate) fn self_version(
     short: bool,
     output_format: VersionFormat,
     printer: Printer,
-) -> Result<ExitStatus> {
+) -> Result<UvReport> {
     let version_info = uv_cli::version::uv_self_version();
     print_version(version_info, None, short, output_format, printer)?;
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::Success.into())
 }
 
 /// Read or update project version (`uv version`)
@@ -80,7 +80,7 @@ pub(crate) async fn project_version(
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
-) -> Result<ExitStatus> {
+) -> Result<UvReport> {
     // Read the metadata
     let project = find_target(
         project_dir,
@@ -319,7 +319,7 @@ pub(crate) async fn project_version(
 
     // Update the toml and lock
     let status = if dry_run {
-        ExitStatus::Success
+        ExitStatus::Success.into()
     } else if let Some(new_version) = &new_version {
         let project = update_project(project, new_version, &mut toml, &pyproject_path)?;
         Box::pin(lock_and_sync(
@@ -345,7 +345,7 @@ pub(crate) async fn project_version(
         .await?
     } else {
         debug!("No changes to version; skipping update");
-        ExitStatus::Success
+        ExitStatus::Success.into()
     };
 
     // Report the results
@@ -451,7 +451,7 @@ async fn print_frozen_version(
     output_format: VersionFormat,
     printer: Printer,
     preview: Preview,
-) -> Result<ExitStatus> {
+) -> Result<UvReport> {
     // Discover the interpreter (this is the same interpreter --no-sync uses).
     let interpreter = ProjectInterpreter::discover(
         project.workspace(),
@@ -496,7 +496,7 @@ async fn print_frozen_version(
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(err) => return err.report(&client_builder),
+        Err(err) => return err.into_report(),
     };
 
     // Try to find the package of interest in the lock
@@ -519,7 +519,7 @@ async fn print_frozen_version(
     let old_version = VersionInfo::new(Some(name), version);
     print_version(old_version, None, short, output_format, printer)?;
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::Success.into())
 }
 
 /// Re-lock and re-sync the project after a series of edits.
@@ -542,10 +542,10 @@ async fn lock_and_sync(
     cache: &Cache,
     printer: Printer,
     preview: Preview,
-) -> Result<ExitStatus> {
+) -> Result<UvReport> {
     // If frozen, don't touch the lock or sync at all
     if frozen.is_some() {
-        return Ok(ExitStatus::Success);
+        return Ok(ExitStatus::Success.into());
     }
 
     // Determine the groups and extras that should be enabled.
@@ -632,17 +632,17 @@ async fn lock_and_sync(
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(err) => return err.report(&client_builder),
+        Err(err) => return err.into_report(),
     };
 
     let AddTarget::Project(project, environment) = target else {
         // If we're not adding to a project, exit early.
-        return Ok(ExitStatus::Success);
+        return Ok(ExitStatus::Success.into());
     };
 
     let PythonTarget::Environment(venv) = &*environment else {
         // If we're not syncing, exit early.
-        return Ok(ExitStatus::Success);
+        return Ok(ExitStatus::Success.into());
     };
 
     // Perform a full sync, because we don't know what exactly is affected by the version.
@@ -686,10 +686,10 @@ async fn lock_and_sync(
     .await
     {
         Ok(_) => {}
-        Err(err) => return err.report(&client_builder),
+        Err(err) => return err.into_report(),
     }
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::Success.into())
 }
 
 fn print_version(

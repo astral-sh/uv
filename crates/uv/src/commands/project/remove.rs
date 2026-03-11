@@ -34,7 +34,7 @@ use crate::commands::project::{
     ProjectEnvironment, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
     default_dependency_groups,
 };
-use crate::commands::{ExitStatus, project};
+use crate::commands::{ExitStatus, UvReport, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
@@ -61,7 +61,7 @@ pub(crate) async fn remove(
     cache: &Cache,
     printer: Printer,
     preview: Preview,
-) -> Result<ExitStatus> {
+) -> Result<UvReport> {
     let target = if let Some(script) = script {
         // If we found a PEP 723 script and the user provided a project-only setting, warn.
         if package.is_some() {
@@ -181,7 +181,7 @@ pub(crate) async fn remove(
     // If `--frozen`, exit early. There's no reason to lock and sync, since we don't need a `uv.lock`
     // to exist at all.
     if frozen.is_some() {
-        return Ok(ExitStatus::Success);
+        return Ok(ExitStatus::Success.into());
     }
 
     // If we're modifying a script, and lockfile doesn't exist, don't create it.
@@ -192,7 +192,7 @@ pub(crate) async fn remove(
                 "Updated `{}`",
                 script.path.user_display().cyan()
             )?;
-            return Ok(ExitStatus::Success);
+            return Ok(ExitStatus::Success.into());
         }
     }
 
@@ -315,17 +315,17 @@ pub(crate) async fn remove(
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(err) => return err.report(&client_builder),
+        Err(err) => return err.into_report(),
     };
 
     let AddTarget::Project(project, environment) = target else {
         // If we're not adding to a project, exit early.
-        return Ok(ExitStatus::Success);
+        return Ok(ExitStatus::Success.into());
     };
 
     let PythonTarget::Environment(venv) = &*environment else {
         // If we're not syncing, exit early.
-        return Ok(ExitStatus::Success);
+        return Ok(ExitStatus::Success.into());
     };
 
     // Identify the installation target.
@@ -367,10 +367,10 @@ pub(crate) async fn remove(
     .await
     {
         Ok(_) => {}
-        Err(err) => return err.report(&client_builder),
+        Err(err) => return err.into_report(),
     }
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::Success.into())
 }
 
 /// Represents the destination where dependencies are added, either to a project or a script.

@@ -65,13 +65,13 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    EnvironmentSpecification, PreferenceLocation, ProjectEnvironment, ProjectError,
-    ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
-    default_dependency_groups, script_extra_build_requires, script_specification,
-    update_environment, validate_project_requires_python,
+    EnvironmentSpecification, PreferenceLocation, ProjectEnvironment, ScriptEnvironment,
+    ScriptInterpreter, UniversalState, WorkspacePython, default_dependency_groups,
+    script_extra_build_requires, script_specification, update_environment,
+    validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, diagnostics, project};
+use crate::commands::{ExitStatus, UvReport, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings, ResolverSettings};
 
@@ -111,7 +111,7 @@ pub(crate) async fn run(
     env_file: EnvFile,
     preview: Preview,
     max_recursion_depth: u32,
-) -> anyhow::Result<ExitStatus> {
+) -> anyhow::Result<UvReport> {
     // Check if max recursion depth was exceeded. This most commonly happens
     // for scripts with a shebang line like `#!/usr/bin/env -S uv run`, so try
     // to provide guidance for that case.
@@ -293,15 +293,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             .await
             {
                 Ok(result) => result.into_lock(),
-                Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::native_tls(
-                        client_builder.is_native_tls(),
-                    )
-                    .with_context("script")
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                Err(err) => {
+                    return err.with_operation_context("script").into_report();
                 }
-                Err(err) => return err.report(&client_builder),
             };
 
             // Sync the environment.
@@ -340,15 +334,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             .await
             {
                 Ok(_) => {}
-                Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::native_tls(
-                        client_builder.is_native_tls(),
-                    )
-                    .with_context("script")
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                Err(err) => {
+                    return err.with_operation_context("script").into_report();
                 }
-                Err(err) => return err.report(&client_builder),
             }
 
             // Respect any locked preferences when resolving `--with` dependencies downstream.
@@ -457,15 +445,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 .await
                 {
                     Ok(update) => Some(update.into_environment().into_interpreter()),
-                    Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::native_tls(
-                            client_builder.is_native_tls(),
-                        )
-                        .with_context("script")
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    Err(err) => {
+                        return err.with_operation_context("script").into_report();
                     }
-                    Err(err) => return err.report(&client_builder),
                 }
             } else {
                 // Create a virtual environment.
@@ -793,7 +775,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 .await
                 {
                     Ok(result) => result,
-                    Err(err) => return err.report(&client_builder),
+                    Err(err) => return err.into_report(),
                 };
 
                 // Identify the installation target.
@@ -874,7 +856,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 .await
                 {
                     Ok(_) => {}
-                    Err(err) => return err.report(&client_builder),
+                    Err(err) => return err.into_report(),
                 }
 
                 base_lock = Some((
@@ -1022,15 +1004,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
             let environment = match result {
                 Ok(resolution) => resolution,
-                Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::native_tls(
-                        client_builder.is_native_tls(),
-                    )
-                    .with_context("`--with`")
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                Err(err) => {
+                    return err.with_operation_context("`--with`").into_report();
                 }
-                Err(err) => return err.report(&client_builder),
             };
 
             Some(PythonEnvironment::from(environment))
@@ -1265,7 +1241,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
         }
         let help = format!("See `{}` for more information.", "uv run --help".bold());
         writeln!(printer.stdout(), "\n{help}")?;
-        return Ok(ExitStatus::Error);
+        return Ok(ExitStatus::Error.into());
     };
 
     debug!("Running `{command}`");
@@ -1321,7 +1297,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
         .spawn()
         .with_context(|| format!("Failed to spawn: `{}`", command.display_executable()))?;
 
-    run_to_completion(handle).await
+    Ok(run_to_completion(handle).await?.into())
 }
 
 /// Returns `true` if we can skip creating an additional ephemeral environment in `uv run`.

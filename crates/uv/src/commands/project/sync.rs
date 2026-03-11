@@ -36,7 +36,6 @@ use uv_warnings::warn_user;
 use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
-use crate::commands::ExitStatus;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations::{ChangedDist, Changelog, Modifications};
 use crate::commands::pip::resolution_markers;
@@ -49,6 +48,7 @@ use crate::commands::project::{
     UniversalState, default_dependency_groups, detect_conflicts, script_extra_build_requires,
     script_specification, update_environment,
 };
+use crate::commands::{ExitStatus, UvReport};
 use crate::printer::Printer;
 use crate::settings::{
     FrozenSource, InstallerSettingsRef, LockCheck, LockCheckSource, ResolverInstallerSettings,
@@ -85,7 +85,7 @@ pub(crate) async fn sync(
     printer: Printer,
     preview: Preview,
     output_format: SyncFormat,
-) -> Result<ExitStatus> {
+) -> Result<UvReport> {
     if preview.is_enabled(PreviewFeature::JsonOutput) && matches!(output_format, SyncFormat::Json) {
         warn_user!(
             "The `--output-format json` option is experimental and the schema may change without warning. Pass `--preview-features {}` to disable this warning.",
@@ -310,10 +310,10 @@ pub(crate) async fn sync(
                     if let Some(output) = report.format(output_format) {
                         writeln!(printer.stdout_important(), "{output}")?;
                     }
-                    return Ok(ExitStatus::Success);
+                    return Ok(ExitStatus::Success.into());
                 }
                 // TODO(zanieb): We should respect `--output-format json` for the error case
-                Err(err) => return err.report(&client_builder),
+                Err(err) => return err.into_report(),
             }
         }
     }
@@ -368,10 +368,10 @@ pub(crate) async fn sync(
                         .to_string()
                         .bold()
                 )?;
-                return Ok(ExitStatus::Failure);
+                return Ok(ExitStatus::Failure.into());
             }
         }
-        Err(err) => return err.report(&client_builder),
+        Err(err) => return err.into_report(),
     };
 
     let lock_report = LockReport::from((&lock_target, &mode, &outcome));
@@ -409,7 +409,7 @@ pub(crate) async fn sync(
     .await
     {
         Ok(changelog) => changelog,
-        Err(err) => return err.report(&client_builder),
+        Err(err) => return err.into_report(),
     };
 
     let report = Report {
@@ -430,7 +430,7 @@ pub(crate) async fn sync(
     }
 
     match outcome {
-        Outcome::Success(..) => Ok(ExitStatus::Success),
+        Outcome::Success(..) => Ok(ExitStatus::Success.into()),
         Outcome::LockMismatch(prev, cur, lock_source) => {
             writeln!(
                 printer.stderr(),
@@ -439,7 +439,7 @@ pub(crate) async fn sync(
                     .to_string()
                     .bold()
             )?;
-            Ok(ExitStatus::Failure)
+            Ok(ExitStatus::Failure.into())
         }
     }
 }

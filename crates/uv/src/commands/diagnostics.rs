@@ -12,6 +12,7 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_resolver::SentinelRange;
 
+use crate::commands::ExitStatus;
 use crate::commands::pip;
 
 static SUGGESTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::new(|| {
@@ -30,26 +31,39 @@ static SUGGESTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::ne
 
 /// A rich reporter for operational diagnostics, i.e., errors that occur during resolution and
 /// installation.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct OperationDiagnostic {
+    /// The underlying operation error.
+    pub(crate) err: pip::operations::Error,
     /// The hint to display to the user upon resolution failure.
     pub(crate) hint: Option<String>,
-    /// Whether native TLS is enabled.
-    pub(crate) native_tls: bool,
     /// The context to display to the user upon resolution failure.
     pub(crate) context: Option<&'static str>,
 }
 
-impl OperationDiagnostic {
-    /// Create an [`OperationDiagnostic`] with the given native TLS setting.
-    #[must_use]
-    pub(crate) fn native_tls(native_tls: bool) -> Self {
+impl std::fmt::Display for OperationDiagnostic {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.err.fmt(f)
+    }
+}
+
+impl std::error::Error for OperationDiagnostic {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.err.source()
+    }
+}
+
+impl From<pip::operations::Error> for OperationDiagnostic {
+    fn from(err: pip::operations::Error) -> Self {
         Self {
-            native_tls,
-            ..Default::default()
+            err,
+            hint: None,
+            context: None,
         }
     }
+}
 
+impl OperationDiagnostic {
     /// Set the hint to display to the user upon resolution failure.
     #[must_use]
     pub(crate) fn with_hint(self, hint: String) -> Self {
@@ -68,20 +82,21 @@ impl OperationDiagnostic {
         }
     }
 
-    /// Attempt to report an error with rich diagnostic context.
-    ///
-    /// Returns `Some` if the error was not handled.
-    pub(crate) fn report(self, err: pip::operations::Error) -> Option<pip::operations::Error> {
+    /// Report the diagnostic and convert to an exit status.
+    pub(crate) fn report(self, native_tls: bool) -> anyhow::Result<ExitStatus> {
+        let err = self.err;
+        let hint = self.hint;
+        let context = self.context;
         match err {
             pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(err)) => {
-                if let Some(context) = self.context {
+                if let Some(context) = context {
                     no_solution_context(&err, context);
-                } else if let Some(hint) = self.hint {
+                } else if let Some(hint) = hint {
                     no_solution_hint(err, hint);
                 } else {
                     no_solution(&err);
                 }
-                None
+                Ok(ExitStatus::Failure)
             }
             pip::operations::Error::Resolve(uv_resolver::ResolveError::Dist(
                 kind,
@@ -89,8 +104,8 @@ impl OperationDiagnostic {
                 chain,
                 err,
             )) => {
-                requested_dist_error(kind, dist, &chain, err, self.hint);
-                None
+                requested_dist_error(kind, dist, &chain, err, hint);
+                Ok(ExitStatus::Failure)
             }
             pip::operations::Error::Resolve(uv_resolver::ResolveError::Dependencies(
                 error,
@@ -98,18 +113,12 @@ impl OperationDiagnostic {
                 version,
                 chain,
             )) => {
-                dependencies_error(error, &name, &version, &chain, self.hint.clone());
-                None
+                dependencies_error(error, &name, &version, &chain, hint.clone());
+                Ok(ExitStatus::Failure)
             }
             pip::operations::Error::Requirements(uv_requirements::Error::Dist(kind, dist, err)) => {
-                dist_error(
-                    kind,
-                    dist,
-                    &DerivationChain::default(),
-                    Arc::new(err),
-                    self.hint,
-                );
-                None
+                dist_error(kind, dist, &DerivationChain::default(), Arc::new(err), hint);
+                Ok(ExitStatus::Failure)
             }
             pip::operations::Error::Prepare(uv_installer::PrepareError::Dist(
                 kind,
@@ -117,30 +126,30 @@ impl OperationDiagnostic {
                 chain,
                 err,
             )) => {
-                dist_error(kind, dist, &chain, Arc::new(err), self.hint);
-                None
+                dist_error(kind, dist, &chain, Arc::new(err), hint);
+                Ok(ExitStatus::Failure)
             }
             pip::operations::Error::Requirements(err) => {
-                if let Some(context) = self.context {
+                if let Some(context) = context {
                     let err = miette::Report::msg(format!("{err}"))
                         .context(format!("Failed to resolve {context} requirement"));
                     anstream::eprint!("{err:?}");
-                    None
+                    Ok(ExitStatus::Failure)
                 } else {
-                    Some(pip::operations::Error::Requirements(err))
+                    Err(pip::operations::Error::Requirements(err).into())
                 }
             }
             pip::operations::Error::Resolve(uv_resolver::ResolveError::Client(err))
-                if !self.native_tls && err.is_ssl() =>
+                if !native_tls && err.is_ssl() =>
             {
                 native_tls_hint(err);
-                None
+                Ok(ExitStatus::Failure)
             }
             pip::operations::Error::OutdatedEnvironment => {
                 anstream::eprintln!("{}", err);
-                None
+                Ok(ExitStatus::Failure)
             }
-            err => Some(err),
+            err => Err(err.into()),
         }
     }
 }

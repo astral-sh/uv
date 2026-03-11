@@ -17,16 +17,16 @@ use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
-use crate::commands::ExitStatus;
 use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::resolution_markers;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, default_dependency_groups,
+    ProjectInterpreter, ScriptInterpreter, UniversalState, default_dependency_groups,
 };
 use crate::commands::reporters::LatestVersionReporter;
+use crate::commands::{ExitStatus, UvReport};
 use crate::printer::Printer;
 use crate::settings::FrozenSource;
 use crate::settings::LockCheck;
@@ -61,7 +61,7 @@ pub(crate) async fn tree(
     cache: &Cache,
     printer: Printer,
     preview: Preview,
-) -> Result<ExitStatus> {
+) -> Result<UvReport> {
     // Find the project requirements.
     let workspace_cache = WorkspaceCache::default();
     let workspace;
@@ -157,7 +157,7 @@ pub(crate) async fn tree(
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(err) => return err.report(&client_builder),
+        Err(err) => return err.into_report(),
     };
 
     // Determine the markers to use for resolution.
@@ -283,5 +283,5 @@ pub(crate) async fn tree(
 
     print!("{tree}");
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::Success.into())
 }

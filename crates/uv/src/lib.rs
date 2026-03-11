@@ -51,7 +51,7 @@ use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
-use crate::commands::{ExitStatus, RunCommand, ScriptPath, ToolRunCommand};
+use crate::commands::{ExitStatus, RunCommand, ScriptPath, ToolRunCommand, UvReport};
 use crate::printer::Printer;
 use crate::settings::{
     CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
@@ -68,6 +68,15 @@ pub(crate) mod printer;
 pub(crate) mod settings;
 #[cfg(windows)]
 mod windows_exception;
+
+/// Convert a [`UvReport`] to an [`ExitStatus`], reporting any operation diagnostics.
+fn report_uv(result: Result<UvReport>, native_tls: bool) -> Result<ExitStatus> {
+    match result {
+        Ok(UvReport::ExitStatus(status)) => Ok(status),
+        Ok(UvReport::OperationDiagnostic(diag)) => diag.report(native_tls),
+        Err(err) => Err(err),
+    }
+}
 
 #[instrument(skip_all)]
 async fn run(mut cli: Cli) -> Result<ExitStatus> {
@@ -488,9 +497,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     let cache = Cache::from_settings(cache_settings.no_cache, cache_settings.cache_dir)?;
 
     // Configure the global network settings.
+    let native_tls = globals.network_settings.native_tls;
+
     let client_builder = BaseClientBuilder::new(
         globals.network_settings.connectivity,
-        globals.network_settings.native_tls,
+        native_tls,
         globals.network_settings.allow_insecure_host.clone(),
         globals.preview,
         globals.network_settings.read_timeout,
@@ -630,70 +641,73 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 groups: args.settings.groups,
             };
 
-            commands::pip_compile(
-                &requirements,
-                &constraints,
-                &overrides,
-                &excludes,
-                &build_constraints,
-                args.constraints_from_workspace,
-                args.overrides_from_workspace,
-                args.excludes_from_workspace,
-                args.build_constraints_from_workspace,
-                args.environments,
-                args.settings.extras,
-                groups,
-                args.settings.output_file.as_deref(),
-                args.format,
-                args.settings.resolution,
-                args.settings.prerelease,
-                args.settings.fork_strategy,
-                args.settings.dependency_mode,
-                args.settings.upgrade,
-                args.settings.generate_hashes,
-                args.settings.no_emit_package,
-                args.settings.no_strip_extras,
-                args.settings.no_strip_markers,
-                !args.settings.no_annotate,
-                !args.settings.no_header,
-                args.settings.custom_compile_command,
-                args.settings.emit_index_url,
-                args.settings.emit_find_links,
-                args.settings.emit_build_options,
-                args.settings.emit_marker_expression,
-                args.settings.emit_index_annotation,
-                args.settings.index_locations,
-                args.settings.index_strategy,
-                args.settings.torch_backend,
-                args.settings.dependency_metadata,
-                args.settings.keyring_provider,
-                &client_builder.subcommand(vec!["pip".to_owned(), "compile".to_owned()]),
-                args.settings.config_setting,
-                args.settings.config_settings_package,
-                args.settings.build_isolation.clone(),
-                &args.settings.extra_build_dependencies,
-                &args.settings.extra_build_variables,
-                args.settings.build_options,
-                args.settings.install_mirrors,
-                args.settings.python_version,
-                args.settings.python_platform,
-                globals.python_downloads,
-                args.settings.universal,
-                args.settings.exclude_newer,
-                args.settings.sources,
-                args.settings.annotation_style,
-                args.settings.link_mode,
-                args.settings.python,
-                args.settings.system,
-                globals.python_preference,
-                globals.concurrency,
-                globals.quiet > 0,
-                cache,
-                workspace_cache,
-                printer,
-                globals.preview,
+            report_uv(
+                commands::pip_compile(
+                    &requirements,
+                    &constraints,
+                    &overrides,
+                    &excludes,
+                    &build_constraints,
+                    args.constraints_from_workspace,
+                    args.overrides_from_workspace,
+                    args.excludes_from_workspace,
+                    args.build_constraints_from_workspace,
+                    args.environments,
+                    args.settings.extras,
+                    groups,
+                    args.settings.output_file.as_deref(),
+                    args.format,
+                    args.settings.resolution,
+                    args.settings.prerelease,
+                    args.settings.fork_strategy,
+                    args.settings.dependency_mode,
+                    args.settings.upgrade,
+                    args.settings.generate_hashes,
+                    args.settings.no_emit_package,
+                    args.settings.no_strip_extras,
+                    args.settings.no_strip_markers,
+                    !args.settings.no_annotate,
+                    !args.settings.no_header,
+                    args.settings.custom_compile_command,
+                    args.settings.emit_index_url,
+                    args.settings.emit_find_links,
+                    args.settings.emit_build_options,
+                    args.settings.emit_marker_expression,
+                    args.settings.emit_index_annotation,
+                    args.settings.index_locations,
+                    args.settings.index_strategy,
+                    args.settings.torch_backend,
+                    args.settings.dependency_metadata,
+                    args.settings.keyring_provider,
+                    &client_builder.subcommand(vec!["pip".to_owned(), "compile".to_owned()]),
+                    args.settings.config_setting,
+                    args.settings.config_settings_package,
+                    args.settings.build_isolation.clone(),
+                    &args.settings.extra_build_dependencies,
+                    &args.settings.extra_build_variables,
+                    args.settings.build_options,
+                    args.settings.install_mirrors,
+                    args.settings.python_version,
+                    args.settings.python_platform,
+                    globals.python_downloads,
+                    args.settings.universal,
+                    args.settings.exclude_newer,
+                    args.settings.sources,
+                    args.settings.annotation_style,
+                    args.settings.link_mode,
+                    args.settings.python,
+                    args.settings.system,
+                    globals.python_preference,
+                    globals.concurrency,
+                    globals.quiet > 0,
+                    cache,
+                    workspace_cache,
+                    printer,
+                    globals.preview,
+                )
+                .await,
+                native_tls,
             )
-            .await
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Sync(args),
@@ -736,51 +750,54 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 groups: args.settings.groups,
             };
 
-            commands::pip_sync(
-                &requirements,
-                &constraints,
-                &build_constraints,
-                &args.settings.extras,
-                &groups,
-                args.settings.reinstall,
-                args.settings.link_mode,
-                args.settings.compile_bytecode,
-                args.settings.hash_checking,
-                args.settings.index_locations,
-                args.settings.index_strategy,
-                args.settings.torch_backend,
-                args.settings.dependency_metadata,
-                args.settings.keyring_provider,
-                &client_builder.subcommand(vec!["pip".to_owned(), "sync".to_owned()]),
-                args.settings.allow_empty_requirements,
-                globals.installer_metadata,
-                &args.settings.config_setting,
-                &args.settings.config_settings_package,
-                args.settings.build_isolation.clone(),
-                &args.settings.extra_build_dependencies,
-                &args.settings.extra_build_variables,
-                args.settings.build_options,
-                args.settings.python_version,
-                args.settings.python_platform,
-                globals.python_downloads,
-                args.settings.install_mirrors,
-                args.settings.strict,
-                args.settings.exclude_newer,
-                args.settings.python,
-                args.settings.system,
-                args.settings.break_system_packages,
-                args.settings.target,
-                args.settings.prefix,
-                args.settings.sources,
-                globals.python_preference,
-                globals.concurrency,
-                cache,
-                workspace_cache,
-                args.dry_run,
-                printer,
-                globals.preview,
+            report_uv(
+                commands::pip_sync(
+                    &requirements,
+                    &constraints,
+                    &build_constraints,
+                    &args.settings.extras,
+                    &groups,
+                    args.settings.reinstall,
+                    args.settings.link_mode,
+                    args.settings.compile_bytecode,
+                    args.settings.hash_checking,
+                    args.settings.index_locations,
+                    args.settings.index_strategy,
+                    args.settings.torch_backend,
+                    args.settings.dependency_metadata,
+                    args.settings.keyring_provider,
+                    &client_builder.subcommand(vec!["pip".to_owned(), "sync".to_owned()]),
+                    args.settings.allow_empty_requirements,
+                    globals.installer_metadata,
+                    &args.settings.config_setting,
+                    &args.settings.config_settings_package,
+                    args.settings.build_isolation.clone(),
+                    &args.settings.extra_build_dependencies,
+                    &args.settings.extra_build_variables,
+                    args.settings.build_options,
+                    args.settings.python_version,
+                    args.settings.python_platform,
+                    globals.python_downloads,
+                    args.settings.install_mirrors,
+                    args.settings.strict,
+                    args.settings.exclude_newer,
+                    args.settings.python,
+                    args.settings.system,
+                    args.settings.break_system_packages,
+                    args.settings.target,
+                    args.settings.prefix,
+                    args.settings.sources,
+                    globals.python_preference,
+                    globals.concurrency,
+                    cache,
+                    workspace_cache,
+                    args.dry_run,
+                    printer,
+                    globals.preview,
+                )
+                .await,
+                native_tls,
             )
-            .await
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Install(args),
@@ -885,61 +902,64 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     .combine(Refresh::from(args.settings.upgrade.clone())),
             );
 
-            Box::pin(commands::pip_install(
-                &requirements,
-                &constraints,
-                &overrides,
-                &excludes,
-                &build_constraints,
-                args.constraints_from_workspace,
-                args.overrides_from_workspace,
-                args.excludes_from_workspace,
-                args.build_constraints_from_workspace,
-                &args.settings.extras,
-                &groups,
-                args.settings.resolution,
-                args.settings.prerelease,
-                args.settings.dependency_mode,
-                args.settings.upgrade,
-                args.settings.index_locations,
-                args.settings.index_strategy,
-                args.settings.torch_backend,
-                args.settings.dependency_metadata,
-                args.settings.keyring_provider,
-                &client_builder.subcommand(vec!["pip".to_owned(), "install".to_owned()]),
-                args.settings.reinstall,
-                args.settings.link_mode,
-                args.settings.compile_bytecode,
-                args.settings.hash_checking,
-                globals.installer_metadata,
-                &args.settings.config_setting,
-                &args.settings.config_settings_package,
-                args.settings.build_isolation.clone(),
-                &args.settings.extra_build_dependencies,
-                &args.settings.extra_build_variables,
-                args.settings.build_options,
-                args.modifications,
-                args.settings.python_version,
-                args.settings.python_platform,
-                globals.python_downloads,
-                args.settings.install_mirrors,
-                args.settings.strict,
-                args.settings.exclude_newer,
-                args.settings.sources,
-                args.settings.python,
-                args.settings.system,
-                args.settings.break_system_packages,
-                args.settings.target,
-                args.settings.prefix,
-                globals.python_preference,
-                globals.concurrency,
-                cache,
-                workspace_cache,
-                args.dry_run,
-                printer,
-                globals.preview,
-            ))
-            .await
+            report_uv(
+                Box::pin(commands::pip_install(
+                    &requirements,
+                    &constraints,
+                    &overrides,
+                    &excludes,
+                    &build_constraints,
+                    args.constraints_from_workspace,
+                    args.overrides_from_workspace,
+                    args.excludes_from_workspace,
+                    args.build_constraints_from_workspace,
+                    &args.settings.extras,
+                    &groups,
+                    args.settings.resolution,
+                    args.settings.prerelease,
+                    args.settings.dependency_mode,
+                    args.settings.upgrade,
+                    args.settings.index_locations,
+                    args.settings.index_strategy,
+                    args.settings.torch_backend,
+                    args.settings.dependency_metadata,
+                    args.settings.keyring_provider,
+                    &client_builder.subcommand(vec!["pip".to_owned(), "install".to_owned()]),
+                    args.settings.reinstall,
+                    args.settings.link_mode,
+                    args.settings.compile_bytecode,
+                    args.settings.hash_checking,
+                    globals.installer_metadata,
+                    &args.settings.config_setting,
+                    &args.settings.config_settings_package,
+                    args.settings.build_isolation.clone(),
+                    &args.settings.extra_build_dependencies,
+                    &args.settings.extra_build_variables,
+                    args.settings.build_options,
+                    args.modifications,
+                    args.settings.python_version,
+                    args.settings.python_platform,
+                    globals.python_downloads,
+                    args.settings.install_mirrors,
+                    args.settings.strict,
+                    args.settings.exclude_newer,
+                    args.settings.sources,
+                    args.settings.python,
+                    args.settings.system,
+                    args.settings.break_system_packages,
+                    args.settings.target,
+                    args.settings.prefix,
+                    globals.python_preference,
+                    globals.concurrency,
+                    cache,
+                    workspace_cache,
+                    args.dry_run,
+                    printer,
+                    globals.preview,
+                ))
+                .await,
+                native_tls,
+            )
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Uninstall(args),
@@ -1272,7 +1292,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             )
             .await
         }
-        Commands::Project(project) => {
+        Commands::Project(project) => report_uv(
             Box::pin(run_project(
                 project,
                 &project_dir,
@@ -1287,8 +1307,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &workspace_cache,
                 printer,
             ))
-            .await
-        }
+            .await,
+            native_tls,
+        ),
         #[cfg(feature = "self-update")]
         Commands::Self_(SelfNamespace {
             command:
@@ -1437,35 +1458,38 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 }
             };
 
-            Box::pin(commands::tool_run(
-                args.command,
-                args.from,
-                &requirements,
-                &constraints,
-                &overrides,
-                &build_constraints,
-                args.show_resolution || globals.verbose > 0,
-                args.lfs,
-                args.python,
-                args.python_platform,
-                args.install_mirrors,
-                args.options,
-                args.settings,
-                client_builder,
-                invocation_source,
-                args.isolated,
-                globals.python_preference,
-                globals.python_downloads,
-                globals.installer_metadata,
-                globals.concurrency,
-                cache,
-                workspace_cache,
-                printer,
-                args.env_file,
-                args.no_env_file,
-                globals.preview,
-            ))
-            .await
+            report_uv(
+                Box::pin(commands::tool_run(
+                    args.command,
+                    args.from,
+                    &requirements,
+                    &constraints,
+                    &overrides,
+                    &build_constraints,
+                    args.show_resolution || globals.verbose > 0,
+                    args.lfs,
+                    args.python,
+                    args.python_platform,
+                    args.install_mirrors,
+                    args.options,
+                    args.settings,
+                    client_builder,
+                    invocation_source,
+                    args.isolated,
+                    globals.python_preference,
+                    globals.python_downloads,
+                    globals.installer_metadata,
+                    globals.concurrency,
+                    cache,
+                    workspace_cache,
+                    printer,
+                    args.env_file,
+                    args.no_env_file,
+                    globals.preview,
+                ))
+                .await,
+                native_tls,
+            )
         }
         Commands::Tool(ToolNamespace {
             command: ToolCommand::Install(args),
@@ -1537,35 +1561,38 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .map(RequirementsSource::from_constraints_txt)
                 .collect::<Result<Vec<_>, _>>()?;
 
-            Box::pin(commands::tool_install(
-                args.package,
-                args.editable,
-                args.from,
-                &requirements,
-                &constraints,
-                &overrides,
-                &excludes,
-                &build_constraints,
-                &entrypoints,
-                args.lfs,
-                args.python,
-                args.python_platform,
-                args.install_mirrors,
-                args.force,
-                args.options,
-                args.settings,
-                client_builder.subcommand(vec!["tool".to_owned(), "install".to_owned()]),
-                globals.python_preference,
-                globals.python_downloads,
-                globals.installer_metadata,
-                globals.concurrency,
-                cli.top_level.no_config,
-                cache,
-                &workspace_cache,
-                printer,
-                globals.preview,
-            ))
-            .await
+            report_uv(
+                Box::pin(commands::tool_install(
+                    args.package,
+                    args.editable,
+                    args.from,
+                    &requirements,
+                    &constraints,
+                    &overrides,
+                    &excludes,
+                    &build_constraints,
+                    &entrypoints,
+                    args.lfs,
+                    args.python,
+                    args.python_platform,
+                    args.install_mirrors,
+                    args.force,
+                    args.options,
+                    args.settings,
+                    client_builder.subcommand(vec!["tool".to_owned(), "install".to_owned()]),
+                    globals.python_preference,
+                    globals.python_downloads,
+                    globals.installer_metadata,
+                    globals.concurrency,
+                    cli.top_level.no_config,
+                    cache,
+                    &workspace_cache,
+                    printer,
+                    globals.preview,
+                ))
+                .await,
+                native_tls,
+            )
         }
         Commands::Tool(ToolNamespace {
             command: ToolCommand::List(args),
@@ -1966,13 +1993,13 @@ async fn run_project(
     cache: Cache,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
-) -> Result<ExitStatus> {
+) -> Result<UvReport> {
     // Write out any resolved settings.
     macro_rules! show_settings {
         ($arg:expr) => {
             if globals.show_settings {
                 writeln!(printer.stdout(), "{:#?}", $arg)?;
-                return Ok(ExitStatus::Success);
+                return Ok(ExitStatus::Success.into());
             }
         };
     }

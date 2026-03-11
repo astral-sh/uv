@@ -41,12 +41,12 @@ use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
-use crate::commands::ExitStatus;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::operations::{report_interpreter, report_target_environment};
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
 use crate::commands::reporters::PythonDownloadReporter;
+use crate::commands::{ExitStatus, UvReport};
 use crate::printer::Printer;
 
 /// Install packages into the current environment.
@@ -104,7 +104,7 @@ pub(crate) async fn pip_install(
     dry_run: DryRun,
     printer: Printer,
     preview: Preview,
-) -> anyhow::Result<ExitStatus> {
+) -> anyhow::Result<UvReport> {
     let start = std::time::Instant::now();
 
     let client_builder = client_builder.clone().keyring(keyring_provider);
@@ -342,7 +342,7 @@ pub(crate) async fn pip_install(
                 }
                 DefaultInstallLogger.on_audit(requirements.len(), start, printer, dry_run)?;
 
-                return Ok(ExitStatus::Success);
+                return Ok(ExitStatus::Success.into());
             }
             SatisfiesResult::Unsatisfied(requirement) => {
                 debug!("At least one requirement is not satisfied: {requirement}");
@@ -607,7 +607,7 @@ pub(crate) async fn pip_install(
         {
             Ok(graph) => Resolution::from(graph),
             Err(err) => {
-                return err.report(&client_builder);
+                return err.into_report();
             }
         };
 
@@ -671,7 +671,7 @@ pub(crate) async fn pip_install(
     {
         Ok(..) => {}
         Err(err) => {
-            return err.report(&client_builder);
+            return err.into_report();
         }
     }
 
@@ -683,5 +683,5 @@ pub(crate) async fn pip_install(
         operations::diagnose_environment(&resolution, &environment, &marker_env, &tags, printer)?;
     }
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::Success.into())
 }

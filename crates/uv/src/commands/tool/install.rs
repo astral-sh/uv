@@ -32,7 +32,6 @@ use uv_tool::InstalledTools;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
 
-use crate::commands::ExitStatus;
 use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::{self, Modifications};
@@ -46,6 +45,7 @@ use crate::commands::tool::common::{
     finalize_tool_install, refine_interpreter, remove_entrypoints,
 };
 use crate::commands::tool::{Target, ToolRequest};
+use crate::commands::{ExitStatus, UvReport};
 use crate::printer::Printer;
 use crate::settings::{ResolverInstallerSettings, ResolverSettings};
 
@@ -78,7 +78,7 @@ pub(crate) async fn install(
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
-) -> Result<ExitStatus> {
+) -> Result<UvReport> {
     if settings.resolver.torch_backend.is_some() {
         warn_user_once!(
             "The `--torch-backend` option is experimental and may change without warning."
@@ -535,7 +535,7 @@ pub(crate) async fn install(
                         requirement.cyan()
                     )?;
 
-                    return Ok(ExitStatus::Success);
+                    return Ok(ExitStatus::Success.into());
                 }
             }
         }
@@ -590,7 +590,7 @@ pub(crate) async fn install(
         .await
         {
             Ok(update) => update.into_environment(),
-            Err(err) => return err.report(&client_builder),
+            Err(err) => return err.into_report(),
         };
 
         // At this point, we updated the existing environment, so we should remove any of its
@@ -636,7 +636,7 @@ pub(crate) async fn install(
                     let Some(interpreter) = refine_interpreter(
                         &interpreter,
                         python_request.as_ref(),
-                        &err,
+                        &err.err,
                         &client_builder,
                         &reporter,
                         &install_mirrors,
@@ -648,7 +648,7 @@ pub(crate) async fn install(
                     .await
                     .ok()
                     .flatten() else {
-                        return err.report(&client_builder);
+                        return Ok(UvReport::OperationDiagnostic(err));
                     };
 
                     debug!(
@@ -675,10 +675,10 @@ pub(crate) async fn install(
                     .await
                     {
                         Ok(resolution) => (resolution, interpreter),
-                        Err(err) => return err.report(&client_builder),
+                        Err(err) => return err.into_report(),
                     }
                 }
-                err => return err.report(&client_builder),
+                err => return err.into_report(),
             },
         };
 
@@ -713,7 +713,7 @@ pub(crate) async fn install(
             let _ = installed_tools.remove_environment(package_name);
         }) {
             Ok(environment) => environment,
-            Err(err) => return err.report(&client_builder),
+            Err(err) => return err.into_report(),
         }
     };
 
@@ -738,7 +738,7 @@ pub(crate) async fn install(
         printer,
     )?;
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::Success.into())
 }
 
 fn existing_environment_usable(

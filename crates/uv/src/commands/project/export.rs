@@ -27,10 +27,10 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, default_dependency_groups,
+    ProjectInterpreter, ScriptInterpreter, UniversalState, default_dependency_groups,
     detect_conflicts,
 };
-use crate::commands::{ExitStatus, OutputWriter};
+use crate::commands::{ExitStatus, OutputWriter, UvReport};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 
@@ -84,7 +84,7 @@ pub(crate) async fn export(
     cache: &Cache,
     printer: Printer,
     preview: Preview,
-) -> Result<ExitStatus> {
+) -> Result<UvReport> {
     // Identify the target.
     let workspace_cache = WorkspaceCache::default();
     let target = if let Some(script) = script {
@@ -220,7 +220,7 @@ pub(crate) async fn export(
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(err) => return err.report(&client_builder),
+        Err(err) => return err.into_report(),
     };
 
     // Identify the installation target.
@@ -410,7 +410,7 @@ pub(crate) async fn export(
 
     writer.commit().await?;
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::Success.into())
 }
 
 /// Format the uv command used to generate the output file.

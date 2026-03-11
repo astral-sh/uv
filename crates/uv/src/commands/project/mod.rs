@@ -52,11 +52,12 @@ use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::pyproject::{ExtraBuildDependency, PyProjectToml};
 use uv_workspace::{RequiresPythonSources, Workspace, WorkspaceCache};
 
+use crate::commands::diagnostics::OperationDiagnostic;
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::{Changelog, Modifications};
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{ExitStatus, capitalize, conjunction, pip};
+use crate::commands::{UvReport, capitalize, conjunction, pip};
 use crate::printer::Printer;
 use crate::settings::{
     FrozenSource, InstallerSettingsRef, LockCheckSource, ResolverInstallerSettings,
@@ -298,7 +299,7 @@ pub(crate) enum ProjectError {
     Lock(#[from] uv_resolver::LockError),
 
     #[error(transparent)]
-    Operation(#[from] pip::operations::Error),
+    Operation(OperationDiagnostic),
 
     #[error(transparent)]
     Interpreter(#[from] uv_python::InterpreterError),
@@ -343,19 +344,37 @@ pub(crate) enum ProjectError {
     Anyhow(#[from] anyhow::Error),
 }
 
+impl From<pip::operations::Error> for ProjectError {
+    fn from(err: pip::operations::Error) -> Self {
+        Self::Operation(OperationDiagnostic::from(err))
+    }
+}
+
 impl ProjectError {
-    /// Report the error with rich diagnostics and convert to an exit status.
-    ///
-    /// If the error is an operation error that can be reported with diagnostics,
-    /// it is printed and `Ok(ExitStatus::Failure)` is returned. Otherwise, the
-    /// error is returned as `Err`.
-    pub(crate) fn report(
-        self,
-        client_builder: &BaseClientBuilder<'_>,
-    ) -> anyhow::Result<ExitStatus> {
+    /// Convert to a report: Operation becomes `Ok(UvReport::OperationDiagnostic)`,
+    /// other variants become `Err(anyhow)`.
+    pub(crate) fn into_report(self) -> anyhow::Result<UvReport> {
         match self {
-            Self::Operation(err) => err.report(client_builder),
+            Self::Operation(diag) => Ok(UvReport::OperationDiagnostic(diag)),
             err => Err(err.into()),
+        }
+    }
+
+    /// Add context to an Operation error (no-op for other variants).
+    #[must_use]
+    pub(crate) fn with_operation_context(self, context: &'static str) -> Self {
+        match self {
+            Self::Operation(diag) => Self::Operation(diag.with_context(context)),
+            other => other,
+        }
+    }
+
+    /// Add a hint to an Operation error (no-op for other variants).
+    #[must_use]
+    pub(crate) fn with_operation_hint(self, hint: String) -> Self {
+        match self {
+            Self::Operation(diag) => Self::Operation(diag.with_hint(hint)),
+            other => other,
         }
     }
 }

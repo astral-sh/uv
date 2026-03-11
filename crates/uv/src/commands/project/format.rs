@@ -14,7 +14,7 @@ use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
 
 use crate::child::run_to_completion;
-use crate::commands::ExitStatus;
+use crate::commands::UvReport;
 use crate::commands::reporters::BinaryDownloadReporter;
 use crate::printer::Printer;
 
@@ -33,7 +33,7 @@ pub(crate) async fn format(
     printer: Printer,
     preview: Preview,
     no_project: bool,
-) -> Result<ExitStatus> {
+) -> Result<UvReport> {
     // Check if the format feature is in preview
     if !preview.is_enabled(PreviewFeature::Format) {
         warn_user!(
@@ -163,5 +163,5 @@ pub(crate) async fn format(
     command.args(extra_args.iter());
 
     let handle = command.spawn().context("Failed to spawn `ruff format`")?;
-    run_to_completion(handle).await
+    Ok(run_to_completion(handle).await?.into())
 }

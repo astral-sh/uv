@@ -47,7 +47,7 @@ use crate::commands::project::{
     init_script_python_requirement, script_extra_build_requires,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{ExitStatus, ScriptPath, pip};
+use crate::commands::{ExitStatus, ScriptPath, UvReport, pip};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, LockCheckSource, ResolverSettings};
 
@@ -97,7 +97,7 @@ pub(crate) async fn lock(
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
-) -> anyhow::Result<ExitStatus> {
+) -> anyhow::Result<UvReport> {
     // If necessary, initialize the PEP 723 script.
     let script = match script {
         Some(ScriptPath::Path(path)) => {
@@ -251,13 +251,13 @@ pub(crate) async fn lock(
                 }
             }
 
-            Ok(ExitStatus::Success)
+            Ok(ExitStatus::Success.into())
         }
         Err(err @ ProjectError::LockMismatch(..)) => {
             writeln!(printer.stderr(), "{}", err.to_string().bold())?;
-            Ok(ExitStatus::Failure)
+            Ok(ExitStatus::Failure.into())
         }
-        Err(err) => err.report(&client_builder),
+        Err(err) => err.into_report(),
     }
 }
 
@@ -901,7 +901,9 @@ async fn do_lock(
                     .with_reporter(Arc::new(ResolverReporter::from(printer)))
                     .resolve(target.members_requirements())
                     .await
-                    .map_err(|err| ProjectError::Operation(err.into()))?
+                    .map_err(|err| {
+                        ProjectError::Operation(pip::operations::Error::from(err).into())
+                    })?
                     .into_iter()
                     .chain(target.group_requirements())
                     .chain(requirements.iter().cloned())

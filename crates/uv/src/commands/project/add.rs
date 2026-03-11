@@ -54,7 +54,7 @@ use crate::commands::project::{
     UniversalState, default_dependency_groups, init_script_python_requirement,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{ExitStatus, ScriptPath, diagnostics, project};
+use crate::commands::{ExitStatus, ScriptPath, UvReport, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
@@ -102,7 +102,7 @@ pub(crate) async fn add(
     cache: &Cache,
     printer: Printer,
     preview: Preview,
-) -> Result<ExitStatus> {
+) -> Result<UvReport> {
     for source in &requirements {
         match source {
             RequirementsSource::PyprojectToml(_) => {
@@ -691,7 +691,7 @@ pub(crate) async fn add(
     // If `--frozen`, exit early. There's no reason to lock and sync, since we don't need a `uv.lock`
     // to exist at all.
     if frozen.is_some() {
-        return Ok(ExitStatus::Success);
+        return Ok(ExitStatus::Success.into());
     }
 
     // If we're modifying a script, and lockfile doesn't exist, avoid creating it. We still need
@@ -758,17 +758,12 @@ pub(crate) async fn add(
     ))
     .await
     {
-        Ok(()) => Ok(ExitStatus::Success),
+        Ok(()) => Ok(ExitStatus::Success.into()),
         Err(err) => {
             if modified {
                 let _ = snapshot.revert();
             }
-            match err {
-                ProjectError::Operation(err) => diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls()).with_hint(format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing.", "--frozen".green()))
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
-                err => err.report(&client_builder),
-            }
+            err.with_operation_hint(format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing.", "--frozen".green())).into_report()
         }
     }
 }

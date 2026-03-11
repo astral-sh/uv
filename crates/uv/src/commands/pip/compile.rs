@@ -56,7 +56,7 @@ use uv_workspace::pyproject::ExtraBuildDependencies;
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, OutputWriter};
+use crate::commands::{ExitStatus, OutputWriter, UvReport};
 use crate::printer::Printer;
 
 /// Resolve a set of requirements into a set of pinned versions.
@@ -123,7 +123,7 @@ pub(crate) async fn pip_compile(
     workspace_cache: WorkspaceCache,
     printer: Printer,
     preview: Preview,
-) -> Result<ExitStatus> {
+) -> Result<UvReport> {
     // If the user provides a `pyproject.toml` or other TOML file as the output file, raise an
     // error.
     if output_file
@@ -590,7 +590,7 @@ pub(crate) async fn pip_compile(
     {
         Ok(resolution) => resolution,
         Err(err) => {
-            return err.report(&client_builder);
+            return err.into_report();
         }
     };
 
@@ -780,7 +780,7 @@ pub(crate) async fn pip_compile(
     // Notify the user of any resolution diagnostics.
     operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::Success.into())
 }
 
 /// Format the uv command used to generate the output file.

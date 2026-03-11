@@ -72,6 +72,7 @@ pub(crate) use workspace::dir::dir;
 pub(crate) use workspace::list::list;
 pub(crate) use workspace::metadata::metadata;
 
+use crate::commands::diagnostics::OperationDiagnostic;
 use crate::commands::pip::operations::ChangedDist;
 use crate::printer::Printer;
 
@@ -108,6 +109,38 @@ pub(crate) enum ExitStatus {
 
     /// The command's exit status is propagated from an external command.
     External(u8),
+}
+
+/// The result of a command execution.
+pub(crate) enum UvReport {
+    /// The command completed with a specific exit status.
+    ExitStatus(ExitStatus),
+    /// The command failed with an operation error that should be reported with diagnostics.
+    OperationDiagnostic(OperationDiagnostic),
+}
+
+impl From<ExitStatus> for UvReport {
+    fn from(status: ExitStatus) -> Self {
+        Self::ExitStatus(status)
+    }
+}
+
+pub(crate) trait OperationResultExt<T> {
+    /// Convert an operation error into `Ok(UvReport::OperationDiagnostic)`,
+    /// allowing early return via `?` when the outer function returns `anyhow::Result<UvReport>`.
+    fn or_report(self) -> Result<T, UvReport>;
+}
+
+impl<T> OperationResultExt<T> for Result<T, pip::operations::Error> {
+    fn or_report(self) -> Result<T, UvReport> {
+        self.map_err(|err| UvReport::OperationDiagnostic(OperationDiagnostic::from(err)))
+    }
+}
+
+impl From<UvReport> for anyhow::Result<UvReport> {
+    fn from(report: UvReport) -> Self {
+        Ok(report)
+    }
 }
 
 impl From<ExitStatus> for ExitCode {

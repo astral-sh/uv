@@ -33,9 +33,9 @@ use uv_warnings::warn_user_once;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceCache, WorkspaceError};
 
-use crate::commands::ExitStatus;
 use crate::commands::project::{find_requires_python, init_script_python_requirement};
 use crate::commands::reporters::PythonDownloadReporter;
+use crate::commands::{ExitStatus, UvReport};
 use crate::printer::Printer;
 
 /// Add one or more packages to the project requirements.
@@ -64,7 +64,7 @@ pub(crate) async fn init(
     cache: &Cache,
     printer: Printer,
     preview: Preview,
-) -> Result<ExitStatus> {
+) -> Result<UvReport> {
     match init_kind {
         InitKind::Script => {
             let Some(path) = explicit_path.as_deref() else {
@@ -196,7 +196,7 @@ pub(crate) async fn init(
         }
     }
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::Success.into())
 }
 
 #[expect(clippy::fn_params_excessive_bools)]

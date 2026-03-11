@@ -3,16 +3,14 @@ use owo_colors::OwoColorize;
 use std::fmt::Write as _;
 use std::path::Path;
 
-use crate::commands::ExitStatus;
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::resolution_markers;
 use crate::commands::project::default_dependency_groups;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
-use crate::commands::project::{
-    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
-};
+use crate::commands::project::{ProjectInterpreter, ScriptInterpreter, UniversalState};
 use crate::commands::reporters::AuditReporter;
+use crate::commands::{ExitStatus, UvReport};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 
@@ -50,7 +48,7 @@ pub(crate) async fn audit(
     cache: Cache,
     printer: Printer,
     preview: Preview,
-) -> Result<ExitStatus> {
+) -> Result<UvReport> {
     // Check if the audit feature is in preview
     if !preview.is_enabled(PreviewFeature::Audit) {
         warn_user!(
@@ -163,7 +161,7 @@ pub(crate) async fn audit(
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(err) => return err.report(&client_builder),
+        Err(err) => return err.into_report(),
     };
 
     // Determine the markers to use for resolution.
@@ -231,7 +229,7 @@ pub(crate) async fn audit(
     };
     display.render()?;
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::Success.into())
 }
 
 struct AuditResults {
