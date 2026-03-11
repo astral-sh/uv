@@ -285,9 +285,9 @@ impl VerbatimUrl {
 
     /// Set the "given value contained variables which were expanded" flag.
     ///
-    /// Intended to only be used by the [`Pep508Url`] impl.
+    /// Intended to only be used by the URL parser implementations.
     #[must_use]
-    fn with_expanded(self, expanded: bool) -> Self {
+    pub(crate) fn with_expanded(self, expanded: bool) -> Self {
         Self { expanded, ..self }
     }
 
@@ -399,15 +399,7 @@ impl Pep508Url for VerbatimUrl {
         // Expand environment variables in the URL.
         let expanded = expand_env_vars(url);
 
-        // Since `expand_env_vars` can return `Cow::Owned` even when variables were not expanded,
-        // the check needs to fall back to comparison for that case.
-        //
-        // Note: If a variable named `FOO` expands to `${FOO}` then this will produce a false
-        // negative. This seems like too much of a corner case to justify trying to fix it.
-        let vars_expanded = match &expanded {
-            Cow::Owned(owned) => owned != url,
-            Cow::Borrowed(_) => false,
-        };
+        let vars_expanded = were_vars_expanded(url, expanded.as_ref());
 
         if let Some((scheme, path)) = split_scheme(&expanded) {
             match Scheme::parse(scheme) {
@@ -543,6 +535,14 @@ pub fn expand_env_vars(s: &str) -> Cow<'_, str> {
             _ => caps["var"].to_owned(),
         })
     })
+}
+
+/// Returns `true` if [`expand_env_vars`] changed the given value.
+///
+/// Note: If a variable named `FOO` expands to `${FOO}` then this will produce a false negative.
+/// This seems like too much of a corner case to justify trying to fix it.
+pub(crate) fn were_vars_expanded(given: &str, expanded: &str) -> bool {
+    expanded != given
 }
 
 /// Like [`Url::parse`], but only splits the scheme. Derived from the `url` crate.
