@@ -276,6 +276,12 @@ impl PyxTokenStore {
         &self.api
     }
 
+    /// Retrieve the access token set via the `PYX_AUTH_TOKEN` (or `UV_AUTH_TOKEN`) environment
+    /// variable, if any.
+    pub fn auth_token_from_env(&self) -> Option<AccessToken> {
+        read_pyx_auth_token()
+    }
+
     /// Get or initialize an [`AccessToken`] from the store.
     ///
     /// If an access token is set in the environment, it will be returned as-is.

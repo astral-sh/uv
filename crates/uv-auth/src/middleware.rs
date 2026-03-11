@@ -16,7 +16,7 @@ use uv_warnings::owo_colors::OwoColorize;
 
 use crate::credentials::Authentication;
 use crate::providers::{GcsEndpointProvider, HuggingFaceProvider, S3EndpointProvider};
-use crate::pyx::{DEFAULT_TOLERANCE_SECS, PyxTokenStore};
+use crate::pyx::{DEFAULT_TOLERANCE_SECS, PyxTokenStore, PyxTokens};
 use crate::{
     AccessToken, CredentialsCache, KeyringProvider,
     cache::FetchUrl,
@@ -139,6 +139,23 @@ enum GcsCredentialState {
     Initialized(Option<Arc<Authentication>>),
 }
 
+/// Cached pyx authentication state for an [`AuthMiddleware`] instance.
+///
+/// Transitions from `Uninitialized` on the first request to either `Global` or `Workspace`
+/// depending on which credential type the store returns.
+enum PyxTokenState {
+    /// No fetch has been attempted yet.
+    Uninitialized,
+    /// The store returned a global credential (API key, OAuth token, or `PYX_AUTH_TOKEN`
+    /// env var) that applies to every workspace. A single access token (or `None` if the user
+    /// has no credentials) is cached here; we never perform more than one exchange.
+    Global(Option<AccessToken>),
+    /// The store returned Trusted Access tokens, which are minted per-workspace via an OIDC
+    /// exchange. Each entry is fetched and cached independently; a missing key means the token
+    /// has not yet been fetched for that workspace.
+    Workspace(FxHashMap<String, Option<AccessToken>>),
+}
+
 /// A middleware that adds basic authentication to requests.
 ///
 /// Uses a cache to propagate credentials from previously seen requests and
@@ -158,13 +175,13 @@ pub struct AuthMiddleware {
     base_client: Option<ClientWithMiddleware>,
     /// The pyx token store to use for persistent credentials.
     pyx_token_store: Option<PyxTokenStore>,
-    /// Per-workspace token state.
+    /// Cached pyx token state.
     ///
-    /// Keyed by workspace name (e.g., `"acme"`). All known pyx URL shapes encode the workspace
-    /// so the key is always present. Each workspace gets its own entry so that Trusted Access
-    /// tokens — which are minted per-workspace — are cached and refreshed independently. A
-    /// missing entry means the token has not yet been fetched for that workspace.
-    pyx_token_state: Mutex<FxHashMap<String, Option<AccessToken>>>,
+    /// Once initialized, the state is either `Global` — meaning an API key, OAuth token, or
+    /// `PYX_AUTH_TOKEN` env var applies to every workspace — or `Workspace`, meaning the store
+    /// is using Trusted Access tokens that are minted per-workspace and must be fetched and
+    /// cached independently.
+    pyx_token_state: Mutex<PyxTokenState>,
     /// Cached S3 credentials to avoid running the credential helper multiple times.
     s3_credential_state: Mutex<S3CredentialState>,
     /// Cached GCS credentials to avoid running the credential helper multiple times.
@@ -190,7 +207,7 @@ impl AuthMiddleware {
             only_authenticated: false,
             base_client: None,
             pyx_token_store: None,
-            pyx_token_state: Mutex::new(FxHashMap::default()),
+            pyx_token_state: Mutex::new(PyxTokenState::Uninitialized),
             s3_credential_state: Mutex::new(S3CredentialState::Uninitialized),
             gcs_credential_state: Mutex::new(GcsCredentialState::Uninitialized),
             preview: Preview::default(),
@@ -762,26 +779,85 @@ impl AuthMiddleware {
                     // NOTE: new scope here to avoid holding the token state lock
                     // for the entire function body.
                     let token = {
-                        let mut token_state_map = self.pyx_token_state.lock().await;
+                        let mut token_state = self.pyx_token_state.lock().await;
 
-                        if let Some(token) = token_state_map.get(&workspace) {
-                            token.clone()
+                        // Fast path: return a cached token without fetching.
+                        match &*token_state {
+                            PyxTokenState::Global(token) => {
+                                return {
+                                    let credentials = token.clone().map(|token| {
+                                        trace!("Using credentials from token store for {url}");
+                                        Arc::new(Authentication::from(Credentials::from(token)))
+                                    });
+                                    self.cache().fetches.done(key.clone(), credentials.clone());
+                                    credentials
+                                };
+                            }
+                            PyxTokenState::Workspace(map) if map.contains_key(&workspace) => {
+                                return {
+                                    let credentials =
+                                        map.get(&workspace).unwrap().clone().map(|token| {
+                                            trace!("Using credentials from token store for {url}");
+                                            Arc::new(Authentication::from(Credentials::from(token)))
+                                        });
+                                    self.cache().fetches.done(key.clone(), credentials.clone());
+                                    credentials
+                                };
+                            }
+                            _ => {}
+                        }
+
+                        trace!("Initializing token store for {url}");
+
+                        // Remember whether we're in Workspace mode before the async call,
+                        // so we know how to update the state afterward.
+                        let in_workspace_mode = matches!(*token_state, PyxTokenState::Workspace(_));
+
+                        // Determine the access token and whether it is global (one token
+                        // shared across all workspaces) or workspace-specific (Trusted Access).
+                        let (token, is_global) = if let Some(env_token) =
+                            token_store.auth_token_from_env()
+                        {
+                            // Environment variable tokens are always global.
+                            (Some(env_token), true)
                         } else {
-                            trace!("Initializing token store for {url}");
-                            let generated = match token_store
-                                .access_token(base_client, DEFAULT_TOLERANCE_SECS, Some(&workspace))
+                            let tokens = match token_store
+                                .init(
+                                    base_client,
+                                    DEFAULT_TOLERANCE_SECS,
+                                    Some(workspace.as_str()),
+                                )
                                 .await
                             {
-                                Ok(Some(token)) => Some(token),
-                                Ok(None) => None,
+                                Ok(tokens) => tokens,
                                 Err(err) => {
-                                    warn!("Failed to generate access tokens: {err}");
+                                    warn!("Failed to initialize token store: {err}");
                                     None
                                 }
                             };
-                            token_state_map.insert(workspace, generated.clone());
-                            generated
+                            // Trusted Access tokens are workspace-specific;
+                            // everything else (OAuth, API key, or no credentials)
+                            // is treated as global so we only exchange once.
+                            let is_global = !matches!(tokens, Some(PyxTokens::TrustedAccess(_)));
+                            let token = tokens.map(AccessToken::from);
+                            (token, is_global)
+                        };
+
+                        if in_workspace_mode {
+                            // Already in Workspace mode: fill in this new workspace's entry.
+                            if let PyxTokenState::Workspace(map) = &mut *token_state {
+                                map.insert(workspace.clone(), token.clone());
+                            }
+                        } else if is_global {
+                            *token_state = PyxTokenState::Global(token.clone());
+                        } else {
+                            // First Trusted Access token: switch to Workspace mode.
+                            let mut map = FxHashMap::default();
+                            map.insert(workspace, token.clone());
+                            *token_state = PyxTokenState::Workspace(map);
                         }
+
+                        token
                     };
 
                     let credentials = token.map(|token| {
