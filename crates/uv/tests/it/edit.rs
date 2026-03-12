@@ -15,11 +15,10 @@ use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use std::path::Path;
 use url::Url;
-use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method, matchers::path};
+use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
 
 #[cfg(feature = "test-git-lfs")]
 use uv_cache_key::{RepositoryUrl, cache_digest};
-use uv_fs::Simplified;
 use uv_static::EnvVars;
 
 use uv_test::{packse_index_url, uv_snapshot, venv_bin_path};
@@ -1431,8 +1430,9 @@ fn add_remove_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    hint: `anyio` is in the `dev` group (try: `uv remove anyio --group dev`)
     error: The dependency `anyio` could not be found in `project.dependencies`
+
+    hint: `anyio` is in the `dev` group (try: `uv remove anyio --group dev`)
     ");
 
     // Remove the dependency.
@@ -1641,8 +1641,9 @@ fn add_remove_optional() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    hint: `anyio` is an optional dependency (try: `uv remove anyio --optional io`)
     error: The dependency `anyio` could not be found in `project.dependencies`
+
+    hint: `anyio` is an optional dependency (try: `uv remove anyio --optional io`)
     ");
 
     // Remove the dependency.
@@ -4666,7 +4667,9 @@ fn add_error() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because there are no versions of xyz and your project depends on xyz, we can conclude that your project's requirements are unsatisfiable.
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+
+
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     ");
 
     uv_snapshot!(context.filters(), context.add().arg("xyz").arg("--frozen"), @"
@@ -5534,7 +5537,7 @@ fn remove_virtual_empty() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The dependency `sortedcontainers` could not be found in `tool.uv.dev-dependencies` or `tool.uv.dependency-groups.dev`
+    error: The dependency `sortedcontainers` could not be found in `dependency-groups.dev`
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -9936,8 +9939,10 @@ fn add_warn_index_url() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because only idna==2.7 is available and your project depends on idna>=3.6, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: `idna` was found on https://test.pypi.org/simple, but not at the requested version (idna>=3.6). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+
+    hint: `idna` was found on https://test.pypi.org/simple, but not at the requested version (idna>=3.6). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
     ");
 
     Ok(())
@@ -13432,8 +13437,10 @@ async fn add_full_url_in_keyring() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+
+    hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     "
     );
     Ok(())
@@ -13470,8 +13477,10 @@ async fn add_stop_index_search_early_on_auth_failure() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+
+    hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     "
     );
     Ok(())
@@ -13558,8 +13567,10 @@ async fn add_empty_ignore_error_codes() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (http://[LOCALHOST]/) returned a 403 Forbidden error. This could indicate lack of valid authentication credentials, or the package may not exist on this index.
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+
+    hint: An index URL (http://[LOCALHOST]/) returned a 403 Forbidden error. This could indicate lack of valid authentication credentials, or the package may not exist on this index.
     "
     );
     Ok(())
@@ -13596,7 +13607,9 @@ fn add_missing_package_on_pytorch() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because fakepkg was not found in the package registry and your project depends on fakepkg, we can conclude that your project's requirements are unsatisfiable.
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+
+
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "
     );
     Ok(())
@@ -13924,8 +13937,10 @@ async fn add_auth_policy_never_with_env_var_credentials() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+
+    hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     "
     );
 
@@ -14020,8 +14035,10 @@ async fn add_redirect_cross_origin() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (http://[LOCALHOST]/) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+
+    hint: An index URL (http://[LOCALHOST]/) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     "
     );
 
@@ -14151,8 +14168,10 @@ async fn add_redirect_with_keyring_cross_origin() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (http://[LOCALHOST]/) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+
+    hint: An index URL (http://[LOCALHOST]/) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     "
     );
 

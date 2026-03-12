@@ -1508,9 +1508,6 @@ fn tool_install_suggest_other_packages_with_executable() {
     success: false
     exit_code: 2
     ----- stdout -----
-    No executables are provided by package `fastapi`; removing tool
-    hint: An executable with the name `fastapi` is available via dependency `fastapi-cli`.
-          Did you mean `uv tool install fastapi-cli`?
 
     ----- stderr -----
     Resolved 35 packages in [TIME]
@@ -1550,7 +1547,10 @@ fn tool_install_suggest_other_packages_with_executable() {
      + uvicorn==0.29.0
      + watchfiles==0.21.0
      + websockets==12.0
-    error: Failed to install entrypoints for `fastapi`
+    error: No executables are provided by package `fastapi`
+
+    hint: An executable with the name `fastapi` is available via dependency `fastapi-cli`.
+          Did you mean `uv tool install fastapi-cli`?
     ");
 }
 
@@ -1882,7 +1882,6 @@ fn tool_install_remove_on_empty() -> Result<()> {
     success: false
     exit_code: 2
     ----- stdout -----
-    No executables are provided by package `black`; removing tool
 
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -1896,7 +1895,7 @@ fn tool_install_remove_on_empty() -> Result<()> {
      - packaging==24.0
      - pathspec==0.12.1
      - platformdirs==4.2.0
-    error: Failed to install entrypoints for `black`
+    error: No executables are provided by package `black`
     ");
 
     // Re-request `black`. It should reinstall, without requiring `--force`.
@@ -2720,14 +2719,13 @@ fn tool_install_no_entrypoints() {
     success: false
     exit_code: 2
     ----- stdout -----
-    No executables are provided by package `iniconfig`; removing tool
 
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    error: Failed to install entrypoints for `iniconfig`
+    error: No executables are provided by package `iniconfig`
     ");
 
     // Ensure the tool environment is not created.
@@ -2790,7 +2788,9 @@ fn tool_install_uninstallable() {
           #
 
 
-          hint: This usually indicates a problem with the package or the build environment.
+
+
+    hint: This usually indicates a problem with the package or the build environment.
     ");
 
     // Ensure the tool environment is not created.
@@ -5564,7 +5564,8 @@ fn tool_install_find_links() {
       ╰─▶ Because only basic-app==0.1 is available and basic-app==0.1 needs to be downloaded from a registry, we can conclude that all versions of basic-app cannot be used.
           And because you require basic-app, we can conclude that your requirements are unsatisfiable.
 
-          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+
+    hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     ");
 }
 
