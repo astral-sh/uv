@@ -16,15 +16,27 @@ use uv_pypi_types::{
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 
+/// The source constraint carried by a single dependency edge.
+///
+/// Most dependency edges are source-agnostic and use [`DependencySource::Unspecified`]. Direct
+/// URLs and group-scoped explicit indexes use a concrete source so fork construction can keep
+/// that source information attached to the edge that introduced it.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(crate) enum DependencySource {
+    /// The dependency does not carry an edge-local source constraint.
     #[default]
     Unspecified,
+    /// The dependency was introduced by a direct URL-like requirement.
     Url(Box<VerbatimParsedUrl>),
+    /// The dependency was introduced by a requirement pinned to an explicit index.
     ExplicitIndex(IndexMetadata),
 }
 
 impl DependencySource {
+    /// Derive the edge-local source constraint from a requirement.
+    ///
+    /// Registry requirements only carry a source here when they are tied to a group-scoped
+    /// explicit index. Direct URL-like requirements always preserve their verbatim URL.
     pub(crate) fn from_requirement(requirement: &Requirement) -> Self {
         match &requirement.source {
             RequirementSource::Registry { index, .. }
@@ -51,6 +63,7 @@ impl DependencySource {
         }
     }
 
+    /// Return the direct URL attached to this source, if any.
     pub(crate) fn verbatim_url(&self) -> Option<&VerbatimParsedUrl> {
         match self {
             Self::Url(url) => Some(url.as_ref()),
@@ -58,6 +71,7 @@ impl DependencySource {
         }
     }
 
+    /// Return the explicit index attached to this source, if any.
     pub(crate) fn explicit_index(&self) -> Option<&IndexMetadata> {
         match self {
             Self::ExplicitIndex(index) => Some(index),

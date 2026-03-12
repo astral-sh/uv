@@ -30,10 +30,15 @@ pub(crate) struct ForkScope {
 }
 
 impl ForkScope {
+    /// Create a scope from a marker plus an optional conflict item.
     pub(crate) fn new(marker: MarkerTree, conflict: Option<ConflictItem>) -> Self {
         Self { marker, conflict }
     }
 
+    /// Derive the scope under which a requirement should be visible in forked resolution.
+    ///
+    /// Group conflicts are folded into the marker so group-scoped entries only appear in forks
+    /// where that group is active.
     pub(crate) fn from_requirement(requirement: &Requirement) -> Self {
         let conflict = match &requirement.source {
             uv_distribution_types::RequirementSource::Registry { conflict, .. } => conflict.clone(),
@@ -55,6 +60,7 @@ impl ForkScope {
         Self::new(marker, conflict)
     }
 
+    /// Return the conflict item that further restricts this scope, if any.
     pub(crate) fn conflict(&self) -> Option<ConflictItemRef<'_>> {
         self.conflict.as_ref().map(ConflictItem::as_ref)
     }
