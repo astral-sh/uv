@@ -98,8 +98,6 @@ wheels/
 
 # Common folders
 .*_cache/
-.[nt]ox/
-.ipynb_checkpoints/
 
 # Virtual environments
 .venv
