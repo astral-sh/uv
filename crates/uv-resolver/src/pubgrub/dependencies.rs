@@ -37,12 +37,21 @@ impl DependencySource {
     /// Registry requirements only carry a source here when they are tied to a group-scoped
     /// explicit index. Direct URL-like requirements always preserve their verbatim URL.
     pub(crate) fn from_requirement(requirement: &Requirement) -> Self {
-        match &requirement.source {
+        Self::from_requirement_source(&requirement.source, requirement.origin.as_ref())
+    }
+
+    /// Derive the edge-local source constraint from a requirement source and its origin.
+    ///
+    /// Group-scoped explicit indexes only survive when the caller provides the originating group.
+    /// Callers that only have a `RequirementSource` should pass `None`, which preserves URL-like
+    /// sources but treats registry requirements as source-agnostic.
+    pub(crate) fn from_requirement_source(
+        source: &RequirementSource,
+        origin: Option<&RequirementOrigin>,
+    ) -> Self {
+        match source {
             RequirementSource::Registry { index, .. }
-                if matches!(
-                    requirement.origin.as_ref(),
-                    Some(RequirementOrigin::Group(_, Some(_), _))
-                ) =>
+                if matches!(origin, Some(RequirementOrigin::Group(_, Some(_), _))) =>
             {
                 index
                     .clone()
@@ -53,8 +62,7 @@ impl DependencySource {
             RequirementSource::Url { .. }
             | RequirementSource::Git { .. }
             | RequirementSource::Path { .. }
-            | RequirementSource::Directory { .. } => requirement
-                .source
+            | RequirementSource::Directory { .. } => source
                 .to_verbatim_parsed_url()
                 .map(Box::new)
                 .map(Self::Url)
@@ -76,6 +84,64 @@ impl DependencySource {
             Self::ExplicitIndex(index) => Some(index),
             Self::Unspecified | Self::Url(_) => None,
         }
+    }
+
+    /// Returns `true` when this dependency source carries no edge-local source constraint.
+    pub(crate) fn is_unspecified(&self) -> bool {
+        matches!(self, Self::Unspecified)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+    use std::str::FromStr;
+
+    use uv_distribution_types::{IndexFormat, IndexMetadata, IndexUrl};
+    use uv_normalize::{GroupName, PackageName};
+    use uv_pep440::VersionSpecifiers;
+    use uv_pep508::MarkerTree;
+
+    use super::*;
+
+    #[test]
+    fn requirement_source_needs_origin_for_group_explicit_index() {
+        let index = IndexMetadata {
+            url: IndexUrl::parse("https://test.pypi.org/simple", None).unwrap(),
+            format: IndexFormat::Simple,
+        };
+        let requirement = Requirement {
+            name: PackageName::from_str("demo").unwrap(),
+            extras: Box::default(),
+            groups: Box::default(),
+            marker: MarkerTree::TRUE,
+            source: RequirementSource::Registry {
+                specifier: VersionSpecifiers::empty(),
+                index: Some(index.clone()),
+                conflict: None,
+            },
+            origin: Some(RequirementOrigin::Group(
+                PathBuf::from("pyproject.toml"),
+                Some(PackageName::from_str("project").unwrap()),
+                GroupName::from_str("dev").unwrap(),
+            )),
+        };
+
+        assert_eq!(
+            DependencySource::from_requirement(&requirement),
+            DependencySource::ExplicitIndex(index.clone())
+        );
+        assert_eq!(
+            DependencySource::from_requirement_source(&requirement.source, None),
+            DependencySource::Unspecified
+        );
+        assert_eq!(
+            DependencySource::from_requirement_source(
+                &requirement.source,
+                requirement.origin.as_ref()
+            ),
+            DependencySource::ExplicitIndex(index)
+        );
     }
 }
 
@@ -229,6 +295,25 @@ impl PubGrubDependency {
                 PubGrubPackageInner::System(_) => unreachable!("System package in dependencies"),
             }
         })
+    }
+
+    /// Returns `true` if this dependency targets the given package name and carries the given
+    /// edge-local source constraint.
+    pub(crate) fn matches_name_and_source(
+        &self,
+        name: &PackageName,
+        source: &DependencySource,
+    ) -> bool {
+        self.package.name() == Some(name) && &self.source == source
+    }
+
+    /// Returns `true` if this dependency is the plain base package for the given name, without an
+    /// extra, group, or edge-local source constraint.
+    pub(crate) fn is_unsourced_base_for(&self, name: &PackageName) -> bool {
+        self.package.name() == Some(name)
+            && self.package.extra().is_none()
+            && self.package.group().is_none()
+            && self.source.is_unspecified()
     }
 
     /// Extracts a possible conflicting item from this dependency.

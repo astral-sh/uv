@@ -133,6 +133,12 @@ impl PubGrubPackage {
         }
     }
 
+    /// Create a base [`PubGrubPackage`] from a package name and marker,
+    /// preserving the marker expression as-is.
+    pub(crate) fn from_base(name: PackageName, marker: MarkerTree) -> Self {
+        Self::from_package(name, None, None, marker)
+    }
+
     /// If this package is a proxy package, return the base package it depends on.
     ///
     /// While dependency groups may be attached to a package, we don't consider them here as
@@ -149,12 +155,7 @@ impl PubGrubPackage {
                 None
             }
             PubGrubPackageInner::Extra { name, .. } | PubGrubPackageInner::Marker { name, .. } => {
-                Some(Self::from_package(
-                    name.clone(),
-                    None,
-                    None,
-                    MarkerTree::TRUE,
-                ))
+                Some(Self::from_base(name.clone(), MarkerTree::TRUE))
             }
         }
     }
@@ -322,7 +323,7 @@ impl PubGrubPackage {
 
     /// Returns a new [`PubGrubPackage`] representing the base package with the given name.
     pub(crate) fn base(name: &PackageName) -> Self {
-        Self::from_package(name.clone(), None, None, MarkerTree::TRUE)
+        Self::from_base(name.clone(), MarkerTree::TRUE)
     }
 }
 
