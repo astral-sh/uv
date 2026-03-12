@@ -63,6 +63,8 @@ fn main() -> Result<()> {
     } else if preview.any_enabled() {
         debug!("The following preview features are enabled: {preview}");
     }
+    uv_preview::init(preview)
+        .expect("Global preview features should not have been initialised already");
 
     match command.as_str() {
         "build-sdist" => {
@@ -85,7 +87,6 @@ fn main() -> Result<()> {
                 metadata_directory.as_deref(),
                 uv_version::version(),
                 false,
-                preview,
             )?;
             // Tell the build frontend about the name of the artifact we built
             writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;
@@ -99,7 +100,6 @@ fn main() -> Result<()> {
                 metadata_directory.as_deref(),
                 uv_version::version(),
                 false,
-                preview,
             )?;
             // Tell the build frontend about the name of the artifact we built
             writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;
@@ -110,7 +110,6 @@ fn main() -> Result<()> {
                 &env::current_dir()?,
                 &wheel_directory,
                 uv_version::version(),
-                preview,
             )?;
             // Tell the build frontend about the name of the artifact we built
             writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;
@@ -121,7 +120,6 @@ fn main() -> Result<()> {
                 &env::current_dir()?,
                 &wheel_directory,
                 uv_version::version(),
-                preview,
             )?;
             // Tell the build frontend about the name of the artifact we built
             writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;

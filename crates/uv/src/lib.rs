@@ -388,6 +388,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     // Resolve the cache settings.
     let cache_settings = CacheSettings::resolve(*cli.top_level.cache_args, filesystem.as_ref());
 
+    // Set the global preview configuration.
+    uv_preview::init(globals.preview)?;
+
     // Enforce the required version.
     if let Some(required_version) = globals.required_version.as_ref() {
         let package_version = uv_pep440::Version::from_str(uv_version::version())?;
@@ -1917,7 +1920,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             } => commands::build_backend::build_wheel(
                 &wheel_directory,
                 metadata_directory.as_deref(),
-                globals.preview,
             ),
             BuildBackendCommand::BuildEditable {
                 wheel_directory,
@@ -1925,7 +1927,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             } => commands::build_backend::build_editable(
                 &wheel_directory,
                 metadata_directory.as_deref(),
-                globals.preview,
             ),
             BuildBackendCommand::GetRequiresForBuildSdist => {
                 commands::build_backend::get_requires_for_build_sdist()
@@ -1934,19 +1935,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 commands::build_backend::get_requires_for_build_wheel()
             }
             BuildBackendCommand::PrepareMetadataForBuildWheel { wheel_directory } => {
-                commands::build_backend::prepare_metadata_for_build_wheel(
-                    &wheel_directory,
-                    globals.preview,
-                )
+                commands::build_backend::prepare_metadata_for_build_wheel(&wheel_directory)
             }
             BuildBackendCommand::GetRequiresForBuildEditable => {
                 commands::build_backend::get_requires_for_build_editable()
             }
             BuildBackendCommand::PrepareMetadataForBuildEditable { wheel_directory } => {
-                commands::build_backend::prepare_metadata_for_build_editable(
-                    &wheel_directory,
-                    globals.preview,
-                )
+                commands::build_backend::prepare_metadata_for_build_editable(&wheel_directory)
             }
         })
         .await
