@@ -11,7 +11,7 @@ use uv_workspace::Workspace;
 use crate::Lock;
 use crate::lock::{
     Dependency, DirectSource, PackageId, RegistrySource, Source, SourceDist, SourceDistMetadata,
-    Wheel, WheelTagHint, WheelWireSource, ZstdWheel,
+    Wheel, WheelWireSource, ZstdWheel,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -23,7 +23,6 @@ enum MetadataErrorKind {
 #[derive(Debug)]
 pub struct MetadataError {
     kind: Box<MetadataErrorKind>,
-    hint: Option<WheelTagHint>,
 }
 
 impl std::error::Error for MetadataError {
@@ -35,9 +34,6 @@ impl std::error::Error for MetadataError {
 impl std::fmt::Display for MetadataError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.kind)?;
-        if let Some(hint) = &self.hint {
-            write!(f, "\n\n{hint}")?;
-        }
         Ok(())
     }
 }
@@ -49,7 +45,6 @@ where
     fn from(err: E) -> Self {
         Self {
             kind: Box::new(MetadataErrorKind::from(err)),
-            hint: None,
         }
     }
 }
@@ -197,7 +192,7 @@ impl MetadataNode {
 struct MetadataNodeId {
     /// The name of the package
     name: PackageName,
-    /// The version of the package, if any could be found (workspace packages may have no version)
+    /// The version of the package, if any could be found (source trees may have no version)
     #[serde(skip_serializing_if = "Option::is_none", default)]
     version: Option<Version>,
     /// The source of the package (directory, registry, URL...)
@@ -206,6 +201,11 @@ struct MetadataNodeId {
     kind: MetadataNodeKind,
 }
 
+/// This is intended to be an opaque unique id for referring to a node
+///
+/// It's human readable for convenience but parsing it or relying on it is inadvisable.
+/// As currently implemented this is just a concatenation of the 4 fields in `MetadataNodeId`
+/// which every node includes, so parsing it is just making more work for yourself.
 type MetadataNodeIdFlat = String;
 
 impl MetadataNodeId {
@@ -422,8 +422,8 @@ impl MetadataSourceDist {
 #[serde(rename_all = "snake_case")]
 struct MetadataSourceDistMetadata {
     /// A hash of the source distribution.
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    hash: Option<Hash>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+    hashes: BTreeMap<HashAlgorithm, Hash>,
     /// The size of the source distribution in bytes.
     ///
     /// This is only present for source distributions that come from registries.
@@ -434,12 +434,25 @@ struct MetadataSourceDistMetadata {
     upload_time: Option<jiff::Timestamp>,
 }
 
+/// The name of a hash algorithm ("sha256", "blake2b", "md5", etc)
+type HashAlgorithm = String;
+/// A hex encoded digest of the file
 type Hash = String;
+
+/// Oh you wanted a hash map? No this is the hashes map, a sorted map of hashes!
+///
+/// We prefer matching PEP 691 (JSON-based Simple API for Python) here for future-proofing
+/// and convenience of consumption.
+fn hashes_map(hash: &crate::lock::Hash) -> BTreeMap<HashAlgorithm, Hash> {
+    Some((hash.0.algorithm.to_string(), hash.0.digest.to_string()))
+        .into_iter()
+        .collect()
+}
 
 impl MetadataSourceDistMetadata {
     fn from_sdist(sdist: &SourceDistMetadata) -> Self {
         Self {
-            hash: sdist.hash.as_ref().map(ToString::to_string),
+            hashes: sdist.hash.as_ref().map(hashes_map).unwrap_or_default(),
             size: sdist.size,
             upload_time: sdist.upload_time,
         }
@@ -457,8 +470,8 @@ struct MetadataWheel {
     /// This is only present for wheels that come from registries and direct
     /// URLs. Wheels from git or path dependencies do not have hashes
     /// associated with them.
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    hash: Option<Hash>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+    hashes: BTreeMap<HashAlgorithm, Hash>,
     /// The size of the built distribution in bytes.
     ///
     /// This is only present for wheels that come from registries.
@@ -485,7 +498,7 @@ impl MetadataWheel {
     fn from_wheel(wheel: &Wheel) -> Self {
         Self {
             url: MetadataWheelWireSource::from_wheel(&wheel.url),
-            hash: wheel.hash.as_ref().map(ToString::to_string),
+            hashes: wheel.hash.as_ref().map(hashes_map).unwrap_or_default(),
             size: wheel.size,
             upload_time: wheel.upload_time,
             filename: wheel.filename.clone(),
@@ -495,7 +508,7 @@ impl MetadataWheel {
 }
 
 #[derive(Clone, Debug, serde::Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(untagged, rename_all = "snake_case")]
 enum MetadataWheelWireSource {
     Url { url: UrlString },
     Path { path: PortablePathBuf },
@@ -518,8 +531,8 @@ impl MetadataWheelWireSource {
 
 #[derive(Clone, Debug, serde::Serialize)]
 struct MetadataZstdWheel {
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    hash: Option<Hash>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+    hashes: BTreeMap<HashAlgorithm, Hash>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     size: Option<u64>,
 }
@@ -527,7 +540,7 @@ struct MetadataZstdWheel {
 impl MetadataZstdWheel {
     fn from_wheel(wheel: &ZstdWheel) -> Self {
         Self {
-            hash: wheel.hash.as_ref().map(ToString::to_string),
+            hashes: wheel.hash.as_ref().map(hashes_map).unwrap_or_default(),
             size: wheel.size,
         }
     }
