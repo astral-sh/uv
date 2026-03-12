@@ -114,6 +114,13 @@ cargo test --package <package> --test <test> -- <test_name> -- --exact
 cargo insta review
 ```
 
+A script is available to update the snapshots based on results in CI. This is useful for updating
+snapshots without re-running the test suite and for updating platform-specific snapshots.
+
+```shell
+./scripts/apply-ci-snapshots.sh
+```
+
 ### Git and Git LFS
 
 A subset of uv tests require both [Git](https://git-scm.com) and [Git LFS](https://git-lfs.com/) to
