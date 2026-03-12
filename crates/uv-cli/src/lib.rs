@@ -865,6 +865,7 @@ pub struct CacheNamespace {
 #[derive(Subcommand)]
 pub enum CacheCommand {
     /// Clear the cache, removing all entries or those linked to specific packages.
+    #[command(alias = "clear")]
     Clean(CleanArgs),
     /// Prune all unreachable objects from the cache.
     Prune(PruneArgs),
