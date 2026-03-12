@@ -3,8 +3,10 @@ use rustc_hash::FxHashMap;
 use uv_distribution_types::Requirement;
 use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
+use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKind};
 
 use crate::ResolverEnvironment;
+use crate::universal_marker::{ConflictMarker, UniversalMarker};
 
 /// A set of package names associated with a given fork.
 pub(crate) type ForkSet = ForkMap<()>;
@@ -17,7 +19,52 @@ pub(crate) struct ForkMap<T>(FxHashMap<PackageName, Vec<Entry<T>>>);
 #[derive(Debug, Clone)]
 struct Entry<T> {
     value: T,
+    scope: ForkScope,
+}
+
+/// The fork visibility of an entry.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub(crate) struct ForkScope {
     marker: MarkerTree,
+    conflict: Option<ConflictItem>,
+}
+
+impl ForkScope {
+    pub(crate) fn new(marker: MarkerTree, conflict: Option<ConflictItem>) -> Self {
+        Self { marker, conflict }
+    }
+
+    pub(crate) fn from_requirement(requirement: &Requirement) -> Self {
+        let conflict = match &requirement.source {
+            uv_distribution_types::RequirementSource::Registry { conflict, .. } => conflict.clone(),
+            uv_distribution_types::RequirementSource::Url { .. }
+            | uv_distribution_types::RequirementSource::Git { .. }
+            | uv_distribution_types::RequirementSource::Path { .. }
+            | uv_distribution_types::RequirementSource::Directory { .. } => None,
+        };
+        let marker = conflict
+            .as_ref()
+            .filter(|conflict_item| matches!(conflict_item.kind(), ConflictKind::Group(_)))
+            .map_or(requirement.marker, |conflict_item| {
+                UniversalMarker::new(
+                    requirement.marker.without_extras(),
+                    ConflictMarker::from_conflict_item(conflict_item),
+                )
+                .combined()
+            });
+        Self::new(marker, conflict)
+    }
+
+    pub(crate) fn conflict(&self) -> Option<ConflictItemRef<'_>> {
+        self.conflict.as_ref().map(ConflictItem::as_ref)
+    }
+
+    fn matches(&self, env: &ResolverEnvironment) -> bool {
+        env.included_by_marker(self.marker)
+            && self
+                .conflict()
+                .is_none_or(|conflict| env.included_by_group(conflict))
+    }
 }
 
 impl<T> Default for ForkMap<T> {
@@ -29,15 +76,23 @@ impl<T> Default for ForkMap<T> {
 impl<T> ForkMap<T> {
     /// Associate a value with the [`Requirement`] in a given fork.
     pub(crate) fn add(&mut self, requirement: &Requirement, value: T) {
-        let entry = Entry {
+        self.add_with_scope(
+            &requirement.name,
+            ForkScope::from_requirement(requirement),
             value,
-            marker: requirement.marker,
-        };
+        );
+    }
 
-        self.0
-            .entry(requirement.name.clone())
-            .or_default()
-            .push(entry);
+    /// Associate a value with a package name and scope in a given fork.
+    pub(crate) fn add_with_scope(
+        &mut self,
+        package_name: &PackageName,
+        scope: ForkScope,
+        value: T,
+    ) {
+        let entry = Entry { value, scope };
+
+        self.0.entry(package_name.clone()).or_default().push(entry);
     }
 
     /// Returns `true` if the map contains any values for a package that are compatible with the
@@ -62,7 +117,7 @@ impl<T> ForkMap<T> {
         };
         values
             .iter()
-            .filter(|entry| env.included_by_marker(entry.marker))
+            .filter(|entry| entry.scope.matches(env))
             .map(|entry| &entry.value)
             .collect()
     }

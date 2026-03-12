@@ -1,9 +1,9 @@
-use uv_distribution_types::{IndexMetadata, RequirementSource};
-use uv_normalize::PackageName;
-use uv_pypi_types::ConflictItem;
-
 use crate::resolver::ForkMap;
 use crate::{DependencyMode, Manifest, ResolverEnvironment};
+use uv_distribution_types::{IndexMetadata, RequirementSource};
+use uv_normalize::PackageName;
+use uv_pep508::RequirementOrigin;
+use uv_pypi_types::ConflictItem;
 
 /// A map of package names to their explicit index.
 ///
@@ -46,8 +46,15 @@ impl Indexes {
                 continue;
             };
             let index = index.clone();
-            let conflict = conflict.clone();
-            indexes.add(&requirement, Entry { index, conflict });
+            let conflict = conflict
+                .clone()
+                .or_else(|| match requirement.origin.as_ref() {
+                    Some(RequirementOrigin::Group(_, Some(project_name), group)) => {
+                        Some(ConflictItem::from((project_name.clone(), group.clone())))
+                    }
+                    _ => None,
+                });
+            indexes.add(requirement.as_ref(), Entry { index, conflict });
         }
 
         Self(indexes)

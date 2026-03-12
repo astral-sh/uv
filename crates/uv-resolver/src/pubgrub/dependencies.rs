@@ -4,15 +4,67 @@ use std::iter;
 use either::Either;
 use pubgrub::Ranges;
 
-use uv_distribution_types::{Requirement, RequirementSource};
+use uv_distribution_types::{IndexMetadata, Requirement, RequirementSource};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
+use uv_pep508::RequirementOrigin;
 use uv_pypi_types::{
     ConflictItemRef, Conflicts, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl,
     ParsedUrl, VerbatimParsedUrl,
 };
 
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
+use crate::universal_marker::{ConflictMarker, UniversalMarker};
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub(crate) enum DependencySource {
+    #[default]
+    Unspecified,
+    Url(Box<VerbatimParsedUrl>),
+    ExplicitIndex(IndexMetadata),
+}
+
+impl DependencySource {
+    pub(crate) fn from_requirement(requirement: &Requirement) -> Self {
+        match &requirement.source {
+            RequirementSource::Registry { index, .. }
+                if matches!(
+                    requirement.origin.as_ref(),
+                    Some(RequirementOrigin::Group(_, Some(_), _))
+                ) =>
+            {
+                index
+                    .clone()
+                    .map(Self::ExplicitIndex)
+                    .unwrap_or(Self::Unspecified)
+            }
+            RequirementSource::Registry { .. } => Self::Unspecified,
+            RequirementSource::Url { .. }
+            | RequirementSource::Git { .. }
+            | RequirementSource::Path { .. }
+            | RequirementSource::Directory { .. } => requirement
+                .source
+                .to_verbatim_parsed_url()
+                .map(Box::new)
+                .map(Self::Url)
+                .unwrap_or(Self::Unspecified),
+        }
+    }
+
+    pub(crate) fn verbatim_url(&self) -> Option<&VerbatimParsedUrl> {
+        match self {
+            Self::Url(url) => Some(url.as_ref()),
+            Self::Unspecified | Self::ExplicitIndex(_) => None,
+        }
+    }
+
+    pub(crate) fn explicit_index(&self) -> Option<&IndexMetadata> {
+        match self {
+            Self::ExplicitIndex(index) => Some(index),
+            Self::Unspecified | Self::Url(_) => None,
+        }
+    }
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct PubGrubDependency {
@@ -34,10 +86,12 @@ pub(crate) struct PubGrubDependency {
     /// we introduce this parent field to enable "delayed" filtering.
     pub(crate) parent: Option<PackageName>,
 
-    /// This field is set if the [`Requirement`] had a URL. We still use a URL from [`Urls`]
-    /// even if this field is None where there is an override with a URL or there is a different
-    /// requirement or constraint for the same package that has a URL.
-    pub(crate) url: Option<VerbatimParsedUrl>,
+    /// The direct source constraint attached to this dependency edge.
+    ///
+    /// This is only populated when the edge itself needs source identity, e.g. for direct URLs
+    /// or group-scoped explicit indexes. Manifest-wide URL and index constraints are still applied
+    /// separately via `Urls` and `Indexes`.
+    pub(crate) source: DependencySource,
 }
 
 impl PubGrubDependency {
@@ -104,7 +158,7 @@ impl PubGrubDependency {
             let PubGrubRequirement {
                 package,
                 version,
-                url,
+                source,
             } = pubgrub_requirement;
             match &*package {
                 PubGrubPackageInner::Package { .. } => Self {
@@ -115,7 +169,7 @@ impl PubGrubDependency {
                     } else {
                         None
                     },
-                    url,
+                    source,
                 },
                 PubGrubPackageInner::Marker { .. } => Self {
                     package,
@@ -125,7 +179,7 @@ impl PubGrubDependency {
                     } else {
                         None
                     },
-                    url,
+                    source,
                 },
                 PubGrubPackageInner::Extra { name, .. } => {
                     if group_name.is_none() {
@@ -138,7 +192,7 @@ impl PubGrubDependency {
                         package,
                         version,
                         parent: None,
-                        url,
+                        source,
                     }
                 }
                 PubGrubPackageInner::Group { name, .. } => {
@@ -152,7 +206,7 @@ impl PubGrubDependency {
                         package,
                         version,
                         parent: None,
-                        url,
+                        source,
                     }
                 }
                 PubGrubPackageInner::Root(_) => unreachable!("Root package in dependencies"),
@@ -178,10 +232,38 @@ impl PubGrubDependency {
 pub(crate) struct PubGrubRequirement {
     pub(crate) package: PubGrubPackage,
     pub(crate) version: Ranges<Version>,
-    pub(crate) url: Option<VerbatimParsedUrl>,
+    pub(crate) source: DependencySource,
 }
 
 impl PubGrubRequirement {
+    fn package_for_requirement(
+        requirement: &Requirement,
+        extra: Option<ExtraName>,
+        group: Option<GroupName>,
+    ) -> PubGrubPackage {
+        let marker = requirement.marker.without_extras();
+
+        if let Some(extra) = extra {
+            PubGrubPackage::from(PubGrubPackageInner::Extra {
+                name: requirement.name.clone(),
+                extra,
+                marker,
+            })
+        } else if let Some(group) = group {
+            PubGrubPackage::from(PubGrubPackageInner::Group {
+                name: requirement.name.clone(),
+                group: group.clone(),
+                marker: UniversalMarker::new(
+                    marker,
+                    ConflictMarker::group(&requirement.name, &group),
+                )
+                .combined(),
+            })
+        } else {
+            PubGrubPackage::from_base(requirement.name.clone(), marker)
+        }
+    }
+
     /// Convert a [`Requirement`] to a PubGrub-compatible package and range, while returning the URL
     /// on the [`Requirement`], if any.
     pub(crate) fn from_requirement(
@@ -244,17 +326,12 @@ impl PubGrubRequirement {
         };
 
         Self {
-            package: PubGrubPackage::from_package(
-                requirement.name.clone(),
-                extra,
-                group,
-                requirement.marker,
-            ),
+            package: Self::package_for_requirement(requirement, extra, group),
             version: Ranges::full(),
-            url: Some(VerbatimParsedUrl {
+            source: DependencySource::Url(Box::new(VerbatimParsedUrl {
                 parsed_url,
                 verbatim: verbatim_url.clone(),
-            }),
+            })),
         }
     }
 
@@ -265,13 +342,8 @@ impl PubGrubRequirement {
         requirement: &Requirement,
     ) -> Self {
         Self {
-            package: PubGrubPackage::from_package(
-                requirement.name.clone(),
-                extra,
-                group,
-                requirement.marker,
-            ),
-            url: None,
+            package: Self::package_for_requirement(requirement, extra, group),
+            source: DependencySource::from_requirement(requirement),
             version: Ranges::from(specifier.clone()),
         }
     }
