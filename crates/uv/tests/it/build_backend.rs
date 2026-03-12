@@ -1564,3 +1564,39 @@ fn tool_uv_build_backend_wrong_build_backend() -> Result<()> {
 
     Ok(())
 }
+
+/// Show a warning when the project uses deprecated `License ::` classifiers.
+#[test]
+fn warn_on_license_classifier() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        classifiers = ["License :: OSI Approved :: MIT License"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    context.temp_dir.child("src/foo/__init__.py").touch()?;
+
+    uv_snapshot!(context.filters(), context.build(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+    warning: Found license classifier `License :: OSI Approved :: MIT License`. License classifiers are ambiguous and deprecated per PEP 639; projects should use `project.license` and `project.license-files` instead.
+    Building wheel from source distribution (uv build backend)...
+    Successfully built dist/foo-1.0.0.tar.gz
+    Successfully built dist/foo-1.0.0-py3-none-any.whl
+    ");
+
+    Ok(())
+}
