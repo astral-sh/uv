@@ -147,7 +147,7 @@ class Variant(StrEnum):
     @classmethod
     def from_build_options(
         cls: type["Variant"], build_options: list[str]
-    ) -> "Variant" | None:
+    ) -> "Variant | None":
         if "debug" in build_options and "freethreaded" in build_options:
             return cls.FREETHREADED_DEBUG
         elif "debug" in build_options:
