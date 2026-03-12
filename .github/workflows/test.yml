@@ -99,6 +99,7 @@ jobs:
           UV_INTERNAL__TEST_ALT_FS: /tmpfs
           UV_INTERNAL__TEST_LOWLINKS_FS: /minix
           # Write pending snapshots to a separate directory for artifact upload
+          INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
           cargo nextest run \
@@ -114,6 +115,7 @@ jobs:
           name: pending-snapshots-linux
           path: pending-snapshots/
           if-no-files-found: ignore
+          include-hidden-files: true
           retention-days: 14
 
   cargo-test-macos:
@@ -163,6 +165,7 @@ jobs:
           UV_INTERNAL__TEST_NOCOW_FS: ${{ env.HFS_MOUNT }}
           UV_INTERNAL__TEST_ALT_FS: ${{ env.HFS_MOUNT }}
           # Write pending snapshots to a separate directory for artifact upload
+          INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
           cargo nextest run \
@@ -179,6 +182,7 @@ jobs:
           name: pending-snapshots-macos
           path: pending-snapshots/
           if-no-files-found: ignore
+          include-hidden-files: true
           retention-days: 14
 
   cargo-test-windows:
@@ -239,6 +243,7 @@ jobs:
           RUST_BACKTRACE: 1
           UV_INTERNAL__TEST_LOWLINKS_FS: "C:\\uv"
           # Write pending snapshots to a separate directory for artifact upload
+          INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         shell: bash
         run: |
@@ -257,4 +262,5 @@ jobs:
           name: pending-snapshots-windows-${{ matrix.partition }}
           path: pending-snapshots/
           if-no-files-found: ignore
+          include-hidden-files: true
           retention-days: 14
