@@ -519,11 +519,42 @@ def get_operating_system_and_architecture():
                 architecture = "i386"
 
         version = version.split(".")
+
+        # Detect Apple's SYSTEM_VERSION_COMPAT shim (macOS 11 Big Sur+).
+        # When Python was built against an older SDK (e.g. conda with
+        # MACOSX_DEPLOYMENT_TARGET=10.15), platform.mac_ver() returns
+        # "10.16" instead of the real macOS version. Re-query with the
+        # shim disabled, matching the behavior of the `packaging` library:
+        # https://github.com/pypa/packaging/blob/main/src/packaging/tags.py
+        # See: https://github.com/astral-sh/uv/issues/14267
+        if int(version[0]) == 10 and int(version[1]) == 16:
+            try:
+                import subprocess
+
+                real_version = subprocess.run(
+                    [
+                        sys.executable,
+                        "-sS",
+                        "-c",
+                        "import platform; print(platform.mac_ver()[0])",
+                    ],
+                    check=True,
+                    env={"SYSTEM_VERSION_COMPAT": "0"},
+                    stdout=subprocess.PIPE,
+                    text=True,
+                ).stdout.strip()
+                if real_version:
+                    version = real_version.split(".")
+            except (subprocess.CalledProcessError, OSError):
+                # On failure, `version` remains "10.16" as before
+                pass
+
         operating_system = {
             "name": "macos",
             "major": int(version[0]),
             "minor": int(version[1]),
         }
+
     elif operating_system == "ios":
         ios_ver = platform.ios_ver()
         version = ios_ver.release.split(".")
