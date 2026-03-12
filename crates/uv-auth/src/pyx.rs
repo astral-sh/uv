@@ -104,6 +104,35 @@ impl From<AccessToken> for Credentials {
     }
 }
 
+/// A pyx access token annotated with its caching scope.
+///
+/// - [`Global`](Self::Global) tokens (API key, OAuth, or `PYX_AUTH_TOKEN`) apply to all
+///   workspaces; once fetched, they are reused for every subsequent request.
+/// - [`Workspace`](Self::Workspace) tokens (Trusted Access) are minted per-workspace via an
+///   OIDC exchange and must be fetched and cached independently per workspace.
+#[derive(Debug, Clone)]
+pub enum PyxAccessToken {
+    /// A token obtained from a global credential (API key, OAuth, or `PYX_AUTH_TOKEN` env var).
+    Global(AccessToken),
+    /// A Trusted Access token minted for a specific pyx workspace.
+    Workspace(AccessToken),
+}
+
+impl PyxAccessToken {
+    /// Unwrap into the inner [`AccessToken`].
+    pub fn into_access_token(self) -> AccessToken {
+        match self {
+            Self::Global(token) | Self::Workspace(token) => token,
+        }
+    }
+}
+
+impl From<PyxAccessToken> for AccessToken {
+    fn from(token: PyxAccessToken) -> Self {
+        token.into_access_token()
+    }
+}
+
 /// Reason why a token is considered expired and needs refresh.
 #[derive(Debug, Clone)]
 enum ExpiredTokenReason {
@@ -276,20 +305,13 @@ impl PyxTokenStore {
         &self.api
     }
 
-    /// Retrieve the access token set via the `PYX_AUTH_TOKEN` (or `UV_AUTH_TOKEN`) environment
-    /// variable, if any.
-    pub fn auth_token_from_env(&self) -> Option<AccessToken> {
-        read_pyx_auth_token()
-    }
-
-    /// Get or initialize an [`AccessToken`] from the store.
+    /// Get or initialize a [`PyxAccessToken`] from the store.
     ///
-    /// If an access token is set in the environment, it will be returned as-is.
+    /// If an access token is set in the environment, it will be returned as [`PyxAccessToken::Global`].
     ///
     /// If an access token is present on-disk, it will be returned (and refreshed, if necessary).
-    ///
-    /// If no access token is found, but an API key is present, the API key will be used to
-    /// bootstrap an access token.
+    /// OAuth and API-key tokens are returned as [`PyxAccessToken::Global`]; Trusted Access tokens
+    /// are returned as [`PyxAccessToken::Workspace`].
     ///
     /// `workspace` is the pyx workspace name, required to bootstrap a Trusted Access token. If
     /// `None`, Trusted Access bootstrapping is skipped.
@@ -298,17 +320,20 @@ impl PyxTokenStore {
         client: &ClientWithMiddleware,
         tolerance_secs: u64,
         workspace: Option<&str>,
-    ) -> Result<Option<AccessToken>, TokenStoreError> {
-        // If the access token is already set in the environment, return it.
+    ) -> Result<Option<PyxAccessToken>, TokenStoreError> {
+        // If the access token is already set in the environment, return it as global.
         if let Some(access_token) = read_pyx_auth_token() {
-            return Ok(Some(access_token));
+            return Ok(Some(PyxAccessToken::Global(access_token)));
         }
 
         // Initialize the tokens from the store.
         let tokens = self.init(client, tolerance_secs, workspace).await?;
 
-        // Extract the access token from the OAuth tokens or API key.
-        Ok(tokens.map(AccessToken::from))
+        // Annotate with scope: Trusted Access tokens are workspace-scoped, everything else is global.
+        Ok(tokens.map(|tokens| match tokens {
+            PyxTokens::TrustedAccess(_) => PyxAccessToken::Workspace(AccessToken::from(tokens)),
+            _ => PyxAccessToken::Global(AccessToken::from(tokens)),
+        }))
     }
 
     /// Initialize the [`PyxTokens`] from the store.

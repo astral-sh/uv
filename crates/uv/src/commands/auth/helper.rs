@@ -98,7 +98,8 @@ async fn credentials_for_url(
             )
             .await
             .context("Authentication failure")?
-            .context("No access token found")?;
+            .context("No access token found")?
+            .into_access_token();
         return Ok(Some(Credentials::bearer(token.into_bytes())));
     }
     let backend = AuthBackend::from_settings(preview).await?;

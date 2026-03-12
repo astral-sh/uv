@@ -95,7 +95,7 @@ async fn pyx_refresh(store: &PyxTokenStore, client: &BaseClient, printer: Printe
         .await
     {
         // If the tokens were successfully refreshed, return them.
-        Ok(Some(token)) => token,
+        Ok(Some(token)) => token.into_access_token(),
 
         // If the token store is empty, prompt for login.
         Ok(None) => {

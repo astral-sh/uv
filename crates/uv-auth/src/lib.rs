@@ -5,7 +5,8 @@ pub use index::{AuthPolicy, Index, Indexes};
 pub use keyring::KeyringProvider;
 pub use middleware::AuthMiddleware;
 pub use pyx::{
-    DEFAULT_TOLERANCE_SECS, PyxJwt, PyxOAuthTokens, PyxTokenStore, PyxTokens, TokenStoreError,
+    DEFAULT_TOLERANCE_SECS, PyxAccessToken, PyxJwt, PyxOAuthTokens, PyxTokenStore, PyxTokens,
+    TokenStoreError,
     is_default_pyx_domain,
 };
 pub use realm::{Realm, RealmRef};

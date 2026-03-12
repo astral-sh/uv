@@ -16,7 +16,7 @@ use uv_warnings::owo_colors::OwoColorize;
 
 use crate::credentials::Authentication;
 use crate::providers::{GcsEndpointProvider, HuggingFaceProvider, S3EndpointProvider};
-use crate::pyx::{DEFAULT_TOLERANCE_SECS, PyxTokenStore, PyxTokens};
+use crate::pyx::{DEFAULT_TOLERANCE_SECS, PyxAccessToken, PyxTokenStore};
 use crate::{
     AccessToken, CredentialsCache, KeyringProvider,
     cache::FetchUrl,
@@ -813,34 +813,27 @@ impl AuthMiddleware {
                         // so we know how to update the state afterward.
                         let in_workspace_mode = matches!(*token_state, PyxTokenState::Workspace(_));
 
-                        // Determine the access token and whether it is global (one token
-                        // shared across all workspaces) or workspace-specific (Trusted Access).
-                        let (token, is_global) = if let Some(env_token) =
-                            token_store.auth_token_from_env()
+                        let pyx_token = match token_store
+                            .access_token(
+                                base_client,
+                                DEFAULT_TOLERANCE_SECS,
+                                Some(workspace.as_str()),
+                            )
+                            .await
                         {
-                            // Environment variable tokens are always global.
-                            (Some(env_token), true)
-                        } else {
-                            let tokens = match token_store
-                                .init(
-                                    base_client,
-                                    DEFAULT_TOLERANCE_SECS,
-                                    Some(workspace.as_str()),
-                                )
-                                .await
-                            {
-                                Ok(tokens) => tokens,
-                                Err(err) => {
-                                    warn!("Failed to initialize token store: {err}");
-                                    None
-                                }
-                            };
-                            // Trusted Access tokens are workspace-specific;
-                            // everything else (OAuth, API key, or no credentials)
-                            // is treated as global so we only exchange once.
-                            let is_global = !matches!(tokens, Some(PyxTokens::TrustedAccess(_)));
-                            let token = tokens.map(AccessToken::from);
-                            (token, is_global)
+                            Ok(token) => token,
+                            Err(err) => {
+                                warn!("Failed to initialize token store: {err}");
+                                None
+                            }
+                        };
+
+                        // `Global` tokens (API key, OAuth, env var) apply to every workspace;
+                        // `Workspace` tokens (Trusted Access) are minted per-workspace.
+                        let (token, is_global) = match pyx_token {
+                            Some(PyxAccessToken::Global(token)) => (Some(token), true),
+                            Some(PyxAccessToken::Workspace(token)) => (Some(token), false),
+                            None => (None, true),
                         };
 
                         if in_workspace_mode {
