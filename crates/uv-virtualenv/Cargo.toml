@@ -19,6 +19,7 @@ workspace = true
 
 [dependencies]
 uv-console = { workspace = true }
+uv-errors = { workspace = true }
 uv-fs = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }

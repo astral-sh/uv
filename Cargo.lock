@@ -5757,6 +5757,7 @@ dependencies = [
  "uv-distribution",
  "uv-distribution-filename",
  "uv-distribution-types",
+ "uv-errors",
  "uv-extract",
  "uv-flags",
  "uv-fs",
@@ -6002,6 +6003,7 @@ dependencies = [
  "uv-configuration",
  "uv-distribution",
  "uv-distribution-types",
+ "uv-errors",
  "uv-fs",
  "uv-normalize",
  "uv-pep440",
@@ -6287,6 +6289,7 @@ dependencies = [
  "uv-distribution",
  "uv-distribution-filename",
  "uv-distribution-types",
+ "uv-errors",
  "uv-git",
  "uv-install-wheel",
  "uv-installer",
@@ -6331,6 +6334,7 @@ dependencies = [
  "uv-configuration",
  "uv-distribution-filename",
  "uv-distribution-types",
+ "uv-errors",
  "uv-extract",
  "uv-flags",
  "uv-fs",
@@ -6393,6 +6397,7 @@ dependencies = [
  "uv-cache-info",
  "uv-cache-key",
  "uv-distribution-filename",
+ "uv-errors",
  "uv-fs",
  "uv-git-types",
  "uv-install-wheel",
@@ -6404,6 +6409,13 @@ dependencies = [
  "uv-redacted",
  "uv-small-str",
  "uv-warnings",
+]
+
+[[package]]
+name = "uv-errors"
+version = "0.0.29"
+dependencies = [
+ "owo-colors",
 ]
 
 [[package]]
@@ -6518,12 +6530,12 @@ dependencies = [
  "fs-err",
  "globset",
  "insta",
- "owo-colors",
  "regex",
  "regex-automata",
  "tempfile",
  "thiserror 2.0.18",
  "tracing",
+ "uv-errors",
  "walkdir",
 ]
 
@@ -6590,6 +6602,7 @@ dependencies = [
  "uv-distribution",
  "uv-distribution-filename",
  "uv-distribution-types",
+ "uv-errors",
  "uv-fs",
  "uv-git-types",
  "uv-install-wheel",
@@ -6902,6 +6915,7 @@ dependencies = [
  "uv-dirs",
  "uv-distribution-filename",
  "uv-distribution-types",
+ "uv-errors",
  "uv-extract",
  "uv-fs",
  "uv-install-wheel",
@@ -7040,6 +7054,7 @@ dependencies = [
  "uv-distribution",
  "uv-distribution-filename",
  "uv-distribution-types",
+ "uv-errors",
  "uv-flags",
  "uv-fs",
  "uv-git",
@@ -7276,6 +7291,7 @@ dependencies = [
  "uv-configuration",
  "uv-distribution-filename",
  "uv-distribution-types",
+ "uv-errors",
  "uv-git",
  "uv-normalize",
  "uv-once-map",
@@ -7311,6 +7327,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tracing",
  "uv-console",
+ "uv-errors",
  "uv-fs",
  "uv-platform-tags",
  "uv-pypi-types",
@@ -7350,7 +7367,6 @@ dependencies = [
  "ignore",
  "insta",
  "itertools 0.14.0",
- "owo-colors",
  "regex",
  "rustc-hash",
  "schemars",
@@ -7365,6 +7381,7 @@ dependencies = [
  "uv-cache-key",
  "uv-configuration",
  "uv-distribution-types",
+ "uv-errors",
  "uv-fs",
  "uv-git-types",
  "uv-macros",

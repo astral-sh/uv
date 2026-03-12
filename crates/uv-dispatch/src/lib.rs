@@ -61,6 +61,29 @@ pub enum BuildDispatchError {
     Prepare(#[from] uv_installer::PrepareError),
 }
 
+impl uv_errors::Hint for BuildDispatchError {
+    fn hints(&self) -> Vec<std::borrow::Cow<'_, str>> {
+        match self {
+            Self::BuildFrontend(err) => err.hints(),
+            Self::Resolve(err) => err.hints(),
+            Self::Anyhow(err) => {
+                // Walk the anyhow error chain to find hint-bearing errors
+                // (e.g., ResolveError wrapped via `with_context`).
+                for cause in err.chain() {
+                    if let Some(resolve_err) = cause.downcast_ref::<uv_resolver::ResolveError>() {
+                        let hints = resolve_err.hints();
+                        if !hints.is_empty() {
+                            return hints;
+                        }
+                    }
+                }
+                Vec::new()
+            }
+            _ => Vec::new(),
+        }
+    }
+}
+
 impl IsBuildBackendError for BuildDispatchError {
     fn is_build_backend_error(&self) -> bool {
         match self {

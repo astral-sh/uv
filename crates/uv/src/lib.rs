@@ -1330,11 +1330,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
             let message = match InstallSource::detect() {
                 Some(source) => format!(
-                    "{base}\n\n{hint}{colon} You installed uv using {}. To update uv, run `{}`",
+                    "{base}\n\n{prefix} You installed uv using {}. To update uv, run `{}`",
                     source.description(),
                     source.update_instructions().green(),
-                    hint = "hint".bold().cyan(),
-                    colon = ":".bold(),
+                    prefix = uv_errors::HintPrefix,
                     base = BASE_MESSAGE
                 ),
                 None => format!("{BASE_MESSAGE} Please use your package manager to update uv."),
@@ -2715,6 +2714,10 @@ where
         Ok(code) => code.into(),
         Err(err) => {
             trace!("Error trace: {err:?}");
+
+            // Collect hints before rendering the error chain.
+            let hints = commands::diagnostics::hints_for_error(&err);
+
             let mut causes = err.chain();
             eprintln!(
                 "{}: {}",
@@ -2724,6 +2727,12 @@ where
             for err in causes {
                 eprintln!("  {}: {}", "Caused by".red().bold(), err.to_string().trim());
             }
+
+            // Render hints after the error chain.
+            for hint in &hints {
+                eprintln!("\n{} {hint}", uv_errors::HintPrefix);
+            }
+
             ExitStatus::Error.into()
         }
     }

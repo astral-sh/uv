@@ -786,7 +786,8 @@ fn conflict_in_fork() -> Result<()> {
               package-a{sys_platform == 'os2'}>=2
           and your project depends on package-a{sys_platform == 'os2'}<2, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
+
+    hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
     "
     );
 
