@@ -1296,7 +1296,7 @@ fn install_local_wheel() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 

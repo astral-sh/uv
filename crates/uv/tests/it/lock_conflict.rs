@@ -451,7 +451,7 @@ fn extra_multiple_not_conflicting1() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited in [TIME]
+    Checked in [TIME]
     ");
     // And similarly, with project 4.
     uv_snapshot!(
@@ -463,7 +463,7 @@ fn extra_multiple_not_conflicting1() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited in [TIME]
+    Checked in [TIME]
     ");
     // ... and neither does extra2/project3.
     uv_snapshot!(
@@ -475,7 +475,7 @@ fn extra_multiple_not_conflicting1() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     Ok(())

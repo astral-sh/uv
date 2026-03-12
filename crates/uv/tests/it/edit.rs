@@ -3484,7 +3484,7 @@ fn add_update_marker() -> Result<()> {
 
     ----- stderr -----
     Resolved 10 packages in [TIME]
-    Audited 5 packages in [TIME]
+    Checked 5 packages in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -3516,7 +3516,7 @@ fn add_update_marker() -> Result<()> {
 
     ----- stderr -----
     Resolved 10 packages in [TIME]
-    Audited 5 packages in [TIME]
+    Checked 5 packages in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");

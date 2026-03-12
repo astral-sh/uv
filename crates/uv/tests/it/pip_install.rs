@@ -6916,7 +6916,7 @@ fn already_installed_remote_url() {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     // Request reinstallation
@@ -6947,7 +6947,7 @@ fn already_installed_remote_url() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     // Request reinstallation with the full URL
@@ -11374,7 +11374,7 @@ fn change_layout_custom_directory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 

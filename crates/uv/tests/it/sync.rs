@@ -194,7 +194,7 @@ fn empty() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     Ok(())
@@ -529,7 +529,7 @@ fn sync_json() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "#);
 
     // Invalidate the lockfile by changing the requirements.
@@ -3247,7 +3247,7 @@ fn sync_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 10 packages in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--all-groups"), @"
@@ -6751,7 +6751,7 @@ fn sync_active_project_environment() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     // If they disagree, we use `VIRTUAL_ENV` because of `--active`
@@ -6765,7 +6765,7 @@ fn sync_active_project_environment() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     context
@@ -7330,7 +7330,7 @@ fn sync_virtual_env_warning() -> Result<()> {
 
         ----- stderr -----
         Resolved 2 packages in [TIME]
-        Audited 1 package in [TIME]
+        Checked 1 package in [TIME]
         ");
     }
 
@@ -7343,7 +7343,7 @@ fn sync_virtual_env_warning() -> Result<()> {
     ----- stderr -----
     warning: `VIRTUAL_ENV=foo` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Resolved 2 packages in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     // Including absolute paths
@@ -7355,7 +7355,7 @@ fn sync_virtual_env_warning() -> Result<()> {
     ----- stderr -----
     warning: `VIRTUAL_ENV=foo` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Resolved 2 packages in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     // We should not warn if the project environment has been customized and matches
@@ -7400,7 +7400,7 @@ fn sync_virtual_env_warning() -> Result<()> {
     ----- stderr -----
     warning: `VIRTUAL_ENV=foo` does not match the project environment path `[TEMP_DIR]/foo` and will be ignored; use `--active` to target the active environment instead
     Resolved 2 packages in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     // But, a matching absolute path shouldn't warn
@@ -7411,7 +7411,7 @@ fn sync_virtual_env_warning() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     Ok(())
@@ -8972,7 +8972,7 @@ fn sync_partial_environment_delete() -> Result<()> {
     Removed virtual environment at: .venv
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     Ok(())
@@ -11751,7 +11751,7 @@ fn multiple_group_conflicts() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("bar").arg("--group").arg("baz"), @"
@@ -11861,7 +11861,7 @@ fn transitive_group_conflicts_shallow() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("test").arg("--group").arg("magic"), @"
@@ -11958,7 +11958,7 @@ fn transitive_group_conflicts_deep() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--group").arg("magic"), @"
@@ -12632,7 +12632,7 @@ fn sync_when_virtual_environment_incompatible_with_interpreter() -> Result<()> {
     Removed virtual environment at: .venv
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     insta::with_settings!({
@@ -13575,7 +13575,7 @@ fn sync_python_preference() -> Result<()> {
     Removed virtual environment at: .venv
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     // We will use the environment if it exists
@@ -13586,7 +13586,7 @@ fn sync_python_preference() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     // Unless the user requests a Python preference that is incompatible
@@ -13600,7 +13600,7 @@ fn sync_python_preference() -> Result<()> {
     Removed virtual environment at: .venv
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     // If a interpreter cannot be found, we'll fail
@@ -13640,7 +13640,7 @@ fn sync_python_preference() -> Result<()> {
     Removed virtual environment at: .venv
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     // But it can be overridden via the CLI
@@ -13654,7 +13654,7 @@ fn sync_python_preference() -> Result<()> {
     Removed virtual environment at: .venv
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     // `uv run` will invalidate the environment too
@@ -13669,7 +13669,7 @@ fn sync_python_preference() -> Result<()> {
     Removed virtual environment at: .venv
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     Ok(())
@@ -14888,7 +14888,7 @@ fn sync_extra_build_dependencies_cache() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     // Adding a version specifier is fine if match-runtime is false
@@ -14982,7 +14982,7 @@ fn sync_extra_build_dependencies_cache() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     Ok(())

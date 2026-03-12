@@ -1085,7 +1085,7 @@ fn run_pep723_script_lock() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     Traceback (most recent call last):
       File "[TEMP_DIR]/main.py", line 8, in <module>
         import anyio
@@ -1355,7 +1355,7 @@ fn run_with() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 2 packages in [TIME]
+    Checked 2 packages in [TIME]
     Resolved 3 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -1388,7 +1388,7 @@ fn run_with() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 2 packages in [TIME]
+    Checked 2 packages in [TIME]
       × No solution found when resolving `--with` dependencies:
       ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     ");
@@ -2211,7 +2211,7 @@ fn run_with_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
       × Failed to resolve `--with` requirement
       ╰─▶ Distribution not found at: file://[TEMP_DIR]/foo
     ");
@@ -2346,7 +2346,7 @@ fn run_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("--no-project").arg("main.py"), @"
@@ -2944,7 +2944,7 @@ fn run_requirements_txt() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     Resolved 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
@@ -2965,7 +2965,7 @@ fn run_requirements_txt() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     Resolved 2 packages in [TIME]
     ");
 
@@ -4245,7 +4245,7 @@ fn run_script_module_conflict() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     Ok(())
