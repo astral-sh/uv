@@ -318,7 +318,7 @@ http-body-util = { version = "0.1.2" }
 hyper = { version = "1.4.1", features = ["server", "http1"] }
 hyper-util = { version = "0.1.8", features = ["tokio", "server", "http1"] }
 ignore = { version = "0.4.23" }
-insta = { version = "1.40.0", features = ["json", "filters", "redactions"] }
+insta = { version = "1.46.0", features = ["json", "filters", "redactions"] }
 predicates = { version = "3.1.2" }
 rcgen = { version = "0.14.5", features = [
   "crypto",
