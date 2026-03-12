@@ -15885,7 +15885,7 @@ fn sync_reinstalls_on_version_change() -> Result<()> {
     ");
 
     // Sync should reinstall child with the new version. Before the fix for #17370,
-    // this would incorrectly say "Audited 2 packages" and not reinstall the child package.
+    // this would incorrectly say "Checked 2 packages" and not reinstall the child package.
     uv_snapshot!(context.filters(), context.sync(), @"
     success: true
     exit_code: 0

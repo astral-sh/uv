@@ -1671,7 +1671,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     Resolved 1 package in [TIME]
     ");
 
@@ -1772,7 +1772,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     Resolved 1 package in [TIME]
     ");
 
@@ -5964,7 +5964,7 @@ fn run_windows_legacy_scripts() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "###);
 
     // Test with explicit .cmd extension
@@ -6005,7 +6005,7 @@ fn run_windows_legacy_scripts() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "###);
 
     // Test with explicit .ps1 extension
@@ -6046,7 +6046,7 @@ fn run_windows_legacy_scripts() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "###);
 
     // Test without explicit extension (.ps1 should be used) as there's no .exe available.
@@ -6087,7 +6087,7 @@ fn run_windows_legacy_scripts() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "###);
 
     Ok(())
