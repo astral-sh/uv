@@ -43,14 +43,14 @@ else
         exit 1
     fi
 
-    echo "Looking up PR for branch '$branch'..."
     pr_number="$(gh pr view "$branch" --repo "$REPO" --json number --jq '.number' 2>/dev/null || true)"
     if [[ -z "$pr_number" ]]; then
         echo "error: no PR found for branch '$branch'" >&2
         exit 1
     fi
 
-    echo "Found PR #$pr_number, looking for latest CI run..."
+    echo "Found pull request #$pr_number for branch '$branch'..."
+
     run_id="$(gh run list \
         --repo "$REPO" \
         --workflow ci.yml \
@@ -62,11 +62,11 @@ else
         echo "error: no CI runs found for branch '$branch'" >&2
         exit 1
     fi
-    echo "Using run $run_id"
+    echo "Found latest CI run $run_id"
 fi
 
 # Download all pending-snapshots artifacts from the run
-echo "Downloading pending snapshot artifacts from run $run_id..."
+echo "Downloading pending snapshot artifacts..."
 mkdir -p "$DOWNLOAD_DIR"
 gh run download "$run_id" \
     --repo "$REPO" \
@@ -81,8 +81,7 @@ if [[ "$artifact_count" -eq 0 ]]; then
     exit 0
 fi
 
-echo "Downloaded $artifact_count artifact(s):"
-find "$DOWNLOAD_DIR" -mindepth 1 -maxdepth 1 -type d -exec basename {} \;
+echo "Downloaded $artifact_count artifact(s)"
 
 # Merge all artifacts into a single pending-snapshots directory.
 # Different platforms may produce different snapshots; we collect them all.
@@ -99,9 +98,7 @@ if [[ "$snapshot_count" -eq 0 ]]; then
     exit 0
 fi
 
-echo "Found $snapshot_count pending snapshot(s)."
-echo ""
+echo "Applying $snapshot_count snapshot change(s)..."
 
 # Use cargo-insta with INSTA_PENDING_DIR to apply the snapshots
-echo "Running 'cargo insta $action' with pending snapshots..."
 INSTA_PENDING_DIR="$merged_dir" cargo insta "$action" --workspace
