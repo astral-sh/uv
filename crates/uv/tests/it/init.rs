@@ -175,7 +175,7 @@ fn init_application() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     Ok(())

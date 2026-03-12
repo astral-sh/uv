@@ -89,7 +89,7 @@ fn run_with_python_version() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     ");
 
     // This time, we target Python 3.11 instead.
@@ -200,7 +200,7 @@ fn run_args() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     Ok(())
@@ -390,7 +390,7 @@ fn run_pep723_script() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     ");
 
     // If the script contains a PEP 723 tag, it can omit the dependencies field.
@@ -1037,7 +1037,7 @@ fn run_pep723_script_lock() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     // With a lockfile, running with `--locked` should not warn.
@@ -1049,7 +1049,7 @@ fn run_pep723_script_lock() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     // Modify the metadata.
@@ -1325,7 +1325,7 @@ fn run_with() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 2 packages in [TIME]
+    Checked 2 packages in [TIME]
     ");
 
     // Unless the user requests a different version.
@@ -1337,7 +1337,7 @@ fn run_with() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 2 packages in [TIME]
+    Checked 2 packages in [TIME]
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -1758,7 +1758,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     Resolved 1 package in [TIME]
     ");
 
@@ -1898,7 +1898,7 @@ fn run_with_build_constraints() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Audited 5 packages in [TIME]
+    Checked 5 packages in [TIME]
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -2015,7 +2015,7 @@ fn run_in_workspace() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     Traceback (most recent call last):
       File "[TEMP_DIR]/main.py", line 1, in <module>
         import iniconfig
@@ -2048,7 +2048,7 @@ fn run_in_workspace() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     Traceback (most recent call last):
       File "[TEMP_DIR]/main.py", line 1, in <module>
         import typing_extensions
@@ -2142,7 +2142,7 @@ fn run_with_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -2157,7 +2157,7 @@ fn run_with_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     ");
 
     // Similarly, an already editable requirement does not require a layer
@@ -2200,7 +2200,7 @@ fn run_with_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     ");
 
     // If invalid, we should reference `--with-editable`.
@@ -2320,7 +2320,7 @@ fn run_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Audited 5 packages in [TIME]
+    Checked 5 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--all-groups").arg("main.py"), @"
@@ -2333,7 +2333,7 @@ fn run_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Audited 5 packages in [TIME]
+    Checked 5 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--all-groups").arg("--no-group").arg("bar").arg("main.py"), @"
@@ -2839,7 +2839,7 @@ fn run_empty_requirements_txt() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     warning: Requirements file `requirements.txt` does not contain any dependencies
     ");
 
@@ -2909,7 +2909,7 @@ fn run_requirements_txt() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     ");
 
     // Unless the user requests a different version.
@@ -2922,7 +2922,7 @@ fn run_requirements_txt() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -3710,7 +3710,7 @@ fn virtual_empty() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     // `run --no-project` should also work fine
@@ -4157,7 +4157,7 @@ fn run_script_without_build_system() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     error: Failed to spawn: `entry`
       Caused by: No such file or directory (os error 2)
     ");
@@ -4221,7 +4221,7 @@ fn run_script_module_conflict() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     // Even if the working directory is `src`
@@ -4233,7 +4233,7 @@ fn run_script_module_conflict() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     // Unless the user opts-in to module running with `-m`
@@ -4500,7 +4500,7 @@ fn run_linked_environment_path() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    Audited 6 packages in [TIME]
+    Checked 6 packages in [TIME]
     ");
 
     // And, similarly, the entrypoint should use `target`
@@ -4575,7 +4575,7 @@ fn run_active_project_environment() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     context
@@ -5289,7 +5289,7 @@ fn run_default_groups() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Audited 5 packages in [TIME]
+    Checked 5 packages in [TIME]
     ");
 
     // Using `--only-group` should exclude the defaults
@@ -5388,7 +5388,7 @@ fn run_default_groups() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Audited 5 packages in [TIME]
+    Checked 5 packages in [TIME]
     ");
 
     Ok(())
@@ -5504,7 +5504,7 @@ fn run_groups_requires_python() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Audited 2 packages in [TIME]
+    Checked 2 packages in [TIME]
     ");
 
     // Explicitly requesting an in-range python can downgrade
@@ -5712,7 +5712,7 @@ fn run_repeated() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     Resolved 1 package in [TIME]
     ");
 
@@ -5799,7 +5799,7 @@ fn run_without_overlay() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     Resolved 1 package in [TIME]
     ");
 
@@ -6395,7 +6395,7 @@ fn isolate_child_environment() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     Traceback (most recent call last):
       File "<string>", line 1, in <module>
     ModuleNotFoundError: No module named 'iniconfig'
@@ -6409,7 +6409,7 @@ fn isolate_child_environment() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]

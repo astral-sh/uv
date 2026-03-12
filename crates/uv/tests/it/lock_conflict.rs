@@ -159,7 +159,7 @@ fn extra_basic() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited in [TIME]
+    Checked in [TIME]
     ");
     // Another install, but with one of the extras enabled.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=extra1"), @"
@@ -403,7 +403,7 @@ fn extra_multiple_not_conflicting1() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited in [TIME]
+    Checked in [TIME]
     ");
     // extra1/extra2 conflict!
     uv_snapshot!(
@@ -439,7 +439,7 @@ fn extra_multiple_not_conflicting1() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited in [TIME]
+    Checked in [TIME]
     ");
     // ... and neither does extra2/project3.
     uv_snapshot!(
@@ -1300,7 +1300,7 @@ fn extra_unconditional_in_optional() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     // This should install `sortedcontainers==2.3.0`.
@@ -2039,7 +2039,7 @@ fn group_basic() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited in [TIME]
+    Checked in [TIME]
     ");
     // Another install, but with one of the groups enabled.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group1"), @"
@@ -2206,7 +2206,7 @@ fn group_default() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     // Another install, but with the other group enabled. This should error, since `group1` is
@@ -2409,7 +2409,7 @@ fn mixed() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited in [TIME]
+    Checked in [TIME]
     ");
     // Another install, but with the group enabled.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group1"), @"
@@ -4274,7 +4274,7 @@ fn shared_dependency_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     ");
 
     Ok(())
@@ -4448,7 +4448,7 @@ fn shared_dependency_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     ");
 
     Ok(())
@@ -4629,7 +4629,7 @@ fn shared_dependency_mixed() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     ");
 
     Ok(())
@@ -4905,7 +4905,7 @@ fn jinja_no_conflict_markers1() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
@@ -5067,7 +5067,7 @@ fn jinja_no_conflict_markers2() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();

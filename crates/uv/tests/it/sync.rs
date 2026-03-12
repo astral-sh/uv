@@ -180,7 +180,7 @@ fn empty() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     assert!(context.temp_dir.child("uv.lock").exists());
@@ -488,7 +488,7 @@ fn sync_json() -> Result<()> {
     }
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "#);
 
     uv_snapshot!(context.filters(), context.sync()
@@ -1104,7 +1104,7 @@ fn check() -> Result<()> {
     Would use project environment at: .venv
     Resolved 2 packages in [TIME]
     Found up-to-date lockfile at: uv.lock
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     Would make no changes
     ");
     Ok(())
@@ -1428,7 +1428,7 @@ fn sync_non_project_frozen_modification() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     ");
 
     Ok(())
@@ -2961,7 +2961,7 @@ fn sync_relative_wheel() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 2 packages in [TIME]
+    Checked 2 packages in [TIME]
     ");
 
     Ok(())
@@ -3177,7 +3177,7 @@ fn sync_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 10 packages in [TIME]
-    Audited 9 packages in [TIME]
+    Checked 9 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--all-groups").arg("--no-group").arg("bar"), @"
@@ -3454,7 +3454,7 @@ fn sync_include_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Audited 5 packages in [TIME]
+    Checked 5 packages in [TIME]
     ");
 
     Ok(())
@@ -3591,7 +3591,7 @@ fn sync_exclude_group_with_environment_variable() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     ");
 
     // Test that CLI flag takes precedence over environment variable
@@ -3751,7 +3751,7 @@ fn sync_non_existent_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 6 packages in [TIME]
+    Checked 6 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group").arg("baz"), @"
@@ -5103,7 +5103,7 @@ fn sync_ignore_extras_check_when_no_provides_extras() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     Ok(())
@@ -5343,7 +5343,7 @@ fn sync_non_existent_extra_non_project_workspace() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     ");
 
     // Syncing from an unrelated child should fail.
@@ -6055,7 +6055,7 @@ fn virtual_empty() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     Ok(())
@@ -6737,7 +6737,7 @@ fn sync_active_project_environment() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     // Setting both the `VIRTUAL_ENV` and `UV_PROJECT_ENVIRONMENT` is fine if they agree
@@ -6862,7 +6862,7 @@ fn sync_active_script_environment() -> Result<()> {
     ----- stderr -----
     Using script environment at: foo
     Resolved 3 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     ");
 
     // Requesting another Python version will invalidate the environment
@@ -7041,7 +7041,7 @@ fn sync_active_script_environment_json() -> Result<()> {
     ----- stderr -----
     Using script environment at: foo
     Resolved 3 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     ");
 
     // Requesting another Python version will invalidate the environment
@@ -7222,7 +7222,7 @@ fn sync_workspace_custom_environment_path() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     context
@@ -7312,7 +7312,7 @@ fn sync_virtual_env_warning() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     // Or, if it's a link that resolves to the same path
@@ -8266,7 +8266,7 @@ fn sync_no_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 2 packages in [TIME]
+    Checked 2 packages in [TIME]
     ");
 
     // Remove the project.
@@ -8320,7 +8320,7 @@ fn sync_scripts_without_build_system() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     warning: Skipping installation of entry points (`project.scripts`) for package `foo` because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     Ok(())
@@ -8369,7 +8369,7 @@ fn sync_scripts_project_not_packaged() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     warning: Skipping installation of entry points (`project.scripts`) for package `foo` because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     Ok(())
@@ -8420,7 +8420,7 @@ fn sync_scripts_workspace_member_not_packaged() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     warning: Skipping installation of entry points (`project.scripts`) for package `member` because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     Ok(())
@@ -8469,7 +8469,7 @@ fn sync_scripts_workspace_member_not_packaged_not_synced() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     Ok(())
@@ -8927,7 +8927,7 @@ fn sync_partial_environment_delete() -> Result<()> {
     Using CPython 3.13.[X] interpreter at: [PYTHON-3.13]
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     // Create a directory that's unreadable, erroring on trying to delete its children.
@@ -11078,7 +11078,7 @@ fn sync_dry_run() -> Result<()> {
     Would use project environment at: .venv
     Resolved 2 packages in [TIME]
     Found up-to-date lockfile at: uv.lock
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     Would make no changes
     ");
 
@@ -11729,7 +11729,7 @@ fn multiple_group_conflicts() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("baz"), @"
@@ -11851,7 +11851,7 @@ fn transitive_group_conflicts_shallow() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--group").arg("test"), @"
@@ -11948,7 +11948,7 @@ fn transitive_group_conflicts_deep() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--group").arg("test"), @"
@@ -12038,7 +12038,7 @@ fn transitive_group_conflicts_siblings() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--no-dev").arg("--group").arg("dev2"), @"
@@ -12436,7 +12436,7 @@ fn sync_build_constraints() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     Ok(())
@@ -12593,7 +12593,7 @@ fn sync_when_virtual_environment_incompatible_with_interpreter() -> Result<()> {
     Removed virtual environment at: .venv
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     insta::with_settings!({
@@ -12744,7 +12744,7 @@ fn sync_upload_time() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     ");
 
     Ok(())
@@ -12833,7 +12833,7 @@ fn repeated_dev_member_all_packages() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     ");
 
     Ok(())
@@ -13157,7 +13157,7 @@ fn read_only() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     Ok(())
@@ -13269,7 +13269,7 @@ fn conflicting_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let lock = context.read("uv.lock");
@@ -13435,7 +13435,7 @@ fn undeclared_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let lock = context.read("uv.lock");
@@ -13561,7 +13561,7 @@ fn sync_python_preference() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     // We should invalidate the environment and switch to 3.11
@@ -14783,7 +14783,7 @@ fn match_runtime_optional() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     Ok(())
@@ -14848,7 +14848,7 @@ fn sync_extra_build_dependencies_cache() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     // Add a build dependency.
