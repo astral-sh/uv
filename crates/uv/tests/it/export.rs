@@ -3427,7 +3427,7 @@ fn requirements_txt_complex_conflict_markers() -> Result<()> {
         # via torch
 
     ----- stderr -----
-    Resolved 33 packages in [TIME]
+    Resolved 34 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.export().arg("--extra").arg("cpu"), @r"
@@ -3581,7 +3581,7 @@ fn requirements_txt_complex_conflict_markers() -> Result<()> {
         # via torch
 
     ----- stderr -----
-    Resolved 33 packages in [TIME]
+    Resolved 34 packages in [TIME]
     ");
 
     Ok(())

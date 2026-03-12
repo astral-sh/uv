@@ -1,12 +1,12 @@
 use rustc_hash::FxHashMap;
 
 use uv_distribution_types::{Requirement, RequirementSource};
-use uv_normalize::PackageName;
+use uv_normalize::{GroupName, PackageName};
 use uv_pep508::{MarkerTree, RequirementOrigin};
-use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKind};
+use uv_pypi_types::{ConflictItem, ConflictItemRef};
 
 use crate::ResolverEnvironment;
-use crate::universal_marker::{ConflictMarker, UniversalMarker};
+use crate::universal_marker::UniversalMarker;
 
 /// A set of package names associated with a given fork.
 pub(crate) type ForkSet = ForkMap<()>;
@@ -24,29 +24,43 @@ struct Entry<T> {
 
 /// The fork visibility of an entry.
 #[derive(Debug, Clone, Eq, PartialEq)]
-struct ForkScope {
+pub(super) struct ForkScope {
     marker: MarkerTree,
     conflict: Option<ConflictItem>,
 }
 
 impl ForkScope {
-    /// Derive the scope under which a requirement should be visible in forked resolution.
-    ///
-    /// Group conflicts are folded into the marker so group-scoped entries only appear in forks
-    /// where that group is active.
-    fn from_requirement(requirement: &Requirement) -> Self {
+    /// Derives the fork scope implied by a requirement's marker and conflict state.
+    pub(super) fn from_requirement(requirement: &Requirement) -> Self {
         let conflict = Self::conflict_for_requirement(requirement);
-        let marker = conflict
-            .as_ref()
-            .filter(|conflict_item| matches!(conflict_item.kind(), ConflictKind::Group(_)))
-            .map_or(requirement.marker, |conflict_item| {
-                UniversalMarker::new(
-                    requirement.marker.without_extras(),
-                    ConflictMarker::from_conflict_item(conflict_item),
-                )
-                .combined()
-            });
+        let marker = conflict.as_ref().map_or(requirement.marker, |conflict| {
+            Self::marker_with_conflict(requirement.marker, conflict)
+        });
         Self { marker, conflict }
+    }
+
+    /// Derives a fork scope for a dependency-group requirement.
+    pub(super) fn from_group(
+        marker: MarkerTree,
+        project_name: &PackageName,
+        group: &GroupName,
+    ) -> Self {
+        let conflict = ConflictItem::from((project_name.clone(), group.clone()));
+        let marker = Self::marker_with_conflict(marker, &conflict);
+        Self {
+            marker,
+            conflict: Some(conflict),
+        }
+    }
+
+    /// Returns the marker under which the entry is visible.
+    pub(super) fn marker(&self) -> MarkerTree {
+        self.marker
+    }
+
+    /// Returns the conflict item that must remain enabled for this scope to match, if any.
+    fn conflict(&self) -> Option<ConflictItemRef<'_>> {
+        self.conflict.as_ref().map(ConflictItem::as_ref)
     }
 
     fn conflict_for_requirement(requirement: &Requirement) -> Option<ConflictItem> {
@@ -65,9 +79,8 @@ impl ForkScope {
         })
     }
 
-    /// Return the conflict item that further restricts this scope, if any.
-    fn conflict(&self) -> Option<ConflictItemRef<'_>> {
-        self.conflict.as_ref().map(ConflictItem::as_ref)
+    fn marker_with_conflict(marker: MarkerTree, conflict: &ConflictItem) -> MarkerTree {
+        UniversalMarker::from_marker_and_conflict_item(marker, conflict).combined()
     }
 
     fn matches(&self, env: &ResolverEnvironment) -> bool {

@@ -100,6 +100,20 @@ impl UniversalMarker {
         Self::from_combined(pep508_marker)
     }
 
+    /// Creates a new universal marker from a PEP 508 marker and a conflict item.
+    ///
+    /// Any `extra` terms in `pep508_marker` are treated as source extras and are replaced by the
+    /// encoded conflict item.
+    pub(crate) fn from_marker_and_conflict_item(
+        pep508_marker: MarkerTree,
+        conflict: &ConflictItem,
+    ) -> Self {
+        Self::new(
+            pep508_marker.without_extras(),
+            ConflictMarker::from_conflict_item(conflict),
+        )
+    }
+
     /// Creates a new universal marker from a marker that has already been
     /// combined from a PEP 508 and conflict marker.
     pub(crate) fn from_combined(marker: MarkerTree) -> Self {
