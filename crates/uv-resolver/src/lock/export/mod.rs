@@ -585,3 +585,171 @@ fn conflict_marker_reachability<'lock>(
 
     reachability
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::{BTreeMap, BTreeSet};
+    use std::iter;
+    use std::path::{Path, PathBuf};
+    use std::str::FromStr;
+
+    use rustc_hash::FxHashMap;
+    use uv_configuration::{DependencyGroupsWithDefaults, ExtrasSpecification, InstallOptions};
+    use uv_distribution_types::RequiresPython;
+    use uv_normalize::{DefaultExtras, ExtraName, PackageName};
+    use uv_pep440::Version;
+    use uv_pep508::MarkerTree;
+    use uv_pypi_types::Conflicts;
+
+    use super::super::{
+        Dependency, Package, PackageId, PackageMetadata, ResolverManifest, ResolverOptions, Source,
+    };
+    use super::*;
+    use crate::lock::Installable;
+    use crate::universal_marker::UniversalMarker;
+
+    struct TestInstallable<'lock> {
+        lock: &'lock crate::Lock,
+        root: &'lock PackageName,
+    }
+
+    impl<'lock> Installable<'lock> for TestInstallable<'lock> {
+        fn install_path(&self) -> &'lock Path {
+            Path::new(".")
+        }
+
+        fn lock(&self) -> &'lock crate::Lock {
+            self.lock
+        }
+
+        fn roots(&self) -> impl Iterator<Item = &PackageName> {
+            iter::once(self.root)
+        }
+
+        fn project_name(&self) -> Option<&PackageName> {
+            Some(self.root)
+        }
+    }
+
+    #[test]
+    fn simplifies_selected_root_extra_markers() {
+        let project = PackageName::from_str("project").unwrap();
+        let dependency = PackageName::from_str("typing-extensions").unwrap();
+        let foo = ExtraName::from_str("foo").unwrap();
+        let bar = ExtraName::from_str("bar").unwrap();
+        let requires_python =
+            RequiresPython::greater_than_equal_version(&Version::from_str("3.12").unwrap());
+
+        let dependency_id = PackageId {
+            name: dependency.clone(),
+            version: None,
+            source: Source::Path(PathBuf::from("typing-extensions").into_boxed_path()),
+        };
+
+        let dependency_marker =
+            MarkerTree::from_str(r#"extra == "foo" or extra == "bar""#).unwrap();
+        let root_dependency = Dependency::new(
+            &requires_python,
+            dependency_id.clone(),
+            BTreeSet::default(),
+            UniversalMarker::from_combined(dependency_marker),
+        );
+
+        let root_id = PackageId {
+            name: project.clone(),
+            version: None,
+            source: Source::Editable(PathBuf::from(".").into_boxed_path()),
+        };
+        let mut optional_dependencies = BTreeMap::new();
+        optional_dependencies.insert(foo.clone(), Vec::new());
+        optional_dependencies.insert(bar.clone(), Vec::new());
+
+        let packages = vec![
+            Package {
+                id: root_id.clone(),
+                sdist: None,
+                wheels: Vec::new(),
+                fork_markers: Vec::new(),
+                dependencies: vec![root_dependency],
+                optional_dependencies,
+                dependency_groups: BTreeMap::new(),
+                metadata: PackageMetadata {
+                    requires_dist: BTreeSet::default(),
+                    provides_extra: vec![foo, bar].into_boxed_slice(),
+                    dependency_groups: BTreeMap::default(),
+                },
+            },
+            Package {
+                id: dependency_id.clone(),
+                sdist: None,
+                wheels: Vec::new(),
+                fork_markers: Vec::new(),
+                dependencies: Vec::new(),
+                optional_dependencies: BTreeMap::new(),
+                dependency_groups: BTreeMap::new(),
+                metadata: PackageMetadata {
+                    requires_dist: BTreeSet::default(),
+                    provides_extra: Box::default(),
+                    dependency_groups: BTreeMap::default(),
+                },
+            },
+        ];
+        let by_id = FxHashMap::from_iter(
+            packages
+                .iter()
+                .enumerate()
+                .map(|(index, package)| (package.id.clone(), index)),
+        );
+
+        let lock = crate::Lock {
+            version: 1,
+            revision: 0,
+            fork_markers: Vec::new(),
+            conflicts: Conflicts::empty(),
+            supported_environments: Vec::new(),
+            required_environments: Vec::new(),
+            requires_python,
+            options: ResolverOptions::default(),
+            packages,
+            by_id,
+            manifest: ResolverManifest::new(
+                iter::empty::<PackageName>(),
+                iter::empty(),
+                iter::empty(),
+                iter::empty(),
+                iter::empty(),
+                iter::empty(),
+                iter::empty(),
+                iter::empty(),
+            ),
+        };
+
+        let target = TestInstallable {
+            lock: &lock,
+            root: &project,
+        };
+        let extras = ExtrasSpecification::from_all_extras().with_defaults(DefaultExtras::default());
+        let install_options =
+            InstallOptions::new(false, false, false, false, false, false, vec![], vec![]);
+        let requirements = ExportableRequirements::from_lock(
+            &target,
+            &[],
+            &extras,
+            &DependencyGroupsWithDefaults::none(),
+            false,
+            &install_options,
+        )
+        .unwrap();
+
+        let requirement = requirements
+            .0
+            .iter()
+            .find(|requirement| requirement.package.name() == &dependency)
+            .unwrap();
+        assert!(
+            requirement.marker.is_true(),
+            "expected marker to simplify away, got {:#?}",
+            requirement.marker
+        );
+    }
+}
