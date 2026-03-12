@@ -85,11 +85,21 @@ impl std::fmt::Display for VersionControlSystem {
 
 const GITIGNORE: &str = "# Python-generated files
 __pycache__/
-*.py[oc]
+*.py[codz]
 build/
 dist/
+site/
+target/
 wheels/
 *.egg-info
+
+# C extensions
+*.so
+
+# Common folders
+.*_cache/
+.[nt]ox/
+.ipynb_checkpoints/
 
 # Virtual environments
 .venv
