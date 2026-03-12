@@ -13685,7 +13685,7 @@ fn transitive_dependency_config_settings_invalidation() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Prepared 2 packages in [TIME]
+    Prepared 6 packages in [TIME]
     Installed 2 packages in [TIME]
      + anyio==4.3.0
      + sniffio==1.3.1
