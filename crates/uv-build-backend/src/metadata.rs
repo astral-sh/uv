@@ -1624,6 +1624,25 @@ mod tests {
 
     #[test]
     fn invalid_classifier() {
+        for tc in [
+            "",
+            " ",
+            "\n",
+            "NotAClassifier",
+            "Foo ::  :: Bar",
+            "Foo :: Bar :: ",
+            " :: Foo :: Bar",
+        ] {
+            assert!(
+                Classifier::from_str(tc).is_err(),
+                "expected `{tc}` to be an invalid classifier"
+            );
+        }
+    }
+
+    /// Test that we produce a reasonable parse error when a pyproject.toml contains an invalid classifier.
+    #[test]
+    fn invalid_classifier_in_pyproject() {
         let contents = extend_project(indoc! {r#"
             classifiers = ["NotAClassifier"]
         "#
@@ -1636,23 +1655,6 @@ mod tests {
         4 | classifiers = ["NotAClassifier"]
           |               ^^^^^^^^^^^^^^^^^^
         `project.classifiers` contains an invalid classifier: NotAClassifier
-        "#);
-    }
-
-    #[test]
-    fn invalid_classifier_empty_part() {
-        let contents = extend_project(indoc! {r#"
-            classifiers = ["Foo ::  :: Bar"]
-        "#
-        });
-
-        let err = toml::from_str::<PyProjectToml>(&contents).unwrap_err();
-        assert_snapshot!(format_err(err), @r#"
-        TOML parse error at line 4, column 15
-          |
-        4 | classifiers = ["Foo ::  :: Bar"]
-          |               ^^^^^^^^^^^^^^^^^^
-        `project.classifiers` contains an invalid classifier: Foo ::  :: Bar
         "#);
     }
 
