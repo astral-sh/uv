@@ -477,7 +477,6 @@ fn build_fail() -> Result<()> {
       ├─▶ The build backend returned an error
       ╰─▶ Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
 
-
     hint: Build failures usually indicate a problem with the package or the build environment.
     "#);
 
@@ -808,7 +807,6 @@ fn build_all_with_failure() -> Result<()> {
       × Failed to build `member-b @ [TEMP_DIR]/project/packages/member_b`
       ├─▶ The build backend returned an error
       ╰─▶ Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
-
 
     hint: Build failures usually indicate a problem with the package or the build environment.Successfully built dist/project-0.1.0.tar.gz
     Successfully built dist/project-0.1.0-py3-none-any.whl
@@ -1457,7 +1455,6 @@ fn build_hide_build_output_on_failure() -> Result<()> {
       × Failed to build `[TEMP_DIR]/project`
       ├─▶ The build backend returned an error
       ╰─▶ Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
-
 
     hint: Build failures usually indicate a problem with the package or the build environment.
     ");
@@ -2303,7 +2300,6 @@ fn force_pep517() -> Result<()> {
       × Failed to build `[TEMP_DIR]/`
       ├─▶ The build backend returned an error
       ╰─▶ Call to `uv_build.build_sdist` failed (exit status: 1)
-
 
     hint: Build failures usually indicate a problem with the package or the build environment.
     ");

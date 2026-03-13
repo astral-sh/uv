@@ -433,7 +433,6 @@ dependencies = ["flask==1.0.x"]
           configuration error: `project.dependencies[0]` must be pep508
 
 
-
     hint: Build failures usually indicate a problem with the package or the build environment.
     "##
     );
@@ -1992,7 +1991,6 @@ fn install_no_index() {
       × No solution found when resolving dependencies:
       ╰─▶ Because flask was not found in the provided package locations and you require flask, we can conclude that your requirements are unsatisfiable.
 
-
     hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "
     );
@@ -2016,7 +2014,6 @@ fn install_no_index_version() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because flask was not found in the provided package locations and you require flask==3.0.0, we can conclude that your requirements are unsatisfiable.
-
 
     hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "
@@ -2966,9 +2963,7 @@ fn install_only_binary_all_and_no_binary_all() {
       × No solution found when resolving dependencies:
       ╰─▶ Because all versions of anyio have no usable wheels and you require anyio, we can conclude that your requirements are unsatisfiable.
 
-
     hint: Pre-releases are available for `anyio` in the requested range (e.g., 4.0.0rc1), but pre-releases weren't enabled (try: `--prerelease=allow`)
-
     hint: Wheels are required for `anyio` because building from source is disabled for all packages (i.e., with `--no-build`)
     "
     );
@@ -3061,7 +3056,6 @@ fn only_binary_requirements_txt() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because django-allauth==0.51.0 has no usable wheels and you require django-allauth==0.51.0, we can conclude that your requirements are unsatisfiable.
-
 
     hint: Wheels are required for `django-allauth` because building from source is disabled for `django-allauth` (i.e., with `--no-build-package django-allauth`)
     "
@@ -3952,7 +3946,6 @@ fn build_prerelease_hint() -> Result<()> {
       ├─▶ No solution found when resolving: `transitive-package-only-prereleases-in-range-a`
       ╰─▶ Because only transitive-package-only-prereleases-in-range-b<=0.1 is available and transitive-package-only-prereleases-in-range-a==0.1.0 depends on transitive-package-only-prereleases-in-range-b>0.1, we can conclude that transitive-package-only-prereleases-in-range-a==0.1.0 cannot be used.
           And because only transitive-package-only-prereleases-in-range-a==0.1.0 is available and you require transitive-package-only-prereleases-in-range-a, we can conclude that your requirements are unsatisfiable.
-
 
     hint: Only pre-releases of `transitive-package-only-prereleases-in-range-b` (e.g., 1.0.0a1) match these build requirements, and build environments can't enable pre-releases automatically. Add `transitive-package-only-prereleases-in-range-b>=1.0.0a1` to `build-system.requires`, `[tool.uv.extra-build-dependencies]`, or supply it via `uv build --build-constraint`.
     "
@@ -5357,7 +5350,6 @@ fn no_build_isolation() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'setuptools'
 
-
     hint: This error likely indicates that `anyio` depends on `setuptools`, but doesn't declare it as a build dependency. If `anyio` is a first-party package, consider adding `setuptools` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
     [tool.uv.extra-build-dependencies]
@@ -5430,7 +5422,6 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
           Traceback (most recent call last):
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'setuptools'
-
 
     hint: This error likely indicates that `anyio` depends on `setuptools`, but doesn't declare it as a build dependency. If `anyio` is a first-party package, consider adding `setuptools` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
@@ -6104,7 +6095,6 @@ async fn install_package_basic_auth_from_keyring_wrong_password() {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
 
-
     hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     "
     );
@@ -6149,7 +6139,6 @@ async fn install_package_basic_auth_from_keyring_wrong_username() {
     Keyring request for public@http://[LOCALHOST]
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
-
 
     hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     "
@@ -6317,7 +6306,6 @@ fn reinstall_no_index() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the provided package locations and you require anyio, we can conclude that your requirements are unsatisfiable.
-
 
     hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "
@@ -6686,7 +6674,6 @@ fn already_installed_local_version_of_remote_package() {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the provided package locations and you require anyio==4.2.0, we can conclude that your requirements are unsatisfiable.
 
-
     hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "
     );
@@ -6946,7 +6933,6 @@ fn already_installed_remote_url() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because uv-public-pypackage was not found in the provided package locations and you require uv-public-pypackage, we can conclude that your requirements are unsatisfiable.
-
 
     hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     ");
@@ -9174,7 +9160,6 @@ fn install_build_isolation_package() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'hatchling'
 
-
     hint: This error likely indicates that `iniconfig` depends on `hatchling`, but doesn't declare it as a build dependency. If `iniconfig` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
     [tool.uv.extra-build-dependencies]
@@ -9520,7 +9505,6 @@ fn sklearn() {
 
       help: `sklearn` is often confused for `scikit-learn` Did you mean to install `scikit-learn` instead?
 
-
     hint: Build failures usually indicate a problem with the package or the build environment.
     "
     );
@@ -9577,7 +9561,6 @@ fn resolve_derivation_chain() -> Result<()> {
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
       help: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref`
-
 
     hint: Build failures usually indicate a problem with the package or the build environment.
     "#
@@ -13154,7 +13137,6 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
 
       help: `child` was included because `parent` (v0.1.0) depends on `child`
 
-
     hint: Build failures usually indicate a problem with the package or the build environment.
     ");
 
@@ -14267,7 +14249,7 @@ fn abi_compatibility_on_freethreaded_python() {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to determine installation plan
-      Caused by: A path dependency is incompatible with the current platform: [WORKSPACE]/test/links/abi3_package-1.0.0-cp37-abi3-manylinux_2_17_x86_64.whl
+      Caused by: A path ([WORKSPACE]/test/links/abi3_package-1.0.0-cp37-abi3-manylinux_2_17_x86_64.whl) dependency is incompatible with the current platform
 
     hint: You're using free-threaded CPython 3.14 (`cp314t`), but the wheel was built for the stable ABI (`abi3`), which requires a GIL-enabled interpreter
     ");

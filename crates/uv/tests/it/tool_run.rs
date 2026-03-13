@@ -2930,7 +2930,6 @@ fn tool_run_verbose_hint() {
       × No solution found when resolving dependencies:
       ╰─▶ Because nonexistent-package-foo was not found in the package registry and you require nonexistent-package-foo, we can conclude that your requirements are unsatisfiable.
 
-
     hint: You provided `--verbose` to `nonexistent-package-foo`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run --verbose nonexistent-package-foo`
     ");
 

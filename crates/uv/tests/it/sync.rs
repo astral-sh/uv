@@ -803,7 +803,6 @@ fn group_requires_python_useful_defaults() -> Result<()> {
           And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
           And because pharaohs-tomp:dev depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:dev, we can conclude that your project's requirements are unsatisfiable.
 
-
     hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
     ");
 
@@ -948,7 +947,6 @@ fn group_requires_python_useful_non_defaults() -> Result<()> {
       ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
           And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
           And because pharaohs-tomp:mygroup depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:mygroup, we can conclude that your project's requirements are unsatisfiable.
-
 
     hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
     ");
@@ -1546,7 +1544,6 @@ fn sync_build_isolation_package() -> Result<()> {
           ModuleNotFoundError: No module named 'hatchling'
       help: `source-distribution` was included because `project` (v0.1.0) depends on `source-distribution`
 
-
     hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
     [tool.uv.extra-build-dependencies]
@@ -1634,7 +1631,6 @@ fn sync_build_isolation_package_order() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'hatchling'
       help: `source-distribution` was included because `project` (v0.1.0) depends on `source-distribution`
-
 
     hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
@@ -1812,7 +1808,6 @@ fn sync_build_isolation_extra() -> Result<()> {
           ModuleNotFoundError: No module named 'hatchling'
       help: `source-distribution` was included because `project[compile]` (v0.1.0) depends on `source-distribution`
 
-
     hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
     [tool.uv.extra-build-dependencies]
@@ -1953,7 +1948,6 @@ fn sync_extra_build_dependencies() -> Result<()> {
           Missing `anyio` module
 
       help: `child` was included because `parent` (v0.1.0) depends on `child`
-
 
     hint: Build failures usually indicate a problem with the package or the build environment.
     ");
@@ -2196,7 +2190,6 @@ fn sync_extra_build_dependencies_setuptools_legacy() -> Result<()> {
           Missing `anyio` module
 
 
-
     hint: Build failures usually indicate a problem with the package or the build environment.
     ");
 
@@ -2303,7 +2296,6 @@ fn sync_extra_build_dependencies_setuptools() -> Result<()> {
           Missing `anyio` module
 
       help: `child` was included because `parent` (v0.1.0) depends on `child`
-
 
     hint: Build failures usually indicate a problem with the package or the build environment.
     ");
@@ -2495,7 +2487,6 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
 
       help: `child` was included because `parent` (v0.1.0) depends on `child`
 
-
     hint: Build failures usually indicate a problem with the package or the build environment.
     ");
 
@@ -2649,7 +2640,6 @@ fn sync_extra_build_dependencies_sources_from_child() -> Result<()> {
 
       help: `child` was included because `project` (v0.1.0) depends on `child`
 
-
     hint: Build failures usually indicate a problem with the package or the build environment.
     ");
 
@@ -2717,7 +2707,6 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
               import anyio
           ModuleNotFoundError: No module named 'anyio'
       help: `child` was included because `parent` (v0.1.0) depends on `child`
-
 
     hint: This error likely indicates that `child@0.1.0` depends on `anyio`, but doesn't declare it as a build dependency. If `child` is a first-party package, consider adding `anyio` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
@@ -5907,7 +5896,6 @@ fn sync_extra_build_dependencies_script() -> Result<()> {
 
           [stderr]
           Missing `anyio` module
-
 
 
     hint: Build failures usually indicate a problem with the package or the build environment.
@@ -9940,7 +9928,6 @@ fn sync_derivation_chain() -> Result<()> {
 
       help: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref`
 
-
     hint: Build failures usually indicate a problem with the package or the build environment.
     "#);
 
@@ -10004,7 +9991,6 @@ fn sync_derivation_chain_extra() -> Result<()> {
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
       help: `wsgiref` (v0.1.2) was included because `project[wsgi]` (v0.1.0) depends on `wsgiref`
-
 
     hint: Build failures usually indicate a problem with the package or the build environment.
     "#);
@@ -10071,7 +10057,6 @@ fn sync_derivation_chain_group() -> Result<()> {
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
       help: `wsgiref` (v0.1.2) was included because `project:wsgi` (v0.1.0) depends on `wsgiref`
-
 
     hint: Build failures usually indicate a problem with the package or the build environment.
     "#);
@@ -14027,7 +14012,6 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
 
       help: `child` was included because `parent` (v0.1.0) depends on `child`
 
-
     hint: Build failures usually indicate a problem with the package or the build environment.
     ");
 
@@ -14257,7 +14241,6 @@ fn sync_extra_build_variables() -> Result<()> {
 
           [stderr]
           Expected `anyio` version 3.0 but got 4.3.0
-
 
 
     hint: Build failures usually indicate a problem with the package or the build environment.
