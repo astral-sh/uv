@@ -975,21 +975,22 @@ async fn do_lock(
             .relative_to(target.install_path())?;
 
             let previous = existing_lock.map(ValidatedLock::into_lock);
-            let lock = Lock::from_resolution(&resolution, target.install_path())?
-                .with_manifest(manifest)
-                .with_conflicts(conflicts)
-                .with_supported_environments(
-                    environments
-                        .cloned()
-                        .map(SupportedEnvironments::into_markers)
-                        .unwrap_or_default(),
-                )
-                .with_required_environments(
-                    required_environments
-                        .cloned()
-                        .map(SupportedEnvironments::into_markers)
-                        .unwrap_or_default(),
-                );
+            let lock = Lock::from_resolution(
+                &resolution,
+                target.install_path(),
+                environments
+                    .cloned()
+                    .map(SupportedEnvironments::into_markers)
+                    .unwrap_or_default(),
+            )?
+            .with_manifest(manifest)
+            .with_conflicts(conflicts)
+            .with_required_environments(
+                required_environments
+                    .cloned()
+                    .map(SupportedEnvironments::into_markers)
+                    .unwrap_or_default(),
+            );
 
             if previous.as_ref().is_some_and(|previous| *previous == lock) {
                 Ok(LockResult::Unchanged(lock))
