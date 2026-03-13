@@ -3108,7 +3108,8 @@ fn add_path_adjacent_directory() -> Result<()> {
 
 /// Check relative and absolute path handling with `uv add`.
 ///
-/// BUG: Currently `uv add` always relativizes paths in `pyproject.toml`
+/// TODO(tk): Currently `uv add` always relativizes paths in `pyproject.toml`,
+/// this is a bug.
 #[test]
 fn add_relative_and_absolute_paths() -> Result<()> {
     let context = uv_test::test_context!("3.12");
