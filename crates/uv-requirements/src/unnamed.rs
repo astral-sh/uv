@@ -295,7 +295,10 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let hashes = hasher.get_url(source.url());
                 let source = BuildableSource::Url(source);
-                let archive = database.build_wheel_metadata(&source, hashes).await?;
+                let archive = database
+                    .build_wheel_metadata(&source, hashes)
+                    .await
+                    .map_err(Box::new)?;
 
                 let name = archive.metadata.name.clone();
 

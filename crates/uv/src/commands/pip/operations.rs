@@ -849,7 +849,6 @@ async fn execute_plan(
 }
 
 /// Display a message about the interpreter that was selected for the operation.
-#[expect(clippy::result_large_err)]
 pub(crate) fn report_interpreter(
     python: &PythonInstallation,
     dimmed: bool,
@@ -911,7 +910,6 @@ pub(crate) fn report_interpreter(
 }
 
 /// Display a message about the target environment for the operation.
-#[expect(clippy::result_large_err)]
 pub(crate) fn report_target_environment(
     env: &PythonEnvironment,
     cache: &Cache,
@@ -967,7 +965,6 @@ pub(crate) fn report_target_environment(
 }
 
 /// Report on the results of a dry-run installation.
-#[expect(clippy::result_large_err)]
 fn report_dry_run(
     dry_run: DryRun,
     resolution: &Resolution,
@@ -1040,7 +1037,6 @@ fn report_dry_run(
 }
 
 /// Report any diagnostics on resolved distributions.
-#[expect(clippy::result_large_err)]
 pub(crate) fn diagnose_resolution(
     diagnostics: &[ResolutionDiagnostic],
     printer: Printer,
@@ -1058,7 +1054,6 @@ pub(crate) fn diagnose_resolution(
 }
 
 /// Report any diagnostics on installed distributions in the Python environment.
-#[expect(clippy::result_large_err)]
 pub(crate) fn diagnose_environment(
     resolution: &Resolution,
     venv: &PythonEnvironment,

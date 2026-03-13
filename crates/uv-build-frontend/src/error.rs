@@ -81,7 +81,7 @@ pub enum Error {
     #[error("The build backend returned an error")]
     BuildBackend(#[from] BuildBackendError),
     #[error("The build backend returned an error")]
-    MissingHeader(#[from] MissingHeaderError),
+    MissingHeader(#[from] Box<MissingHeaderError>),
     #[error("Failed to build PATH for build script")]
     BuildScriptPath(#[source] env::JoinPathsError),
     // For the convenience of typing `setup_build` properly.
@@ -414,7 +414,7 @@ impl Error {
         if let Some(missing_library) = missing_library {
             return match level {
                 BuildOutput::Stderr | BuildOutput::Quiet => {
-                    Self::MissingHeader(MissingHeaderError {
+                    Self::MissingHeader(Box::new(MissingHeaderError {
                         message,
                         exit_code: output.status,
                         stdout: vec![],
@@ -425,9 +425,9 @@ impl Error {
                             package_version: version.cloned(),
                             version_id: version_id.map(ToString::to_string),
                         },
-                    })
+                    }))
                 }
-                BuildOutput::Debug => Self::MissingHeader(MissingHeaderError {
+                BuildOutput::Debug => Self::MissingHeader(Box::new(MissingHeaderError {
                     message,
                     exit_code: output.status,
                     stdout: output.stdout.clone(),
@@ -438,7 +438,7 @@ impl Error {
                         package_version: version.cloned(),
                         version_id: version_id.map(ToString::to_string),
                     },
-                }),
+                })),
             };
         }
 

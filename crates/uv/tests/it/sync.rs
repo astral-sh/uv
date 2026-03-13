@@ -818,7 +818,6 @@ fn group_requires_python_useful_defaults() -> Result<()> {
           And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
           And because pharaohs-tomp:dev depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:dev, we can conclude that your project's requirements are unsatisfiable.
 
-
     hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
     ");
 
@@ -963,7 +962,6 @@ fn group_requires_python_useful_non_defaults() -> Result<()> {
       ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
           And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
           And because pharaohs-tomp:mygroup depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:mygroup, we can conclude that your project's requirements are unsatisfiable.
-
 
     hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
     ");
@@ -2025,7 +2023,6 @@ fn sync_extra_build_dependencies() -> Result<()> {
 
       help: `child` was included because `parent` (v0.1.0) depends on `child`
 
-
     hint: Build failures usually indicate a problem with the package or the build environment.
     ");
 
@@ -2542,7 +2539,6 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
 
       help: `child` was included because `parent` (v0.1.0) depends on `child`
 
-
     hint: Build failures usually indicate a problem with the package or the build environment.
     ");
 
@@ -2773,7 +2769,6 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
               import sklearn
           ModuleNotFoundError: No module named 'sklearn'
       help: `child` was included because `parent` (v0.1.0) depends on `child`
-
 
     hint: This error likely indicates that `child@0.1.0` depends on `scikit-learn`, but doesn't declare it as a build dependency. If `child` is a first-party package, consider adding `scikit-learn` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
@@ -14079,7 +14074,6 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
 
       help: `child` was included because `parent` (v0.1.0) depends on `child`
 
-
     hint: Build failures usually indicate a problem with the package or the build environment.
     ");
 
@@ -14275,7 +14269,6 @@ fn sync_extra_build_variables() -> Result<()> {
 
           [stderr]
           Expected `anyio` version 3.0 but got 4.3.0
-
 
 
     hint: Build failures usually indicate a problem with the package or the build environment.

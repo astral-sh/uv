@@ -6955,8 +6955,9 @@ fn remove_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    hint: `anyio` is a production dependency
     error: The dependency `anyio` could not be found in `dependency-groups.test`
+
+    hint: `anyio` is a production dependency
     ");
 
     Ok(())

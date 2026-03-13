@@ -432,7 +432,6 @@ impl RemoveTarget {
     }
 
     /// Update the target in-memory to incorporate the new content.
-    #[expect(clippy::result_large_err)]
     fn update(self, content: &str) -> Result<Self, ProjectError> {
         match self {
             Self::Script(mut script) => {

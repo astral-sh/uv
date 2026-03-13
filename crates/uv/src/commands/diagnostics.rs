@@ -105,7 +105,7 @@ impl OperationDiagnostic {
                 None
             }
             pip::operations::Error::Requirements(uv_requirements::Error::Dist(kind, dist, err)) => {
-                dist_error(kind, dist, &DerivationChain::default(), Arc::new(err));
+                dist_error(kind, dist, &DerivationChain::default(), Arc::new(*err));
                 None
             }
             pip::operations::Error::Prepare(uv_installer::PrepareError::Dist(
@@ -114,7 +114,7 @@ impl OperationDiagnostic {
                 chain,
                 err,
             )) => {
-                dist_error(kind, dist, &chain, Arc::new(err));
+                dist_error(kind, dist, &chain, Arc::new(*err));
                 None
             }
             pip::operations::Error::Requirements(err) => {
