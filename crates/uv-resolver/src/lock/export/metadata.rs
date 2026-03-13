@@ -431,7 +431,7 @@ fn normalize_workspace_relative_path(
 enum MetadataRegistrySource {
     /// Ex) `https://pypi.org/simple`
     Url(UrlString),
-    /// Ex) `../path/to/local/index`
+    /// Ex) `/path/to/local/index`
     Path(PortablePathBuf),
 }
 
@@ -625,11 +625,15 @@ struct MetadataConflicts {
 }
 
 impl MetadataConflicts {
-    fn from_conflicts(conflicts: &Conflicts) -> Self {
+    fn from_conflicts(
+        members: &[MetadataWorkspaceMember],
+        resolve: &BTreeMap<MetadataNodeIdFlat, MetadataNode>,
+        conflicts: &Conflicts,
+    ) -> Self {
         Self {
             sets: conflicts
                 .iter()
-                .map(MetadataConflictSet::from_conflicts)
+                .map(|set| MetadataConflictSet::from_conflicts(members, resolve, set))
                 .collect(),
         }
     }
@@ -641,11 +645,15 @@ struct MetadataConflictSet {
 }
 
 impl MetadataConflictSet {
-    fn from_conflicts(set: &ConflictSet) -> Self {
+    fn from_conflicts(
+        members: &[MetadataWorkspaceMember],
+        resolve: &BTreeMap<MetadataNodeIdFlat, MetadataNode>,
+        set: &ConflictSet,
+    ) -> Self {
         Self {
             items: set
                 .iter()
-                .map(MetadataConflictItem::from_conflicts)
+                .map(|item| MetadataConflictItem::from_conflicts(members, resolve, item))
                 .collect(),
         }
     }
@@ -656,13 +664,33 @@ struct MetadataConflictItem {
     /// These should always be names of packages referred to in [`Metadata::members`]
     package: PackageName,
     kind: MetadataConflictKind,
+    /// This should never be None (should be a validation error way earlier in uv)
+    /// ...but I'd rather not error if wrong.
+    id: Option<MetadataNodeIdFlat>,
 }
 
 impl MetadataConflictItem {
-    fn from_conflicts(item: &ConflictItem) -> Self {
+    fn from_conflicts(
+        members: &[MetadataWorkspaceMember],
+        resolve: &BTreeMap<MetadataNodeIdFlat, MetadataNode>,
+        item: &ConflictItem,
+    ) -> Self {
+        let kind = MetadataConflictKind::from_conflicts(item.kind());
+        let id = members
+            .iter()
+            .find(|member| &member.name == item.package())
+            .and_then(|member| {
+                let package_node = resolve.get(&member.id)?;
+                let id = MetadataNodeId {
+                    kind: kind.to_node_kind(),
+                    ..package_node.id.clone()
+                };
+                Some(id.to_flat())
+            });
         Self {
             package: item.package().clone(),
-            kind: MetadataConflictKind::from_conflicts(item.kind()),
+            kind,
+            id,
         }
     }
 }
@@ -682,6 +710,14 @@ impl MetadataConflictKind {
             ConflictKind::Project => Self::Project,
         }
     }
+
+    fn to_node_kind(&self) -> MetadataNodeKind {
+        match self {
+            Self::Group(name) => MetadataNodeKind::Group(name.clone()),
+            Self::Extra(name) => MetadataNodeKind::Extra(name.clone()),
+            Self::Project => MetadataNodeKind::Package,
+        }
+    }
 }
 
 impl Metadata {
@@ -690,7 +726,6 @@ impl Metadata {
         let mut resolve = BTreeMap::new();
         let mut members = Vec::new();
         let workspace_root = PortablePathBuf::from(workspace.install_path().as_path());
-        let conflicts = MetadataConflicts::from_conflicts(&lock.conflicts);
 
         for lock_package in lock.packages() {
             let mut meta_package = MetadataNode::from_package_id(
@@ -774,6 +809,8 @@ impl Metadata {
 
             resolve.insert(meta_package.id.to_flat(), meta_package);
         }
+
+        let conflicts = MetadataConflicts::from_conflicts(&members, &resolve, &lock.conflicts);
 
         Ok(Self {
             schema: SchemaReport {
