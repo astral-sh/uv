@@ -134,9 +134,9 @@ pub(crate) async fn list(
     let installed =
         match kinds {
             PythonListKinds::Installed | PythonListKinds::Default => {
-                // When `--managed-python` is used (`OnlyManaged`), widen discovery to include
-                // search path sources so that symlinks pointing to managed installations are
-                // found. We then post-filter to keep only managed interpreters.
+                // While usually [`PythonPreference::OnlyManaged`] means we can skip searching the `PATH`,
+                // in `uv python list` we want to enumerate links to managed Python interpreters for inspection.
+                // Consequently, we widen the preference here and perform post-filtering.
                 let discovery_preference = if python_preference == PythonPreference::OnlyManaged {
                     PythonPreference::Managed
                 } else {
