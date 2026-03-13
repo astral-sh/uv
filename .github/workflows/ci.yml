@@ -111,7 +111,7 @@ jobs:
           [[ ! $has_skip_label ]] && test_ecosystem=1
           [[ $has_integration_label || $has_extended_label || $on_main_branch ]] && test_integration=1
           [[ $has_system_label || $has_extended_label || $on_main_branch || $system_workflow_changed ]] && test_system=1
-          [[ $has_macos_label || $has_extended_label || $on_main_branch ]] && test_macos=1
+          [[ $has_macos_label || $has_extended_label || $on_main_branch || $build_release_binaries ]] && test_macos=1
           [[ ! $has_build_skip_label && ! $has_build_skip_docker_label && ($docker_build_changed || $has_build_push_docker_label) ]] && build_docker=1
           [[ $has_build_push_docker_label ]] && push_docker=1
 
