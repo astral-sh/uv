@@ -33995,6 +33995,48 @@ fn lock_unsupported_wheel_url_requires_python() -> Result<()> {
 }
 
 #[test]
+fn lock_unsupported_wheel_url_supported_platform() -> Result<()> {
+    let context = uv_test::test_context!("3.11");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["numpy @ https://files.pythonhosted.org/packages/4d/1a/e85f0eea4cf03d6a0228f5c0256b53f2df4bc794706e7df019fc622e47f1/numpy-2.3.5-cp311-cp311-macosx_14_0_arm64.whl"]
+
+        [tool.uv]
+        environments = ["sys_platform == 'win32'"]
+        "#,
+    )?;
+
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([(
+            // This hint is only shown when the current platform doesn't match the target.
+            r"\n\n\s+hint: The resolution failed for an environment that is not the current one[^\n]*",
+            "",
+        )])
+        .collect();
+
+    uv_snapshot!(filters, context.lock(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies for split (markers: sys_platform == 'win32'):
+      ╰─▶ Because only numpy==2.3.5 is available and numpy==2.3.5 has no Windows-compatible wheels, we can conclude that all versions of numpy cannot be used.
+          And because your project depends on numpy, we can conclude that your project's requirements are unsatisfiable.
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn lock_unsupported_wheel_url_required_platform() -> Result<()> {
     let context = uv_test::test_context!("3.11");
 
@@ -34026,10 +34068,8 @@ fn lock_unsupported_wheel_url_required_platform() -> Result<()> {
     Ok(())
 }
 
-// TODO(charlie): This produces an empty entry in the lockfile (`pywin32` has no wheels for the
-// set of supported environments, and no source distribution).
 #[test]
-fn lock_supported_environment_wheel_only_package_can_produce_empty_entry() -> Result<()> {
+fn lock_supported_environment_wheel_only_package_requires_compatible_wheels() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -34042,61 +34082,49 @@ fn lock_supported_environment_wheel_only_package_can_produce_empty_entry() -> Re
         dependencies = ["pywin32"]
 
         [tool.uv]
-        environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+        environments = ["sys_platform == 'linux'"]
         "#,
     )?;
 
-    uv_snapshot!(
-        context.filters(),
-        context.lock(),
-        @"
-    success: true
-    exit_code: 0
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([(
+            // This hint is only shown when the current platform doesn't match the target.
+            r"\n\n\s+hint: The resolution failed for an environment that is not the current one[^\n]*",
+            "",
+        )])
+        .collect();
+
+    uv_snapshot!(filters, context.lock(), @"
+    success: false
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 2 packages in [TIME]
-    "
-    );
+      × No solution found when resolving dependencies for split (markers: sys_platform == 'linux'):
+      ╰─▶ Because only the following versions of pywin32 are available:
+              pywin32==222
+              pywin32==223
+              pywin32==224
+              pywin32==225
+              pywin32==226
+              pywin32==227
+              pywin32==228
+              pywin32==300
+              pywin32==301
+              pywin32==302
+              pywin32==303
+              pywin32==304
+              pywin32==305
+              pywin32==306
+              pywin32==307
+              pywin32==308
+          and pywin32<=305 has no wheels with a matching Python version tag (e.g., `cp312`), we can conclude that pywin32<=305 cannot be used.
+          And because pywin32>=306 has no Linux-compatible wheels and your project depends on pywin32, we can conclude that your project's requirements are unsatisfiable.
 
-    let lock = context.read("uv.lock");
-
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        assert_snapshot!(
-            lock, @r#"
-        version = 1
-        revision = 3
-        requires-python = "==3.12.*"
-        resolution-markers = [
-            "platform_machine == 'x86_64' and sys_platform == 'linux'",
-        ]
-        supported-markers = [
-            "platform_machine == 'x86_64' and sys_platform == 'linux'",
-        ]
-
-        [options]
-        exclude-newer = "2025-01-30T00:00:00Z"
-
-        [[package]]
-        name = "project"
-        version = "0.1.0"
-        source = { virtual = "." }
-        dependencies = [
-            { name = "pywin32", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
-        ]
-
-        [package.metadata]
-        requires-dist = [{ name = "pywin32" }]
-
-        [[package]]
-        name = "pywin32"
-        version = "308"
-        source = { registry = "https://pypi.org/simple" }
-        "#
-        );
-    });
+          hint: Wheels are available for `pywin32` (v305) with the following Python ABI tags: `cp36m`, `cp37m`, `cp38`, `cp39`, `cp310`, `cp311`
+    ");
 
     Ok(())
 }
