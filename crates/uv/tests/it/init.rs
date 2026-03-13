@@ -3618,10 +3618,9 @@ fn init_app_build_backend_scikit() -> Result<()> {
     }, {
         assert_snapshot!(
             build_file_contents, @"
-        cmake_minimum_required(VERSION 3.15)
+        cmake_minimum_required(VERSION 3.15...4.0)
         project(${SKBUILD_PROJECT_NAME} LANGUAGES CXX)
 
-        set(PYBIND11_FINDPYTHON ON)
         find_package(pybind11 CONFIG REQUIRED)
 
         pybind11_add_module(_core MODULE src/main.cpp)
@@ -3867,10 +3866,9 @@ fn init_lib_build_backend_scikit() -> Result<()> {
     }, {
         assert_snapshot!(
             build_file_contents, @"
-        cmake_minimum_required(VERSION 3.15)
+        cmake_minimum_required(VERSION 3.15...4.0)
         project(${SKBUILD_PROJECT_NAME} LANGUAGES CXX)
 
-        set(PYBIND11_FINDPYTHON ON)
         find_package(pybind11 CONFIG REQUIRED)
 
         pybind11_add_module(_core MODULE src/main.cpp)
