@@ -865,6 +865,7 @@ pub struct CacheNamespace {
 #[derive(Subcommand)]
 pub enum CacheCommand {
     /// Clear the cache, removing all entries or those linked to specific packages.
+    #[command(alias = "clear")]
     Clean(CleanArgs),
     /// Prune all unreachable objects from the cache.
     Prune(PruneArgs),
@@ -5704,7 +5705,8 @@ pub struct ToolInstallArgs {
 
     /// Force installation of the tool.
     ///
-    /// Will replace any existing entry points with the same name in the executable directory.
+    /// Will recreate any existing environment for the tool and replace any existing entry points
+    /// with the same name in the executable directory.
     #[arg(long)]
     pub force: bool,
 
@@ -5786,6 +5788,16 @@ pub struct ToolListArgs {
     /// Whether to display the Python version associated with each tool.
     #[arg(long)]
     pub show_python: bool,
+
+    /// List outdated tools.
+    ///
+    /// The latest version of each tool will be shown alongside the installed version. Up-to-date
+    /// tools will be omitted from the output.
+    #[arg(long, overrides_with("no_outdated"))]
+    pub outdated: bool,
+
+    #[arg(long, overrides_with("outdated"), hide = true)]
+    pub no_outdated: bool,
 
     // Hide unused global Python options.
     #[arg(long, hide = true)]

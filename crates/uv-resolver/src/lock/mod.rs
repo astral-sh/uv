@@ -26,17 +26,19 @@ use uv_distribution_filename::{
 };
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
-    Dist, DistributionMetadata, FileLocation, GitSourceDist, IndexLocations, IndexMetadata,
-    IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
+    Dist, FileLocation, GitSourceDist, Identifier, IndexLocations, IndexMetadata, IndexUrl, Name,
+    PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
+    RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
     SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString,
 };
-use uv_fs::{PortablePath, PortablePathBuf, Simplified, relative_to};
+use uv_fs::{PortablePath, PortablePathBuf, Simplified, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
-use uv_pep508::{MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError, split_scheme};
+use uv_pep508::{
+    MarkerEnvironment, MarkerTree, Scheme, VerbatimUrl, VerbatimUrlError, split_scheme,
+};
 use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
 };
@@ -1640,8 +1642,7 @@ impl Lock {
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => None,
                     IndexUrl::Path(url) => {
                         let path = url.to_file_path().ok()?;
-                        let path = relative_to(&path, root)
-                            .or_else(|_| std::path::absolute(path))
+                        let path = try_relative_to_if(&path, root, !url.was_given_absolute())
                             .ok()?
                             .into_boxed_path();
                         Some(path)
@@ -1689,9 +1690,7 @@ impl Lock {
                     IndexUrl::Path(url) => {
                         if let Some(locals) = locals.as_mut() {
                             if let Some(path) = url.to_file_path().ok().and_then(|path| {
-                                relative_to(&path, root)
-                                    .or_else(|_| std::path::absolute(path))
-                                    .ok()
+                                try_relative_to_if(&path, root, !url.was_given_absolute()).ok()
                             }) {
                                 locals.insert(path.into_boxed_path());
                             }
@@ -1794,7 +1793,7 @@ impl Lock {
                 )?;
 
                 let metadata = {
-                    let id = dist.version_id();
+                    let id = dist.distribution_id();
                     if let Some(archive) =
                         index
                             .distributions()
@@ -1946,7 +1945,7 @@ impl Lock {
                     )?;
 
                     let metadata = {
-                        let id = dist.version_id();
+                        let id = dist.distribution_id();
                         if let Some(archive) =
                             index
                                 .distributions()
@@ -2034,9 +2033,7 @@ impl Lock {
                         IndexUrl::Path(url) => {
                             if let Some(locals) = locals.as_mut() {
                                 if let Some(path) = url.to_file_path().ok().and_then(|path| {
-                                    relative_to(&path, root)
-                                        .or_else(|_| std::path::absolute(path))
-                                        .ok()
+                                    try_relative_to_if(&path, root, !url.was_given_absolute()).ok()
                                 }) {
                                     locals.insert(path.into_boxed_path());
                                 }
@@ -2797,10 +2794,11 @@ impl Package {
                     return Ok(None);
                 };
                 let install_path = absolute_path(workspace_root, path)?;
+                let given = path.to_str().expect("lock file paths must be UTF-8");
                 let path_dist = PathSourceDist {
                     name: self.id.name.clone(),
                     version: self.id.version.clone(),
-                    url: verbatim_url(&install_path, &self.id)?,
+                    url: verbatim_url(&install_path, &self.id)?.with_given(given),
                     install_path: install_path.into_boxed_path(),
                     ext,
                 };
@@ -2808,9 +2806,10 @@ impl Package {
             }
             Source::Directory(path) => {
                 let install_path = absolute_path(workspace_root, path)?;
+                let given = path.to_str().expect("lock file paths must be UTF-8");
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
-                    url: verbatim_url(&install_path, &self.id)?,
+                    url: verbatim_url(&install_path, &self.id)?.with_given(given),
                     install_path: install_path.into_boxed_path(),
                     editable: Some(false),
                     r#virtual: Some(false),
@@ -2819,9 +2818,10 @@ impl Package {
             }
             Source::Editable(path) => {
                 let install_path = absolute_path(workspace_root, path)?;
+                let given = path.to_str().expect("lock file paths must be UTF-8");
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
-                    url: verbatim_url(&install_path, &self.id)?,
+                    url: verbatim_url(&install_path, &self.id)?.with_given(given),
                     install_path: install_path.into_boxed_path(),
                     editable: Some(true),
                     r#virtual: Some(false),
@@ -2830,9 +2830,10 @@ impl Package {
             }
             Source::Virtual(path) => {
                 let install_path = absolute_path(workspace_root, path)?;
+                let given = path.to_str().expect("lock file paths must be UTF-8");
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
-                    url: verbatim_url(&install_path, &self.id)?,
+                    url: verbatim_url(&install_path, &self.id)?.with_given(given),
                     install_path: install_path.into_boxed_path(),
                     editable: Some(false),
                     r#virtual: Some(true),
@@ -3655,16 +3656,22 @@ impl Source {
     }
 
     fn from_path_built_dist(path_dist: &PathBuiltDist, root: &Path) -> Result<Self, LockError> {
-        let path = relative_to(&path_dist.install_path, root)
-            .or_else(|_| std::path::absolute(&path_dist.install_path))
-            .map_err(LockErrorKind::DistributionRelativePath)?;
+        let path = try_relative_to_if(
+            &path_dist.install_path,
+            root,
+            !path_dist.url.was_given_absolute(),
+        )
+        .map_err(LockErrorKind::DistributionRelativePath)?;
         Ok(Self::Path(path.into_boxed_path()))
     }
 
     fn from_path_source_dist(path_dist: &PathSourceDist, root: &Path) -> Result<Self, LockError> {
-        let path = relative_to(&path_dist.install_path, root)
-            .or_else(|_| std::path::absolute(&path_dist.install_path))
-            .map_err(LockErrorKind::DistributionRelativePath)?;
+        let path = try_relative_to_if(
+            &path_dist.install_path,
+            root,
+            !path_dist.url.was_given_absolute(),
+        )
+        .map_err(LockErrorKind::DistributionRelativePath)?;
         Ok(Self::Path(path.into_boxed_path()))
     }
 
@@ -3672,9 +3679,12 @@ impl Source {
         directory_dist: &DirectorySourceDist,
         root: &Path,
     ) -> Result<Self, LockError> {
-        let path = relative_to(&directory_dist.install_path, root)
-            .or_else(|_| std::path::absolute(&directory_dist.install_path))
-            .map_err(LockErrorKind::DistributionRelativePath)?;
+        let path = try_relative_to_if(
+            &directory_dist.install_path,
+            root,
+            !directory_dist.url.was_given_absolute(),
+        )
+        .map_err(LockErrorKind::DistributionRelativePath)?;
         if directory_dist.editable.unwrap_or(false) {
             Ok(Self::Editable(path.into_boxed_path()))
         } else if directory_dist.r#virtual.unwrap_or(false) {
@@ -3696,8 +3706,7 @@ impl Source {
                 let path = url
                     .to_file_path()
                     .map_err(|()| LockErrorKind::UrlToPath { url: url.to_url() })?;
-                let path = relative_to(&path, root)
-                    .or_else(|_| std::path::absolute(&path))
+                let path = try_relative_to_if(&path, root, !url.was_given_absolute())
                     .map_err(LockErrorKind::IndexRelativePath)?;
                 let source = RegistrySource::Path(path.into_boxed_path());
                 Ok(Self::Registry(source))
@@ -3984,7 +3993,7 @@ impl<'de> serde::de::Deserialize<'de> for RegistrySourceWire {
             where
                 E: serde::de::Error,
             {
-                if split_scheme(value).is_some() {
+                if split_scheme(value).is_some_and(|(scheme, _)| Scheme::parse(scheme).is_some()) {
                     Ok(
                         serde::Deserialize::deserialize(serde::de::value::StrDeserializer::new(
                             value,
@@ -4264,10 +4273,10 @@ impl SourceDist {
                     let reg_dist_path = url
                         .to_file_path()
                         .map_err(|()| LockErrorKind::UrlToPath { url })?;
-                    let path = relative_to(&reg_dist_path, index_path)
-                        .or_else(|_| std::path::absolute(&reg_dist_path))
-                        .map_err(LockErrorKind::DistributionRelativePath)?
-                        .into_boxed_path();
+                    let path =
+                        try_relative_to_if(&reg_dist_path, index_path, !path.was_given_absolute())
+                            .map_err(LockErrorKind::DistributionRelativePath)?
+                            .into_boxed_path();
                     let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
                     let size = reg_dist.file.size;
                     let upload_time = reg_dist
@@ -4612,10 +4621,10 @@ impl Wheel {
                     let wheel_path = wheel_url
                         .to_file_path()
                         .map_err(|()| LockErrorKind::UrlToPath { url: wheel_url })?;
-                    let path = relative_to(&wheel_path, index_path)
-                        .or_else(|_| std::path::absolute(&wheel_path))
-                        .map_err(LockErrorKind::DistributionRelativePath)?
-                        .into_boxed_path();
+                    let path =
+                        try_relative_to_if(&wheel_path, index_path, !path.was_given_absolute())
+                            .map_err(LockErrorKind::DistributionRelativePath)?
+                            .into_boxed_path();
                     WheelWireSource::Path { path }
                 } else {
                     let url = normalize_file_location(&wheel.file.url)
@@ -6788,5 +6797,30 @@ source = { editable = "path/to/dir" }
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
         insta::assert_debug_snapshot!(result);
+    }
+
+    /// Windows drive letter paths like `C:/...` should be deserialized as local path registry
+    /// sources, not as URLs. The `C:` prefix must not be misinterpreted as a URL scheme.
+    #[test]
+    fn registry_source_windows_drive_letter() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[package]]
+name = "tqdm"
+version = "1000.0.0"
+source = { registry = "C:/Users/user/links" }
+wheels = [
+    { path = "C:/Users/user/links/tqdm-1000.0.0-py3-none-any.whl" },
+]
+"#;
+        let lock: Lock = toml::from_str(data).unwrap();
+        assert_eq!(
+            lock.packages[0].id.source,
+            Source::Registry(RegistrySource::Path(
+                Path::new("C:/Users/user/links").into()
+            ))
+        );
     }
 }

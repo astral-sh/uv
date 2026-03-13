@@ -329,7 +329,7 @@ pub(crate) async fn install(
         settings
     };
 
-    // If the user passed `--force`, it implies `--reinstall-package <from>`
+    // If the user passed `--force`, it implies `--reinstall-package <from>`.
     let settings = if force {
         ResolverInstallerSettings {
             reinstall: Reinstall::package(package_name.clone()).combine(settings.reinstall),
@@ -446,20 +446,23 @@ pub(crate) async fn install(
             }
         };
 
-    let existing_environment = installed_tools
-        .get_environment(package_name, &cache)?
-        .filter(|environment| {
-            existing_environment_usable(
-                environment.environment(),
-                &interpreter,
-                package_name,
-                python_request.as_ref(),
-                explicit_python_request,
-                &settings,
-                existing_tool_receipt.as_ref(),
-                printer,
-            )
-        });
+    let existing_environment = if force {
+        None
+    } else {
+        installed_tools
+            .get_environment(package_name, &cache)?
+            .filter(|environment| {
+                existing_environment_usable(
+                    environment.environment(),
+                    &interpreter,
+                    package_name,
+                    explicit_python_request,
+                    &settings,
+                    existing_tool_receipt.as_ref(),
+                    printer,
+                )
+            })
+    };
 
     // If the requested and receipt requirements are the same...
     if let Some(environment) = existing_environment.as_ref().filter(|_| {
@@ -770,7 +773,6 @@ fn existing_environment_usable(
     environment: &PythonEnvironment,
     interpreter: &Interpreter,
     package_name: &PackageName,
-    python_request: Option<&PythonRequest>,
     explicit_python_request: bool,
     settings: &ResolverInstallerSettings,
     existing_tool_receipt: Option<&uv_tool::Tool>,
@@ -797,14 +799,12 @@ fn existing_environment_usable(
         return false;
     }
 
-    // Otherwise, we'll invalidate the environment if all of the following are true:
-    // - The user requested a reinstall
-    // - The tool was not previously pinned to a Python version
-    // - There is _some_ alternative Python request
+    // Otherwise, invalidate the environment when this tool is being reinstalled and its
+    // previous receipt did not pin a Python request. In that case, the reinstall should
+    // follow the newly selected interpreter instead of reusing the old environment.
     if let Some(tool_receipt) = existing_tool_receipt
-        && settings.reinstall.is_all()
+        && settings.reinstall.contains_package(package_name)
         && tool_receipt.python().is_none()
-        && python_request.is_some()
     {
         let _ = writeln!(
             printer.stderr(),

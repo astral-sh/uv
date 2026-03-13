@@ -429,7 +429,7 @@ fn noop() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -470,7 +470,7 @@ fn pip_sync_empty() -> Result<()> {
     ----- stderr -----
     warning: Requirements file `requirements.txt` does not contain any dependencies
     Resolved in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     "
     );
 
@@ -915,7 +915,7 @@ fn install_url_then_install_url() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -952,7 +952,7 @@ fn install_url_then_install_version() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -1277,7 +1277,7 @@ fn install_local_wheel() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -1296,7 +1296,7 @@ fn install_local_wheel() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -2392,7 +2392,7 @@ fn sync_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 2 packages in [TIME]
+    Checked 2 packages in [TIME]
     "
     );
 
@@ -2457,7 +2457,7 @@ fn sync_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 2 packages in [TIME]
+    Checked 2 packages in [TIME]
     "
     );
 
@@ -2590,7 +2590,7 @@ fn sync_editable_and_registry() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -3328,7 +3328,7 @@ requires-python = ">=3.8"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -5887,7 +5887,7 @@ fn pep_751() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     "
     );
 

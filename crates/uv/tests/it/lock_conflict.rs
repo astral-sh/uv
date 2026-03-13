@@ -159,7 +159,7 @@ fn extra_basic() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited in [TIME]
+    Checked in [TIME]
     ");
     // Another install, but with one of the extras enabled.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=extra1"), @"
@@ -403,7 +403,7 @@ fn extra_multiple_not_conflicting1() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited in [TIME]
+    Checked in [TIME]
     ");
     // extra1/extra2 conflict!
     uv_snapshot!(
@@ -439,7 +439,7 @@ fn extra_multiple_not_conflicting1() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited in [TIME]
+    Checked in [TIME]
     ");
     // ... and neither does extra2/project3.
     uv_snapshot!(
@@ -451,7 +451,7 @@ fn extra_multiple_not_conflicting1() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited in [TIME]
+    Checked in [TIME]
     ");
     // And similarly, with project 4.
     uv_snapshot!(
@@ -463,7 +463,7 @@ fn extra_multiple_not_conflicting1() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited in [TIME]
+    Checked in [TIME]
     ");
     // ... and neither does extra2/project3.
     uv_snapshot!(
@@ -475,7 +475,7 @@ fn extra_multiple_not_conflicting1() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     Ok(())
@@ -1300,7 +1300,7 @@ fn extra_unconditional_in_optional() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     // This should install `sortedcontainers==2.3.0`.
@@ -2039,7 +2039,7 @@ fn group_basic() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited in [TIME]
+    Checked in [TIME]
     ");
     // Another install, but with one of the groups enabled.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group1"), @"
@@ -2206,7 +2206,7 @@ fn group_default() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     // Another install, but with the other group enabled. This should error, since `group1` is
@@ -2409,7 +2409,7 @@ fn mixed() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited in [TIME]
+    Checked in [TIME]
     ");
     // Another install, but with the group enabled.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group1"), @"
@@ -4274,7 +4274,7 @@ fn shared_dependency_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     ");
 
     Ok(())
@@ -4448,7 +4448,7 @@ fn shared_dependency_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     ");
 
     Ok(())
@@ -4629,7 +4629,7 @@ fn shared_dependency_mixed() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     ");
 
     Ok(())
@@ -4905,7 +4905,7 @@ fn jinja_no_conflict_markers1() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
@@ -5067,7 +5067,7 @@ fn jinja_no_conflict_markers2() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
@@ -14113,6 +14113,463 @@ fn overlapping_resolution_markers() -> Result<()> {
         "#
         );
     });
+
+    Ok(())
+}
+
+/// Ref: <https://github.com/astral-sh/uv/issues/17732>
+#[test]
+fn conditional_sources_keep_default_platform_specific_transitive_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-02-06T00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "test-torch"
+        version = "0.1.0"
+        requires-python = "==3.12.*"
+        dependencies = ["torch>=2.6.0,<2.7.0"]
+
+        [project.optional-dependencies]
+        cpu = ["torch>=2.6.0,<2.7.0"]
+        cu124 = ["torch>=2.6.0,<2.7.0"]
+
+        [tool.uv]
+        conflicts = [
+            [{ extra = "cpu" }, { extra = "cu124" }],
+        ]
+
+        [[tool.uv.index]]
+        name = "pytorch-cu124"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu124"
+        default = true
+
+        [[tool.uv.index]]
+        name = "pytorch-cpu"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cpu"
+        explicit = true
+
+        [tool.uv.sources]
+        torch = [
+            { index = "pytorch-cpu", extra = "cpu" },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 27 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock,
+            @r#"
+        version = 1
+        revision = 3
+        requires-python = "==3.12.*"
+        resolution-markers = [
+            "extra != 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124'",
+            "sys_platform != 'darwin' and extra == 'extra-10-test-torch-cpu' and extra != 'extra-10-test-torch-cu124'",
+            "sys_platform == 'darwin' and extra == 'extra-10-test-torch-cpu' and extra != 'extra-10-test-torch-cu124'",
+            "extra != 'extra-10-test-torch-cpu' and extra != 'extra-10-test-torch-cu124'",
+        ]
+        conflicts = [[
+            { package = "test-torch", extra = "cpu" },
+            { package = "test-torch", extra = "cu124" },
+        ]]
+
+        [options]
+        exclude-newer = "2025-02-06T00:00:00Z"
+
+        [[package]]
+        name = "filelock"
+        version = "3.13.1"
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
+        wheels = [
+            { url = "https://download.pytorch.org/whl/filelock-3.13.1-py3-none-any.whl", upload-time = "2025-01-29T22:50:56.834Z" },
+        ]
+
+        [[package]]
+        name = "fsspec"
+        version = "2024.6.1"
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
+        wheels = [
+            { url = "https://download.pytorch.org/whl/fsspec-2024.6.1-py3-none-any.whl", upload-time = "2025-01-29T22:50:56.915Z" },
+        ]
+
+        [[package]]
+        name = "jinja2"
+        version = "3.1.4"
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
+        dependencies = [
+            { name = "markupsafe" },
+        ]
+        wheels = [
+            { url = "https://download.pytorch.org/whl/Jinja2-3.1.4-py3-none-any.whl", upload-time = "2025-01-29T22:50:57.275Z" },
+        ]
+
+        [[package]]
+        name = "markupsafe"
+        version = "2.1.5"
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
+        sdist = { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5.tar.gz", upload-time = "2025-01-29T22:50:57.539Z" }
+        wheels = [
+            { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-macosx_10_9_universal2.whl", hash = "sha256:8dec4936e9c3100156f8a2dc89c4b88d5c435175ff03413b443469c7c8c5f4d1", upload-time = "2025-01-29T22:50:57.538Z" },
+            { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:3c6b973f22eb18a789b1460b4b91bf04ae3f0c4234a0a6aa6b0a92f6f7b951d4", upload-time = "2025-01-29T22:50:57.539Z" },
+            { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:ac07bad82163452a6884fe8fa0963fb98c2346ba78d779ec06bd7a6262132aee", upload-time = "2025-01-29T22:50:57.539Z" },
+            { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f5dfb42c4604dddc8e4305050aa6deb084540643ed5804d7455b5df8fe16f5e5", upload-time = "2025-01-29T22:50:57.539Z" },
+            { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:ea3d8a3d18833cf4304cd2fc9cbb1efe188ca9b5efef2bdac7adc20594a0e46b", upload-time = "2025-01-29T22:50:57.539Z" },
+            { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-win_amd64.whl", hash = "sha256:823b65d8706e32ad2df51ed89496147a42a2a6e01c13cfb6ffb8b1e92bc910bb", upload-time = "2025-01-29T22:50:57.539Z" },
+        ]
+
+        [[package]]
+        name = "mpmath"
+        version = "1.3.0"
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
+        wheels = [
+            { url = "https://download.pytorch.org/whl/mpmath-1.3.0-py3-none-any.whl", hash = "sha256:a0b2b9fe80bbcd81a6647ff13108738cfb482d481d826cc0e02f5b35e5c88d2c", upload-time = "2025-01-29T22:50:57.683Z" },
+        ]
+
+        [[package]]
+        name = "networkx"
+        version = "3.3"
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
+        wheels = [
+            { url = "https://download.pytorch.org/whl/networkx-3.3-py3-none-any.whl", upload-time = "2025-01-29T22:50:57.843Z" },
+        ]
+
+        [[package]]
+        name = "nvidia-cublas-cu12"
+        version = "12.4.5.8"
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
+        wheels = [
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_cublas_cu12-12.4.5.8-py3-none-manylinux2014_aarch64.whl", hash = "sha256:0f8aa1706812e00b9f19dfe0cdb3999b092ccb8ca168c0db5b8ea712456fd9b3", upload-time = "2025-01-29T22:51:38.991Z" },
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_cublas_cu12-12.4.5.8-py3-none-manylinux2014_x86_64.whl", hash = "sha256:2fc8da60df463fdefa81e323eef2e36489e1c94335b5358bcb38360adf75ac9b", upload-time = "2025-01-29T22:51:38.991Z" },
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_cublas_cu12-12.4.5.8-py3-none-win_amd64.whl", hash = "sha256:5a796786da89203a0657eda402bcdcec6180254a8ac22d72213abc42069522dc", upload-time = "2025-01-29T22:51:38.992Z" },
+        ]
+
+        [[package]]
+        name = "nvidia-cuda-cupti-cu12"
+        version = "12.4.127"
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
+        wheels = [
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_cuda_cupti_cu12-12.4.127-py3-none-manylinux2014_aarch64.whl", hash = "sha256:79279b35cf6f91da114182a5ce1864997fd52294a87a16179ce275773799458a", upload-time = "2025-01-29T22:51:39.068Z" },
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_cuda_cupti_cu12-12.4.127-py3-none-manylinux2014_x86_64.whl", hash = "sha256:9dec60f5ac126f7bb551c055072b69d85392b13311fcc1bcda2202d172df30fb", upload-time = "2025-01-29T22:51:39.068Z" },
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_cuda_cupti_cu12-12.4.127-py3-none-win_amd64.whl", hash = "sha256:5688d203301ab051449a2b1cb6690fbe90d2b372f411521c86018b950f3d7922", upload-time = "2025-01-29T22:51:39.069Z" },
+        ]
+
+        [[package]]
+        name = "nvidia-cuda-nvrtc-cu12"
+        version = "12.4.127"
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
+        wheels = [
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_cuda_nvrtc_cu12-12.4.127-py3-none-manylinux2014_aarch64.whl", hash = "sha256:0eedf14185e04b76aa05b1fea04133e59f465b6f960c0cbf4e37c3cb6b0ea198", upload-time = "2025-01-29T22:51:39.138Z" },
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_cuda_nvrtc_cu12-12.4.127-py3-none-manylinux2014_x86_64.whl", hash = "sha256:a178759ebb095827bd30ef56598ec182b85547f1508941a3d560eb7ea1fbf338", upload-time = "2025-01-29T22:51:39.138Z" },
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_cuda_nvrtc_cu12-12.4.127-py3-none-win_amd64.whl", hash = "sha256:a961b2f1d5f17b14867c619ceb99ef6fcec12e46612711bcec78eb05068a60ec", upload-time = "2025-01-29T22:51:39.139Z" },
+        ]
+
+        [[package]]
+        name = "nvidia-cuda-runtime-cu12"
+        version = "12.4.127"
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
+        wheels = [
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_cuda_runtime_cu12-12.4.127-py3-none-manylinux2014_aarch64.whl", hash = "sha256:961fe0e2e716a2a1d967aab7caee97512f71767f852f67432d572e36cb3a11f3", upload-time = "2025-01-29T22:51:39.232Z" },
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_cuda_runtime_cu12-12.4.127-py3-none-manylinux2014_x86_64.whl", hash = "sha256:64403288fa2136ee8e467cdc9c9427e0434110899d07c779f25b5c068934faa5", upload-time = "2025-01-29T22:51:39.232Z" },
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_cuda_runtime_cu12-12.4.127-py3-none-win_amd64.whl", hash = "sha256:09c2e35f48359752dfa822c09918211844a3d93c100a715d79b59591130c5e1e", upload-time = "2025-01-29T22:51:39.232Z" },
+        ]
+
+        [[package]]
+        name = "nvidia-cudnn-cu12"
+        version = "9.1.0.70"
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
+        dependencies = [
+            { name = "nvidia-cublas-cu12" },
+        ]
+        wheels = [
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_cudnn_cu12-9.1.0.70-py3-none-manylinux2014_x86_64.whl", hash = "sha256:165764f44ef8c61fcdfdfdbe769d687e06374059fbb388b6c89ecb0e28793a6f", upload-time = "2025-01-29T22:51:39.303Z" },
+        ]
+
+        [[package]]
+        name = "nvidia-cufft-cu12"
+        version = "11.2.1.3"
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
+        dependencies = [
+            { name = "nvidia-nvjitlink-cu12" },
+        ]
+        wheels = [
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_cufft_cu12-11.2.1.3-py3-none-manylinux2014_aarch64.whl", hash = "sha256:5dad8008fc7f92f5ddfa2101430917ce2ffacd86824914c82e28990ad7f00399", upload-time = "2025-01-29T22:51:39.382Z" },
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_cufft_cu12-11.2.1.3-py3-none-manylinux2014_x86_64.whl", hash = "sha256:f083fc24912aa410be21fa16d157fed2055dab1cc4b6934a0e03cba69eb242b9", upload-time = "2025-01-29T22:51:39.382Z" },
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_cufft_cu12-11.2.1.3-py3-none-win_amd64.whl", hash = "sha256:d802f4954291101186078ccbe22fc285a902136f974d369540fd4a5333d1440b", upload-time = "2025-01-29T22:51:39.382Z" },
+        ]
+
+        [[package]]
+        name = "nvidia-curand-cu12"
+        version = "10.3.5.147"
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
+        wheels = [
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_curand_cu12-10.3.5.147-py3-none-manylinux2014_aarch64.whl", hash = "sha256:1f173f09e3e3c76ab084aba0de819c49e56614feae5c12f69883f4ae9bb5fad9", upload-time = "2025-01-29T22:51:39.466Z" },
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_curand_cu12-10.3.5.147-py3-none-manylinux2014_x86_64.whl", hash = "sha256:a88f583d4e0bb643c49743469964103aa59f7f708d862c3ddb0fc07f851e3b8b", upload-time = "2025-01-29T22:51:39.467Z" },
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_curand_cu12-10.3.5.147-py3-none-win_amd64.whl", hash = "sha256:f307cc191f96efe9e8f05a87096abc20d08845a841889ef78cb06924437f6771", upload-time = "2025-01-29T22:51:39.467Z" },
+        ]
+
+        [[package]]
+        name = "nvidia-cusolver-cu12"
+        version = "11.6.1.9"
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
+        dependencies = [
+            { name = "nvidia-cublas-cu12" },
+            { name = "nvidia-cusparse-cu12" },
+            { name = "nvidia-nvjitlink-cu12" },
+        ]
+        wheels = [
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_cusolver_cu12-11.6.1.9-py3-none-manylinux2014_aarch64.whl", hash = "sha256:d338f155f174f90724bbde3758b7ac375a70ce8e706d70b018dd3375545fc84e", upload-time = "2025-01-29T22:51:39.551Z" },
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_cusolver_cu12-11.6.1.9-py3-none-manylinux2014_x86_64.whl", hash = "sha256:19e33fa442bcfd085b3086c4ebf7e8debc07cfe01e11513cc6d332fd918ac260", upload-time = "2025-01-29T22:51:39.551Z" },
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_cusolver_cu12-11.6.1.9-py3-none-win_amd64.whl", hash = "sha256:e77314c9d7b694fcebc84f58989f3aa4fb4cb442f12ca1a9bde50f5e8f6d1b9c", upload-time = "2025-01-29T22:51:39.551Z" },
+        ]
+
+        [[package]]
+        name = "nvidia-cusparse-cu12"
+        version = "12.3.1.170"
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
+        dependencies = [
+            { name = "nvidia-nvjitlink-cu12" },
+        ]
+        wheels = [
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_cusparse_cu12-12.3.1.170-py3-none-manylinux2014_aarch64.whl", hash = "sha256:9d32f62896231ebe0480efd8a7f702e143c98cfaa0e8a76df3386c1ba2b54df3", upload-time = "2025-01-29T22:51:39.648Z" },
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_cusparse_cu12-12.3.1.170-py3-none-manylinux2014_x86_64.whl", hash = "sha256:ea4f11a2904e2a8dc4b1833cc1b5181cde564edd0d5cd33e3c168eff2d1863f1", upload-time = "2025-01-29T22:51:39.648Z" },
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_cusparse_cu12-12.3.1.170-py3-none-win_amd64.whl", hash = "sha256:9bc90fb087bc7b4c15641521f31c0371e9a612fc2ba12c338d3ae032e6b6797f", upload-time = "2025-01-29T22:51:39.648Z" },
+        ]
+
+        [[package]]
+        name = "nvidia-cusparselt-cu12"
+        version = "0.6.2"
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
+        wheels = [
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_cusparselt_cu12-0.6.2-py3-none-manylinux2014_aarch64.whl", upload-time = "2025-01-29T22:51:39.74Z" },
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_cusparselt_cu12-0.6.2-py3-none-manylinux2014_x86_64.whl", upload-time = "2025-01-29T22:51:39.74Z" },
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_cusparselt_cu12-0.6.2-py3-none-win_amd64.whl", upload-time = "2025-01-29T22:51:39.74Z" },
+        ]
+
+        [[package]]
+        name = "nvidia-nccl-cu12"
+        version = "2.21.5"
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
+        wheels = [
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_nccl_cu12-2.21.5-py3-none-manylinux2014_x86_64.whl", hash = "sha256:8579076d30a8c24988834445f8d633c697d42397e92ffc3f63fa26766d25e0a0", upload-time = "2025-01-29T22:51:39.917Z" },
+            { url = "https://download.pytorch.org/whl/nvidia_nccl_cu12-2.21.5-py3-none-manylinux2014_x86_64.whl", hash = "sha256:8579076d30a8c24988834445f8d633c697d42397e92ffc3f63fa26766d25e0a0", upload-time = "2025-01-29T22:50:58.013Z" },
+        ]
+
+        [[package]]
+        name = "nvidia-nvjitlink-cu12"
+        version = "12.4.127"
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
+        wheels = [
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_nvjitlink_cu12-12.4.127-py3-none-manylinux2014_aarch64.whl", hash = "sha256:4abe7fef64914ccfa909bc2ba39739670ecc9e820c83ccc7a6ed414122599b83", upload-time = "2025-01-29T22:51:40.008Z" },
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_nvjitlink_cu12-12.4.127-py3-none-manylinux2014_x86_64.whl", hash = "sha256:06b3b9b25bf3f8af351d664978ca26a16d2c5127dbd53c0497e28d1fb9611d57", upload-time = "2025-01-29T22:51:40.008Z" },
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_nvjitlink_cu12-12.4.127-py3-none-win_amd64.whl", hash = "sha256:fd9020c501d27d135f983c6d3e244b197a7ccad769e34df53a42e276b0e25fa1", upload-time = "2025-01-29T22:51:40.008Z" },
+        ]
+
+        [[package]]
+        name = "nvidia-nvtx-cu12"
+        version = "12.4.127"
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
+        wheels = [
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_nvtx_cu12-12.4.127-py3-none-manylinux2014_aarch64.whl", hash = "sha256:7959ad635db13edf4fc65c06a6e9f9e55fc2f92596db928d169c0bb031e88ef3", upload-time = "2025-01-29T22:51:40.099Z" },
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_nvtx_cu12-12.4.127-py3-none-manylinux2014_x86_64.whl", hash = "sha256:781e950d9b9f60d8241ccea575b32f5105a5baf4c2351cab5256a24869f12a1a", upload-time = "2025-01-29T22:51:40.099Z" },
+            { url = "https://download.pytorch.org/whl/cu124/nvidia_nvtx_cu12-12.4.127-py3-none-win_amd64.whl", hash = "sha256:641dccaaa1139f3ffb0d3164b4b84f9d253397e38246a4f2f36728b48566d485", upload-time = "2025-01-29T22:51:40.099Z" },
+        ]
+
+        [[package]]
+        name = "setuptools"
+        version = "70.2.0"
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
+        wheels = [
+            { url = "https://download.pytorch.org/whl/setuptools-70.2.0-py3-none-any.whl", upload-time = "2025-01-29T22:50:58.769Z" },
+        ]
+
+        [[package]]
+        name = "sympy"
+        version = "1.13.1"
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
+        dependencies = [
+            { name = "mpmath" },
+        ]
+        wheels = [
+            { url = "https://download.pytorch.org/whl/sympy-1.13.1-py3-none-any.whl", hash = "sha256:db36cdc64bf61b9b24578b6f7bab1ecdd2452cf008f34faa33776680c26d66f8", upload-time = "2025-01-29T22:50:58.85Z" },
+        ]
+
+        [[package]]
+        name = "test-torch"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "torch", version = "2.6.0", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "torch", version = "2.6.0+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "torch", version = "2.6.0+cu124", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, marker = "extra == 'extra-10-test-torch-cu124' or extra != 'extra-10-test-torch-cpu'" },
+        ]
+
+        [package.optional-dependencies]
+        cpu = [
+            { name = "torch", version = "2.6.0", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "torch", version = "2.6.0+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+        ]
+        cu124 = [
+            { name = "torch", version = "2.6.0+cu124", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" } },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "torch", specifier = ">=2.6.0,<2.7.0" },
+            { name = "torch", marker = "extra == 'cpu'", specifier = ">=2.6.0,<2.7.0", index = "https://astral-sh.github.io/pytorch-mirror/whl/cpu", conflict = { package = "test-torch", extra = "cpu" } },
+            { name = "torch", marker = "extra == 'cu124'", specifier = ">=2.6.0,<2.7.0" },
+        ]
+        provides-extras = ["cpu", "cu124"]
+
+        [[package]]
+        name = "torch"
+        version = "2.6.0"
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+        ]
+        dependencies = [
+            { name = "filelock", marker = "(sys_platform == 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "fsspec", marker = "(sys_platform == 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "jinja2", marker = "(sys_platform == 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "networkx", marker = "(sys_platform == 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "setuptools", marker = "(sys_platform == 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "sympy", marker = "(sys_platform == 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "typing-extensions", marker = "(sys_platform == 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+        ]
+        wheels = [
+            { url = "https://download.pytorch.org/whl/cpu/torch-2.6.0-cp312-none-macosx_11_0_arm64.whl", upload-time = "2025-01-29T22:50:59.085Z" },
+        ]
+
+        [[package]]
+        name = "torch"
+        version = "2.6.0+cpu"
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }
+        resolution-markers = [
+            "sys_platform != 'darwin'",
+        ]
+        dependencies = [
+            { name = "filelock", marker = "(sys_platform != 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "fsspec", marker = "(sys_platform != 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "jinja2", marker = "(sys_platform != 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "networkx", marker = "(sys_platform != 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "setuptools", marker = "(sys_platform != 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "sympy", marker = "(sys_platform != 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "typing-extensions", marker = "(sys_platform != 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+        ]
+        wheels = [
+            { url = "https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp312-cp312-linux_x86_64.whl", upload-time = "2025-01-29T22:50:59.085Z" },
+            { url = "https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp312-cp312-manylinux_2_28_aarch64.whl", upload-time = "2025-01-29T22:50:59.085Z" },
+            { url = "https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp312-cp312-win_amd64.whl", upload-time = "2025-01-29T22:50:59.085Z" },
+        ]
+
+        [[package]]
+        name = "torch"
+        version = "2.6.0+cu124"
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
+        dependencies = [
+            { name = "filelock" },
+            { name = "fsspec" },
+            { name = "jinja2" },
+            { name = "networkx" },
+            { name = "nvidia-cublas-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "nvidia-cuda-cupti-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "nvidia-cuda-nvrtc-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "nvidia-cuda-runtime-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "nvidia-cudnn-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "nvidia-cufft-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "nvidia-curand-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "nvidia-cusolver-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "nvidia-cusparse-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "nvidia-cusparselt-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "nvidia-nccl-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "nvidia-nvjitlink-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "nvidia-nvtx-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "setuptools", marker = "extra == 'extra-10-test-torch-cu124' or extra != 'extra-10-test-torch-cpu'" },
+            { name = "sympy", marker = "extra == 'extra-10-test-torch-cu124' or extra != 'extra-10-test-torch-cpu'" },
+            { name = "triton", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "typing-extensions" },
+        ]
+        wheels = [
+            { url = "https://download.pytorch.org/whl/cu124/torch-2.6.0%2Bcu124-cp312-cp312-linux_x86_64.whl", upload-time = "2025-01-29T22:51:41.169Z" },
+            { url = "https://download.pytorch.org/whl/cu124/torch-2.6.0%2Bcu124-cp312-cp312-win_amd64.whl", upload-time = "2025-01-29T22:51:41.169Z" },
+        ]
+
+        [[package]]
+        name = "triton"
+        version = "3.2.0"
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
+        wheels = [
+            { url = "https://download.pytorch.org/whl/triton-3.2.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = "2025-01-29T22:51:00.867Z" },
+            { url = "https://download.pytorch.org/whl/triton-3.2.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", upload-time = "2025-01-29T22:51:00.867Z" },
+        ]
+
+        [[package]]
+        name = "typing-extensions"
+        version = "4.12.2"
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
+        wheels = [
+            { url = "https://download.pytorch.org/whl/typing_extensions-4.12.2-py3-none-any.whl", upload-time = "2025-01-29T22:51:00.933Z" },
+        ]
+        "#
+        );
+    });
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .sync()
+            .arg("--frozen")
+            .arg("--dry-run")
+            .arg("--python-platform")
+            .arg("x86_64-manylinux2014"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 24 packages
+    Would install 24 packages
+     + filelock==3.13.1
+     + fsspec==2024.6.1
+     + jinja2==3.1.4
+     + markupsafe==2.1.5
+     + mpmath==1.3.0
+     + networkx==3.3
+     + nvidia-cublas-cu12==12.4.5.8
+     + nvidia-cuda-cupti-cu12==12.4.127
+     + nvidia-cuda-nvrtc-cu12==12.4.127
+     + nvidia-cuda-runtime-cu12==12.4.127
+     + nvidia-cudnn-cu12==9.1.0.70
+     + nvidia-cufft-cu12==11.2.1.3
+     + nvidia-curand-cu12==10.3.5.147
+     + nvidia-cusolver-cu12==11.6.1.9
+     + nvidia-cusparse-cu12==12.3.1.170
+     + nvidia-cusparselt-cu12==0.6.2
+     + nvidia-nccl-cu12==2.21.5
+     + nvidia-nvjitlink-cu12==12.4.127
+     + nvidia-nvtx-cu12==12.4.127
+     + setuptools==70.2.0
+     + sympy==1.13.1
+     + torch==2.6.0+cu124
+     + triton==3.2.0
+     + typing-extensions==4.12.2
+    ");
 
     Ok(())
 }

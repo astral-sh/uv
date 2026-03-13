@@ -278,7 +278,7 @@ fn tool_install_python_from_global_version_file() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    Audited [N] packages in [TIME]
+    Checked [N] packages in [TIME]
     Installed 1 executable: flask
     ");
 
@@ -403,6 +403,98 @@ fn tool_install_python_from_global_version_file() {
     exit_code: 0
     ----- stdout -----
     Python 3.11.[X]
+    Flask 3.0.2
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn tool_install_force_respects_global_python_change() {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12", "3.13"])
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    context
+        .python_pin()
+        .arg("3.12")
+        .arg("--global")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("flask")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.1
+    Installed 1 executable: flask
+    ");
+
+    uv_snapshot!(context.filters(), Command::new("flask").arg("--version").env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.2
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    ");
+
+    context
+        .python_pin()
+        .arg("3.13")
+        .arg("--global")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("flask")
+        .arg("--force")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.1
+    Installed 1 executable: flask
+    ");
+
+    uv_snapshot!(context.filters(), Command::new("flask").arg("--version").env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.13.[X]
     Flask 3.0.2
     Werkzeug 3.0.1
 
@@ -804,7 +896,7 @@ fn tool_install_editable() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     Installed 1 executable: black
     ");
 
@@ -1483,6 +1575,10 @@ fn tool_install_force() {
 
     tool_dir.child("black").assert(predicate::path::is_dir());
 
+    let marker = tool_dir.child("black").child("marker");
+    fs_err::write(&marker, b"marker").unwrap();
+    marker.assert(predicate::path::is_file());
+
     // Re-install `black` with `--force`
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
@@ -1496,13 +1592,18 @@ fn tool_install_force() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     ~ black==24.3.0
+     + black==24.3.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
     Installed 2 executables: black, blackd
     ");
 
     tool_dir.child("black").assert(predicate::path::is_dir());
+    marker.assert(predicate::path::missing());
 
     // Re-install `black` without `--force`
     uv_snapshot!(context.filters(), context.tool_install()
@@ -2865,7 +2966,7 @@ fn tool_install_upgrade() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    Audited [N] packages in [TIME]
+    Checked [N] packages in [TIME]
     Installed 2 executables: black, blackd
     ");
 
@@ -3856,7 +3957,7 @@ fn tool_install_at_latest_upgrade() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    Audited [N] packages in [TIME]
+    Checked [N] packages in [TIME]
     Installed 2 executables: black, blackd
     ");
 
@@ -4693,27 +4794,13 @@ fn tool_install_removed_python() {
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
-
     let (_, python_executable) = context.python_versions.first().unwrap();
-    let install_root = if cfg!(unix) {
-        // <root>/bin/python3.12
-        python_executable.parent().unwrap().parent().unwrap()
-    } else {
-        // <root>/python.exe
-        python_executable.parent().unwrap()
-    };
 
-    let temp_python_dir = context.temp_dir.child("temp-python");
-    copy_dir_all(install_root, &temp_python_dir).unwrap();
-
-    let relative_path = python_executable.strip_prefix(install_root).unwrap();
-    let temp_python = temp_python_dir.join(relative_path);
-
-    // Install `black` using the temporary Python.
+    // Install `black` with an explicit Python request.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
         .arg("--python")
-        .arg(&temp_python)
+        .arg(python_executable)
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
@@ -4734,7 +4821,38 @@ fn tool_install_removed_python() {
     Installed 2 executables: black, blackd
     ");
 
-    fs_err::remove_dir_all(&temp_python_dir).unwrap();
+    let tool_root = tool_dir.child("black");
+
+    // Simulate the tool's interpreter disappearing without copying an arbitrary system prefix
+    // like `/usr` into the test directory.
+    #[cfg(unix)]
+    {
+        let tool_python = tool_root.child("bin").child("python");
+        fs_err::remove_file(&tool_python).unwrap();
+        fs_err::os::unix::fs::symlink(context.temp_dir.join("missing-python"), &tool_python)
+            .unwrap();
+    }
+
+    #[cfg(windows)]
+    {
+        use uv_fs::Simplified;
+
+        let pyvenv_cfg = tool_root.child("pyvenv.cfg");
+        let broken_home = context.temp_dir.join("missing-python");
+        let contents = fs_err::read_to_string(&pyvenv_cfg).unwrap();
+        let contents = contents
+            .lines()
+            .map(|line| {
+                if line.starts_with("home = ") {
+                    format!("home = {}", broken_home.simplified_display())
+                } else {
+                    line.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        fs_err::write(&pyvenv_cfg, format!("{contents}\n")).unwrap();
+    }
 
     // Reinstalling should skip the broken Python install.
     uv_snapshot!(context.filters(), context.tool_install()

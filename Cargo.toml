@@ -9,7 +9,7 @@ resolver = "2"
 
 [workspace.package]
 edition = "2024"
-rust-version = "1.91"
+rust-version = "1.92.0"
 homepage = "https://pypi.org/project/uv/"
 repository = "https://github.com/astral-sh/uv"
 authors = ["uv"]
@@ -294,6 +294,7 @@ windows = { version = "0.61.0", features = [
   "Win32_UI_WindowsAndMessaging",
 ] }
 windows-registry = { version = "0.5.0" }
+windows-version = { version = "0.1.6" }
 wiremock = { version = "0.6.4" }
 wmi = { version = "0.16.0", default-features = false }
 xz2 = { version = "0.1.7", features = ["static"] }
@@ -317,7 +318,7 @@ http-body-util = { version = "0.1.2" }
 hyper = { version = "1.4.1", features = ["server", "http1"] }
 hyper-util = { version = "0.1.8", features = ["tokio", "server", "http1"] }
 ignore = { version = "0.4.23" }
-insta = { version = "1.40.0", features = ["json", "filters", "redactions"] }
+insta = { version = "1.46.0", features = ["json", "filters", "redactions"] }
 predicates = { version = "3.1.2" }
 rcgen = { version = "0.14.5", features = [
   "crypto",
@@ -445,6 +446,3 @@ codegen-units = 1
 # The profile that 'cargo dist' will build with.
 [profile.dist]
 inherits = "release"
-
-[workspace.metadata.cargo-shear]
-ignored = ["uv-audit"]

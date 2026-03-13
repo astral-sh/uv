@@ -7,7 +7,7 @@ use tracing::trace;
 
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{DistributionDatabase, Reporter};
-use uv_distribution_types::{Dist, DistributionMetadata, Requirement, RequirementSource};
+use uv_distribution_types::{Dist, Identifier, Requirement, RequirementSource};
 use uv_resolver::{InMemoryIndex, MetadataResponse, ResolverEnvironment};
 use uv_types::{BuildContext, HashStrategy, RequestedRequirements};
 
@@ -146,7 +146,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
 
         // Fetch the metadata for the distribution.
         let metadata = {
-            let id = dist.version_id();
+            let id = dist.distribution_id();
             if self.index.distributions().register(id.clone()) {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let archive = self
