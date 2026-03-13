@@ -497,43 +497,50 @@ fn python_list_downloads_installed() {
     ");
 }
 
-/// Test that `--managed-python` shows symlinks on the search path that point to managed
-/// installations.
+/// Test that symlinks installed by `python install` on the search path are correctly
+/// filtered by `--managed-python` and `--no-managed-python`.
 #[test]
+#[cfg(feature = "test-python-managed")]
 fn python_list_managed_symlinks() {
-    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
-        .with_filtered_python_symlinks()
+    use assert_cmd::assert::OutputAssertExt;
+
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
-        .with_collapsed_whitespace()
-        .with_versions_as_managed(&["3.12"]);
+        .with_filtered_python_install_bin()
+        .with_filtered_python_names()
+        .with_managed_python_dirs();
 
-    // Without any flags, all interpreters are shown
-    uv_snapshot!(context.filters(), context.python_list(), @"
+    // Install a Python version; this creates a symlink in `bin_dir` (on the search path)
+    context.python_install().arg("3.10").assert().success();
+
+    // Include `bin_dir` in the test search path so the symlink is discoverable
+    let bin_dir = context.bin_dir.to_path_buf();
+
+    // With `--no-managed-python`, the symlink should be excluded since it points to a
+    // managed installation
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("3.10")
+        .arg("--only-installed")
+        .arg("--no-managed-python")
+        .env(EnvVars::UV_TEST_PYTHON_PATH, &bin_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.12.[X]-[PLATFORM] [PYTHON-3.12]
-    cpython-3.11.[X]-[PLATFORM] [PYTHON-3.11]
 
     ----- stderr -----
     ");
 
-    // With `--managed-python`, only managed interpreters (3.12) are shown
-    uv_snapshot!(context.filters(), context.python_list().arg("--managed-python"), @"
+    // With `--managed-python`, both the managed installation and the symlink are shown
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("3.10")
+        .arg("--only-installed")
+        .arg("--managed-python")
+        .env(EnvVars::UV_TEST_PYTHON_PATH, &bin_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.12.[X]-[PLATFORM] [PYTHON-3.12]
-
-    ----- stderr -----
-    ");
-
-    // With `--no-managed-python`, only non-managed interpreters (3.11) are shown
-    uv_snapshot!(context.filters(), context.python_list().arg("--no-managed-python"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    cpython-3.11.[X]-[PLATFORM] [PYTHON-3.11]
+    cpython-3.10.19-[PLATFORM]    [BIN]/[PYTHON] -> managed/cpython-3.10-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    cpython-3.10.19-[PLATFORM]    managed/cpython-3.10-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");
