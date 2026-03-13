@@ -95,6 +95,41 @@ jobs:
           echo "$CONDA_PREFIX"
           ./uv pip install anyio
 
+  integration-test-conda-macos-x86_64:
+    name: "conda on macos x86-64"
+    timeout-minutes: 10
+    runs-on: macos-15-intel # github-macos-15-x86_64-4
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: conda-incubator/setup-miniconda@fc2d68f6413eb2d87b895e92f8584b5b94a10167 # v3.3.0
+        with:
+          miniconda-version: latest
+          activate-environment: uv
+          python-version: "3.12"
+
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-macos-x86_64-${{ inputs.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: Conda info
+        shell: bash -el {0}
+        run: conda info
+
+      - name: "Install a package (regression test for #14267)"
+        shell: bash -el {0}
+        run: |
+          echo "$CONDA_PREFIX"
+          # greenlet has `macosx_11_0_universal2` wheels; conda interpreters
+          # on Intel Macs previously got wrong platform tags (`macosx_10_16`)
+          # causing uv to try building from source instead of using the wheel.
+          ./uv pip install greenlet
+
   integration-test-deadsnakes-39-linux:
     name: "deadsnakes python3.9 on ubuntu"
     timeout-minutes: 15
