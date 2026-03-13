@@ -2092,7 +2092,6 @@ fn sync_extra_build_dependencies() -> Result<()> {
 
       help: `bad-child` was included because `parent` (v0.1.0) depends on `bad-child`
 
-
     hint: Build failures usually indicate a problem with the package or the build environment.
     ");
 
