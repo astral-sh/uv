@@ -161,10 +161,13 @@ pub(crate) async fn list(
             .into_iter()
             // Drop any "missing" installations
             .filter_map(Result::ok)
-            // When `--managed-python` was requested, filter to only managed interpreters
-            .filter(|installation| {
-                python_preference != PythonPreference::OnlyManaged
-                    || installation.interpreter().is_managed()
+            // When `--managed-python` was requested, filter to only managed interpreters;
+            // when `--no-managed-python` was requested, filter out managed interpreters
+            // (e.g., symlinks on the search path pointing to managed installations).
+            .filter(|installation| match python_preference {
+                PythonPreference::OnlyManaged => installation.interpreter().is_managed(),
+                PythonPreference::OnlySystem => !installation.interpreter().is_managed(),
+                _ => true,
             }))
             }
             PythonListKinds::Downloads => None,
