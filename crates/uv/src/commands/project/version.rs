@@ -366,7 +366,7 @@ pub(crate) struct MissingProjectVersionError {
 
 impl uv_errors::Hint for MissingProjectVersionError {
     fn hints(&self) -> uv_errors::Hints<'_> {
-        uv_errors::Hints::owned(format!(
+        uv_errors::Hints::from(format!(
             "If you meant to view uv's version, use `{}` instead",
             "uv self version".green()
         ))

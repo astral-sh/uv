@@ -1615,7 +1615,7 @@ impl uv_errors::Hint for SourceError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::OverlappingMarkers(_, rhs, replacement) => {
-                uv_errors::Hints::owned(format!("replace `{rhs}` with `{replacement}`."))
+                uv_errors::Hints::from(format!("replace `{rhs}` with `{replacement}`."))
             }
             _ => uv_errors::Hints::none(),
         }

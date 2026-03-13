@@ -143,7 +143,7 @@ impl OperationDiagnostic {
         // Render the caller-provided hint after the error output.
         if result.is_none() {
             if let Some(hint) = &self.hint {
-                let hints = Hints::borrowed(hint.as_str());
+                let hints = Hints::from(hint.as_str());
                 anstream::eprint!("{hints}");
             }
         }

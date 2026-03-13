@@ -32,7 +32,7 @@ pub enum Error {
 impl uv_errors::Hint for Error {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
-            Self::Exists { name, .. } => uv_errors::Hints::owned(format!(
+            Self::Exists { name, .. } => uv_errors::Hints::from(format!(
                 "Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing {name}",
             )),
             _ => uv_errors::Hints::none(),

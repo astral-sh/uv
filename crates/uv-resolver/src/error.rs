@@ -535,7 +535,10 @@ impl std::error::Error for NoSolutionError {}
 
 impl uv_errors::Hint for NoSolutionError {
     fn hints(&self) -> uv_errors::Hints<'_> {
-        uv_errors::Hints::from_owned(self.pubgrub_hints().iter().map(ToString::to_string))
+        self.pubgrub_hints()
+            .iter()
+            .map(ToString::to_string)
+            .collect()
     }
 }
 

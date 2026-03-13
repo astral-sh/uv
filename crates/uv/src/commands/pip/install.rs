@@ -65,9 +65,9 @@ pub(crate) struct ExternallyManagedError {
 impl Hint for ExternallyManagedError {
     fn hints(&self) -> Hints<'_> {
         if self.system {
-            Hints::borrowed("Virtual environments were not considered due to the `--system` flag")
+            Hints::from("Virtual environments were not considered due to the `--system` flag")
         } else {
-            Hints::borrowed("Consider creating a virtual environment, e.g., with `uv venv`")
+            Hints::from("Consider creating a virtual environment, e.g., with `uv venv`")
         }
     }
 }

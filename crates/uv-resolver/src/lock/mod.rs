@@ -5361,7 +5361,7 @@ impl std::error::Error for LockError {
 impl uv_errors::Hint for LockError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         if let Some(hint) = &self.hint {
-            uv_errors::Hints::owned(hint.to_string())
+            uv_errors::Hints::from(hint.to_string())
         } else {
             uv_errors::Hints::none()
         }

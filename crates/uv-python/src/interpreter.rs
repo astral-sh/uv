@@ -900,7 +900,7 @@ impl Display for BrokenLink {
 impl uv_errors::Hint for BrokenLink {
     fn hints(&self) -> uv_errors::Hints<'_> {
         if self.venv {
-            uv_errors::Hints::owned(format!(
+            uv_errors::Hints::from(format!(
                 "Consider recreating the environment (e.g., with `{}`)",
                 "uv venv".green()
             ))

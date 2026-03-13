@@ -574,7 +574,7 @@ impl uv_errors::Hint for LoweringError {
         match self {
             Self::MissingIndex {
                 hint: Some(hint), ..
-            } => uv_errors::Hints::owned(hint.clone()),
+            } => uv_errors::Hints::from(hint.clone()),
             _ => uv_errors::Hints::none(),
         }
     }

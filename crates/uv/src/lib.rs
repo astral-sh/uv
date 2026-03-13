@@ -79,13 +79,13 @@ struct ExternallyInstalledError {
 impl uv_errors::Hint for ExternallyInstalledError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         if let Some(source) = &self.install_source {
-            uv_errors::Hints::owned(format!(
+            uv_errors::Hints::from(format!(
                 "You installed uv using {}. To update uv, run `{}`",
                 source.description(),
                 source.update_instructions(),
             ))
         } else {
-            uv_errors::Hints::borrowed("Please use your package manager to update uv.")
+            uv_errors::Hints::from("Please use your package manager to update uv.")
         }
     }
 }

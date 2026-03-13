@@ -1247,7 +1247,7 @@ pub(crate) enum ToolRunScriptError {
 
 impl uv_errors::Hint for ToolRunScriptError {
     fn hints(&self) -> uv_errors::Hints<'_> {
-        uv_errors::Hints::owned(match self {
+        uv_errors::Hints::from(match self {
             Self::FromScript {
                 package_name,
                 target,
