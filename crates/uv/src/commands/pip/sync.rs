@@ -3,7 +3,7 @@ use std::fmt::Write;
 
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
-use tracing::{debug, warn};
+use tracing::{debug, info_span, warn};
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -89,6 +89,7 @@ pub(crate) async fn pip_sync(
     python_preference: PythonPreference,
     concurrency: Concurrency,
     cache: Cache,
+    workspace_cache: WorkspaceCache,
     dry_run: DryRun,
     printer: Printer,
     preview: Preview,
@@ -392,8 +393,8 @@ pub(crate) async fn pip_sync(
         &build_hasher,
         exclude_newer.clone(),
         sources.clone(),
-        WorkspaceCache::default(),
-        concurrency,
+        workspace_cache.clone(),
+        concurrency.clone(),
         preview,
     );
 
@@ -405,9 +406,11 @@ pub(crate) async fn pip_sync(
         let install_path = std::path::absolute(&pylock)?;
         let install_path = install_path.parent().unwrap();
         let content = fs_err::tokio::read_to_string(&pylock).await?;
-        let lock = toml::from_str::<PylockToml>(&content).with_context(|| {
-            format!("Not a valid `pylock.toml` file: {}", pylock.user_display())
-        })?;
+        let lock = info_span!("toml::from_str pip sync", path = %pylock.display())
+            .in_scope(|| toml::from_str::<PylockToml>(&content))
+            .with_context(|| {
+                format!("Not a valid `pylock.toml` file: {}", pylock.user_display())
+            })?;
 
         // Verify that the Python version is compatible with the lock file.
         if let Some(requires_python) = lock.requires_python.as_ref() {
@@ -486,7 +489,7 @@ pub(crate) async fn pip_sync(
             &flat_index,
             state.index(),
             &build_dispatch,
-            concurrency,
+            &concurrency,
             options,
             Box::new(DefaultResolveLogger),
             printer,
@@ -530,8 +533,8 @@ pub(crate) async fn pip_sync(
         &build_hasher,
         exclude_newer.clone(),
         sources,
-        WorkspaceCache::default(),
-        concurrency,
+        workspace_cache,
+        concurrency.clone(),
         preview,
     );
 
@@ -549,7 +552,7 @@ pub(crate) async fn pip_sync(
         &tags,
         &client,
         state.in_flight(),
-        concurrency,
+        &concurrency,
         &build_dispatch,
         &cache,
         &environment,

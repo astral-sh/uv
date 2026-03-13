@@ -40,7 +40,7 @@ use uv_fs::{CWD, Simplified};
 #[cfg(feature = "self-update")]
 use uv_pep440::release_specifiers_to_ranges;
 use uv_pep508::VersionOrUrl;
-use uv_preview::PreviewFeature;
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl};
 use uv_python::PythonRequest;
 use uv_requirements::{GroupsSpecification, RequirementsSource};
@@ -101,6 +101,55 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     // Load environment variables not handled by Clap
     let environment = EnvironmentOptions::new()?;
+
+    // Validate that the project directory exists if explicitly provided via --project, except for
+    // `uv init`, which creates the project directory (separate deprecation).
+    let skip_project_validation = matches!(
+        &*cli.command,
+        Commands::Project(command) if matches!(**command, ProjectCommand::Init(_))
+    );
+
+    if !skip_project_validation {
+        if let Some(project_path) = cli.top_level.global_args.project.as_ref() {
+            // Resolve the preview flags until this becomes stabilized. We check CLI args and
+            // the `UV_PREVIEW` env var, but not workspace config (which requires reading from
+            // the project directory that may not exist).
+            let preview = Preview::from_args(
+                cli.top_level.global_args.preview || environment.preview.value == Some(true),
+                cli.top_level.global_args.no_preview,
+                &cli.top_level.global_args.preview_features,
+            );
+            if !project_dir.exists() {
+                if preview.is_enabled(PreviewFeature::ProjectDirectoryMustExist) {
+                    bail!(
+                        "Project directory `{}` does not exist",
+                        project_path.user_display()
+                    );
+                }
+                warn_user_once!(
+                    "Project directory `{}` does not exist. \
+                    This will become an error in a future release. \
+                    Use `--preview-features project-directory-must-exist` to error on this now.",
+                    project_path.user_display()
+                );
+            } else if !project_dir.is_dir() {
+                // On Unix, this always fails downstream (e.g., "Not a directory" when
+                // trying to read `uv.toml`), so we bail with a clear error message.
+                // On Windows, this is currently non-fatal, so we only error with the
+                // preview flag.
+                if cfg!(unix) || preview.is_enabled(PreviewFeature::ProjectDirectoryMustExist) {
+                    bail!(
+                        "Project path `{}` is not a directory",
+                        project_path.user_display()
+                    );
+                }
+                warn_user_once!(
+                    "Project path `{}` is not a directory. Use `--preview-features project-directory-must-exist` to error on this.",
+                    project_path.user_display()
+                );
+            }
+        }
+    }
 
     // The `--isolated` argument is deprecated on preview APIs, and warns on non-preview APIs.
     let deprecated_isolated = if cli.top_level.global_args.isolated {
@@ -362,6 +411,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     )?;
 
     debug!("uv {}", uv_cli::version::uv_self_version());
+    if let Some(config_file) = cli.top_level.config_file.as_ref() {
+        debug!("Using configuration file: {}", config_file.user_display());
+    }
     if globals.preview.all_enabled() {
         debug!("All preview features are enabled");
     } else if globals.preview.any_enabled() {
@@ -384,6 +436,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     // Resolve the cache settings.
     let cache_settings = CacheSettings::resolve(*cli.top_level.cache_args, filesystem.as_ref());
+
+    // Set the global preview configuration.
+    uv_preview::init(globals.preview)?;
 
     // Enforce the required version.
     if let Some(required_version) = globals.required_version.as_ref() {
@@ -689,6 +744,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.concurrency,
                 globals.quiet > 0,
                 cache,
+                workspace_cache,
                 printer,
                 globals.preview,
             )
@@ -774,6 +830,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.python_preference,
                 globals.concurrency,
                 cache,
+                workspace_cache,
                 args.dry_run,
                 printer,
                 globals.preview,
@@ -932,6 +989,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.python_preference,
                 globals.concurrency,
                 cache,
+                workspace_cache,
                 args.dry_run,
                 printer,
                 globals.preview,
@@ -1170,6 +1228,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.force_pep517,
                 args.clear,
                 build_constraints,
+                args.build_constraints_from_workspace,
                 args.hash_checking,
                 args.python,
                 args.install_mirrors,
@@ -1180,6 +1239,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.python_downloads,
                 globals.concurrency,
                 &cache,
+                &workspace_cache,
                 printer,
                 globals.preview,
             )
@@ -1256,6 +1316,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 cli.top_level.no_config,
                 args.no_project,
                 &cache,
+                &workspace_cache,
                 printer,
                 args.relocatable
                     || (globals
@@ -1278,6 +1339,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 client_builder,
                 filesystem,
                 cache,
+                &workspace_cache,
                 printer,
             ))
             .await
@@ -1452,6 +1514,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.installer_metadata,
                 globals.concurrency,
                 cache,
+                workspace_cache,
                 printer,
                 args.env_file,
                 args.no_env_file,
@@ -1553,6 +1616,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.concurrency,
                 cli.top_level.no_config,
                 cache,
+                &workspace_cache,
                 printer,
                 globals.preview,
             ))
@@ -1574,6 +1638,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.show_with,
                 args.show_extras,
                 args.show_python,
+                args.outdated,
+                client_builder.subcommand(vec!["tool".to_owned(), "list".to_owned()]),
+                globals.concurrency,
                 &cache,
                 printer,
             )
@@ -1605,6 +1672,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.installer_metadata,
                 globals.concurrency,
                 &cache,
+                &workspace_cache,
                 printer,
                 globals.preview,
             ))
@@ -1780,6 +1848,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     args.python_downloads_json_url.as_deref(),
                     &client_builder.subcommand(vec!["python".to_owned(), "find".to_owned()]),
                     &cache,
+                    &workspace_cache,
                     printer,
                     globals.preview,
                 )
@@ -1807,6 +1876,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.install_mirrors,
                 client_builder.subcommand(vec!["python".to_owned(), "pin".to_owned()]),
                 &cache,
+                &workspace_cache,
                 printer,
                 globals.preview,
             )
@@ -1880,10 +1950,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         }
         Commands::Workspace(WorkspaceNamespace { command }) => match command {
             WorkspaceCommand::Metadata(_args) => {
-                commands::metadata(&project_dir, globals.preview, printer).await
+                commands::metadata(&project_dir, globals.preview, &workspace_cache, printer).await
             }
-            WorkspaceCommand::Dir(args) => commands::dir(args.package, &project_dir, printer).await,
-            WorkspaceCommand::List(args) => commands::list(&project_dir, args.paths, printer).await,
+            WorkspaceCommand::Dir(args) => {
+                commands::dir(args.package, &project_dir, &workspace_cache, printer).await
+            }
+            WorkspaceCommand::List(args) => {
+                commands::list(&project_dir, args.paths, &workspace_cache, printer).await
+            }
         },
         Commands::BuildBackend { command } => spawn_blocking(move || match command {
             BuildBackendCommand::BuildSdist { sdist_directory } => {
@@ -1895,7 +1969,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             } => commands::build_backend::build_wheel(
                 &wheel_directory,
                 metadata_directory.as_deref(),
-                globals.preview,
             ),
             BuildBackendCommand::BuildEditable {
                 wheel_directory,
@@ -1903,7 +1976,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             } => commands::build_backend::build_editable(
                 &wheel_directory,
                 metadata_directory.as_deref(),
-                globals.preview,
             ),
             BuildBackendCommand::GetRequiresForBuildSdist => {
                 commands::build_backend::get_requires_for_build_sdist()
@@ -1912,19 +1984,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 commands::build_backend::get_requires_for_build_wheel()
             }
             BuildBackendCommand::PrepareMetadataForBuildWheel { wheel_directory } => {
-                commands::build_backend::prepare_metadata_for_build_wheel(
-                    &wheel_directory,
-                    globals.preview,
-                )
+                commands::build_backend::prepare_metadata_for_build_wheel(&wheel_directory)
             }
             BuildBackendCommand::GetRequiresForBuildEditable => {
                 commands::build_backend::get_requires_for_build_editable()
             }
             BuildBackendCommand::PrepareMetadataForBuildEditable { wheel_directory } => {
-                commands::build_backend::prepare_metadata_for_build_editable(
-                    &wheel_directory,
-                    globals.preview,
-                )
+                commands::build_backend::prepare_metadata_for_build_editable(&wheel_directory)
             }
         })
         .await
@@ -1945,6 +2011,7 @@ async fn run_project(
     client_builder: BaseClientBuilder<'_>,
     filesystem: Option<FilesystemOptions>,
     cache: Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
 ) -> Result<ExitStatus> {
     // Write out any resolved settings.
@@ -2081,6 +2148,7 @@ async fn run_project(
                 globals.installer_metadata,
                 globals.concurrency,
                 cache,
+                workspace_cache,
                 printer,
                 args.env_file,
                 globals.preview,
@@ -2137,6 +2205,7 @@ async fn run_project(
                 globals.concurrency,
                 no_config,
                 &cache,
+                workspace_cache,
                 printer,
                 globals.preview,
                 args.output_format,
@@ -2189,6 +2258,7 @@ async fn run_project(
                 globals.concurrency,
                 no_config,
                 &cache,
+                workspace_cache,
                 printer,
                 globals.preview,
             ))
@@ -2417,6 +2487,7 @@ async fn run_project(
                 globals.concurrency,
                 no_config,
                 &cache,
+                workspace_cache,
                 printer,
                 globals.preview,
             ))
@@ -2536,6 +2607,42 @@ async fn run_project(
                 printer,
                 globals.preview,
                 args.no_project,
+            ))
+            .await
+        }
+        ProjectCommand::Audit(audit_args) => {
+            let args = settings::AuditSettings::resolve(audit_args, filesystem, environment);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init().await?;
+
+            // Unwrap the script.
+            let script = script.map(|script| match script {
+                Pep723Item::Script(script) => script,
+                Pep723Item::Stdin(..) => unreachable!("`uv audit` does not support stdin"),
+                Pep723Item::Remote(..) => unreachable!("`uv audit` does not support remote files"),
+            });
+
+            Box::pin(commands::audit(
+                project_dir,
+                args.extras,
+                args.groups,
+                args.lock_check,
+                args.frozen,
+                script,
+                args.python_version,
+                args.python_platform,
+                args.install_mirrors,
+                args.settings,
+                client_builder.subcommand(vec!["audit".to_owned()]),
+                globals.python_preference,
+                globals.python_downloads,
+                globals.concurrency,
+                no_config,
+                cache,
+                printer,
+                globals.preview,
             ))
             .await
         }

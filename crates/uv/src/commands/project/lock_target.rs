@@ -1,7 +1,7 @@
+use itertools::Either;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-
-use itertools::Either;
+use tracing::info_span;
 
 use uv_auth::CredentialsCache;
 use uv_configuration::{DependencyGroupsWithDefaults, NoSources};
@@ -243,7 +243,6 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Return the `Requires-Python` bound for the [`LockTarget`].
-    #[expect(clippy::result_large_err)]
     pub(crate) fn requires_python(self) -> Result<Option<RequiresPython>, ProjectError> {
         match self {
             Self::Workspace(workspace) => {
@@ -288,9 +287,12 @@ impl<'lock> LockTarget<'lock> {
     ///
     /// Returns `Ok(None)` if the lockfile does not exist.
     pub(crate) async fn read(self) -> Result<Option<Lock>, ProjectError> {
-        match fs_err::tokio::read_to_string(self.lock_path()).await {
+        let lock_path = self.lock_path();
+        match fs_err::tokio::read_to_string(&lock_path).await {
             Ok(encoded) => {
-                match toml::from_str::<Lock>(&encoded) {
+                let result = info_span!("toml::from_str lock", path = %lock_path.display())
+                    .in_scope(|| toml::from_str::<Lock>(&encoded));
+                match result {
                     Ok(lock) => {
                         // If the lockfile uses an unsupported version, raise an error.
                         if lock.version() != VERSION {

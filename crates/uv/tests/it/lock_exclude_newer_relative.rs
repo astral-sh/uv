@@ -1111,7 +1111,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .arg("--exclude-newer")
-        .arg("P4Z"), @r#"
+        .arg("P4Z"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1120,12 +1120,12 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     error: invalid value 'P4Z' for '--exclude-newer <EXCLUDE_NEWER>': `P4Z` could not be parsed as an ISO 8601 duration: expected to find date unit designator suffix (`Y`, `M`, `W` or `D`), but found `Z` instead
 
     For more information, try '--help'.
-    "#);
+    ");
 
     uv_snapshot!(context.filters(), context
         .lock()
         .arg("--exclude-newer")
-        .arg("2006-12-02T02:07:43"), @"
+        .arg("2006-12-02T02:07:43Z"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1135,6 +1135,8 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because there are no versions of iniconfig and iniconfig==2.0.0 was published after the exclude newer time, we can conclude that all versions of iniconfig cannot be used.
           And because your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2006-12-02T02:07:43Z. Consider using `exclude-newer-package` to override the cutoff for this package.
     ");
 
     uv_snapshot!(context.filters(), context

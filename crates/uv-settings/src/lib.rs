@@ -2,6 +2,7 @@ use std::num::NonZeroUsize;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+use tracing::info_span;
 use uv_client::{DEFAULT_CONNECT_TIMEOUT, DEFAULT_READ_TIMEOUT, DEFAULT_READ_TIMEOUT_UPLOAD};
 use uv_dirs::{system_config_file, user_config_dir};
 use uv_distribution_types::Origin;
@@ -119,20 +120,22 @@ impl FilesystemOptions {
         let path = dir.join("uv.toml");
         match fs_err::read_to_string(&path) {
             Ok(content) => {
-                let options = toml::from_str::<Options>(&content)
-                    .map_err(|err| Error::UvToml(path.clone(), Box::new(err)))?
-                    .relative_to(&std::path::absolute(dir)?)?;
+                let options =
+                    info_span!("toml::from_str filesystem options uv.toml", path = %path.display())
+                        .in_scope(|| toml::from_str::<Options>(&content))
+                        .map_err(|err| Error::UvToml(path.clone(), Box::new(err)))?
+                        .relative_to(&std::path::absolute(dir)?)?;
 
                 // If the directory also contains a `[tool.uv]` table in a `pyproject.toml` file,
                 // warn.
                 let pyproject = dir.join("pyproject.toml");
-                if let Some(pyproject) = fs_err::read_to_string(pyproject)
-                    .ok()
-                    .and_then(|content| toml::from_str::<PyProjectToml>(&content).ok())
-                {
-                    if let Some(options) = pyproject.tool.as_ref().and_then(|tool| tool.uv.as_ref())
+                if let Ok(content) = fs_err::read_to_string(&pyproject) {
+                    let result = info_span!("toml::from_str filesystem options pyproject.toml", path = %pyproject.display())
+                        .in_scope(|| toml::from_str::<PyProjectToml>(&content)).ok();
+                    if let Some(options) =
+                        result.and_then(|pyproject| pyproject.tool.and_then(|tool| tool.uv))
                     {
-                        warn_uv_toml_masked_fields(options);
+                        warn_uv_toml_masked_fields(&options);
                     }
                 }
 
@@ -149,8 +152,10 @@ impl FilesystemOptions {
         match fs_err::read_to_string(&path) {
             Ok(content) => {
                 // Parse, but skip any `pyproject.toml` that doesn't have a `[tool.uv]` section.
-                let pyproject: PyProjectToml = toml::from_str(&content)
-                    .map_err(|err| Error::PyprojectToml(path.clone(), Box::new(err)))?;
+                let pyproject =
+                    info_span!("toml::from_str filesystem options pyproject.toml", path = %path.display())
+                        .in_scope(|| toml::from_str::<PyProjectToml>(&content))
+                        .map_err(|err| Error::PyprojectToml(path.clone(), Box::new(err)))?;
                 let Some(tool) = pyproject.tool else {
                     tracing::debug!(
                         "Skipping `pyproject.toml` in `{}` (no `[tool]` section)",
@@ -198,7 +203,8 @@ impl From<Options> for FilesystemOptions {
 /// Load [`Options`] from a `uv.toml` file.
 fn read_file(path: &Path) -> Result<Options, Error> {
     let content = fs_err::read_to_string(path)?;
-    let options = toml::from_str::<Options>(&content)
+    let options = info_span!("toml::from_str filesystem options uv.toml", path = %path.display())
+        .in_scope(|| toml::from_str::<Options>(&content))
         .map_err(|err| Error::UvToml(path.to_path_buf(), Box::new(err)))?;
     let options = if let Some(parent) = std::path::absolute(path)?.parent() {
         options.relative_to(parent)?
@@ -657,6 +663,8 @@ pub struct EnvironmentOptions {
     pub no_env_file: EnvFlag,
     pub venv_seed: EnvFlag,
     pub venv_clear: EnvFlag,
+    pub venv_relocatable: EnvFlag,
+    pub init_bare: EnvFlag,
 }
 
 impl EnvironmentOptions {
@@ -749,6 +757,8 @@ impl EnvironmentOptions {
             no_env_file: EnvFlag::new(EnvVars::UV_NO_ENV_FILE)?,
             venv_seed: EnvFlag::new(EnvVars::UV_VENV_SEED)?,
             venv_clear: EnvFlag::new(EnvVars::UV_VENV_CLEAR)?,
+            venv_relocatable: EnvFlag::new(EnvVars::UV_VENV_RELOCATABLE)?,
+            init_bare: EnvFlag::new(EnvVars::UV_INIT_BARE)?,
         })
     }
 }

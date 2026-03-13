@@ -2127,7 +2127,7 @@ fn tool_run_python() {
 
     ----- stderr -----
     Resolved in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.tool_run()
@@ -2160,7 +2160,7 @@ fn tool_run_python_at_version() {
 
     ----- stderr -----
     Resolved in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.tool_run()
@@ -2185,7 +2185,7 @@ fn tool_run_python_at_version() {
 
     ----- stderr -----
     Resolved in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     // The @ is optional.
@@ -2411,7 +2411,7 @@ fn tool_run_python_from_global_version_file() {
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("python")
-        .arg("--version"), @r###"
+        .arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2419,8 +2419,8 @@ fn tool_run_python_from_global_version_file() {
 
     ----- stderr -----
     Resolved in [TIME]
-    Audited in [TIME]
-    "###);
+    Checked in [TIME]
+    ");
 }
 
 #[test]
@@ -2440,7 +2440,7 @@ fn tool_run_python_version_overrides_global_pin() {
     // Explicitly request python3.12, should override global pin
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("python3.12")
-        .arg("--version"), @r###"
+        .arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2448,8 +2448,8 @@ fn tool_run_python_version_overrides_global_pin() {
 
     ----- stderr -----
     Resolved in [TIME]
-    Audited in [TIME]
-    "###);
+    Checked in [TIME]
+    ");
 }
 
 #[test]
@@ -2471,7 +2471,7 @@ fn tool_run_python_with_explicit_default_bypasses_global_pin() {
         .arg("--python")
         .arg("default")
         .arg("python")
-        .arg("--version"), @r###"
+        .arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2479,8 +2479,8 @@ fn tool_run_python_with_explicit_default_bypasses_global_pin() {
 
     ----- stderr -----
     Resolved in [TIME]
-    Audited in [TIME]
-    "###);
+    Checked in [TIME]
+    ");
 }
 
 #[test]
@@ -2501,7 +2501,7 @@ fn tool_run_python_from() {
 
     ----- stderr -----
     Resolved in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.tool_run()
@@ -2516,7 +2516,7 @@ fn tool_run_python_from() {
 
     ----- stderr -----
     Resolved in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.tool_run()

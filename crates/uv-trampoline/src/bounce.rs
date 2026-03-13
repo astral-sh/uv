@@ -452,11 +452,25 @@ pub fn bounce(is_gui: bool) -> ! {
         print_job_error_and_exit("uv trampoline failed to create job object", e);
     });
 
+    // Assign the child to the job object so it gets terminated if the trampoline is killed.
+    //
+    // If the assignment fails, the child may outlive the trampoline on forced kill, but normal
+    // execution (child exits naturally) is unaffected so we ignore the failure. This matches
+    // `distlib`'s approach where `AssignProcessToJobObject` failure is non-fatal [1]. There are
+    // various plausible scenarios where we may fail to assign the child, including simple race
+    // conditions like the child process exiting before assignment.
+    //
+    // See also <https://github.com/astral-sh/uv/pull/18170> which explores a more robust solution
+    // at the cost of increased complexity.
+    //
+    // [1]: https://github.com/pypa/distlib/blob/37df85a61ead2ea2dc48d0e06f7bfe2f209a982c/PC/launcher.c#L835
+    //
     // SAFETY: child_handle is a valid process handle returned by spawn_child.
     if let Err(e) = unsafe { job.assign_process(child_handle) } {
-        print_job_error_and_exit(
-            "uv trampoline failed to assign child process to job object",
-            e,
+        warn!(
+            "uv trampoline failed to assign child process to job object\n  Caused by: {} (os error {})",
+            e.message(),
+            e.code(),
         );
     }
 

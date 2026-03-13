@@ -415,6 +415,47 @@ where
     }
 }
 
+/// Reflink a file from `from` to `to`, preserving file permissions.
+///
+/// On macOS, `clonefile` preserves all file metadata including permissions. On Linux,
+/// `ioctl_ficlone` only clones data blocks, so we implement our own reflink that copies
+/// permissions via `fchmod` on the open file descriptor, avoiding TOCTOU races.
+///
+/// See: <https://github.com/astral-sh/uv/issues/18181>
+#[cfg(target_os = "linux")]
+fn reflink_with_permissions(from: &Path, to: &Path) -> io::Result<()> {
+    use fs_err::os::unix::fs::OpenOptionsExt;
+    use std::os::unix::fs::PermissionsExt;
+
+    // Open source and read permissions from the file descriptor.
+    let src = fs_err::File::open(from)?;
+    let mode = src.metadata()?.permissions().mode();
+
+    // Create destination exclusively with the source's permissions.
+    let dest = fs_err::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(mode)
+        .open(to)?;
+
+    // Clone data blocks from source to destination.
+    if let Err(err) = rustix::fs::ioctl_ficlone(&dest, &src) {
+        // Clean up the destination file on failure.
+        let _ = fs_err::remove_file(to);
+        return Err(err.into());
+    }
+
+    Ok(())
+}
+
+/// Reflink a file from `from` to `to`, preserving file permissions.
+///
+/// On macOS, `clonefile` preserves all file metadata including permissions natively.
+#[cfg(not(target_os = "linux"))]
+fn reflink_with_permissions(from: &Path, to: &Path) -> io::Result<()> {
+    reflink_copy::reflink(from, to)
+}
+
 /// Attempt to reflink a single file, falling back via [`link_file`] on failure.
 fn reflink_file_with_fallback<F>(
     path: &Path,
@@ -426,7 +467,7 @@ where
     F: Fn(&Path) -> bool,
 {
     match state.attempt {
-        LinkAttempt::Initial => match reflink_copy::reflink(path, target) {
+        LinkAttempt::Initial => match reflink_with_permissions(path, target) {
             Ok(()) => Ok(state.mode_working()),
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
                 if options.on_existing_directory == OnExistingDirectory::Merge {
@@ -434,7 +475,7 @@ where
                     let parent = target.parent().unwrap();
                     let tempdir = tempfile::tempdir_in(parent)?;
                     let tempfile = tempdir.path().join(target.file_name().unwrap());
-                    if reflink_copy::reflink(path, &tempfile).is_ok() {
+                    if reflink_with_permissions(path, &tempfile).is_ok() {
                         fs_err::rename(&tempfile, target)?;
                         Ok(state.mode_working())
                     } else {
@@ -462,17 +503,19 @@ where
                 link_file(path, target, state.next_mode(), options)
             }
         },
-        LinkAttempt::Subsequent => match reflink_copy::reflink(path, target) {
+        LinkAttempt::Subsequent => match reflink_with_permissions(path, target) {
             Ok(()) => Ok(state),
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
                 if options.on_existing_directory == OnExistingDirectory::Merge {
                     let parent = target.parent().unwrap();
                     let tempdir = tempfile::tempdir_in(parent)?;
                     let tempfile = tempdir.path().join(target.file_name().unwrap());
-                    reflink_copy::reflink(path, &tempfile).map_err(|err| LinkError::Reflink {
-                        from: path.to_path_buf(),
-                        to: tempfile.clone(),
-                        err,
+                    reflink_with_permissions(path, &tempfile).map_err(|err| {
+                        LinkError::Reflink {
+                            from: path.to_path_buf(),
+                            to: tempfile.clone(),
+                            err,
+                        }
                     })?;
                     fs_err::rename(&tempfile, target)?;
                     Ok(state)
@@ -722,9 +765,32 @@ where
         })
 }
 
-/// Try to create a hard link, returning the `io::Error` on failure.
+/// Try to create a hard link, handling `TooManyLinks` (EMLINK/`ERROR_TOO_MANY_LINKS`)
+/// by copying the source to a fresh inode and retrying.
 fn try_hardlink_file(src: &Path, dst: &Path) -> io::Result<()> {
-    fs_err::hard_link(src, dst)
+    match fs_err::hard_link(src, dst) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == io::ErrorKind::TooManyLinks => {
+            debug!(
+                "Hit link limit for {}, creating a fresh copy",
+                src.display()
+            );
+            let mut parent = src.parent().unwrap_or(Path::new("."));
+            if parent.as_os_str().is_empty() {
+                parent = Path::new(".");
+            }
+            let temp = tempfile::NamedTempFile::new_in(parent)?;
+            // This is a benign race. It can effectively lead to the destination being an
+            // independent copy.
+            fs_err::copy(src, temp.path())?;
+            // Linking a copy before renaming avoids the unlikely race where another process could
+            // exhaust the fresh inode's links between the rename and our link.
+            fs_err::hard_link(temp.path(), dst)?;
+            fs_err::rename(temp.path(), src)?;
+            Ok(())
+        }
+        Err(err) => Err(err),
+    }
 }
 
 /// Atomically overwrite an existing file with a hard link.
@@ -743,7 +809,7 @@ where
     let tempdir = tempfile::tempdir_in(parent)?;
     let tempfile = tempdir.path().join(dst.file_name().unwrap());
 
-    if fs_err::hard_link(src, &tempfile).is_ok() {
+    if try_hardlink_file(src, &tempfile).is_ok() {
         fs_err::rename(&tempfile, dst)?;
         Ok(state.mode_working())
     } else {

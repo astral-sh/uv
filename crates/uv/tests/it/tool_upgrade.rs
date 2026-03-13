@@ -1,3 +1,4 @@
+use anyhow::Result;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 
@@ -1007,4 +1008,139 @@ fn test_tool_upgrade_additional_entrypoints() {
     Installed 1 executable: pybabel
     Upgraded tool environment for `babel` to Python 3.12
     ");
+}
+
+/// Upgrade a tool with an excluded dependency.
+///
+/// Compare with `tool_upgrade_respect_constraints`, which shows `pytz` being
+/// upgraded alongside `babel`. Here, `pytz` is excluded, so it should remain
+/// absent after the upgrade.
+#[test]
+fn tool_upgrade_excludes() {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let excludes_txt = context.temp_dir.child("excludes.txt");
+    excludes_txt.write_str("pytz").unwrap();
+
+    // Install `babel` from Test PyPI, to get an outdated version.
+    // `pytz` is excluded, so it won't be installed despite being a dependency.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("babel<2.10")
+        .arg("--excludes")
+        .arg("excludes.txt")
+        .arg("--index-url")
+        .arg("https://test.pypi.org/simple/")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + babel==2.6.0
+    Installed 1 executable: pybabel
+    ");
+
+    // Upgrade `babel` from PyPI. Babel should be updated (within the `<2.10`
+    // constraint), but `pytz` should remain excluded.
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("babel")
+        .arg("--index-url")
+        .arg("https://pypi.org/simple/")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Updated babel v2.6.0 -> v2.9.1
+     - babel==2.6.0
+     + babel==2.9.1
+    Installed 1 executable: pybabel
+    ");
+}
+
+/// When upgrading a tool from an authenticated index with invalid credentials,
+/// the command should fail with an auth error rather than silently reporting
+/// "Nothing to upgrade".
+///
+/// See: <https://github.com/astral-sh/uv/issues/18120>
+#[tokio::test]
+async fn tool_upgrade_invalid_auth() -> Result<()> {
+    let proxy = crate::pypi_proxy::start().await;
+    let context = uv_test::test_context!("3.12")
+        .with_exclude_newer("2025-01-18T00:00:00Z")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `executable-application` from an authenticated index using `--index`.
+    // The receipt will store `authenticate = "auto"` (not "always").
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("executable-application")
+        .arg("--index")
+        .arg(proxy.authenticated_url("public", "heron", "/basic-auth/simple"))
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + executable-application==0.3.0
+    Installed 1 executable: app
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // Verify the receipt has `authenticate = "always"` (promoted from "auto" because the
+        // original URL had embedded credentials).
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r#"
+        [tool]
+        requirements = [{ name = "executable-application" }]
+        entrypoints = [
+            { name = "app", install-path = "[TEMP_DIR]/bin/app", from = "executable-application" },
+        ]
+
+        [tool.options]
+        index = [{ url = "http://[LOCALHOST]/basic-auth/simple", explicit = false, default = false, format = "simple", authenticate = "always" }]
+        exclude-newer = "2025-01-18T00:00:00Z"
+        "#);
+    });
+
+    // Attempt to upgrade without providing credentials.
+    // Because the receipt now stores `authenticate = "always"`, the upgrade should fail
+    // with a credentials error rather than silently reporting "Nothing to upgrade".
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("executable-application")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to upgrade executable-application
+      Caused by: Failed to fetch: `http://[LOCALHOST]/basic-auth/simple/executable-application/`
+      Caused by: Missing credentials for http://[LOCALHOST]/basic-auth/simple/executable-application/
+    ");
+
+    Ok(())
 }

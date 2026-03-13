@@ -216,6 +216,36 @@ required-environments = [
 ]
 ```
 
+## Common marker values
+
+The `environments` and `required-environments` settings accept
+[PEP 508 environment markers](https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers).
+The values for these markers are derived from the Python runtime (e.g.,
+[`sys.platform`](https://docs.python.org/3/library/sys.html#sys.platform),
+[`platform.machine()`](https://docs.python.org/3/library/platform.html#platform.machine),
+[`platform.system()`](https://docs.python.org/3/library/platform.html#platform.system), and
+[`os.name`](https://docs.python.org/3/library/os.html#os.name)).
+
+For quick reference, the most common marker values by platform are:
+
+| Marker                      | Linux       | macOS      | Windows     |
+| --------------------------- | ----------- | ---------- | ----------- |
+| `sys_platform`              | `'linux'`   | `'darwin'` | `'win32'`   |
+| `platform_system`           | `'Linux'`   | `'Darwin'` | `'Windows'` |
+| `platform_machine` (x86-64) | `'x86_64'`  | `'x86_64'` | `'AMD64'`   |
+| `platform_machine` (ARM64)  | `'aarch64'` | `'arm64'`  | `'ARM64'`   |
+| `os_name`                   | `'posix'`   | `'posix'`  | `'nt'`      |
+
+!!! note
+
+    On Windows, `sys_platform` is always `'win32'`, even on 64-bit systems.
+
+You can check the values for your current platform by running:
+
+```console
+$ uvx python -c "import sysconfig; print(sysconfig.get_config_vars())"
+```
+
 ## Dependency preferences
 
 If resolution output file exists, i.e., a uv lockfile (`uv.lock`) or a requirements output file

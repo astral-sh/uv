@@ -12,6 +12,11 @@ use uv_platform_tags::{Arch, Os, Platform};
 use uv_redacted::DisplaySafeUrl;
 use uv_version::version;
 
+/// Return the current uv version as a regex-escaped string for use in snapshot filters.
+fn escaped_version() -> String {
+    regex::escape(version())
+}
+
 use crate::http_util::start_http_user_agent_server;
 
 #[tokio::test]
@@ -47,7 +52,8 @@ async fn test_user_agent_has_version() -> Result<()> {
     let linehaul: LineHaul = serde_json::from_str(uv_linehaul)?;
 
     // Assert linehaul user agent
-    let filters = vec![(version(), "[VERSION]")];
+    let version = escaped_version();
+    let filters = vec![(version.as_str(), "[VERSION]")];
     with_settings!({
         filters => filters
     }, {
@@ -106,7 +112,8 @@ async fn test_user_agent_has_subcommand() -> Result<()> {
     let linehaul: LineHaul = serde_json::from_str(uv_linehaul)?;
 
     // Assert linehaul user agent
-    let filters = vec![(version(), "[VERSION]")];
+    let version = escaped_version();
+    let filters = vec![(version.as_str(), "[VERSION]")];
     with_settings!({
         filters => filters
     }, {
@@ -205,7 +212,8 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
     let linehaul: LineHaul = serde_json::from_str(uv_linehaul)?;
 
     // Assert linehaul user agent
-    let filters = vec![(version(), "[VERSION]")];
+    let version = escaped_version();
+    let filters = vec![(version.as_str(), "[VERSION]")];
     with_settings!({
         filters => filters
     }, {
@@ -267,7 +275,7 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
             .distro
             .expect("got no distro, but expected one in linehaul");
         // Gather distribution info from /etc/os-release.
-        let release_info = sys_info::linux_os_release()
+        let release_info = uv_platform::host::LinuxOsRelease::from_env()
             .expect("got no os release info, but expected one in linux");
         assert_eq!(distro_info.id, release_info.version_codename);
         assert_eq!(distro_info.name, release_info.name);

@@ -347,6 +347,18 @@ impl Index {
         self.url.root()
     }
 
+    /// If credentials are available (via the URL or environment) and [`AuthPolicy`] is
+    /// [`AuthPolicy::Auto`], promote to [`AuthPolicy::Always`] so that future operations
+    /// (e.g., `uv tool upgrade`) know that authentication is required even after the credentials
+    /// are stripped from the stored URL.
+    #[must_use]
+    pub fn with_promoted_auth_policy(mut self) -> Self {
+        if matches!(self.authenticate, AuthPolicy::Auto) && self.credentials().is_some() {
+            self.authenticate = AuthPolicy::Always;
+        }
+        self
+    }
+
     /// Retrieve the credentials for the index, either from the environment, or from the URL itself.
     pub fn credentials(&self) -> Option<Credentials> {
         // If the index is named, and credentials are provided via the environment, prefer those.

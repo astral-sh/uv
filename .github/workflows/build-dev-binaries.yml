@@ -24,7 +24,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+      - name: "Install mold"
+        run: ./scripts/install-mold.sh
 
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
@@ -51,7 +52,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+      - name: "Install mold"
+        run: ./scripts/install-mold.sh
 
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
@@ -78,7 +80,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+      - name: "Install mold"
+        run: ./scripts/install-mold.sh
 
       - name: "Setup musl"
         run: |
@@ -110,8 +113,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
-
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
@@ -135,8 +136,6 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-
-      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
 
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
@@ -190,15 +189,14 @@ jobs:
 
   build-binary-windows-aarch64:
     name: "windows aarch64"
-    timeout-minutes: 25
-    runs-on:
-      labels: windows-latest
+    timeout-minutes: 10
+    runs-on: windows-11-arm
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
-      - name: Create Dev Drive using ReFS
+      - name: Setup Dev Drive
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
 
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
@@ -211,20 +209,17 @@ jobs:
           workspaces: ${{ env.UV_WORKSPACE }}
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
-      - name: "Install cross target"
-        run: rustup target add aarch64-pc-windows-msvc
-
       - name: "Build"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: cargo build --profile no-debug --target aarch64-pc-windows-msvc
+        run: cargo build --profile no-debug --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: uv-windows-aarch64-${{ github.sha }}
           path: |
-            ${{ env.UV_WORKSPACE }}/target/aarch64-pc-windows-msvc/no-debug/uv.exe
-            ${{ env.UV_WORKSPACE }}/target/aarch64-pc-windows-msvc/no-debug/uvx.exe
+            ${{ env.UV_WORKSPACE }}/target/no-debug/uv.exe
+            ${{ env.UV_WORKSPACE }}/target/no-debug/uvx.exe
           retention-days: 1
 
   build-binary-msrv:
@@ -245,7 +240,7 @@ jobs:
         env:
           MSRV: ${{ steps.msrv.outputs.value }}
       - name: "Install mold"
-        uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+        run: ./scripts/install-mold.sh
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
@@ -253,6 +248,54 @@ jobs:
         env:
           MSRV: ${{ steps.msrv.outputs.value }}
       - run: ./target/no-debug/uv --version
+
+  build-binary-android-aarch64:
+    name: "android aarch64"
+    timeout-minutes: 10
+    runs-on: github-ubuntu-24.04-x86_64-8
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: "Setup Android NDK"
+        run: |
+          # Use ANDROID_NDK_ROOT if set, otherwise find the latest installed NDK
+          if [ -z "${ANDROID_NDK_ROOT}" ]; then
+            NDK_ROOT=$(ls -d "${ANDROID_HOME}/ndk/"* 2>/dev/null | sort -V | tail -n1)
+          else
+            NDK_ROOT="${ANDROID_NDK_ROOT}"
+          fi
+          TOOLCHAIN="${NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64"
+
+          echo "CC_aarch64_linux_android=${TOOLCHAIN}/bin/aarch64-linux-android24-clang" >> "$GITHUB_ENV"
+          echo "CXX_aarch64_linux_android=${TOOLCHAIN}/bin/aarch64-linux-android24-clang++" >> "$GITHUB_ENV"
+          echo "AR_aarch64_linux_android=${TOOLCHAIN}/bin/llvm-ar" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=${TOOLCHAIN}/bin/aarch64-linux-android24-clang" >> "$GITHUB_ENV"
+
+          # NDK 23+ removed libgcc, provide a stub that redirects to libunwind
+          LIBDIR=$(echo "${TOOLCHAIN}"/lib/clang/*/lib/linux/aarch64)
+          if [ ! -f "${LIBDIR}/libgcc.a" ]; then
+            echo 'INPUT(-lunwind)' | sudo tee "${LIBDIR}/libgcc.a" > /dev/null
+          fi
+
+          rustup target add aarch64-linux-android
+
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+
+      - name: "Build"
+        run: cargo build --profile no-debug --target aarch64-linux-android --bin uv --bin uvx
+
+      - name: "Upload binary"
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: uv-android-aarch64-${{ github.sha }}
+          path: |
+            ./target/aarch64-linux-android/no-debug/uv
+            ./target/aarch64-linux-android/no-debug/uvx
+          retention-days: 1
 
   build-binary-freebsd:
     name: "freebsd"

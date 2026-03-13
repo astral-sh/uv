@@ -360,17 +360,19 @@ fn python_list_duplicate_path_entries() {
 
 #[test]
 fn python_list_downloads() {
-    let context = uv_test::test_context_with_versions!(&[]).with_filtered_python_keys();
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_latest_python_versions();
 
     // We do not test showing all interpreters — as it differs per platform
-    // Instead, we choose a Python version where our available distributions are stable
+    // Instead, we choose a Python version where our available distributions are stable
 
     // Test the default display, which requires reverting the test context disabling Python downloads
     uv_snapshot!(context.filters(), context.python_list().arg("3.10").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @"
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.10.19-[PLATFORM]    <download available>
+    cpython-3.10.[LATEST]-[PLATFORM]    <download available>
     pypy-3.10.16-[PLATFORM]       <download available>
     graalpy-3.10.0-[PLATFORM]     <download available>
 
@@ -382,6 +384,7 @@ fn python_list_downloads() {
     success: true
     exit_code: 0
     ----- stdout -----
+    cpython-3.10.[LATEST]-[PLATFORM]    <download available>
     cpython-3.10.19-[PLATFORM]    <download available>
     cpython-3.10.18-[PLATFORM]    <download available>
     cpython-3.10.17-[PLATFORM]    <download available>
@@ -419,17 +422,18 @@ fn python_list_downloads_installed() {
         .with_filtered_python_keys()
         .with_filtered_python_install_bin()
         .with_filtered_python_names()
-        .with_managed_python_dirs();
+        .with_managed_python_dirs()
+        .with_filtered_latest_python_versions();
 
-    // We do not test showing all interpreters — as it differs per platform
-    // Instead, we choose a Python version where our available distributions are stable
+    // We do not test showing all interpreters - as it differs per platform
+    // Instead, we choose a Python version where our available distributions are stable
 
     // First, the download is shown as available
     uv_snapshot!(context.filters(), context.python_list().arg("3.10").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @"
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.10.19-[PLATFORM]    <download available>
+    cpython-3.10.[LATEST]-[PLATFORM]    <download available>
     pypy-3.10.16-[PLATFORM]       <download available>
     graalpy-3.10.0-[PLATFORM]     <download available>
 
@@ -456,7 +460,7 @@ fn python_list_downloads_installed() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.10.19-[PLATFORM]    managed/cpython-3.10-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    cpython-3.10.[LATEST]-[PLATFORM]    managed/cpython-3.10-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
     pypy-3.10.16-[PLATFORM]       <download available>
     graalpy-3.10.0-[PLATFORM]     <download available>
 
@@ -468,7 +472,7 @@ fn python_list_downloads_installed() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.10.19-[PLATFORM]    <download available>
+    cpython-3.10.[LATEST]-[PLATFORM]    <download available>
     pypy-3.10.16-[PLATFORM]       <download available>
     graalpy-3.10.0-[PLATFORM]     <download available>
 
@@ -656,6 +660,7 @@ fn python_list_with_mirrors() {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_collapsed_whitespace()
+        .with_filtered_latest_python_versions()
         // Add filters to normalize file paths in URLs
         .with_filter((
             r"(https://mirror\.example\.com/).*".to_string(),
@@ -671,6 +676,11 @@ fn python_list_with_mirrors() {
         ))
         .with_filter((
             r"(https://github\.com/astral-sh/python-build-standalone/releases/download/).*"
+                .to_string(),
+            "$1[FILE-PATH]".to_string(),
+        ))
+        .with_filter((
+            r"(https://releases\.astral\.sh/github/python-build-standalone/releases/download/).*"
                 .to_string(),
             "$1[FILE-PATH]".to_string(),
         ))
@@ -721,14 +731,14 @@ fn python_list_with_mirrors() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.10.19-[PLATFORM] https://python-mirror.example.com/[FILE-PATH]
+    cpython-3.10.[LATEST]-[PLATFORM] https://python-mirror.example.com/[FILE-PATH]
     pypy-3.10.16-[PLATFORM] https://pypy-mirror.example.com/[FILE-PATH]
     graalpy-3.10.0-[PLATFORM] https://github.com/oracle/graalpython/releases/download/[FILE-PATH]
 
     ----- stderr -----
     ");
 
-    // Test without mirrors - verify default URLs are used
+    // Test without mirrors - verify the default Astral mirror URL is used for CPython
     uv_snapshot!(context.filters(), context.python_list()
         .arg("3.10")
         .arg("--show-urls")
@@ -736,7 +746,7 @@ fn python_list_with_mirrors() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.10.19-[PLATFORM] https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
+    cpython-3.10.[LATEST]-[PLATFORM] https://releases.astral.sh/github/python-build-standalone/releases/download/[FILE-PATH]
     pypy-3.10.16-[PLATFORM] https://downloads.python.org/pypy/[FILE-PATH]
     graalpy-3.10.0-[PLATFORM] https://github.com/oracle/graalpython/releases/download/[FILE-PATH]
 

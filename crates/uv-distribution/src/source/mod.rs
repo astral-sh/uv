@@ -36,7 +36,7 @@ use uv_distribution_types::{
     SourceUrl,
 };
 use uv_extract::hash::Hasher;
-use uv_fs::{rename_with_retry, write_atomic};
+use uv_fs::{Simplified, rename_with_retry, write_atomic};
 use uv_git::{GIT_LFS, GitError};
 use uv_git_types::{GitHubRepository, GitOid};
 use uv_metadata::read_archive_metadata;
@@ -1235,7 +1235,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let (disk_filename, filename, metadata) = self
             .build_distribution(
                 source,
-                &resource.install_path,
+                resource.install_path,
                 None,
                 &cache_shard,
                 self.build_context.sources().clone(),
@@ -1282,12 +1282,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // If the metadata is static, return it.
-        let dynamic = match StaticMetadata::read(source, &resource.install_path, None).await? {
+        let dynamic = match StaticMetadata::read(source, resource.install_path, None).await? {
             StaticMetadata::Some(metadata) => {
                 return Ok(ArchiveMetadata::from(
                     Metadata::from_workspace(
                         metadata,
-                        resource.install_path.as_ref(),
+                        resource.install_path,
                         None,
                         self.build_context.locations(),
                         self.build_context.sources().clone(),
@@ -1341,7 +1341,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     return Ok(ArchiveMetadata::from(
                         Metadata::from_workspace(
                             metadata,
-                            resource.install_path.as_ref(),
+                            resource.install_path,
                             None,
                             self.build_context.locations(),
                             self.build_context.sources().clone(),
@@ -1363,7 +1363,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         if let Some(metadata) = self
             .build_metadata(
                 source,
-                &resource.install_path,
+                resource.install_path,
                 None,
                 self.build_context.sources().clone(),
             )
@@ -1391,7 +1391,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Ok(ArchiveMetadata::from(
                 Metadata::from_workspace(
                     metadata,
-                    resource.install_path.as_ref(),
+                    resource.install_path,
                     None,
                     self.build_context.locations(),
                     self.build_context.sources().clone(),
@@ -1422,7 +1422,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let (_disk_filename, _filename, metadata) = self
             .build_distribution(
                 source,
-                &resource.install_path,
+                resource.install_path,
                 None,
                 &cache_shard,
                 self.build_context.sources().clone(),
@@ -1453,7 +1453,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         Ok(ArchiveMetadata::from(
             Metadata::from_workspace(
                 metadata,
-                resource.install_path.as_ref(),
+                resource.install_path,
                 None,
                 self.build_context.locations(),
                 self.build_context.sources().clone(),
@@ -1477,7 +1477,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // Determine the last-modified time of the source distribution.
-        let cache_info = CacheInfo::from_directory(&resource.install_path)?;
+        let cache_info = CacheInfo::from_directory(resource.install_path)?;
 
         // Read the existing metadata from the cache.
         let entry = cache_shard.entry(LOCAL_REVISION);
@@ -2123,7 +2123,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         };
 
         // Parse the `pyproject.toml`.
-        let pyproject_toml = match PyProjectToml::from_toml(&content) {
+        let pyproject_toml = match PyProjectToml::from_toml(&content, source) {
             Ok(metadata) => metadata,
             Err(
                 uv_pypi_types::MetadataError::InvalidPyprojectTomlSyntax(..)
@@ -2908,8 +2908,9 @@ fn has_sources(content: &str) -> Result<bool, toml::de::Error> {
         sources: Option<ToolUvSources>,
     }
 
-    let PyProjectToml { tool } = toml::from_str(content)?;
-    if let Some(tool) = tool {
+    let pyproject_toml =
+        info_span!("toml::from_str has sources").in_scope(|| toml::from_str(content))?;
+    if let PyProjectToml { tool: Some(tool) } = pyproject_toml {
         if let Some(uv) = tool.uv {
             if let Some(sources) = uv.sources {
                 if !sources.inner().is_empty() {
@@ -3077,7 +3078,7 @@ async fn read_pyproject_toml(
         Some(subdirectory) => source_tree.join(subdirectory).join("pyproject.toml"),
         None => source_tree.join("pyproject.toml"),
     };
-    let content = match fs::read_to_string(pyproject_toml).await {
+    let content = match fs::read_to_string(&pyproject_toml).await {
         Ok(content) => content,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
             return Err(Error::MissingPyprojectToml);
@@ -3085,7 +3086,7 @@ async fn read_pyproject_toml(
         Err(err) => return Err(Error::CacheRead(err)),
     };
 
-    let pyproject_toml = PyProjectToml::from_toml(&content)?;
+    let pyproject_toml = PyProjectToml::from_toml(&content, pyproject_toml.simplified_display())?;
 
     Ok(pyproject_toml)
 }

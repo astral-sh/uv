@@ -128,7 +128,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     flat_index: &FlatIndex,
     index: &InMemoryIndex,
     build_dispatch: &BuildDispatch<'_>,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     options: Options,
     logger: Box<dyn ResolveLogger>,
     printer: Printer,
@@ -156,7 +156,11 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 NamedRequirementsResolver::new(
                     hasher,
                     index,
-                    DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+                    DistributionDatabase::new(
+                        client,
+                        build_dispatch,
+                        concurrency.downloads_semaphore.clone(),
+                    ),
                 )
                 .with_reporter(Arc::new(ResolverReporter::from(printer)))
                 .resolve(unnamed.into_iter())
@@ -170,7 +174,11 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 extras,
                 hasher,
                 index,
-                DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+                DistributionDatabase::new(
+                    client,
+                    build_dispatch,
+                    concurrency.downloads_semaphore.clone(),
+                ),
             )
             .with_reporter(Arc::new(ResolverReporter::from(printer)))
             .resolve(source_trees.iter())
@@ -278,7 +286,11 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 NamedRequirementsResolver::new(
                     hasher,
                     index,
-                    DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+                    DistributionDatabase::new(
+                        client,
+                        build_dispatch,
+                        concurrency.downloads_semaphore.clone(),
+                    ),
                 )
                 .with_reporter(Arc::new(ResolverReporter::from(printer)))
                 .resolve(unnamed.into_iter())
@@ -309,7 +321,11 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 &overrides,
                 hasher,
                 index,
-                DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+                DistributionDatabase::new(
+                    client,
+                    build_dispatch,
+                    concurrency.downloads_semaphore.clone(),
+                ),
             )
             .with_reporter(Arc::new(ResolverReporter::from(printer)))
             .resolve(&resolver_env)
@@ -357,7 +373,11 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             hasher,
             build_dispatch,
             installed_packages,
-            DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+            DistributionDatabase::new(
+                client,
+                build_dispatch,
+                concurrency.downloads_semaphore.clone(),
+            ),
         )?
         .with_reporter(Arc::new(reporter));
 
@@ -544,7 +564,7 @@ pub(crate) async fn install(
     tags: &Tags,
     client: &RegistryClient,
     in_flight: &InFlight,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     build_dispatch: &BuildDispatch<'_>,
     cache: &Cache,
     venv: &PythonEnvironment,
@@ -608,7 +628,7 @@ pub(crate) async fn install(
         && extraneous.is_empty()
         && !compile
     {
-        logger.on_audit(resolution.len(), start, printer, dry_run)?;
+        logger.on_check(resolution.len(), start, printer, dry_run)?;
         return Ok(Changelog::default());
     }
 
@@ -685,7 +705,7 @@ pub(crate) async fn install(
     }
 
     if compile {
-        compile_bytecode(venv, &concurrency, cache, printer).await?;
+        compile_bytecode(venv, concurrency, cache, printer).await?;
     }
 
     // Construct a summary of the changes made to the environment.
@@ -722,7 +742,7 @@ async fn execute_plan(
     tags: &Tags,
     client: &RegistryClient,
     in_flight: &InFlight,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     build_dispatch: &BuildDispatch<'_>,
     cache: &Cache,
     venv: &PythonEnvironment,
@@ -749,7 +769,11 @@ async fn execute_plan(
             tags,
             hasher,
             build_options,
-            DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+            DistributionDatabase::new(
+                client,
+                build_dispatch,
+                concurrency.downloads_semaphore.clone(),
+            ),
         )
         .with_reporter(Arc::new(
             PrepareReporter::from(printer).with_length(remote.len() as u64),
@@ -833,7 +857,6 @@ async fn execute_plan(
 }
 
 /// Display a message about the interpreter that was selected for the operation.
-#[expect(clippy::result_large_err)]
 pub(crate) fn report_interpreter(
     python: &PythonInstallation,
     dimmed: bool,
@@ -895,7 +918,6 @@ pub(crate) fn report_interpreter(
 }
 
 /// Display a message about the target environment for the operation.
-#[expect(clippy::result_large_err)]
 pub(crate) fn report_target_environment(
     env: &PythonEnvironment,
     cache: &Cache,
@@ -951,7 +973,6 @@ pub(crate) fn report_target_environment(
 }
 
 /// Report on the results of a dry-run installation.
-#[expect(clippy::result_large_err)]
 fn report_dry_run(
     dry_run: DryRun,
     resolution: &Resolution,
@@ -976,7 +997,7 @@ fn report_dry_run(
 
     // Nothing to do.
     if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() && extraneous.is_empty() {
-        logger.on_audit(resolution.len(), start, printer, dry_run)?;
+        logger.on_check(resolution.len(), start, printer, dry_run)?;
         return Ok(Changelog::default());
     }
 
@@ -1024,7 +1045,6 @@ fn report_dry_run(
 }
 
 /// Report any diagnostics on resolved distributions.
-#[expect(clippy::result_large_err)]
 pub(crate) fn diagnose_resolution(
     diagnostics: &[ResolutionDiagnostic],
     printer: Printer,
@@ -1042,7 +1062,6 @@ pub(crate) fn diagnose_resolution(
 }
 
 /// Report any diagnostics on installed distributions in the Python environment.
-#[expect(clippy::result_large_err)]
 pub(crate) fn diagnose_environment(
     resolution: &Resolution,
     venv: &PythonEnvironment,

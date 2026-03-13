@@ -1,26 +1,52 @@
+use std::collections::hash_map::Entry;
+
 use rustc_hash::FxHashMap;
 
-use uv_distribution_types::{CompatibleDist, ResolvedDist};
+use uv_distribution_types::{CompatibleDist, DistributionId, Identifier, ResolvedDist};
 use uv_normalize::PackageName;
 
 use crate::candidate_selector::Candidate;
 
+#[derive(Clone, Debug)]
+struct FilePin {
+    /// The concrete distribution chosen for installation and locking.
+    dist: ResolvedDist,
+    /// The concrete distribution whose metadata was used during resolution.
+    metadata_id: DistributionId,
+}
+
 /// A set of package versions pinned to specific files.
 ///
 /// For example, given `Flask==3.0.0`, the [`FilePins`] would contain a mapping from `Flask` to
-/// `3.0.0` to the specific wheel or source distribution archive that was pinned for that version.
+/// `3.0.0` to the specific wheel or source distribution archive that was pinned for installation,
+/// along with the concrete distribution whose metadata was used during resolution.
 #[derive(Clone, Debug, Default)]
-pub(crate) struct FilePins(FxHashMap<(PackageName, uv_pep440::Version), ResolvedDist>);
+pub(crate) struct FilePins(FxHashMap<(PackageName, uv_pep440::Version), FilePin>);
 
 // Inserts are common (every time we select a version) while reads are rare (converting the
 // final resolution).
 impl FilePins {
     /// Pin a candidate package.
     pub(crate) fn insert(&mut self, candidate: &Candidate, dist: &CompatibleDist) {
-        self.0
+        let pin = FilePin {
+            dist: dist.for_installation().to_owned(),
+            metadata_id: dist.for_resolution().distribution_id(),
+        };
+        match self
+            .0
             .entry((candidate.name().clone(), candidate.version().clone()))
-            // Avoid the expensive clone when a version is selected again.
-            .or_insert_with(|| dist.for_installation().to_owned());
+        {
+            Entry::Occupied(mut entry) => {
+                if entry.get().dist.distribution_id() != pin.dist.distribution_id()
+                    || entry.get().metadata_id != pin.metadata_id
+                {
+                    entry.insert(pin);
+                }
+            }
+            Entry::Vacant(entry) => {
+                entry.insert(pin);
+            }
+        }
     }
 
     /// Return the pinned file for the given package name and version, if it exists.
@@ -29,6 +55,19 @@ impl FilePins {
         name: &PackageName,
         version: &uv_pep440::Version,
     ) -> Option<&ResolvedDist> {
-        self.0.get(&(name.clone(), version.clone()))
+        self.0
+            .get(&(name.clone(), version.clone()))
+            .map(|pin| &pin.dist)
+    }
+
+    /// Return the distribution id whose metadata was used during resolution.
+    pub(crate) fn metadata_id(
+        &self,
+        name: &PackageName,
+        version: &uv_pep440::Version,
+    ) -> Option<&DistributionId> {
+        self.0
+            .get(&(name.clone(), version.clone()))
+            .map(|pin| &pin.metadata_id)
     }
 }

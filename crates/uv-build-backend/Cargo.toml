@@ -1,6 +1,6 @@
 [package]
 name = "uv-build-backend"
-version = "0.0.25"
+version = "0.0.30"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -24,7 +24,6 @@ uv-pep508 = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
-uv-version = { workspace = true }
 uv-warnings = { workspace = true }
 
 base64 = { workspace = true }
@@ -60,6 +59,8 @@ ignored = ["uv-options-metadata"]
 schemars = ["dep:schemars", "uv-pypi-types/schemars"]
 
 [dev-dependencies]
+uv-preview = { workspace = true, features = ["testing"] }
+
 indoc = { workspace = true }
 insta = { workspace = true }
 regex = { workspace = true }

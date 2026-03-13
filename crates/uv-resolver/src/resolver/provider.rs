@@ -248,6 +248,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
             Err(err) => match err {
                 uv_distribution::Error::Client(client) => {
                     let retries = client.retries();
+                    let duration = client.duration();
                     match client.into_kind() {
                         uv_client::ErrorKind::Offline(_) => {
                             Ok(MetadataResponse::Unavailable(MetadataUnavailable::Offline))
@@ -262,7 +263,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                                 MetadataUnavailable::InvalidStructure(Arc::new(err)),
                             ))
                         }
-                        kind => Err(uv_client::Error::new(kind, retries).into()),
+                        kind => Err(uv_client::Error::new(kind, retries, duration).into()),
                     }
                 }
                 uv_distribution::Error::WheelMetadataVersionMismatch { .. } => {

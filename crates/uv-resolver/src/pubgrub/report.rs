@@ -5,7 +5,7 @@ use std::ops::Bound;
 use indexmap::IndexSet;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use pubgrub::{DerivationTree, Derived, External, Map, Range, ReportFormatter, Term};
+use pubgrub::{DerivationTree, Derived, External, Map, Range, Ranges, ReportFormatter, Term};
 use rustc_hash::FxHashMap;
 
 use uv_configuration::{IndexStrategy, NoBinary, NoBuild};
@@ -29,7 +29,9 @@ use crate::resolver::{
     MetadataUnavailable, UnavailableErrorChain, UnavailablePackage, UnavailableReason,
     UnavailableVersion,
 };
-use crate::{Flexibility, InMemoryIndex, Options, ResolverEnvironment, VersionsResponse};
+use crate::{
+    ExcludeNewerValue, Flexibility, InMemoryIndex, Options, ResolverEnvironment, VersionsResponse,
+};
 
 #[derive(Debug)]
 pub(crate) struct PubGrubReportFormatter<'a> {
@@ -638,6 +640,21 @@ impl PubGrubReportFormatter<'_> {
                         incomplete_packages,
                         output_hints,
                     );
+
+                    if let Some(exclude_newer) = options.exclude_newer.exclude_newer_package(name) {
+                        if self
+                            .available_versions
+                            .get(name)
+                            .is_some_and(BTreeSet::is_empty)
+                            && Self::has_versions_in_index(name, index, fork_indexes)
+                        {
+                            output_hints.insert(PubGrubHint::ExcludeNewer {
+                                package: name.clone(),
+                                per_package: options.exclude_newer.package.contains_key(name),
+                                exclude_newer,
+                            });
+                        }
+                    }
                 }
             }
             DerivationTree::External(External::FromDependencyOf(
@@ -1036,6 +1053,30 @@ impl PubGrubReportFormatter<'_> {
             }
         }
     }
+
+    fn has_versions_in_index(
+        name: &PackageName,
+        index: &InMemoryIndex,
+        fork_indexes: &ForkIndexes,
+    ) -> bool {
+        let response = if let Some(url) = fork_indexes.get(name).map(IndexMetadata::url) {
+            index.explicit().get(&(name.clone(), url.clone()))
+        } else {
+            index.implicit().get(name)
+        };
+
+        let Some(response) = response else {
+            return false;
+        };
+
+        let VersionsResponse::Found(ref version_maps) = *response else {
+            return false;
+        };
+
+        version_maps
+            .iter()
+            .any(|vm| vm.iter(&Ranges::full()).next().is_some())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1204,6 +1245,13 @@ pub(crate) enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         tags: BTreeSet<PlatformTag>,
     },
+    /// All versions of a package were excluded by `exclude-newer`.
+    ExcludeNewer {
+        package: PackageName,
+        per_package: bool,
+        // excluded from `PartialEq` and `Hash`
+        exclude_newer: ExcludeNewerValue,
+    },
     /// The resolution failed for a Python version that is different from the current Python version.
     DisjointPythonVersion {
         // excluded from `PartialEq` and `Hash`
@@ -1287,6 +1335,10 @@ enum PubGrubHintCore {
     PlatformTags {
         package: PackageName,
     },
+    ExcludeNewer {
+        package: PackageName,
+        per_package: bool,
+    },
     DisjointPythonVersion,
     DisjointEnvironment,
 }
@@ -1355,6 +1407,14 @@ impl From<PubGrubHint> for PubGrubHintCore {
             PubGrubHint::LanguageTags { package, .. } => Self::LanguageTags { package },
             PubGrubHint::AbiTags { package, .. } => Self::AbiTags { package },
             PubGrubHint::PlatformTags { package, .. } => Self::PlatformTags { package },
+            PubGrubHint::ExcludeNewer {
+                package,
+                per_package,
+                ..
+            } => Self::ExcludeNewer {
+                package,
+                per_package,
+            },
             PubGrubHint::DisjointPythonVersion { .. } => Self::DisjointPythonVersion,
             PubGrubHint::DisjointEnvironment => Self::DisjointEnvironment,
         }
@@ -1786,6 +1846,36 @@ impl std::fmt::Display for PubGrubHint {
                         .map(|tag| format!("`{}`", tag.cyan()))
                         .join(", "),
                 )
+            }
+            Self::ExcludeNewer {
+                package,
+                per_package,
+                exclude_newer,
+            } => {
+                if *per_package {
+                    write!(
+                        f,
+                        "{}{} `{}` was filtered by `{}` to only include packages uploaded \
+                        before {}. Consider removing the setting or updating it to a later date.",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        package.cyan(),
+                        "exclude-newer-package".green(),
+                        exclude_newer.cyan(),
+                    )
+                } else {
+                    write!(
+                        f,
+                        "{}{} `{}` was filtered by `{}` to only include packages uploaded \
+                        before {}. Consider using `{}` to override the cutoff for this package.",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        package.cyan(),
+                        "exclude-newer".green(),
+                        exclude_newer.cyan(),
+                        "exclude-newer-package".green(),
+                    )
+                }
             }
             Self::DisjointPythonVersion { python_version } => {
                 write!(

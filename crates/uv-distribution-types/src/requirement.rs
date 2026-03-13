@@ -6,7 +6,7 @@ use std::str::FromStr;
 use thiserror::Error;
 use uv_cache_key::{CacheKey, CacheKeyHasher};
 use uv_distribution_filename::DistExtension;
-use uv_fs::{CWD, PortablePath, PortablePathBuf, relative_to};
+use uv_fs::{CWD, PortablePath, PortablePathBuf, try_relative_to_if};
 use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError, OidParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
@@ -694,8 +694,7 @@ impl RequirementSource {
                 ext,
                 url,
             } => Ok(Self::Path {
-                install_path: relative_to(&install_path, path)
-                    .or_else(|_| std::path::absolute(install_path))?
+                install_path: try_relative_to_if(&install_path, path, !url.was_given_absolute())?
                     .into_boxed_path(),
                 ext,
                 url,
@@ -707,8 +706,7 @@ impl RequirementSource {
                 url,
                 ..
             } => Ok(Self::Directory {
-                install_path: relative_to(&install_path, path)
-                    .or_else(|_| std::path::absolute(install_path))?
+                install_path: try_relative_to_if(&install_path, path, !url.was_given_absolute())?
                     .into_boxed_path(),
                 editable,
                 r#virtual,

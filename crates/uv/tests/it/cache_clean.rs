@@ -36,6 +36,38 @@ fn clean_all() -> Result<()> {
     Ok(())
 }
 
+/// `cache clear` should behave as an alias of `cache clean`.
+#[test]
+fn clear_all_alias() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("typing-extensions\niniconfig")?;
+
+    // Install a requirement, to populate the cache.
+    context
+        .pip_sync()
+        .arg("requirements.txt")
+        .assert()
+        .success();
+
+    let mut command = context.command();
+    command.arg("cache").arg("clear").arg("--verbose");
+
+    uv_snapshot!(context.with_filtered_counts().filters(), command, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    DEBUG uv [VERSION] ([COMMIT] DATE)
+    Clearing cache at: [CACHE_DIR]/
+    Removed [N] files ([SIZE])
+    ");
+
+    Ok(())
+}
+
 #[tokio::test]
 async fn clean_force() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_counts();

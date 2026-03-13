@@ -1,6 +1,6 @@
 [package]
 name = "uv-publish"
-version = "0.0.25"
+version = "0.0.30"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -36,7 +36,7 @@ futures = { workspace = true }
 glob = { workspace = true }
 itertools = { workspace = true }
 reqwest = { workspace = true }
-reqwest-middleware = { workspace = true }
+reqwest-middleware = { workspace = true, features = ["json"] }
 reqwest-retry = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

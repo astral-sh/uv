@@ -3,9 +3,10 @@ use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use rustc_hash::FxHashSet;
 use serde::Serialize;
 use tracing::warn;
 use uv_cache::Cache;
@@ -81,6 +82,7 @@ pub(crate) async fn sync(
     concurrency: Concurrency,
     no_config: bool,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
     output_format: SyncFormat,
@@ -93,7 +95,6 @@ pub(crate) async fn sync(
     }
 
     // Identify the target.
-    let workspace_cache = WorkspaceCache::default();
     let target = if let Some(script) = script {
         SyncTarget::Script(script)
     } else {
@@ -105,21 +106,22 @@ pub(crate) async fn sync(
                     members: MemberDiscovery::None,
                     ..DiscoveryOptions::default()
                 },
-                &workspace_cache,
+                workspace_cache,
             )
             .await?
         } else if let [name] = package.as_slice() {
-            VirtualProject::Project(
-                Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
-                    .await?
-                    .with_current_project(name.clone())
-                    .with_context(|| format!("Package `{name}` not found in workspace"))?,
+            VirtualProject::discover_with_package(
+                project_dir,
+                &DiscoveryOptions::default(),
+                workspace_cache,
+                name.clone(),
             )
+            .await?
         } else {
             let project = VirtualProject::discover(
                 project_dir,
                 &DiscoveryOptions::default(),
-                &workspace_cache,
+                workspace_cache,
             )
             .await?;
 
@@ -131,16 +133,6 @@ pub(crate) async fn sync(
 
             project
         };
-
-        // TODO(lucab): improve warning content
-        // <https://github.com/astral-sh/uv/issues/7428>
-        if project.workspace().pyproject_toml().has_scripts()
-            && !project.workspace().pyproject_toml().is_package(true)
-        {
-            warn_user!(
-                "Skipping installation of entry points (`project.scripts`) because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`"
-            );
-        }
 
         SyncTarget::Project(project)
     };
@@ -283,9 +275,9 @@ pub(crate) async fn sync(
                 Box::new(DefaultResolveLogger),
                 Box::new(DefaultInstallLogger),
                 installer_metadata,
-                concurrency,
+                &concurrency,
                 cache,
-                workspace_cache.clone(),
+                workspace_cache,
                 dry_run,
                 printer,
                 preview,
@@ -350,9 +342,9 @@ pub(crate) async fn sync(
             &client_builder,
             &state,
             Box::new(DefaultResolveLogger),
-            concurrency,
+            &concurrency,
             cache,
-            &workspace_cache,
+            workspace_cache,
             printer,
             preview,
         )
@@ -393,6 +385,23 @@ pub(crate) async fn sync(
     // Identify the installation target.
     let sync_target = identify_installation_target(&target, outcome.lock(), all_packages, &package);
 
+    // TODO(lucab): improve warning content
+    // <https://github.com/astral-sh/uv/issues/7428>
+    if let SyncTarget::Project(project) = &target {
+        let roots = sync_target.roots().collect::<FxHashSet<_>>();
+        for (name, member) in project.workspace().packages() {
+            if roots.contains(name)
+                && member.pyproject_toml().has_scripts()
+                && !member.pyproject_toml().is_package(true)
+            {
+                warn_user!(
+                    "Skipping installation of entry points (`project.scripts`) for package `{}` because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`",
+                    name
+                );
+            }
+        }
+    }
+
     let state = state.fork();
 
     // Perform the sync operation.
@@ -410,7 +419,7 @@ pub(crate) async fn sync(
         &state,
         Box::new(DefaultInstallLogger),
         installer_metadata,
-        concurrency,
+        &concurrency,
         cache,
         workspace_cache,
         dry_run,
@@ -613,9 +622,9 @@ pub(super) async fn do_sync(
     state: &PlatformState,
     logger: Box<dyn InstallLogger>,
     installer_metadata: bool,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     cache: &Cache,
-    workspace_cache: WorkspaceCache,
+    workspace_cache: &WorkspaceCache,
     dry_run: DryRun,
     printer: Printer,
     preview: Preview,
@@ -815,7 +824,7 @@ pub(super) async fn do_sync(
         exclude_newer.clone(),
         sources.clone(),
         workspace_cache.clone(),
-        concurrency,
+        concurrency.clone(),
         preview,
     );
 

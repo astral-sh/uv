@@ -221,7 +221,7 @@ pub enum Error {
         DistErrorKind,
         Box<Dist>,
         DerivationChain,
-        #[source] uv_distribution::Error,
+        #[source] Box<uv_distribution::Error>,
     ),
     #[error("Cyclic build dependency detected for `{0}`")]
     CyclicBuildDependency(PackageName),
@@ -238,7 +238,7 @@ impl Error {
             DistErrorKind::from_dist(&dist, &err),
             Box::new(dist),
             chain,
-            err,
+            Box::new(err),
         )
     }
 }

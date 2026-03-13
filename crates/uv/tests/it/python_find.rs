@@ -1048,7 +1048,7 @@ fn python_find_script() {
     ----- stderr -----
     Creating script environment at: [CACHE_DIR]/environments-v2/foo-[HASH]
     Resolved in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.python_find().arg("--script").arg("foo.py"), @"
@@ -1139,7 +1139,7 @@ fn python_find_script_no_such_version() {
     ----- stderr -----
     Creating script environment at: [CACHE_DIR]/environments-v2/foo-[HASH]
     Resolved in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     script

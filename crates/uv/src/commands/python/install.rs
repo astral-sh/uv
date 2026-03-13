@@ -565,7 +565,11 @@ async fn perform_install(
             .iter()
             .copied()
             .cloned()
-            .try_for_each(|installation| sender.send(installation))?;
+            .try_for_each(|installation| {
+                sender
+                    .send(installation)
+                    .map_err(|err| anyhow::anyhow!(err))
+            })?;
     }
 
     // Check if Python downloads are banned
@@ -628,7 +632,9 @@ async fn perform_install(
 
                 let installation = ManagedPythonInstallation::new(path, download);
                 if let Some(ref sender) = bytecode_compilation_sender {
-                    sender.send(installation.clone())?;
+                    sender
+                        .send(installation.clone())
+                        .map_err(|err| anyhow::anyhow!(err))?;
                 }
                 changelog.installed.insert(installation.key().clone());
                 for request in &requests {

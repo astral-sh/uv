@@ -284,7 +284,7 @@ impl RequirementsSpecification {
                         ));
                     }
                 };
-                let pyproject_toml = toml::from_str::<PyProjectToml>(&content)
+                let pyproject_toml = PyProjectToml::from_toml(&content, path.user_display())
                     .with_context(|| format!("Failed to parse: `{}`", path.user_display()))?;
 
                 Self {
@@ -726,6 +726,32 @@ impl RequirementsSpecification {
                 .into_iter()
                 .map(UnresolvedRequirementSpecification::from)
                 .collect(),
+            ..Self::default()
+        }
+    }
+
+    /// Initialize a [`RequirementsSpecification`] from a list of [`Requirement`], including
+    /// constraints, overrides, and excludes.
+    pub fn from_excludes(
+        requirements: Vec<Requirement>,
+        constraints: Vec<Requirement>,
+        overrides: Vec<Requirement>,
+        excludes: Vec<PackageName>,
+    ) -> Self {
+        Self {
+            requirements: requirements
+                .into_iter()
+                .map(UnresolvedRequirementSpecification::from)
+                .collect(),
+            constraints: constraints
+                .into_iter()
+                .map(NameRequirementSpecification::from)
+                .collect(),
+            overrides: overrides
+                .into_iter()
+                .map(UnresolvedRequirementSpecification::from)
+                .collect(),
+            excludes,
             ..Self::default()
         }
     }

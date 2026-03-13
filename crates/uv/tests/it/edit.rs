@@ -136,7 +136,7 @@ fn add_registry() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     ");
 
     Ok(())
@@ -199,7 +199,7 @@ fn add_git() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -299,7 +299,7 @@ fn add_git() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     ");
 
     Ok(())
@@ -395,7 +395,7 @@ fn add_git_private_source() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     Ok(())
@@ -489,7 +489,7 @@ fn add_git_private_raw() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     Ok(())
@@ -607,7 +607,7 @@ fn add_git_error() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     // Provide a tag without a Git source.
@@ -886,7 +886,7 @@ fn add_git_lfs() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     Ok(())
@@ -1036,7 +1036,7 @@ fn add_git_raw() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     ");
 
     Ok(())
@@ -1295,7 +1295,7 @@ fn add_unnamed() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     Ok(())
@@ -1421,7 +1421,7 @@ fn add_remove_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     ");
 
     // This should fail without --dev.
@@ -1502,7 +1502,7 @@ fn add_remove_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     Ok(())
@@ -1653,7 +1653,7 @@ fn add_remove_optional() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -1707,7 +1707,7 @@ fn add_remove_optional() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     Ok(())
@@ -1958,7 +1958,7 @@ fn add_remove_workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 2 packages in [TIME]
+    Checked 2 packages in [TIME]
     ");
 
     // Remove the dependency.
@@ -2036,7 +2036,7 @@ fn add_remove_workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     Ok(())
@@ -2306,7 +2306,7 @@ fn remove_both_dev() -> Result<()> {
     ----- stderr -----
     warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -2398,7 +2398,7 @@ fn remove_both_dev_group() -> Result<()> {
     ----- stderr -----
     warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -2626,7 +2626,7 @@ fn add_workspace_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 2 packages in [TIME]
+    Checked 2 packages in [TIME]
     ");
 
     Ok(())
@@ -2752,7 +2752,7 @@ fn add_workspace_path() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     Ok(())
@@ -2880,7 +2880,7 @@ fn add_path_implicit_workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     Ok(())
@@ -2996,7 +2996,7 @@ fn add_path_no_workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     Ok(())
@@ -3106,6 +3106,201 @@ fn add_path_adjacent_directory() -> Result<()> {
     Ok(())
 }
 
+/// Check relative and absolute path handling with `uv add`.
+///
+/// TODO(tk): Currently `uv add` always relativizes paths in `pyproject.toml`,
+/// this is a bug.
+#[test]
+fn add_relative_and_absolute_paths() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Create a dependency at a relative path (sibling directory).
+    let relative_dep = context.temp_dir.child("relative_dep");
+    relative_dep.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "relative-dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    relative_dep
+        .child("src")
+        .child("relative_dep")
+        .child("__init__.py")
+        .touch()?;
+
+    // Create a dependency at an absolute path (using the full temp_dir path).
+    let absolute_dep = context.temp_dir.child("absolute_dep");
+    absolute_dep.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "absolute-dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    absolute_dep
+        .child("src")
+        .child("absolute_dep")
+        .child("__init__.py")
+        .touch()?;
+
+    // Create a dependency that will be added via a file:// URL.
+    let file_url_dep = context.temp_dir.child("file_url_dep");
+    file_url_dep.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "file-url-dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    file_url_dep
+        .child("src")
+        .child("file_url_dep")
+        .child("__init__.py")
+        .touch()?;
+
+    // Add the relative dependency using a relative path.
+    uv_snapshot!(context.filters(), context.add().arg("../relative_dep").current_dir(project.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + relative-dep==0.1.0 (from file://[TEMP_DIR]/relative_dep)
+    ");
+
+    // Add the absolute dependency using an absolute path.
+    uv_snapshot!(context.filters(), context.add().arg(absolute_dep.path()).current_dir(project.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + absolute-dep==0.1.0 (from file://[TEMP_DIR]/absolute_dep)
+    ");
+
+    // Add a dependency using a file:// URL (also absolute).
+    let file_url = Url::from_file_path(file_url_dep.path()).unwrap();
+    uv_snapshot!(context.filters(), context.add().arg(file_url.as_str()).current_dir(project.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + file-url-dep==0.1.0 (from file://[TEMP_DIR]/file_url_dep)
+    ");
+
+    // Check pyproject.toml.
+    let pyproject_toml = fs_err::read_to_string(project.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "absolute-dep",
+            "file-url-dep",
+            "relative-dep",
+        ]
+
+        [tool.uv.sources]
+        relative-dep = { path = "../relative_dep" }
+        absolute-dep = { path = "../absolute_dep" }
+        file-url-dep = { path = "../file_url_dep" }
+        "#
+        );
+    });
+
+    // Check uv.lock.
+    let lock = fs_err::read_to_string(project.join("uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "absolute-dep"
+        version = "0.1.0"
+        source = { directory = "../absolute_dep" }
+
+        [[package]]
+        name = "file-url-dep"
+        version = "0.1.0"
+        source = { directory = "../file_url_dep" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "absolute-dep" },
+            { name = "file-url-dep" },
+            { name = "relative-dep" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "absolute-dep", directory = "../absolute_dep" },
+            { name = "file-url-dep", directory = "../file_url_dep" },
+            { name = "relative-dep", directory = "../relative_dep" },
+        ]
+
+        [[package]]
+        name = "relative-dep"
+        version = "0.1.0"
+        source = { directory = "../relative_dep" }
+        "#
+        );
+    });
+
+    Ok(())
+}
+
 /// Update a requirement, modifying the source and extras.
 #[test]
 #[cfg(feature = "test-git")]
@@ -3153,7 +3348,7 @@ fn update() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Audited 5 packages in [TIME]
+    Checked 5 packages in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -3371,7 +3566,7 @@ fn update() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 7 packages in [TIME]
+    Checked 7 packages in [TIME]
     ");
 
     Ok(())
@@ -3422,7 +3617,7 @@ fn add_update_marker() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    Audited 5 packages in [TIME]
+    Checked 5 packages in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -3453,7 +3648,7 @@ fn add_update_marker() -> Result<()> {
 
     ----- stderr -----
     Resolved 10 packages in [TIME]
-    Audited 5 packages in [TIME]
+    Checked 5 packages in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -3484,7 +3679,7 @@ fn add_update_marker() -> Result<()> {
 
     ----- stderr -----
     Resolved 10 packages in [TIME]
-    Audited 5 packages in [TIME]
+    Checked 5 packages in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -3516,7 +3711,7 @@ fn add_update_marker() -> Result<()> {
 
     ----- stderr -----
     Resolved 10 packages in [TIME]
-    Audited 5 packages in [TIME]
+    Checked 5 packages in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -3916,7 +4111,7 @@ fn remove_non_normalized_source() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -4057,7 +4252,7 @@ fn add_inexact() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     // Install from the lockfile, performing an exact sync.
@@ -4170,7 +4365,7 @@ fn remove_registry() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     Ok(())
@@ -5158,7 +5353,7 @@ fn add_virtual_dependency_group() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 3 packages in [TIME]
-    Audited 2 packages in [TIME]
+    Checked 2 packages in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -5213,7 +5408,7 @@ fn add_empty_requirements_group() -> Result<()> {
     ----- stderr -----
     warning: Requirements file `requirements.txt` does not contain any dependencies
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -5266,7 +5461,7 @@ fn add_empty_requirements_optional() -> Result<()> {
     ----- stderr -----
     warning: Requirements file `requirements.txt` does not contain any dependencies
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -5487,7 +5682,7 @@ fn add_repeat() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -5581,7 +5776,7 @@ fn add_requirements_file() -> Result<()> {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    Audited [N] packages in [TIME]
+    Checked [N] packages in [TIME]
     ");
 
     // Passing a `setup.py` should fail.
@@ -5860,7 +6055,7 @@ fn add_requirements_file_with_marker_flag() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
     let edited_pyproject_toml = context.read("pyproject.toml");
 
@@ -6246,7 +6441,7 @@ fn add_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -6276,7 +6471,7 @@ fn add_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -6431,7 +6626,7 @@ fn add_group_normalize() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -6683,7 +6878,7 @@ fn remove_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -7580,7 +7775,7 @@ fn remove_repeated() -> Result<()> {
     ----- stderr -----
     warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 2 packages in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -10052,7 +10247,7 @@ fn add_index() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     ");
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -10300,7 +10495,7 @@ fn add_index() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     ");
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -11293,7 +11488,7 @@ fn add_group_comment() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 2 packages in [TIME]
+    Checked 2 packages in [TIME]
     ");
 
     Ok(())
@@ -11474,7 +11669,7 @@ fn add_self() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -11751,7 +11946,7 @@ fn add_direct_url_subdirectory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     ");
 
     Ok(())
@@ -11881,7 +12076,7 @@ fn add_direct_url_subdirectory_raw() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     ");
 
     Ok(())
@@ -12319,7 +12514,7 @@ fn remove_requirement() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -12367,7 +12562,7 @@ fn remove_all_with_comments() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -12495,7 +12690,7 @@ fn multiple_index_cli() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     Ok(())
@@ -12606,7 +12801,7 @@ fn repeated_index_cli_environment_variable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     Ok(())
@@ -12712,7 +12907,7 @@ fn repeated_index_cli_environment_variable_newline() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     Ok(())
@@ -12822,7 +13017,7 @@ fn repeated_index_cli() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     Ok(())
@@ -12932,7 +13127,7 @@ fn repeated_index_cli_reversed() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     Ok(())
@@ -13321,13 +13516,14 @@ async fn add_unexpected_error_code() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--index").arg(server.uri())
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+        .env(EnvVars::UV_HTTP_RETRIES, "1"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Request failed after 3 retries
+    error: Request failed after 1 retry in [TIME]
       Caused by: Failed to fetch: `http://[LOCALHOST]/anyio/`
       Caused by: HTTP status server error (503 Service Unavailable) for url (http://[LOCALHOST]/anyio/)
     "
@@ -14092,7 +14288,7 @@ fn add_optional_normalize() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -14208,7 +14404,7 @@ fn add_bounds() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -14267,7 +14463,7 @@ fn add_bounds() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
