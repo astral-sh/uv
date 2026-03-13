@@ -99,6 +99,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         .map(Cow::Owned)
         .unwrap_or_else(|| Cow::Borrowed(&*CWD));
 
+    // Load environment variables not handled by Clap
+    let environment = EnvironmentOptions::new()?;
+
     // Validate that the project directory exists if explicitly provided via --project, except for
     // `uv init`, which creates the project directory (separate deprecation).
     let skip_project_validation = matches!(
@@ -108,9 +111,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     if !skip_project_validation {
         if let Some(project_path) = cli.top_level.global_args.project.as_ref() {
-            // Resolve the preview flags until this becomes stabilized.
+            // Resolve the preview flags until this becomes stabilized. We check CLI args and
+            // the `UV_PREVIEW` env var, but not workspace config (which requires reading from
+            // the project directory that may not exist).
             let preview = Preview::from_args(
-                cli.top_level.global_args.preview,
+                cli.top_level.global_args.preview || environment.preview.value == Some(true),
                 cli.top_level.global_args.no_preview,
                 &cli.top_level.global_args.preview_features,
             );
@@ -145,9 +150,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             }
         }
     }
-
-    // Load environment variables not handled by Clap
-    let environment = EnvironmentOptions::new()?;
 
     // The `--isolated` argument is deprecated on preview APIs, and warns on non-preview APIs.
     let deprecated_isolated = if cli.top_level.global_args.isolated {

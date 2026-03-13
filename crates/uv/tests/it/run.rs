@@ -6583,7 +6583,7 @@ fn run_project_not_found() {
     hello
 
     ----- stderr -----
-    warning: Project directory `/tmp/does-not-exist-uv-test` does not exist. Use `--preview-features project-directory-must-exist` to error on this.
+    warning: Project directory `/tmp/does-not-exist-uv-test` does not exist. This will become an error in a future release. Use `--preview-features project-directory-must-exist` to error on this now.
     ");
 }
 
@@ -6593,6 +6593,21 @@ fn run_project_not_found_preview() {
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.run().arg("--preview-features").arg("project-directory-must-exist").arg("--project").arg("/tmp/does-not-exist-uv-test").arg("python").arg("-c").arg("print('hello')"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Project directory `/tmp/does-not-exist-uv-test` does not exist
+    ");
+}
+
+/// Using `--project` with a non-existent directory should error with `UV_PREVIEW=1`.
+#[test]
+fn run_project_not_found_uv_preview_env() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.run().env("UV_PREVIEW", "1").arg("--project").arg("/tmp/does-not-exist-uv-test").arg("python").arg("-c").arg("print('hello')"), @"
     success: false
     exit_code: 2
     ----- stdout -----
