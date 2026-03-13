@@ -12,7 +12,7 @@ use uv_auth::Service;
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::comma::CommaSeparatedRequirements;
 use uv_cli::{
-    AddArgs, AuthLoginArgs, AuthLogoutArgs, AuthTokenArgs, ColorChoice, ExternalCommand,
+    AddArgs, AuditArgs, AuthLoginArgs, AuthLogoutArgs, AuthTokenArgs, ColorChoice, ExternalCommand,
     GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs,
     PipInstallArgs, PipListArgs, PipShowArgs, PipSyncArgs, PipTreeArgs, PipUninstallArgs,
     PythonFindArgs, PythonInstallArgs, PythonListArgs, PythonListFormat, PythonPinArgs,
@@ -1094,6 +1094,7 @@ pub(crate) struct ToolListSettings {
     pub(crate) show_with: bool,
     pub(crate) show_extras: bool,
     pub(crate) show_python: bool,
+    pub(crate) outdated: bool,
 }
 
 impl ToolListSettings {
@@ -1106,6 +1107,8 @@ impl ToolListSettings {
             show_with,
             show_extras,
             show_python,
+            outdated,
+            no_outdated,
             python_preference: _,
             no_python_downloads: _,
         } = args;
@@ -1116,6 +1119,7 @@ impl ToolListSettings {
             show_with,
             show_extras,
             show_python,
+            outdated: flag(outdated, no_outdated, "outdated").unwrap_or(false),
         }
     }
 }
@@ -2464,6 +2468,95 @@ impl FormatSettings {
     }
 }
 
+/// The resolved settings to use for an `audit` invocation.
+#[derive(Debug, Clone)]
+pub(crate) struct AuditSettings {
+    pub(crate) extras: ExtrasSpecification,
+    pub(crate) groups: DependencyGroups,
+    pub(crate) lock_check: LockCheck,
+    pub(crate) frozen: Option<FrozenSource>,
+    pub(crate) python_version: Option<PythonVersion>,
+    pub(crate) python_platform: Option<TargetTriple>,
+    pub(crate) install_mirrors: PythonInstallMirrors,
+    pub(crate) settings: ResolverSettings,
+}
+
+impl AuditSettings {
+    /// Resolve the [`AuditSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(
+        args: AuditArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
+        let AuditArgs {
+            extra,
+            all_extras,
+            no_extra,
+            no_all_extras,
+            dev,
+            no_dev,
+            group,
+            no_group,
+            no_default_groups,
+            only_group,
+            all_groups,
+            only_dev,
+            script: _,
+            python_version,
+            python_platform,
+            locked,
+            frozen,
+            build,
+            resolver,
+        } = args;
+
+        let filesystem_install_mirrors = filesystem
+            .clone()
+            .map(|fs| fs.install_mirrors.clone())
+            .unwrap_or_default();
+
+        let dev = dev || environment.dev.value == Some(true);
+        let no_dev = no_dev || environment.no_dev.value == Some(true);
+
+        // Resolve flags from CLI and environment variables.
+        let locked = resolve_flag(locked, "locked", environment.locked);
+        let frozen = resolve_flag(frozen, "frozen", environment.frozen);
+
+        // Check for conflicts between locked and frozen.
+        check_conflicts(locked, frozen);
+
+        Self {
+            extras: ExtrasSpecification::from_args(
+                extra.unwrap_or_default(),
+                no_extra,
+                // TODO(ww): support no_default_extras?
+                false,
+                // TODO(ww): support only_extra?
+                vec![],
+                flag(all_extras, no_all_extras, "all-extras").unwrap_or_default(),
+            ),
+            groups: DependencyGroups::from_args(
+                dev,
+                no_dev,
+                only_dev,
+                group,
+                no_group,
+                no_default_groups,
+                only_group,
+                all_groups,
+            ),
+            lock_check: resolve_lock_check(locked),
+            frozen: resolve_frozen(frozen),
+            python_version,
+            python_platform,
+            install_mirrors: environment
+                .install_mirrors
+                .combine(filesystem_install_mirrors),
+            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
+        }
+    }
+}
+
 /// The resolved settings to use for a `pip compile` invocation.
 #[derive(Debug, Clone)]
 pub(crate) struct PipCompileSettings {
@@ -3277,6 +3370,7 @@ pub(crate) struct BuildSettings {
     pub(crate) force_pep517: bool,
     pub(crate) clear: bool,
     pub(crate) build_constraints: Vec<PathBuf>,
+    pub(crate) build_constraints_from_workspace: Vec<Requirement>,
     pub(crate) hash_checking: Option<HashCheckingMode>,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
@@ -3319,6 +3413,19 @@ impl BuildSettings {
             Some(fs) => fs.install_mirrors.clone(),
             None => PythonInstallMirrors::default(),
         };
+        let build_constraints_from_workspace = if let Some(configuration) = &filesystem {
+            configuration
+                .build_constraint_dependencies
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|requirement| {
+                    Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
 
         Self {
             src,
@@ -3337,6 +3444,7 @@ impl BuildSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            build_constraints_from_workspace,
             hash_checking: HashCheckingMode::from_args(
                 flag(require_hashes, no_require_hashes, "require-hashes"),
                 flag(verify_hashes, no_verify_hashes, "verify-hashes"),
@@ -3402,6 +3510,7 @@ impl VenvSettings {
         // Resolve flags from CLI and environment variables.
         let seed = seed || environment.venv_seed.value == Some(true);
         let clear = clear || environment.venv_clear.value == Some(true);
+        let relocatable = relocatable || environment.venv_relocatable.value == Some(true);
 
         Self {
             seed,

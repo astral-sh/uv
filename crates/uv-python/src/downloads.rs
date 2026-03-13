@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::str::FromStr;
 use std::task::{Context, Poll};
+use std::time::{Duration, Instant, SystemTimeError};
 use std::{env, io};
 
 use futures::TryStreamExt;
@@ -17,10 +18,13 @@ use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt, BufWriter, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tokio_util::either::Either;
-use tracing::{debug, instrument, warn};
+use tracing::{debug, instrument};
 use url::Url;
 
-use uv_client::{BaseClient, RetryState, WrappedReqwestError, retryable_on_request_failure};
+use uv_client::{
+    BaseClient, RetriableError, WrappedReqwestError, fetch_with_url_fallback,
+    retryable_on_request_failure,
+};
 use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
 use uv_fs::{Simplified, rename_with_retry};
@@ -54,11 +58,16 @@ pub enum Error {
     TooManyParts(String),
     #[error("Failed to download {0}")]
     NetworkError(DisplaySafeUrl, #[source] WrappedReqwestError),
-    #[error("Request failed after {retries} {subject}", subject = if *retries > 1 { "retries" } else { "retry" })]
+    #[error(
+        "Request failed after {retries} {subject} in {duration:.1}s",
+        subject = if *retries > 1 { "retries" } else { "retry" },
+        duration = duration.as_secs_f32()
+    )]
     NetworkErrorWithRetries {
         #[source]
         err: Box<Self>,
         retries: u32,
+        duration: Duration,
     },
     #[error("Failed to download {0}")]
     NetworkMiddlewareError(DisplaySafeUrl, #[source] anyhow::Error),
@@ -116,9 +125,11 @@ pub enum Error {
     BuildVersion(#[from] BuildVersionError),
     #[error("No download URL found for Python")]
     NoPythonDownloadUrlFound,
+    #[error(transparent)]
+    SystemTime(#[from] SystemTimeError),
 }
 
-impl Error {
+impl RetriableError for Error {
     // Return the number of retries that were made to complete this request before this error was
     // returned.
     //
@@ -158,6 +169,14 @@ impl Error {
             // explicitly so that `retryable_on_request_failure` can inspect the io error kind.
             Self::Io(err) => retryable_on_request_failure(err).is_some(),
             _ => false,
+        }
+    }
+
+    fn into_retried(self, retries: u32, duration: Duration) -> Self {
+        Self::NetworkErrorWithRetries {
+            err: Box::new(self),
+            retries,
+            duration,
         }
     }
 }
@@ -1144,54 +1163,20 @@ impl ManagedPythonDownload {
         reporter: Option<&dyn Reporter>,
     ) -> Result<DownloadResult, Error> {
         let urls = self.download_urls(python_install_mirror, pypy_install_mirror)?;
-        let mut retry_state = RetryState::start(
-            *retry_policy,
-            // We pass in the last URL because that will trigger backoff if it fails.
-            urls.last().ok_or(Error::NoPythonDownloadUrlFound)?.clone(),
-        );
-
-        'retry: loop {
-            for (i, url) in urls.iter().enumerate() {
-                let is_last = i == urls.len() - 1;
-                match self
-                    .fetch_from_url(
-                        url,
-                        client,
-                        installation_dir,
-                        scratch_dir,
-                        reinstall,
-                        reporter,
-                    )
-                    .await
-                {
-                    Ok(download_result) => return Ok(download_result),
-                    Err(err) => {
-                        if !is_last && err.should_try_next_url() {
-                            warn!(
-                                "Failed to download `{}` from {url} ({err}); falling back to {}",
-                                self.key(),
-                                urls[i + 1]
-                            );
-                            continue;
-                        }
-                        // All URLs exhausted; apply the retry policy.
-                        if let Some(backoff) = retry_state.should_retry(&err, err.retries()) {
-                            retry_state.sleep_backoff(backoff).await;
-                            continue 'retry;
-                        }
-                        return if retry_state.total_retries() > 0 {
-                            Err(Error::NetworkErrorWithRetries {
-                                err: Box::new(err),
-                                retries: retry_state.total_retries(),
-                            })
-                        } else {
-                            Err(err)
-                        };
-                    }
-                }
-            }
-            unreachable!("download_urls() must return at least one URL");
+        if urls.is_empty() {
+            return Err(Error::NoPythonDownloadUrlFound);
         }
+        fetch_with_url_fallback(&urls, *retry_policy, &format!("`{}`", self.key()), |url| {
+            self.fetch_from_url(
+                url,
+                client,
+                installation_dir,
+                scratch_dir,
+                reinstall,
+                reporter,
+            )
+        })
+        .await
     }
 
     /// Download and extract a Python distribution.
@@ -1207,7 +1192,10 @@ impl ManagedPythonDownload {
         reporter: Option<&dyn Reporter>,
     ) -> Result<DownloadResult, Error> {
         let urls = self.download_urls(python_install_mirror, pypy_install_mirror)?;
-        let url = urls.first().ok_or(Error::NoPythonDownloadUrlFound)?;
+        let url = urls
+            .into_iter()
+            .next()
+            .ok_or(Error::NoPythonDownloadUrlFound)?;
         self.fetch_from_url(
             url,
             client,
@@ -1222,7 +1210,7 @@ impl ManagedPythonDownload {
     /// Download and extract a Python distribution from the given URL.
     async fn fetch_from_url(
         &self,
-        url: &DisplaySafeUrl,
+        url: DisplaySafeUrl,
         client: &BaseClient,
         installation_dir: &Path,
         scratch_dir: &Path,
@@ -1294,7 +1282,7 @@ impl ManagedPythonDownload {
                         }
 
                         self.download_archive(
-                            url,
+                            &url,
                             client,
                             reporter,
                             &python_builds_dir,
@@ -1330,7 +1318,7 @@ impl ManagedPythonDownload {
                 temp_dir.path().simplified_display()
             );
 
-            let (reader, size) = read_url(url, client).await?;
+            let (reader, size) = read_url(&url, client).await?;
             self.extract_reader(
                 reader,
                 temp_dir.path(),
@@ -1698,12 +1686,14 @@ impl Error {
         url: DisplaySafeUrl,
         err: reqwest::Error,
         retries: Option<u32>,
+        start: Instant,
     ) -> Self {
         let err = Self::NetworkError(url, WrappedReqwestError::from(err));
         if let Some(retries) = retries {
             Self::NetworkErrorWithRetries {
                 err: Box::new(err),
                 retries,
+                duration: start.elapsed(),
             }
         } else {
             err
@@ -1815,6 +1805,7 @@ async fn read_url(
 
         Ok((Either::Left(reader), Some(size)))
     } else {
+        let start = Instant::now();
         let response = client
             .for_host(url)
             .get(Url::from(url.clone()))
@@ -1830,7 +1821,7 @@ async fn read_url(
         // Check the status code.
         let response = response
             .error_for_status()
-            .map_err(|err| Error::from_reqwest(url.clone(), err, retry_count))?;
+            .map_err(|err| Error::from_reqwest(url.clone(), err, retry_count, start))?;
 
         let size = response.content_length();
         let stream = response

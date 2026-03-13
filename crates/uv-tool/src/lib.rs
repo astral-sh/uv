@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use fs_err as fs;
 use fs_err::File;
+use owo_colors::OwoColorize;
 use thiserror::Error;
 use tracing::{debug, warn};
 
@@ -14,7 +15,7 @@ use uv_install_wheel::read_record_file;
 use uv_installer::SitePackages;
 use uv_normalize::{InvalidNameError, PackageName};
 use uv_pep440::Version;
-use uv_python::{Interpreter, PythonEnvironment};
+use uv_python::{BrokenLink, Interpreter, PythonEnvironment};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
 use uv_virtualenv::remove_virtualenv;
@@ -287,15 +288,24 @@ impl InstalledTools {
 
                 Ok(None)
             }
-            Err(uv_python::Error::Query(uv_python::InterpreterError::BrokenSymlink(
-                broken_symlink,
-            ))) => {
-                let target_path = fs_err::read_link(&broken_symlink.path)?;
-                warn!(
-                    "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
-                    broken_symlink.path.user_display(),
-                    target_path.user_display()
-                );
+            Err(uv_python::Error::Query(uv_python::InterpreterError::BrokenLink(BrokenLink {
+                path,
+                unix,
+                venv: _,
+            }))) => {
+                if unix {
+                    let target_path = fs_err::read_link(&path)?;
+                    warn!(
+                        "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
+                        path.user_display().cyan(),
+                        target_path.user_display().cyan(),
+                    );
+                } else {
+                    warn!(
+                        "Ignoring existing virtual environment linked to non-existent Python interpreter: {}",
+                        path.user_display().cyan(),
+                    );
+                }
 
                 Ok(None)
             }
@@ -314,14 +324,14 @@ impl InstalledTools {
         let environment_path = self.tool_dir(name);
 
         // Remove any existing environment.
-        match fs_err::remove_dir_all(&environment_path) {
+        match remove_virtualenv(&environment_path) {
             Ok(()) => {
                 debug!(
                     "Removed existing environment for tool `{name}`: {}",
                     environment_path.user_display()
                 );
             }
-            Err(err) if err.kind() == io::ErrorKind::NotFound => (),
+            Err(uv_virtualenv::Error::Io(err)) if err.kind() == io::ErrorKind::NotFound => (),
             Err(err) => return Err(err.into()),
         }
 

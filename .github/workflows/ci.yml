@@ -306,7 +306,7 @@ jobs:
           # Build a yet unused version of `astral-test-pypa-gh-action`
           mkdir astral-test-pypa-gh-action
           cd astral-test-pypa-gh-action
-          ../uv init --package
+          ../uv init --package --no-workspace
           # Get the latest patch version
           patch_version=$(curl https://test.pypi.org/simple/astral-test-pypa-gh-action/?format=application/vnd.pypi.simple.v1+json | jq --raw-output '[.files[].filename | select(endswith(".tar.gz"))] | last' | grep -oP '(?<=astral_test_pypa_gh_action-0\.1\.)\d+(?=\.tar\.gz)')
           # Set the current version to one higher (which should be unused)
@@ -377,7 +377,7 @@ jobs:
 
       - name: "Publish test packages"
         # `-p 3.12` prefers the python we just installed over the one locked in `.python_version`.
-        run: ./uv run -p "${PYTHON_VERSION}" scripts/publish/test_publish.py --uv ./uv all
+        run: ./uv run --no-project -p "${PYTHON_VERSION}" scripts/publish/test_publish.py --uv ./uv all
         env:
           RUST_LOG: uv=debug,uv_publish=trace
           UV_TEST_PUBLISH_TOKEN: ${{ secrets.UV_TEST_PUBLISH_TOKEN }}

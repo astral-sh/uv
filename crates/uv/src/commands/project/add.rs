@@ -6,7 +6,7 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
@@ -22,8 +22,8 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
-    Index, IndexName, IndexUrl, IndexUrls, NameRequirementSpecification, Requirement,
-    RequirementSource, UnresolvedRequirement, VersionId,
+    Identifier, Index, IndexName, IndexUrl, IndexUrls, NameRequirementSpecification, Requirement,
+    RequirementSource, UnresolvedRequirement,
 };
 use uv_fs::{LockedFile, LockedFileError, Simplified};
 use uv_git::GIT_STORE;
@@ -40,7 +40,7 @@ use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{DependencyType, Source, SourceError, Sources, ToolUvSources};
 use uv_workspace::pyproject_mut::{AddBoundsKind, ArrayEdit, DependencyTarget, PyProjectTomlMut};
-use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceCache};
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryResolveLogger,
@@ -230,16 +230,13 @@ pub(crate) async fn add(
         // Find the project in the workspace.
         // No workspace caching since `uv add` changes the workspace definition.
         let project = if let Some(package) = package {
-            VirtualProject::Project(
-                Workspace::discover(
-                    project_dir,
-                    &DiscoveryOptions::default(),
-                    &WorkspaceCache::default(),
-                )
-                .await?
-                .with_current_project(package.clone())
-                .with_context(|| format!("Package `{package}` not found in workspace"))?,
+            VirtualProject::discover_with_package(
+                project_dir,
+                &DiscoveryOptions::default(),
+                &WorkspaceCache::default(),
+                package,
             )
+            .await?
         } else {
             VirtualProject::discover(
                 project_dir,
@@ -1119,8 +1116,8 @@ async fn lock_and_sync(
             if let AddTarget::Project(VirtualProject::Project(ref project), _) = target {
                 let url = DisplaySafeUrl::from_file_path(project.project_root())
                     .expect("project root is a valid URL");
-                let version_id = VersionId::from_url(&url);
-                let existing = lock_state.index().distributions().remove(&version_id);
+                let distribution_id = url.distribution_id();
+                let existing = lock_state.index().distributions().remove(&distribution_id);
                 debug_assert!(existing.is_some(), "distribution should exist");
             }
 
@@ -1200,7 +1197,7 @@ async fn lock_and_sync(
         installer_metadata,
         concurrency,
         cache,
-        WorkspaceCache::default(),
+        &WorkspaceCache::default(),
         DryRun::Disabled,
         printer,
         preview,
@@ -1349,7 +1346,7 @@ impl AddTarget {
             }
             Self::Project(project, venv) => {
                 let project = project
-                    .with_pyproject_toml(
+                    .update_member(
                         toml::from_str(content).map_err(ProjectError::PyprojectTomlParse)?,
                     )?
                     .ok_or(ProjectError::PyprojectTomlUpdate)?;

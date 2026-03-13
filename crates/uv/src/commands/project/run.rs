@@ -42,7 +42,7 @@ use uv_settings::PythonInstallMirrors;
 use uv_shell::runnable::WindowsRunnable;
 use uv_static::EnvVars;
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceCache, WorkspaceError};
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
 
 use crate::child::run_to_completion;
 
@@ -106,6 +106,7 @@ pub(crate) async fn run(
     installer_metadata: bool,
     concurrency: Concurrency,
     cache: Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     env_file: EnvFile,
     preview: Preview,
@@ -161,7 +162,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     // Initialize any shared state.
     let lock_state = UniversalState::default();
     let sync_state = lock_state.fork();
-    let workspace_cache = WorkspaceCache::default();
 
     // Read from the `.env` file, if necessary.
     for env_file_path in env_file.iter().rev().map(PathBuf::as_path) {
@@ -284,7 +284,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     },
                     &concurrency,
                     &cache,
-                    &workspace_cache,
+                    workspace_cache,
                     printer,
                     preview,
                 )
@@ -332,7 +332,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 installer_metadata,
                 &concurrency,
                 &cache,
-                workspace_cache.clone(),
+                workspace_cache,
                 DryRun::Disabled,
                 printer,
                 preview,
@@ -449,7 +449,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     installer_metadata,
                     &concurrency,
                     &cache,
-                    workspace_cache.clone(),
+                    workspace_cache,
                     DryRun::Disabled,
                     printer,
                     preview,
@@ -561,21 +561,19 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
         let project = if let Some(package) = package.as_ref() {
             // We need a workspace, but we don't need to have a current package, we can be e.g. in
             // the root of a virtual workspace and then switch into the selected package.
-            Some(VirtualProject::Project(
-                Workspace::discover(
-                    &discovery_dir,
-                    &DiscoveryOptions::default(),
-                    &workspace_cache,
-                )
-                .await?
-                .with_current_project(package.clone())
-                .with_context(|| format!("Package `{package}` not found in workspace"))?,
-            ))
+            let project = VirtualProject::discover_with_package(
+                &discovery_dir,
+                &DiscoveryOptions::default(),
+                workspace_cache,
+                package.clone(),
+            )
+            .await?;
+            Some(project)
         } else {
             match VirtualProject::discover(
                 &discovery_dir,
                 &DiscoveryOptions::default(),
-                &workspace_cache,
+                workspace_cache,
             )
             .await
             {
@@ -786,7 +784,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         },
                         &concurrency,
                         &cache,
-                        &workspace_cache,
+                        workspace_cache,
                         printer,
                         preview,
                     )
@@ -875,7 +873,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     installer_metadata,
                     &concurrency,
                     &cache,
-                    workspace_cache.clone(),
+                    workspace_cache,
                     DryRun::Disabled,
                     printer,
                     preview,
@@ -1030,6 +1028,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 installer_metadata,
                 &concurrency,
                 &cache,
+                workspace_cache,
                 printer,
                 preview,
             )

@@ -329,7 +329,17 @@ def build_project_at_version(
     if project_root.exists():
         rmtree(project_root)
     check_call(
-        [uv, "init", "-p", PYTHON_VERSION, "--lib", "--name", project_name, dir_name],
+        [
+            uv,
+            "init",
+            "-p",
+            PYTHON_VERSION,
+            "--lib",
+            "--no-workspace",
+            "--name",
+            project_name,
+            dir_name,
+        ],
         cwd=cwd,
     )
     toml = (

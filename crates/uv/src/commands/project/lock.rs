@@ -94,6 +94,7 @@ pub(crate) async fn lock(
     concurrency: Concurrency,
     no_config: bool,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
 ) -> anyhow::Result<ExitStatus> {
@@ -122,14 +123,12 @@ pub(crate) async fn lock(
     };
 
     // Find the project requirements.
-    let workspace_cache = WorkspaceCache::default();
     let workspace;
     let target = if let Some(script) = script.as_ref() {
         LockTarget::Script(script)
     } else {
         workspace =
-            Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
-                .await?;
+            Workspace::discover(project_dir, &DiscoveryOptions::default(), workspace_cache).await?;
         LockTarget::Workspace(&workspace)
     };
 
@@ -198,7 +197,7 @@ pub(crate) async fn lock(
             Box::new(DefaultResolveLogger),
             &concurrency,
             cache,
-            &workspace_cache,
+            workspace_cache,
             printer,
             preview,
         )

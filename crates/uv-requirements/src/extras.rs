@@ -3,8 +3,7 @@ use std::sync::Arc;
 use futures::{TryStreamExt, stream::FuturesOrdered};
 
 use uv_distribution::{DistributionDatabase, Reporter};
-use uv_distribution_types::DistributionMetadata;
-use uv_distribution_types::Requirement;
+use uv_distribution_types::{Identifier, Requirement};
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
 
@@ -78,7 +77,7 @@ impl<'a, Context: BuildContext> ExtrasResolver<'a, Context> {
 
         // Fetch the metadata for the distribution.
         let metadata = {
-            let id = dist.version_id();
+            let id = dist.distribution_id();
             if let Some(archive) = index
                 .distributions()
                 .get(&id)

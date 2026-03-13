@@ -8,6 +8,7 @@ use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::str::{self, FromStr};
 use tracing::{debug, trace, warn};
+use uv_warnings::warn_user_once;
 use version_ranges::Ranges;
 use walkdir::WalkDir;
 
@@ -68,6 +69,8 @@ pub enum ValidationError {
     LicenseGlobNoMatches { field: String, glob: String },
     #[error("License file `{}` must be UTF-8 encoded", _0)]
     LicenseFileNotUtf8(String),
+    #[error("`project.classifiers` contains an invalid classifier: {0}")]
+    InvalidClassifiers(String),
 }
 
 /// The project is not compatible with a direct uv build.
@@ -109,17 +112,19 @@ pub fn check_direct_build(
         build_system: BuildSystem,
     }
 
-    let pyproject_toml: PyProjectToml =
-        match fs_err::read_to_string(source_tree.join("pyproject.toml"))
-            .map_err(|err| err.to_string())
-            .and_then(|pyproject_toml| {
-                toml::from_str(&pyproject_toml).map_err(|err| err.to_string())
-            }) {
-            Ok(pyproject_toml) => pyproject_toml,
-            Err(err) => {
-                return Err(DirectBuildIncompatibility::PyprojectToml(err));
-            }
-        };
+    let path = source_tree.join("pyproject.toml");
+    let pyproject_toml: PyProjectToml = match fs_err::read_to_string(&path)
+        .map_err(|err| err.to_string())
+        .and_then(|pyproject_toml| {
+            tracing::info_span!("toml::from_str check direct build", path = %path.display())
+                .in_scope(|| toml::from_str(&pyproject_toml))
+                .map_err(|err| err.to_string())
+        }) {
+        Ok(pyproject_toml) => pyproject_toml,
+        Err(err) => {
+            return Err(DirectBuildIncompatibility::PyprojectToml(err));
+        }
+    };
 
     if pyproject_toml.build_system.build_backend.as_deref() != Some("uv_build") {
         return Err(DirectBuildIncompatibility::WrongBackend(
@@ -229,7 +234,9 @@ impl PyProjectToml {
     pub(crate) fn parse(path: &Path) -> Result<Self, Error> {
         let contents = fs_err::read_to_string(path)?;
         let pyproject_toml =
-            toml::from_str(&contents).map_err(|err| Error::Toml(path.to_path_buf(), err))?;
+            tracing::info_span!("toml::from_str uv build backend", path = %path.display())
+                .in_scope(|| toml::from_str(&contents))
+                .map_err(|err| Error::Toml(path.to_path_buf(), err))?;
         Ok(pyproject_toml)
     }
 
@@ -476,7 +483,15 @@ impl PyProjectToml {
             license,
             license_expression,
             license_files,
-            classifiers: self.project.classifiers.clone().unwrap_or_default(),
+            classifiers: self
+                .project
+                .classifiers
+                .iter()
+                .flatten()
+                .cloned()
+                .map(Into::into)
+                .collect(),
+
             requires_dist: requires_dist.iter().map(ToString::to_string).collect(),
             provides_extra: extras.iter().map(ToString::to_string).collect(),
             // Not commonly set.
@@ -642,6 +657,21 @@ impl PyProjectToml {
             }
         }
 
+        // Reconcile any structured license metadata against the deprecated license classifiers.
+        for classifier in self.project.classifiers.iter().flatten() {
+            let classifier = classifier.as_str();
+            // Warn on `License :: ` classifiers.
+            // We don't produce a hard failure here, per PEP 639.
+            if classifier.starts_with("License :: ") {
+                warn_user_once!(
+                    "Found license classifier `{classifier}`. License classifiers are ambiguous and deprecated per PEP 639; projects should use `project.license` and `project.license-files` instead."
+                );
+
+                // TODO: Produce a hard error here if the project also has
+                // structured license metadata, per PEP 639.
+            }
+        }
+
         Ok((license, license_expression, license_files))
     }
 
@@ -751,7 +781,7 @@ struct Project {
     /// The keywords for the project.
     keywords: Option<Vec<String>>,
     /// Trove classifiers which apply to the project.
-    classifiers: Option<Vec<String>>,
+    classifiers: Option<Vec<Classifier>>,
     /// A table of URLs where the key is the URL label and the value is the URL itself.
     ///
     /// PyPI shows all URLs with their name. For some known patterns, they add favicons.
@@ -861,6 +891,49 @@ pub(crate) enum Contact {
     Name { name: String },
     /// TODO(konsti): RFC 822 validation.
     Email { email: String },
+}
+
+/// A trove classifier as originally specified in PEP 301.
+#[derive(Debug, Clone)]
+pub(crate) struct Classifier(String);
+
+impl From<Classifier> for String {
+    fn from(val: Classifier) -> Self {
+        val.0
+    }
+}
+
+impl<'de> Deserialize<'de> for Classifier {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = <Cow<'_, str>>::deserialize(deserializer)?;
+        Self::from_str(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+impl FromStr for Classifier {
+    type Err = ValidationError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // A classifier has two or more non-empty parts separated by ` :: `.
+        let mut parts = s.split(" :: ");
+        let valid = parts.next().is_some_and(|p| !p.is_empty())
+            && parts.next().is_some_and(|p| !p.is_empty())
+            && parts.all(|p| !p.is_empty());
+        if !valid {
+            return Err(ValidationError::InvalidClassifiers(s.to_string()));
+        }
+
+        Ok(Self(s.to_string()))
+    }
+}
+
+impl Classifier {
+    fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 /// The `tool` section as specified in PEP 517.
@@ -1547,6 +1620,42 @@ mod tests {
           Caused by: MIT XOR Apache-2
             ^^^ unknown term
         ");
+    }
+
+    #[test]
+    fn invalid_classifier() {
+        for tc in [
+            "",
+            " ",
+            "\n",
+            "NotAClassifier",
+            "Foo ::  :: Bar",
+            "Foo :: Bar :: ",
+            " :: Foo :: Bar",
+        ] {
+            assert!(
+                Classifier::from_str(tc).is_err(),
+                "expected `{tc}` to be an invalid classifier"
+            );
+        }
+    }
+
+    /// Test that we produce a reasonable parse error when a pyproject.toml contains an invalid classifier.
+    #[test]
+    fn invalid_classifier_in_pyproject() {
+        let contents = extend_project(indoc! {r#"
+            classifiers = ["NotAClassifier"]
+        "#
+        });
+
+        let err = toml::from_str::<PyProjectToml>(&contents).unwrap_err();
+        assert_snapshot!(format_err(err), @r#"
+        TOML parse error at line 4, column 15
+          |
+        4 | classifiers = ["NotAClassifier"]
+          |               ^^^^^^^^^^^^^^^^^^
+        `project.classifiers` contains an invalid classifier: NotAClassifier
+        "#);
     }
 
     #[test]

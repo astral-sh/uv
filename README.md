@@ -115,7 +115,7 @@ Resolved 2 packages in 0.33ms
 
 $ uv sync
 Resolved 2 packages in 0.70ms
-Audited 1 package in 0.02ms
+Checked 1 package in 0.02ms
 ```
 
 See the [project documentation](https://docs.astral.sh/uv/guides/projects/) to get started.
@@ -239,9 +239,9 @@ Migrate to uv without changing your existing workflows — and experience a 10-1
 Compile requirements into a platform-independent requirements file:
 
 ```console
-$ uv pip compile docs/requirements.in \
+$ uv pip compile requirements.in \
    --universal \
-   --output-file docs/requirements.txt
+   --output-file requirements.txt
 Resolved 43 packages in 12ms
 ```
 
@@ -257,7 +257,7 @@ Activate with: source .venv/bin/activate
 Install the locked requirements:
 
 ```console
-$ uv pip sync docs/requirements.txt
+$ uv pip sync requirements.txt
 Resolved 43 packages in 11ms
 Installed 43 packages in 208ms
  + babel==2.15.0

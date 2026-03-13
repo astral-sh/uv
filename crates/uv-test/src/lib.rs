@@ -40,12 +40,12 @@ pub const PACKSE_VERSION: &str = "0.3.59";
 pub const DEFAULT_PYTHON_VERSION: &str = "3.12";
 
 // The expected latest patch version for each Python minor version.
-pub const LATEST_PYTHON_3_15: &str = "3.15.0a6";
+pub const LATEST_PYTHON_3_15: &str = "3.15.0a7";
 pub const LATEST_PYTHON_3_14: &str = "3.14.3";
 pub const LATEST_PYTHON_3_13: &str = "3.13.12";
-pub const LATEST_PYTHON_3_12: &str = "3.12.12";
-pub const LATEST_PYTHON_3_11: &str = "3.11.14";
-pub const LATEST_PYTHON_3_10: &str = "3.10.19";
+pub const LATEST_PYTHON_3_12: &str = "3.12.13";
+pub const LATEST_PYTHON_3_11: &str = "3.11.15";
+pub const LATEST_PYTHON_3_10: &str = "3.10.20";
 
 /// Using a find links url allows using `--index-url` instead of `--extra-index-url` in tests
 /// to prevent dependency confusion attacks against our test suite.
@@ -220,7 +220,7 @@ impl TestContext {
             "Prepared",
             "Installed",
             "Uninstalled",
-            "Audited",
+            "Checked",
         ] {
             self.filters.push((
                 format!("{verb} \\d+ packages?"),
@@ -709,6 +709,17 @@ impl TestContext {
             return Ok(None);
         };
         self.with_cache_on_fs(&dir, "ALT_FS").map(Some)
+    }
+
+    /// Use a cache directory on the filesystem specified by
+    /// [`EnvVars::UV_INTERNAL__TEST_LOWLINKS_FS`].
+    ///
+    /// Returns `Ok(None)` if the environment variable is not set.
+    pub fn with_cache_on_lowlinks_fs(self) -> anyhow::Result<Option<Self>> {
+        let Some(dir) = env::var(EnvVars::UV_INTERNAL__TEST_LOWLINKS_FS).ok() else {
+            return Ok(None);
+        };
+        self.with_cache_on_fs(&dir, "LOWLINKS_FS").map(Some)
     }
 
     /// Use a cache directory on the filesystem specified by
@@ -2225,12 +2236,12 @@ pub fn run_and_format_with_status<T: AsRef<str>>(
                             "Resolved",
                             "Prepared",
                             "Installed",
-                            "Audited",
+                            "Checked",
                             "Uninstalled",
                         ]
                         .iter(),
                         WindowsFilters::Universal => {
-                            ["Prepared", "Installed", "Audited", "Uninstalled"].iter()
+                            ["Prepared", "Installed", "Checked", "Uninstalled"].iter()
                         }
                     } {
                         snapshot = snapshot.replace(

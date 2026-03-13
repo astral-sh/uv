@@ -61,7 +61,7 @@ fn empty_requirements_txt() -> Result<()> {
 
     ----- stderr -----
     warning: Requirements file `requirements.txt` does not contain any dependencies
-    Audited in [TIME]
+    Checked in [TIME]
     "
     );
 
@@ -132,6 +132,7 @@ fn invalid_pyproject_toml_syntax() -> Result<()> {
       key with no value, expected `=`
 
     error: Failed to parse: `pyproject.toml`
+      Caused by: Invalid `pyproject.toml`
       Caused by: TOML parse error at line 1, column 5
       |
     1 | 123 - 456
@@ -236,7 +237,7 @@ fn invalid_pyproject_toml_option_unknown_field() -> Result<()> {
       unknown field `unknown`, expected one of `required-version`, `native-tls`, [...]
 
     Resolved in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     "#
     );
 
@@ -995,7 +996,7 @@ fn respect_installed_and_reinstall() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -1566,7 +1567,7 @@ fn install_editable_and_registry() {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -1740,7 +1741,7 @@ fn install_editable_pep_508_requirements_txt() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -1758,7 +1759,7 @@ fn install_editable_pep_508_requirements_txt() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -1776,7 +1777,7 @@ fn install_editable_pep_508_requirements_txt() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -2366,7 +2367,7 @@ fn install_git_public_https_exact_commit() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 }
 
@@ -2695,7 +2696,7 @@ fn reinstall_no_binary() {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -3524,7 +3525,7 @@ fn install_no_downgrade() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     "
     );
 
@@ -3610,7 +3611,7 @@ fn install_upgrade() {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     "
     );
 
@@ -3625,7 +3626,7 @@ fn install_upgrade() {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Audited 6 packages in [TIME]
+    Checked 6 packages in [TIME]
     "
     );
 
@@ -3996,7 +3997,7 @@ fn install_constraints_with_markers() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -4505,7 +4506,7 @@ requires-python = ">=3.8"
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -4597,7 +4598,7 @@ dependencies = {file = ["dependencies.txt"]}
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -4653,7 +4654,7 @@ requires-python = ">=3.8"
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -4747,7 +4748,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -4813,7 +4814,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -4942,7 +4943,7 @@ fn invalidate_path_on_commit() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -5025,7 +5026,7 @@ fn invalidate_path_on_env_var() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -5077,7 +5078,7 @@ fn path_name_version_change() {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -5692,7 +5693,7 @@ fn dry_run_install_already_installed() -> std::result::Result<(), Box<dyn std::e
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     Would make no changes
     "
     );
@@ -6286,7 +6287,7 @@ fn reinstall_no_index() {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -6654,7 +6655,7 @@ fn already_installed_local_version_of_remote_package() {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -6760,7 +6761,7 @@ fn already_installed_local_version_of_remote_package() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -6890,7 +6891,7 @@ fn already_installed_remote_url() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     // Request installation again with a different URL, but the same _canonical_ URL and the same
@@ -6903,7 +6904,7 @@ fn already_installed_remote_url() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     // Request installation again with just the name
@@ -6915,7 +6916,7 @@ fn already_installed_remote_url() {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     // Request reinstallation
@@ -6946,7 +6947,7 @@ fn already_installed_remote_url() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     // Request reinstallation with the full URL
@@ -8211,7 +8212,7 @@ fn tool_uv_sources() -> Result<()> {
 
     ----- stderr -----
     Resolved 9 packages in [TIME]
-    Audited 9 packages in [TIME]
+    Checked 9 packages in [TIME]
     "
     );
     Ok(())
@@ -11218,7 +11219,7 @@ fn change_layout_src() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -11253,7 +11254,7 @@ fn change_layout_src() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -11315,7 +11316,7 @@ fn change_layout_custom_directory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -11344,7 +11345,7 @@ fn change_layout_custom_directory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -11373,7 +11374,7 @@ fn change_layout_custom_directory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -11426,7 +11427,7 @@ fn pep_751_install_registry_wheel() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -11479,7 +11480,7 @@ fn pep_751_install_registry_sdist() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -11560,7 +11561,7 @@ fn pep_751_install_directory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     "
     );
 
@@ -11614,7 +11615,7 @@ fn pep_751_install_git() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -11669,7 +11670,7 @@ fn pep_751_install_url_wheel() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     "
     );
 
@@ -11724,7 +11725,7 @@ fn pep_751_install_url_sdist() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     "
     );
 
@@ -11807,7 +11808,7 @@ fn pep_751_install_path_wheel() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -11870,7 +11871,7 @@ fn pep_751_install_path_sdist() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -12638,7 +12639,7 @@ fn install_python_preference() {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     // This also works with `VIRTUAL_ENV` unset
@@ -12649,7 +12650,7 @@ fn install_python_preference() {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 }
 
@@ -13813,7 +13814,7 @@ fn pip_install_no_sources_editable_to_registry_switch() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -13829,7 +13830,8 @@ fn install_with_system_interpreter() {
     let context = uv_test::test_context_with_versions!(&[])
         .with_python_download_cache()
         .with_managed_python_dirs()
-        .with_filtered_python_keys();
+        .with_filtered_python_keys()
+        .with_filtered_latest_python_versions();
 
     // We use a managed Python version here to ensure consistent output across systems
     context.python_install().arg("3.12").assert().success();
@@ -13842,8 +13844,8 @@ fn install_with_system_interpreter() {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.12 environment at: managed/cpython-3.12.12-[PLATFORM]
-    error: The interpreter at managed/cpython-3.12.12-[PLATFORM] is externally managed, and indicates the following:
+    Using Python 3.12.[LATEST] environment at: managed/cpython-3.12.[LATEST]-[PLATFORM]
+    error: The interpreter at managed/cpython-3.12.[LATEST]-[PLATFORM] is externally managed, and indicates the following:
 
       This Python installation is managed by uv and should not be modified.
 
@@ -13912,7 +13914,8 @@ fn install_missing_python_version_with_target() {
     // Create a context that only has Python 3.11 available.
     let context = uv_test::test_context!("3.11")
         .with_python_download_cache()
-        .with_managed_python_dirs();
+        .with_managed_python_dirs()
+        .with_filtered_latest_python_versions();
 
     let target_dir = context.temp_dir.child("target-dir");
 
@@ -13926,7 +13929,7 @@ fn install_missing_python_version_with_target() {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.12
+    Using CPython 3.12.[LATEST]
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -14323,7 +14326,7 @@ fn warn_on_lzma_wheel() {
 
     ----- stderr -----
       × Failed to download `futzed-lzma @ https://github.com/astral-sh/futzed-wheels/releases/download/v2026.02.09.2/futzed_lzma-0.1.0-py3-none-any.whl`
-      ├─▶ Request failed after 3 retries
+      ├─▶ Request failed after 3 retries in [TIME]
       ├─▶ Failed to read metadata: `https://github.com/astral-sh/futzed-wheels/releases/download/v2026.02.09.2/futzed_lzma-0.1.0-py3-none-any.whl`
       ├─▶ Failed to read from zip file
       ├─▶ an upstream reader returned an error: stream/file format not recognized

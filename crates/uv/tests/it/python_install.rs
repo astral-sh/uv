@@ -12,7 +12,7 @@ use assert_fs::{
 use indoc::indoc;
 use predicates::prelude::predicate;
 use tracing::debug;
-use uv_test::uv_snapshot;
+use uv_test::{LATEST_PYTHON_3_12, uv_snapshot};
 
 use uv_fs::Simplified;
 use uv_python::managed::platform_key_from_env;
@@ -207,7 +207,8 @@ fn python_reinstall_patch() {
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
-        .with_python_download_cache();
+        .with_python_download_cache()
+        .with_filtered_latest_python_versions();
 
     // Install a couple patch versions
     uv_snapshot!(context.filters(), context.python_install().arg("3.12.6").arg("3.12.7"), @"
@@ -230,8 +231,8 @@ fn python_reinstall_patch() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.12.12 in [TIME]
-     + cpython-3.12.12-[PLATFORM] (python3.12)
+    Installed Python 3.12.[LATEST] in [TIME]
+     + cpython-3.12.[LATEST]-[PLATFORM] (python3.12)
     ");
 }
 
@@ -4220,7 +4221,8 @@ fn python_install_upgrade_build_version() {
         .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
-        .with_managed_python_dirs();
+        .with_managed_python_dirs()
+        .with_filtered_latest_python_versions();
 
     // Install Python 3.12
     uv_snapshot!(context.filters(), context.python_install().arg("3.12"), @"
@@ -4229,8 +4231,8 @@ fn python_install_upgrade_build_version() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.12.12 in [TIME]
-     + cpython-3.12.12-[PLATFORM] (python3.12)
+    Installed Python 3.12.[LATEST] in [TIME]
+     + cpython-3.12.[LATEST]-[PLATFORM] (python3.12)
     ");
 
     // Should be a no-op when already installed at latest version
@@ -4245,7 +4247,8 @@ fn python_install_upgrade_build_version() {
 
     // Overwrite the BUILD file with an older build version
     let installation_dir = context.temp_dir.child("managed").child(format!(
-        "cpython-3.12.12-{}",
+        "cpython-{}-{}",
+        LATEST_PYTHON_3_12,
         platform_key_from_env().unwrap()
     ));
     let build_file = installation_dir.join("BUILD");
@@ -4258,8 +4261,8 @@ fn python_install_upgrade_build_version() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.12.12 in [TIME]
-     ~ cpython-3.12.12-[PLATFORM]
+    Installed Python 3.12.[LATEST] in [TIME]
+     ~ cpython-3.12.[LATEST]-[PLATFORM]
     ");
 
     // Should be a no-op again after upgrade

@@ -4,7 +4,7 @@ use std::fmt::Write;
 use std::num::ParseIntError;
 use std::path::Path;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, SystemTime, SystemTimeError};
 use std::{env, io, iter};
 
 use anyhow::anyhow;
@@ -23,8 +23,10 @@ use reqwest_retry::{
     Jitter, RetryPolicy, RetryTransientMiddleware, Retryable, RetryableStrategy,
     default_on_request_error, default_on_request_success,
 };
+
 use thiserror::Error;
-use tracing::{debug, trace};
+
+use tracing::{debug, trace, warn};
 use url::ParseError;
 use url::Url;
 
@@ -114,6 +116,8 @@ pub struct BaseClientBuilder<'a> {
     subcommand: Option<Vec<String>>,
     /// Optional name for this client, used in debug logging.
     client_name: Option<&'static str>,
+    /// Whether to disable retry delays (for testing).
+    no_retry_delay: bool,
 }
 
 /// The policy for handling HTTP redirects.
@@ -178,6 +182,7 @@ impl Default for BaseClientBuilder<'_> {
             custom_client: None,
             subcommand: None,
             client_name: None,
+            no_retry_delay: env::var_os(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY).is_some(),
         }
     }
 }
@@ -236,6 +241,12 @@ impl<'a> BaseClientBuilder<'a> {
     #[must_use]
     pub fn retries(mut self, retries: u32) -> Self {
         self.retries = retries;
+        self
+    }
+
+    #[must_use]
+    pub fn no_retry_delay(mut self, no_retry_delay: bool) -> Self {
+        self.no_retry_delay = no_retry_delay;
         self
     }
 
@@ -371,7 +382,7 @@ impl<'a> BaseClientBuilder<'a> {
 
     /// Create a [`RetryPolicy`] for the client.
     pub fn retry_policy(&self) -> ExponentialBackoff {
-        retry_policy(self.retries)
+        retry_policy(self.retries, self.no_retry_delay)
     }
 
     pub fn build(&self) -> BaseClient {
@@ -414,6 +425,7 @@ impl<'a> BaseClientBuilder<'a> {
             connectivity: self.connectivity,
             allow_insecure_host: self.allow_insecure_host.clone(),
             retries: self.retries,
+            no_retry_delay: self.no_retry_delay,
             client,
             raw_client,
             dangerous_client,
@@ -442,6 +454,7 @@ impl<'a> BaseClientBuilder<'a> {
             connectivity: self.connectivity,
             allow_insecure_host: self.allow_insecure_host.clone(),
             retries: self.retries,
+            no_retry_delay: self.no_retry_delay,
             client,
             dangerous_client,
             raw_client: existing.raw_client.clone(),
@@ -754,6 +767,8 @@ pub struct BaseClient {
     allow_insecure_host: Vec<TrustedHost>,
     /// The number of retries to attempt on transient errors.
     retries: u32,
+    /// Whether to disable retry delays (for testing).
+    no_retry_delay: bool,
     /// Global authentication cache for a uv invocation to share credentials across uv clients.
     credentials_cache: Arc<CredentialsCache>,
 }
@@ -806,7 +821,7 @@ impl BaseClient {
 
     /// The [`RetryPolicy`] for the client.
     pub fn retry_policy(&self) -> ExponentialBackoff {
-        retry_policy(self.retries)
+        retry_policy(self.retries, self.no_retry_delay)
     }
 
     pub fn credentials_cache(&self) -> &CredentialsCache {
@@ -1136,9 +1151,9 @@ impl<'a> RequestBuilder<'a> {
 }
 
 /// Create a [`RetryPolicy`] with the given number of retries.
-fn retry_policy(retries: u32) -> ExponentialBackoff {
+fn retry_policy(retries: u32, no_retry_delay: bool) -> ExponentialBackoff {
     let mut builder = ExponentialBackoff::builder();
-    if env::var_os(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY).is_some() {
+    if no_retry_delay {
         builder = builder.retry_bounds(Duration::from_millis(0), Duration::from_millis(0));
     } else {
         // Configure an effective minimum between attempts of 1s and a real maximum of 30s.
@@ -1304,6 +1319,11 @@ impl RetryState {
         self.total_retries
     }
 
+    /// The total duration from the first request to the (failure) of the last request.
+    pub fn duration(&self) -> Result<Duration, SystemTimeError> {
+        self.start_time.elapsed()
+    }
+
     /// Determines whether request should be retried.
     ///
     /// Takes the number of retries from nested layers associated with the specific `err` type as
@@ -1352,6 +1372,74 @@ impl RetryState {
         // TODO(konsti): Should we show a spinner plus a message in the CLI while
         // waiting?
         tokio::time::sleep(duration).await;
+    }
+}
+
+/// An error type that supports URL-fallback and exponential-backoff retry logic.
+///
+/// Used by [`fetch_with_url_fallback`] to drive the retry loop without knowing the concrete error
+/// type.
+pub trait RetriableError: std::error::Error + Sized + 'static {
+    /// Returns `true` if an alternative URL should be tried immediately (without backoff).
+    fn should_try_next_url(&self) -> bool;
+
+    /// Returns the number of inner retries already recorded in this error.
+    fn retries(&self) -> u32;
+
+    /// Wrap the error to indicate that the operation was retried `retries` times before failing.
+    #[must_use]
+    fn into_retried(self, retries: u32, duration: Duration) -> Self;
+}
+
+/// Try a fallible async operation against each URL in order, with exponential backoff.
+///
+/// URLs are tried in sequence without any backoff between them. Backoff is only applied after all
+/// URLs have been exhausted. On the next retry attempt the full URL list is tried again from the
+/// beginning.
+pub async fn fetch_with_url_fallback<T, E, F>(
+    urls: &[DisplaySafeUrl],
+    retry_policy: ExponentialBackoff,
+    subject: &str,
+    mut attempt: F,
+) -> Result<T, E>
+where
+    F: AsyncFnMut(DisplaySafeUrl) -> Result<T, E>,
+    E: RetriableError + From<SystemTimeError>,
+{
+    let mut retry_state = RetryState::start(
+        retry_policy,
+        // The last URL will trigger backoff if it fails.
+        urls.last().expect("urls must not be empty").clone(),
+    );
+
+    'retry: loop {
+        for (i, url) in urls.iter().enumerate() {
+            let is_last = i == urls.len() - 1;
+            match attempt(url.clone()).await {
+                Ok(result) => return Ok(result),
+                Err(err) => {
+                    if !is_last && err.should_try_next_url() {
+                        warn!(
+                            "Failed to fetch {subject} from {url} ({err}); falling back to {}",
+                            urls[i + 1]
+                        );
+                        continue;
+                    }
+                    // All URLs exhausted; apply the retry policy.
+                    if let Some(backoff) = retry_state.should_retry(&err, err.retries()) {
+                        retry_state.sleep_backoff(backoff).await;
+                        continue 'retry;
+                    }
+                    return if retry_state.total_retries() > 0 {
+                        let retries = retry_state.total_retries();
+                        Err(err.into_retried(retries, retry_state.duration()?))
+                    } else {
+                        Err(err)
+                    };
+                }
+            }
+        }
+        unreachable!("urls must not be empty");
     }
 }
 

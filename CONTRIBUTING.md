@@ -35,6 +35,13 @@ and make up smart sounding but ultimately wrong claims. Instead, phrase issue an
 comments in your own words. It's not important to sound perfect, but that we can follow what problem
 you're trying to solve and why the pull request uses a correct approach.
 
+When using LLMs, there must always be a human in the loop who fully understands the work the LLM is
+doing. Since LLMs cannot (yet) correctly reason about complex codebases, you need to be able to
+explain all changes and how they interact with the rest of the codebase in your own words, without
+relying on the LLM to do so. Generally, this requires designing the change yourself and
+understanding all involved data structures, formats, and algorithms, while only using the LLM to aid
+in rather than drive these tasks. Autonomous contributions from AI agents are not allowed.
+
 ## Setup
 
 [Rust](https://rustup.rs/) (and a C compiler) are required to build uv.
@@ -105,6 +112,13 @@ To run and review a specific snapshot test:
 ```shell
 cargo test --package <package> --test <test> -- <test_name> -- --exact
 cargo insta review
+```
+
+A script is available to update the snapshots based on results in CI. This is useful for updating
+snapshots without re-running the test suite and for updating platform-specific snapshots.
+
+```shell
+./scripts/apply-ci-snapshots.sh
 ```
 
 ### Git and Git LFS
@@ -260,17 +274,11 @@ To preview any changes to the documentation locally:
 3. Run the development server with:
 
    ```shell
-   uvx --with-requirements docs/requirements.txt -- mkdocs serve -f mkdocs.yml
+   uv run --group docs mkdocs serve -f mkdocs.yml
    ```
 
 The documentation should then be available locally at
 [http://127.0.0.1:8000/uv/](http://127.0.0.1:8000/uv/).
-
-To update the documentation dependencies, edit `docs/requirements.in`, then run:
-
-```shell
-uv pip compile docs/requirements.in -o docs/requirements.txt --universal -p 3.12
-```
 
 Documentation is deployed automatically on release by publishing to the
 [Astral documentation](https://github.com/astral-sh/docs) repository, which itself deploys via

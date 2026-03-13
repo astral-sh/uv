@@ -60,7 +60,7 @@ fn test_albatross_in_examples_bird_feeder() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 2 packages in [TIME]
+    Checked 2 packages in [TIME]
     "
     );
 
@@ -101,7 +101,7 @@ fn test_albatross_in_examples() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 2 packages in [TIME]
+    Checked 2 packages in [TIME]
     "
     );
 
@@ -142,7 +142,7 @@ fn test_albatross_just_project() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 2 packages in [TIME]
+    Checked 2 packages in [TIME]
     "
     );
 
@@ -204,7 +204,7 @@ fn test_albatross_project_in_excluded() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 2 packages in [TIME]
+    Checked 2 packages in [TIME]
     "
     );
 
@@ -220,7 +220,7 @@ fn test_albatross_project_in_excluded() {
     ----- stdout -----
 
     ----- stderr -----
-    error: The project is marked as unmanaged: `[TEMP_DIR]/workspace/albatross-project-in-excluded/packages/seeds`
+    error: The project is marked as unmanaged: [TEMP_DIR]/workspace/albatross-project-in-excluded/packages/seeds
     "
     );
 }
@@ -262,7 +262,7 @@ fn test_albatross_root_workspace() {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Audited 5 packages in [TIME]
+    Checked 5 packages in [TIME]
     "
     );
 
@@ -308,7 +308,7 @@ fn test_albatross_root_workspace_bird_feeder() {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     "
     );
 
@@ -354,7 +354,7 @@ fn test_albatross_root_workspace_albatross() {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     "
     );
 
@@ -401,7 +401,7 @@ fn test_albatross_virtual_workspace() {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    Audited 5 packages in [TIME]
+    Checked 5 packages in [TIME]
     "
     );
 
@@ -641,7 +641,7 @@ fn test_uv_run_isolate() -> Result<()> {
     ----- stderr -----
     warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Resolved 5 packages in [TIME]
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     "
     );
 

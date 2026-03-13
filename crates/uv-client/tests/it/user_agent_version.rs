@@ -275,7 +275,7 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
             .distro
             .expect("got no distro, but expected one in linehaul");
         // Gather distribution info from /etc/os-release.
-        let release_info = sys_info::linux_os_release()
+        let release_info = uv_platform::host::LinuxOsRelease::from_env()
             .expect("got no os release info, but expected one in linux");
         assert_eq!(distro_info.id, release_info.version_codename);
         assert_eq!(distro_info.name, release_info.name);

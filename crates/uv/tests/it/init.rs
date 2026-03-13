@@ -175,7 +175,7 @@ fn init_application() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     Ok(())
@@ -2783,7 +2783,7 @@ fn init_failure() -> Result<()> {
 
     ----- stderr -----
     error: Failed to discover parent workspace; use `uv init --no-workspace` to ignore
-      Caused by: No `project` table found in: `[TEMP_DIR]/pyproject.toml`
+      Caused by: No `project` table found in: [TEMP_DIR]/pyproject.toml
     ");
 
     uv_snapshot!(context.filters(), context.init().arg("foo").arg("--no-workspace"), @"
@@ -3503,7 +3503,7 @@ fn init_app_build_backend_maturin() -> Result<()> {
         [dependencies]
         # "extension-module" tells pyo3 we want to build an extension module (skips linking against libpython.so)
         # "abi3-py39" tells pyo3 (and maturin) to build using the stable ABI with minimum Python version 3.9
-        pyo3 = { version = "0.27.1", features = ["extension-module", "abi3-py39"] }
+        pyo3 = { version = "0.28.2", features = ["extension-module", "abi3-py39"] }
         "#
         );
     });
@@ -3559,7 +3559,7 @@ fn init_app_build_backend_scikit() -> Result<()> {
         cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.{h,c,hpp,cpp}" }, { file = "CMakeLists.txt" }]
 
         [build-system]
-        requires = ["scikit-build-core>=0.10", "pybind11"]
+        requires = ["scikit-build-core>=0.12", "pybind11>=3"]
         build-backend = "scikit_build_core.build"
         "#
         );
@@ -3618,10 +3618,9 @@ fn init_app_build_backend_scikit() -> Result<()> {
     }, {
         assert_snapshot!(
             build_file_contents, @"
-        cmake_minimum_required(VERSION 3.15)
+        cmake_minimum_required(VERSION 3.15...4.0)
         project(${SKBUILD_PROJECT_NAME} LANGUAGES CXX)
 
-        set(PYBIND11_FINDPYTHON ON)
         find_package(pybind11 CONFIG REQUIRED)
 
         pybind11_add_module(_core MODULE src/main.cpp)
@@ -3755,7 +3754,7 @@ fn init_lib_build_backend_maturin() -> Result<()> {
         [dependencies]
         # "extension-module" tells pyo3 we want to build an extension module (skips linking against libpython.so)
         # "abi3-py39" tells pyo3 (and maturin) to build using the stable ABI with minimum Python version 3.9
-        pyo3 = { version = "0.27.1", features = ["extension-module", "abi3-py39"] }
+        pyo3 = { version = "0.28.2", features = ["extension-module", "abi3-py39"] }
         "#
         );
     });
@@ -3808,7 +3807,7 @@ fn init_lib_build_backend_scikit() -> Result<()> {
         cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.{h,c,hpp,cpp}" }, { file = "CMakeLists.txt" }]
 
         [build-system]
-        requires = ["scikit-build-core>=0.10", "pybind11"]
+        requires = ["scikit-build-core>=0.12", "pybind11>=3"]
         build-backend = "scikit_build_core.build"
         "#
         );
@@ -3867,10 +3866,9 @@ fn init_lib_build_backend_scikit() -> Result<()> {
     }, {
         assert_snapshot!(
             build_file_contents, @"
-        cmake_minimum_required(VERSION 3.15)
+        cmake_minimum_required(VERSION 3.15...4.0)
         project(${SKBUILD_PROJECT_NAME} LANGUAGES CXX)
 
-        set(PYBIND11_FINDPYTHON ON)
         find_package(pybind11 CONFIG REQUIRED)
 
         pybind11_add_module(_core MODULE src/main.cpp)
