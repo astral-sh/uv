@@ -131,18 +131,17 @@ pub(crate) async fn list(
         }
     }
 
-    // When `--managed-python` is used (`OnlyManaged`), widen discovery to include search path
-    // sources so that symlinks pointing to managed installations are found. We then post-filter
-    // to keep only managed interpreters.
-    let discovery_preference = if python_preference == PythonPreference::OnlyManaged {
-        PythonPreference::Managed
-    } else {
-        python_preference
-    };
-
     let installed =
         match kinds {
             PythonListKinds::Installed | PythonListKinds::Default => {
+                // When `--managed-python` is used (`OnlyManaged`), widen discovery to include
+                // search path sources so that symlinks pointing to managed installations are
+                // found. We then post-filter to keep only managed interpreters.
+                let discovery_preference = if python_preference == PythonPreference::OnlyManaged {
+                    PythonPreference::Managed
+                } else {
+                    python_preference
+                };
                 Some(find_python_installations(
                 request.as_ref().unwrap_or(&PythonRequest::Any),
                 EnvironmentPreference::OnlySystem,
@@ -167,7 +166,7 @@ pub(crate) async fn list(
             .filter(|installation| match python_preference {
                 PythonPreference::OnlyManaged => installation.interpreter().is_managed(),
                 PythonPreference::OnlySystem => !installation.interpreter().is_managed(),
-                _ => true,
+                PythonPreference::Managed | PythonPreference::System => true,
             }))
             }
             PythonListKinds::Downloads => None,
