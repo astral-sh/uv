@@ -213,7 +213,7 @@ fn resolve_python_preference(
 }
 
 /// Resolve the preview setting from CLI, environment, and workspace config.
-fn resolve_preview(
+pub(crate) fn resolve_preview(
     args: &GlobalArgs,
     workspace: Option<&FilesystemOptions>,
     environment: &EnvironmentOptions,

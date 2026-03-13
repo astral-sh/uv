@@ -111,11 +111,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     if !skip_project_validation {
         if let Some(project_path) = cli.top_level.global_args.project.as_ref() {
-            // Resolve the preview flags until this becomes stabilized. We check CLI args and
-            // the `UV_PREVIEW` env var, but not workspace config (which requires reading from
-            // the project directory that may not exist).
+            // Resolve the preview flags until this becomes stabilized. We do
+            // not pass a workspace configuration as this would require reading
+            // from the project directory which might not exist.
             let preview = Preview::from_args(
-                cli.top_level.global_args.preview || environment.preview.value == Some(true),
+                settings::resolve_preview(&cli.top_level.global_args, None, &environment),
                 cli.top_level.global_args.no_preview,
                 &cli.top_level.global_args.preview_features,
             );
