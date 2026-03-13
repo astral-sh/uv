@@ -271,7 +271,6 @@ impl<'lock> InstallTarget<'lock> {
     }
 
     /// Validate the extras requested by the [`ExtrasSpecification`].
-    #[expect(clippy::result_large_err)]
     pub(crate) fn validate_extras(self, extras: &ExtrasSpecification) -> Result<(), ProjectError> {
         if extras.is_empty() {
             return Ok(());
@@ -327,7 +326,6 @@ impl<'lock> InstallTarget<'lock> {
     }
 
     /// Validate the dependency groups requested by the [`DependencyGroupSpecifier`].
-    #[expect(clippy::result_large_err)]
     pub(crate) fn validate_groups(
         self,
         groups: &DependencyGroupsWithDefaults,
