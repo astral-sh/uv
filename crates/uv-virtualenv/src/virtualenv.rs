@@ -9,6 +9,7 @@ use console::Term;
 use fs_err::File;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+
 use tracing::{debug, trace};
 
 use crate::{Error, Prompt};
@@ -114,21 +115,12 @@ pub(crate) fn create(
             } else {
                 "directory"
             };
-            let hint = format!(
-                "Use the `{}` flag or set `{}` to replace the existing {name}",
-                "--clear".green(),
-                "UV_VENV_CLEAR=1".green()
-            );
             // TODO(zanieb): We may want to consider omitting the hint in some of these cases, e.g.,
             // when `--no-clear` is used do we want to suggest `--clear`?
-            let err = Err(Error::Io(io::Error::new(
-                io::ErrorKind::AlreadyExists,
-                format!(
-                    "A {name} already exists at: {}\n\n{prefix} {hint}",
-                    location.user_display(),
-                    prefix = uv_errors::HintPrefix,
-                ),
-            )));
+            let err = Err(Error::Exists {
+                name,
+                path: location.to_path_buf(),
+            });
             match on_existing {
                 OnExisting::Allow => {
                     debug!("Allowing existing {name} due to `--allow-existing`");
