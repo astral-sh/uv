@@ -135,7 +135,7 @@ pub mod test {
         let state = PREVIEW.get_or_init(|| PreviewMode::Test(RwLock::new(None)));
         match state {
             PreviewMode::Test(rwlock) => {
-                *rwlock.write().unwrap() = Some(Preview::from_iter(features));
+                *rwlock.write().unwrap() = Some(Preview::new(features));
             }
             PreviewMode::Normal(_) => {
                 panic!(
@@ -328,6 +328,12 @@ impl Debug for Preview {
 }
 
 impl Preview {
+    pub fn new(flags: &[PreviewFeature]) -> Self {
+        Self {
+            flags: flags.iter().copied().fold(BitFlags::empty(), BitOr::bitor),
+        }
+    }
+
     pub fn all() -> Self {
         Self {
             flags: BitFlags::all(),
@@ -347,22 +353,6 @@ impl Preview {
     /// Check if any preview feature is enabled.
     pub fn any_enabled(&self) -> bool {
         !self.flags.is_empty()
-    }
-}
-
-impl<'flag> FromIterator<&'flag PreviewFeature> for Preview {
-    fn from_iter<T: IntoIterator<Item = &'flag PreviewFeature>>(iter: T) -> Self {
-        let flags = iter
-            .into_iter()
-            .copied()
-            .fold(BitFlags::empty(), BitOr::bitor);
-        Self { flags }
-    }
-}
-
-impl From<bool> for Preview {
-    fn from(value: bool) -> Self {
-        if value { Self::all() } else { Self::default() }
     }
 }
 
@@ -457,7 +447,7 @@ mod tests {
         // Test disabled
         let preview = Preview::default();
         assert_eq!(preview.to_string(), "disabled");
-        let preview = Preview::from_iter(&[]);
+        let preview = Preview::new(&[]);
         assert_eq!(preview.to_string(), "disabled");
 
         // Test enabled (all features)
@@ -465,21 +455,12 @@ mod tests {
         assert_eq!(preview.to_string(), "enabled");
 
         // Test single feature
-        let preview = Preview::from_iter(&[PreviewFeature::PythonInstallDefault]);
+        let preview = Preview::new(&[PreviewFeature::PythonInstallDefault]);
         assert_eq!(preview.to_string(), "python-install-default");
 
         // Test multiple features
-        let preview = Preview::from_iter(&[PreviewFeature::PythonUpgrade, PreviewFeature::Pylock]);
+        let preview = Preview::new(&[PreviewFeature::PythonUpgrade, PreviewFeature::Pylock]);
         assert_eq!(preview.to_string(), "python-upgrade,pylock");
-    }
-
-    #[test]
-    fn test_preview_from_iter() {
-        let preview =
-            Preview::from_iter(&[PreviewFeature::PythonUpgrade, PreviewFeature::JsonOutput]);
-        assert!(preview.is_enabled(PreviewFeature::PythonUpgrade));
-        assert!(preview.is_enabled(PreviewFeature::JsonOutput));
-        assert!(!preview.is_enabled(PreviewFeature::Pylock));
     }
 
     #[test]

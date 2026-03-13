@@ -216,7 +216,11 @@ pub(crate) fn resolve_preview(
 ) -> Preview {
     // Commandline arguments take priority.
     if let Some(preview) = flag(args.preview, args.no_preview, "preview") {
-        return preview.into();
+        return if preview {
+            Preview::all()
+        } else {
+            Preview::default()
+        };
     }
 
     // Check environment variable
@@ -226,20 +230,12 @@ pub(crate) fn resolve_preview(
 
     // From preview_features
     if !args.preview_features.is_empty() {
-        return Preview::from_iter(&args.preview_features);
+        return Preview::new(&args.preview_features);
     }
 
     // Fall back to workspace config
     workspace
-        .and_then(|workspace| {
-            workspace.globals.preview.map(Preview::from).or_else(|| {
-                workspace
-                    .globals
-                    .preview_features
-                    .as_ref()
-                    .map(Preview::from_iter)
-            })
-        })
+        .and_then(|w| w.globals.preview.as_ref().map(Preview::from))
         .unwrap_or_default()
 }
 

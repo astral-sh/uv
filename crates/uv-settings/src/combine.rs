@@ -23,7 +23,7 @@ use uv_torch::TorchMode;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 use uv_workspace::pyproject_mut::AddBoundsKind;
 
-use crate::{FilesystemOptions, Options, PipOptions};
+use crate::{FilesystemOptions, Options, PipOptions, PreviewOption};
 
 pub trait Combine {
     /// Combine two values, preferring the values in `self`.
@@ -100,6 +100,7 @@ impl_combine_or!(PipExtraIndex);
 impl_combine_or!(PipFindLinks);
 impl_combine_or!(PipIndex);
 impl_combine_or!(PrereleaseMode);
+impl_combine_or!(PreviewOption);
 impl_combine_or!(ProxyUrl);
 impl_combine_or!(PythonDownloads);
 impl_combine_or!(PythonPreference);

@@ -420,17 +420,8 @@
         }
       ]
     },
-    "preview": {
-      "description": "Whether to enable all experimental, preview features.",
-      "type": ["boolean", "null"]
-    },
-    "preview-features": {
-      "description": "Whether to enable specific experimental, preview features.",
-      "type": ["array", "null"],
-      "items": {
-        "$ref": "#/definitions/PreviewFeature"
-      }
-    },
+    "preview": true,
+    "preview-features": true,
     "publish-url": {
       "description": "The URL for publishing packages to the Python package index (by default:\n<https://upload.pypi.org/legacy/>).",
       "anyOf": [
@@ -573,6 +564,34 @@
     }
   },
   "additionalProperties": false,
+  "anyOf": [
+    {
+      "oneOf": [
+        {
+          "description": "Whether to enable all experimental, preview features\n\nDeprecated: Use `preview-features` instead",
+          "type": "object",
+          "properties": {
+            "preview": {
+              "type": "boolean"
+            }
+          },
+          "deprecated": true,
+          "required": ["preview"]
+        },
+        {
+          "description": "Whether to enable some specific or all experimental, preview features",
+          "type": "object",
+          "properties": {
+            "preview-features": {
+              "$ref": "#/definitions/PreviewFeaturesOption"
+            }
+          },
+          "required": ["preview-features"]
+        }
+      ]
+    },
+    {}
+  ],
   "definitions": {
     "AddBoundsKind": {
       "description": "The default version specifier when adding a dependency.",
@@ -1615,6 +1634,20 @@
         "publish-require-normalized",
         "audit",
         "project-directory-must-exist"
+      ]
+    },
+    "PreviewFeaturesOption": {
+      "description": "Represents the `preview-features` configuration option",
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PreviewFeature"
+          }
+        }
       ]
     },
     "ProxyUrl": {
