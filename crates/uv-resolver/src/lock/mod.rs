@@ -296,9 +296,26 @@ pub struct Lock {
 
 impl Lock {
     /// Initialize a [`Lock`] from a [`ResolverOutput`].
-    pub fn from_resolution(resolution: &ResolverOutput, root: &Path) -> Result<Self, LockError> {
+    pub fn from_resolution(
+        resolution: &ResolverOutput,
+        root: &Path,
+        supported_environments: Vec<MarkerTree>,
+    ) -> Result<Self, LockError> {
         let mut packages = BTreeMap::new();
         let requires_python = resolution.requires_python.clone();
+        let supported_environments = supported_environments
+            .into_iter()
+            .map(|marker| requires_python.complexify_markers(marker))
+            .collect::<Vec<_>>();
+        let supported_environments_marker = if supported_environments.is_empty() {
+            None
+        } else {
+            let mut combined = MarkerTree::FALSE;
+            for marker in &supported_environments {
+                combined.or(*marker);
+            }
+            Some(UniversalMarker::new(combined, ConflictMarker::TRUE))
+        };
 
         // Determine the set of packages included at multiple versions.
         let mut seen = FxHashSet::default();
@@ -345,13 +362,16 @@ impl Lock {
             };
 
             let mut package = Package::from_annotated_dist(dist, fork_markers, root)?;
+            let mut wheel_marker = dist.marker;
+            if let Some(supported_environments_marker) = supported_environments_marker {
+                wheel_marker.and(supported_environments_marker);
+            }
             let wheels = &mut package.wheels;
             wheels.retain(|wheel| {
-                !is_wheel_unreachable(
+                !is_wheel_unreachable_for_marker(
                     &wheel.filename,
-                    resolution,
                     &requires_python,
-                    node_index,
+                    &wheel_marker,
                     None,
                 )
             });
@@ -460,7 +480,7 @@ impl Lock {
             options,
             ResolverManifest::default(),
             Conflicts::empty(),
-            vec![],
+            supported_environments,
             vec![],
             fork_markers,
         )?;
@@ -6190,11 +6210,10 @@ fn simplified_universal_markers(
 ///
 /// Returns `true` if the wheel is definitely unreachable, and `false` if it may be reachable,
 /// including if the wheel tag isn't recognized.
-pub(crate) fn is_wheel_unreachable(
+fn is_wheel_unreachable_for_marker(
     filename: &WheelFilename,
-    graph: &ResolverOutput,
     requires_python: &RequiresPython,
-    node_index: NodeIndex,
+    marker: &UniversalMarker,
     tags: Option<&Tags>,
 ) -> bool {
     if let Some(tags) = tags
@@ -6223,246 +6242,180 @@ pub(crate) fn is_wheel_unreachable(
 
     if platform_tags.iter().all(PlatformTag::is_linux) {
         if platform_tags.iter().all(PlatformTag::is_arm) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*LINUX_ARM_MARKERS)
-            {
+            if marker.is_disjoint(*LINUX_ARM_MARKERS) {
                 return true;
             }
         } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*LINUX_X86_64_MARKERS)
-            {
+            if marker.is_disjoint(*LINUX_X86_64_MARKERS) {
                 return true;
             }
         } else if platform_tags.iter().all(PlatformTag::is_x86) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*LINUX_X86_MARKERS)
-            {
+            if marker.is_disjoint(*LINUX_X86_MARKERS) {
                 return true;
             }
         } else if platform_tags.iter().all(PlatformTag::is_ppc64le) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*LINUX_PPC64LE_MARKERS)
-            {
+            if marker.is_disjoint(*LINUX_PPC64LE_MARKERS) {
                 return true;
             }
         } else if platform_tags.iter().all(PlatformTag::is_ppc64) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*LINUX_PPC64_MARKERS)
-            {
+            if marker.is_disjoint(*LINUX_PPC64_MARKERS) {
                 return true;
             }
         } else if platform_tags.iter().all(PlatformTag::is_s390x) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*LINUX_S390X_MARKERS)
-            {
+            if marker.is_disjoint(*LINUX_S390X_MARKERS) {
                 return true;
             }
         } else if platform_tags.iter().all(PlatformTag::is_riscv64) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*LINUX_RISCV64_MARKERS)
-            {
+            if marker.is_disjoint(*LINUX_RISCV64_MARKERS) {
                 return true;
             }
         } else if platform_tags.iter().all(PlatformTag::is_loongarch64) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*LINUX_LOONGARCH64_MARKERS)
-            {
+            if marker.is_disjoint(*LINUX_LOONGARCH64_MARKERS) {
                 return true;
             }
         } else if platform_tags.iter().all(PlatformTag::is_armv7l) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*LINUX_ARMV7L_MARKERS)
-            {
+            if marker.is_disjoint(*LINUX_ARMV7L_MARKERS) {
                 return true;
             }
         } else if platform_tags.iter().all(PlatformTag::is_armv6l) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*LINUX_ARMV6L_MARKERS)
-            {
+            if marker.is_disjoint(*LINUX_ARMV6L_MARKERS) {
                 return true;
             }
-        } else if graph.graph[node_index].marker().is_disjoint(*LINUX_MARKERS) {
+        } else if marker.is_disjoint(*LINUX_MARKERS) {
             return true;
         }
     }
 
     if platform_tags.iter().all(PlatformTag::is_windows) {
         if platform_tags.iter().all(PlatformTag::is_arm) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*WINDOWS_ARM_MARKERS)
-            {
+            if marker.is_disjoint(*WINDOWS_ARM_MARKERS) {
                 return true;
             }
         } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*WINDOWS_X86_64_MARKERS)
-            {
+            if marker.is_disjoint(*WINDOWS_X86_64_MARKERS) {
                 return true;
             }
         } else if platform_tags.iter().all(PlatformTag::is_x86) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*WINDOWS_X86_MARKERS)
-            {
+            if marker.is_disjoint(*WINDOWS_X86_MARKERS) {
                 return true;
             }
-        } else if graph.graph[node_index]
-            .marker()
-            .is_disjoint(*WINDOWS_MARKERS)
-        {
+        } else if marker.is_disjoint(*WINDOWS_MARKERS) {
             return true;
         }
     }
 
     if platform_tags.iter().all(PlatformTag::is_macos) {
         if platform_tags.iter().all(PlatformTag::is_arm) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*MAC_ARM_MARKERS)
-            {
+            if marker.is_disjoint(*MAC_ARM_MARKERS) {
                 return true;
             }
         } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*MAC_X86_64_MARKERS)
-            {
+            if marker.is_disjoint(*MAC_X86_64_MARKERS) {
                 return true;
             }
         } else if platform_tags.iter().all(PlatformTag::is_x86) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*MAC_X86_MARKERS)
-            {
+            if marker.is_disjoint(*MAC_X86_MARKERS) {
                 return true;
             }
-        } else if graph.graph[node_index].marker().is_disjoint(*MAC_MARKERS) {
+        } else if marker.is_disjoint(*MAC_MARKERS) {
             return true;
         }
     }
 
     if platform_tags.iter().all(PlatformTag::is_android) {
         if platform_tags.iter().all(PlatformTag::is_arm) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*ANDROID_ARM_MARKERS)
-            {
+            if marker.is_disjoint(*ANDROID_ARM_MARKERS) {
                 return true;
             }
         } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*ANDROID_X86_64_MARKERS)
-            {
+            if marker.is_disjoint(*ANDROID_X86_64_MARKERS) {
                 return true;
             }
         } else if platform_tags.iter().all(PlatformTag::is_x86) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*ANDROID_X86_MARKERS)
-            {
+            if marker.is_disjoint(*ANDROID_X86_MARKERS) {
                 return true;
             }
-        } else if graph.graph[node_index]
-            .marker()
-            .is_disjoint(*ANDROID_MARKERS)
-        {
+        } else if marker.is_disjoint(*ANDROID_MARKERS) {
             return true;
         }
     }
 
     if platform_tags.iter().all(PlatformTag::is_arm) {
-        if graph.graph[node_index].marker().is_disjoint(*ARM_MARKERS) {
+        if marker.is_disjoint(*ARM_MARKERS) {
             return true;
         }
     }
 
     if platform_tags.iter().all(PlatformTag::is_x86_64) {
-        if graph.graph[node_index]
-            .marker()
-            .is_disjoint(*X86_64_MARKERS)
-        {
+        if marker.is_disjoint(*X86_64_MARKERS) {
             return true;
         }
     }
 
     if platform_tags.iter().all(PlatformTag::is_x86) {
-        if graph.graph[node_index].marker().is_disjoint(*X86_MARKERS) {
+        if marker.is_disjoint(*X86_MARKERS) {
             return true;
         }
     }
 
     if platform_tags.iter().all(PlatformTag::is_ppc64le) {
-        if graph.graph[node_index]
-            .marker()
-            .is_disjoint(*PPC64LE_MARKERS)
-        {
+        if marker.is_disjoint(*PPC64LE_MARKERS) {
             return true;
         }
     }
 
     if platform_tags.iter().all(PlatformTag::is_ppc64) {
-        if graph.graph[node_index].marker().is_disjoint(*PPC64_MARKERS) {
+        if marker.is_disjoint(*PPC64_MARKERS) {
             return true;
         }
     }
 
     if platform_tags.iter().all(PlatformTag::is_s390x) {
-        if graph.graph[node_index].marker().is_disjoint(*S390X_MARKERS) {
+        if marker.is_disjoint(*S390X_MARKERS) {
             return true;
         }
     }
 
     if platform_tags.iter().all(PlatformTag::is_riscv64) {
-        if graph.graph[node_index]
-            .marker()
-            .is_disjoint(*RISCV64_MARKERS)
-        {
+        if marker.is_disjoint(*RISCV64_MARKERS) {
             return true;
         }
     }
 
     if platform_tags.iter().all(PlatformTag::is_loongarch64) {
-        if graph.graph[node_index]
-            .marker()
-            .is_disjoint(*LOONGARCH64_MARKERS)
-        {
+        if marker.is_disjoint(*LOONGARCH64_MARKERS) {
             return true;
         }
     }
 
     if platform_tags.iter().all(PlatformTag::is_armv7l) {
-        if graph.graph[node_index]
-            .marker()
-            .is_disjoint(*ARMV7L_MARKERS)
-        {
+        if marker.is_disjoint(*ARMV7L_MARKERS) {
             return true;
         }
     }
 
     if platform_tags.iter().all(PlatformTag::is_armv6l) {
-        if graph.graph[node_index]
-            .marker()
-            .is_disjoint(*ARMV6L_MARKERS)
-        {
+        if marker.is_disjoint(*ARMV6L_MARKERS) {
             return true;
         }
     }
 
     false
+}
+
+pub(crate) fn is_wheel_unreachable(
+    filename: &WheelFilename,
+    graph: &ResolverOutput,
+    requires_python: &RequiresPython,
+    node_index: NodeIndex,
+    tags: Option<&Tags>,
+) -> bool {
+    is_wheel_unreachable_for_marker(
+        filename,
+        requires_python,
+        graph.graph[node_index].marker(),
+        tags,
+    )
 }
 
 #[cfg(test)]

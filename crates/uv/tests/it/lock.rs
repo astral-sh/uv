@@ -33808,6 +33808,81 @@ fn lock_unsupported_wheel_url_required_platform() -> Result<()> {
     Ok(())
 }
 
+// TODO(charlie): This produces an empty entry in the lockfile (`pywin32` has no wheels for the
+// set of supported environments, and no source distribution).
+#[test]
+fn lock_supported_environment_wheel_only_package_can_produce_empty_entry() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = "~=3.12.0"
+        dependencies = ["pywin32"]
+
+        [tool.uv]
+        environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+        "#,
+    )?;
+
+    uv_snapshot!(
+        context.filters(),
+        context.lock(),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "
+    );
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = "==3.12.*"
+        resolution-markers = [
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+        supported-markers = [
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "pywin32", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "pywin32" }]
+
+        [[package]]
+        name = "pywin32"
+        version = "308"
+        source = { registry = "https://pypi.org/simple" }
+        "#
+        );
+    });
+
+    Ok(())
+}
+
 /// If an index is filtered out (e.g., it's the second `default = true` index defined in the file),
 /// we should still consider the lockfile valid if it's referenced by name, regardless of whether
 /// it's defined in a dependency group or the top-level `project.dependencies` field.
