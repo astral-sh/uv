@@ -971,6 +971,12 @@ impl InterpreterInfo {
             .arg("-B") // Don't write bytecode.
             .arg("-c")
             .arg(script)
+            // Disable Apple's SYSTEM_VERSION_COMPAT shim so that
+            // `platform.mac_ver()` reports the real macOS version
+            // instead of "10.16" for interpreters built against
+            // older SDKs (e.g., conda with MACOSX_DEPLOYMENT_TARGET=10.15).
+            // See: https://github.com/astral-sh/uv/issues/14267
+            .env("SYSTEM_VERSION_COMPAT", "0")
             .output()
             .map_err(|err| {
                 match err.kind() {
