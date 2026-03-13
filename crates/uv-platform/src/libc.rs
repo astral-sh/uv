@@ -301,6 +301,17 @@ fn find_ld_path() -> Result<PathBuf, LibcDetectionError> {
             }
         }
     }
+
+    // If none of the common binaries exist or are parseable, try to find the
+    // dynamic linker directly on the filesystem. This handles minimal container
+    // images (e.g., Chainguard, distroless) that lack standard shell utilities
+    // but still have a dynamic linker installed.
+    //
+    // See: https://github.com/astral-sh/uv/issues/8635
+    if let Some(ld_path) = find_ld_path_from_filesystem() {
+        return Ok(ld_path);
+    }
+
     let attempts_string = attempts.join(", ");
     if !found_anything {
         // Known failure cases here include running the distroless Docker images directly
@@ -310,6 +321,56 @@ fn find_ld_path() -> Result<PathBuf, LibcDetectionError> {
     } else {
         Err(LibcDetectionError::CoreBinaryParsing(attempts_string))
     }
+}
+
+/// Search for the dynamic linker directly on the filesystem.
+///
+/// On glibc systems, the linker is typically named `ld-linux-*.so.*` (e.g.,
+/// `ld-linux-x86-64.so.2` or `ld-linux-aarch64.so.1`).
+///
+/// On musl systems, it's typically named `ld-musl-*.so.*` (e.g.,
+/// `ld-musl-x86_64.so.1` or `ld-musl-aarch64.so.1`).
+///
+/// We search common library directories where the dynamic linker is installed.
+fn find_ld_path_from_filesystem() -> Option<PathBuf> {
+    // Directories where the dynamic linker is commonly found.
+    let search_dirs = ["/lib", "/lib64", "/usr/lib", "/usr/lib64"];
+
+    // Prefixes that identify dynamic linker files. We check musl first since
+    // on a musl system, finding `ld-musl-*` is the definitive answer. On a
+    // glibc system, `ld-linux-*` is always present.
+    let ld_prefixes = ["ld-musl-", "ld-linux-"];
+
+    for dir in &search_dirs {
+        let dir_path = Path::new(dir);
+        let Ok(entries) = fs::read_dir(dir_path) else {
+            continue;
+        };
+        for entry in entries {
+            let Ok(entry) = entry else {
+                continue;
+            };
+            let file_name = entry.file_name();
+            let Some(name) = file_name.to_str() else {
+                continue;
+            };
+            for prefix in &ld_prefixes {
+                if name.starts_with(prefix) && name.contains(".so") {
+                    let path = entry.path();
+                    trace!(
+                        "Found dynamic linker on filesystem: {}",
+                        path.user_display()
+                    );
+                    return Some(path);
+                }
+            }
+        }
+    }
+
+    trace!(
+        "Could not find dynamic linker (ld-linux-* or ld-musl-*) in any common library directory"
+    );
+    None
 }
 
 /// Attempt to find the path to the `ld` executable by
