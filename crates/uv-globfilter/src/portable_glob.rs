@@ -49,7 +49,7 @@ impl uv_errors::Hint for PortableGlobError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::InvalidCharacterUv { .. } => {
-                uv_errors::Hints::borrowed("Characters can be escaped with a backslash")
+                uv_errors::Hints::from("Characters can be escaped with a backslash")
             }
             _ => uv_errors::Hints::none(),
         }

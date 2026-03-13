@@ -123,10 +123,10 @@ impl IsBuildBackendError for Error {
 impl Hint for Error {
     fn hints(&self) -> Hints<'_> {
         match self {
-            Self::BuildBackend(_) => Hints::borrowed(
+            Self::BuildBackend(_) => Hints::from(
                 "Build failures usually indicate a problem with the package or the build environment.",
             ),
-            Self::MissingHeader(err) => Hints::owned(err.cause.to_string()),
+            Self::MissingHeader(err) => Hints::from(err.cause.to_string()),
             Self::RequirementsResolve(_, err) | Self::RequirementsInstall(_, err) => err.hints(),
             _ => Hints::none(),
         }

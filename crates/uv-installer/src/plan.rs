@@ -78,7 +78,7 @@ impl std::error::Error for IncompatibleWheelError {}
 impl uv_errors::Hint for IncompatibleWheelError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         if let Some(hint) = &self.compatibility_hint {
-            uv_errors::Hints::owned(hint.to_string())
+            uv_errors::Hints::from(hint.to_string())
         } else {
             uv_errors::Hints::none()
         }

@@ -20,25 +20,10 @@ pub trait Hint {
 /// Each hint is rendered on its own line, prefixed with the styled `hint:` label.
 pub struct Hints<'a>(Vec<Cow<'a, str>>);
 
-impl<'a> Hints<'a> {
+impl Hints<'_> {
     /// No hints.
     pub fn none() -> Self {
         Self(Vec::new())
-    }
-
-    /// A single borrowed hint.
-    pub fn borrowed(hint: &'a str) -> Self {
-        Self(vec![Cow::Borrowed(hint)])
-    }
-
-    /// A single owned hint.
-    pub fn owned(hint: String) -> Self {
-        Self(vec![Cow::Owned(hint)])
-    }
-
-    /// Multiple owned hints.
-    pub fn from_owned(hints: impl IntoIterator<Item = String>) -> Self {
-        Self(hints.into_iter().map(Cow::Owned).collect())
     }
 
     /// Add a single owned hint.
@@ -65,6 +50,24 @@ impl<'a> Hints<'a> {
     pub fn extend(&mut self, other: Hints<'_>) {
         self.0
             .extend(other.0.into_iter().map(|cow| Cow::Owned(cow.into_owned())));
+    }
+}
+
+impl<'a> From<&'a str> for Hints<'a> {
+    fn from(hint: &'a str) -> Self {
+        Self(vec![Cow::Borrowed(hint)])
+    }
+}
+
+impl From<String> for Hints<'_> {
+    fn from(hint: String) -> Self {
+        Self(vec![Cow::Owned(hint)])
+    }
+}
+
+impl FromIterator<String> for Hints<'_> {
+    fn from_iter<I: IntoIterator<Item = String>>(iter: I) -> Self {
+        Self(iter.into_iter().map(Cow::Owned).collect())
     }
 }
 

@@ -448,7 +448,7 @@ async fn perform_install(
                 write!(
                     printer.stderr(),
                     "{}",
-                    uv_errors::Hints::borrowed(
+                    uv_errors::Hints::from(
                         "The version request came from a `.python-version` file; change the patch version in the file to upgrade instead",
                     ),
                 )?;
