@@ -240,15 +240,6 @@ impl Upgrade {
         matches!(self.strategy, UpgradeStrategy::All)
     }
 
-    /// Returns `true` if the specified package should be upgraded.
-    pub fn contains(&self, package_name: &PackageName) -> bool {
-        match &self.strategy {
-            UpgradeStrategy::None => false,
-            UpgradeStrategy::All => true,
-            UpgradeStrategy::Some(packages, _) => packages.contains(package_name),
-        }
-    }
-
     /// Returns an iterator over the constraints.
     ///
     /// When upgrading, users can provide bounds on the upgrade (e.g., `--upgrade-package flask<3`).
@@ -256,6 +247,14 @@ impl Upgrade {
         self.constraints
             .values()
             .flat_map(|requirements| requirements.iter())
+    }
+
+    /// Returns the set of explicitly named packages to upgrade (from `--upgrade-package`).
+    pub fn packages(&self) -> Option<&FxHashSet<PackageName>> {
+        match &self.strategy {
+            UpgradeStrategy::Some(packages, _) => Some(packages),
+            _ => None,
+        }
     }
 
     /// Returns the set of dependency groups whose packages should be upgraded.

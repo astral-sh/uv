@@ -41,7 +41,7 @@ use uv_requirements::{
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
-    Preferences, PythonRequirement, Resolver, ResolverEnvironment, ResolverOutput,
+    Preferences, PythonRequirement, Resolver, ResolverEnvironment, ResolverOutput, UpgradePackages,
 };
 use uv_tool::InstalledTools;
 use uv_types::{BuildContext, HashStrategy, InFlight, InstalledPackagesProvider};
@@ -335,7 +335,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     };
 
     // TODO(zanieb): Consider consuming these instead of cloning
-    let exclusions = Exclusions::new(reinstall.clone(), upgrade.clone());
+    let exclusions = Exclusions::new(reinstall.clone(), UpgradePackages::for_non_project(upgrade));
 
     // Create a manifest of the requirements.
     let manifest = Manifest::new(
