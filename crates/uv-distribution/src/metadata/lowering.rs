@@ -3,7 +3,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use either::Either;
-use owo_colors::OwoColorize;
+
 use thiserror::Error;
 use uv_auth::CredentialsCache;
 use uv_distribution_filename::DistExtension;
@@ -533,7 +533,7 @@ pub enum LoweringError {
     MoreThanOneGitRef,
     #[error(transparent)]
     GitUrlParse(#[from] GitUrlParseError),
-    #[error("Package `{package}` references an undeclared index: `{index}`{}", if let Some(hint) = hint { format!("\n\n{}{} {hint}", "hint".bold().cyan(), ":".bold()) } else { String::new() })]
+    #[error("Package `{package}` references an undeclared index: `{index}`")]
     MissingIndex {
         package: PackageName,
         index: IndexName,
@@ -567,6 +567,17 @@ pub enum LoweringError {
     NonUtf8Path(PathBuf),
     #[error(transparent)] // Function attaches the context
     RelativeTo(io::Error),
+}
+
+impl uv_errors::Hint for LoweringError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::MissingIndex {
+                hint: Some(hint), ..
+            } => uv_errors::Hints::owned(hint.clone()),
+            _ => uv_errors::Hints::none(),
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone)]

@@ -45,7 +45,9 @@ fn create_venv() {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      Caused by: A virtual environment already exists at `[VENV]/`. Use `--clear` to replace it
+      Caused by: A virtual environment already exists at: .venv
+
+    hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing virtual environment
     "
     );
 
@@ -1540,7 +1542,9 @@ fn venv_python_preference() {
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      Caused by: A virtual environment already exists at `.venv`. Use `--clear` to replace it
+      Caused by: A virtual environment already exists at: .venv
+
+    hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing virtual environment
     ");
 
     uv_snapshot!(context.filters(), context.venv().arg("--clear").arg("--no-managed-python"), @"
@@ -1563,7 +1567,9 @@ fn venv_python_preference() {
     Using CPython 3.12.[X]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      Caused by: A virtual environment already exists at `.venv`. Use `--clear` to replace it
+      Caused by: A virtual environment already exists at: .venv
+
+    hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing virtual environment
     ");
 
     uv_snapshot!(context.filters(), context.venv().arg("--clear").arg("--managed-python"), @"
