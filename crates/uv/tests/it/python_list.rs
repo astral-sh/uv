@@ -483,6 +483,60 @@ fn python_list_downloads_installed() {
 
     ----- stderr -----
     ");
+
+    // When `--managed-python` is used, managed installations should still be shown
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--managed-python").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.10.19-[PLATFORM]    managed/cpython-3.10-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    pypy-3.10.16-[PLATFORM]       <download available>
+    graalpy-3.10.0-[PLATFORM]     <download available>
+
+    ----- stderr -----
+    ");
+}
+
+/// Test that `--managed-python` shows symlinks on the search path that point to managed
+/// installations.
+#[test]
+fn python_list_managed_symlinks() {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
+        .with_filtered_python_symlinks()
+        .with_filtered_python_keys()
+        .with_collapsed_whitespace()
+        .with_versions_as_managed(&["3.12"]);
+
+    // Without any flags, all interpreters are shown
+    uv_snapshot!(context.filters(), context.python_list(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.12.[X]-[PLATFORM] [PYTHON-3.12]
+    cpython-3.11.[X]-[PLATFORM] [PYTHON-3.11]
+
+    ----- stderr -----
+    ");
+
+    // With `--managed-python`, only managed interpreters (3.12) are shown
+    uv_snapshot!(context.filters(), context.python_list().arg("--managed-python"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.12.[X]-[PLATFORM] [PYTHON-3.12]
+
+    ----- stderr -----
+    ");
+
+    // With `--no-managed-python`, only non-managed interpreters (3.11) are shown
+    uv_snapshot!(context.filters(), context.python_list().arg("--no-managed-python"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.11.[X]-[PLATFORM] [PYTHON-3.11]
+
+    ----- stderr -----
+    ");
 }
 
 #[tokio::test]
