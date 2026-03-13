@@ -620,7 +620,7 @@ pub(crate) async fn install(
         && extraneous.is_empty()
         && !compile
     {
-        logger.on_audit(resolution.len(), start, printer, dry_run)?;
+        logger.on_check(resolution.len(), start, printer, dry_run)?;
         return Ok(Changelog::default());
     }
 
@@ -992,7 +992,7 @@ fn report_dry_run(
 
     // Nothing to do.
     if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() && extraneous.is_empty() {
-        logger.on_audit(resolution.len(), start, printer, dry_run)?;
+        logger.on_check(resolution.len(), start, printer, dry_run)?;
         return Ok(Changelog::default());
     }
 

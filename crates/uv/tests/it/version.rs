@@ -151,7 +151,7 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -194,7 +194,7 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -236,7 +236,7 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -276,7 +276,7 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -316,7 +316,7 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -356,7 +356,7 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -398,7 +398,7 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -522,7 +522,7 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -563,7 +563,7 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -604,7 +604,7 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -645,7 +645,7 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -686,7 +686,7 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -727,7 +727,7 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -768,7 +768,7 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -858,7 +858,7 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -899,7 +899,7 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -940,7 +940,7 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -980,7 +980,7 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -1021,7 +1021,7 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -1062,7 +1062,7 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -1103,7 +1103,7 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -1143,7 +1143,7 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -1184,7 +1184,7 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -1224,7 +1224,7 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -1265,7 +1265,7 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -1306,7 +1306,7 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -1347,7 +1347,7 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -1686,7 +1686,7 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
     Ok(())
 }
@@ -1716,7 +1716,7 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
     Ok(())
 }
@@ -1774,7 +1774,7 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
     Ok(())
 }
@@ -3238,7 +3238,7 @@ conflicts = [[{"extra" = "foo"}, {"extra" = "bar"}]]
 
     ----- stderr -----
     Resolved 19 packages in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     // Sync an extra, we should not remove it.
@@ -3253,7 +3253,7 @@ conflicts = [[{"extra" = "foo"}, {"extra" = "bar"}]]
 
     ----- stderr -----
     Resolved 19 packages in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     Ok(())

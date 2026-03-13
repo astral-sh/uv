@@ -2127,7 +2127,7 @@ fn tool_run_python() {
 
     ----- stderr -----
     Resolved in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.tool_run()
@@ -2160,7 +2160,7 @@ fn tool_run_python_at_version() {
 
     ----- stderr -----
     Resolved in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.tool_run()
@@ -2185,7 +2185,7 @@ fn tool_run_python_at_version() {
 
     ----- stderr -----
     Resolved in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     // The @ is optional.
@@ -2419,7 +2419,7 @@ fn tool_run_python_from_global_version_file() {
 
     ----- stderr -----
     Resolved in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 }
 
@@ -2448,7 +2448,7 @@ fn tool_run_python_version_overrides_global_pin() {
 
     ----- stderr -----
     Resolved in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 }
 
@@ -2479,7 +2479,7 @@ fn tool_run_python_with_explicit_default_bypasses_global_pin() {
 
     ----- stderr -----
     Resolved in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 }
 
@@ -2501,7 +2501,7 @@ fn tool_run_python_from() {
 
     ----- stderr -----
     Resolved in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.tool_run()
@@ -2516,7 +2516,7 @@ fn tool_run_python_from() {
 
     ----- stderr -----
     Resolved in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.tool_run()

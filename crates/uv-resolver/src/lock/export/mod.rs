@@ -55,6 +55,8 @@ impl<'lock> ExportableRequirements<'lock> {
         let size_guess = target.lock().packages.len();
         let mut graph = Graph::<Node<'lock>, Edge<'lock>>::with_capacity(size_guess, size_guess);
         let mut inverse = FxHashMap::with_capacity_and_hasher(size_guess, FxBuildHasher);
+        let mut selected_extras: FxHashMap<_, Vec<ExtraName>> =
+            FxHashMap::with_capacity_and_hasher(size_guess, FxBuildHasher);
 
         let mut queue: VecDeque<(&Package, Option<&ExtraName>)> = VecDeque::new();
         let mut seen = FxHashSet::default();
@@ -91,7 +93,9 @@ impl<'lock> ExportableRequirements<'lock> {
 
                 // Push its dependencies on the queue.
                 queue.push_back((dist, None));
+                let mut root_extras = Vec::new();
                 for extra in extras.extra_names(dist.optional_dependencies.keys()) {
+                    root_extras.push(extra.clone());
                     queue.push_back((dist, Some(extra)));
 
                     // Track the activated extra in the list of known conflicts.
@@ -101,6 +105,9 @@ impl<'lock> ExportableRequirements<'lock> {
                             MarkerTree::TRUE,
                         );
                     }
+                }
+                if !root_extras.is_empty() {
+                    selected_extras.insert(&dist.id, root_extras);
                 }
             }
 
@@ -271,13 +278,49 @@ impl<'lock> ExportableRequirements<'lock> {
                     .or_insert_with(|| graph.add_node(Node::Package(dep_dist)));
 
                 // Add an edge from the dependency.
+                let mut active_extras = selected_extras
+                    .get(&package.id)
+                    .cloned()
+                    .unwrap_or_default();
+                if let Some(extra) = extra {
+                    if !active_extras.contains(extra) {
+                        active_extras.push((*extra).clone());
+                    }
+                }
+                if !active_extras.is_empty() {
+                    match selected_extras.entry(&dep.package_id) {
+                        Entry::Occupied(mut entry) => {
+                            for extra in &active_extras {
+                                if !entry.get().contains(extra) {
+                                    entry.get_mut().push(extra.clone());
+                                }
+                            }
+                        }
+                        Entry::Vacant(entry) => {
+                            entry.insert(active_extras.clone());
+                        }
+                    }
+                }
+
                 graph.add_edge(
                     index,
                     dep_index,
                     if let Some(extra) = extra {
-                        Edge::Optional(extra, dep.simplified_marker.as_simplified_marker_tree())
+                        Edge::Optional(
+                            extra,
+                            dep.simplified_marker
+                                .as_simplified_marker_tree()
+                                .simplify_extras(std::slice::from_ref(extra)),
+                        )
                     } else {
-                        Edge::Prod(dep.simplified_marker.as_simplified_marker_tree())
+                        Edge::Prod(selected_extras.get(&package.id).map_or_else(
+                            || dep.simplified_marker.as_simplified_marker_tree(),
+                            |extras| {
+                                dep.simplified_marker
+                                    .as_simplified_marker_tree()
+                                    .simplify_extras(extras)
+                            },
+                        ))
                     },
                 );
 

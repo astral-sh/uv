@@ -213,6 +213,21 @@ impl VerbatimUrl {
         self.given.as_deref()
     }
 
+    /// Returns `true` if the `given` input was an absolute path or file URL.
+    pub fn was_given_absolute(&self) -> bool {
+        let Some(given) = &self.given else {
+            return false;
+        };
+
+        if let Some((scheme, _)) = split_scheme(given) {
+            if let Some(parsed_scheme) = Scheme::parse(scheme) {
+                return parsed_scheme.is_file();
+            }
+        }
+
+        Path::new(given.as_str()).is_absolute()
+    }
+
     /// Return the underlying [`DisplaySafeUrl`].
     pub fn raw(&self) -> &DisplaySafeUrl {
         &self.url
