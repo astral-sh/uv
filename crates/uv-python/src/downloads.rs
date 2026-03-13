@@ -351,7 +351,10 @@ impl PythonDownloadRequest {
     ///
     /// Platform information is pulled from the environment.
     pub fn fill_platform(mut self) -> Result<Self, Error> {
-        let platform = Platform::from_env()?;
+        let platform = Platform::from_env().map_err(|err| match err {
+            platform::Error::LibcDetectionError(err) => Error::LibcDetection(err),
+            err => Error::InvalidRequestPlatform(err),
+        })?;
         if self.arch.is_none() {
             self.arch = Some(ArchRequest::Environment(platform.arch));
         }
