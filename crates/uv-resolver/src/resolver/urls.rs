@@ -10,6 +10,7 @@ use uv_pep508::VerbatimUrl;
 use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl, VerbatimParsedUrl};
 
 use crate::resolver::ForkMap;
+use crate::resolver::fork_map::ForkScope;
 use crate::{DependencyMode, Manifest, ResolveError, ResolverEnvironment};
 
 /// The URLs that are allowed for packages.
@@ -85,7 +86,11 @@ impl Urls {
             // a requirements.txt entry `./anyio`, we still use the URL. See
             // `allow_recursive_url_local_path_override_constraint`.
             regular.remove(&requirement.name);
-            overrides.add(requirement.as_ref(), url);
+            overrides.add_with_scope(
+                &requirement.name,
+                ForkScope::from_requirement(requirement.as_ref()),
+                url,
+            );
         }
 
         Self { overrides, regular }

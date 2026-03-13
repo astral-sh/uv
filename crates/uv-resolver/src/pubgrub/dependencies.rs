@@ -14,7 +14,6 @@ use uv_pypi_types::{
 };
 
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
-use crate::universal_marker::{ConflictMarker, UniversalMarker};
 
 /// The source constraint carried by a single dependency edge.
 ///
@@ -255,27 +254,7 @@ impl PubGrubRequirement {
         extra: Option<ExtraName>,
         group: Option<GroupName>,
     ) -> PubGrubPackage {
-        let marker = requirement.marker.without_extras();
-
-        if let Some(extra) = extra {
-            PubGrubPackage::from(PubGrubPackageInner::Extra {
-                name: requirement.name.clone(),
-                extra,
-                marker,
-            })
-        } else if let Some(group) = group {
-            PubGrubPackage::from(PubGrubPackageInner::Group {
-                name: requirement.name.clone(),
-                group: group.clone(),
-                marker: UniversalMarker::new(
-                    marker,
-                    ConflictMarker::group(&requirement.name, &group),
-                )
-                .combined(),
-            })
-        } else {
-            PubGrubPackage::from_base(requirement.name.clone(), marker)
-        }
+        PubGrubPackage::from_package(requirement.name.clone(), extra, group, requirement.marker)
     }
 
     /// Convert a [`Requirement`] to a PubGrub-compatible package and range, while returning the URL

@@ -84,7 +84,7 @@ impl<T> ForkMap<T> {
     pub(crate) fn add(&mut self, requirement: &Requirement, value: T) {
         self.add_with_scope(
             &requirement.name,
-            ForkScope::from_requirement(requirement),
+            ForkScope::new(requirement.marker, None),
             value,
         );
     }

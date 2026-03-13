@@ -96,15 +96,37 @@ pub enum PubGrubPackageInner {
 }
 
 impl PubGrubPackage {
-    /// Create a base [`PubGrubPackage`] from a package name and marker,
-    /// preserving the marker expression as-is.
-    pub(crate) fn from_base(name: PackageName, marker: MarkerTree) -> Self {
-        if !marker.is_true() {
+    /// Create a [`PubGrubPackage`] from a package name and extra.
+    pub(crate) fn from_package(
+        name: PackageName,
+        extra: Option<ExtraName>,
+        group: Option<GroupName>,
+        marker: MarkerTree,
+    ) -> Self {
+        // Remove all extra expressions from the marker, since we track extras
+        // separately. This also avoids an issue where packages added via
+        // extras end up having two distinct marker expressions, which in turn
+        // makes them two distinct packages. This results in PubGrub being
+        // unable to unify version constraints across such packages.
+        let marker = marker.simplify_extras_with(|_| true);
+        if let Some(extra) = extra {
+            Self(Arc::new(PubGrubPackageInner::Extra {
+                name,
+                extra,
+                marker,
+            }))
+        } else if let Some(group) = group {
+            Self(Arc::new(PubGrubPackageInner::Group {
+                name,
+                group,
+                marker,
+            }))
+        } else if !marker.is_true() {
             Self(Arc::new(PubGrubPackageInner::Marker { name, marker }))
         } else {
             Self(Arc::new(PubGrubPackageInner::Package {
                 name,
-                extra: None,
+                extra,
                 group: None,
                 marker,
             }))
@@ -127,7 +149,12 @@ impl PubGrubPackage {
                 None
             }
             PubGrubPackageInner::Extra { name, .. } | PubGrubPackageInner::Marker { name, .. } => {
-                Some(Self::from_base(name.clone(), MarkerTree::TRUE))
+                Some(Self::from_package(
+                    name.clone(),
+                    None,
+                    None,
+                    MarkerTree::TRUE,
+                ))
             }
         }
     }
@@ -295,7 +322,7 @@ impl PubGrubPackage {
 
     /// Returns a new [`PubGrubPackage`] representing the base package with the given name.
     pub(crate) fn base(name: &PackageName) -> Self {
-        Self::from_base(name.clone(), MarkerTree::TRUE)
+        Self::from_package(name.clone(), None, None, MarkerTree::TRUE)
     }
 }
 
