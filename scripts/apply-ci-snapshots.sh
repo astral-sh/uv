@@ -18,8 +18,7 @@ for cmd in gh cargo-insta git; do
 done
 
 REPO="astral-sh/uv"
-TMPDIR_BASE="${TMPDIR:-/tmp}"
-DOWNLOAD_DIR="$TMPDIR_BASE/uv-pending-snapshots-$$"
+DOWNLOAD_DIR="$(mktemp -d)"
 
 cleanup() {
     rm -rf "$DOWNLOAD_DIR"
