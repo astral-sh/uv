@@ -5581,7 +5581,7 @@ fn add_requirements_file() -> Result<()> {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    Checked 10 packages in [TIME]
+    Checked [N] packages in [TIME]
     ");
 
     // Passing a `setup.py` should fail.

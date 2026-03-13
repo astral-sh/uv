@@ -278,7 +278,7 @@ fn tool_install_python_from_global_version_file() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    Checked 7 packages in [TIME]
+    Checked [N] packages in [TIME]
     Installed 1 executable: flask
     ");
 
@@ -2966,7 +2966,7 @@ fn tool_install_upgrade() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    Checked 6 packages in [TIME]
+    Checked [N] packages in [TIME]
     Installed 2 executables: black, blackd
     ");
 
@@ -3957,7 +3957,7 @@ fn tool_install_at_latest_upgrade() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    Checked 6 packages in [TIME]
+    Checked [N] packages in [TIME]
     Installed 2 executables: black, blackd
     ");
 
