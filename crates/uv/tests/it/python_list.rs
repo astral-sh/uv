@@ -493,7 +493,7 @@ fn python_list_downloads_installed() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.10.19-[PLATFORM]    managed/cpython-3.10-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    cpython-3.10.[LATEST]-[PLATFORM]    managed/cpython-3.10-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
     pypy-3.10.16-[PLATFORM]       <download available>
     graalpy-3.10.0-[PLATFORM]     <download available>
 
@@ -512,7 +512,8 @@ fn python_list_managed_symlinks() {
         .with_filtered_python_keys()
         .with_filtered_python_install_bin()
         .with_filtered_python_names()
-        .with_managed_python_dirs();
+        .with_managed_python_dirs()
+        .with_filtered_latest_python_versions();
 
     // Install a Python version; this creates a symlink in `bin_dir` (on the search path)
     context.python_install().arg("3.10").assert().success();
@@ -543,8 +544,8 @@ fn python_list_managed_symlinks() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.10.19-[PLATFORM]    [BIN]/[PYTHON] -> managed/cpython-3.10-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
-    cpython-3.10.19-[PLATFORM]    managed/cpython-3.10-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    cpython-3.10.[LATEST]-[PLATFORM]    [BIN]/[PYTHON] -> managed/cpython-3.10-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    cpython-3.10.[LATEST]-[PLATFORM]    managed/cpython-3.10-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");
