@@ -504,7 +504,7 @@ fn python_list_downloads_installed() {
 /// Test that symlinks installed by `python install` on the search path are correctly
 /// filtered by `--managed-python` and `--no-managed-python`.
 #[test]
-#[cfg(feature = "test-python-managed")]
+#[cfg(all(unix, feature = "test-python-managed"))]
 fn python_list_managed_symlinks() {
     use assert_cmd::assert::OutputAssertExt;
 
