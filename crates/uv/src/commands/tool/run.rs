@@ -1305,8 +1305,8 @@ pub(crate) enum ToolRunScriptError {
 }
 
 impl uv_errors::Hint for ToolRunScriptError {
-    fn hints(&self) -> Vec<std::borrow::Cow<'_, str>> {
-        vec![std::borrow::Cow::Owned(match self {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        uv_errors::Hints::owned(match self {
             Self::FromScript {
                 package_name,
                 target,
@@ -1329,6 +1329,6 @@ impl uv_errors::Hint for ToolRunScriptError {
                 package_name.cyan(),
                 format!("{invocation} --from {package_name} {target}").green(),
             ),
-        })]
+        })
     }
 }

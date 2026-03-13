@@ -6407,7 +6407,7 @@ dependencies = [
 
 [[package]]
 name = "uv-errors"
-version = "0.0.29"
+version = "0.0.48"
 dependencies = [
  "owo-colors",
 ]

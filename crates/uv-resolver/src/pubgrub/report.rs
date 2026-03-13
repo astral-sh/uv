@@ -1980,20 +1980,16 @@ impl std::fmt::Display for PubGrubHint {
                 match source {
                     EffectiveExcludeNewerSource::Package => write!(
                         f,
-                        "{}{} `{}` was filtered by `{}` to only include packages uploaded \
+                        "`{}` was filtered by `{}` to only include packages uploaded \
                         before {}.{latest} Consider removing the setting or updating it to a later date.",
-                        "hint".bold().cyan(),
-                        ":".bold(),
                         package.cyan(),
                         "exclude-newer-package".green(),
                         exclude_newer.cyan(),
                     ),
                     EffectiveExcludeNewerSource::Global => write!(
                         f,
-                        "{}{} `{}` was filtered by `{}` to only include packages uploaded \
+                        "`{}` was filtered by `{}` to only include packages uploaded \
                         before {}.{latest} Consider using `{}` to override the cutoff for this package.",
-                        "hint".bold().cyan(),
-                        ":".bold(),
                         package.cyan(),
                         "exclude-newer".green(),
                         exclude_newer.cyan(),

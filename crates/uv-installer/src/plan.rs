@@ -1,11 +1,12 @@
-use std::borrow::Cow;
 use std::fmt;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Result, bail};
 use owo_colors::OwoColorize;
 use tracing::{debug, warn};
 
+use url::Url;
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_cache_info::Timestamp;
 use uv_configuration::{BuildOptions, Reinstall};
@@ -31,30 +32,43 @@ use crate::{InstallationStrategy, SitePackages};
 /// A wheel dependency is incompatible with the current platform.
 #[derive(Debug)]
 pub struct IncompatibleWheelError {
-    /// The kind of dependency (URL or path).
+    /// The dependency source (URL or path, with location).
     kind: IncompatibleWheelKind,
-    /// The location of the dependency (URL or path string).
-    location: String,
     /// Optional compatibility hint generated from wheel tags.
-    compatibility_hint: Option<String>,
+    compatibility_hint: Option<IncompatibleWheelHint>,
 }
 
 #[derive(Debug)]
 enum IncompatibleWheelKind {
-    Url,
-    Path,
+    Url(Url),
+    Path(PathBuf),
+}
+
+impl fmt::Display for IncompatibleWheelKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Url(url) => write!(f, "URL ({url})"),
+            Self::Path(path) => write!(f, "path ({})", path.user_display()),
+        }
+    }
+}
+
+/// A hint describing why a wheel is incompatible.
+#[derive(Debug)]
+struct IncompatibleWheelHint(String);
+
+impl fmt::Display for IncompatibleWheelHint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
 }
 
 impl fmt::Display for IncompatibleWheelError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let kind = match self.kind {
-            IncompatibleWheelKind::Url => "A URL dependency",
-            IncompatibleWheelKind::Path => "A path dependency",
-        };
         write!(
             f,
-            "{kind} is incompatible with the current platform: {}",
-            self.location,
+            "A {} dependency is incompatible with the current platform",
+            self.kind,
         )
     }
 }
@@ -62,11 +76,12 @@ impl fmt::Display for IncompatibleWheelError {
 impl std::error::Error for IncompatibleWheelError {}
 
 impl uv_errors::Hint for IncompatibleWheelError {
-    fn hints(&self) -> Vec<Cow<'_, str>> {
-        self.compatibility_hint
-            .as_deref()
-            .map(|hint| vec![Cow::Borrowed(hint)])
-            .unwrap_or_default()
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        if let Some(hint) = &self.compatibility_hint {
+            uv_errors::Hints::owned(hint.to_string())
+        } else {
+            uv_errors::Hints::none()
+        }
     }
 }
 
@@ -261,8 +276,7 @@ impl<'a> Planner<'a> {
                 Dist::Built(BuiltDist::DirectUrl(wheel)) => {
                     if !wheel.filename.is_compatible(tags) {
                         return Err(IncompatibleWheelError {
-                            kind: IncompatibleWheelKind::Url,
-                            location: wheel.url.to_string(),
+                            kind: IncompatibleWheelKind::Url(wheel.url.to_url().into()),
                             compatibility_hint: generate_wheel_compatibility_hint(
                                 &wheel.filename,
                                 tags,
@@ -330,8 +344,7 @@ impl<'a> Planner<'a> {
 
                     if !wheel.filename.is_compatible(tags) {
                         return Err(IncompatibleWheelError {
-                            kind: IncompatibleWheelKind::Path,
-                            location: wheel.install_path.user_display().to_string(),
+                            kind: IncompatibleWheelKind::Path(wheel.install_path.to_path_buf()),
                             compatibility_hint: generate_wheel_compatibility_hint(
                                 &wheel.filename,
                                 tags,
@@ -576,7 +589,10 @@ fn is_seed_package(dist_info: &InstalledDist, venv: &PythonEnvironment) -> bool 
 }
 
 /// Generate a hint for explaining wheel compatibility issues.
-fn generate_wheel_compatibility_hint(filename: &WheelFilename, tags: &Tags) -> Option<String> {
+fn generate_wheel_compatibility_hint(
+    filename: &WheelFilename,
+    tags: &Tags,
+) -> Option<IncompatibleWheelHint> {
     let TagCompatibility::Incompatible(incompatible_tag) = filename.compatibility(tags) else {
         return None;
     };
@@ -593,7 +609,7 @@ fn generate_wheel_compatibility_hint(filename: &WheelFilename, tags: &Tags) -> O
                     format!("`{}`", current.cyan())
                 };
 
-                Some(format!(
+                Some(IncompatibleWheelHint(format!(
                     "The wheel is compatible with {}, but you're using {}",
                     wheel_tags
                         .iter()
@@ -605,9 +621,9 @@ fn generate_wheel_compatibility_hint(filename: &WheelFilename, tags: &Tags) -> O
                         .collect::<Vec<_>>()
                         .join(", "),
                     message
-                ))
+                )))
             } else {
-                Some(format!(
+                Some(IncompatibleWheelHint(format!(
                     "The wheel requires {}",
                     wheel_tags
                         .iter()
@@ -618,7 +634,7 @@ fn generate_wheel_compatibility_hint(filename: &WheelFilename, tags: &Tags) -> O
                         })
                         .collect::<Vec<_>>()
                         .join(", ")
-                ))
+                )))
             }
         }
         IncompatibleTag::FreethreadedAbi => {
@@ -646,9 +662,9 @@ fn generate_wheel_compatibility_hint(filename: &WheelFilename, tags: &Tags) -> O
             } else {
                 "free-threaded Python".to_string()
             };
-            Some(format!(
+            Some(IncompatibleWheelHint(format!(
                 "You're using {current}, but the wheel was built for {wheel_abi}, which requires a GIL-enabled interpreter"
-            ))
+            )))
         }
         IncompatibleTag::Abi => {
             let wheel_tags = filename.abi_tags();
@@ -659,7 +675,7 @@ fn generate_wheel_compatibility_hint(filename: &WheelFilename, tags: &Tags) -> O
                 } else {
                     format!("`{}`", current.cyan())
                 };
-                Some(format!(
+                Some(IncompatibleWheelHint(format!(
                     "The wheel is compatible with {}, but you're using {}",
                     wheel_tags
                         .iter()
@@ -671,9 +687,9 @@ fn generate_wheel_compatibility_hint(filename: &WheelFilename, tags: &Tags) -> O
                         .collect::<Vec<_>>()
                         .join(", "),
                     message
-                ))
+                )))
             } else {
-                Some(format!(
+                Some(IncompatibleWheelHint(format!(
                     "The wheel requires {}",
                     wheel_tags
                         .iter()
@@ -684,7 +700,7 @@ fn generate_wheel_compatibility_hint(filename: &WheelFilename, tags: &Tags) -> O
                         })
                         .collect::<Vec<_>>()
                         .join(", ")
-                ))
+                )))
             }
         }
         IncompatibleTag::Platform => {
@@ -697,7 +713,7 @@ fn generate_wheel_compatibility_hint(filename: &WheelFilename, tags: &Tags) -> O
                 } else {
                     format!("`{}`", current.cyan())
                 };
-                Some(format!(
+                Some(IncompatibleWheelHint(format!(
                     "The wheel is compatible with {}, but you're on {}",
                     wheel_tags
                         .iter()
@@ -709,9 +725,9 @@ fn generate_wheel_compatibility_hint(filename: &WheelFilename, tags: &Tags) -> O
                         .collect::<Vec<_>>()
                         .join(", "),
                     message
-                ))
+                )))
             } else {
-                Some(format!(
+                Some(IncompatibleWheelHint(format!(
                     "The wheel requires {}",
                     wheel_tags
                         .iter()
@@ -722,7 +738,7 @@ fn generate_wheel_compatibility_hint(filename: &WheelFilename, tags: &Tags) -> O
                         })
                         .collect::<Vec<_>>()
                         .join(", ")
-                ))
+                )))
             }
         }
         _ => None,
@@ -858,6 +874,7 @@ mod tests {
         // Generate the hint
         let hint = generate_wheel_compatibility_hint(&filename, &tags).unwrap();
 
+        let hint = hint.to_string();
         let hint = anstream::adapter::strip_str(&hint);
         insta::assert_snapshot!(hint, @"You're using free-threaded CPython 3.14 (`cp314t`), but the wheel was built for the stable ABI (`abi3`), which requires a GIL-enabled interpreter");
     }
@@ -893,6 +910,7 @@ mod tests {
         // Generate the hint
         let hint = generate_wheel_compatibility_hint(&filename, &tags).unwrap();
 
+        let hint = hint.to_string();
         let hint = anstream::adapter::strip_str(&hint);
         insta::assert_snapshot!(hint, @"You're using free-threaded CPython 3.14 (`cp314t`), but the wheel was built for the CPython 3.14 ABI (`cp314`), which requires a GIL-enabled interpreter");
     }
