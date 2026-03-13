@@ -2,8 +2,6 @@ use std::fmt::Write;
 use std::path::Path;
 use std::str::FromStr;
 
-use std::borrow::Cow;
-
 use anyhow::{Result, anyhow};
 use owo_colors::OwoColorize;
 use thiserror::Error;
@@ -367,11 +365,11 @@ pub(crate) struct MissingProjectVersionError {
 }
 
 impl uv_errors::Hint for MissingProjectVersionError {
-    fn hints(&self) -> Vec<Cow<'_, str>> {
-        vec![Cow::Owned(format!(
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        uv_errors::Hints::owned(format!(
             "If you meant to view uv's version, use `{}` instead",
             "uv self version".green()
-        ))]
+        ))
     }
 }
 

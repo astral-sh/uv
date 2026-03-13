@@ -98,14 +98,14 @@ enum Error {
 }
 
 /// Collect hints from a build [`Error`] by inspecting its inner types.
-fn collect_build_hints(err: &Error) -> Vec<String> {
+fn collect_build_hints(err: &Error) -> uv_errors::Hints<'_> {
     use uv_errors::Hint;
     match err {
-        Error::BuildFrontend(err) => err.hints().into_iter().map(Into::into).collect(),
-        Error::BuildDispatch(err) => err.hints().into_iter().map(Into::into).collect(),
-        Error::Project(err) => err.hints().into_iter().map(Into::into).collect(),
-        Error::Operations(err) => err.hints().into_iter().map(Into::into).collect(),
-        _ => Vec::new(),
+        Error::BuildFrontend(err) => err.hints(),
+        Error::BuildDispatch(err) => err.hints(),
+        Error::Project(err) => err.hints(),
+        Error::Operations(err) => err.hints(),
+        _ => uv_errors::Hints::none(),
     }
 }
 
@@ -444,16 +444,14 @@ async fn build_impl(
                     None
                 };
 
-                let hints = collect_build_hints(&err);
+                let hints = collect_build_hints(&err).into_owned();
                 let report = miette::Report::new(Diagnostic {
                     source: source.to_string(),
                     cause: err.into(),
                     help,
                 });
                 anstream::eprint!("{report:?}");
-                for hint in &hints {
-                    anstream::eprint!("\n\n{} {hint}", uv_errors::HintPrefix);
-                }
+                anstream::eprint!("{hints}");
 
                 success = false;
             }

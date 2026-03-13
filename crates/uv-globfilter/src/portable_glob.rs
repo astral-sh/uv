@@ -1,8 +1,6 @@
 //! Cross-language glob syntax from
 //! [PEP 639](https://packaging.python.org/en/latest/specifications/glob-patterns/).
 
-use std::borrow::Cow;
-
 use globset::{Glob, GlobBuilder};
 use thiserror::Error;
 
@@ -48,12 +46,12 @@ pub enum PortableGlobError {
 }
 
 impl uv_errors::Hint for PortableGlobError {
-    fn hints(&self) -> Vec<Cow<'_, str>> {
+    fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::InvalidCharacterUv { .. } => {
-                vec![Cow::Borrowed("Characters can be escaped with a backslash")]
+                uv_errors::Hints::borrowed("Characters can be escaped with a backslash")
             }
-            _ => Vec::new(),
+            _ => uv_errors::Hints::none(),
         }
     }
 }

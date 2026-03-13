@@ -1601,7 +1601,7 @@ pub enum SourceError {
     Absolute(#[from] std::io::Error),
     #[error("Path contains invalid characters: `{}`", _0.display())]
     NonUtf8Path(PathBuf),
-    #[error("Source markers must be disjoint, but the following markers overlap: `{0}` and `{1}`.\n\n{prefix} replace `{1}` with `{2}`.", prefix = uv_errors::HintPrefix)]
+    #[error("Source markers must be disjoint, but the following markers overlap: `{0}` and `{1}`.")]
     OverlappingMarkers(String, String, String),
     #[error(
         "When multiple sources are provided, each source must include a platform marker (e.g., `marker = \"sys_platform == 'linux'\"`)"
@@ -1612,14 +1612,12 @@ pub enum SourceError {
 }
 
 impl uv_errors::Hint for SourceError {
-    fn hints(&self) -> Vec<std::borrow::Cow<'_, str>> {
+    fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::OverlappingMarkers(_, rhs, replacement) => {
-                vec![std::borrow::Cow::Owned(format!(
-                    "replace `{rhs}` with `{replacement}`."
-                ))]
+                uv_errors::Hints::owned(format!("replace `{rhs}` with `{replacement}`."))
             }
-            _ => Vec::new(),
+            _ => uv_errors::Hints::none(),
         }
     }
 }

@@ -170,13 +170,11 @@ impl std::fmt::Display for MissingPythonHint {
 }
 
 impl uv_errors::Hint for Error {
-    fn hints(&self) -> Vec<std::borrow::Cow<'_, str>> {
+    fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
-            Self::MissingPython(_, Some(hint)) => {
-                vec![std::borrow::Cow::Owned(hint.to_string())]
-            }
+            Self::MissingPython(_, Some(hint)) => uv_errors::Hints::owned(hint.to_string()),
             Self::Discovery(err) => err.hints(),
-            _ => Vec::new(),
+            _ => uv_errors::Hints::none(),
         }
     }
 }

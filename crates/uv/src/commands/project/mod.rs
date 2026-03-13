@@ -349,17 +349,15 @@ pub(crate) enum ProjectError {
 }
 
 impl uv_errors::Hint for ProjectError {
-    fn hints(&self) -> Vec<std::borrow::Cow<'_, str>> {
+    fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::OverlappingMarkers(_, rhs, replacement) => {
-                vec![std::borrow::Cow::Owned(format!(
-                    "replace `{rhs}` with `{replacement}`."
-                ))]
+                uv_errors::Hints::owned(format!("replace `{rhs}` with `{replacement}`."))
             }
             Self::Lock(err) => err.hints(),
             Self::Python(err) => err.hints(),
             Self::Operation(err) => err.hints(),
-            _ => Vec::new(),
+            _ => uv_errors::Hints::none(),
         }
     }
 }

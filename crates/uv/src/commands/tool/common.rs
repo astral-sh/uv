@@ -1,5 +1,4 @@
 use std::{
-    borrow::Cow,
     collections::{BTreeSet, Bound},
     ffi::OsString,
     fmt::Write,
@@ -15,7 +14,7 @@ use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_distribution_types::Requirement;
 use uv_distribution_types::{InstalledDist, Name};
-use uv_errors::Hint;
+use uv_errors::{Hint, Hints};
 use uv_fs::Simplified;
 #[cfg(unix)]
 use uv_fs::replace_symlink;
@@ -47,35 +46,35 @@ pub(crate) struct NoExecutablesError {
 }
 
 impl Hint for NoExecutablesError {
-    fn hints(&self) -> Vec<Cow<'_, str>> {
-        let mut hints = Vec::new();
+    fn hints(&self) -> Hints<'_> {
+        let mut hints = Hints::none();
         if self.is_dependency {
-            hints.push(Cow::Owned(format!(
+            hints.push(format!(
                 "Use `--with {}` to include `{}` as a dependency without installing its executables.",
                 self.package.cyan(),
                 self.package.cyan(),
-            )));
+            ));
         }
         match self.matching_dependency_packages.as_slice() {
             [] => {}
             [dep] => {
                 let command = format!("uv tool install {dep}");
-                hints.push(Cow::Owned(format!(
+                hints.push(format!(
                     "An executable with the name `{}` is available via dependency `{}`.\n      Did you mean `{}`?",
                     self.package.cyan(),
                     dep.cyan(),
                     command.bold(),
-                )));
+                ));
             }
             deps => {
                 let dep_list = deps
                     .iter()
                     .map(|dep| format!("- {}", dep.cyan()))
                     .join("\n");
-                hints.push(Cow::Owned(format!(
+                hints.push(format!(
                     "An executable with the name `{}` is available via the following dependencies:\n{dep_list}\n      Did you mean to install one of them instead?",
                     self.package.cyan(),
-                )));
+                ));
             }
         }
         hints
@@ -301,8 +300,7 @@ pub(crate) fn finalize_tool_install(
 
             if is_dependency {
                 // Non-root package: display the error with hints and continue.
-                write!(printer.stdout(), "{err}")?;
-                uv_errors::write_hints(&mut printer.stdout(), &err.hints());
+                write!(printer.stdout(), "{err}{}", err.hints())?;
                 writeln!(printer.stdout())?;
                 continue;
             }

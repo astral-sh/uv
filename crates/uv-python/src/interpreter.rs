@@ -861,10 +861,10 @@ pub enum Error {
 }
 
 impl uv_errors::Hint for Error {
-    fn hints(&self) -> Vec<std::borrow::Cow<'_, str>> {
+    fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::BrokenLink(err) => err.hints(),
-            _ => Vec::new(),
+            _ => uv_errors::Hints::none(),
         }
     }
 }
@@ -898,14 +898,14 @@ impl Display for BrokenLink {
 }
 
 impl uv_errors::Hint for BrokenLink {
-    fn hints(&self) -> Vec<std::borrow::Cow<'_, str>> {
+    fn hints(&self) -> uv_errors::Hints<'_> {
         if self.venv {
-            vec![std::borrow::Cow::Owned(format!(
+            uv_errors::Hints::owned(format!(
                 "Consider recreating the environment (e.g., with `{}`)",
                 "uv venv".green()
-            ))]
+            ))
         } else {
-            Vec::new()
+            uv_errors::Hints::none()
         }
     }
 }

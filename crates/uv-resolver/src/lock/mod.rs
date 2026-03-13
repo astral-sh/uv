@@ -5359,11 +5359,12 @@ impl std::error::Error for LockError {
 }
 
 impl uv_errors::Hint for LockError {
-    fn hints(&self) -> Vec<std::borrow::Cow<'_, str>> {
-        self.hint
-            .as_ref()
-            .map(|hint| vec![std::borrow::Cow::Owned(hint.to_string())])
-            .unwrap_or_default()
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        if let Some(hint) = &self.hint {
+            uv_errors::Hints::owned(hint.to_string())
+        } else {
+            uv_errors::Hints::none()
+        }
     }
 }
 

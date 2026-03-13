@@ -463,37 +463,32 @@ pub(crate) struct DependencyNotFoundError {
 }
 
 impl uv_errors::Hint for DependencyNotFoundError {
-    fn hints(&self) -> Vec<std::borrow::Cow<'_, str>> {
-        self.found_in
-            .iter()
-            .map(|dep_ty| {
-                std::borrow::Cow::Owned(match dep_ty {
-                    DependencyType::Production => {
-                        format!("`{}` is a production dependency", self.package)
-                    }
-                    DependencyType::Dev => {
-                        format!(
-                            "`{}` is a development dependency (try: `{}`)",
-                            self.package,
-                            format!("uv remove {} --dev", self.package).bold(),
-                        )
-                    }
-                    DependencyType::Optional(group) => {
-                        format!(
-                            "`{}` is an optional dependency (try: `{}`)",
-                            self.package,
-                            format!("uv remove {} --optional {group}", self.package).bold(),
-                        )
-                    }
-                    DependencyType::Group(group) => {
-                        format!(
-                            "`{}` is in the `{group}` group (try: `{}`)",
-                            self.package,
-                            format!("uv remove {} --group {group}", self.package).bold(),
-                        )
-                    }
-                })
-            })
-            .collect()
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        uv_errors::Hints::from_owned(self.found_in.iter().map(|dep_ty| match dep_ty {
+            DependencyType::Production => {
+                format!("`{}` is a production dependency", self.package)
+            }
+            DependencyType::Dev => {
+                format!(
+                    "`{}` is a development dependency (try: `{}`)",
+                    self.package,
+                    format!("uv remove {} --dev", self.package).bold(),
+                )
+            }
+            DependencyType::Optional(group) => {
+                format!(
+                    "`{}` is an optional dependency (try: `{}`)",
+                    self.package,
+                    format!("uv remove {} --optional {group}", self.package).bold(),
+                )
+            }
+            DependencyType::Group(group) => {
+                format!(
+                    "`{}` is in the `{group}` group (try: `{}`)",
+                    self.package,
+                    format!("uv remove {} --group {group}", self.package).bold(),
+                )
+            }
+        }))
     }
 }

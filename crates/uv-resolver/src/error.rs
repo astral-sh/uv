@@ -149,10 +149,10 @@ pub enum ResolveError {
 }
 
 impl uv_errors::Hint for ResolveError {
-    fn hints(&self) -> Vec<std::borrow::Cow<'_, str>> {
+    fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::NoSolution(no_solution) => uv_errors::Hint::hints(no_solution.as_ref()),
-            _ => Vec::new(),
+            _ => uv_errors::Hints::none(),
         }
     }
 }
@@ -534,16 +534,13 @@ impl std::fmt::Debug for NoSolutionError {
 impl std::error::Error for NoSolutionError {}
 
 impl uv_errors::Hint for NoSolutionError {
-    fn hints(&self) -> Vec<std::borrow::Cow<'_, str>> {
-        self.pubgrub_hints()
-            .iter()
-            .map(|h| std::borrow::Cow::Owned(h.to_string()))
-            .collect()
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        uv_errors::Hints::from_owned(self.pubgrub_hints().iter().map(ToString::to_string))
     }
 }
 
 impl uv_errors::Hint for Box<NoSolutionError> {
-    fn hints(&self) -> Vec<std::borrow::Cow<'_, str>> {
+    fn hints(&self) -> uv_errors::Hints<'_> {
         self.as_ref().hints()
     }
 }

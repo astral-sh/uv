@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
@@ -8,7 +7,7 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 use tracing::{Level, debug, enabled, info_span, warn};
 
-use uv_errors::Hint;
+use uv_errors::{Hint, Hints};
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -64,15 +63,11 @@ pub(crate) struct ExternallyManagedError {
 }
 
 impl Hint for ExternallyManagedError {
-    fn hints(&self) -> Vec<Cow<'_, str>> {
+    fn hints(&self) -> Hints<'_> {
         if self.system {
-            vec![Cow::Borrowed(
-                "Virtual environments were not considered due to the `--system` flag",
-            )]
+            Hints::borrowed("Virtual environments were not considered due to the `--system` flag")
         } else {
-            vec![Cow::Borrowed(
-                "Consider creating a virtual environment, e.g., with `uv venv`",
-            )]
+            Hints::borrowed("Consider creating a virtual environment, e.g., with `uv venv`")
         }
     }
 }

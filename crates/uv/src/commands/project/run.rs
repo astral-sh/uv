@@ -2037,11 +2037,11 @@ pub(crate) struct RecursionLimitError {
 }
 
 impl uv_errors::Hint for RecursionLimitError {
-    fn hints(&self) -> Vec<std::borrow::Cow<'_, str>> {
-        vec![std::borrow::Cow::Owned(format!(
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        uv_errors::Hints::owned(format!(
             "If you are running a script with `{}` in the shebang, you may need to include the `{}` flag.",
             "uv run".green(),
             "--script".green(),
-        ))]
+        ))
     }
 }

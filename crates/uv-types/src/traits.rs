@@ -255,7 +255,7 @@ impl std::error::Error for AnyErrorBuild {
 }
 
 impl uv_errors::Hint for AnyErrorBuild {
-    fn hints(&self) -> Vec<std::borrow::Cow<'_, str>> {
+    fn hints(&self) -> uv_errors::Hints<'_> {
         self.0.hints()
     }
 }

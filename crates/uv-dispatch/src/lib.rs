@@ -62,7 +62,7 @@ pub enum BuildDispatchError {
 }
 
 impl uv_errors::Hint for BuildDispatchError {
-    fn hints(&self) -> Vec<std::borrow::Cow<'_, str>> {
+    fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::BuildFrontend(err) => err.hints(),
             Self::Resolve(err) => err.hints(),
@@ -77,9 +77,9 @@ impl uv_errors::Hint for BuildDispatchError {
                         }
                     }
                 }
-                Vec::new()
+                uv_errors::Hints::none()
             }
-            _ => Vec::new(),
+            _ => uv_errors::Hints::none(),
         }
     }
 }

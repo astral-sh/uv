@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::env;
 use std::fmt::{Display, Formatter};
 use std::io;
@@ -12,7 +11,7 @@ use regex::Regex;
 use thiserror::Error;
 use uv_configuration::BuildOutput;
 use uv_distribution_types::IsBuildBackendError;
-use uv_errors::Hint;
+use uv_errors::{Hint, Hints};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -122,14 +121,14 @@ impl IsBuildBackendError for Error {
 }
 
 impl Hint for Error {
-    fn hints(&self) -> Vec<Cow<'_, str>> {
+    fn hints(&self) -> Hints<'_> {
         match self {
-            Self::BuildBackend(_) => vec![Cow::Borrowed(
+            Self::BuildBackend(_) => Hints::borrowed(
                 "Build failures usually indicate a problem with the package or the build environment.",
-            )],
-            Self::MissingHeader(err) => vec![Cow::Owned(err.cause.to_string())],
+            ),
+            Self::MissingHeader(err) => Hints::owned(err.cause.to_string()),
             Self::RequirementsResolve(_, err) | Self::RequirementsInstall(_, err) => err.hints(),
-            _ => Vec::new(),
+            _ => Hints::none(),
         }
     }
 }
@@ -462,6 +461,8 @@ impl Error {
 
 #[cfg(test)]
 mod test {
+    use std::fmt::Write;
+
     use crate::{Error, PythonRunnerOutput};
     use indoc::indoc;
     use std::process::ExitStatus;
@@ -512,7 +513,7 @@ mod test {
             .unwrap()
             .to_string()
             .replace("exit status: ", "exit code: ");
-        uv_errors::write_hints(&mut formatted, &err.hints());
+        write!(formatted, "{}", err.hints()).unwrap();
         let formatted = anstream::adapter::strip_str(&formatted);
         insta::assert_snapshot!(formatted, @r#"
         Failed building wheel through setup.py (exit code: 0)
@@ -570,7 +571,7 @@ mod test {
             .unwrap()
             .to_string()
             .replace("exit status: ", "exit code: ");
-        uv_errors::write_hints(&mut formatted, &err.hints());
+        write!(formatted, "{}", err.hints()).unwrap();
         let formatted = anstream::adapter::strip_str(&formatted);
         insta::assert_snapshot!(formatted, @"
         Failed building wheel through setup.py (exit code: 0)
@@ -618,7 +619,7 @@ mod test {
             .unwrap()
             .to_string()
             .replace("exit status: ", "exit code: ");
-        uv_errors::write_hints(&mut formatted, &err.hints());
+        write!(formatted, "{}", err.hints()).unwrap();
         let formatted = anstream::adapter::strip_str(&formatted);
         insta::assert_snapshot!(formatted, @r#"
         Failed building wheel through setup.py (exit code: 0)
@@ -669,7 +670,7 @@ mod test {
             .unwrap()
             .to_string()
             .replace("exit status: ", "exit code: ");
-        uv_errors::write_hints(&mut formatted, &err.hints());
+        write!(formatted, "{}", err.hints()).unwrap();
         let formatted = anstream::adapter::strip_str(&formatted);
         insta::assert_snapshot!(formatted, @"
         Failed building wheel through setup.py (exit code: 0)

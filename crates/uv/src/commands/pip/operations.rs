@@ -1116,10 +1116,10 @@ pub(crate) enum Error {
 }
 
 impl uv_errors::Hint for Error {
-    fn hints(&self) -> Vec<std::borrow::Cow<'_, str>> {
+    fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::Resolve(resolve_err) => resolve_err.hints(),
-            _ => Vec::new(),
+            _ => uv_errors::Hints::none(),
         }
     }
 }
@@ -1134,11 +1134,11 @@ pub(crate) struct ExtrasWithoutSourceError {
 }
 
 impl uv_errors::Hint for ExtrasWithoutSourceError {
-    fn hints(&self) -> Vec<std::borrow::Cow<'_, str>> {
-        vec![std::borrow::Cow::Borrowed(if self.has_editable {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        uv_errors::Hints::borrowed(if self.has_editable {
             "Use `<dir>[extra]` syntax or `-r <file>` instead."
         } else {
             "Use `package[extra]` syntax instead."
-        })]
+        })
     }
 }

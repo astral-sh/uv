@@ -166,11 +166,12 @@ impl std::fmt::Display for PylockTomlError {
 }
 
 impl uv_errors::Hint for PylockTomlError {
-    fn hints(&self) -> Vec<std::borrow::Cow<'_, str>> {
-        self.hint
-            .as_ref()
-            .map(|hint| vec![std::borrow::Cow::Owned(hint.to_string())])
-            .unwrap_or_default()
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        if let Some(hint) = &self.hint {
+            uv_errors::Hints::owned(hint.to_string())
+        } else {
+            uv_errors::Hints::none()
+        }
     }
 }
 

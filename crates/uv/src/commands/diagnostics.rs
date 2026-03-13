@@ -8,7 +8,7 @@ use version_ranges::Ranges;
 use uv_distribution_types::{
     DerivationChain, DerivationStep, Dist, DistErrorKind, Name, RequestedDist,
 };
-use uv_errors::Hint;
+use uv_errors::{Hint, Hints};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_resolver::SentinelRange;
@@ -143,7 +143,8 @@ impl OperationDiagnostic {
         // Render the caller-provided hint after the error output.
         if result.is_none() {
             if let Some(hint) = &self.hint {
-                render_hints(&[hint.as_str()]);
+                let hints = Hints::borrowed(hint.as_str());
+                anstream::eprint!("{hints}");
             }
         }
 
@@ -189,7 +190,7 @@ pub(crate) fn dist_error(
                 Some(format_chain(dist.name(), dist.version(), chain))
             }
         });
-    let hints: Vec<String> = cause.hints().into_iter().map(Into::into).collect();
+    let hints = cause.hints().into_owned();
     let report = miette::Report::new(Diagnostic {
         kind,
         dist,
@@ -197,7 +198,7 @@ pub(crate) fn dist_error(
         help,
     });
     anstream::eprint!("{report:?}");
-    render_hints(&hints);
+    anstream::eprint!("{hints}");
 }
 
 /// Render a requested distribution failure (read, download or build) with a help message.
@@ -238,7 +239,7 @@ pub(crate) fn requested_dist_error(
                 Some(format_chain(dist.name(), dist.version(), chain))
             }
         });
-    let hints: Vec<String> = cause.hints().into_iter().map(Into::into).collect();
+    let hints = cause.hints().into_owned();
     let report = miette::Report::new(Diagnostic {
         kind,
         dist,
@@ -246,7 +247,7 @@ pub(crate) fn requested_dist_error(
         help,
     });
     anstream::eprint!("{report:?}");
-    render_hints(&hints);
+    anstream::eprint!("{hints}");
 }
 
 /// Render an error in fetching a package's dependencies.
@@ -287,7 +288,7 @@ pub(crate) fn dependencies_error(
                 Some(format_chain(name, Some(version), chain))
             }
         });
-    let hints: Vec<String> = error.hints().into_iter().map(Into::into).collect();
+    let hints = error.hints().into_owned();
     let report = miette::Report::new(Diagnostic {
         name: name.clone(),
         version: version.clone(),
@@ -295,7 +296,7 @@ pub(crate) fn dependencies_error(
         help,
     });
     anstream::eprint!("{report:?}");
-    render_hints(&hints);
+    anstream::eprint!("{hints}");
 }
 
 /// Render a [`uv_resolver::NoSolutionError`].
@@ -307,7 +308,8 @@ pub(crate) fn no_solution(err: &uv_resolver::NoSolutionError, context: Option<&'
     };
     let report = miette::Report::msg(err.report().to_string()).context(header);
     anstream::eprint!("{report:?}");
-    render_hints(err.pubgrub_hints());
+    let hints = err.hints();
+    anstream::eprint!("{hints}");
 }
 
 /// Render a TLS error with a hint to enable native TLS.
@@ -347,23 +349,13 @@ pub(crate) fn native_tls_hint(err: uv_client::Error) {
     anstream::eprint!("{report:?}");
 }
 
-/// Render a set of hints to stderr.
-///
-/// Each hint is rendered on its own line, prefixed with `hint:`, after the
-/// error output.
-fn render_hints<'a>(hints: impl IntoIterator<Item = &'a (impl std::fmt::Display + 'a)>) {
-    for hint in hints {
-        anstream::eprint!("\n\n{} {hint}", uv_errors::HintPrefix);
-    }
-}
-
 /// Walk an error chain and collect hint strings from all known error types.
 ///
 /// This is the central "hint for error" function. It walks the full error chain
 /// (via `anyhow::Error::chain`) and tries to downcast each error to known types
 /// that implement [`Hint`]. All hint rendering logic should be consolidated here.
-pub(crate) fn hints_for_error(err: &anyhow::Error) -> Vec<String> {
-    let mut hints = Vec::new();
+pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
+    let mut hints = Hints::none();
     for cause in err.chain() {
         collect_hint::<Box<uv_resolver::NoSolutionError>>(cause, &mut hints);
         collect_hint::<uv_resolver::NoSolutionError>(cause, &mut hints);
@@ -385,6 +377,7 @@ pub(crate) fn hints_for_error(err: &anyhow::Error) -> Vec<String> {
         collect_hint::<uv_python::BrokenLink>(cause, &mut hints);
         collect_hint::<uv_resolver::PylockTomlError>(cause, &mut hints);
         collect_hint::<uv_python::InterpreterError>(cause, &mut hints);
+        collect_hint::<uv_workspace::pyproject::SourceError>(cause, &mut hints);
     }
     hints
 }
@@ -392,10 +385,10 @@ pub(crate) fn hints_for_error(err: &anyhow::Error) -> Vec<String> {
 /// If `cause` can be downcast to `T`, collect its hints.
 fn collect_hint<T: Hint + std::error::Error + 'static>(
     cause: &(dyn std::error::Error + 'static),
-    hints: &mut Vec<String>,
+    hints: &mut Hints<'static>,
 ) {
     if let Some(inner) = cause.downcast_ref::<T>() {
-        hints.extend(inner.hints().into_iter().map(Into::into));
+        hints.extend(inner.hints());
     }
 }
 

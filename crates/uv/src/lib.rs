@@ -2729,9 +2729,7 @@ where
             }
 
             // Render hints after the error chain.
-            for hint in &hints {
-                eprintln!("\n{} {hint}", uv_errors::HintPrefix);
-            }
+            anstream::eprint!("{hints}");
 
             ExitStatus::Error.into()
         }
