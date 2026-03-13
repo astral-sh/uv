@@ -1,7 +1,5 @@
 # Security policy
 
-## Scope of security vulnerabilities
-
 uv is a Python package manager. Due to the design of the Python packaging ecosystem and the dynamic
 nature of Python itself, there are many cases where uv can execute arbitrary code. For example:
 
@@ -12,17 +10,6 @@ nature of Python itself, there are many cases where uv can execute arbitrary cod
 These are not considered vulnerabilities in uv. If you think uv's stance in these areas can be
 hardened, please file an issue for a new feature.
 
-## Reporting a vulnerability
-
-If you have found a possible vulnerability that is not excluded by the above
-[scope](#scope-of-security-vulnerabilities), please email `security at astral dot sh`.
-
-## Bug bounties
-
-While we sincerely appreciate and encourage reports of suspected security problems, please note that
-Astral does not currently run any bug bounty programs.
-
-## Vulnerability disclosures
-
-Critical vulnerabilities will be disclosed via GitHub's
-[security advisory](https://github.com/astral-sh/uv/security) system.
+If you believe you have found a vulnerability that is in scope for the project, please contact us as
+described in the organization
+[Security Policy](https://github.com/astral-sh/.github/blob/main/SECURITY.md).
