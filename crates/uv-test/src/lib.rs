@@ -220,7 +220,7 @@ impl TestContext {
             "Prepared",
             "Installed",
             "Uninstalled",
-            "Audited",
+            "Checked",
         ] {
             self.filters.push((
                 format!("{verb} \\d+ packages?"),
@@ -2236,12 +2236,12 @@ pub fn run_and_format_with_status<T: AsRef<str>>(
                             "Resolved",
                             "Prepared",
                             "Installed",
-                            "Audited",
+                            "Checked",
                             "Uninstalled",
                         ]
                         .iter(),
                         WindowsFilters::Universal => {
-                            ["Prepared", "Installed", "Audited", "Uninstalled"].iter()
+                            ["Prepared", "Installed", "Checked", "Uninstalled"].iter()
                         }
                     } {
                         snapshot = snapshot.replace(
