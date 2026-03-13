@@ -3106,6 +3106,201 @@ fn add_path_adjacent_directory() -> Result<()> {
     Ok(())
 }
 
+/// Check relative and absolute path handling with `uv add`.
+///
+/// TODO(tk): Currently `uv add` always relativizes paths in `pyproject.toml`,
+/// this is a bug.
+#[test]
+fn add_relative_and_absolute_paths() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Create a dependency at a relative path (sibling directory).
+    let relative_dep = context.temp_dir.child("relative_dep");
+    relative_dep.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "relative-dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    relative_dep
+        .child("src")
+        .child("relative_dep")
+        .child("__init__.py")
+        .touch()?;
+
+    // Create a dependency at an absolute path (using the full temp_dir path).
+    let absolute_dep = context.temp_dir.child("absolute_dep");
+    absolute_dep.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "absolute-dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    absolute_dep
+        .child("src")
+        .child("absolute_dep")
+        .child("__init__.py")
+        .touch()?;
+
+    // Create a dependency that will be added via a file:// URL.
+    let file_url_dep = context.temp_dir.child("file_url_dep");
+    file_url_dep.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "file-url-dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    file_url_dep
+        .child("src")
+        .child("file_url_dep")
+        .child("__init__.py")
+        .touch()?;
+
+    // Add the relative dependency using a relative path.
+    uv_snapshot!(context.filters(), context.add().arg("../relative_dep").current_dir(project.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + relative-dep==0.1.0 (from file://[TEMP_DIR]/relative_dep)
+    ");
+
+    // Add the absolute dependency using an absolute path.
+    uv_snapshot!(context.filters(), context.add().arg(absolute_dep.path()).current_dir(project.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + absolute-dep==0.1.0 (from file://[TEMP_DIR]/absolute_dep)
+    ");
+
+    // Add a dependency using a file:// URL (also absolute).
+    let file_url = Url::from_file_path(file_url_dep.path()).unwrap();
+    uv_snapshot!(context.filters(), context.add().arg(file_url.as_str()).current_dir(project.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + file-url-dep==0.1.0 (from file://[TEMP_DIR]/file_url_dep)
+    ");
+
+    // Check pyproject.toml.
+    let pyproject_toml = fs_err::read_to_string(project.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "absolute-dep",
+            "file-url-dep",
+            "relative-dep",
+        ]
+
+        [tool.uv.sources]
+        relative-dep = { path = "../relative_dep" }
+        absolute-dep = { path = "../absolute_dep" }
+        file-url-dep = { path = "../file_url_dep" }
+        "#
+        );
+    });
+
+    // Check uv.lock.
+    let lock = fs_err::read_to_string(project.join("uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "absolute-dep"
+        version = "0.1.0"
+        source = { directory = "../absolute_dep" }
+
+        [[package]]
+        name = "file-url-dep"
+        version = "0.1.0"
+        source = { directory = "../file_url_dep" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "absolute-dep" },
+            { name = "file-url-dep" },
+            { name = "relative-dep" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "absolute-dep", directory = "../absolute_dep" },
+            { name = "file-url-dep", directory = "../file_url_dep" },
+            { name = "relative-dep", directory = "../relative_dep" },
+        ]
+
+        [[package]]
+        name = "relative-dep"
+        version = "0.1.0"
+        source = { directory = "../relative_dep" }
+        "#
+        );
+    });
+
+    Ok(())
+}
+
 /// Update a requirement, modifying the source and extras.
 #[test]
 #[cfg(feature = "test-git")]
