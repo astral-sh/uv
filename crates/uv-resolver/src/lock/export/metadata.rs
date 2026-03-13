@@ -6,6 +6,7 @@ use uv_distribution_types::{RequiresPython, UrlString};
 use uv_fs::PortablePathBuf;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
+use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts};
 use uv_workspace::Workspace;
 
 use crate::Lock;
@@ -49,6 +50,32 @@ where
     }
 }
 
+/// The full `uv workspace metadata` json object
+#[derive(Debug, serde::Serialize)]
+pub struct Metadata {
+    /// Format info
+    schema: SchemaReport,
+    /// Absolute path to the workspace root
+    ///
+    /// Ideally absolute paths to things that are found in subdirs of this should have exactly
+    /// this as a prefix so it can be stripped to get relative paths if one wants.
+    workspace_root: PortablePathBuf,
+    /// The version of python required by the workspace
+    ///
+    /// Every `marker` we emit implicitly assumes this constraint to keep things clean
+    requires_python: RequiresPython,
+    /// Info about conflicting packages
+    conflicts: MetadataConflicts,
+    /// An index of which nodes are workspace members
+    ///
+    /// These entries are often what users should use as the entry-points into the `resolve` graph.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    members: Vec<MetadataWorkspaceMember>,
+    /// The dependency graph
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+    resolve: BTreeMap<MetadataNodeIdFlat, MetadataNode>,
+}
+
 /// The schema version for the metadata report.
 #[derive(serde::Serialize, Debug, Default)]
 #[serde(rename_all = "snake_case")]
@@ -64,22 +91,14 @@ struct SchemaReport {
     /// The version of the schema.
     version: SchemaVersion,
 }
-
-#[derive(Debug, serde::Serialize)]
-pub struct Metadata {
-    schema: SchemaReport,
-    workspace_root: PortablePathBuf,
-    requires_python: RequiresPython,
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    members: Vec<MetadataWorkspaceMember>,
-    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
-    resolve: BTreeMap<MetadataNodeIdFlat, MetadataNode>,
-}
-
+/// Info for looking up workspace members, most info is stored in the node behind `id`
 #[derive(Debug, serde::Serialize)]
 struct MetadataWorkspaceMember {
+    /// Package name
     name: PackageName,
+    /// Absolute path to the member
     path: PortablePathBuf,
+    /// Key for the package's node in the `resolve` graph
     id: MetadataNodeIdFlat,
 }
 
@@ -133,16 +152,21 @@ struct MetadataNode {
     /// A unique id for this node that will be used to refer to it
     #[serde(flatten)]
     id: MetadataNodeId,
-    /// dependencies of this node
+    /// Dependencies of this node (the edges of The Graph)
     dependencies: Vec<MetadataDependency>,
+    /// Extras
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     optional_dependencies: Vec<MetadataExtra>,
+    /// Groups
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     dependency_groups: Vec<MetadataGroup>,
+    /// Info about building the package
     #[serde(skip_serializing_if = "Option::is_none", default)]
     build_system: Option<MetadataBuildSystem>,
+    /// The source distribution found
     #[serde(skip_serializing_if = "Option::is_none", default)]
     sdist: Option<MetadataSourceDist>,
+    /// Wheels we found
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     wheels: Vec<MetadataWheel>,
 }
@@ -160,15 +184,22 @@ impl MetadataNode {
         }
     }
 
-    fn from_package_id(id: &PackageId, kind: MetadataNodeKind) -> Self {
-        Self::new(MetadataNodeId::from_package_id(id, kind))
+    fn from_package_id(
+        workspace_root: &PortablePathBuf,
+        id: &PackageId,
+        kind: MetadataNodeKind,
+    ) -> Self {
+        Self::new(MetadataNodeId::from_package_id(workspace_root, id, kind))
     }
 
-    fn add_dependency(&mut self, dependency: &Dependency) {
+    fn add_dependency(&mut self, workspace_root: &PortablePathBuf, dependency: &Dependency) {
         let extras = dependency.extra();
         if extras.is_empty() {
-            let id =
-                MetadataNodeId::from_package_id(&dependency.package_id, MetadataNodeKind::Package);
+            let id = MetadataNodeId::from_package_id(
+                workspace_root,
+                &dependency.package_id,
+                MetadataNodeKind::Package,
+            );
             self.dependencies.push(MetadataDependency {
                 id: id.to_flat(),
                 marker: dependency.simplified_marker.try_to_string(),
@@ -177,6 +208,7 @@ impl MetadataNode {
         }
         for extra in extras {
             let id = MetadataNodeId::from_package_id(
+                workspace_root,
                 &dependency.package_id,
                 MetadataNodeKind::Extra(extra.clone()),
             );
@@ -188,6 +220,9 @@ impl MetadataNode {
     }
 }
 
+/// The unique key for every node in the graph
+///
+/// (It's not entirely clear to me that two nodes can differ only by `source` but it doesn't hurt.)
 #[derive(Debug, Clone, serde::Serialize)]
 struct MetadataNodeId {
     /// The name of the package
@@ -209,10 +244,14 @@ struct MetadataNodeId {
 type MetadataNodeIdFlat = String;
 
 impl MetadataNodeId {
-    fn from_package_id(id: &PackageId, kind: MetadataNodeKind) -> Self {
+    fn from_package_id(
+        workspace_root: &PortablePathBuf,
+        id: &PackageId,
+        kind: MetadataNodeKind,
+    ) -> Self {
         let name = id.name.clone();
         let version = id.version.clone();
-        let source = MetadataSource::from_source(id.source.clone());
+        let source = MetadataSource::from_source(workspace_root, id.source.clone());
 
         Self {
             name,
@@ -341,34 +380,49 @@ impl MetadataSource {
 }
 
 impl MetadataSource {
-    fn from_source(source: Source) -> Self {
+    fn from_source(workspace_root: &PortablePathBuf, source: Source) -> Self {
         match source {
             Source::Registry(source) => match source {
                 RegistrySource::Url(url) => Self::Registry {
                     registry: MetadataRegistrySource::Url(url),
                 },
                 RegistrySource::Path(path) => Self::Registry {
-                    registry: MetadataRegistrySource::Path(PortablePathBuf::from(path)),
+                    registry: MetadataRegistrySource::Path(normalize_workspace_relative_path(
+                        workspace_root,
+                        &path,
+                    )),
                 },
             },
             Source::Git(url, _) => Self::Git { git: url },
             Source::Direct(url, DirectSource { subdirectory }) => Self::Direct {
                 url,
-                subdirectory: subdirectory.map(PortablePathBuf::from),
+                subdirectory: subdirectory
+                    .map(|path| normalize_workspace_relative_path(workspace_root, &path)),
             },
             Source::Path(path) => Self::Path {
-                path: PortablePathBuf::from(path),
+                path: normalize_workspace_relative_path(workspace_root, &path),
             },
             Source::Directory(path) => Self::Directory {
-                directory: PortablePathBuf::from(path),
+                directory: normalize_workspace_relative_path(workspace_root, &path),
             },
             Source::Editable(path) => Self::Editable {
-                editable: PortablePathBuf::from(path),
+                editable: normalize_workspace_relative_path(workspace_root, &path),
             },
             Source::Virtual(path) => Self::Virtual {
-                r#virtual: PortablePathBuf::from(path),
+                r#virtual: normalize_workspace_relative_path(workspace_root, &path),
             },
         }
+    }
+}
+
+fn normalize_workspace_relative_path(
+    workspace_root: &PortablePathBuf,
+    maybe_rel: &std::path::Path,
+) -> PortablePathBuf {
+    if maybe_rel.is_absolute() {
+        PortablePathBuf::from(maybe_rel)
+    } else {
+        PortablePathBuf::from(workspace_root.as_ref().join(maybe_rel).as_path())
     }
 }
 
@@ -401,14 +455,14 @@ enum MetadataSourceDist {
 }
 
 impl MetadataSourceDist {
-    fn from_sdist(sdist: &SourceDist) -> Self {
+    fn from_sdist(workspace_root: &PortablePathBuf, sdist: &SourceDist) -> Self {
         match sdist {
             SourceDist::Url { url, metadata } => Self::Url {
                 url: url.clone(),
                 metadata: MetadataSourceDistMetadata::from_sdist(metadata),
             },
             SourceDist::Path { path, metadata } => Self::Path {
-                path: PortablePathBuf::from(path.as_ref()),
+                path: normalize_workspace_relative_path(workspace_root, path),
                 metadata: MetadataSourceDistMetadata::from_sdist(metadata),
             },
             SourceDist::Metadata { metadata } => Self::Metadata {
@@ -496,9 +550,9 @@ struct MetadataWheel {
 }
 
 impl MetadataWheel {
-    fn from_wheel(wheel: &Wheel) -> Self {
+    fn from_wheel(workspace_root: &PortablePathBuf, wheel: &Wheel) -> Self {
         Self {
-            source: MetadataWheelWireSource::from_wheel(&wheel.url),
+            source: MetadataWheelWireSource::from_wheel(workspace_root, &wheel.url),
             hashes: wheel.hash.as_ref().map(hashes_map).unwrap_or_default(),
             size: wheel.size,
             upload_time: wheel.upload_time,
@@ -516,11 +570,11 @@ enum MetadataWheelWireSource {
 }
 
 impl MetadataWheelWireSource {
-    fn from_wheel(wheel: &WheelWireSource) -> Option<Self> {
+    fn from_wheel(workspace_root: &PortablePathBuf, wheel: &WheelWireSource) -> Option<Self> {
         match wheel {
             WheelWireSource::Url { url } => Some(Self::Url { url: url.clone() }),
             WheelWireSource::Path { path } => Some(Self::Path {
-                path: PortablePathBuf::from(path.as_ref()),
+                path: normalize_workspace_relative_path(workspace_root, path),
             }),
             // We guarantee this as a separate field so it's redundant
             WheelWireSource::Filename { .. } => None,
@@ -559,8 +613,75 @@ struct MetadataGroup {
 
 #[derive(Clone, Debug, serde::Serialize)]
 struct MetadataBuildSystem {
+    /// The `build-backend` specified in the pyproject.toml
     build_backend: String,
     id: MetadataNodeIdFlat,
+}
+
+/// Conflicts
+#[derive(Clone, Debug, serde::Serialize)]
+struct MetadataConflicts {
+    sets: Vec<MetadataConflictSet>,
+}
+
+impl MetadataConflicts {
+    fn from_conflicts(conflicts: &Conflicts) -> Self {
+        Self {
+            sets: conflicts
+                .iter()
+                .map(MetadataConflictSet::from_conflicts)
+                .collect(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+struct MetadataConflictSet {
+    items: Vec<MetadataConflictItem>,
+}
+
+impl MetadataConflictSet {
+    fn from_conflicts(set: &ConflictSet) -> Self {
+        Self {
+            items: set
+                .iter()
+                .map(MetadataConflictItem::from_conflicts)
+                .collect(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+struct MetadataConflictItem {
+    /// These should always be names of packages referred to in [`Metadata::members`]
+    package: PackageName,
+    kind: MetadataConflictKind,
+}
+
+impl MetadataConflictItem {
+    fn from_conflicts(item: &ConflictItem) -> Self {
+        Self {
+            package: item.package().clone(),
+            kind: MetadataConflictKind::from_conflicts(item.kind()),
+        }
+    }
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+enum MetadataConflictKind {
+    Group(GroupName),
+    Extra(ExtraName),
+    Project,
+}
+
+impl MetadataConflictKind {
+    fn from_conflicts(item: &ConflictKind) -> Self {
+        match item {
+            ConflictKind::Extra(name) => Self::Extra(name.clone()),
+            ConflictKind::Group(name) => Self::Group(name.clone()),
+            ConflictKind::Project => Self::Project,
+        }
+    }
 }
 
 impl Metadata {
@@ -568,19 +689,25 @@ impl Metadata {
     pub fn from_lock(workspace: &Workspace, lock: &Lock) -> Result<Self, MetadataError> {
         let mut resolve = BTreeMap::new();
         let mut members = Vec::new();
+        let workspace_root = PortablePathBuf::from(workspace.install_path().as_path());
+        let conflicts = MetadataConflicts::from_conflicts(&lock.conflicts);
 
         for lock_package in lock.packages() {
-            let mut meta_package =
-                MetadataNode::from_package_id(&lock_package.id, MetadataNodeKind::Package);
+            let mut meta_package = MetadataNode::from_package_id(
+                &workspace_root,
+                &lock_package.id,
+                MetadataNodeKind::Package,
+            );
 
             // Direct dependencies go on the package node
             for dependency in &lock_package.dependencies {
-                meta_package.add_dependency(dependency);
+                meta_package.add_dependency(&workspace_root, dependency);
             }
 
             // Extras get their own nodes
             for (extra, dependencies) in &lock_package.optional_dependencies {
                 let mut meta_extra = MetadataNode::from_package_id(
+                    &workspace_root,
                     &lock_package.id,
                     MetadataNodeKind::Extra(extra.clone()),
                 );
@@ -590,7 +717,7 @@ impl Metadata {
                     marker: None,
                 });
                 for dependency in dependencies {
-                    meta_extra.add_dependency(dependency);
+                    meta_extra.add_dependency(&workspace_root, dependency);
                 }
 
                 meta_package.optional_dependencies.push(MetadataExtra {
@@ -604,12 +731,13 @@ impl Metadata {
             // Groups get their own nodes
             for (group, dependencies) in &lock_package.dependency_groups {
                 let mut meta_group = MetadataNode::from_package_id(
+                    &workspace_root,
                     &lock_package.id,
                     MetadataNodeKind::Group(group.clone()),
                 );
                 // Groups *do not* depend on the base package, so don't add that
                 for dependency in dependencies {
-                    meta_group.add_dependency(dependency);
+                    meta_group.add_dependency(&workspace_root, dependency);
                 }
 
                 meta_package.dependency_groups.push(MetadataGroup {
@@ -624,7 +752,10 @@ impl Metadata {
             if let Some(workspace_package) = workspace.packages().get(lock_package.name()) {
                 let member = MetadataWorkspaceMember {
                     name: meta_package.id.name.clone(),
-                    path: PortablePathBuf::from(workspace_package.root().as_path()),
+                    path: normalize_workspace_relative_path(
+                        &workspace_root,
+                        workspace_package.root().as_path(),
+                    ),
                     id: meta_package.id.to_flat(),
                 };
                 members.push(member);
@@ -632,11 +763,13 @@ impl Metadata {
 
             // Record sdist/wheel info
             if let Some(sdist) = &lock_package.sdist {
-                meta_package.sdist = Some(MetadataSourceDist::from_sdist(sdist));
+                meta_package.sdist = Some(MetadataSourceDist::from_sdist(&workspace_root, sdist));
             }
 
             for wheel in &lock_package.wheels {
-                meta_package.wheels.push(MetadataWheel::from_wheel(wheel));
+                meta_package
+                    .wheels
+                    .push(MetadataWheel::from_wheel(&workspace_root, wheel));
             }
 
             resolve.insert(meta_package.id.to_flat(), meta_package);
@@ -646,7 +779,8 @@ impl Metadata {
             schema: SchemaReport {
                 version: SchemaVersion::Preview,
             },
-            workspace_root: PortablePathBuf::from(workspace.install_path().as_path()),
+            conflicts,
+            workspace_root,
             requires_python: lock.requires_python.clone(),
             members,
             resolve,

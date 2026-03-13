@@ -24,19 +24,22 @@ fn workspace_metadata_simple() {
       },
       "workspace_root": "[TEMP_DIR]/foo",
       "requires_python": ">=3.12",
+      "conflicts": {
+        "sets": []
+      },
       "members": [
         {
           "name": "foo",
           "path": "[TEMP_DIR]/foo",
-          "id": "foo==0.1.0 @ virtual+."
+          "id": "foo==0.1.0 @ virtual+[TEMP_DIR]/foo/"
         }
       ],
       "resolve": {
-        "foo==0.1.0 @ virtual+.": {
+        "foo==0.1.0 @ virtual+[TEMP_DIR]/foo/": {
           "name": "foo",
           "version": "0.1.0",
           "source": {
-            "virtual": "."
+            "virtual": "[TEMP_DIR]/foo/"
           },
           "kind": "package",
           "dependencies": []
@@ -75,45 +78,48 @@ fn workspace_metadata_root_workspace() -> Result<()> {
       },
       "workspace_root": "[TEMP_DIR]/workspace",
       "requires_python": ">=3.12",
+      "conflicts": {
+        "sets": []
+      },
       "members": [
         {
           "name": "albatross",
           "path": "[TEMP_DIR]/workspace",
-          "id": "albatross==0.1.0 @ editable+."
+          "id": "albatross==0.1.0 @ editable+[TEMP_DIR]/workspace/"
         },
         {
           "name": "bird-feeder",
           "path": "[TEMP_DIR]/workspace/packages/bird-feeder",
-          "id": "bird-feeder==1.0.0 @ editable+packages/bird-feeder"
+          "id": "bird-feeder==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/bird-feeder"
         },
         {
           "name": "seeds",
           "path": "[TEMP_DIR]/workspace/packages/seeds",
-          "id": "seeds==1.0.0 @ editable+packages/seeds"
+          "id": "seeds==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/seeds"
         }
       ],
       "resolve": {
-        "albatross==0.1.0 @ editable+.": {
+        "albatross==0.1.0 @ editable+[TEMP_DIR]/workspace/": {
           "name": "albatross",
           "version": "0.1.0",
           "source": {
-            "editable": "."
+            "editable": "[TEMP_DIR]/workspace/"
           },
           "kind": "package",
           "dependencies": [
             {
-              "id": "bird-feeder==1.0.0 @ editable+packages/bird-feeder"
+              "id": "bird-feeder==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/bird-feeder"
             },
             {
               "id": "iniconfig==2.0.0 @ registry+https://pypi.org/simple"
             }
           ]
         },
-        "bird-feeder==1.0.0 @ editable+packages/bird-feeder": {
+        "bird-feeder==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/bird-feeder": {
           "name": "bird-feeder",
           "version": "1.0.0",
           "source": {
-            "editable": "packages/bird-feeder"
+            "editable": "[TEMP_DIR]/workspace/packages/bird-feeder"
           },
           "kind": "package",
           "dependencies": [
@@ -121,7 +127,7 @@ fn workspace_metadata_root_workspace() -> Result<()> {
               "id": "iniconfig==2.0.0 @ registry+https://pypi.org/simple"
             },
             {
-              "id": "seeds==1.0.0 @ editable+packages/seeds"
+              "id": "seeds==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/seeds"
             }
           ]
         },
@@ -185,11 +191,11 @@ fn workspace_metadata_root_workspace() -> Result<()> {
             }
           ]
         },
-        "seeds==1.0.0 @ editable+packages/seeds": {
+        "seeds==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/seeds": {
           "name": "seeds",
           "version": "1.0.0",
           "source": {
-            "editable": "packages/seeds"
+            "editable": "[TEMP_DIR]/workspace/packages/seeds"
           },
           "kind": "package",
           "dependencies": [
@@ -234,34 +240,37 @@ fn workspace_metadata_virtual_workspace() -> Result<()> {
       },
       "workspace_root": "[TEMP_DIR]/workspace",
       "requires_python": ">=3.12",
+      "conflicts": {
+        "sets": []
+      },
       "members": [
         {
           "name": "albatross",
           "path": "[TEMP_DIR]/workspace/packages/albatross",
-          "id": "albatross==0.1.0 @ editable+packages/albatross"
+          "id": "albatross==0.1.0 @ editable+[TEMP_DIR]/workspace/packages/albatross"
         },
         {
           "name": "bird-feeder",
           "path": "[TEMP_DIR]/workspace/packages/bird-feeder",
-          "id": "bird-feeder==1.0.0 @ editable+packages/bird-feeder"
+          "id": "bird-feeder==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/bird-feeder"
         },
         {
           "name": "seeds",
           "path": "[TEMP_DIR]/workspace/packages/seeds",
-          "id": "seeds==1.0.0 @ editable+packages/seeds"
+          "id": "seeds==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/seeds"
         }
       ],
       "resolve": {
-        "albatross==0.1.0 @ editable+packages/albatross": {
+        "albatross==0.1.0 @ editable+[TEMP_DIR]/workspace/packages/albatross": {
           "name": "albatross",
           "version": "0.1.0",
           "source": {
-            "editable": "packages/albatross"
+            "editable": "[TEMP_DIR]/workspace/packages/albatross"
           },
           "kind": "package",
           "dependencies": [
             {
-              "id": "bird-feeder==1.0.0 @ editable+packages/bird-feeder"
+              "id": "bird-feeder==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/bird-feeder"
             },
             {
               "id": "iniconfig==2.0.0 @ registry+https://pypi.org/simple"
@@ -305,11 +314,11 @@ fn workspace_metadata_virtual_workspace() -> Result<()> {
             }
           ]
         },
-        "bird-feeder==1.0.0 @ editable+packages/bird-feeder": {
+        "bird-feeder==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/bird-feeder": {
           "name": "bird-feeder",
           "version": "1.0.0",
           "source": {
-            "editable": "packages/bird-feeder"
+            "editable": "[TEMP_DIR]/workspace/packages/bird-feeder"
           },
           "kind": "package",
           "dependencies": [
@@ -317,7 +326,7 @@ fn workspace_metadata_virtual_workspace() -> Result<()> {
               "id": "anyio==4.3.0 @ registry+https://pypi.org/simple"
             },
             {
-              "id": "seeds==1.0.0 @ editable+packages/seeds"
+              "id": "seeds==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/seeds"
             }
           ]
         },
@@ -381,11 +390,11 @@ fn workspace_metadata_virtual_workspace() -> Result<()> {
             }
           ]
         },
-        "seeds==1.0.0 @ editable+packages/seeds": {
+        "seeds==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/seeds": {
           "name": "seeds",
           "version": "1.0.0",
           "source": {
-            "editable": "packages/seeds"
+            "editable": "[TEMP_DIR]/workspace/packages/seeds"
           },
           "kind": "package",
           "dependencies": [
@@ -462,45 +471,48 @@ fn workspace_metadata_from_member() -> Result<()> {
       },
       "workspace_root": "[TEMP_DIR]/workspace",
       "requires_python": ">=3.12",
+      "conflicts": {
+        "sets": []
+      },
       "members": [
         {
           "name": "albatross",
           "path": "[TEMP_DIR]/workspace",
-          "id": "albatross==0.1.0 @ editable+."
+          "id": "albatross==0.1.0 @ editable+[TEMP_DIR]/workspace/"
         },
         {
           "name": "bird-feeder",
           "path": "[TEMP_DIR]/workspace/packages/bird-feeder",
-          "id": "bird-feeder==1.0.0 @ editable+packages/bird-feeder"
+          "id": "bird-feeder==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/bird-feeder"
         },
         {
           "name": "seeds",
           "path": "[TEMP_DIR]/workspace/packages/seeds",
-          "id": "seeds==1.0.0 @ editable+packages/seeds"
+          "id": "seeds==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/seeds"
         }
       ],
       "resolve": {
-        "albatross==0.1.0 @ editable+.": {
+        "albatross==0.1.0 @ editable+[TEMP_DIR]/workspace/": {
           "name": "albatross",
           "version": "0.1.0",
           "source": {
-            "editable": "."
+            "editable": "[TEMP_DIR]/workspace/"
           },
           "kind": "package",
           "dependencies": [
             {
-              "id": "bird-feeder==1.0.0 @ editable+packages/bird-feeder"
+              "id": "bird-feeder==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/bird-feeder"
             },
             {
               "id": "iniconfig==2.0.0 @ registry+https://pypi.org/simple"
             }
           ]
         },
-        "bird-feeder==1.0.0 @ editable+packages/bird-feeder": {
+        "bird-feeder==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/bird-feeder": {
           "name": "bird-feeder",
           "version": "1.0.0",
           "source": {
-            "editable": "packages/bird-feeder"
+            "editable": "[TEMP_DIR]/workspace/packages/bird-feeder"
           },
           "kind": "package",
           "dependencies": [
@@ -508,7 +520,7 @@ fn workspace_metadata_from_member() -> Result<()> {
               "id": "iniconfig==2.0.0 @ registry+https://pypi.org/simple"
             },
             {
-              "id": "seeds==1.0.0 @ editable+packages/seeds"
+              "id": "seeds==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/seeds"
             }
           ]
         },
@@ -572,11 +584,11 @@ fn workspace_metadata_from_member() -> Result<()> {
             }
           ]
         },
-        "seeds==1.0.0 @ editable+packages/seeds": {
+        "seeds==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/seeds": {
           "name": "seeds",
           "version": "1.0.0",
           "source": {
-            "editable": "packages/seeds"
+            "editable": "[TEMP_DIR]/workspace/packages/seeds"
           },
           "kind": "package",
           "dependencies": [
@@ -633,47 +645,50 @@ fn workspace_metadata_multiple_members() {
       },
       "workspace_root": "[TEMP_DIR]/pkg-a",
       "requires_python": ">=3.12",
+      "conflicts": {
+        "sets": []
+      },
       "members": [
         {
           "name": "pkg-a",
           "path": "[TEMP_DIR]/pkg-a",
-          "id": "pkg-a==0.1.0 @ virtual+."
+          "id": "pkg-a==0.1.0 @ virtual+[TEMP_DIR]/pkg-a/"
         },
         {
           "name": "pkg-b",
           "path": "[TEMP_DIR]/pkg-a/pkg-b",
-          "id": "pkg-b==0.1.0 @ virtual+pkg-b"
+          "id": "pkg-b==0.1.0 @ virtual+[TEMP_DIR]/pkg-a/pkg-b"
         },
         {
           "name": "pkg-c",
           "path": "[TEMP_DIR]/pkg-a/pkg-c",
-          "id": "pkg-c==0.1.0 @ virtual+pkg-c"
+          "id": "pkg-c==0.1.0 @ virtual+[TEMP_DIR]/pkg-a/pkg-c"
         }
       ],
       "resolve": {
-        "pkg-a==0.1.0 @ virtual+.": {
+        "pkg-a==0.1.0 @ virtual+[TEMP_DIR]/pkg-a/": {
           "name": "pkg-a",
           "version": "0.1.0",
           "source": {
-            "virtual": "."
+            "virtual": "[TEMP_DIR]/pkg-a/"
           },
           "kind": "package",
           "dependencies": []
         },
-        "pkg-b==0.1.0 @ virtual+pkg-b": {
+        "pkg-b==0.1.0 @ virtual+[TEMP_DIR]/pkg-a/pkg-b": {
           "name": "pkg-b",
           "version": "0.1.0",
           "source": {
-            "virtual": "pkg-b"
+            "virtual": "[TEMP_DIR]/pkg-a/pkg-b"
           },
           "kind": "package",
           "dependencies": []
         },
-        "pkg-c==0.1.0 @ virtual+pkg-c": {
+        "pkg-c==0.1.0 @ virtual+[TEMP_DIR]/pkg-a/pkg-c": {
           "name": "pkg-c",
           "version": "0.1.0",
           "source": {
-            "virtual": "pkg-c"
+            "virtual": "[TEMP_DIR]/pkg-a/pkg-c"
           },
           "kind": "package",
           "dependencies": []
@@ -708,19 +723,22 @@ fn workspace_metadata_single_project() {
       },
       "workspace_root": "[TEMP_DIR]/my-project",
       "requires_python": ">=3.12",
+      "conflicts": {
+        "sets": []
+      },
       "members": [
         {
           "name": "my-project",
           "path": "[TEMP_DIR]/my-project",
-          "id": "my-project==0.1.0 @ virtual+."
+          "id": "my-project==0.1.0 @ virtual+[TEMP_DIR]/my-project/"
         }
       ],
       "resolve": {
-        "my-project==0.1.0 @ virtual+.": {
+        "my-project==0.1.0 @ virtual+[TEMP_DIR]/my-project/": {
           "name": "my-project",
           "version": "0.1.0",
           "source": {
-            "virtual": "."
+            "virtual": "[TEMP_DIR]/my-project/"
           },
           "kind": "package",
           "dependencies": []
@@ -759,19 +777,22 @@ fn workspace_metadata_with_excluded() -> Result<()> {
       },
       "workspace_root": "[TEMP_DIR]/workspace",
       "requires_python": ">=3.12",
+      "conflicts": {
+        "sets": []
+      },
       "members": [
         {
           "name": "albatross",
           "path": "[TEMP_DIR]/workspace",
-          "id": "albatross==0.1.0 @ editable+."
+          "id": "albatross==0.1.0 @ editable+[TEMP_DIR]/workspace/"
         }
       ],
       "resolve": {
-        "albatross==0.1.0 @ editable+.": {
+        "albatross==0.1.0 @ editable+[TEMP_DIR]/workspace/": {
           "name": "albatross",
           "version": "0.1.0",
           "source": {
-            "editable": "."
+            "editable": "[TEMP_DIR]/workspace/"
           },
           "kind": "package",
           "dependencies": [
@@ -861,11 +882,14 @@ fn workspace_metadata_with_packse() -> Result<()> {
       },
       "workspace_root": "[TEMP_DIR]/workspace",
       "requires_python": ">=3.12",
+      "conflicts": {
+        "sets": []
+      },
       "members": [
         {
           "name": "packse",
           "path": "[TEMP_DIR]/workspace",
-          "id": "packse==0.0.0 @ editable+."
+          "id": "packse==0.0.0 @ editable+[TEMP_DIR]/workspace/"
         }
       ],
       "resolve": {
@@ -2121,11 +2145,11 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "packse:dev==0.0.0 @ editable+.": {
+        "packse:dev==0.0.0 @ editable+[TEMP_DIR]/workspace/": {
           "name": "packse",
           "version": "0.0.0",
           "source": {
-            "editable": "."
+            "editable": "[TEMP_DIR]/workspace/"
           },
           "kind": {
             "group": "dev"
@@ -2142,11 +2166,11 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "packse==0.0.0 @ editable+.": {
+        "packse==0.0.0 @ editable+[TEMP_DIR]/workspace/": {
           "name": "packse",
           "version": "0.0.0",
           "source": {
-            "editable": "."
+            "editable": "[TEMP_DIR]/workspace/"
           },
           "kind": "package",
           "dependencies": [
@@ -2172,50 +2196,50 @@ fn workspace_metadata_with_packse() -> Result<()> {
           "optional_dependencies": [
             {
               "name": "index",
-              "id": "packse[index]==0.0.0 @ editable+."
+              "id": "packse[index]==0.0.0 @ editable+[TEMP_DIR]/workspace/"
             },
             {
               "name": "serve",
-              "id": "packse[serve]==0.0.0 @ editable+."
+              "id": "packse[serve]==0.0.0 @ editable+[TEMP_DIR]/workspace/"
             }
           ],
           "dependency_groups": [
             {
               "name": "dev",
-              "id": "packse:dev==0.0.0 @ editable+."
+              "id": "packse:dev==0.0.0 @ editable+[TEMP_DIR]/workspace/"
             }
           ]
         },
-        "packse[index]==0.0.0 @ editable+.": {
+        "packse[index]==0.0.0 @ editable+[TEMP_DIR]/workspace/": {
           "name": "packse",
           "version": "0.0.0",
           "source": {
-            "editable": "."
+            "editable": "[TEMP_DIR]/workspace/"
           },
           "kind": {
             "extra": "index"
           },
           "dependencies": [
             {
-              "id": "packse==0.0.0 @ editable+."
+              "id": "packse==0.0.0 @ editable+[TEMP_DIR]/workspace/"
             },
             {
               "id": "pypiserver==2.0.1 @ registry+https://pypi.org/simple"
             }
           ]
         },
-        "packse[serve]==0.0.0 @ editable+.": {
+        "packse[serve]==0.0.0 @ editable+[TEMP_DIR]/workspace/": {
           "name": "packse",
           "version": "0.0.0",
           "source": {
-            "editable": "."
+            "editable": "[TEMP_DIR]/workspace/"
           },
           "kind": {
             "extra": "serve"
           },
           "dependencies": [
             {
-              "id": "packse==0.0.0 @ editable+."
+              "id": "packse==0.0.0 @ editable+[TEMP_DIR]/workspace/"
             },
             {
               "id": "pypiserver==2.0.1 @ registry+https://pypi.org/simple"
