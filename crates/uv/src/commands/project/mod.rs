@@ -2237,6 +2237,7 @@ pub(crate) async fn sync_environment(
         build_options,
         sources,
     } = settings;
+    let link_mode = crate::effective_link_mode(link_mode, preview);
 
     let client_builder = client_builder.clone().keyring(keyring_provider);
 

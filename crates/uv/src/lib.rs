@@ -37,6 +37,7 @@ use uv_client::BaseClientBuilder;
 use uv_configuration::min_stack_size;
 use uv_flags::EnvironmentFlags;
 use uv_fs::{CWD, Simplified};
+use uv_install_wheel::LinkMode;
 #[cfg(feature = "self-update")]
 use uv_pep440::release_specifiers_to_ranges;
 use uv_pep508::VersionOrUrl;
@@ -68,6 +69,22 @@ pub(crate) mod printer;
 pub(crate) mod settings;
 #[cfg(windows)]
 mod windows_exception;
+
+/// Returns the effective [`LinkMode`], applying the `reflink-windows` preview override.
+///
+/// On Windows, the default link mode is [`LinkMode::Hardlink`]. When the `reflink-windows`
+/// preview feature is enabled, this overrides the default to [`LinkMode::Clone`] so that
+/// copy-on-write is attempted on ReFS/Dev Drive volumes.
+pub(crate) fn effective_link_mode(link_mode: LinkMode, preview: uv_preview::Preview) -> LinkMode {
+    if cfg!(target_os = "windows")
+        && link_mode == LinkMode::Hardlink
+        && preview.is_enabled(PreviewFeature::ReflinkWindows)
+    {
+        LinkMode::Clone
+    } else {
+        link_mode
+    }
+}
 
 #[instrument(skip_all)]
 async fn run(mut cli: Cli) -> Result<ExitStatus> {
@@ -737,7 +754,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.exclude_newer,
                 args.settings.sources,
                 args.settings.annotation_style,
-                args.settings.link_mode,
+                effective_link_mode(args.settings.link_mode, globals.preview),
                 args.settings.python,
                 args.settings.system,
                 globals.python_preference,
@@ -798,7 +815,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &args.settings.extras,
                 &groups,
                 args.settings.reinstall,
-                args.settings.link_mode,
+                effective_link_mode(args.settings.link_mode, globals.preview),
                 args.settings.compile_bytecode,
                 args.settings.hash_checking,
                 args.settings.index_locations,
@@ -963,7 +980,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.keyring_provider,
                 &client_builder.subcommand(vec!["pip".to_owned(), "install".to_owned()]),
                 args.settings.reinstall,
-                args.settings.link_mode,
+                effective_link_mode(args.settings.link_mode, globals.preview),
                 args.settings.compile_bytecode,
                 args.settings.hash_checking,
                 globals.installer_metadata,
@@ -1301,7 +1318,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.install_mirrors,
                 globals.python_preference,
                 globals.python_downloads,
-                args.settings.link_mode,
+                effective_link_mode(args.settings.link_mode, globals.preview),
                 &args.settings.index_locations,
                 args.settings.index_strategy,
                 args.settings.dependency_metadata,
