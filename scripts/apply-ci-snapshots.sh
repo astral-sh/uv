@@ -80,7 +80,8 @@ if [[ "$artifact_count" -eq 0 ]]; then
     exit 0
 fi
 
-echo "Downloaded $artifact_count artifact(s)"
+s=$( (( artifact_count != 1 )) && echo "s" || true)
+echo "Downloaded $artifact_count artifact$s"
 
 # Merge all artifacts into a single pending-snapshots directory.
 # Different platforms may produce different snapshots; we collect them all.
@@ -91,13 +92,12 @@ for artifact_dir in "$DOWNLOAD_DIR"/pending-snapshots-*/; do
     cp -rn "$artifact_dir"/* "$merged_dir"/ 2>/dev/null || true
 done
 
-snapshot_count="$(find "$merged_dir" -type f \( -name '*.snap.new' -o -name '*.pending-snap' \) | wc -l | tr -d ' ')"
-if [[ "$snapshot_count" -eq 0 ]]; then
+if ! find "$merged_dir" -type f \( -name '*.snap.new' -o -name '*.pending-snap' \) | grep -q .; then
     echo "No pending snapshot files found in the artifacts."
     exit 0
 fi
 
-echo "Applying $snapshot_count snapshot change(s)..."
+echo "Applying snapshot changes..."
 
 # Use cargo-insta with INSTA_PENDING_DIR to apply the snapshots
 INSTA_PENDING_DIR="$merged_dir" cargo insta "$action" --workspace
