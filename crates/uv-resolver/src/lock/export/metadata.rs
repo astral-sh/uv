@@ -464,7 +464,8 @@ struct MetadataWheel {
     /// against was found. The location does not need to exist in the future,
     /// so this should be treated as only a hint to where to look and/or
     /// recording where the wheel file originally came from.
-    url: MetadataWheelWireSource,
+    #[serde(flatten)]
+    source: Option<MetadataWheelWireSource>,
     /// A hash of the built distribution.
     ///
     /// This is only present for wheels that come from registries and direct
@@ -497,7 +498,7 @@ struct MetadataWheel {
 impl MetadataWheel {
     fn from_wheel(wheel: &Wheel) -> Self {
         Self {
-            url: MetadataWheelWireSource::from_wheel(&wheel.url),
+            source: MetadataWheelWireSource::from_wheel(&wheel.url),
             hashes: wheel.hash.as_ref().map(hashes_map).unwrap_or_default(),
             size: wheel.size,
             upload_time: wheel.upload_time,
@@ -512,19 +513,17 @@ impl MetadataWheel {
 enum MetadataWheelWireSource {
     Url { url: UrlString },
     Path { path: PortablePathBuf },
-    Filename { filename: WheelFilename },
 }
 
 impl MetadataWheelWireSource {
-    fn from_wheel(wheel: &WheelWireSource) -> Self {
+    fn from_wheel(wheel: &WheelWireSource) -> Option<Self> {
         match wheel {
-            WheelWireSource::Url { url } => Self::Url { url: url.clone() },
-            WheelWireSource::Path { path } => Self::Path {
+            WheelWireSource::Url { url } => Some(Self::Url { url: url.clone() }),
+            WheelWireSource::Path { path } => Some(Self::Path {
                 path: PortablePathBuf::from(path.as_ref()),
-            },
-            WheelWireSource::Filename { filename } => Self::Filename {
-                filename: filename.clone(),
-            },
+            }),
+            // We guarantee this as a separate field so it's redundant
+            WheelWireSource::Filename { .. } => None,
         }
     }
 }
