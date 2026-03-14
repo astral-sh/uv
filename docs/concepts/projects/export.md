@@ -51,6 +51,10 @@ used with `pip` and other Python package managers.
 $ uv export --format requirements.txt
 ```
 
+By default, `uv export` includes the project's dependencies and any
+[default dependency groups](./dependencies.md#default-groups). Optional dependencies ("extras") are
+only included when requested with flags like `--extra` or `--all-extras`.
+
 The generated `requirements.txt` file can then be installed via `uv pip install`, or with other
 tools like `pip`.
 
