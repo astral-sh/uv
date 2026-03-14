@@ -2,8 +2,6 @@ use crate::resolver::ForkMap;
 use crate::{DependencyMode, Manifest, ResolverEnvironment};
 use uv_distribution_types::{IndexMetadata, RequirementSource};
 use uv_normalize::PackageName;
-use uv_pep508::RequirementOrigin;
-use uv_pypi_types::ConflictItem;
 
 /// A map of package names to their explicit index.
 ///
@@ -19,13 +17,7 @@ use uv_pypi_types::ConflictItem;
 ///
 /// [`Indexes`] would contain a single entry mapping `torch` to `https://download.pytorch.org/whl/cu121`.
 #[derive(Debug, Default, Clone)]
-pub(crate) struct Indexes(ForkMap<Entry>);
-
-#[derive(Debug, Clone)]
-struct Entry {
-    index: IndexMetadata,
-    conflict: Option<ConflictItem>,
-}
+pub(crate) struct Indexes(ForkMap<IndexMetadata>);
 
 impl Indexes {
     /// Determine the set of explicit, pinned indexes in the [`Manifest`].
@@ -38,23 +30,12 @@ impl Indexes {
 
         for requirement in manifest.requirements(env, dependencies) {
             let RequirementSource::Registry {
-                index: Some(index),
-                conflict,
-                ..
+                index: Some(index), ..
             } = &requirement.source
             else {
                 continue;
             };
-            let index = index.clone();
-            let conflict = conflict
-                .clone()
-                .or_else(|| match requirement.origin.as_ref() {
-                    Some(RequirementOrigin::Group(_, Some(project_name), group)) => {
-                        Some(ConflictItem::from((project_name.clone(), group.clone())))
-                    }
-                    _ => None,
-                });
-            indexes.add(requirement.as_ref(), Entry { index, conflict });
+            indexes.add(requirement.as_ref(), index.clone());
         }
 
         Self(indexes)
@@ -67,16 +48,6 @@ impl Indexes {
 
     /// Return the explicit index used for a package in the given fork.
     pub(crate) fn get(&self, name: &PackageName, env: &ResolverEnvironment) -> Vec<&IndexMetadata> {
-        let entries = self.0.get(name, env);
-        entries
-            .iter()
-            .filter(|entry| {
-                entry
-                    .conflict
-                    .as_ref()
-                    .is_none_or(|conflict| env.included_by_group(conflict.as_ref()))
-            })
-            .map(|entry| &entry.index)
-            .collect()
+        self.0.get(name, env)
     }
 }
