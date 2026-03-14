@@ -56,6 +56,18 @@ By default, `uv run` and `uv sync` operates on the workspace root. For example, 
 example, `uv run` and `uv run --package albatross` would be equivalent, while
 `uv run --package bird-feeder` would run the command in the `bird-feeder` package.
 
+For commands that support it, `--all-packages` can be used to operate on all workspace members at
+once instead of just the root package. For example:
+
+```console
+$ uv sync --all-packages
+$ uv run --all-packages pytest
+$ uv export --all-packages --format requirements.txt
+```
+
+Any extras or dependency groups selected with options like `--extra`, `--group`, or related flags
+will be applied to all workspace members.
+
 ## Workspace sources
 
 Within a workspace, dependencies on workspace members are facilitated via
