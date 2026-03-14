@@ -972,41 +972,53 @@ impl InterpreterInfo {
             r#"import sys; sys.path = ["{}"] + sys.path; from python.get_interpreter_info import main; main()"#,
             tempdir.path().escape_for_python()
         );
-        let output = Command::new(interpreter)
+        let mut command = Command::new(interpreter);
+        command
             .arg("-I") // Isolated mode.
             .arg("-B") // Don't write bytecode.
             .arg("-c")
-            .arg(script)
-            .output()
-            .map_err(|err| {
-                match err.kind() {
-                    io::ErrorKind::NotFound => return Error::NotFound(interpreter.to_path_buf()),
-                    io::ErrorKind::PermissionDenied => {
-                        return Error::PermissionDenied {
-                            path: interpreter.to_path_buf(),
-                            err,
-                        };
-                    }
-                    _ => {}
-                }
-                #[cfg(windows)]
-                if let Some(APPMODEL_ERROR_NO_PACKAGE | ERROR_CANT_ACCESS_FILE) = err
-                    .raw_os_error()
-                    .and_then(|code| u32::try_from(code).ok())
-                    .map(WIN32_ERROR)
-                {
-                    // These error codes are returned if the Python interpreter is a corrupt MSIX
-                    // package, which we want to differentiate from a typical spawn failure.
-                    return Error::CorruptWindowsPackage {
+            .arg(script);
+
+        // Disable Apple's SYSTEM_VERSION_COMPAT shim so that `platform.mac_ver()` reports
+        // the real macOS version instead of "10.16" for interpreters built against older SDKs
+        // (e.g., conda with MACOSX_DEPLOYMENT_TARGET=10.15).
+        //
+        // See:
+        //
+        // - https://github.com/astral-sh/uv/issues/14267
+        // - https://github.com/pypa/packaging/blob/f2bbd4f578644865bc5cb2534768e46563ee7f66/src/packaging/tags.py#L436
+        #[cfg(target_os = "macos")]
+        command.env("SYSTEM_VERSION_COMPAT", "0");
+
+        let output = command.output().map_err(|err| {
+            match err.kind() {
+                io::ErrorKind::NotFound => return Error::NotFound(interpreter.to_path_buf()),
+                io::ErrorKind::PermissionDenied => {
+                    return Error::PermissionDenied {
                         path: interpreter.to_path_buf(),
                         err,
                     };
                 }
-                Error::SpawnFailed {
+                _ => {}
+            }
+            #[cfg(windows)]
+            if let Some(APPMODEL_ERROR_NO_PACKAGE | ERROR_CANT_ACCESS_FILE) = err
+                .raw_os_error()
+                .and_then(|code| u32::try_from(code).ok())
+                .map(WIN32_ERROR)
+            {
+                // These error codes are returned if the Python interpreter is a corrupt MSIX
+                // package, which we want to differentiate from a typical spawn failure.
+                return Error::CorruptWindowsPackage {
                     path: interpreter.to_path_buf(),
                     err,
-                }
-            })?;
+                };
+            }
+            Error::SpawnFailed {
+                path: interpreter.to_path_buf(),
+                err,
+            }
+        })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
