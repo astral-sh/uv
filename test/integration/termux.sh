@@ -21,7 +21,7 @@ pkg install -y python=3.13.12-5 \
     ncurses-ui-libs=6.6.20260124+really6.5.20250830 \
     openssl=1:3.6.1 \
     readline=8.3.1-2 \
-    zlib=1.3.2 \
+    zlib=1.3.2
 
 # Test uv
 uv --version
