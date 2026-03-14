@@ -2542,8 +2542,9 @@ pub struct PipFreezeArgs {
     #[arg(long)]
     pub exclude_editable: bool,
 
-    /// Exclude the specified package(s) from the output. Repeat to exclude
-    /// multiple packages, e.g., `--exclude pip --exclude setuptools`.
+    /// Exclude the specified package(s) from the output.
+    ///
+    /// May be provided multiple times.
     #[arg(long)]
     pub r#exclude: Vec<PackageName>,
 
@@ -2614,8 +2615,9 @@ pub struct PipListArgs {
     #[arg(long, conflicts_with = "editable")]
     pub exclude_editable: bool,
 
-    /// Exclude the specified package(s) from the output. Repeat to exclude
-    /// multiple packages, e.g., `--exclude pip --exclude setuptools`.
+    /// Exclude the specified package(s) from the output.
+    ///
+    /// May be provided multiple times.
     #[arg(long, value_hint = ValueHint::Other)]
     pub r#exclude: Vec<PackageName>,
 
