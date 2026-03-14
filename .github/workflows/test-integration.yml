@@ -121,16 +121,16 @@ jobs:
         shell: bash -el {0}
         run: conda info
 
-      - name: "Install a package (regression test for #14267)"
+      - name: "Install a package with macOS macOS 11.0 wheels"
         shell: bash -el {0}
         run: |
-          echo "$CONDA_PREFIX"
-          # greenlet has `macosx_11_0_universal2` wheels; conda interpreters
-          # on Intel Macs previously got wrong platform tags (`macosx_10_16`)
-          # causing uv to miss the wheel. Using `--only-binary` ensures this
-          # fails if the platform tags are wrong instead of falling back to
-          # a source build.
-          ./uv pip install --only-binary :all: 'greenlet>=3.1'
+          # greenlet has `macosx_11_0_universal2` wheels. Previously, conda interpreters on Intel
+          # macOS reported the incorrect platform tag `macosx_10_16` causing uv to consider the
+          # wheel incompatible. See https://github.com/astral-sh/uv/issues/14267
+          #
+          # Using `--only-binary` ensures this fails if the platform tags are wrong instead of
+          # falling back to a source build.
+          ./uv pip install --no-build 'greenlet==3.3.2'
 
   integration-test-deadsnakes-39-linux:
     name: "deadsnakes python3.9 on ubuntu"
