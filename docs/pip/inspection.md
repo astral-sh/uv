@@ -20,6 +20,12 @@ To list all the packages in the environment in a `requirements.txt` format:
 $ uv pip freeze
 ```
 
+Repeat `--exclude` to omit multiple packages from the output:
+
+```console
+$ uv pip freeze --exclude pip --exclude setuptools
+```
+
 ## Inspecting a package
 
 To show information about an installed package, e.g., `numpy`:
