@@ -344,21 +344,130 @@ fn find_module_path_from_package_name(
             .expect("non-empty package name prefix must be valid package name")
             .as_dist_info_name()
             .to_string();
-        let module_relative = PathBuf::from(format!("{module_name}-stubs"));
-        let init_pyi = src_root.join(&module_relative).join("__init__.pyi");
-        if !init_pyi.is_file() {
-            return Err(Error::MissingInitPy(init_pyi));
+        let normalized_relative = PathBuf::from(format!("{module_name}-stubs"));
+
+        // First try to find the actual directory with matching casing on disk. This handles
+        // case-insensitive filesystems where `is_file()` might succeed with wrong casing,
+        // and case-sensitive filesystems where the directory has different casing than the
+        // normalized package name.
+        if let Some(found) =
+            find_matching_module(src_root, &module_name, Some("-stubs"), "__init__.pyi")
+        {
+            return Ok(found);
         }
-        Ok(module_relative)
+
+        let init_pyi = src_root.join(&normalized_relative).join("__init__.pyi");
+        Err(Error::MissingInitPy(init_pyi))
     } else {
         // This name is always lowercase.
-        let module_relative = PathBuf::from(package_name.as_dist_info_name().to_string());
-        let init_py = src_root.join(&module_relative).join("__init__.py");
-        if !init_py.is_file() {
-            return Err(Error::MissingInitPy(init_py));
+        let normalized_name = package_name.as_dist_info_name().to_string();
+
+        // First try to find the actual directory with matching casing on disk. This handles
+        // case-insensitive filesystems where `is_file()` might succeed with wrong casing,
+        // and case-sensitive filesystems where the directory has different casing than the
+        // normalized package name (e.g., `hunterMakesPy` vs `huntermakespy`).
+        if let Some(found) =
+            find_matching_module(src_root, &normalized_name, None, "__init__.py")
+        {
+            return Ok(found);
         }
-        Ok(module_relative)
+
+        let init_py = src_root
+            .join(&normalized_name)
+            .join("__init__.py");
+        Err(Error::MissingInitPy(init_py))
     }
+}
+
+/// Scan `src_root` for a directory whose name, when normalized (lowercased, with `-`/`.`
+/// replaced by `_`), matches `expected_name`, and that contains the given `init_file`.
+///
+/// If `suffix` is provided (e.g., `"-stubs"`), the directory must end with that suffix,
+/// and only the prefix is normalized for comparison.
+///
+/// Returns the matching directory as a relative `PathBuf` if exactly one match is found.
+/// This ensures we use the actual filesystem casing, which is important for:
+/// - Case-sensitive filesystems where the directory has different casing (e.g., `hunterMakesPy`)
+/// - Case-insensitive filesystems where `is_file()` would succeed with wrong casing but
+///   the wrong path would break glob-based file inclusion in source distributions.
+fn find_matching_module(
+    src_root: &Path,
+    expected_name: &str,
+    suffix: Option<&str>,
+    init_file: &str,
+) -> Option<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(src_root) else {
+        return None;
+    };
+
+    let mut matches = Vec::new();
+    for entry in entries.flatten() {
+        if !entry.file_type().map_or(false, |ft| ft.is_dir()) {
+            continue;
+        }
+        let dir_name = entry.file_name();
+        let Some(dir_name_str) = dir_name.to_str() else {
+            continue;
+        };
+
+        // Normalize the directory name for comparison: lowercase and replace `-`/`.` with `_`.
+        let candidate = if let Some(suffix) = suffix {
+            let Some(stem) = dir_name_str.strip_suffix(suffix) else {
+                continue;
+            };
+            normalize_module_name(stem)
+        } else {
+            normalize_module_name(dir_name_str)
+        };
+
+        if candidate == expected_name && entry.path().join(init_file).is_file() {
+            matches.push(PathBuf::from(dir_name_str));
+        }
+    }
+
+    match matches.as_slice() {
+        [found] => {
+            let found = found.clone();
+            let normalized_dir_name = if let Some(suffix) = suffix {
+                format!("{expected_name}{suffix}")
+            } else {
+                expected_name.to_string()
+            };
+            if found.as_os_str() != normalized_dir_name.as_str() {
+                warn_user_once!(
+                    "Found module `{}` with non-normalized casing (expected `{}`). \
+                     Consider setting `tool.uv.build-backend.module-name = \"{}\"` \
+                     explicitly for cross-platform consistency.",
+                    found.display(),
+                    normalized_dir_name,
+                    found.display()
+                );
+            }
+            Some(found)
+        }
+        [] => None,
+        _ => {
+            let names: Vec<_> = matches.iter().map(|m| m.display().to_string()).collect();
+            warn_user_once!(
+                "Multiple modules found matching package name `{}`: {}. \
+                 Set `tool.uv.build-backend.module-name` explicitly to disambiguate.",
+                expected_name,
+                names.join(", ")
+            );
+            None
+        }
+    }
+}
+
+/// Normalize a module name for case-insensitive comparison: lowercase and replace `-`/`.`
+/// with `_`.
+fn normalize_module_name(name: &str) -> String {
+    name.chars()
+        .map(|c| match c {
+            '-' | '.' => '_',
+            c => c.to_ascii_lowercase(),
+        })
+        .collect()
 }
 
 /// Determine the relative module path from an explicit module name.
@@ -1071,6 +1180,49 @@ mod tests {
             err_message,
             @"Expected a Python module at: [TEMP_PATH]/src/camel_case/__init__.py"
         );
+    }
+
+    /// Check that a mixed-case module directory is found via case-insensitive lookup
+    /// when no explicit `module-name` is set (issue #18423).
+    #[test]
+    fn test_case_insensitive_module_discovery() {
+        let src = TempDir::new().unwrap();
+        fs_err::write(
+            src.path().join("pyproject.toml"),
+            indoc! {r#"
+            [project]
+            name = "hunterMakesPy"
+            version = "1.0.0"
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6.0"]
+            build-backend = "uv_build"
+            "#
+            },
+        )
+        .unwrap();
+
+        // Create the module with the original (non-normalized) casing.
+        fs_err::create_dir_all(src.path().join("src").join("hunterMakesPy")).unwrap();
+        File::create(
+            src.path()
+                .join("src")
+                .join("hunterMakesPy")
+                .join("__init__.py"),
+        )
+        .unwrap();
+
+        let dist = TempDir::new().unwrap();
+        let build1 = build(src.path(), dist.path(), &[]).unwrap();
+
+        assert_snapshot!(build1.wheel_contents.join("\n"), @"
+        hunterMakesPy/
+        hunterMakesPy/__init__.py
+        huntermakespy-1.0.0.dist-info/
+        huntermakespy-1.0.0.dist-info/METADATA
+        huntermakespy-1.0.0.dist-info/RECORD
+        huntermakespy-1.0.0.dist-info/WHEEL
+        ");
     }
 
     /// Test that no partial files are left in dist directory when build fails.
