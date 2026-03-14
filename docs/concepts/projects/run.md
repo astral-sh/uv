@@ -9,6 +9,12 @@ environment:
 $ uv run python -c "import example"
 ```
 
+To start an interactive Python REPL in the project environment, run:
+
+```console
+$ uv run python
+```
+
 When using `run`, uv will ensure that the project environment is up-to-date before running the given
 command.
 
