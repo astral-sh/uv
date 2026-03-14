@@ -16,7 +16,7 @@ use tracing::{debug, trace, warn};
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_configuration::Concurrency;
+use uv_configuration::{Concurrency, DependencyGroupsWithDefaults};
 use uv_fs::Simplified;
 use uv_platform::{Arch, Libc};
 use uv_preview::{Preview, PreviewFeature};
@@ -30,13 +30,15 @@ use uv_python::managed::{
 };
 use uv_python::{
     ImplementationName, Interpreter, PythonDownloads, PythonInstallationKey,
-    PythonInstallationMinorVersionKey, PythonRequest, PythonVersionFile,
+    PythonInstallationMinorVersionKey, PythonRequest, PythonVariant, PythonVersionFile,
     VersionFileDiscoveryOptions, VersionFilePreference, VersionRequest,
 };
 use uv_shell::Shell;
 use uv_trampoline_builder::{Launcher, LauncherKind};
-use uv_warnings::{warn_user, write_error_chain};
+use uv_warnings::{warn_user, warn_user_once, write_error_chain};
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
 
+use crate::commands::project::find_requires_python;
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, elapsed};
@@ -364,7 +366,7 @@ async fn perform_install(
             }
             minor_version_requests.into_iter().collect::<Vec<_>>()
         } else {
-            PythonVersionFile::discover(
+            let version_file_versions = PythonVersionFile::discover(
                 project_dir,
                 &VersionFileDiscoveryOptions::default()
                     .with_no_config(no_config)
@@ -378,22 +380,36 @@ async fn perform_install(
                 );
             })
             .map(PythonVersionFile::into_versions)
-            .inspect(|_| is_from_python_version_file = true)
-            .unwrap_or_else(|| {
-                // If no version file is found and no requests were made
-                // TODO(zanieb): We should consider differentiating between a global Python version
-                // file here, allowing a request from there to enable `is_default_install`.
-                is_default_install = true;
-                vec![if reinstall {
-                    // On bare `--reinstall`, reinstall all Python versions
-                    PythonRequest::Any
+            .inspect(|_| is_from_python_version_file = true);
+
+            let versions = if let Some(versions) = version_file_versions {
+                versions
+            } else {
+                // No version file found; try to discover `requires-python` from the workspace
+                let requires_python_request = discover_requires_python_request(project_dir).await;
+
+                if let Some(request) = requires_python_request {
+                    debug!(
+                        "Using Python request `{}` from `requires-python` metadata",
+                        request.to_canonical_string()
+                    );
+                    vec![request]
                 } else {
-                    PythonRequest::Default
-                }]
-            })
-            .into_iter()
-            .map(|request| InstallRequest::new(request, &download_list))
-            .collect::<Result<Vec<_>>>()?
+                    // Fall back to the default install behavior
+                    is_default_install = true;
+                    vec![if reinstall {
+                        // On bare `--reinstall`, reinstall all Python versions
+                        PythonRequest::Any
+                    } else {
+                        PythonRequest::Default
+                    }]
+                }
+            };
+
+            versions
+                .into_iter()
+                .map(|request| InstallRequest::new(request, &download_list))
+                .collect::<Result<Vec<_>>>()?
         }
     } else {
         targets
@@ -1348,4 +1364,37 @@ fn matches_build(download_build: Option<&str>, installation_build: Option<&str>)
         // Download doesn't have build info, assume matches
         (None, _) => true,
     }
+}
+
+/// Discover the `requires-python` specifier from the workspace `pyproject.toml`, if any,
+/// and return it as a [`PythonRequest`].
+///
+/// This enables `uv python install` (with no arguments) to respect the project's
+/// `requires-python` constraint, consistent with `uv python find`.
+async fn discover_requires_python_request(project_dir: &Path) -> Option<PythonRequest> {
+    let workspace_cache = WorkspaceCache::default();
+    let project =
+        match VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
+            .await
+        {
+            Ok(project) => project,
+            Err(WorkspaceError::MissingProject(_))
+            | Err(WorkspaceError::MissingPyprojectToml)
+            | Err(WorkspaceError::NonWorkspace(_)) => return None,
+            Err(err) => {
+                warn_user_once!("{err}");
+                return None;
+            }
+        };
+
+    let groups = DependencyGroupsWithDefaults::none();
+    let requires_python = find_requires_python(project.workspace(), &groups)
+        .ok()
+        .flatten()?;
+    let specifiers = requires_python.specifiers();
+
+    Some(PythonRequest::Version(VersionRequest::Range(
+        specifiers.clone(),
+        PythonVariant::Default,
+    )))
 }
