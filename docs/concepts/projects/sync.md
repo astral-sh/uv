@@ -4,10 +4,6 @@ Locking is the process of resolving your project's dependencies into a
 [lockfile](./layout.md#the-lockfile). Syncing is the process of installing a subset of packages from
 the lockfile into the [project environment](./layout.md#the-project-environment).
 
-Project commands use uv's [universal resolution](../resolution.md#universal-resolution). As a
-result, `uv lock`, `uv sync`, and the automatic locking performed by commands like `uv run`
-resolve dependencies across supported platforms and Python versions before syncing the environment.
-
 ## Automatic lock and sync
 
 Locking and syncing are _automatic_ in uv. For example, when `uv run` is used, the project is locked
