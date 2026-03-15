@@ -1,5 +1,3 @@
-use std::collections::hash_map::Entry;
-
 use rustc_hash::FxHashMap;
 
 use uv_distribution_types::{CompatibleDist, DistributionId, Identifier, ResolvedDist};
@@ -27,26 +25,16 @@ pub(crate) struct FilePins(FxHashMap<(PackageName, uv_pep440::Version), FilePin>
 // final resolution).
 impl FilePins {
     /// Pin a candidate package.
+    ///
+    /// Within a single fork, the same `(name, version)` always resolves to the same distribution,
+    /// so we skip construction when an entry already exists.
     pub(crate) fn insert(&mut self, candidate: &Candidate, dist: &CompatibleDist) {
-        let pin = FilePin {
-            dist: dist.for_installation().to_owned(),
-            metadata_id: dist.for_resolution().distribution_id(),
-        };
-        match self
-            .0
+        self.0
             .entry((candidate.name().clone(), candidate.version().clone()))
-        {
-            Entry::Occupied(mut entry) => {
-                if entry.get().dist.distribution_id() != pin.dist.distribution_id()
-                    || entry.get().metadata_id != pin.metadata_id
-                {
-                    entry.insert(pin);
-                }
-            }
-            Entry::Vacant(entry) => {
-                entry.insert(pin);
-            }
-        }
+            .or_insert_with(|| FilePin {
+                dist: dist.for_installation().to_owned(),
+                metadata_id: dist.for_resolution().distribution_id(),
+            });
     }
 
     /// Return the pinned file for the given package name and version, if it exists.
