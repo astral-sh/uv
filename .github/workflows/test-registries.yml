@@ -10,6 +10,37 @@ on:
         required: true
         type: string
         default: "uv-test-registries"
+    secrets:
+      UV_TEST_ARTIFACTORY_TOKEN:
+        required: true
+      UV_TEST_ARTIFACTORY_URL:
+        required: true
+      UV_TEST_ARTIFACTORY_USERNAME:
+        required: true
+      UV_TEST_AWS_URL:
+        required: true
+      UV_TEST_AZURE_TOKEN:
+        required: true
+      UV_TEST_AZURE_URL:
+        required: true
+      UV_TEST_CLOUDSMITH_TOKEN:
+        required: true
+      UV_TEST_CLOUDSMITH_URL:
+        required: true
+      UV_TEST_CLOUDSMITH_USERNAME:
+        required: true
+      UV_TEST_GCP_URL:
+        required: true
+      UV_TEST_GEMFURY_TOKEN:
+        required: true
+      UV_TEST_GEMFURY_URL:
+        required: true
+      UV_TEST_GEMFURY_USERNAME:
+        required: true
+      UV_TEST_GITLAB_TOKEN:
+        required: true
+      UV_TEST_GITLAB_URL:
+        required: true
 
 permissions: {}
 
