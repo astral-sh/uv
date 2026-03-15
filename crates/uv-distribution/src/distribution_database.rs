@@ -390,6 +390,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             && !matches!(extension, SourceDistExtension::TarGz)
         {
             if matches!(dist, SourceDist::Registry(_)) {
+                // Observe that we display a slightly different warning when the sdist comes
+                // from a registry, since that suggests that the user has inadvertently
+                // (rather than explicitly) depended on a non-compliant sdist.
                 warn_user_once!(
                     "{dist} uses a legacy source distribution format ('.{extension}') that is not compliant with PEP 625. A future version of uv will reject this source distribution. Consider upgrading to a newer version of {package}",
                     package = dist.name(),
