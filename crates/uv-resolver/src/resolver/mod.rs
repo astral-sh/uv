@@ -1810,17 +1810,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     return Ok(Dependencies::Unforkable(Vec::default()));
                 }
 
-                let (distribution_id, task) = if let Some(distribution_id) =
-                    pins.metadata_id(name, version)
+                // Look up the distribution ID from the pins (common case) or fork URLs.
+                let owned_id;
+                let distribution_id = if let Some((_, metadata_id)) =
+                    pins.dist_and_id(name, version)
                 {
-                    (
-                        distribution_id.clone(),
-                        pins.get(name, version)
-                            .map_or_else(|| format!("{name}=={version}"), ToString::to_string),
-                    )
+                    metadata_id
                 } else if let Some(url) = fork_urls.get(name) {
                     let dist = Dist::from_url(name.clone(), url.clone())?;
-                    (dist.distribution_id(), dist.to_string())
+                    owned_id = dist.distribution_id();
+                    &owned_id
                 } else {
                     debug_assert!(
                         false,
@@ -1845,8 +1844,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let response = self
                     .index
                     .distributions()
-                    .wait_blocking(&distribution_id)
-                    .ok_or_else(|| ResolveError::UnregisteredTask(task))?;
+                    .wait_blocking(distribution_id)
+                    .ok_or_else(|| ResolveError::UnregisteredTask(format!("{name}=={version}")))?;
 
                 let metadata = match &*response {
                     MetadataResponse::Found(archive) => &archive.metadata,
