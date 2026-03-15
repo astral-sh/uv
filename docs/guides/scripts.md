@@ -342,10 +342,6 @@ for more details on requesting Python versions.
 
 On Windows `uv` will run your script ending with `.pyw` extension using `pythonw`:
 
-If you want to invoke the same command without opening a console window for `uv` itself, use
-`uvw` instead. `uvw` is a Windows-only alias for `uv`, so the same arguments work with either
-binary.
-
 ```python title="example.pyw"
 from tkinter import Tk, ttk
 
@@ -360,6 +356,10 @@ root.mainloop()
 ```console
 PS> uv run example.pyw
 ```
+
+Use `uvw` instead if you want to avoid opening a console window for `uv` itself, e.g., when
+running a GUI in the background. `uvw` is a Windows-only alias for `uv` and accepts all the same
+options.
 
 ```console
 PS> uvw run example.pyw
