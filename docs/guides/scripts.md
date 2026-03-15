@@ -357,9 +357,8 @@ root.mainloop()
 PS> uv run example.pyw
 ```
 
-Use `uvw` instead if you want to avoid opening a console window for `uv` itself, e.g., when
-running a GUI in the background. `uvw` is a Windows-only alias for `uv` and accepts all the same
-options.
+Use `uvw` instead if you want to avoid opening a console window for `uv` itself, e.g., when running
+a GUI in the background. `uvw` is a Windows-only alias for `uv` and accepts all the same options.
 
 ```console
 PS> uvw run example.pyw
