@@ -226,6 +226,22 @@ jobs:
     with:
       sha: ${{ github.sha }}
       environment-name: uv-test-registries
+    secrets:
+      UV_TEST_ARTIFACTORY_TOKEN: ${{ secrets.UV_TEST_ARTIFACTORY_TOKEN }}
+      UV_TEST_ARTIFACTORY_URL: ${{ secrets.UV_TEST_ARTIFACTORY_URL }}
+      UV_TEST_ARTIFACTORY_USERNAME: ${{ secrets.UV_TEST_ARTIFACTORY_USERNAME }}
+      UV_TEST_AWS_URL: ${{ secrets.UV_TEST_AWS_URL }}
+      UV_TEST_AZURE_TOKEN: ${{ secrets.UV_TEST_AZURE_TOKEN }}
+      UV_TEST_AZURE_URL: ${{ secrets.UV_TEST_AZURE_URL }}
+      UV_TEST_CLOUDSMITH_TOKEN: ${{ secrets.UV_TEST_CLOUDSMITH_TOKEN }}
+      UV_TEST_CLOUDSMITH_URL: ${{ secrets.UV_TEST_CLOUDSMITH_URL }}
+      UV_TEST_CLOUDSMITH_USERNAME: ${{ secrets.UV_TEST_CLOUDSMITH_USERNAME }}
+      UV_TEST_GCP_URL: ${{ secrets.UV_TEST_GCP_URL }}
+      UV_TEST_GEMFURY_TOKEN: ${{ secrets.UV_TEST_GEMFURY_TOKEN }}
+      UV_TEST_GEMFURY_URL: ${{ secrets.UV_TEST_GEMFURY_URL }}
+      UV_TEST_GEMFURY_USERNAME: ${{ secrets.UV_TEST_GEMFURY_USERNAME }}
+      UV_TEST_GITLAB_TOKEN: ${{ secrets.UV_TEST_GITLAB_TOKEN }}
+      UV_TEST_GITLAB_URL: ${{ secrets.UV_TEST_GITLAB_URL }}
 
   test-system:
     needs:
