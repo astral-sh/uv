@@ -83,8 +83,7 @@ for the lifetime of the Jupyter server, but may disappear on subsequent `jupyter
 
 If you're working with a notebook that relies on pip (e.g., via the `%pip` magic), you can include
 pip in your project's virtual environment by running `uv venv --seed` prior to starting the Jupyter
-server. This installs `pip` along with any dependencies required by the seeded packages. For
-example, given:
+server. For example, given:
 
 ```console
 $ uv venv --seed

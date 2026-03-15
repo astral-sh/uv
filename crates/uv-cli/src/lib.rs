@@ -3100,11 +3100,10 @@ pub struct VenvArgs {
     #[arg(long, alias = "no-workspace")]
     pub no_project: bool,
 
-    /// Install seed packages and any required dependencies into the virtual environment. uv seeds
-    /// from `pip`, `setuptools`, and `wheel` [env: UV_VENV_SEED=]
+    /// Install seed packages (one or more of: `pip`, `setuptools`, and `wheel`) into the virtual
+    /// environment [env: UV_VENV_SEED=]
     ///
-    /// Note that `setuptools` and `wheel` are not included as top-level seed packages in Python
-    /// 3.12+ environments.
+    /// Note that `setuptools` and `wheel` are not included in Python 3.12+ environments.
     #[arg(long, value_parser = clap::builder::BoolishValueParser::new())]
     pub seed: bool,
 
