@@ -12970,7 +12970,7 @@ fn lock_sources_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: workspace @ https://github.com/user-attachments/files/16592193/workspace.zip is not a standards-compliant source distribution: expected '.tar.gz' but found '.zip'. A future version of uv will reject source distributions that do not match the specification defined in PEP 625
+    warning: workspace @ https://github.com/user-attachments/files/16592193/workspace.zip is not a standards-compliant source distribution: expected '.tar.gz' but found '.zip'. A future version of uv will reject source distributions that do not meet the requirements specified in PEP 625
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
@@ -13107,7 +13107,7 @@ fn lock_sources_archive() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: workspace @ file://[TEMP_DIR]/workspace.zip is not a standards-compliant source distribution: expected '.tar.gz' but found '.zip'. A future version of uv will reject source distributions that do not match the specification defined in PEP 625
+    warning: workspace @ file://[TEMP_DIR]/workspace.zip is not a standards-compliant source distribution: expected '.tar.gz' but found '.zip'. A future version of uv will reject source distributions that do not meet the requirements specified in PEP 625
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
