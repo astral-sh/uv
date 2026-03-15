@@ -366,15 +366,11 @@ fn find_module_path_from_package_name(
         // case-insensitive filesystems where `is_file()` might succeed with wrong casing,
         // and case-sensitive filesystems where the directory has different casing than the
         // normalized package name (e.g., `hunterMakesPy` vs `huntermakespy`).
-        if let Some(found) =
-            find_matching_module(src_root, &normalized_name, None, "__init__.py")
-        {
+        if let Some(found) = find_matching_module(src_root, &normalized_name, None, "__init__.py") {
             return Ok(found);
         }
 
-        let init_py = src_root
-            .join(&normalized_name)
-            .join("__init__.py");
+        let init_py = src_root.join(&normalized_name).join("__init__.py");
         Err(Error::MissingInitPy(init_py))
     }
 }
@@ -396,13 +392,13 @@ fn find_matching_module(
     suffix: Option<&str>,
     init_file: &str,
 ) -> Option<PathBuf> {
-    let Ok(entries) = std::fs::read_dir(src_root) else {
+    let Ok(entries) = fs_err::read_dir(src_root) else {
         return None;
     };
 
     let mut matches = Vec::new();
     for entry in entries.flatten() {
-        if !entry.file_type().map_or(false, |ft| ft.is_dir()) {
+        if !entry.file_type().is_ok_and(|ft| ft.is_dir()) {
             continue;
         }
         let dir_name = entry.file_name();
