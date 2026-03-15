@@ -456,14 +456,11 @@ impl ResolverOutput {
                 Some(metadata),
             )
         } else {
-            let dist = pins
-                .get(name, version)
-                .expect("Every package should be pinned")
-                .clone();
+            let (dist, metadata_id) = pins
+                .dist_and_id(name, version)
+                .expect("Every package should be pinned");
+            let dist = dist.clone();
             let hashes_id = dist.distribution_id();
-            let metadata_id = pins
-                .metadata_id(name, version)
-                .expect("Every package should have pinned metadata");
 
             // Track yanks for any registry distributions.
             match dist.yanked() {

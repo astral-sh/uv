@@ -48,14 +48,14 @@ impl FilePins {
             .map(|pin| &pin.dist)
     }
 
-    /// Return the distribution id whose metadata was used during resolution.
-    pub(crate) fn metadata_id(
+    /// Return the pinned distribution and its metadata id in a single lookup.
+    pub(crate) fn dist_and_id(
         &self,
         name: &PackageName,
         version: &uv_pep440::Version,
-    ) -> Option<&DistributionId> {
+    ) -> Option<(&ResolvedDist, &DistributionId)> {
         self.0
             .get(&(name.clone(), version.clone()))
-            .map(|pin| &pin.metadata_id)
+            .map(|pin| (&pin.dist, &pin.metadata_id))
     }
 }
