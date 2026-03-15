@@ -396,7 +396,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 warn_user_once!(
                     "{dist} uses a legacy source distribution format ('.{extension}') that is not compliant with PEP 625. A future version of uv will reject this source distribution. Consider upgrading to a newer version of {package}",
                     package = dist.name(),
-                )
+                );
             } else {
                 warn_user_once!(
                     "{dist} is not a standards-compliant source distribution: expected '.tar.gz' but found '.{extension}'. A future version of uv will reject source distributions that do not meet the requirements specified in PEP 625",
