@@ -881,6 +881,7 @@ fn install_sdist_archive_type_bz2() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    warning: bz2 @ file://[WORKSPACE]/test/links/bz2-1.0.0.tar.bz2 is not a standards-compliant source distribution: expected '.tar.gz' but found '.tar.bz2'. A future version of uv will reject source distributions that do not meet the requirements specified in PEP 625
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + bz2==1.0.0 (from file://[WORKSPACE]/test/links/bz2-1.0.0.tar.bz2)

@@ -6323,6 +6323,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-redacted",
  "uv-types",
+ "uv-warnings",
  "uv-workspace",
  "walkdir",
  "zip",
