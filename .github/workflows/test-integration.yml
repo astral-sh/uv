@@ -211,7 +211,7 @@ jobs:
         run: |
           python_path=$(./uv python find 3.13)
           echo "Found Python at: $python_path"
-          [[ "$python_path" =~ \.local/share/uv/python/cpython-3\.13\.[0-9]+-linux-aarch64-gnu/bin/python3\.13$ ]]
+          [[ "$python_path" == */.local/share/uv/python/cpython-3.13.*-linux-aarch64-gnu/bin/python3.13 ]]
 
       - name: "Create a virtual environment (stdlib)"
         run: |
