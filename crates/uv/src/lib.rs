@@ -90,7 +90,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     // Determine the project directory.
     //
     // If `--project` points to a `pyproject.toml` file, resolve to its parent directory,
-    // since downstream code (e.g., `FilesystemOptions::find`) expects a directory. See #18508.
+    // since downstream code (e.g., `FilesystemOptions::find`) expects a directory.
     let project_dir = cli
         .top_level
         .global_args
