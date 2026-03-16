@@ -10515,7 +10515,7 @@ fn preview_features_pyproject_toml() -> anyhow::Result<()> {
         |
       1 | [tool.uv]
         | ^^^^^^^^^
-      Cannot specify both `preview` and `preview-features`.
+      cannot specify both `preview` and `preview-features`.
     "#);
 
     // Invalid features produce a warning
@@ -10646,7 +10646,7 @@ fn preview_features_pyproject_toml() -> anyhow::Result<()> {
         |
       2 | preview-features = ["i-hope-we-never-have-a-preview-feature-with-this-name"]
         |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      data did not match any variant of untagged enum PreviewFeaturesOption
+      unknown preview feature: `i-hope-we-never-have-a-preview-feature-with-this-name`
     "#);
 
     // Other error handling
@@ -10777,7 +10777,7 @@ fn preview_features_pyproject_toml() -> anyhow::Result<()> {
         |
       2 | preview-features = 123
         |                    ^^^
-      data did not match any variant of untagged enum PreviewFeaturesOption
+      invalid type: integer `123`, expected a boolean or a list of preview feature names
     "#);
 
     Ok(())
@@ -11603,7 +11603,7 @@ fn preview_features_uv_toml() -> anyhow::Result<()> {
 
     ----- stderr -----
     error: Failed to parse: `uv.toml`
-      Caused by: Cannot specify both `preview` and `preview-features`.
+      Caused by: cannot specify both `preview` and `preview-features`.
     ");
 
     // Invalid feature name produces an error
@@ -11621,7 +11621,7 @@ fn preview_features_uv_toml() -> anyhow::Result<()> {
       |
     1 | preview-features = ["i-hope-we-never-have-a-preview-feature-with-this-name"]
       |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    data did not match any variant of untagged enum PreviewFeaturesOption
+    unknown preview feature: `i-hope-we-never-have-a-preview-feature-with-this-name`
     "#);
 
     // Other error handling
@@ -11637,7 +11637,7 @@ fn preview_features_uv_toml() -> anyhow::Result<()> {
       |
     1 | preview-features = 123
       |                    ^^^
-    data did not match any variant of untagged enum PreviewFeaturesOption
+    invalid type: integer `123`, expected a boolean or a list of preview feature names
     ");
 
     Ok(())

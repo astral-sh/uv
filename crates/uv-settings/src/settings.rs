@@ -2604,12 +2604,43 @@ pub struct AddOptions {
 }
 
 /// Represents the `preview-features` configuration option
-#[derive(Debug, Clone, Deserialize)]
-#[serde(untagged)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "schemars", schemars(untagged))]
 pub enum PreviewFeaturesOption {
     Toggle(bool),
     Features(Vec<PreviewFeature>),
+}
+
+impl<'de> Deserialize<'de> for PreviewFeaturesOption {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de;
+
+        struct Visitor;
+
+        impl<'de> de::Visitor<'de> for Visitor {
+            type Value = PreviewFeaturesOption;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("a boolean or a list of preview feature names")
+            }
+
+            fn visit_bool<E: de::Error>(self, v: bool) -> Result<Self::Value, E> {
+                Ok(PreviewFeaturesOption::Toggle(v))
+            }
+
+            fn visit_seq<A: de::SeqAccess<'de>>(self, seq: A) -> Result<Self::Value, A::Error> {
+                let features =
+                    Vec::<PreviewFeature>::deserialize(de::value::SeqAccessDeserializer::new(seq))?;
+                Ok(PreviewFeaturesOption::Features(features))
+            }
+        }
+
+        deserializer.deserialize_any(Visitor)
+    }
 }
 
 /// Represents the user's preview configuration from either `preview` (bool)
@@ -2633,7 +2664,7 @@ impl PreviewOption {
         preview_features: Option<PreviewFeaturesOption>,
     ) -> Result<Option<Self>, &'static str> {
         match (preview, preview_features) {
-            (Some(_), Some(_)) => Err("Cannot specify both `preview` and `preview-features`."),
+            (Some(_), Some(_)) => Err("cannot specify both `preview` and `preview-features`."),
             #[expect(deprecated)]
             (Some(b), None) => Ok(Some(Self::Preview(b))),
             (None, Some(features)) => Ok(Some(Self::PreviewFeatures(features))),

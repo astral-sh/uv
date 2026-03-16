@@ -274,8 +274,10 @@ impl serde::Serialize for PreviewFeature {
 }
 
 #[derive(Debug, Error, Clone)]
-#[error("Unknown feature flag")]
-pub struct PreviewFeatureParseError;
+#[error("unknown preview feature: `{input}`")]
+pub struct PreviewFeatureParseError {
+    input: String,
+}
 
 impl FromStr for PreviewFeature {
     type Err = PreviewFeatureParseError;
@@ -310,7 +312,11 @@ impl FromStr for PreviewFeature {
             "publish-require-normalized" => Self::PublishRequireNormalized,
             "audit" => Self::Audit,
             "project-directory-must-exist" => Self::ProjectDirectoryMustExist,
-            _ => return Err(PreviewFeatureParseError),
+            _ => {
+                return Err(PreviewFeatureParseError {
+                    input: s.to_string(),
+                });
+            }
         })
     }
 }
