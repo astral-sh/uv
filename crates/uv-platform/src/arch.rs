@@ -108,8 +108,8 @@ impl Arch {
 fn arch_from_uname() -> Option<target_lexicon::Architecture> {
     #[cfg(unix)]
     {
-        let uname = nix::sys::utsname::uname().ok()?;
-        let machine = uname.machine().to_str()?;
+        let uname = rustix::system::uname();
+        let machine = uname.machine().to_str().ok()?;
         let architecture = target_lexicon::Architecture::from_str(machine).ok()?;
         if matches!(architecture, target_lexicon::Architecture::Unknown) {
             return None;
