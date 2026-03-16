@@ -203,14 +203,16 @@ jobs:
       - name: "Prepare binary"
         run: chmod +x ./uv
 
+      - name: "Install Python via uv"
+        run: |
+          ./uv python install -v 3.13
+
       - name: "Verify platform detection"
         run: |
-          ./uv python install -v 3.13 2>&1 | tee install-log.txt
-          # Ensure we did not select a soft-float (gnueabi) variant on a hard-float system
-          if grep -q 'gnueabi[^h]' install-log.txt; then
-            echo "Error: uv selected a soft-float (gnueabi) Python variant on aarch64"
-            exit 1
-          fi
+          python_path=$(./uv python find 3.13)
+          echo "Found Python at: $python_path"
+          # On aarch64, the path should contain 'aarch64', not a soft-float armv7 variant
+          echo "$python_path" | grep -q 'aarch64'
 
       - name: "Create a virtual environment (stdlib)"
         run: |
