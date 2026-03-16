@@ -6738,6 +6738,7 @@ dependencies = [
  "goblin",
  "indoc",
  "insta",
+ "nix 0.31.2",
  "procfs",
  "regex",
  "rustix",
