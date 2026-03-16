@@ -23,7 +23,9 @@ path = "benches/uv.rs"
 harness = false
 
 [dev-dependencies]
+uv = { path = "../uv", default-features = false }
 uv-cache = { workspace = true }
+uv-cli = { workspace = true }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-dispatch = { workspace = true }
@@ -42,9 +44,11 @@ uv-types = { workspace = true }
 uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
+clap = { workspace = true }
 criterion = { version = "4.0.3", default-features = false, package = "codspeed-criterion-compat", features = ["async_tokio"] }
 jiff = { workspace = true }
 tokio = { workspace = true }
+toml = { workspace = true }
 
 [package.metadata.cargo-shear]
 ignored = ["uv-extract"]

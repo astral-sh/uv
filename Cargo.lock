@@ -5873,10 +5873,14 @@ name = "uv-bench"
 version = "0.0.30"
 dependencies = [
  "anyhow",
+ "clap",
  "codspeed-criterion-compat",
  "jiff",
  "tokio",
+ "toml",
+ "uv",
  "uv-cache",
+ "uv-cli",
  "uv-client",
  "uv-configuration",
  "uv-dispatch",
