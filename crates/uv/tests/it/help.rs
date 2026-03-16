@@ -378,9 +378,8 @@ fn help_subcommand() {
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_SYSTEM_CERTS=]
               
-              By default, uv loads certificates from the bundled `webpki-roots` crate. The
-              `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv
-              improves portability and performance (especially on macOS).
+              By default, uv uses bundled Mozilla root certificates, which improves portability and
+              performance (especially on macOS).
               
               However, in some cases, you may want to use the platform's native certificate store,
               especially if you're relying on a corporate trust root (e.g., for a mandatory proxy)
@@ -672,9 +671,8 @@ fn help_subsubcommand() {
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_SYSTEM_CERTS=]
               
-              By default, uv loads certificates from the bundled `webpki-roots` crate. The
-              `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv
-              improves portability and performance (especially on macOS).
+              By default, uv uses bundled Mozilla root certificates, which improves portability and
+              performance (especially on macOS).
               
               However, in some cases, you may want to use the platform's native certificate store,
               especially if you're relying on a corporate trust root (e.g., for a mandatory proxy)

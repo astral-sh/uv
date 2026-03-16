@@ -333,9 +333,8 @@ pub(crate) async fn run(
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
 
-            let diagnostic = diagnostics::OperationDiagnostic::with_system_certs(
-                client_builder.system_certs(),
-            );
+            let diagnostic =
+                diagnostics::OperationDiagnostic::with_system_certs(client_builder.system_certs());
             let diagnostic = if let Some(verbose_flag) = find_verbose_flag(args) {
                 diagnostic.with_hint(format!(
                     "You provided `{}` to `{}`. Did you mean to provide it to `{}`? e.g., `{}`",

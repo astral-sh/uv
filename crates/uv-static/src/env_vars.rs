@@ -115,7 +115,7 @@ impl EnvVars {
 
     /// Equivalent to the `--system-certs` command-line argument. If set to `true`, uv will
     /// load TLS certificates from the platform's native certificate store instead of the
-    /// bundled `webpki-roots`.
+    /// bundled Mozilla root certificates.
     #[attr_added_in("next release")]
     pub const UV_SYSTEM_CERTS: &'static str = "UV_SYSTEM_CERTS";
 
