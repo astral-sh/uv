@@ -198,15 +198,7 @@ pub(crate) async fn audit(
     install_target.validate_extras(&extras)?;
     install_target.validate_groups(&groups)?;
 
-    // Build the list of auditable packages. Traverse the lockfile dependency graph respecting
-    // the requested extras and groups, then filter out workspace members (local by definition,
-    // with no meaningful external package identity) and packages without a version.
-    //
-    // When a specific Python version or platform is requested, also filter to packages whose
-    // reachability markers are satisfied by that environment.
-    //
-    // This mirrors the logic in `TreeDisplay::new`: for single-member workspaces, `lock.members()`
-    // is empty and the root package (source at path "") is the implicit member.
+    // Collect the auditable subset of packages in the lockfile.
     let workspace_root_name = lock.root().map(uv_resolver::Package::name);
     let auditable: Vec<_> = auditable_packages(&install_target, &extras, &groups)?
         .into_iter()
