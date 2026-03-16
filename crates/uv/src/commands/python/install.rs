@@ -11,13 +11,15 @@ use indexmap::IndexSet;
 use itertools::Itertools;
 use owo_colors::{AnsiColors, OwoColorize};
 use rustc_hash::{FxHashMap, FxHashSet};
+use serde::Serialize;
 use tokio::sync::mpsc;
 use tracing::{debug, trace, warn};
 
 use uv_cache::Cache;
+use uv_cli::PythonInstallFormat;
 use uv_client::BaseClientBuilder;
 use uv_configuration::Concurrency;
-use uv_fs::Simplified;
+use uv_fs::{PortablePathBuf, Simplified};
 use uv_platform::{Arch, Libc};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::downloads::{
@@ -151,6 +153,122 @@ enum InstallErrorKind {
     Registry,
 }
 
+/// The top-level JSON report for a `python install` operation.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+struct Report {
+    schema: SchemaReport,
+    python: Vec<PythonInstallReport>,
+}
+
+#[derive(Debug, Serialize)]
+struct SchemaReport {
+    version: SchemaVersion,
+}
+
+impl Default for SchemaReport {
+    fn default() -> Self {
+        Self {
+            version: SchemaVersion::Preview,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum SchemaVersion {
+    Preview,
+}
+
+/// A single Python installation change event in the JSON report.
+#[derive(Debug, Serialize)]
+struct PythonInstallReport {
+    key: String,
+    version: String,
+    path: PortablePathBuf,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    executables: Vec<PortablePathBuf>,
+    action: PythonInstallAction,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum PythonInstallAction {
+    Installed,
+    Reinstalled,
+    Removed,
+    Unchanged,
+}
+
+impl Report {
+    fn format(&self, output_format: PythonInstallFormat) -> Option<String> {
+        match output_format {
+            PythonInstallFormat::Json => serde_json::to_string_pretty(self).ok(),
+            PythonInstallFormat::Text => None,
+        }
+    }
+
+    fn from_changelog(changelog: &Changelog, installations_dir: &Path) -> Self {
+        let python: Vec<PythonInstallReport> = changelog
+            .events()
+            .map(|event| {
+                let executables = changelog
+                    .installed_executables
+                    .get(&event.key)
+                    .map(|paths| {
+                        paths
+                            .iter()
+                            .sorted_unstable()
+                            .map(|p| PortablePathBuf::from(p.as_path()))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let action = match event.kind {
+                    ChangeEventKind::Added => PythonInstallAction::Installed,
+                    ChangeEventKind::Reinstalled => PythonInstallAction::Reinstalled,
+                    ChangeEventKind::Removed => PythonInstallAction::Removed,
+                };
+                PythonInstallReport {
+                    key: event.key.to_string(),
+                    version: event.key.version().to_string(),
+                    path: PortablePathBuf::from(
+                        installations_dir.join(event.key.to_string()).as_path(),
+                    ),
+                    executables,
+                    action,
+                }
+            })
+            .collect();
+
+        Self {
+            schema: SchemaReport::default(),
+            python,
+        }
+    }
+
+    fn from_existing(
+        existing: &FxHashSet<PythonInstallationKey>,
+        installations_dir: &Path,
+    ) -> Self {
+        let python: Vec<PythonInstallReport> = existing
+            .iter()
+            .sorted_unstable()
+            .map(|key| PythonInstallReport {
+                key: key.to_string(),
+                version: key.version().to_string(),
+                path: PortablePathBuf::from(installations_dir.join(key.to_string()).as_path()),
+                executables: Vec::new(),
+                action: PythonInstallAction::Unchanged,
+            })
+            .collect();
+
+        Self {
+            schema: SchemaReport::default(),
+            python,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum PythonUpgradeSource {
     /// The user invoked `uv python install --upgrade`
@@ -195,11 +313,21 @@ pub(crate) async fn install(
     python_downloads: PythonDownloads,
     no_config: bool,
     compile_bytecode: bool,
+    output_format: PythonInstallFormat,
     concurrency: &Concurrency,
     cache: &Cache,
     preview: Preview,
     printer: Printer,
 ) -> Result<ExitStatus> {
+    if preview.is_enabled(PreviewFeature::JsonOutput)
+        && matches!(output_format, PythonInstallFormat::Json)
+    {
+        warn_user!(
+            "The `--output-format json` option is experimental and the schema may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::JsonOutput
+        );
+    }
+
     let (sender, mut receiver) = mpsc::unbounded_channel();
     let compiler = async {
         let mut total_files = 0;
@@ -242,6 +370,7 @@ pub(crate) async fn install(
         python_downloads,
         no_config,
         compile_bytecode.then_some(sender),
+        output_format,
         concurrency,
         preview,
         printer,
@@ -301,6 +430,7 @@ async fn perform_install(
     python_downloads: PythonDownloads,
     no_config: bool,
     bytecode_compilation_sender: Option<mpsc::UnboundedSender<ManagedPythonInstallation>>,
+    output_format: PythonInstallFormat,
     concurrency: &Concurrency,
     preview: Preview,
     printer: Printer,
@@ -529,6 +659,7 @@ async fn perform_install(
                 {
                     if matches_build(request.download.build(), installation.build()) {
                         debug!("Found `{}` for request `{}`", installation.key(), request);
+                        changelog.existing.insert(installation.key().clone());
                         satisfied.push(installation);
                     } else {
                         // Key matches but build version differs - track as existing for reinstall
@@ -548,6 +679,7 @@ async fn perform_install(
                 .find(|inst| request.matches_installation(inst))
             {
                 debug!("Found `{}` for request `{}`", installation.key(), request);
+                changelog.existing.insert(installation.key().clone());
                 satisfied.push(installation);
             } else {
                 debug!("No installation found for request `{}`", request);
@@ -791,6 +923,13 @@ async fn perform_install(
                 writeln!(printer.stderr(), "All requested versions already installed")?;
             }
         }
+
+        if let Some(output) =
+            Report::from_existing(&changelog.existing, installations_dir).format(output_format)
+        {
+            writeln!(printer.stdout(), "{output}")?;
+        }
+
         return Ok(ExitStatus::Success);
     }
 
@@ -954,8 +1093,19 @@ async fn perform_install(
         }
 
         if fatal {
+            if let Some(output) =
+                Report::from_changelog(&changelog, installations_dir).format(output_format)
+            {
+                writeln!(printer.stdout(), "{output}")?;
+            }
             return Ok(ExitStatus::Failure);
         }
+    }
+
+    if let Some(output) =
+        Report::from_changelog(&changelog, installations_dir).format(output_format)
+    {
+        writeln!(printer.stdout(), "{output}")?;
     }
 
     Ok(ExitStatus::Success)

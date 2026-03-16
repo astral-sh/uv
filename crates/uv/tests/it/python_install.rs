@@ -4375,3 +4375,96 @@ fn python_install_compile_bytecode_pypy() {
     Bytecode compiled [COUNT] files in [TIME]
     ");
 }
+
+/// Test JSON output for `uv python install`.
+#[test]
+fn python_install_json() {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_filtered_latest_python_versions()
+        .with_managed_python_dirs()
+        .with_empty_python_install_mirror()
+        .with_python_download_cache();
+
+    // Install with JSON output
+    uv_snapshot!(context.filters(), context.python_install()
+        .arg("--output-format").arg("json"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "python": [
+        {
+          "key": "cpython-3.14.[LATEST]-[PLATFORM]",
+          "version": "3.14.[LATEST]",
+          "path": "[TEMP_DIR]/managed/cpython-3.14.[LATEST]-[PLATFORM]",
+          "executables": [
+            "[BIN]/python3.14"
+          ],
+          "action": "installed"
+        }
+      ]
+    }
+
+    ----- stderr -----
+    Installed Python 3.14.[LATEST] in [TIME]
+     + cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
+    "###);
+
+    // Installing again should show "unchanged" in JSON
+    uv_snapshot!(context.filters(), context.python_install()
+        .arg("--output-format").arg("json"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "python": [
+        {
+          "key": "cpython-3.14.[LATEST]-[PLATFORM]",
+          "version": "3.14.[LATEST]",
+          "path": "[TEMP_DIR]/managed/cpython-3.14.[LATEST]-[PLATFORM]",
+          "action": "unchanged"
+        }
+      ]
+    }
+
+    ----- stderr -----
+    Python is already installed. Use `uv python install <request>` to install another version.
+    "###);
+
+    // Reinstall with JSON should show "reinstalled"
+    uv_snapshot!(context.filters(), context.python_install()
+        .arg("--reinstall")
+        .arg("--output-format").arg("json"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "python": [
+        {
+          "key": "cpython-3.14.[LATEST]-[PLATFORM]",
+          "version": "3.14.[LATEST]",
+          "path": "[TEMP_DIR]/managed/cpython-3.14.[LATEST]-[PLATFORM]",
+          "executables": [
+            "[BIN]/python3.14"
+          ],
+          "action": "reinstalled"
+        }
+      ]
+    }
+
+    ----- stderr -----
+    Installed Python 3.14.[LATEST] in [TIME]
+     ~ cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
+    "###);
+}

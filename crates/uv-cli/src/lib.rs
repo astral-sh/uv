@@ -59,6 +59,15 @@ pub enum PythonListFormat {
 }
 
 #[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
+pub enum PythonInstallFormat {
+    /// Plain text (for humans).
+    #[default]
+    Text,
+    /// JSON (for computers).
+    Json,
+}
+
+#[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
 pub enum SyncFormat {
     /// Display the result in a human-readable format.
     #[default]
@@ -6466,6 +6475,10 @@ pub struct PythonInstallArgs {
 
     #[command(flatten)]
     pub compile_bytecode: PythonInstallCompileBytecodeArgs,
+
+    /// Select the output format.
+    #[arg(long, value_enum, default_value_t = PythonInstallFormat::default())]
+    pub output_format: PythonInstallFormat,
 }
 
 impl PythonInstallArgs {
