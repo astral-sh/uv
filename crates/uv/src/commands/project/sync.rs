@@ -647,6 +647,7 @@ pub(super) async fn do_sync(
         build_options,
         sources,
     } = settings;
+    let link_mode = crate::effective_link_mode(link_mode, preview);
 
     // Lower the extra build dependencies with source resolution.
     let extra_build_requires = match &target {

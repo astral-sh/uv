@@ -14,7 +14,7 @@ use walkdir::WalkDir;
 ///
 /// Defaults to [`Clone`](LinkMode::Clone) on macOS and Linux (which support copy-on-write on
 /// APFS and btrfs/xfs/bcachefs respectively), and [`Hardlink`](LinkMode::Hardlink) on other
-/// platforms.
+/// platforms. On Windows, clone can be enabled via the `reflink-windows` preview flag.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(
