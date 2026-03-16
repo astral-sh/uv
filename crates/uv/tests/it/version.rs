@@ -66,7 +66,8 @@ fn version_get_json() -> Result<()> {
     ----- stdout -----
     {
       "package_name": "myproject",
-      "version": "1.10.31"
+      "version": "1.10.31",
+      "commit_info": null
     }
 
     ----- stderr -----
@@ -2387,6 +2388,7 @@ fn self_version_json() -> Result<()> {
       {
         "package_name": "uv",
         "version": "[VERSION]",
+        "commit_info": null,
         "target_triple": "[TARGET]"
       }
 
