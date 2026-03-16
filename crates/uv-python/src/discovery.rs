@@ -1580,7 +1580,7 @@ pub(crate) async fn find_best_python_installation(
                 let error = anyhow::Error::from(error).context(format!(
                     "A managed Python download is available for {request}, but an error occurred when attempting to download it."
                 ));
-                uv_warnings::write_error_chain(
+                uv_errors::write_error_chain(
                     error.as_ref(),
                     &mut error_chain,
                     "warning",
