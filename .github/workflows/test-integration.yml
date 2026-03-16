@@ -210,7 +210,7 @@ jobs:
       - name: "Verify platform detection"
         run: |
           python_path=$(./uv python find 3.13)
-          expected="$HOME/.local/share/uv/python/cpython-3.13.12-linux-aarch64-gnu/bin/python3.13"
+          expected="$HOME/.local/share/uv/python/cpython-3.13-linux-aarch64-gnu/bin/python3.13"
           if [[ "$python_path" != "$expected" ]]; then
             echo "Expected: $expected"
             echo "Found:    $python_path"
