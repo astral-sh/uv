@@ -60,10 +60,10 @@ pub enum PythonListFormat {
 
 #[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
 pub enum PythonInstallFormat {
-    /// Plain text (for humans).
+    /// Display the result in a human-readable format.
     #[default]
     Text,
-    /// JSON (for computers).
+    /// Display the result in JSON format.
     Json,
 }
 

@@ -153,51 +153,55 @@ enum InstallErrorKind {
     Registry,
 }
 
-/// The top-level JSON report for a `python install` operation.
+/// A report of the `uv python install` operation.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "snake_case")]
 struct Report {
+    /// The schema of this report.
     schema: SchemaReport,
+    /// The Python installations that were affected.
     python: Vec<PythonInstallReport>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Default, Serialize)]
 struct SchemaReport {
+    /// The version of the schema.
     version: SchemaVersion,
 }
 
-impl Default for SchemaReport {
-    fn default() -> Self {
-        Self {
-            version: SchemaVersion::Preview,
-        }
-    }
-}
-
-#[derive(Debug, Serialize)]
+#[derive(Debug, Default, Serialize)]
 #[serde(rename_all = "snake_case")]
 enum SchemaVersion {
+    /// An unstable, experimental schema.
+    #[default]
     Preview,
 }
 
-/// A single Python installation change event in the JSON report.
+/// A report for a single Python installation.
 #[derive(Debug, Serialize)]
 struct PythonInstallReport {
+    /// The installation key, e.g., `cpython-3.12.0-linux-x86_64-gnu`.
     key: String,
+    /// The Python version.
     version: String,
+    /// The path to the installation directory.
     path: PortablePathBuf,
+    /// The executables installed for this Python version.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     executables: Vec<PortablePathBuf>,
+    /// The action taken on this installation.
     action: PythonInstallAction,
 }
 
+/// The action taken on an individual Python installation.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "snake_case")]
 enum PythonInstallAction {
     Installed,
     Reinstalled,
     Removed,
-    Unchanged,
+    /// The installation already existed and no changes were made.
+    Checked,
 }
 
 impl Report {
@@ -258,7 +262,7 @@ impl Report {
                 version: key.version().to_string(),
                 path: PortablePathBuf::from(installations_dir.join(key.to_string()).as_path()),
                 executables: Vec::new(),
-                action: PythonInstallAction::Unchanged,
+                action: PythonInstallAction::Checked,
             })
             .collect();
 

@@ -4430,7 +4430,7 @@ fn python_install_json() {
           "key": "cpython-3.14.[LATEST]-[PLATFORM]",
           "version": "3.14.[LATEST]",
           "path": "[TEMP_DIR]/managed/cpython-3.14.[LATEST]-[PLATFORM]",
-          "action": "unchanged"
+          "action": "checked"
         }
       ]
     }
@@ -4466,5 +4466,87 @@ fn python_install_json() {
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
      ~ cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
+    "###);
+}
+
+/// Test JSON output for `uv python install` with multiple versions.
+#[test]
+fn python_install_json_multiple_versions() {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_filtered_latest_python_versions()
+        .with_managed_python_dirs()
+        .with_empty_python_install_mirror()
+        .with_python_download_cache();
+
+    // Install multiple versions with JSON output
+    uv_snapshot!(context.filters(), context.python_install()
+        .arg("3.12").arg("3.13")
+        .arg("--output-format").arg("json"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "python": [
+        {
+          "key": "cpython-3.12.[LATEST]-[PLATFORM]",
+          "version": "3.12.[LATEST]",
+          "path": "[TEMP_DIR]/managed/cpython-3.12.[LATEST]-[PLATFORM]",
+          "executables": [
+            "[BIN]/python3.12"
+          ],
+          "action": "installed"
+        },
+        {
+          "key": "cpython-3.13.[LATEST]-[PLATFORM]",
+          "version": "3.13.[LATEST]",
+          "path": "[TEMP_DIR]/managed/cpython-3.13.[LATEST]-[PLATFORM]",
+          "executables": [
+            "[BIN]/python3.13"
+          ],
+          "action": "installed"
+        }
+      ]
+    }
+
+    ----- stderr -----
+    Installed 2 versions in [TIME]
+     + cpython-3.12.[LATEST]-[PLATFORM] (python3.12)
+     + cpython-3.13.[LATEST]-[PLATFORM] (python3.13)
+    "###);
+
+    // Installing again should show all as "checked"
+    uv_snapshot!(context.filters(), context.python_install()
+        .arg("3.12").arg("3.13")
+        .arg("--output-format").arg("json"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "python": [
+        {
+          "key": "cpython-3.12.[LATEST]-[PLATFORM]",
+          "version": "3.12.[LATEST]",
+          "path": "[TEMP_DIR]/managed/cpython-3.12.[LATEST]-[PLATFORM]",
+          "action": "checked"
+        },
+        {
+          "key": "cpython-3.13.[LATEST]-[PLATFORM]",
+          "version": "3.13.[LATEST]",
+          "path": "[TEMP_DIR]/managed/cpython-3.13.[LATEST]-[PLATFORM]",
+          "action": "checked"
+        }
+      ]
+    }
+
+    ----- stderr -----
+    All requested versions already installed
     "###);
 }
