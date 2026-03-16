@@ -9955,7 +9955,6 @@ fn sync_derivation_chain() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    warning: wsgiref==0.1.2 uses a legacy source distribution format ('.zip') that is not compliant with PEP 625. A future version of uv will reject this source distribution. Consider upgrading to a newer version of wsgiref
       × Failed to build `wsgiref==0.1.2`
       ├─▶ The build backend returned an error
       ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
@@ -10019,7 +10018,6 @@ fn sync_derivation_chain_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    warning: wsgiref==0.1.2 uses a legacy source distribution format ('.zip') that is not compliant with PEP 625. A future version of uv will reject this source distribution. Consider upgrading to a newer version of wsgiref
       × Failed to build `wsgiref==0.1.2`
       ├─▶ The build backend returned an error
       ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
@@ -10085,7 +10083,6 @@ fn sync_derivation_chain_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    warning: wsgiref==0.1.2 uses a legacy source distribution format ('.zip') that is not compliant with PEP 625. A future version of uv will reject this source distribution. Consider upgrading to a newer version of wsgiref
       × Failed to build `wsgiref==0.1.2`
       ├─▶ The build backend returned an error
       ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
