@@ -8,6 +8,7 @@ use crate::commands::diagnostics;
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::resolution_markers;
 use crate::commands::project::default_dependency_groups;
+use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
@@ -28,6 +29,7 @@ use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
+use uv_resolver::auditable_packages;
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user;
@@ -84,7 +86,7 @@ pub(crate) async fn audit(
         LockTarget::Workspace(_) => DefaultExtras::default(),
         LockTarget::Script(_) => DefaultExtras::default(),
     };
-    let _extras = extras.with_defaults(default_extras);
+    let extras = extras.with_defaults(default_extras);
 
     // Determine whether we're performing a universal audit.
     let universal = python_version.is_none() && python_platform.is_none();
@@ -156,7 +158,7 @@ pub(crate) async fn audit(
             Box::new(DefaultResolveLogger),
             &concurrency,
             &cache,
-            &WorkspaceCache::default(),
+            &workspace_cache,
             printer,
             preview,
         )
@@ -174,7 +176,7 @@ pub(crate) async fn audit(
     };
 
     // Determine the markers to use for resolution.
-    let _markers = (!universal).then(|| {
+    let markers = (!universal).then(|| {
         resolution_markers(
             python_version.as_ref(),
             python_platform.as_ref(),
@@ -182,19 +184,40 @@ pub(crate) async fn audit(
         )
     });
 
-    // TODO: validate the sets of requested extras/groups against the lockfile?
+    // Validate that the set of requested extras and development groups are defined in the lockfile.
+    let install_target = match target {
+        LockTarget::Workspace(workspace) => InstallTarget::Workspace {
+            workspace,
+            lock: &lock,
+        },
+        LockTarget::Script(script) => InstallTarget::Script {
+            script,
+            lock: &lock,
+        },
+    };
+    install_target.validate_extras(&extras)?;
+    install_target.validate_groups(&groups)?;
 
-    // Build the list of auditable packages, skipping workspace members. Workspace members are
-    // local by definition and have no meaningful external package identity to look up in a vuln
-    // service. We also skip packages without a version, since we can't query for them.
+    // Build the list of auditable packages. Traverse the lockfile dependency graph respecting
+    // the requested extras and groups, then filter out workspace members (local by definition,
+    // with no meaningful external package identity) and packages without a version.
+    //
+    // When a specific Python version or platform is requested, also filter to packages whose
+    // reachability markers are satisfied by that environment.
     //
     // This mirrors the logic in `TreeDisplay::new`: for single-member workspaces, `lock.members()`
     // is empty and the root package (source at path "") is the implicit member.
     let workspace_root_name = lock.root().map(uv_resolver::Package::name);
-    let auditable: Vec<_> = lock
-        .packages()
-        .iter()
-        .filter(|p| {
+    let auditable: Vec<_> = auditable_packages(&install_target, &extras, &groups)?
+        .into_iter()
+        .filter(|(p, marker)| {
+            // Filter by platform markers when a specific environment is requested.
+            if markers
+                .as_ref()
+                .is_some_and(|env| !marker.evaluate(env, &[]))
+            {
+                return false;
+            }
             if lock.members().is_empty() {
                 // Single-member workspace: skip the implicit root.
                 workspace_root_name != Some(p.name())
@@ -202,7 +225,7 @@ pub(crate) async fn audit(
                 !lock.members().contains(p.name())
             }
         })
-        .filter_map(|p| {
+        .filter_map(|(p, _marker)| {
             let Some(version) = p.version() else {
                 trace!(
                     "Skipping audit for {} because it has no version information",

@@ -27,6 +27,29 @@ pub mod cyclonedx_json;
 mod pylock_toml;
 mod requirements_txt;
 
+/// Return the set of packages reachable from the target's roots via the given extras and groups,
+/// along with the [`MarkerTree`] condition under which each package is reachable.
+///
+/// This does a graph traversal of the lockfile, following dependency edges that are activated
+/// by the requested `extras` and `groups`. Workspace members are included in the returned list;
+/// callers should filter them out as appropriate.
+///
+/// The reachability marker for each package can be evaluated against a specific marker environment
+/// to determine whether the package should be included for a given platform/Python version.
+pub fn auditable_packages<'lock>(
+    target: &impl Installable<'lock>,
+    extras: &ExtrasSpecificationWithDefaults,
+    groups: &DependencyGroupsWithDefaults,
+) -> Result<Vec<(&'lock Package, MarkerTree)>, LockError> {
+    let install_options = InstallOptions::default();
+    let ExportableRequirements(packages) =
+        ExportableRequirements::from_lock(target, &[], extras, groups, false, &install_options)?;
+    Ok(packages
+        .into_iter()
+        .map(|req| (req.package, req.marker))
+        .collect())
+}
+
 /// A flat requirement, with its associated marker.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ExportableRequirement<'lock> {
@@ -50,7 +73,7 @@ impl<'lock> ExportableRequirements<'lock> {
         extras: &ExtrasSpecificationWithDefaults,
         groups: &DependencyGroupsWithDefaults,
         annotate: bool,
-        install_options: &'lock InstallOptions,
+        install_options: &InstallOptions,
     ) -> Result<Self, LockError> {
         let size_guess = target.lock().packages.len();
         let mut graph = Graph::<Node<'lock>, Edge<'lock>>::with_capacity(size_guess, size_guess);
