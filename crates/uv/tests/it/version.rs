@@ -2290,7 +2290,7 @@ fn self_version_short() -> Result<()> {
         .filters()
         .into_iter()
         .chain([(
-            r"\d+\.\d+\.\d+(-alpha\.\d+)?(\+\d+)?( \(.*\))?( \S+-\S+-\S+)?",
+            r"\d+\.\d+\.\d+(-alpha\.\d+)?(\+\d+)?( \(.*\))?",
             r"[VERSION] ([COMMIT] DATE)",
         )])
         .collect::<Vec<_>>();

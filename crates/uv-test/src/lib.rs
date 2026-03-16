@@ -125,7 +125,7 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"uv\.exe", "uv"),
     // uv version display
     (
-        r"uv(-.*)? \d+\.\d+\.\d+(-(alpha|beta|rc)\.\d+)?(\+\d+)?( \([^)]*\))?( \S+-\S+-\S+)?",
+        r"uv(-.*)? \d+\.\d+\.\d+(-(alpha|beta|rc)\.\d+)?(\+\d+)?( \([^)]*\))?",
         r"uv [VERSION] ([COMMIT] DATE)",
     ),
     // Trim end-of-line whitespaces, to allow removing them on save.

@@ -46,17 +46,23 @@ impl VersionInfo {
 }
 
 impl fmt::Display for VersionInfo {
-    /// Formatted version information: "<version>[+<commits>] (<commit> <date>)"
+    /// Formatted version information: "<version>[+<commits>] (<commit> <date> [<target>])"
     ///
     /// This is intended for consumption by `clap` to provide `uv --version`,
     /// and intentionally omits the name of the package
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.version)?;
         if let Some(ci) = &self.commit_info {
-            write!(f, "{ci}")?;
-        }
-        if let Some(target_triple) = &self.target_triple {
-            write!(f, " {target_triple}")?;
+            if ci.commits_since_last_tag > 0 {
+                write!(f, "+{}", ci.commits_since_last_tag)?;
+            }
+            write!(f, " ({} {}", ci.short_commit_hash, ci.commit_date)?;
+            if let Some(target_triple) = &self.target_triple {
+                write!(f, " {target_triple}")?;
+            }
+            write!(f, ")")?;
+        } else if let Some(target_triple) = &self.target_triple {
+            write!(f, " ({target_triple})")?;
         }
         Ok(())
     }
@@ -159,7 +165,18 @@ mod tests {
             }),
             target_triple: Some("x86_64-unknown-linux-gnu".to_string()),
         };
-        assert_snapshot!(version, @"0.0.0 (53b0f5d92 2023-10-19) x86_64-unknown-linux-gnu");
+        assert_snapshot!(version, @"0.0.0 (53b0f5d92 2023-10-19 x86_64-unknown-linux-gnu)");
+    }
+
+    #[test]
+    fn version_formatting_with_target_triple_only() {
+        let version = VersionInfo {
+            package_name: Some("uv".to_string()),
+            version: "0.0.0".to_string(),
+            commit_info: None,
+            target_triple: Some("x86_64-unknown-linux-gnu".to_string()),
+        };
+        assert_snapshot!(version, @"0.0.0 (x86_64-unknown-linux-gnu)");
     }
 
     #[test]
