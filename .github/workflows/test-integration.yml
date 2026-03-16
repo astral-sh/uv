@@ -205,13 +205,13 @@ jobs:
 
       - name: "Install Python via uv"
         run: |
-          ./uv python install -v 3.13
+          ./uv python install -v 3.13.12
 
       - name: "Verify platform detection"
         run: |
           python_path=$(./uv python find 3.13)
           echo "Found Python at: $python_path"
-          [[ "$python_path" == */.local/share/uv/python/cpython-3.13.*-linux-aarch64-gnu/bin/python3.13 ]]
+          [[ "$python_path" == "$HOME/.local/share/uv/python/cpython-3.13.12-linux-aarch64-gnu/bin/python3.13" ]]
 
       - name: "Create a virtual environment (stdlib)"
         run: |
@@ -220,7 +220,7 @@ jobs:
 
       - name: "Create a virtual environment (uv)"
         run: |
-          ./uv venv -c -p 3.13 --managed-python
+          ./uv venv -c -p 3.13.12 --managed-python
 
       - name: "Check version"
         run: |
