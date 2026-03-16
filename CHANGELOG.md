@@ -3,6 +3,37 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.10.11
+
+Released on 2026-03-16.
+
+### Enhancements
+
+- Fetch Ruff release metadata from an Astral mirror ([#18358](https://github.com/astral-sh/uv/pull/18358))
+- Use PEP 639 license metadata for uv itself ([#16477](https://github.com/astral-sh/uv/pull/16477))
+
+### Performance
+
+- Improve distribution id performance ([#18486](https://github.com/astral-sh/uv/pull/18486))
+
+### Bug fixes
+
+- Allow `--project` to refer to a `pyproject.toml` directly and reduce to a warning on other files ([#18513](https://github.com/astral-sh/uv/pull/18513))
+- Disable `SYSTEM_VERSION_COMPAT` when querying interpreters on macOS ([#18452](https://github.com/astral-sh/uv/pull/18452))
+- Enforce available distributions for supported environments ([#18451](https://github.com/astral-sh/uv/pull/18451))
+- Fix `uv sync --active` recreating active environments when `UV_PYTHON_INSTALL_DIR` is relative ([#18398](https://github.com/astral-sh/uv/pull/18398))
+
+### Documentation
+
+- Add missing `-o requirements.txt` in `uv pip compile` example ([#12308](https://github.com/astral-sh/uv/pull/12308))
+- Link to organization security policy ([#18449](https://github.com/astral-sh/uv/pull/18449))
+- Link to the AI policy in the contributing guide ([#18448](https://github.com/astral-sh/uv/pull/18448))
+
+### Other changes
+
+- Pin termux test packages to improve job stability ([#18480](https://github.com/astral-sh/uv/pull/18480))
+- Update Rust crate tokio to v1.50.0 ([#18498](https://github.com/astral-sh/uv/pull/18498))
+
 ## 0.10.10
 
 Released on 2026-03-13.
