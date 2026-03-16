@@ -28,12 +28,6 @@ Released on 2026-03-16.
 - Add missing `-o requirements.txt` in `uv pip compile` example ([#12308](https://github.com/astral-sh/uv/pull/12308))
 - Link to organization security policy ([#18449](https://github.com/astral-sh/uv/pull/18449))
 - Link to the AI policy in the contributing guide ([#18448](https://github.com/astral-sh/uv/pull/18448))
-
-### Other changes
-
-- Pin termux test packages to improve job stability ([#18480](https://github.com/astral-sh/uv/pull/18480))
-- Update Rust crate tokio to v1.50.0 ([#18498](https://github.com/astral-sh/uv/pull/18498))
-
 ## 0.10.10
 
 Released on 2026-03-13.
