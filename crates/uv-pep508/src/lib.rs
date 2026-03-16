@@ -78,7 +78,7 @@ pub enum Pep508ErrorSource<T: Pep508Url = VerbatimUrl> {
     String(String),
     /// A URL parsing error.
     #[error(transparent)]
-    UrlError(T::Err),
+    UrlError(Box<T::Err>),
     /// The version requirement is not supported.
     #[error("{0}")]
     UnsupportedRequirement(String),
@@ -792,7 +792,7 @@ fn parse_url<T: Pep508Url>(
     }
 
     let url = T::parse_url(url, working_dir).map_err(|err| Pep508Error {
-        message: Pep508ErrorSource::UrlError(err),
+        message: Pep508ErrorSource::UrlError(Box::new(err)),
         start,
         len,
         input: cursor.to_string(),

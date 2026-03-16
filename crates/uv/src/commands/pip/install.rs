@@ -340,7 +340,7 @@ pub(crate) async fn pip_install(
                         debug!("Requirement satisfied: {requirement}");
                     }
                 }
-                DefaultInstallLogger.on_audit(requirements.len(), start, printer, dry_run)?;
+                DefaultInstallLogger.on_check(requirements.len(), start, printer, dry_run)?;
 
                 return Ok(ExitStatus::Success);
             }

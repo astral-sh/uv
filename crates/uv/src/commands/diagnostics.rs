@@ -106,7 +106,7 @@ impl OperationDiagnostic {
                     kind,
                     dist,
                     &DerivationChain::default(),
-                    Arc::new(err),
+                    Arc::new(*err),
                     self.hint,
                 );
                 None
@@ -117,7 +117,7 @@ impl OperationDiagnostic {
                 chain,
                 err,
             )) => {
-                dist_error(kind, dist, &chain, Arc::new(err), self.hint);
+                dist_error(kind, dist, &chain, Arc::new(*err), self.hint);
                 None
             }
             pip::operations::Error::Requirements(err) => {

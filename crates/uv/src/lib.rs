@@ -40,7 +40,7 @@ use uv_fs::{CWD, Simplified};
 #[cfg(feature = "self-update")]
 use uv_pep440::release_specifiers_to_ranges;
 use uv_pep508::VersionOrUrl;
-use uv_preview::PreviewFeature;
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl};
 use uv_python::PythonRequest;
 use uv_requirements::{GroupsSpecification, RequirementsSource};
@@ -101,6 +101,55 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     // Load environment variables not handled by Clap
     let environment = EnvironmentOptions::new()?;
+
+    // Validate that the project directory exists if explicitly provided via --project, except for
+    // `uv init`, which creates the project directory (separate deprecation).
+    let skip_project_validation = matches!(
+        &*cli.command,
+        Commands::Project(command) if matches!(**command, ProjectCommand::Init(_))
+    );
+
+    if !skip_project_validation {
+        if let Some(project_path) = cli.top_level.global_args.project.as_ref() {
+            // Resolve the preview flags until this becomes stabilized. We do
+            // not pass a workspace configuration as this would require reading
+            // from the project directory which might not exist.
+            let preview = Preview::from_args(
+                settings::resolve_preview(&cli.top_level.global_args, None, &environment),
+                cli.top_level.global_args.no_preview,
+                &cli.top_level.global_args.preview_features,
+            );
+            if !project_dir.exists() {
+                if preview.is_enabled(PreviewFeature::ProjectDirectoryMustExist) {
+                    bail!(
+                        "Project directory `{}` does not exist",
+                        project_path.user_display()
+                    );
+                }
+                warn_user_once!(
+                    "Project directory `{}` does not exist. \
+                    This will become an error in a future release. \
+                    Use `--preview-features project-directory-must-exist` to error on this now.",
+                    project_path.user_display()
+                );
+            } else if !project_dir.is_dir() {
+                // On Unix, this always fails downstream (e.g., "Not a directory" when
+                // trying to read `uv.toml`), so we bail with a clear error message.
+                // On Windows, this is currently non-fatal, so we only error with the
+                // preview flag.
+                if cfg!(unix) || preview.is_enabled(PreviewFeature::ProjectDirectoryMustExist) {
+                    bail!(
+                        "Project path `{}` is not a directory",
+                        project_path.user_display()
+                    );
+                }
+                warn_user_once!(
+                    "Project path `{}` is not a directory. Use `--preview-features project-directory-must-exist` to error on this.",
+                    project_path.user_display()
+                );
+            }
+        }
+    }
 
     // The `--isolated` argument is deprecated on preview APIs, and warns on non-preview APIs.
     let deprecated_isolated = if cli.top_level.global_args.isolated {
@@ -363,6 +412,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     )?;
 
     debug!("uv {}", uv_cli::version::uv_self_version());
+    if let Some(config_file) = cli.top_level.config_file.as_ref() {
+        debug!("Using configuration file: {}", config_file.user_display());
+    }
     if globals.preview.all_enabled() {
         debug!("All preview features are enabled");
     } else if globals.preview.any_enabled() {
@@ -385,6 +437,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     // Resolve the cache settings.
     let cache_settings = CacheSettings::resolve(*cli.top_level.cache_args, filesystem.as_ref());
+
+    // Set the global preview configuration.
+    uv_preview::init(globals.preview)?;
 
     // Enforce the required version.
     if let Some(required_version) = globals.required_version.as_ref() {
@@ -1916,7 +1971,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             } => commands::build_backend::build_wheel(
                 &wheel_directory,
                 metadata_directory.as_deref(),
-                globals.preview,
             ),
             BuildBackendCommand::BuildEditable {
                 wheel_directory,
@@ -1924,7 +1978,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             } => commands::build_backend::build_editable(
                 &wheel_directory,
                 metadata_directory.as_deref(),
-                globals.preview,
             ),
             BuildBackendCommand::GetRequiresForBuildSdist => {
                 commands::build_backend::get_requires_for_build_sdist()
@@ -1933,19 +1986,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 commands::build_backend::get_requires_for_build_wheel()
             }
             BuildBackendCommand::PrepareMetadataForBuildWheel { wheel_directory } => {
-                commands::build_backend::prepare_metadata_for_build_wheel(
-                    &wheel_directory,
-                    globals.preview,
-                )
+                commands::build_backend::prepare_metadata_for_build_wheel(&wheel_directory)
             }
             BuildBackendCommand::GetRequiresForBuildEditable => {
                 commands::build_backend::get_requires_for_build_editable()
             }
             BuildBackendCommand::PrepareMetadataForBuildEditable { wheel_directory } => {
-                commands::build_backend::prepare_metadata_for_build_editable(
-                    &wheel_directory,
-                    globals.preview,
-                )
+                commands::build_backend::prepare_metadata_for_build_editable(&wheel_directory)
             }
         })
         .await

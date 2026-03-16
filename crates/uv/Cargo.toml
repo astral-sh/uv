@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.10.9"
+version = "0.10.10"
 description = "A Python package and project manager"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -15,6 +15,7 @@ default-run = "uv"
 workspace = true
 
 [dependencies]
+uv-audit = { workspace = true }
 uv-auth = { workspace = true }
 uv-bin-install = { workspace = true }
 uv-build-backend = { workspace = true }

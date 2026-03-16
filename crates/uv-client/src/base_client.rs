@@ -26,8 +26,10 @@ use reqwest_retry::{
     Jitter, RetryPolicy, RetryTransientMiddleware, Retryable, RetryableStrategy,
     default_on_request_error, default_on_request_success,
 };
+
 use thiserror::Error;
-use tracing::{debug, trace};
+
+use tracing::{debug, trace, warn};
 use url::ParseError;
 use url::Url;
 
@@ -1446,6 +1448,74 @@ impl RetryState {
         // TODO(konsti): Should we show a spinner plus a message in the CLI while
         // waiting?
         tokio::time::sleep(duration).await;
+    }
+}
+
+/// An error type that supports URL-fallback and exponential-backoff retry logic.
+///
+/// Used by [`fetch_with_url_fallback`] to drive the retry loop without knowing the concrete error
+/// type.
+pub trait RetriableError: std::error::Error + Sized + 'static {
+    /// Returns `true` if an alternative URL should be tried immediately (without backoff).
+    fn should_try_next_url(&self) -> bool;
+
+    /// Returns the number of inner retries already recorded in this error.
+    fn retries(&self) -> u32;
+
+    /// Wrap the error to indicate that the operation was retried `retries` times before failing.
+    #[must_use]
+    fn into_retried(self, retries: u32, duration: Duration) -> Self;
+}
+
+/// Try a fallible async operation against each URL in order, with exponential backoff.
+///
+/// URLs are tried in sequence without any backoff between them. Backoff is only applied after all
+/// URLs have been exhausted. On the next retry attempt the full URL list is tried again from the
+/// beginning.
+pub async fn fetch_with_url_fallback<T, E, F>(
+    urls: &[DisplaySafeUrl],
+    retry_policy: ExponentialBackoff,
+    subject: &str,
+    mut attempt: F,
+) -> Result<T, E>
+where
+    F: AsyncFnMut(DisplaySafeUrl) -> Result<T, E>,
+    E: RetriableError + From<SystemTimeError>,
+{
+    let mut retry_state = RetryState::start(
+        retry_policy,
+        // The last URL will trigger backoff if it fails.
+        urls.last().expect("urls must not be empty").clone(),
+    );
+
+    'retry: loop {
+        for (i, url) in urls.iter().enumerate() {
+            let is_last = i == urls.len() - 1;
+            match attempt(url.clone()).await {
+                Ok(result) => return Ok(result),
+                Err(err) => {
+                    if !is_last && err.should_try_next_url() {
+                        warn!(
+                            "Failed to fetch {subject} from {url} ({err}); falling back to {}",
+                            urls[i + 1]
+                        );
+                        continue;
+                    }
+                    // All URLs exhausted; apply the retry policy.
+                    if let Some(backoff) = retry_state.should_retry(&err, err.retries()) {
+                        retry_state.sleep_backoff(backoff).await;
+                        continue 'retry;
+                    }
+                    return if retry_state.total_retries() > 0 {
+                        let retries = retry_state.total_retries();
+                        Err(err.into_retried(retries, retry_state.duration()?))
+                    } else {
+                        Err(err)
+                    };
+                }
+            }
+        }
+        unreachable!("urls must not be empty");
     }
 }
 

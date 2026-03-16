@@ -717,6 +717,16 @@ async fn do_lock(
         }
     };
 
+    let lock_supported_environments = environments.cloned().unwrap_or_default();
+    let lock_required_environments = required_environments.cloned().unwrap_or_default();
+    let artifact_environments = SupportedEnvironments::from_markers(
+        lock_supported_environments
+            .iter()
+            .copied()
+            .chain(lock_required_environments.iter().copied())
+            .collect(),
+    );
+
     let options = OptionsBuilder::new()
         .resolution_mode(*resolution)
         .prerelease_mode(*prerelease)
@@ -724,7 +734,7 @@ async fn do_lock(
         .exclude_newer(exclude_newer.clone())
         .index_strategy(*index_strategy)
         .build_options(build_options.clone())
-        .required_environments(required_environments.cloned().unwrap_or_default())
+        .artifact_environments(artifact_environments.clone())
         .build();
     let hasher = HashStrategy::Generate(HashGeneration::Url);
 
@@ -977,21 +987,14 @@ async fn do_lock(
             .relative_to(target.install_path())?;
 
             let previous = existing_lock.map(ValidatedLock::into_lock);
-            let lock = Lock::from_resolution(&resolution, target.install_path())?
-                .with_manifest(manifest)
-                .with_conflicts(conflicts)
-                .with_supported_environments(
-                    environments
-                        .cloned()
-                        .map(SupportedEnvironments::into_markers)
-                        .unwrap_or_default(),
-                )
-                .with_required_environments(
-                    required_environments
-                        .cloned()
-                        .map(SupportedEnvironments::into_markers)
-                        .unwrap_or_default(),
-                );
+            let lock = Lock::from_resolution(
+                &resolution,
+                target.install_path(),
+                lock_supported_environments.clone().into_markers(),
+            )?
+            .with_manifest(manifest)
+            .with_conflicts(conflicts)
+            .with_required_environments(lock_required_environments.into_markers());
 
             if previous.as_ref().is_some_and(|previous| *previous == lock) {
                 Ok(LockResult::Unchanged(lock))

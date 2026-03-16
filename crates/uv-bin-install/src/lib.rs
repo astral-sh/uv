@@ -3,7 +3,9 @@
 //! These utilities are specifically for consuming distributions that are _not_ Python packages,
 //! e.g., `ruff` (which does have a Python package, but also has standalone binaries on GitHub).
 
+use std::error::Error as _;
 use std::fmt;
+use std::io;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::str::FromStr;
@@ -11,16 +13,18 @@ use std::task::{Context, Poll};
 use std::time::{Duration, SystemTimeError};
 
 use futures::{StreamExt, TryStreamExt};
+use reqwest_retry::Retryable;
 use reqwest_retry::policies::ExponentialBackoff;
 use serde::Deserialize;
 use thiserror::Error;
 use tokio::io::{AsyncRead, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use url::Url;
+use uv_client::retryable_on_request_failure;
 use uv_distribution_filename::SourceDistExtension;
 
 use uv_cache::{Cache, CacheBucket, CacheEntry, Error as CacheError};
-use uv_client::{BaseClient, RetryState};
+use uv_client::{BaseClient, RetriableError, fetch_with_url_fallback};
 use uv_extract::{Error as ExtractError, stream};
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_platform::Platform;
@@ -58,20 +62,58 @@ impl Binary {
         }
     }
 
-    /// Get the download URL for a specific version and platform.
-    pub fn download_url(
+    /// Get the ordered list of download URLs for a specific version and platform.
+    ///
+    /// The default Astral mirror is returned first, followed by the canonical GitHub URL as a
+    /// fallback.
+    pub fn download_urls(
         &self,
         version: &Version,
         platform: &str,
         format: ArchiveFormat,
-    ) -> Result<Url, Error> {
+    ) -> Result<Vec<DisplaySafeUrl>, Error> {
         match self {
             Self::Ruff => {
-                let url = format!(
-                    "https://github.com/astral-sh/ruff/releases/download/{version}/ruff-{platform}.{}",
-                    format.extension()
-                );
-                Url::parse(&url).map_err(|err| Error::UrlParse { url, source: err })
+                let suffix = format!("{version}/ruff-{platform}.{}", format.extension());
+                let canonical = format!("{RUFF_GITHUB_URL_PREFIX}{suffix}");
+                let mirror = format!("{RUFF_DEFAULT_MIRROR}{suffix}");
+                Ok(vec![
+                    DisplaySafeUrl::parse(&mirror).map_err(|err| Error::UrlParse {
+                        url: mirror,
+                        source: err,
+                    })?,
+                    DisplaySafeUrl::parse(&canonical).map_err(|err| Error::UrlParse {
+                        url: canonical,
+                        source: err,
+                    })?,
+                ])
+            }
+        }
+    }
+
+    /// Return the ordered list of manifest URLs to try: the default Astral mirror first, then the
+    /// canonical URL as a fallback.
+    fn manifest_urls(self) -> Vec<DisplaySafeUrl> {
+        let name = self.name();
+        // These are static strings so parsing cannot fail.
+        vec![
+            DisplaySafeUrl::parse(&format!("{VERSIONS_MANIFEST_MIRROR}/{name}.ndjson")).unwrap(),
+            DisplaySafeUrl::parse(&format!("{VERSIONS_MANIFEST_URL}/{name}.ndjson")).unwrap(),
+        ]
+    }
+
+    /// Given a canonical artifact URL (e.g., from the versions manifest), return an ordered list
+    /// of URLs to try: the default Astral mirror first, then the canonical URL as a fallback.
+    fn mirror_urls(self, canonical_url: DisplaySafeUrl) -> Vec<DisplaySafeUrl> {
+        match self {
+            Self::Ruff => {
+                if let Some(suffix) = canonical_url.as_str().strip_prefix(RUFF_GITHUB_URL_PREFIX) {
+                    let mirror_str = format!("{RUFF_DEFAULT_MIRROR}{suffix}");
+                    if let Ok(mirror_url) = DisplaySafeUrl::parse(&mirror_str) {
+                        return vec![mirror_url, canonical_url];
+                    }
+                }
+                vec![canonical_url]
             }
         }
     }
@@ -155,8 +197,20 @@ impl fmt::Display for BinVersion {
     }
 }
 
-/// Base URL for the versions manifest.
+/// The canonical GitHub URL prefix for Ruff releases.
+const RUFF_GITHUB_URL_PREFIX: &str = "https://github.com/astral-sh/ruff/releases/download/";
+
+/// The default Astral mirror for Ruff releases.
+///
+/// This mirror is tried first for Ruff downloads. If it fails, uv falls back to the canonical
+/// GitHub URL.
+const RUFF_DEFAULT_MIRROR: &str = "https://releases.astral.sh/github/ruff/releases/download/";
+
+/// The canonical base URL for the versions manifest.
 const VERSIONS_MANIFEST_URL: &str = "https://raw.githubusercontent.com/astral-sh/versions/main/v1";
+
+/// The default Astral mirror for the versions manifest.
+const VERSIONS_MANIFEST_MIRROR: &str = "https://releases.astral.sh/github/versions/main/v1";
 
 /// Binary version information from the versions manifest.
 #[derive(Debug, Deserialize)]
@@ -188,15 +242,17 @@ struct BinArtifact {
 pub struct ResolvedVersion {
     /// The version number.
     pub version: Version,
-    /// The download URL for this version and current platform.
-    pub artifact_url: Url,
+    /// The ordered list of download URLs to try for this version and current platform.
+    ///
+    /// The default Astral mirror is listed first, with the canonical GitHub URL as a fallback.
+    pub artifact_urls: Vec<DisplaySafeUrl>,
     /// The archive format.
     pub archive_format: ArchiveFormat,
 }
 
 impl ResolvedVersion {
     /// Construct a [`ResolvedVersion`] from a [`Binary`] and a [`Version`] by inferring the
-    /// download URL and archive format from the current platform.
+    /// download URLs and archive format from the current platform.
     pub fn from_version(binary: Binary, version: Version) -> Result<Self, Error> {
         let platform = Platform::from_env()?;
         let platform_name = platform.as_cargo_dist_triple();
@@ -205,10 +261,10 @@ impl ResolvedVersion {
         } else {
             ArchiveFormat::TarGz
         };
-        let artifact_url = binary.download_url(&version, &platform_name, archive_format)?;
+        let artifact_urls = binary.download_urls(&version, &platform_name, archive_format)?;
         Ok(Self {
             version,
-            artifact_url,
+            artifact_urls,
             archive_format,
         })
     }
@@ -224,11 +280,18 @@ pub enum Error {
         source: reqwest_middleware::Error,
     },
 
+    #[error("Failed to read from: {url}")]
+    Stream {
+        url: DisplaySafeUrl,
+        #[source]
+        source: reqwest::Error,
+    },
+
     #[error("Failed to parse URL: {url}")]
     UrlParse {
         url: String,
         #[source]
-        source: url::ParseError,
+        source: uv_redacted::DisplaySafeUrlError,
     },
 
     #[error("Failed to extract archive")]
@@ -298,16 +361,52 @@ pub enum Error {
     SystemTime(#[from] SystemTimeError),
 }
 
-impl Error {
-    /// Return the number of retries that were made to complete this request before this error was
-    /// returned.
-    ///
-    /// Note that e.g. 3 retries equates to 4 attempts.
+impl RetriableError for Error {
     fn retries(&self) -> u32 {
         if let Self::RetriedError { retries, .. } = self {
             return *retries;
         }
         0
+    }
+
+    /// Returns `true` if trying an alternative URL makes sense after this error.
+    ///
+    /// All errors arising from downloading (including streaming during extraction)
+    /// qualify.
+    fn should_try_next_url(&self) -> bool {
+        match self {
+            Self::Download { .. } | Self::ManifestFetch { .. } => true,
+            Self::Stream { .. } => true,
+            Self::RetriedError { err, .. } => err.should_try_next_url(),
+            err => {
+                // Walk the error chain to see if there's a nested download or streaming error.
+                let mut source = err.source();
+                while let Some(err) = source {
+                    if let Some(io_err) = err.downcast_ref::<io::Error>() {
+                        if io_err
+                            .get_ref()
+                            .and_then(|e| e.downcast_ref::<Self>() as Option<&Self>)
+                            .is_some_and(|e| {
+                                matches!(e, Self::Stream { .. } | Self::Download { .. })
+                            })
+                        {
+                            return true;
+                        }
+                    }
+                    source = err.source();
+                }
+                // Make sure all retriable errors also trigger a fallback to the next URL.
+                retryable_on_request_failure(err) == Some(Retryable::Transient)
+            }
+        }
+    }
+
+    fn into_retried(self, retries: u32, duration: Duration) -> Self {
+        Self::RetriedError {
+            err: Box::new(self),
+            retries,
+            duration,
+        }
     }
 }
 
@@ -330,63 +429,39 @@ pub async fn find_matching_version(
     let platform = Platform::from_env()?;
     let platform_name = platform.as_cargo_dist_triple();
 
-    let manifest_url = format!("{}/{}.ndjson", VERSIONS_MANIFEST_URL, binary.name());
-    let manifest_url_parsed = Url::parse(&manifest_url).map_err(|source| Error::UrlParse {
-        url: manifest_url.clone(),
-        source,
-    })?;
-
-    let mut retry_state = RetryState::start(*retry_policy, manifest_url_parsed.clone());
-
-    loop {
-        let result = fetch_and_find_matching_version(
-            binary,
-            constraints,
-            exclude_newer,
-            &platform_name,
-            &manifest_url,
-            &manifest_url_parsed,
-            client,
-        )
-        .await;
-
-        match result {
-            Ok(resolved) => return Ok(resolved),
-            Err(err) => {
-                if let Some(backoff) = retry_state.should_retry(&err, err.retries()) {
-                    retry_state.sleep_backoff(backoff).await;
-                    continue;
-                }
-                return if retry_state.total_retries() > 0 {
-                    Err(Error::RetriedError {
-                        err: Box::new(err),
-                        retries: retry_state.total_retries(),
-                        duration: retry_state.duration()?,
-                    })
-                } else {
-                    Err(err)
-                };
-            }
-        }
-    }
+    fetch_with_url_fallback(
+        &binary.manifest_urls(),
+        *retry_policy,
+        &format!("manifest for `{binary}`"),
+        |url| {
+            fetch_and_find_matching_version(
+                binary,
+                constraints,
+                exclude_newer,
+                &platform_name,
+                url,
+                client,
+            )
+        },
+    )
+    .await
 }
 
-/// Inner function that fetches the manifest and finds a matching version.
+/// Fetch the manifest from a single URL and find a matching version.
 ///
-/// This is separated from [`find_matching_version`] to allow retry logic to wrap
-/// the entire streaming operation.
+/// Separated from [`find_matching_version`] so that [`fetch_with_url_fallback`] can call it
+/// independently for each URL in the fallback list.
 async fn fetch_and_find_matching_version(
     binary: Binary,
     constraints: Option<&uv_pep440::VersionSpecifiers>,
     exclude_newer: Option<jiff::Timestamp>,
     platform_name: &str,
-    manifest_url: &str,
-    manifest_url_parsed: &Url,
+    manifest_url: DisplaySafeUrl,
     client: &BaseClient,
 ) -> Result<ResolvedVersion, Error> {
     let response = client
-        .for_host(&DisplaySafeUrl::from_url(manifest_url_parsed.clone()))
-        .get(manifest_url_parsed.clone())
+        .for_host(&manifest_url)
+        .get(Url::from(manifest_url.clone()))
         .send()
         .await
         .map_err(|source| Error::ManifestFetch {
@@ -409,6 +484,7 @@ async fn fetch_and_find_matching_version(
         }
         let version_info: BinVersionInfo = serde_json::from_str(line_str)?;
         Ok(check_version_match(
+            binary,
             &version_info,
             constraints,
             exclude_newer,
@@ -463,6 +539,7 @@ async fn fetch_and_find_matching_version(
 /// Returns `Some(resolved)` if the version matches and an artifact is found,
 /// `None` if the version doesn't match or no artifact is available for the platform.
 fn check_version_match(
+    binary: Binary,
     version_info: &BinVersionInfo,
     constraints: Option<&uv_pep440::VersionSpecifiers>,
     exclude_newer: Option<jiff::Timestamp>,
@@ -489,7 +566,7 @@ fn check_version_match(
             continue;
         }
 
-        let Ok(artifact_url) = Url::parse(&artifact.url) else {
+        let Ok(canonical_url) = DisplaySafeUrl::parse(&artifact.url) else {
             continue;
         };
 
@@ -501,7 +578,7 @@ fn check_version_match(
 
         return Some(ResolvedVersion {
             version: version_info.version.clone(),
-            artifact_url,
+            artifact_urls: binary.mirror_urls(canonical_url),
             archive_format,
         });
     }
@@ -521,10 +598,10 @@ pub async fn bin_install(
     let platform = Platform::from_env()?;
     let platform_name = platform.as_cargo_dist_triple();
 
-    bin_install_from_url(
+    bin_install_from_urls(
         binary,
         &resolved.version,
-        &resolved.artifact_url,
+        &resolved.artifact_urls,
         resolved.archive_format,
         &platform_name,
         client,
@@ -535,11 +612,11 @@ pub async fn bin_install(
     .await
 }
 
-/// Install a binary from a specific URL.
-async fn bin_install_from_url(
+/// Install a binary from an ordered list of URLs, trying each in sequence.
+async fn bin_install_from_urls(
     binary: Binary,
     version: &Version,
-    download_url: &Url,
+    download_urls: &[DisplaySafeUrl],
     format: ArchiveFormat,
     platform_name: &str,
     client: &BaseClient,
@@ -547,7 +624,6 @@ async fn bin_install_from_url(
     cache: &Cache,
     reporter: &dyn Reporter,
 ) -> Result<PathBuf, Error> {
-    let download_url = DisplaySafeUrl::from_url(download_url.clone());
     let cache_entry = CacheEntry::new(
         cache
             .bucket(CacheBucket::Binaries)
@@ -566,17 +642,23 @@ async fn bin_install_from_url(
     let cache_dir = cache_entry.dir();
     fs_err::tokio::create_dir_all(&cache_dir).await?;
 
-    let path = download_and_unpack_with_retry(
-        binary,
-        version,
-        client,
-        retry_policy,
-        cache,
-        reporter,
-        platform_name,
-        format,
-        &download_url,
-        &cache_entry,
+    let path = fetch_with_url_fallback(
+        download_urls,
+        *retry_policy,
+        &format!("`{binary}`"),
+        |url| {
+            download_and_unpack(
+                binary,
+                version,
+                client,
+                cache,
+                reporter,
+                platform_name,
+                format,
+                url,
+                &cache_entry,
+            )
+        },
     )
     .await?;
 
@@ -598,59 +680,9 @@ async fn bin_install_from_url(
     Ok(path)
 }
 
-/// Download and unpack a binary with retry on stream failures.
-async fn download_and_unpack_with_retry(
-    binary: Binary,
-    version: &Version,
-    client: &BaseClient,
-    retry_policy: &ExponentialBackoff,
-    cache: &Cache,
-    reporter: &dyn Reporter,
-    platform_name: &str,
-    format: ArchiveFormat,
-    download_url: &DisplaySafeUrl,
-    cache_entry: &CacheEntry,
-) -> Result<PathBuf, Error> {
-    let mut retry_state = RetryState::start(*retry_policy, download_url.clone());
-
-    loop {
-        let result = download_and_unpack(
-            binary,
-            version,
-            client,
-            cache,
-            reporter,
-            platform_name,
-            format,
-            download_url,
-            cache_entry,
-        )
-        .await;
-
-        match result {
-            Ok(path) => return Ok(path),
-            Err(err) => {
-                if let Some(backoff) = retry_state.should_retry(&err, err.retries()) {
-                    retry_state.sleep_backoff(backoff).await;
-                    continue;
-                }
-                return if retry_state.total_retries() > 0 {
-                    Err(Error::RetriedError {
-                        err: Box::new(err),
-                        retries: retry_state.total_retries(),
-                        duration: retry_state.duration()?,
-                    })
-                } else {
-                    Err(err)
-                };
-            }
-        }
-    }
-}
-
-/// Download and unpackage a binary,
+/// Download and unpack a binary from a single URL.
 ///
-/// NOTE [`download_and_unpack_with_retry`] should be used instead.
+/// Use [`bin_install_from_urls`] (via [`fetch_with_url_fallback`]) to get URL-fallback and retry.
 async fn download_and_unpack(
     binary: Binary,
     version: &Version,
@@ -659,14 +691,14 @@ async fn download_and_unpack(
     reporter: &dyn Reporter,
     platform_name: &str,
     format: ArchiveFormat,
-    download_url: &DisplaySafeUrl,
+    download_url: DisplaySafeUrl,
     cache_entry: &CacheEntry,
 ) -> Result<PathBuf, Error> {
     // Create a temporary directory for extraction
     let temp_dir = tempfile::tempdir_in(cache.bucket(CacheBucket::Binaries))?;
 
     let response = client
-        .for_host(download_url)
+        .for_host(&download_url)
         .get(Url::from(download_url.clone()))
         .send()
         .await
@@ -706,14 +738,19 @@ async fn download_and_unpack(
     // Stream download directly to extraction
     let reader = response
         .bytes_stream()
-        .map_err(std::io::Error::other)
+        .map_err(|err| {
+            std::io::Error::other(Error::Stream {
+                url: download_url.clone(),
+                source: err,
+            })
+        })
         .into_async_read()
         .compat();
 
     let id = reporter.on_download_start(binary.name(), version, size);
     let mut progress_reader = ProgressReader::new(reader, id, reporter);
     stream::archive(
-        download_url,
+        &download_url,
         &mut progress_reader,
         format.into(),
         temp_dir.path(),
@@ -792,5 +829,64 @@ where
                 self.reporter
                     .on_download_progress(self.index, buf.filled().len() as u64);
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Write;
+    use std::net::TcpListener;
+    use uv_client::{BaseClientBuilder, retryable_on_request_failure};
+    use uv_redacted::DisplaySafeUrl;
+
+    use super::*;
+
+    /// Verify that `should_try_next_url` returns `true` even for streaming errors
+    /// that `retryable_on_request_failure` does not recognise as transient.
+    ///
+    /// This exercises a realistic body-streaming protocol failure: the server
+    /// advertises chunked transfer encoding but sends an invalid chunk size.
+    #[tokio::test]
+    async fn test_non_retryable_stream_error_triggers_url_fallback() {
+        use futures::TryStreamExt;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buf = [0u8; 4096];
+            let _ = std::io::Read::read(&mut stream, &mut buf);
+            stream
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\nZZZ\r\nhello\r\n0\r\n\r\n",
+                )
+                .unwrap();
+        });
+
+        let url = DisplaySafeUrl::parse(&format!("http://{addr}/ruff.tar.gz")).unwrap();
+        let client = BaseClientBuilder::default().build();
+        let response = client
+            .for_host(&url)
+            .get(Url::from(url.clone()))
+            .send()
+            .await
+            .unwrap();
+
+        let reqwest_err = response.bytes_stream().try_next().await.unwrap_err();
+        assert!(reqwest_err.is_body() || reqwest_err.is_decode());
+
+        let err = Error::Extract {
+            source: ExtractError::Io(io::Error::other(Error::Stream {
+                url,
+                source: reqwest_err,
+            })),
+        };
+
+        assert!(retryable_on_request_failure(&err).is_none());
+        assert!(
+            err.should_try_next_url(),
+            "non-retryable streaming error should still trigger URL fallback, got: {err}"
+        );
     }
 }

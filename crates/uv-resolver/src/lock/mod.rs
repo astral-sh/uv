@@ -26,17 +26,19 @@ use uv_distribution_filename::{
 };
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
-    Dist, DistributionMetadata, FileLocation, GitSourceDist, IndexLocations, IndexMetadata,
-    IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
+    Dist, FileLocation, GitSourceDist, Identifier, IndexLocations, IndexMetadata, IndexUrl, Name,
+    PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
+    RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
     SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString,
 };
-use uv_fs::{PortablePath, PortablePathBuf, Simplified, relative_to};
+use uv_fs::{PortablePath, PortablePathBuf, Simplified, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
-use uv_pep508::{MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError, split_scheme};
+use uv_pep508::{
+    MarkerEnvironment, MarkerTree, Scheme, VerbatimUrl, VerbatimUrlError, split_scheme,
+};
 use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
 };
@@ -296,9 +298,26 @@ pub struct Lock {
 
 impl Lock {
     /// Initialize a [`Lock`] from a [`ResolverOutput`].
-    pub fn from_resolution(resolution: &ResolverOutput, root: &Path) -> Result<Self, LockError> {
+    pub fn from_resolution(
+        resolution: &ResolverOutput,
+        root: &Path,
+        supported_environments: Vec<MarkerTree>,
+    ) -> Result<Self, LockError> {
         let mut packages = BTreeMap::new();
         let requires_python = resolution.requires_python.clone();
+        let supported_environments = supported_environments
+            .into_iter()
+            .map(|marker| requires_python.complexify_markers(marker))
+            .collect::<Vec<_>>();
+        let supported_environments_marker = if supported_environments.is_empty() {
+            None
+        } else {
+            let mut combined = MarkerTree::FALSE;
+            for marker in &supported_environments {
+                combined.or(*marker);
+            }
+            Some(UniversalMarker::new(combined, ConflictMarker::TRUE))
+        };
 
         // Determine the set of packages included at multiple versions.
         let mut seen = FxHashSet::default();
@@ -345,13 +364,16 @@ impl Lock {
             };
 
             let mut package = Package::from_annotated_dist(dist, fork_markers, root)?;
+            let mut wheel_marker = dist.marker;
+            if let Some(supported_environments_marker) = supported_environments_marker {
+                wheel_marker.and(supported_environments_marker);
+            }
             let wheels = &mut package.wheels;
             wheels.retain(|wheel| {
-                !is_wheel_unreachable(
+                !is_wheel_unreachable_for_marker(
                     &wheel.filename,
-                    resolution,
                     &requires_python,
-                    node_index,
+                    &wheel_marker,
                     None,
                 )
             });
@@ -460,7 +482,7 @@ impl Lock {
             options,
             ResolverManifest::default(),
             Conflicts::empty(),
-            vec![],
+            supported_environments,
             vec![],
             fork_markers,
         )?;
@@ -1640,8 +1662,7 @@ impl Lock {
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => None,
                     IndexUrl::Path(url) => {
                         let path = url.to_file_path().ok()?;
-                        let path = relative_to(&path, root)
-                            .or_else(|_| std::path::absolute(path))
+                        let path = try_relative_to_if(&path, root, !url.was_given_absolute())
                             .ok()?
                             .into_boxed_path();
                         Some(path)
@@ -1689,9 +1710,7 @@ impl Lock {
                     IndexUrl::Path(url) => {
                         if let Some(locals) = locals.as_mut() {
                             if let Some(path) = url.to_file_path().ok().and_then(|path| {
-                                relative_to(&path, root)
-                                    .or_else(|_| std::path::absolute(path))
-                                    .ok()
+                                try_relative_to_if(&path, root, !url.was_given_absolute()).ok()
                             }) {
                                 locals.insert(path.into_boxed_path());
                             }
@@ -1794,7 +1813,7 @@ impl Lock {
                 )?;
 
                 let metadata = {
-                    let id = dist.version_id();
+                    let id = dist.distribution_id();
                     if let Some(archive) =
                         index
                             .distributions()
@@ -1946,7 +1965,7 @@ impl Lock {
                     )?;
 
                     let metadata = {
-                        let id = dist.version_id();
+                        let id = dist.distribution_id();
                         if let Some(archive) =
                             index
                                 .distributions()
@@ -2034,9 +2053,7 @@ impl Lock {
                         IndexUrl::Path(url) => {
                             if let Some(locals) = locals.as_mut() {
                                 if let Some(path) = url.to_file_path().ok().and_then(|path| {
-                                    relative_to(&path, root)
-                                        .or_else(|_| std::path::absolute(path))
-                                        .ok()
+                                    try_relative_to_if(&path, root, !url.was_given_absolute()).ok()
                                 }) {
                                     locals.insert(path.into_boxed_path());
                                 }
@@ -2797,10 +2814,11 @@ impl Package {
                     return Ok(None);
                 };
                 let install_path = absolute_path(workspace_root, path)?;
+                let given = path.to_str().expect("lock file paths must be UTF-8");
                 let path_dist = PathSourceDist {
                     name: self.id.name.clone(),
                     version: self.id.version.clone(),
-                    url: verbatim_url(&install_path, &self.id)?,
+                    url: verbatim_url(&install_path, &self.id)?.with_given(given),
                     install_path: install_path.into_boxed_path(),
                     ext,
                 };
@@ -2808,9 +2826,10 @@ impl Package {
             }
             Source::Directory(path) => {
                 let install_path = absolute_path(workspace_root, path)?;
+                let given = path.to_str().expect("lock file paths must be UTF-8");
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
-                    url: verbatim_url(&install_path, &self.id)?,
+                    url: verbatim_url(&install_path, &self.id)?.with_given(given),
                     install_path: install_path.into_boxed_path(),
                     editable: Some(false),
                     r#virtual: Some(false),
@@ -2819,9 +2838,10 @@ impl Package {
             }
             Source::Editable(path) => {
                 let install_path = absolute_path(workspace_root, path)?;
+                let given = path.to_str().expect("lock file paths must be UTF-8");
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
-                    url: verbatim_url(&install_path, &self.id)?,
+                    url: verbatim_url(&install_path, &self.id)?.with_given(given),
                     install_path: install_path.into_boxed_path(),
                     editable: Some(true),
                     r#virtual: Some(false),
@@ -2830,9 +2850,10 @@ impl Package {
             }
             Source::Virtual(path) => {
                 let install_path = absolute_path(workspace_root, path)?;
+                let given = path.to_str().expect("lock file paths must be UTF-8");
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
-                    url: verbatim_url(&install_path, &self.id)?,
+                    url: verbatim_url(&install_path, &self.id)?.with_given(given),
                     install_path: install_path.into_boxed_path(),
                     editable: Some(false),
                     r#virtual: Some(true),
@@ -3655,16 +3676,22 @@ impl Source {
     }
 
     fn from_path_built_dist(path_dist: &PathBuiltDist, root: &Path) -> Result<Self, LockError> {
-        let path = relative_to(&path_dist.install_path, root)
-            .or_else(|_| std::path::absolute(&path_dist.install_path))
-            .map_err(LockErrorKind::DistributionRelativePath)?;
+        let path = try_relative_to_if(
+            &path_dist.install_path,
+            root,
+            !path_dist.url.was_given_absolute(),
+        )
+        .map_err(LockErrorKind::DistributionRelativePath)?;
         Ok(Self::Path(path.into_boxed_path()))
     }
 
     fn from_path_source_dist(path_dist: &PathSourceDist, root: &Path) -> Result<Self, LockError> {
-        let path = relative_to(&path_dist.install_path, root)
-            .or_else(|_| std::path::absolute(&path_dist.install_path))
-            .map_err(LockErrorKind::DistributionRelativePath)?;
+        let path = try_relative_to_if(
+            &path_dist.install_path,
+            root,
+            !path_dist.url.was_given_absolute(),
+        )
+        .map_err(LockErrorKind::DistributionRelativePath)?;
         Ok(Self::Path(path.into_boxed_path()))
     }
 
@@ -3672,9 +3699,12 @@ impl Source {
         directory_dist: &DirectorySourceDist,
         root: &Path,
     ) -> Result<Self, LockError> {
-        let path = relative_to(&directory_dist.install_path, root)
-            .or_else(|_| std::path::absolute(&directory_dist.install_path))
-            .map_err(LockErrorKind::DistributionRelativePath)?;
+        let path = try_relative_to_if(
+            &directory_dist.install_path,
+            root,
+            !directory_dist.url.was_given_absolute(),
+        )
+        .map_err(LockErrorKind::DistributionRelativePath)?;
         if directory_dist.editable.unwrap_or(false) {
             Ok(Self::Editable(path.into_boxed_path()))
         } else if directory_dist.r#virtual.unwrap_or(false) {
@@ -3696,8 +3726,7 @@ impl Source {
                 let path = url
                     .to_file_path()
                     .map_err(|()| LockErrorKind::UrlToPath { url: url.to_url() })?;
-                let path = relative_to(&path, root)
-                    .or_else(|_| std::path::absolute(&path))
+                let path = try_relative_to_if(&path, root, !url.was_given_absolute())
                     .map_err(LockErrorKind::IndexRelativePath)?;
                 let source = RegistrySource::Path(path.into_boxed_path());
                 Ok(Self::Registry(source))
@@ -3984,7 +4013,7 @@ impl<'de> serde::de::Deserialize<'de> for RegistrySourceWire {
             where
                 E: serde::de::Error,
             {
-                if split_scheme(value).is_some() {
+                if split_scheme(value).is_some_and(|(scheme, _)| Scheme::parse(scheme).is_some()) {
                     Ok(
                         serde::Deserialize::deserialize(serde::de::value::StrDeserializer::new(
                             value,
@@ -4264,10 +4293,10 @@ impl SourceDist {
                     let reg_dist_path = url
                         .to_file_path()
                         .map_err(|()| LockErrorKind::UrlToPath { url })?;
-                    let path = relative_to(&reg_dist_path, index_path)
-                        .or_else(|_| std::path::absolute(&reg_dist_path))
-                        .map_err(LockErrorKind::DistributionRelativePath)?
-                        .into_boxed_path();
+                    let path =
+                        try_relative_to_if(&reg_dist_path, index_path, !path.was_given_absolute())
+                            .map_err(LockErrorKind::DistributionRelativePath)?
+                            .into_boxed_path();
                     let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
                     let size = reg_dist.file.size;
                     let upload_time = reg_dist
@@ -4612,10 +4641,10 @@ impl Wheel {
                     let wheel_path = wheel_url
                         .to_file_path()
                         .map_err(|()| LockErrorKind::UrlToPath { url: wheel_url })?;
-                    let path = relative_to(&wheel_path, index_path)
-                        .or_else(|_| std::path::absolute(&wheel_path))
-                        .map_err(LockErrorKind::DistributionRelativePath)?
-                        .into_boxed_path();
+                    let path =
+                        try_relative_to_if(&wheel_path, index_path, !path.was_given_absolute())
+                            .map_err(LockErrorKind::DistributionRelativePath)?
+                            .into_boxed_path();
                     WheelWireSource::Path { path }
                 } else {
                     let url = normalize_file_location(&wheel.file.url)
@@ -6190,11 +6219,10 @@ fn simplified_universal_markers(
 ///
 /// Returns `true` if the wheel is definitely unreachable, and `false` if it may be reachable,
 /// including if the wheel tag isn't recognized.
-pub(crate) fn is_wheel_unreachable(
+fn is_wheel_unreachable_for_marker(
     filename: &WheelFilename,
-    graph: &ResolverOutput,
     requires_python: &RequiresPython,
-    node_index: NodeIndex,
+    marker: &UniversalMarker,
     tags: Option<&Tags>,
 ) -> bool {
     if let Some(tags) = tags
@@ -6223,246 +6251,180 @@ pub(crate) fn is_wheel_unreachable(
 
     if platform_tags.iter().all(PlatformTag::is_linux) {
         if platform_tags.iter().all(PlatformTag::is_arm) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*LINUX_ARM_MARKERS)
-            {
+            if marker.is_disjoint(*LINUX_ARM_MARKERS) {
                 return true;
             }
         } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*LINUX_X86_64_MARKERS)
-            {
+            if marker.is_disjoint(*LINUX_X86_64_MARKERS) {
                 return true;
             }
         } else if platform_tags.iter().all(PlatformTag::is_x86) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*LINUX_X86_MARKERS)
-            {
+            if marker.is_disjoint(*LINUX_X86_MARKERS) {
                 return true;
             }
         } else if platform_tags.iter().all(PlatformTag::is_ppc64le) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*LINUX_PPC64LE_MARKERS)
-            {
+            if marker.is_disjoint(*LINUX_PPC64LE_MARKERS) {
                 return true;
             }
         } else if platform_tags.iter().all(PlatformTag::is_ppc64) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*LINUX_PPC64_MARKERS)
-            {
+            if marker.is_disjoint(*LINUX_PPC64_MARKERS) {
                 return true;
             }
         } else if platform_tags.iter().all(PlatformTag::is_s390x) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*LINUX_S390X_MARKERS)
-            {
+            if marker.is_disjoint(*LINUX_S390X_MARKERS) {
                 return true;
             }
         } else if platform_tags.iter().all(PlatformTag::is_riscv64) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*LINUX_RISCV64_MARKERS)
-            {
+            if marker.is_disjoint(*LINUX_RISCV64_MARKERS) {
                 return true;
             }
         } else if platform_tags.iter().all(PlatformTag::is_loongarch64) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*LINUX_LOONGARCH64_MARKERS)
-            {
+            if marker.is_disjoint(*LINUX_LOONGARCH64_MARKERS) {
                 return true;
             }
         } else if platform_tags.iter().all(PlatformTag::is_armv7l) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*LINUX_ARMV7L_MARKERS)
-            {
+            if marker.is_disjoint(*LINUX_ARMV7L_MARKERS) {
                 return true;
             }
         } else if platform_tags.iter().all(PlatformTag::is_armv6l) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*LINUX_ARMV6L_MARKERS)
-            {
+            if marker.is_disjoint(*LINUX_ARMV6L_MARKERS) {
                 return true;
             }
-        } else if graph.graph[node_index].marker().is_disjoint(*LINUX_MARKERS) {
+        } else if marker.is_disjoint(*LINUX_MARKERS) {
             return true;
         }
     }
 
     if platform_tags.iter().all(PlatformTag::is_windows) {
         if platform_tags.iter().all(PlatformTag::is_arm) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*WINDOWS_ARM_MARKERS)
-            {
+            if marker.is_disjoint(*WINDOWS_ARM_MARKERS) {
                 return true;
             }
         } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*WINDOWS_X86_64_MARKERS)
-            {
+            if marker.is_disjoint(*WINDOWS_X86_64_MARKERS) {
                 return true;
             }
         } else if platform_tags.iter().all(PlatformTag::is_x86) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*WINDOWS_X86_MARKERS)
-            {
+            if marker.is_disjoint(*WINDOWS_X86_MARKERS) {
                 return true;
             }
-        } else if graph.graph[node_index]
-            .marker()
-            .is_disjoint(*WINDOWS_MARKERS)
-        {
+        } else if marker.is_disjoint(*WINDOWS_MARKERS) {
             return true;
         }
     }
 
     if platform_tags.iter().all(PlatformTag::is_macos) {
         if platform_tags.iter().all(PlatformTag::is_arm) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*MAC_ARM_MARKERS)
-            {
+            if marker.is_disjoint(*MAC_ARM_MARKERS) {
                 return true;
             }
         } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*MAC_X86_64_MARKERS)
-            {
+            if marker.is_disjoint(*MAC_X86_64_MARKERS) {
                 return true;
             }
         } else if platform_tags.iter().all(PlatformTag::is_x86) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*MAC_X86_MARKERS)
-            {
+            if marker.is_disjoint(*MAC_X86_MARKERS) {
                 return true;
             }
-        } else if graph.graph[node_index].marker().is_disjoint(*MAC_MARKERS) {
+        } else if marker.is_disjoint(*MAC_MARKERS) {
             return true;
         }
     }
 
     if platform_tags.iter().all(PlatformTag::is_android) {
         if platform_tags.iter().all(PlatformTag::is_arm) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*ANDROID_ARM_MARKERS)
-            {
+            if marker.is_disjoint(*ANDROID_ARM_MARKERS) {
                 return true;
             }
         } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*ANDROID_X86_64_MARKERS)
-            {
+            if marker.is_disjoint(*ANDROID_X86_64_MARKERS) {
                 return true;
             }
         } else if platform_tags.iter().all(PlatformTag::is_x86) {
-            if graph.graph[node_index]
-                .marker()
-                .is_disjoint(*ANDROID_X86_MARKERS)
-            {
+            if marker.is_disjoint(*ANDROID_X86_MARKERS) {
                 return true;
             }
-        } else if graph.graph[node_index]
-            .marker()
-            .is_disjoint(*ANDROID_MARKERS)
-        {
+        } else if marker.is_disjoint(*ANDROID_MARKERS) {
             return true;
         }
     }
 
     if platform_tags.iter().all(PlatformTag::is_arm) {
-        if graph.graph[node_index].marker().is_disjoint(*ARM_MARKERS) {
+        if marker.is_disjoint(*ARM_MARKERS) {
             return true;
         }
     }
 
     if platform_tags.iter().all(PlatformTag::is_x86_64) {
-        if graph.graph[node_index]
-            .marker()
-            .is_disjoint(*X86_64_MARKERS)
-        {
+        if marker.is_disjoint(*X86_64_MARKERS) {
             return true;
         }
     }
 
     if platform_tags.iter().all(PlatformTag::is_x86) {
-        if graph.graph[node_index].marker().is_disjoint(*X86_MARKERS) {
+        if marker.is_disjoint(*X86_MARKERS) {
             return true;
         }
     }
 
     if platform_tags.iter().all(PlatformTag::is_ppc64le) {
-        if graph.graph[node_index]
-            .marker()
-            .is_disjoint(*PPC64LE_MARKERS)
-        {
+        if marker.is_disjoint(*PPC64LE_MARKERS) {
             return true;
         }
     }
 
     if platform_tags.iter().all(PlatformTag::is_ppc64) {
-        if graph.graph[node_index].marker().is_disjoint(*PPC64_MARKERS) {
+        if marker.is_disjoint(*PPC64_MARKERS) {
             return true;
         }
     }
 
     if platform_tags.iter().all(PlatformTag::is_s390x) {
-        if graph.graph[node_index].marker().is_disjoint(*S390X_MARKERS) {
+        if marker.is_disjoint(*S390X_MARKERS) {
             return true;
         }
     }
 
     if platform_tags.iter().all(PlatformTag::is_riscv64) {
-        if graph.graph[node_index]
-            .marker()
-            .is_disjoint(*RISCV64_MARKERS)
-        {
+        if marker.is_disjoint(*RISCV64_MARKERS) {
             return true;
         }
     }
 
     if platform_tags.iter().all(PlatformTag::is_loongarch64) {
-        if graph.graph[node_index]
-            .marker()
-            .is_disjoint(*LOONGARCH64_MARKERS)
-        {
+        if marker.is_disjoint(*LOONGARCH64_MARKERS) {
             return true;
         }
     }
 
     if platform_tags.iter().all(PlatformTag::is_armv7l) {
-        if graph.graph[node_index]
-            .marker()
-            .is_disjoint(*ARMV7L_MARKERS)
-        {
+        if marker.is_disjoint(*ARMV7L_MARKERS) {
             return true;
         }
     }
 
     if platform_tags.iter().all(PlatformTag::is_armv6l) {
-        if graph.graph[node_index]
-            .marker()
-            .is_disjoint(*ARMV6L_MARKERS)
-        {
+        if marker.is_disjoint(*ARMV6L_MARKERS) {
             return true;
         }
     }
 
     false
+}
+
+pub(crate) fn is_wheel_unreachable(
+    filename: &WheelFilename,
+    graph: &ResolverOutput,
+    requires_python: &RequiresPython,
+    node_index: NodeIndex,
+    tags: Option<&Tags>,
+) -> bool {
+    is_wheel_unreachable_for_marker(
+        filename,
+        requires_python,
+        graph.graph[node_index].marker(),
+        tags,
+    )
 }
 
 #[cfg(test)]
@@ -6788,5 +6750,30 @@ source = { editable = "path/to/dir" }
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
         insta::assert_debug_snapshot!(result);
+    }
+
+    /// Windows drive letter paths like `C:/...` should be deserialized as local path registry
+    /// sources, not as URLs. The `C:` prefix must not be misinterpreted as a URL scheme.
+    #[test]
+    fn registry_source_windows_drive_letter() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[package]]
+name = "tqdm"
+version = "1000.0.0"
+source = { registry = "C:/Users/user/links" }
+wheels = [
+    { path = "C:/Users/user/links/tqdm-1000.0.0-py3-none-any.whl" },
+]
+"#;
+        let lock: Lock = toml::from_str(data).unwrap();
+        assert_eq!(
+            lock.packages[0].id.source,
+            Source::Registry(RegistrySource::Path(
+                Path::new("C:/Users/user/links").into()
+            ))
+        );
     }
 }

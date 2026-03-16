@@ -1,26 +1,33 @@
+use itertools::Itertools as _;
+use owo_colors::OwoColorize;
+use std::fmt::Write as _;
 use std::path::Path;
 
-use crate::{
-    commands::{
-        ExitStatus, diagnostics,
-        pip::{loggers::DefaultResolveLogger, resolution_markers},
-        project::{
-            ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
-            default_dependency_groups,
-            lock::{LockMode, LockOperation},
-            lock_target::LockTarget,
-        },
-    },
-    printer::Printer,
-    settings::{FrozenSource, LockCheck, ResolverSettings},
+use crate::commands::ExitStatus;
+use crate::commands::diagnostics;
+use crate::commands::pip::loggers::DefaultResolveLogger;
+use crate::commands::pip::resolution_markers;
+use crate::commands::project::default_dependency_groups;
+use crate::commands::project::lock::{LockMode, LockOperation};
+use crate::commands::project::lock_target::LockTarget;
+use crate::commands::project::{
+    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
 };
+use crate::commands::reporters::AuditReporter;
+use crate::printer::Printer;
+use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
+
 use anyhow::Result;
+use tracing::trace;
+use uv_audit::service::osv;
+use uv_audit::types::{Dependency, Finding};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, DependencyGroups, ExtrasSpecification, TargetTriple};
 use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
+use uv_redacted::DisplaySafeUrl;
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user;
@@ -179,11 +186,172 @@ pub(crate) async fn audit(
 
     // TODO: validate the sets of requested extras/groups against the lockfile?
 
+    // Build the list of auditable packages, skipping workspace members. Workspace members are
+    // local by definition and have no meaningful external package identity to look up in a vuln
+    // service. We also skip packages without a version, since we can't query for them.
+    //
+    // This mirrors the logic in `TreeDisplay::new`: for single-member workspaces, `lock.members()`
+    // is empty and the root package (source at path "") is the implicit member.
+    let workspace_root_name = lock.root().map(uv_resolver::Package::name);
+    let auditable: Vec<_> = lock
+        .packages()
+        .iter()
+        .filter(|p| {
+            if lock.members().is_empty() {
+                // Single-member workspace: skip the implicit root.
+                workspace_root_name != Some(p.name())
+            } else {
+                !lock.members().contains(p.name())
+            }
+        })
+        .filter_map(|p| {
+            let Some(version) = p.version() else {
+                trace!(
+                    "Skipping audit for {} because it has no version information",
+                    p.name()
+                );
+                return None;
+            };
+            Some((p.name(), version))
+        })
+        .collect();
+
     // Perform the audit.
-    warn_user!(
-        "Would have audited {n} dependencies.",
-        n = lock.packages().len()
+    let base_client = client_builder.build();
+    let osv_url =
+        DisplaySafeUrl::parse(osv::API_BASE).expect("impossible: embedded URL is invalid");
+    let service = osv::Osv::new(
+        base_client.for_host(&osv_url).raw_client().clone(),
+        None,
+        concurrency,
     );
+    trace!("Auditing {n} dependencies against OSV", n = auditable.len());
+
+    let reporter = AuditReporter::from(printer);
+
+    let dependencies: Vec<Dependency> = auditable
+        .iter()
+        .map(|(name, version)| Dependency::new((*name).clone(), (*version).clone()))
+        .collect();
+    let all_findings = service.query_batch(&dependencies).await?;
+
+    reporter.on_audit_complete();
+
+    let display = AuditResults {
+        printer,
+        n_packages: auditable.len(),
+        findings: all_findings,
+    };
+    display.render()?;
 
     Ok(ExitStatus::Success)
+}
+
+struct AuditResults {
+    printer: Printer,
+    n_packages: usize,
+    findings: Vec<Finding>,
+}
+
+impl AuditResults {
+    fn render(&self) -> Result<()> {
+        let (vulns, statuses): (Vec<_>, Vec<_>) =
+            self.findings.iter().partition_map(|finding| match finding {
+                Finding::Vulnerability(vuln) => itertools::Either::Left(vuln),
+                Finding::ProjectStatus(status) => itertools::Either::Right(status),
+            });
+
+        let vuln_banner = if !vulns.is_empty() {
+            let s = if vulns.len() == 1 { "y" } else { "ies" };
+            format!("{} known vulnerabilit{}", vulns.len(), s)
+                .yellow()
+                .to_string()
+        } else {
+            "no known vulnerabilities".bold().to_string()
+        };
+
+        let status_banner = if !statuses.is_empty() {
+            let s = if statuses.len() == 1 { "" } else { "es" };
+            format!(
+                "{} adverse project status{}",
+                statuses.len().to_string().yellow(),
+                s
+            )
+        } else {
+            "no adverse project statuses".bold().to_string()
+        };
+
+        writeln!(
+            self.printer.stderr(),
+            "Found {vuln_banner} and {status_banner} in {packages}",
+            packages = format!("{npackages} packages", npackages = self.n_packages).bold()
+        )?;
+
+        if !vulns.is_empty() {
+            writeln!(self.printer.stdout_important(), "\nVulnerabilities:\n")?;
+
+            // Group vulnerabilities by (dependency name, version).
+            let groups = vulns
+                .into_iter()
+                .chunk_by(|vuln| (vuln.dependency.name(), vuln.dependency.version()));
+
+            for (dependency, vulns) in &groups {
+                let vulns: Vec<_> = vulns.collect();
+                let (name, version) = dependency;
+
+                writeln!(
+                    self.printer.stdout_important(),
+                    "{name_version} has {n} known vulnerabilit{ies}:\n",
+                    name_version = format!("{name} {version}").bold(),
+                    n = vulns.len(),
+                    ies = if vulns.len() == 1 { "y" } else { "ies" },
+                )?;
+
+                for vuln in vulns {
+                    writeln!(
+                        self.printer.stdout_important(),
+                        "- {id}: {description}",
+                        id = vuln.best_id().as_str().bold(),
+                        description = vuln.summary.as_deref().unwrap_or("No summary provided"),
+                    )?;
+
+                    if vuln.fix_versions.is_empty() {
+                        writeln!(
+                            self.printer.stdout_important(),
+                            "\n  No fix versions available\n"
+                        )?;
+                    } else {
+                        writeln!(
+                            self.printer.stdout_important(),
+                            "\n  Fixed in: {}\n",
+                            vuln.fix_versions
+                                .iter()
+                                .map(std::string::ToString::to_string)
+                                .join(", ")
+                                .blue()
+                        )?;
+                    }
+
+                    if let Some(link) = &vuln.link {
+                        writeln!(
+                            self.printer.stdout_important(),
+                            "  Advisory information: {link}\n",
+                            link = link.as_str().blue()
+                        )?;
+                    }
+                }
+
+                writeln!(self.printer.stdout_important())?;
+            }
+        }
+
+        if !statuses.is_empty() {
+            writeln!(self.printer.stdout_important(), "\nAdverse statuses:\n")?;
+
+            // NOTE: Nothing here yet, since we don't actually produce
+            // any adverse project statuses at the moment.
+        }
+
+        Ok(())
+    }
 }

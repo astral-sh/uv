@@ -18,10 +18,13 @@ use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt, BufWriter, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tokio_util::either::Either;
-use tracing::{debug, instrument, warn};
+use tracing::{debug, instrument};
 use url::Url;
 
-use uv_client::{BaseClient, RetryState, WrappedReqwestError, retryable_on_request_failure};
+use uv_client::{
+    BaseClient, RetriableError, WrappedReqwestError, fetch_with_url_fallback,
+    retryable_on_request_failure,
+};
 use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
 use uv_fs::{Simplified, rename_with_retry};
@@ -126,7 +129,7 @@ pub enum Error {
     SystemTime(#[from] SystemTimeError),
 }
 
-impl Error {
+impl RetriableError for Error {
     // Return the number of retries that were made to complete this request before this error was
     // returned.
     //
@@ -166,6 +169,14 @@ impl Error {
             // explicitly so that `retryable_on_request_failure` can inspect the io error kind.
             Self::Io(err) => retryable_on_request_failure(err).is_some(),
             _ => false,
+        }
+    }
+
+    fn into_retried(self, retries: u32, duration: Duration) -> Self {
+        Self::NetworkErrorWithRetries {
+            err: Box::new(self),
+            retries,
+            duration,
         }
     }
 }
@@ -394,7 +405,10 @@ impl PythonDownloadRequest {
     ///
     /// Platform information is pulled from the environment.
     pub fn fill_platform(mut self) -> Result<Self, Error> {
-        let platform = Platform::from_env()?;
+        let platform = Platform::from_env().map_err(|err| match err {
+            platform::Error::LibcDetectionError(err) => Error::LibcDetection(err),
+            err => Error::InvalidRequestPlatform(err),
+        })?;
         if self.arch.is_none() {
             self.arch = Some(ArchRequest::Environment(platform.arch));
         }
@@ -1152,55 +1166,20 @@ impl ManagedPythonDownload {
         reporter: Option<&dyn Reporter>,
     ) -> Result<DownloadResult, Error> {
         let urls = self.download_urls(python_install_mirror, pypy_install_mirror)?;
-        let mut retry_state = RetryState::start(
-            *retry_policy,
-            // We pass in the last URL because that will trigger backoff if it fails.
-            urls.last().ok_or(Error::NoPythonDownloadUrlFound)?.clone(),
-        );
-
-        'retry: loop {
-            for (i, url) in urls.iter().enumerate() {
-                let is_last = i == urls.len() - 1;
-                match self
-                    .fetch_from_url(
-                        url,
-                        client,
-                        installation_dir,
-                        scratch_dir,
-                        reinstall,
-                        reporter,
-                    )
-                    .await
-                {
-                    Ok(download_result) => return Ok(download_result),
-                    Err(err) => {
-                        if !is_last && err.should_try_next_url() {
-                            warn!(
-                                "Failed to download `{}` from {url} ({err}); falling back to {}",
-                                self.key(),
-                                urls[i + 1]
-                            );
-                            continue;
-                        }
-                        // All URLs exhausted; apply the retry policy.
-                        if let Some(backoff) = retry_state.should_retry(&err, err.retries()) {
-                            retry_state.sleep_backoff(backoff).await;
-                            continue 'retry;
-                        }
-                        return if retry_state.total_retries() > 0 {
-                            Err(Error::NetworkErrorWithRetries {
-                                err: Box::new(err),
-                                retries: retry_state.total_retries(),
-                                duration: retry_state.duration()?,
-                            })
-                        } else {
-                            Err(err)
-                        };
-                    }
-                }
-            }
-            unreachable!("download_urls() must return at least one URL");
+        if urls.is_empty() {
+            return Err(Error::NoPythonDownloadUrlFound);
         }
+        fetch_with_url_fallback(&urls, *retry_policy, &format!("`{}`", self.key()), |url| {
+            self.fetch_from_url(
+                url,
+                client,
+                installation_dir,
+                scratch_dir,
+                reinstall,
+                reporter,
+            )
+        })
+        .await
     }
 
     /// Download and extract a Python distribution.
@@ -1216,7 +1195,10 @@ impl ManagedPythonDownload {
         reporter: Option<&dyn Reporter>,
     ) -> Result<DownloadResult, Error> {
         let urls = self.download_urls(python_install_mirror, pypy_install_mirror)?;
-        let url = urls.first().ok_or(Error::NoPythonDownloadUrlFound)?;
+        let url = urls
+            .into_iter()
+            .next()
+            .ok_or(Error::NoPythonDownloadUrlFound)?;
         self.fetch_from_url(
             url,
             client,
@@ -1231,7 +1213,7 @@ impl ManagedPythonDownload {
     /// Download and extract a Python distribution from the given URL.
     async fn fetch_from_url(
         &self,
-        url: &DisplaySafeUrl,
+        url: DisplaySafeUrl,
         client: &BaseClient,
         installation_dir: &Path,
         scratch_dir: &Path,
@@ -1303,7 +1285,7 @@ impl ManagedPythonDownload {
                         }
 
                         self.download_archive(
-                            url,
+                            &url,
                             client,
                             reporter,
                             &python_builds_dir,
@@ -1339,7 +1321,7 @@ impl ManagedPythonDownload {
                 temp_dir.path().simplified_display()
             );
 
-            let (reader, size) = read_url(url, client).await?;
+            let (reader, size) = read_url(&url, client).await?;
             self.extract_reader(
                 reader,
                 temp_dir.path(),

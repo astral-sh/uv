@@ -891,6 +891,7 @@ pub struct CacheNamespace {
 #[derive(Subcommand)]
 pub enum CacheCommand {
     /// Clear the cache, removing all entries or those linked to specific packages.
+    #[command(alias = "clear")]
     Clean(CleanArgs),
     /// Prune all unreachable objects from the cache.
     Prune(PruneArgs),
@@ -5730,7 +5731,8 @@ pub struct ToolInstallArgs {
 
     /// Force installation of the tool.
     ///
-    /// Will replace any existing entry points with the same name in the executable directory.
+    /// Will recreate any existing environment for the tool and replace any existing entry points
+    /// with the same name in the executable directory.
     #[arg(long)]
     pub force: bool,
 

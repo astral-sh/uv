@@ -9,7 +9,7 @@ use uv_static::EnvVars;
 #[cfg(windows)]
 use serde::Deserialize;
 #[cfg(windows)]
-use wmi::{COMLibrary, WMIConnection};
+use wmi::WMIConnection;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AcceleratorError {
@@ -208,34 +208,28 @@ impl Accelerator {
                 name: Option<String>,
             }
 
-            match COMLibrary::new() {
-                Ok(com_library) => match WMIConnection::new(com_library) {
-                    Ok(wmi_connection) => match wmi_connection.query::<VideoController>() {
-                        Ok(gpu_controllers) => {
-                            for gpu_controller in gpu_controllers {
-                                if let Some(pnp_device_id) = &gpu_controller.pnp_device_id {
-                                    if pnp_device_id
-                                        .contains(&format!("VEN_{PCI_VENDOR_ID_INTEL:04X}"))
-                                    {
-                                        debug!(
-                                            "Detected Intel GPU from WMI: PNPDeviceID={}, Name={:?}",
-                                            pnp_device_id, gpu_controller.name
-                                        );
-                                        return Ok(Some(Self::Xpu));
-                                    }
+            match WMIConnection::new() {
+                Ok(wmi_connection) => match wmi_connection.query::<VideoController>() {
+                    Ok(gpu_controllers) => {
+                        for gpu_controller in gpu_controllers {
+                            if let Some(pnp_device_id) = &gpu_controller.pnp_device_id {
+                                if pnp_device_id.contains(&format!("VEN_{PCI_VENDOR_ID_INTEL:04X}"))
+                                {
+                                    debug!(
+                                        "Detected Intel GPU from WMI: PNPDeviceID={}, Name={:?}",
+                                        pnp_device_id, gpu_controller.name
+                                    );
+                                    return Ok(Some(Self::Xpu));
                                 }
                             }
                         }
-                        Err(e) => {
-                            debug!("Failed to query WMI for video controllers: {e}");
-                        }
-                    },
+                    }
                     Err(e) => {
-                        debug!("Failed to create WMI connection: {e}");
+                        debug!("Failed to query WMI for video controllers: {e}");
                     }
                 },
                 Err(e) => {
-                    debug!("Failed to initialize COM library: {e}");
+                    debug!("Failed to create WMI connection: {e}");
                 }
             }
         }

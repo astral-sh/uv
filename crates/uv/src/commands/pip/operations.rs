@@ -628,7 +628,7 @@ pub(crate) async fn install(
         && extraneous.is_empty()
         && !compile
     {
-        logger.on_audit(resolution.len(), start, printer, dry_run)?;
+        logger.on_check(resolution.len(), start, printer, dry_run)?;
         return Ok(Changelog::default());
     }
 
@@ -857,7 +857,6 @@ async fn execute_plan(
 }
 
 /// Display a message about the interpreter that was selected for the operation.
-#[expect(clippy::result_large_err)]
 pub(crate) fn report_interpreter(
     python: &PythonInstallation,
     dimmed: bool,
@@ -919,7 +918,6 @@ pub(crate) fn report_interpreter(
 }
 
 /// Display a message about the target environment for the operation.
-#[expect(clippy::result_large_err)]
 pub(crate) fn report_target_environment(
     env: &PythonEnvironment,
     cache: &Cache,
@@ -975,7 +973,6 @@ pub(crate) fn report_target_environment(
 }
 
 /// Report on the results of a dry-run installation.
-#[expect(clippy::result_large_err)]
 fn report_dry_run(
     dry_run: DryRun,
     resolution: &Resolution,
@@ -1000,7 +997,7 @@ fn report_dry_run(
 
     // Nothing to do.
     if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() && extraneous.is_empty() {
-        logger.on_audit(resolution.len(), start, printer, dry_run)?;
+        logger.on_check(resolution.len(), start, printer, dry_run)?;
         return Ok(Changelog::default());
     }
 
@@ -1048,7 +1045,6 @@ fn report_dry_run(
 }
 
 /// Report any diagnostics on resolved distributions.
-#[expect(clippy::result_large_err)]
 pub(crate) fn diagnose_resolution(
     diagnostics: &[ResolutionDiagnostic],
     printer: Printer,
@@ -1066,7 +1062,6 @@ pub(crate) fn diagnose_resolution(
 }
 
 /// Report any diagnostics on installed distributions in the Python environment.
-#[expect(clippy::result_large_err)]
 pub(crate) fn diagnose_environment(
     resolution: &Resolution,
     venv: &PythonEnvironment,

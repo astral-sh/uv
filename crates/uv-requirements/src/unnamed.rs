@@ -11,8 +11,8 @@ use url::Host;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_filename::{DistExtension, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuildableSource, DirectSourceUrl, DirectorySourceUrl, GitSourceUrl, PathSourceUrl,
-    RemoteSource, Requirement, SourceUrl, VersionId,
+    BuildableSource, DirectSourceUrl, DirectorySourceUrl, GitSourceUrl, Identifier, PathSourceUrl,
+    RemoteSource, Requirement, SourceUrl,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -276,7 +276,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
 
         // Fetch the metadata for the distribution.
         let name = {
-            let id = VersionId::from_url(source.url());
+            let id = source.distribution_id();
             if let Some(archive) = index
                 .distributions()
                 .get(&id)
@@ -295,7 +295,10 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let hashes = hasher.get_url(source.url());
                 let source = BuildableSource::Url(source);
-                let archive = database.build_wheel_metadata(&source, hashes).await?;
+                let archive = database
+                    .build_wheel_metadata(&source, hashes)
+                    .await
+                    .map_err(Box::new)?;
 
                 let name = archive.metadata.name.clone();
 

@@ -30,17 +30,12 @@ exploration of new features, we will almost always close these pull requests imm
 new feature to uv creates a long-term maintenance burden and requires strong consensus from the uv
 team before it is appropriate to begin work on an implementation.
 
-Do not use LLMs such as Claude Code or ChatGPT for communication. LLMs are notoriously unreliable
-and make up smart sounding but ultimately wrong claims. Instead, phrase issue and pull request
-comments in your own words. It's not important to sound perfect, but that we can follow what problem
-you're trying to solve and why the pull request uses a correct approach.
+## Use of AI
 
-When using LLMs, there must always be a human in the loop who fully understands the work the LLM is
-doing. Since LLMs cannot (yet) correctly reason about complex codebases, you need to be able to
-explain all changes and how they interact with the rest of the codebase in your own words, without
-relying on the LLM to do so. Generally, this requires designing the change yourself and
-understanding all involved data structures, formats, and algorithms, while only using the LLM to aid
-in rather than drive these tasks. Autonomous contributions from AI agents are not allowed.
+We **require all use of AI in contributions to follow our
+[AI Policy](https://github.com/astral-sh/.github/blob/main/AI_POLICY.md)**.
+
+If your contribution does not follow the policy, it will be closed.
 
 ## Setup
 
@@ -112,6 +107,13 @@ To run and review a specific snapshot test:
 ```shell
 cargo test --package <package> --test <test> -- <test_name> -- --exact
 cargo insta review
+```
+
+A script is available to update the snapshots based on results in CI. This is useful for updating
+snapshots without re-running the test suite and for updating platform-specific snapshots.
+
+```shell
+./scripts/apply-ci-snapshots.sh
 ```
 
 ### Git and Git LFS
