@@ -104,6 +104,7 @@ pub(crate) async fn run(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
+    compile_bytecode_timeout: Option<u64>,
     concurrency: Concurrency,
     cache: Cache,
     workspace_cache: &WorkspaceCache,
@@ -330,6 +331,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     Box::new(SummaryInstallLogger)
                 },
                 installer_metadata,
+                compile_bytecode_timeout,
                 &concurrency,
                 &cache,
                 workspace_cache,
@@ -447,6 +449,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         Box::new(SummaryInstallLogger)
                     },
                     installer_metadata,
+                    compile_bytecode_timeout,
                     &concurrency,
                     &cache,
                     workspace_cache,
@@ -871,6 +874,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         Box::new(SummaryInstallLogger)
                     },
                     installer_metadata,
+                    compile_bytecode_timeout,
                     &concurrency,
                     &cache,
                     workspace_cache,
@@ -1026,6 +1030,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     Box::new(SummaryInstallLogger)
                 },
                 installer_metadata,
+                compile_bytecode_timeout,
                 &concurrency,
                 &cache,
                 workspace_cache,

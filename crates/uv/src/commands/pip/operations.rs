@@ -560,6 +560,7 @@ pub(crate) async fn install(
     build_options: &BuildOptions,
     link_mode: LinkMode,
     compile: bool,
+    compile_bytecode_timeout: Option<u64>,
     hasher: &HashStrategy,
     tags: &Tags,
     client: &RegistryClient,
@@ -705,7 +706,7 @@ pub(crate) async fn install(
     }
 
     if compile {
-        compile_bytecode(venv, concurrency, cache, printer).await?;
+        compile_bytecode(venv, concurrency, cache, compile_bytecode_timeout, printer).await?;
     }
 
     // Construct a summary of the changes made to the environment.

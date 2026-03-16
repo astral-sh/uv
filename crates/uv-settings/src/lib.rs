@@ -643,6 +643,9 @@ pub struct EnvironmentOptions {
     pub http_read_timeout_upload: Duration,
     pub http_retries: u32,
     pub concurrency: Concurrency,
+    /// The timeout for each file during bytecode compilation, in seconds. `Some(0)` disables the
+    /// timeout entirely.
+    pub compile_bytecode_timeout: Option<u64>,
     #[cfg(feature = "tracing-durations-export")]
     pub tracing_durations_file: Option<PathBuf>,
     pub frozen: EnvFlag,
@@ -735,6 +738,10 @@ impl EnvironmentOptions {
             .unwrap_or(DEFAULT_CONNECT_TIMEOUT),
             http_retries: parse_integer_environment_variable(EnvVars::UV_HTTP_RETRIES, None)?
                 .unwrap_or(uv_client::DEFAULT_RETRIES),
+            compile_bytecode_timeout: parse_integer_environment_variable(
+                EnvVars::UV_COMPILE_BYTECODE_TIMEOUT,
+                Some("value should be an integer number of seconds"),
+            )?,
             #[cfg(feature = "tracing-durations-export")]
             tracing_durations_file: parse_path_environment_variable(
                 EnvVars::TRACING_DURATIONS_FILE,

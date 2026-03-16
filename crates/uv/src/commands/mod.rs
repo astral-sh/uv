@@ -161,6 +161,7 @@ pub(super) async fn compile_bytecode(
     venv: &PythonEnvironment,
     concurrency: &Concurrency,
     cache: &Cache,
+    bytecode_timeout: Option<u64>,
     printer: Printer,
 ) -> anyhow::Result<()> {
     let start = std::time::Instant::now();
@@ -179,6 +180,7 @@ pub(super) async fn compile_bytecode(
             venv.python_executable(),
             concurrency,
             cache.root(),
+            bytecode_timeout,
         )
         .await
         .with_context(|| {

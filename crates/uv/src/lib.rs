@@ -101,6 +101,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     // Load environment variables not handled by Clap
     let environment = EnvironmentOptions::new()?;
+    let compile_bytecode_timeout = environment.compile_bytecode_timeout;
 
     // Validate that the project directory exists if explicitly provided via --project, except for
     // `uv init`, which creates the project directory (separate deprecation).
@@ -800,6 +801,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.reinstall,
                 args.settings.link_mode,
                 args.settings.compile_bytecode,
+                compile_bytecode_timeout,
                 args.settings.hash_checking,
                 args.settings.index_locations,
                 args.settings.index_strategy,
@@ -965,6 +967,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.reinstall,
                 args.settings.link_mode,
                 args.settings.compile_bytecode,
+                compile_bytecode_timeout,
                 args.settings.hash_checking,
                 globals.installer_metadata,
                 &args.settings.config_setting,
@@ -1512,6 +1515,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.python_preference,
                 globals.python_downloads,
                 globals.installer_metadata,
+                compile_bytecode_timeout,
                 globals.concurrency,
                 cache,
                 workspace_cache,
@@ -1613,6 +1617,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.python_preference,
                 globals.python_downloads,
                 globals.installer_metadata,
+                compile_bytecode_timeout,
                 globals.concurrency,
                 cli.top_level.no_config,
                 cache,
@@ -1670,6 +1675,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.python_preference,
                 globals.python_downloads,
                 globals.installer_metadata,
+                compile_bytecode_timeout,
                 globals.concurrency,
                 &cache,
                 &workspace_cache,
@@ -2026,6 +2032,7 @@ async fn run_project(
 
     // Load environment variables not handled by Clap
     let environment = EnvironmentOptions::new()?;
+    let compile_bytecode_timeout = environment.compile_bytecode_timeout;
 
     match *project_command {
         ProjectCommand::Init(args) => {
@@ -2146,6 +2153,7 @@ async fn run_project(
                 globals.python_preference,
                 globals.python_downloads,
                 globals.installer_metadata,
+                compile_bytecode_timeout,
                 globals.concurrency,
                 cache,
                 workspace_cache,
@@ -2202,6 +2210,7 @@ async fn run_project(
                 client_builder.subcommand(vec!["sync".to_owned()]),
                 script,
                 globals.installer_metadata,
+                compile_bytecode_timeout,
                 globals.concurrency,
                 no_config,
                 &cache,
@@ -2390,6 +2399,7 @@ async fn run_project(
                 globals.python_preference,
                 globals.python_downloads,
                 globals.installer_metadata,
+                compile_bytecode_timeout,
                 globals.concurrency,
                 no_config,
                 &cache,
@@ -2439,6 +2449,7 @@ async fn run_project(
                 globals.python_preference,
                 globals.python_downloads,
                 globals.installer_metadata,
+                compile_bytecode_timeout,
                 globals.concurrency,
                 no_config,
                 &cache,
@@ -2484,6 +2495,7 @@ async fn run_project(
                 globals.python_preference,
                 globals.python_downloads,
                 globals.installer_metadata,
+                compile_bytecode_timeout,
                 globals.concurrency,
                 no_config,
                 &cache,

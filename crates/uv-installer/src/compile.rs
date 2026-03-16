@@ -2,7 +2,7 @@ use std::panic::AssertUnwindSafe;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
-use std::{env, io, panic};
+use std::{io, panic};
 
 use async_channel::{Receiver, SendError};
 use tempfile::tempdir_in;
@@ -69,12 +69,16 @@ pub enum CompileError {
 /// > Uninstallers should be smart enough to remove .pyc even if it is not mentioned in RECORD.
 ///
 /// We've confirmed that both uv and pip (as of 24.0.0) remove the `__pycache__` directory.
+///
+/// The `bytecode_timeout` parameter controls the per-file compilation timeout. A value of
+/// `Some(0)` disables the timeout. `None` uses the default timeout of 60 seconds.
 #[instrument(skip(python_executable))]
 pub async fn compile_tree(
     dir: &Path,
     python_executable: &Path,
     concurrency: &Concurrency,
     cache: &Path,
+    bytecode_timeout: Option<u64>,
 ) -> Result<usize, CompileError> {
     debug_assert!(
         dir.is_absolute(),
@@ -90,20 +94,10 @@ pub async fn compile_tree(
     let tempdir = tempdir_in(cache).map_err(CompileError::TempFile)?;
     let pip_compileall_py = tempdir.path().join("pip_compileall.py");
 
-    let timeout: Option<Duration> = match env::var(EnvVars::UV_COMPILE_BYTECODE_TIMEOUT) {
-        Ok(value) => match value.as_str() {
-            "0" => None,
-            _ => match value.parse::<u64>().map(Duration::from_secs) {
-                Ok(duration) => Some(duration),
-                Err(_) => {
-                    return Err(CompileError::EnvironmentError {
-                        var: EnvVars::UV_COMPILE_BYTECODE_TIMEOUT,
-                        message: format!("Expected an integer number of seconds, got \"{value}\""),
-                    });
-                }
-            },
-        },
-        Err(_) => Some(DEFAULT_COMPILE_TIMEOUT),
+    let timeout: Option<Duration> = match bytecode_timeout {
+        Some(0) => None,
+        Some(secs) => Some(Duration::from_secs(secs)),
+        None => Some(DEFAULT_COMPILE_TIMEOUT),
     };
     if let Some(duration) = timeout {
         debug!(
