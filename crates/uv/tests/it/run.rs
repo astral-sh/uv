@@ -6635,10 +6635,6 @@ fn run_project_pyproject_toml_file() -> Result<()> {
         version = "1.0.0"
         requires-python = ">=3.12"
         dependencies = []
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#
     })?;
 
@@ -6659,9 +6655,7 @@ fn run_project_pyproject_toml_file() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: project/.venv
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + foo==1.0.0 (from file://[TEMP_DIR]/project)
+    Checked in [TIME]
     ");
 
     Ok(())
@@ -6682,10 +6676,6 @@ fn run_project_non_pyproject_file() -> Result<()> {
         version = "1.0.0"
         requires-python = ">=3.12"
         dependencies = []
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#
     })?;
 
@@ -6709,9 +6699,7 @@ fn run_project_non_pyproject_file() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: project/.venv
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + foo==1.0.0 (from file://[TEMP_DIR]/project)
+    Checked in [TIME]
     ");
 
     Ok(())
@@ -6733,10 +6721,6 @@ fn run_project_nested_file() -> Result<()> {
         version = "1.0.0"
         requires-python = ">=3.12"
         dependencies = []
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#
     })?;
 
@@ -6762,9 +6746,7 @@ fn run_project_nested_file() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: project/.venv
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + foo==1.0.0 (from file://[TEMP_DIR]/project)
+    Checked in [TIME]
     ");
 
     Ok(())
