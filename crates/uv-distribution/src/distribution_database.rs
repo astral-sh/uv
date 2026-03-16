@@ -386,8 +386,13 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // a non-compliant distribution isn't a huge problem if it's not actually being
         // materialized into a wheel. Observe that we also allow no extension, since we expect that
         // for directory and Git installs.
+        // NOTE: Observe that we also allow `.zip` sdists here, which are not PEP 625 compliant.
+        // This is because they were allowed on PyPI until relatively recently (2020).
         if let Some(extension) = dist.extension()
-            && !matches!(extension, SourceDistExtension::TarGz)
+            && !matches!(
+                extension,
+                SourceDistExtension::TarGz | SourceDistExtension::Zip
+            )
         {
             if matches!(dist, SourceDist::Registry(_)) {
                 // Observe that we display a slightly different warning when the sdist comes
