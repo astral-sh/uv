@@ -107,13 +107,14 @@ pub fn uv_self_version() -> VersionInfo {
             .map_or(0, |value| value.parse::<u32>().unwrap_or(0)),
     });
 
-    let target_triple = option_env_str!("RUST_HOST_TARGET");
+    // Target triple is set by Cargo via `build.rs`
+    let target_triple = env!("RUST_HOST_TARGET").to_string();
 
     VersionInfo {
         package_name: Some("uv".to_owned()),
         version,
         commit_info,
-        target_triple,
+        target_triple: Some(target_triple),
     }
 }
 
