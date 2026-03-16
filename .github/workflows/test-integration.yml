@@ -186,6 +186,58 @@ jobs:
           ./uv run python -c ""
           ./uv run -p 3.13t python -c ""
 
+  integration-test-linux-aarch64:
+    name: "aarch64 linux"
+    timeout-minutes: 15
+    runs-on: github-ubuntu-24.04-aarch64-2
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-linux-aarch64-${{ inputs.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Verify platform detection"
+        run: |
+          ./uv python install -v 3.13 2>&1 | tee install-log.txt
+          # Ensure we did not select a soft-float (gnueabi) variant on a hard-float system
+          if grep -q 'gnueabi[^h]' install-log.txt; then
+            echo "Error: uv selected a soft-float (gnueabi) Python variant on aarch64"
+            exit 1
+          fi
+
+      - name: "Create a virtual environment (stdlib)"
+        run: |
+          $(./uv python find 3.13) -m venv .venv-stdlib
+          .venv-stdlib/bin/python --version
+
+      - name: "Create a virtual environment (uv)"
+        run: |
+          ./uv venv -c -p 3.13 --managed-python
+
+      - name: "Check version"
+        run: |
+          .venv/bin/python --version
+
+      - name: "Check is aarch64"
+        run: |
+          .venv/bin/python -c "import platform; arch = platform.machine(); print(f'Architecture: {arch}'); assert arch == 'aarch64', f'Expected aarch64, got {arch}'"
+
+      - name: "Check install"
+        run: |
+          ./uv pip install -v anyio
+
+      - name: "Check uv run"
+        run: |
+          ./uv run python -c ""
+          ./uv run -p 3.13 python -c ""
+
   integration-test-windows-aarch64-implicit:
     name: "aarch64 windows implicit"
     timeout-minutes: 10
