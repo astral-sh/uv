@@ -39,3 +39,4 @@ windows-version = { workspace = true }
 [dev-dependencies]
 insta = { workspace = true }
 indoc = { workspace = true }
+tempfile = { workspace = true }
