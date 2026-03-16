@@ -27,10 +27,12 @@ pub struct VersionInfo {
     /// Information about the git commit we may have been built from.
     ///
     /// `None` if not built from a git repo or if retrieval failed.
+    #[serde(skip_serializing_if = "Option::is_none")]
     commit_info: Option<CommitInfo>,
     /// The target triple for which uv was built (e.g., `x86_64-unknown-linux-gnu`).
     ///
     /// `None` for project versions.
+    #[serde(skip_serializing_if = "Option::is_none")]
     target_triple: Option<String>,
 }
 
