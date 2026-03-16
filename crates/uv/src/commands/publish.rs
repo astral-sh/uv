@@ -13,6 +13,7 @@ use uv_client::{
 };
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_types::{IndexCapabilities, IndexLocations, IndexUrl};
+use uv_errors::{Hints, write_error_chain};
 use uv_preview::{Preview, PreviewFeature};
 use uv_publish::{
     CheckUrlClient, FormMetadata, PublishError, TrustedPublishResult, check_trusted_publishing,
@@ -20,7 +21,7 @@ use uv_publish::{
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_settings::EnvironmentOptions;
-use uv_warnings::{warn_user_once, write_error_chain};
+use uv_warnings::warn_user_once;
 
 use crate::commands::reporters::PublishReporter;
 use crate::commands::{ExitStatus, human_readable_bytes};
@@ -240,7 +241,14 @@ pub(crate) async fn publish(
                 Ok(false) => {}
                 Err(err) => {
                     if dry_run {
-                        write_error_chain(&err, printer.stderr(), "error", AnsiColors::Red)?;
+                        write_error_chain(
+                            &err,
+                            printer.stderr(),
+                            "error",
+                            AnsiColors::Red,
+                            Hints::none(),
+                            None,
+                        )?;
                         error_count += 1;
                         continue;
                     }
@@ -278,7 +286,14 @@ pub(crate) async fn publish(
                 Ok(metadata) => metadata,
                 Err(err) => {
                     if dry_run {
-                        write_error_chain(&err, printer.stderr(), "error", AnsiColors::Red)?;
+                        write_error_chain(
+                            &err,
+                            printer.stderr(),
+                            "error",
+                            AnsiColors::Red,
+                            Hints::none(),
+                            None,
+                        )?;
                         error_count += 1;
                         continue;
                     }
@@ -324,6 +339,8 @@ pub(crate) async fn publish(
                             printer.stderr(),
                             "error",
                             AnsiColors::Red,
+                            Hints::none(),
+                            None,
                         )?;
                         error_count += 1;
                     }
@@ -387,6 +404,8 @@ pub(crate) async fn publish(
                             printer.stderr(),
                             "error",
                             AnsiColors::Red,
+                            Hints::none(),
+                            None,
                         )?;
                         error_count += 1;
                         continue;
@@ -551,6 +570,8 @@ async fn gather_credentials(
                 printer.stderr(),
                 "error",
                 AnsiColors::Red,
+                Hints::none(),
+                None,
             )?;
         }
     }

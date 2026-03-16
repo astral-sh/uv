@@ -17,6 +17,7 @@ use tracing::{debug, trace, warn};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::Concurrency;
+use uv_errors::{Hints, write_error_chain};
 use uv_fs::Simplified;
 use uv_platform::{Arch, Libc};
 use uv_preview::{Preview, PreviewFeature};
@@ -35,7 +36,7 @@ use uv_python::{
 };
 use uv_shell::Shell;
 use uv_trampoline_builder::{Launcher, LauncherKind};
-use uv_warnings::{warn_user, write_error_chain};
+use uv_warnings::warn_user;
 
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
 use crate::commands::reporters::PythonDownloadReporter;
@@ -919,6 +920,8 @@ async fn perform_install(
                         printer.stderr(),
                         "error",
                         AnsiColors::Red,
+                        Hints::none(),
+                        None,
                     )?;
                 }
                 InstallErrorKind::Bin => {
@@ -934,6 +937,8 @@ async fn perform_install(
                         printer.stderr(),
                         level,
                         color,
+                        Hints::none(),
+                        None,
                     )?;
                 }
                 InstallErrorKind::Registry => {
@@ -950,6 +955,8 @@ async fn perform_install(
                         printer.stderr(),
                         level,
                         color,
+                        Hints::none(),
+                        None,
                     )?;
                 }
             }

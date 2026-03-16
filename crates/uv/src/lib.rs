@@ -11,12 +11,11 @@ use std::process::ExitCode;
 use std::str::FromStr;
 use std::sync::atomic::Ordering;
 
-use anstream::eprintln;
 use anyhow::{Result, anyhow, bail};
 use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
 use futures::FutureExt;
-use owo_colors::OwoColorize;
+use owo_colors::{AnsiColors, OwoColorize};
 use settings::PipTreeSettings;
 use tokio::task::spawn_blocking;
 use tracing::{debug, instrument, trace};
@@ -2839,21 +2838,18 @@ where
         Err(err) => {
             trace!("Error trace: {err:?}");
 
-            // Collect hints before rendering the error chain.
             let hints = commands::diagnostics::hints_for_error(&err);
-
-            let mut causes = err.chain();
-            eprintln!(
-                "{}: {}",
-                "error".red().bold(),
-                causes.next().unwrap().to_string().trim()
-            );
-            for err in causes {
-                eprintln!("  {}: {}", "Caused by".red().bold(), err.to_string().trim());
-            }
-
-            // Render hints after the error chain.
-            anstream::eprint!("{hints}");
+            let mut error_chain = String::new();
+            uv_errors::write_error_chain(
+                err.as_ref(),
+                &mut error_chain,
+                "error",
+                AnsiColors::Red,
+                hints,
+                None,
+            )
+            .expect("writing to a string should not fail");
+            anstream::eprint!("{error_chain}");
 
             ExitStatus::Error.into()
         }
