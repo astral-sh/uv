@@ -28,6 +28,10 @@ pub struct VersionInfo {
     ///
     /// `None` if not built from a git repo or if retrieval failed.
     commit_info: Option<CommitInfo>,
+    /// The target triple for which uv was built (e.g., `x86_64-unknown-linux-gnu`).
+    ///
+    /// `None` for project versions.
+    target_triple: Option<String>,
 }
 
 impl VersionInfo {
@@ -36,6 +40,7 @@ impl VersionInfo {
             package_name: package_name.map(ToString::to_string),
             version: version.to_string(),
             commit_info: None,
+            target_triple: None,
         }
     }
 }
@@ -49,6 +54,9 @@ impl fmt::Display for VersionInfo {
         write!(f, "{}", self.version)?;
         if let Some(ci) = &self.commit_info {
             write!(f, "{ci}")?;
+        }
+        if let Some(target_triple) = &self.target_triple {
+            write!(f, " {target_triple}")?;
         }
         Ok(())
     }
@@ -93,10 +101,13 @@ pub fn uv_self_version() -> VersionInfo {
             .map_or(0, |value| value.parse::<u32>().unwrap_or(0)),
     });
 
+    let target_triple = option_env_str!("RUST_HOST_TARGET");
+
     VersionInfo {
         package_name: Some("uv".to_owned()),
         version,
         commit_info,
+        target_triple,
     }
 }
 
@@ -112,6 +123,7 @@ mod tests {
             package_name: Some("uv".to_string()),
             version: "0.0.0".to_string(),
             commit_info: None,
+            target_triple: None,
         };
         assert_snapshot!(version, @"0.0.0");
     }
@@ -128,8 +140,26 @@ mod tests {
                 commit_date: "2023-10-19".to_string(),
                 commits_since_last_tag: 0,
             }),
+            target_triple: None,
         };
         assert_snapshot!(version, @"0.0.0 (53b0f5d92 2023-10-19)");
+    }
+
+    #[test]
+    fn version_formatting_with_target_triple() {
+        let version = VersionInfo {
+            package_name: Some("uv".to_string()),
+            version: "0.0.0".to_string(),
+            commit_info: Some(CommitInfo {
+                short_commit_hash: "53b0f5d92".to_string(),
+                commit_hash: "53b0f5d924110e5b26fbf09f6fd3a03d67b475b7".to_string(),
+                last_tag: Some("v0.0.1".to_string()),
+                commit_date: "2023-10-19".to_string(),
+                commits_since_last_tag: 0,
+            }),
+            target_triple: Some("x86_64-unknown-linux-gnu".to_string()),
+        };
+        assert_snapshot!(version, @"0.0.0 (53b0f5d92 2023-10-19) x86_64-unknown-linux-gnu");
     }
 
     #[test]
@@ -144,6 +174,7 @@ mod tests {
                 commit_date: "2023-10-19".to_string(),
                 commits_since_last_tag: 24,
             }),
+            target_triple: None,
         };
         assert_snapshot!(version, @"0.0.0+24 (53b0f5d92 2023-10-19)");
     }
@@ -160,6 +191,7 @@ mod tests {
                 commit_date: "2023-10-19".to_string(),
                 commits_since_last_tag: 0,
             }),
+            target_triple: Some("x86_64-unknown-linux-gnu".to_string()),
         };
         assert_json_snapshot!(version, @r#"
         {
@@ -171,7 +203,8 @@ mod tests {
             "commit_date": "2023-10-19",
             "last_tag": "v0.0.1",
             "commits_since_last_tag": 0
-          }
+          },
+          "target_triple": "x86_64-unknown-linux-gnu"
         }
         "#);
     }

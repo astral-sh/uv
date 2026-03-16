@@ -2290,7 +2290,7 @@ fn self_version_short() -> Result<()> {
         .filters()
         .into_iter()
         .chain([(
-            r"\d+\.\d+\.\d+(-alpha\.\d+)?(\+\d+)?( \(.*\))?",
+            r"\d+\.\d+\.\d+(-alpha\.\d+)?(\+\d+)?( \(.*\))?( \S+-\S+-\S+)?",
             r"[VERSION] ([COMMIT] DATE)",
         )])
         .collect::<Vec<_>>();
@@ -2351,6 +2351,10 @@ fn self_version_json() -> Result<()> {
                 r#"commits_since_last_tag": .*"#,
                 r#"commits_since_last_tag": [COUNT]"#,
             ),
+            (
+                r#"target_triple": (".*"|null)"#,
+                r#"target_triple": "[TARGET]""#,
+            ),
         ])
         .collect::<Vec<_>>();
 
@@ -2369,7 +2373,8 @@ fn self_version_json() -> Result<()> {
             "commit_date": "[DATE]",
             "last_tag": "[TAG]",
             "commits_since_last_tag": [COUNT]
-          }
+          },
+          "target_triple": "[TARGET]"
         }
 
         ----- stderr -----
@@ -2383,7 +2388,8 @@ fn self_version_json() -> Result<()> {
       {
         "package_name": "uv",
         "version": "[VERSION]",
-        "commit_info": null
+        "commit_info": null,
+        "target_triple": "[TARGET]"
       }
 
       ----- stderr -----
