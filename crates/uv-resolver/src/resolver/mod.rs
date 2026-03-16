@@ -1193,12 +1193,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 BuiltDist::Path(dist) => &dist.filename,
             };
 
-            // If the wheel does _not_ cover a required platform, it's incompatible.
-            if env.marker_environment().is_none() && !self.options.required_environments.is_empty()
+            // If the wheel does _not_ cover an environment that requires artifact coverage, it's
+            // incompatible.
+            if env.marker_environment().is_none() && !self.options.artifact_environments.is_empty()
             {
                 let wheel_marker = implied_markers(filename);
-                // If the user explicitly marked a platform as required, ensure it has coverage.
-                for environment_marker in self.options.required_environments.iter().copied() {
+                // If the caller marked an environment as requiring artifact coverage, ensure it
+                // has coverage.
+                for environment_marker in self.options.artifact_environments.iter().copied() {
                     // If the platform is part of the current environment...
                     if env.included_by_marker(environment_marker)
                         && !find_environments(id, pubgrub).is_disjoint(environment_marker)
@@ -1455,8 +1457,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Ok(None);
         }
 
-        // If the user explicitly marked a platform as required, ensure it has coverage.
-        for marker in self.options.required_environments.iter().copied() {
+        // If the caller marked an environment as requiring artifact coverage, ensure it has
+        // coverage.
+        for marker in self.options.artifact_environments.iter().copied() {
             // If the platform is part of the current environment...
             if env.included_by_marker(marker) {
                 // But isn't supported by the distribution...
