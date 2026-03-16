@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use anyhow::{Result, anyhow};
 use owo_colors::OwoColorize;
+use thiserror::Error;
 
 use tracing::debug;
 use uv_cache::Cache;
@@ -356,17 +357,27 @@ pub(crate) async fn project_version(
     Ok(status)
 }
 
+/// A [`WorkspaceError`] that may carry a hint to use `uv self version`.
+#[derive(Debug, Error)]
+#[error("{err}")]
+pub(crate) struct MissingProjectVersionError {
+    err: WorkspaceError,
+}
+
+impl uv_errors::Hint for MissingProjectVersionError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        uv_errors::Hints::from(format!(
+            "If you meant to view uv's version, use `{}` instead",
+            "uv self version".green()
+        ))
+    }
+}
+
 /// Add hint to use `uv self version` when workspace discovery fails due to missing pyproject.toml
 /// and --project was not explicitly passed
 fn hint_uv_self_version(err: WorkspaceError, explicit_project: bool) -> anyhow::Error {
     if matches!(err, WorkspaceError::MissingPyprojectToml) && !explicit_project {
-        anyhow!(
-            "{}\n\n{}{} If you meant to view uv's version, use `{}` instead",
-            err,
-            "hint".bold().cyan(),
-            ":".bold(),
-            "uv self version".green()
-        )
+        MissingProjectVersionError { err }.into()
     } else {
         err.into()
     }

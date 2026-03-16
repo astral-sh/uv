@@ -866,6 +866,15 @@ pub enum Error {
     Encode(#[from] rmp_serde::encode::Error),
 }
 
+impl uv_errors::Hint for Error {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::BrokenLink(err) => err.hints(),
+            _ => uv_errors::Hints::none(),
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 pub struct BrokenLink {
     pub path: PathBuf,
@@ -883,24 +892,27 @@ impl Display for BrokenLink {
                 f,
                 "Broken symlink at `{}`, was the underlying Python interpreter removed?",
                 self.path.user_display()
-            )?;
+            )
         } else {
             write!(
                 f,
                 "Broken Python trampoline at `{}`, was the underlying Python interpreter removed?",
                 self.path.user_display()
-            )?;
+            )
         }
+    }
+}
+
+impl uv_errors::Hint for BrokenLink {
+    fn hints(&self) -> uv_errors::Hints<'_> {
         if self.venv {
-            write!(
-                f,
-                "\n\n{}{} Consider recreating the environment (e.g., with `{}`)",
-                "hint".bold().cyan(),
-                ":".bold(),
+            uv_errors::Hints::from(format!(
+                "Consider recreating the environment (e.g., with `{}`)",
                 "uv venv".green()
-            )?;
+            ))
+        } else {
+            uv_errors::Hints::none()
         }
-        Ok(())
     }
 }
 

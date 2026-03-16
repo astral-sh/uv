@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
+use uv_fs::Simplified;
 use uv_python::{Interpreter, PythonEnvironment};
 
 pub use virtualenv::{OnExisting, RemovalReason, remove_virtualenv};
@@ -19,13 +20,24 @@ pub enum Error {
     NotFound(String),
     #[error(transparent)]
     Python(#[from] uv_python::managed::Error),
-    #[error("A {name} already exists at `{}`. Use `--clear` to replace it", path.display())]
+    #[error("A {name} already exists at: {}", path.user_display())]
     Exists {
-        /// The type of environment (e.g., "virtual environment").
+        /// The type of environment (e.g., "virtual environment" or "directory").
         name: &'static str,
         /// The path to the existing environment.
         path: PathBuf,
     },
+}
+
+impl uv_errors::Hint for Error {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::Exists { name, .. } => uv_errors::Hints::from(format!(
+                "Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing {name}",
+            )),
+            _ => uv_errors::Hints::none(),
+        }
+    }
 }
 
 /// The value to use for the shell prompt when inside a virtual environment.

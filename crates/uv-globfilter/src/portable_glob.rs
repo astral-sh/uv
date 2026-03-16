@@ -2,7 +2,6 @@
 //! [PEP 639](https://packaging.python.org/en/latest/specifications/glob-patterns/).
 
 use globset::{Glob, GlobBuilder};
-use owo_colors::OwoColorize;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -20,11 +19,7 @@ pub enum PortableGlobError {
         pos: usize,
         invalid: char,
     },
-    #[error(
-        "Invalid character `{invalid}` at position {pos} in glob: `{glob}`. {}{} Characters can be escaped with a backslash",
-        "hint".bold().cyan(),
-        ":".bold()
-    )]
+    #[error("Invalid character `{invalid}` at position {pos} in glob: `{glob}`")]
     InvalidCharacterUv {
         glob: String,
         pos: usize,
@@ -48,6 +43,17 @@ pub enum PortableGlobError {
     TooManyStars { glob: String, pos: usize },
     #[error("Trailing backslash at position {pos} in glob: `{glob}`")]
     TrailingEscape { glob: String, pos: usize },
+}
+
+impl uv_errors::Hint for PortableGlobError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::InvalidCharacterUv { .. } => {
+                uv_errors::Hints::from("Characters can be escaped with a backslash")
+            }
+            _ => uv_errors::Hints::none(),
+        }
+    }
 }
 
 /// Cross-language glob syntax from
@@ -275,7 +281,7 @@ mod tests {
         };
         assert_snapshot!(
             parse_err_uv(r"**/@test"),
-            @"Invalid character `@` at position 3 in glob: `**/@test`. hint: Characters can be escaped with a backslash"
+            @"Invalid character `@` at position 3 in glob: `**/@test`"
         );
         // Escaping slashes is not allowed.
         assert_snapshot!(

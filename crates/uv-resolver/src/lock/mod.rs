@@ -55,7 +55,7 @@ use crate::exclude_newer::ExcludeNewerSpan;
 use crate::fork_strategy::ForkStrategy;
 pub(crate) use crate::lock::export::PylockTomlPackage;
 pub use crate::lock::export::RequirementsTxtExport;
-pub use crate::lock::export::{PylockToml, PylockTomlErrorKind, cyclonedx_json};
+pub use crate::lock::export::{PylockToml, PylockTomlError, PylockTomlErrorKind, cyclonedx_json};
 pub use crate::lock::installable::Installable;
 pub use crate::lock::map::PackageMap;
 pub use crate::lock::tree::TreeDisplay;
@@ -66,7 +66,7 @@ use crate::{
     PackageExcludeNewer, PrereleaseMode, ResolutionMode, ResolverOutput,
 };
 
-mod export;
+pub(crate) mod export;
 mod installable;
 mod map;
 mod tree;
@@ -5387,13 +5387,19 @@ impl std::error::Error for LockError {
     }
 }
 
+impl uv_errors::Hint for LockError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        if let Some(hint) = &self.hint {
+            uv_errors::Hints::from(hint.to_string())
+        } else {
+            uv_errors::Hints::none()
+        }
+    }
+}
+
 impl std::fmt::Display for LockError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.kind)?;
-        if let Some(hint) = &self.hint {
-            write!(f, "\n\n{hint}")?;
-        }
-        Ok(())
+        write!(f, "{}", self.kind)
     }
 }
 
@@ -5591,9 +5597,7 @@ impl std::fmt::Display for WheelTagHint {
                     if let Some(version) = version {
                         write!(
                             f,
-                            "{}{} You're using {}, but `{}` ({}) only has wheels with the following Python implementation tag{s}: {}",
-                            "hint".bold().cyan(),
-                            ":".bold(),
+                            "You're using {}, but `{}` ({}) only has wheels with the following Python implementation tag{s}: {}",
                             best,
                             package.cyan(),
                             format!("v{version}").cyan(),
@@ -5604,9 +5608,7 @@ impl std::fmt::Display for WheelTagHint {
                     } else {
                         write!(
                             f,
-                            "{}{} You're using {}, but `{}` only has wheels with the following Python implementation tag{s}: {}",
-                            "hint".bold().cyan(),
-                            ":".bold(),
+                            "You're using {}, but `{}` only has wheels with the following Python implementation tag{s}: {}",
                             best,
                             package.cyan(),
                             tags.iter()
@@ -5619,9 +5621,7 @@ impl std::fmt::Display for WheelTagHint {
                     if let Some(version) = version {
                         write!(
                             f,
-                            "{}{} Wheels are available for `{}` ({}) with the following Python implementation tag{s}: {}",
-                            "hint".bold().cyan(),
-                            ":".bold(),
+                            "Wheels are available for `{}` ({}) with the following Python implementation tag{s}: {}",
                             package.cyan(),
                             format!("v{version}").cyan(),
                             tags.iter()
@@ -5631,9 +5631,7 @@ impl std::fmt::Display for WheelTagHint {
                     } else {
                         write!(
                             f,
-                            "{}{} Wheels are available for `{}` with the following Python implementation tag{s}: {}",
-                            "hint".bold().cyan(),
-                            ":".bold(),
+                            "Wheels are available for `{}` with the following Python implementation tag{s}: {}",
                             package.cyan(),
                             tags.iter()
                                 .map(|tag| format!("`{}`", tag.cyan()))
@@ -5658,9 +5656,7 @@ impl std::fmt::Display for WheelTagHint {
                     if let Some(version) = version {
                         write!(
                             f,
-                            "{}{} You're using {}, but `{}` ({}) only has wheels with the following Python ABI tag{s}: {}",
-                            "hint".bold().cyan(),
-                            ":".bold(),
+                            "You're using {}, but `{}` ({}) only has wheels with the following Python ABI tag{s}: {}",
                             best,
                             package.cyan(),
                             format!("v{version}").cyan(),
@@ -5671,9 +5667,7 @@ impl std::fmt::Display for WheelTagHint {
                     } else {
                         write!(
                             f,
-                            "{}{} You're using {}, but `{}` only has wheels with the following Python ABI tag{s}: {}",
-                            "hint".bold().cyan(),
-                            ":".bold(),
+                            "You're using {}, but `{}` only has wheels with the following Python ABI tag{s}: {}",
                             best,
                             package.cyan(),
                             tags.iter()
@@ -5686,9 +5680,7 @@ impl std::fmt::Display for WheelTagHint {
                     if let Some(version) = version {
                         write!(
                             f,
-                            "{}{} Wheels are available for `{}` ({}) with the following Python ABI tag{s}: {}",
-                            "hint".bold().cyan(),
-                            ":".bold(),
+                            "Wheels are available for `{}` ({}) with the following Python ABI tag{s}: {}",
                             package.cyan(),
                             format!("v{version}").cyan(),
                             tags.iter()
@@ -5698,9 +5690,7 @@ impl std::fmt::Display for WheelTagHint {
                     } else {
                         write!(
                             f,
-                            "{}{} Wheels are available for `{}` with the following Python ABI tag{s}: {}",
-                            "hint".bold().cyan(),
-                            ":".bold(),
+                            "Wheels are available for `{}` with the following Python ABI tag{s}: {}",
                             package.cyan(),
                             tags.iter()
                                 .map(|tag| format!("`{}`", tag.cyan()))
@@ -5731,9 +5721,7 @@ impl std::fmt::Display for WheelTagHint {
                     };
                     write!(
                         f,
-                        "{}{} You're on {}, but {} only has wheels for the following platform{s}: {}; consider adding {} to `{}` to ensure uv resolves to a version with compatible wheels",
-                        "hint".bold().cyan(),
-                        ":".bold(),
+                        "You're on {}, but {} only has wheels for the following platform{s}: {}; consider adding {} to `{}` to ensure uv resolves to a version with compatible wheels",
                         best,
                         package_ref,
                         tags.iter()
@@ -5746,9 +5734,7 @@ impl std::fmt::Display for WheelTagHint {
                     if let Some(version) = version {
                         write!(
                             f,
-                            "{}{} Wheels are available for `{}` ({}) on the following platform{s}: {}",
-                            "hint".bold().cyan(),
-                            ":".bold(),
+                            "Wheels are available for `{}` ({}) on the following platform{s}: {}",
                             package.cyan(),
                             format!("v{version}").cyan(),
                             tags.iter()
@@ -5758,9 +5744,7 @@ impl std::fmt::Display for WheelTagHint {
                     } else {
                         write!(
                             f,
-                            "{}{} Wheels are available for `{}` on the following platform{s}: {}",
-                            "hint".bold().cyan(),
-                            ":".bold(),
+                            "Wheels are available for `{}` on the following platform{s}: {}",
                             package.cyan(),
                             tags.iter()
                                 .map(|tag| format!("`{}`", tag.cyan()))

@@ -290,6 +290,15 @@ pub enum Error {
     BuildVersion(#[from] crate::python_version::BuildVersionError),
 }
 
+impl uv_errors::Hint for Error {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::Query(err, _, _) => err.hints(),
+            _ => uv_errors::Hints::none(),
+        }
+    }
+}
+
 /// Lazily iterate over Python executables in mutable virtual environments.
 ///
 /// The following sources are supported:

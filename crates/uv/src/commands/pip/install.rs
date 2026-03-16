@@ -1,9 +1,13 @@
 use std::collections::BTreeSet;
+use std::path::PathBuf;
 
 use anyhow::Context;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use thiserror::Error;
 use tracing::{Level, debug, enabled, info_span, warn};
+
+use uv_errors::{Hint, Hints};
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -48,6 +52,25 @@ use crate::commands::pip::{operations, resolution_markers, resolution_tags};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
+
+/// The interpreter is externally managed and cannot be modified.
+#[derive(Debug, Error)]
+#[error("{message}")]
+pub(crate) struct ExternallyManagedError {
+    message: String,
+    root: PathBuf,
+    system: bool,
+}
+
+impl Hint for ExternallyManagedError {
+    fn hints(&self) -> Hints<'_> {
+        if self.system {
+            Hints::from("Virtual environments were not considered due to the `--system` flag")
+        } else {
+            Hints::from("Consider creating a virtual environment, e.g., with `uv venv`")
+        }
+    }
+}
 
 /// Install packages into the current environment.
 #[expect(clippy::fn_params_excessive_bools)]
@@ -259,25 +282,12 @@ pub(crate) async fn pip_install(
                 ),
             };
 
-            let error_message = if system {
-                // Add a hint about the `--system` flag
-                format!(
-                    "{}\n{}{} Virtual environments were not considered due to the `--system` flag",
-                    managed_message,
-                    "hint".bold().cyan(),
-                    ":".bold()
-                )
-            } else {
-                // Add a hint to create a virtual environment
-                format!(
-                    "{}\n{}{} Consider creating a virtual environment, e.g., with `uv venv`",
-                    managed_message,
-                    "hint".bold().cyan(),
-                    ":".bold()
-                )
-            };
-
-            return Err(anyhow::Error::msg(error_message));
+            return Err(ExternallyManagedError {
+                message: managed_message,
+                root: environment.root().to_path_buf(),
+                system,
+            }
+            .into());
         }
     }
 

@@ -66,6 +66,29 @@ mod install_source;
 pub(crate) mod logging;
 pub(crate) mod printer;
 pub(crate) mod settings;
+
+/// uv was installed through an external package manager and cannot update itself.
+#[cfg(not(feature = "self-update"))]
+#[derive(Debug, thiserror::Error)]
+#[error("uv was installed through an external package manager and cannot update itself.")]
+struct ExternallyInstalledError {
+    install_source: Option<InstallSource>,
+}
+
+#[cfg(not(feature = "self-update"))]
+impl uv_errors::Hint for ExternallyInstalledError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        if let Some(source) = &self.install_source {
+            uv_errors::Hints::from(format!(
+                "You installed uv using {}. To update uv, run `{}`",
+                source.description(),
+                source.update_instructions(),
+            ))
+        } else {
+            uv_errors::Hints::from("Please use your package manager to update uv.")
+        }
+    }
+}
 #[cfg(windows)]
 mod windows_exception;
 
@@ -1374,22 +1397,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         }
         #[cfg(not(feature = "self-update"))]
         Commands::Self_(_) => {
-            const BASE_MESSAGE: &str =
-                "uv was installed through an external package manager and cannot update itself.";
-
-            let message = match InstallSource::detect() {
-                Some(source) => format!(
-                    "{base}\n\n{hint}{colon} You installed uv using {}. To update uv, run `{}`",
-                    source.description(),
-                    source.update_instructions().green(),
-                    hint = "hint".bold().cyan(),
-                    colon = ":".bold(),
-                    base = BASE_MESSAGE
-                ),
-                None => format!("{BASE_MESSAGE} Please use your package manager to update uv."),
-            };
-
-            anyhow::bail!(message);
+            return Err(ExternallyInstalledError {
+                install_source: InstallSource::detect(),
+            }
+            .into());
         }
         Commands::GenerateShellCompletion(args) => {
             args.shell.generate(&mut Cli::command(), &mut stdout());
@@ -2764,6 +2775,10 @@ where
         Ok(code) => code.into(),
         Err(err) => {
             trace!("Error trace: {err:?}");
+
+            // Collect hints before rendering the error chain.
+            let hints = commands::diagnostics::hints_for_error(&err);
+
             let mut causes = err.chain();
             eprintln!(
                 "{}: {}",
@@ -2773,6 +2788,10 @@ where
             for err in causes {
                 eprintln!("  {}: {}", "Caused by".red().bold(), err.to_string().trim());
             }
+
+            // Render hints after the error chain.
+            anstream::eprint!("{hints}");
+
             ExitStatus::Error.into()
         }
     }
