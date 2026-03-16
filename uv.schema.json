@@ -322,7 +322,7 @@
       "type": ["boolean", "null"]
     },
     "native-tls": {
-      "description": "Whether to use the native-tls TLS backend instead of the default rustls backend.\n\nBy default, uv uses rustls with bundled webpki-root-certs certificates, which provides\nconsistent and portable TLS verification across all platforms.\n\nSetting this to `true` is equivalent to `--tls-backend native-tls`, which uses\nthe platform's native TLS implementation.",
+      "description": "Whether to use the platform's native TLS backend and certificate store.\n\nBy default, uv uses the `rustls` TLS backend with bundled Mozilla root certificates.\n\nWhen enabled, this switches both the TLS backend to the platform's native implementation\nand the certificate source to the system certificate store.",
       "type": ["boolean", "null"]
     },
     "no-binary": {

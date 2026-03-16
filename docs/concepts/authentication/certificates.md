@@ -13,8 +13,8 @@ The [`--tls-backend`](../../reference/cli.md#uv) flag controls which TLS impleme
   Transport on macOS, OpenSSL on Linux).
 
 When using `rustls`, uv uses [`aws-lc-rs`](https://github.com/aws/aws-lc-rs) as the underlying
-cryptography provider. `aws-lc-rs` is a Rust wrapper around
-[AWS-LC](https://github.com/aws/aws-lc), a general-purpose cryptographic library maintained by AWS.
+cryptography provider. `aws-lc-rs` is a Rust wrapper around [AWS-LC](https://github.com/aws/aws-lc),
+a general-purpose cryptographic library maintained by AWS.
 
 ## System certificates
 
@@ -27,15 +27,15 @@ To use system certificates, pass the [`--system-certs`](../../reference/cli.md#u
 [`UV_SYSTEM_CERTS`](../../reference/environment.md#uv_system_certs) environment variable to `true`.
 
 When using system certificates with the `rustls` backend, certificate verification is performed by
-[`rustls-platform-verifier`](https://github.com/rustls/rustls-platform-verifier), which delegates
-to the operating system's certificate verifier. When using the `native` backend, the platform's TLS
+[`rustls-platform-verifier`](https://github.com/rustls/rustls-platform-verifier), which delegates to
+the operating system's certificate verifier. When using the `native` backend, the platform's TLS
 implementation handles verification directly.
 
 ## Custom certificates
 
 To use custom CA certificates, you can set the
-[`SSL_CERT_FILE`](../../reference/environment.md#ssl_cert_file) environment variable to the path of a
-certificate bundle (PEM format), or set
+[`SSL_CERT_FILE`](../../reference/environment.md#ssl_cert_file) environment variable to the path of
+a certificate bundle (PEM format), or set
 [`SSL_CERT_DIR`](../../reference/environment.md#ssl_cert_dir) to a directory containing certificate
 files (`.pem`, `.crt`, or `.cer` extensions).
 
