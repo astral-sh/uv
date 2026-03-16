@@ -513,7 +513,10 @@ mod test {
             .unwrap()
             .to_string()
             .replace("exit status: ", "exit code: ");
-        write!(formatted, "{}", err.hints()).unwrap();
+        let hints = err.hints();
+        if !hints.is_empty() {
+            write!(formatted, "\n{hints}").unwrap();
+        }
         let formatted = anstream::adapter::strip_str(&formatted);
         insta::assert_snapshot!(formatted, @r#"
         Failed building wheel through setup.py (exit code: 0)
@@ -535,6 +538,7 @@ mod test {
               |          ^~~~~~~~~~~~~~~~~~~
         compilation terminated.
         error: command '/usr/bin/gcc' failed with exit code 1
+
         hint: This error likely indicates that you need to install a library that provides "graphviz/cgraph.h" for `pygraphviz-1.11`
         "#);
     }
@@ -571,7 +575,10 @@ mod test {
             .unwrap()
             .to_string()
             .replace("exit status: ", "exit code: ");
-        write!(formatted, "{}", err.hints()).unwrap();
+        let hints = err.hints();
+        if !hints.is_empty() {
+            write!(formatted, "\n{hints}").unwrap();
+        }
         let formatted = anstream::adapter::strip_str(&formatted);
         insta::assert_snapshot!(formatted, @"
         Failed building wheel through setup.py (exit code: 0)
@@ -582,6 +589,7 @@ mod test {
         /usr/bin/ld: cannot find -lncurses: No such file or directory
         collect2: error: ld returned 1 exit status
         error: command '/usr/bin/x86_64-linux-gnu-gcc' failed with exit code 1
+
         hint: This error likely indicates that you need to install the library that provides a shared library for `ncurses` for `pygraphviz-1.11` (e.g., `libncurses-dev`)
         ");
     }
@@ -619,7 +627,10 @@ mod test {
             .unwrap()
             .to_string()
             .replace("exit status: ", "exit code: ");
-        write!(formatted, "{}", err.hints()).unwrap();
+        let hints = err.hints();
+        if !hints.is_empty() {
+            write!(formatted, "\n{hints}").unwrap();
+        }
         let formatted = anstream::adapter::strip_str(&formatted);
         insta::assert_snapshot!(formatted, @r#"
         Failed building wheel through setup.py (exit code: 0)
@@ -631,6 +642,7 @@ mod test {
            or: setup.py cmd --help
 
         error: invalid command 'bdist_wheel'
+
         hint: This error likely indicates that `pygraphviz-1.11` depends on `wheel`, but doesn't declare it as a build dependency. If `pygraphviz-1.11` is a first-party package, consider adding `wheel` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
         [tool.uv.extra-build-dependencies]
@@ -670,7 +682,10 @@ mod test {
             .unwrap()
             .to_string()
             .replace("exit status: ", "exit code: ");
-        write!(formatted, "{}", err.hints()).unwrap();
+        let hints = err.hints();
+        if !hints.is_empty() {
+            write!(formatted, "\n{hints}").unwrap();
+        }
         let formatted = anstream::adapter::strip_str(&formatted);
         insta::assert_snapshot!(formatted, @"
         Failed building wheel through setup.py (exit code: 0)
@@ -678,6 +693,7 @@ mod test {
         [stderr]
         import distutils.core
         ModuleNotFoundError: No module named 'distutils'
+
         hint: `distutils` was removed from the standard library in Python 3.12. Consider adding a constraint (like `pygraphviz >1.11`) to avoid building a version of `pygraphviz` that depends on `distutils`.
         ");
     }
