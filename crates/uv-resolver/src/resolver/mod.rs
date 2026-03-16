@@ -50,7 +50,8 @@ use crate::manifest::Manifest;
 use crate::pins::FilePins;
 use crate::preferences::{PreferenceSource, Preferences};
 use crate::pubgrub::{
-    PubGrubDependency, PubGrubPackage, PubGrubPackageInner, PubGrubPriorities, PubGrubPython,
+    DependencySource, PubGrubDependency, PubGrubPackage, PubGrubPackageInner, PubGrubPriorities,
+    PubGrubPython,
 };
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolverOutput;
@@ -952,7 +953,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 package,
                 version: _,
                 parent: _,
-                url: _,
+                source: _,
             } = dependency;
             let url = package.name().and_then(|name| state.fork_urls.get(name));
             let index = package.name().and_then(|name| state.fork_indexes.get(name));
@@ -1950,7 +1951,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             }),
                             version: Range::singleton(version.clone()),
                             parent: None,
-                            url: None,
+                            source: DependencySource::Unspecified,
                         })
                         .collect(),
                 ));
@@ -1978,7 +1979,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     }),
                                     version: Range::singleton(version.clone()),
                                     parent: None,
-                                    url: None,
+                                    source: DependencySource::Unspecified,
                                 })
                         })
                         .collect(),
@@ -2004,7 +2005,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             }),
                             version: Range::singleton(version.clone()),
                             parent: None,
-                            url: None,
+                            source: DependencySource::Unspecified,
                         })
                         .collect(),
                 ));
@@ -2952,7 +2953,7 @@ impl ForkState {
                 package,
                 version,
                 parent: _,
-                url,
+                source,
             } = dependency;
 
             let mut has_url = false;
@@ -2961,9 +2962,13 @@ impl ForkState {
                 // requirement was a URL requirement. `Urls` applies canonicalization to this and
                 // override URLs to both URL and registry requirements, which we then check for
                 // conflicts using [`ForkUrl`].
-                for url in urls.get_url(&self.env, name, url.as_ref(), git)? {
+                for url in urls.get_url(&self.env, name, source.verbatim_url(), git)? {
                     self.fork_urls.insert(name, url, &self.env)?;
                     has_url = true;
+                }
+
+                if let Some(index) = source.explicit_index() {
+                    self.fork_indexes.insert(name, index, &self.env)?;
                 }
 
                 // If the package is pinned to an exact index, add it to the fork.
@@ -3045,7 +3050,7 @@ impl ForkState {
                 package,
                 version,
                 parent: _,
-                url: _,
+                source: _,
             } = dependency;
 
             let Some(base_package) = package.base_package() else {
@@ -3066,7 +3071,7 @@ impl ForkState {
                     package,
                     version,
                     parent: _,
-                    url: _,
+                    source: _,
                 } = dependency;
                 (package, version)
             }),
