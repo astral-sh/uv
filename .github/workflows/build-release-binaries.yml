@@ -364,16 +364,14 @@ jobs:
             if command -v yum &> /dev/null; then
                 yum update -y && yum install -y perl-core openssl openssl-devel pkgconfig libatomic
 
-                # If we're running on i686 we need to symlink libatomic
-                # in order to build openssl with -latomic flag.
-                if [[ ! -d "/usr/lib64" ]]; then
-                    ln -s /usr/lib/libatomic.so.1 /usr/lib/libatomic.so
-                else
-                  # Support cross-compiling from 64-bit to 32-bit
+                # Install cross build requirements
+                if [[ "${{ matrix.target }}" == "i686-unknown-linux-gnu" ]]; then
                   yum install -y glibc-devel.i686 libstdc++-devel.i686 libatomic.i686
-                  if [[ -f "/usr/lib/libatomic.so.1" && ! -f "/usr/lib/libatomic.so" ]]; then
+                fi
+
+                # We need to symlink libatomic in order to build openssl with -latomic flag.
+                if [[ -f "/usr/lib/libatomic.so.1" && ! -f "/usr/lib/libatomic.so" ]]; then
                     ln -s /usr/lib/libatomic.so.1 /usr/lib/libatomic.so
-                  fi
                 fi
             else
                 # If we're running on debian-based system.
