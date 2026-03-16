@@ -606,6 +606,8 @@ jobs:
             apt-get update && apt-get install -y gcc-s390x-linux-gnu binutils-s390x-linux-gnu
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
+          # OpenSSL requires a target of z10+ but gcc defaults to z9
+          # See https://github.com/openssl/openssl/issues/27323
           CFLAGS_s390x_unknown_linux_gnu: -march=z10
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         name: "Test wheel"
