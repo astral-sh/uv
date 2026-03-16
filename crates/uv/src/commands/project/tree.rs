@@ -158,8 +158,8 @@ pub(crate) async fn tree(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::with_tls_backend(
-                client_builder.tls_backend(),
+            return diagnostics::OperationDiagnostic::with_system_certs(
+                client_builder.system_certs(),
             )
             .report(err)
             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));

@@ -241,6 +241,7 @@ pub(crate) struct NetworkSettings {
     pub(crate) connectivity: Connectivity,
     pub(crate) offline: Flag,
     pub(crate) tls_backend: TlsBackend,
+    pub(crate) system_certs: bool,
     pub(crate) http_proxy: Option<ProxyUrl>,
     pub(crate) https_proxy: Option<ProxyUrl>,
     pub(crate) no_proxy: Option<Vec<String>>,
@@ -284,23 +285,36 @@ impl NetworkSettings {
             Connectivity::Online
         };
 
-        // Resolve TLS backend. Precedence: CLI > Env var (native-tls) > Workspace config > default.
+        // Resolve the `--native-tls` flag. When enabled, it sets both the TLS backend to
+        // native-tls and enables system certificates (unless overridden by more specific flags).
+        let native_tls = match flag(args.native_tls, args.no_native_tls, "native-tls") {
+            Some(value) => value,
+            None => {
+                environment.native_tls.value == Some(true)
+                    || workspace
+                        .and_then(|workspace| workspace.globals.native_tls)
+                        .unwrap_or(false)
+            }
+        };
+
+        // Resolve TLS backend. `--tls-backend` takes precedence, then `--native-tls`.
         let tls_backend = if let Some(backend) = args.tls_backend {
             backend
+        } else if native_tls {
+            TlsBackend::Native
         } else {
-            match flag(args.native_tls, args.no_native_tls, "native-tls") {
-                Some(true) => TlsBackend::NativeTls,
-                Some(false) => TlsBackend::default(),
-                None => {
-                    if environment.native_tls.value == Some(true)
-                        || workspace
-                            .and_then(|workspace| workspace.globals.native_tls)
-                            .unwrap_or(false)
-                    {
-                        TlsBackend::NativeTls
-                    } else {
-                        TlsBackend::default()
-                    }
+            TlsBackend::default()
+        };
+
+        // Resolve whether to use system certificates.
+        // `--system-certs` takes precedence, then `UV_SYSTEM_CERTS`, then `--native-tls`.
+        let system_certs = match flag(args.system_certs, args.no_system_certs, "system-certs") {
+            Some(value) => value,
+            None => {
+                if let Some(true) = environment.system_certs.value {
+                    true
+                } else {
+                    native_tls
                 }
             }
         };
@@ -330,6 +344,7 @@ impl NetworkSettings {
             connectivity,
             offline,
             tls_backend,
+            system_certs,
             http_proxy,
             https_proxy,
             no_proxy,

@@ -56,8 +56,11 @@ fn help() {
               Use verbose output
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
-          --native-tls
-              Whether to use the native-tls TLS backend instead of rustls [env: UV_NATIVE_TLS=]
+          --system-certs
+              Whether to load TLS certificates from the platform's native certificate store [env:
+              UV_SYSTEM_CERTS=]
+          --tls-backend <TLS_BACKEND>
+              The TLS backend to use for HTTPS connections [possible values: rustls, native]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -136,8 +139,11 @@ fn help_flag() {
               Use verbose output
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
-          --native-tls
-              Whether to use the native-tls TLS backend instead of rustls [env: UV_NATIVE_TLS=]
+          --system-certs
+              Whether to load TLS certificates from the platform's native certificate store [env:
+              UV_SYSTEM_CERTS=]
+          --tls-backend <TLS_BACKEND>
+              The TLS backend to use for HTTPS connections [possible values: rustls, native]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -215,8 +221,11 @@ fn help_short_flag() {
               Use verbose output
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
-          --native-tls
-              Whether to use the native-tls TLS backend instead of rustls [env: UV_NATIVE_TLS=]
+          --system-certs
+              Whether to load TLS certificates from the platform's native certificate store [env:
+              UV_SYSTEM_CERTS=]
+          --tls-backend <TLS_BACKEND>
+              The TLS backend to use for HTTPS connections [possible values: rustls, native]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -365,16 +374,26 @@ fn help_subcommand() {
               - always: Enables colored output regardless of the detected environment
               - never:  Disables colored output
 
-          --native-tls
-              Whether to use the native-tls TLS backend instead of rustls.
+          --system-certs
+              Whether to load TLS certificates from the platform's native certificate store [env:
+              UV_SYSTEM_CERTS=]
               
-              By default, uv uses the rustls TLS backend with bundled webpki-root-certs certificates,
-              providing consistent and portable TLS verification across all platforms.
+              By default, uv loads certificates from the bundled `webpki-roots` crate. The
+              `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv
+              improves portability and performance (especially on macOS).
               
-              Setting this flag is equivalent to `--tls-backend native-tls`, which uses the platform's
-              native TLS implementation.
+              However, in some cases, you may want to use the platform's native certificate store,
+              especially if you're relying on a corporate trust root (e.g., for a mandatory proxy)
+              that's included in your system's certificate store.
 
-              [env: UV_NATIVE_TLS=]
+          --tls-backend <TLS_BACKEND>
+              The TLS backend to use for HTTPS connections
+              
+              - `rustls`: Use rustls (default) - `native`: Use the platform's native TLS implementation
+
+              Possible values:
+              - rustls: Use rustls
+              - native: Use the platform's native TLS implementation
 
           --offline
               Disable network access.
@@ -649,16 +668,26 @@ fn help_subsubcommand() {
               - always: Enables colored output regardless of the detected environment
               - never:  Disables colored output
 
-          --native-tls
-              Whether to use the native-tls TLS backend instead of rustls.
+          --system-certs
+              Whether to load TLS certificates from the platform's native certificate store [env:
+              UV_SYSTEM_CERTS=]
               
-              By default, uv uses the rustls TLS backend with bundled webpki-root-certs certificates,
-              providing consistent and portable TLS verification across all platforms.
+              By default, uv loads certificates from the bundled `webpki-roots` crate. The
+              `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv
+              improves portability and performance (especially on macOS).
               
-              Setting this flag is equivalent to `--tls-backend native-tls`, which uses the platform's
-              native TLS implementation.
+              However, in some cases, you may want to use the platform's native certificate store,
+              especially if you're relying on a corporate trust root (e.g., for a mandatory proxy)
+              that's included in your system's certificate store.
 
-              [env: UV_NATIVE_TLS=]
+          --tls-backend <TLS_BACKEND>
+              The TLS backend to use for HTTPS connections
+              
+              - `rustls`: Use rustls (default) - `native`: Use the platform's native TLS implementation
+
+              Possible values:
+              - rustls: Use rustls
+              - native: Use the platform's native TLS implementation
 
           --offline
               Disable network access.
@@ -776,8 +805,11 @@ fn help_flag_subcommand() {
               Use verbose output
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
-          --native-tls
-              Whether to use the native-tls TLS backend instead of rustls [env: UV_NATIVE_TLS=]
+          --system-certs
+              Whether to load TLS certificates from the platform's native certificate store [env:
+              UV_SYSTEM_CERTS=]
+          --tls-backend <TLS_BACKEND>
+              The TLS backend to use for HTTPS connections [possible values: rustls, native]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -859,8 +891,11 @@ fn help_flag_subsubcommand() {
               Use verbose output
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
-          --native-tls
-              Whether to use the native-tls TLS backend instead of rustls [env: UV_NATIVE_TLS=]
+          --system-certs
+              Whether to load TLS certificates from the platform's native certificate store [env:
+              UV_SYSTEM_CERTS=]
+          --tls-backend <TLS_BACKEND>
+              The TLS backend to use for HTTPS connections [possible values: rustls, native]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -1020,8 +1055,11 @@ fn help_with_global_option() {
               Use verbose output
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
-          --native-tls
-              Whether to use the native-tls TLS backend instead of rustls [env: UV_NATIVE_TLS=]
+          --system-certs
+              Whether to load TLS certificates from the platform's native certificate store [env:
+              UV_SYSTEM_CERTS=]
+          --tls-backend <TLS_BACKEND>
+              The TLS backend to use for HTTPS connections [possible values: rustls, native]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -1142,8 +1180,11 @@ fn help_with_no_pager() {
               Use verbose output
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
-          --native-tls
-              Whether to use the native-tls TLS backend instead of rustls [env: UV_NATIVE_TLS=]
+          --system-certs
+              Whether to load TLS certificates from the platform's native certificate store [env:
+              UV_SYSTEM_CERTS=]
+          --tls-backend <TLS_BACKEND>
+              The TLS backend to use for HTTPS connections [possible values: rustls, native]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>

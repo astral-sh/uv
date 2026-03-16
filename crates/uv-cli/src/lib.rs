@@ -236,40 +236,44 @@ pub struct GlobalArgs {
     )]
     pub color: Option<ColorChoice>,
 
-    /// Whether to use the native-tls TLS backend instead of rustls [env: UV_NATIVE_TLS=]
+    /// Whether to use the platform's native TLS backend and certificate store [env:
+    /// UV_NATIVE_TLS=]
     ///
-    /// By default, uv uses the rustls TLS backend with bundled webpki-root-certs certificates,
-    /// providing consistent and portable TLS verification across all platforms.
+    /// By default, uv uses the `rustls` TLS backend with certificates from the bundled
+    /// `webpki-roots` crate.
     ///
-    /// Setting this flag is equivalent to `--tls-backend native-tls`, which uses
-    /// the platform's native TLS implementation.
-    #[arg(global = true, long, value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_native_tls"), conflicts_with("tls_backend"))]
+    /// When enabled, this flag switches both the TLS backend to the platform's native
+    /// implementation and the certificate source to the system certificate store. This is
+    /// equivalent to `--tls-backend native --system-certs`.
+    ///
+    /// Use `--tls-backend` and `--system-certs` for independent control over the TLS backend
+    /// and certificate source.
+    #[arg(global = true, long, value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_native_tls"), hide = true)]
     pub native_tls: bool,
 
-    #[arg(
-        global = true,
-        long,
-        overrides_with("native_tls"),
-        conflicts_with("tls_backend"),
-        hide = true
-    )]
+    #[arg(global = true, long, overrides_with("native_tls"), hide = true)]
     pub no_native_tls: bool,
+
+    /// Whether to load TLS certificates from the platform's native certificate store [env: UV_SYSTEM_CERTS=]
+    ///
+    /// By default, uv loads certificates from the bundled `webpki-roots` crate. The
+    /// `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv
+    /// improves portability and performance (especially on macOS).
+    ///
+    /// However, in some cases, you may want to use the platform's native certificate store,
+    /// especially if you're relying on a corporate trust root (e.g., for a mandatory proxy) that's
+    /// included in your system's certificate store.
+    #[arg(global = true, long, value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_system_certs"))]
+    pub system_certs: bool,
+
+    #[arg(global = true, long, overrides_with("system_certs"), hide = true)]
+    pub no_system_certs: bool,
 
     /// The TLS backend to use for HTTPS connections
     ///
-    /// By default, uv uses `rustls-webpki`, which uses rustls with bundled webpki-root-certs
-    /// certificates for consistent, portable TLS verification.
-    ///
-    /// - `rustls-webpki`: Use rustls with bundled webpki-root-certs certificates (default)
-    /// - `rustls`: Use rustls with system certificates via rustls-platform-verifier
-    /// - `native-tls`: Use system TLS implementation
-    #[arg(
-        global = true,
-        long,
-        value_enum,
-        hide = true,
-        conflicts_with_all = ["native_tls", "no_native_tls"]
-    )]
+    /// - `rustls`: Use rustls (default)
+    /// - `native`: Use the platform's native TLS implementation
+    #[arg(global = true, long, value_enum)]
     pub tls_backend: Option<TlsBackend>,
 
     /// Disable network access [env: UV_OFFLINE=]

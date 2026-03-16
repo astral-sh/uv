@@ -61,7 +61,8 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -265,7 +266,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         .output()?;
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("tls_backend: NativeTls,"));
+    assert!(stdout.contains("tls_backend: Native,"));
 
     // Resolution should use the rustls backend when explicitly requested.
     let output = add_shared_args(context.pip_compile())
@@ -277,17 +278,6 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("tls_backend: Rustls,"));
-
-    // Resolution should use the rustls-webpki backend when explicitly requested.
-    let output = add_shared_args(context.pip_compile())
-        .arg("--show-settings")
-        .arg("--tls-backend")
-        .arg("rustls-webpki")
-        .arg("requirements.in")
-        .output()?;
-    assert!(output.status.success());
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("tls_backend: RustlsWebpki,"));
 
     // Resolution should use the highest version, and generate hashes.
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
@@ -305,7 +295,8 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -517,7 +508,8 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -761,7 +753,8 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -974,7 +967,8 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -1161,7 +1155,8 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -1397,7 +1392,8 @@ fn resolve_index_url() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -1641,7 +1637,8 @@ fn resolve_index_url() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -1943,7 +1940,8 @@ fn resolve_find_links() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -2176,7 +2174,8 @@ fn resolve_top_level() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -2368,7 +2367,8 @@ fn resolve_top_level() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -2610,7 +2610,8 @@ fn resolve_top_level() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -2875,7 +2876,8 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -3057,7 +3059,8 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -3239,7 +3242,8 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -3423,7 +3427,8 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -3626,7 +3631,8 @@ fn resolve_tool() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -3824,7 +3830,8 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -4040,7 +4047,8 @@ fn resolve_both() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -4297,7 +4305,8 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -4633,7 +4642,8 @@ fn resolve_config_file() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -4942,7 +4952,8 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -5127,7 +5138,8 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -5320,7 +5332,8 @@ fn allow_insecure_host() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -5527,7 +5540,8 @@ fn index_priority() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -5773,7 +5787,8 @@ fn index_priority() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -6025,7 +6040,8 @@ fn index_priority() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -6272,7 +6288,8 @@ fn index_priority() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -6526,7 +6543,8 @@ fn index_priority() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -6773,7 +6791,8 @@ fn index_priority() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -7033,7 +7052,8 @@ fn verify_hashes() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -7208,7 +7228,8 @@ fn verify_hashes() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -7381,7 +7402,8 @@ fn verify_hashes() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -7556,7 +7578,8 @@ fn verify_hashes() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -7729,7 +7752,8 @@ fn verify_hashes() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -7903,7 +7927,8 @@ fn verify_hashes() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -8092,7 +8117,8 @@ fn preview_features() {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -8241,7 +8267,8 @@ fn preview_features() {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -8362,7 +8389,8 @@ fn preview_features() {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -8511,7 +8539,8 @@ fn preview_features() {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -8635,7 +8664,8 @@ fn preview_features() {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -8761,7 +8791,8 @@ fn preview_features() {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -8903,7 +8934,8 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -9092,7 +9124,8 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -9275,7 +9308,8 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -9456,7 +9490,8 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -9637,7 +9672,8 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -9819,7 +9855,8 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -10026,7 +10063,8 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -10158,7 +10196,8 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -10284,7 +10323,8 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -10408,7 +10448,8 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -10528,7 +10569,8 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -10649,7 +10691,8 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -10794,7 +10837,8 @@ fn build_isolation_override() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -10972,7 +11016,8 @@ fn build_isolation_override() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            tls_backend: RustlsWebpki,
+            tls_backend: Rustls,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,

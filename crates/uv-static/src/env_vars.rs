@@ -108,9 +108,16 @@ impl EnvVars {
     pub const UV_BREAK_SYSTEM_PACKAGES: &'static str = "UV_BREAK_SYSTEM_PACKAGES";
 
     /// Equivalent to the `--native-tls` command-line argument. If set to `true`, uv will
-    /// use the native-tls TLS backend instead of the default rustls backend.
+    /// use the platform's native TLS backend and load certificates from the system certificate
+    /// store.
     #[attr_added_in("0.1.19")]
     pub const UV_NATIVE_TLS: &'static str = "UV_NATIVE_TLS";
+
+    /// Equivalent to the `--system-certs` command-line argument. If set to `true`, uv will
+    /// load TLS certificates from the platform's native certificate store instead of the
+    /// bundled `webpki-roots`.
+    #[attr_added_in("next release")]
+    pub const UV_SYSTEM_CERTS: &'static str = "UV_SYSTEM_CERTS";
 
     /// Equivalent to the `--index-strategy` command-line argument.
     ///

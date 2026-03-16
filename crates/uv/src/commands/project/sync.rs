@@ -314,8 +314,8 @@ pub(crate) async fn sync(
                 }
                 // TODO(zanieb): We should respect `--output-format json` for the error case
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::with_tls_backend(
-                        client_builder.tls_backend(),
+                    return diagnostics::OperationDiagnostic::with_system_certs(
+                        client_builder.system_certs(),
                     )
                     .report(err)
                     .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
@@ -363,8 +363,8 @@ pub(crate) async fn sync(
     {
         Ok(result) => Outcome::Success(result),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::with_tls_backend(
-                client_builder.tls_backend(),
+            return diagnostics::OperationDiagnostic::with_system_certs(
+                client_builder.system_certs(),
             )
             .report(err)
             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
@@ -424,8 +424,8 @@ pub(crate) async fn sync(
     {
         Ok(changelog) => changelog,
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::with_tls_backend(
-                client_builder.tls_backend(),
+            return diagnostics::OperationDiagnostic::with_system_certs(
+                client_builder.system_certs(),
             )
             .report(err)
             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));

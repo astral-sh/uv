@@ -497,8 +497,8 @@ async fn print_frozen_version(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::with_tls_backend(
-                client_builder.tls_backend(),
+            return diagnostics::OperationDiagnostic::with_system_certs(
+                client_builder.system_certs(),
             )
             .report(err)
             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
@@ -640,8 +640,8 @@ async fn lock_and_sync(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::with_tls_backend(
-                client_builder.tls_backend(),
+            return diagnostics::OperationDiagnostic::with_system_certs(
+                client_builder.system_certs(),
             )
             .report(err)
             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
@@ -701,8 +701,8 @@ async fn lock_and_sync(
     {
         Ok(_) => {}
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::with_tls_backend(
-                client_builder.tls_backend(),
+            return diagnostics::OperationDiagnostic::with_system_certs(
+                client_builder.system_certs(),
             )
             .report(err)
             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));

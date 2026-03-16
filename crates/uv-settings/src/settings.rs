@@ -234,13 +234,16 @@ pub struct GlobalOptions {
         "#
     )]
     pub required_version: Option<RequiredVersion>,
-    /// Whether to use the native-tls TLS backend instead of the default rustls backend.
+    /// Whether to use the platform's native TLS backend and certificate store.
     ///
-    /// By default, uv uses rustls with bundled webpki-root-certs certificates, which provides
-    /// consistent and portable TLS verification across all platforms.
+    /// By default, uv uses the `rustls` TLS backend with certificates from the bundled
+    /// `webpki-roots` crate.
     ///
-    /// Setting this to `true` is equivalent to `--tls-backend native-tls`, which uses
-    /// the platform's native TLS implementation.
+    /// When enabled, this switches both the TLS backend to the platform's native implementation
+    /// and the certificate source to the system certificate store. This is equivalent to
+    /// setting `tls-backend = "native"` and `system-certs = true`.
+    ///
+    /// Use `system-certs` for independent control over the certificate source.
     #[option(
         default = "false",
         value_type = "bool",

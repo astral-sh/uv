@@ -97,6 +97,7 @@ pub struct BaseClientBuilder<'a> {
     preview: Preview,
     allow_insecure_host: Vec<TrustedHost>,
     tls_backend: TlsBackend,
+    system_certs: bool,
     retries: u32,
     pub connectivity: Connectivity,
     markers: Option<&'a MarkerEnvironment>,
@@ -169,6 +170,7 @@ impl Default for BaseClientBuilder<'_> {
             preview: Preview::default(),
             allow_insecure_host: vec![],
             tls_backend: TlsBackend::default(),
+            system_certs: false,
             connectivity: Connectivity::Online,
             retries: DEFAULT_RETRIES,
             markers: None,
@@ -197,6 +199,7 @@ impl<'a> BaseClientBuilder<'a> {
     pub fn new(
         connectivity: Connectivity,
         tls_backend: TlsBackend,
+        system_certs: bool,
         allow_insecure_host: Vec<TrustedHost>,
         preview: Preview,
         read_timeout: Duration,
@@ -207,6 +210,7 @@ impl<'a> BaseClientBuilder<'a> {
             preview,
             allow_insecure_host,
             tls_backend,
+            system_certs,
             retries,
             connectivity,
             read_timeout,
@@ -257,8 +261,8 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     #[must_use]
-    pub fn is_native_tls(&self) -> bool {
-        self.tls_backend.is_native_tls()
+    pub fn system_certs(&self) -> bool {
+        self.system_certs
     }
 
     #[must_use]
@@ -659,40 +663,30 @@ impl<'a> BaseClientBuilder<'a> {
             Security::Insecure => client_builder.danger_accept_invalid_certs(true),
         };
 
-        // Choose TLS backend based on the configured option:
-        // - RustlsWebpki (default): rustls with embedded webpki-root-certs certificates
-        // - Rustls: rustls with platform-verifier (loads from OS certificate stores)
-        // - NativeTls: native-tls (system TLS implementation)
+        // Configure the TLS backend
         let client_builder = match self.tls_backend {
-            TlsBackend::NativeTls => {
-                let client_builder = client_builder.tls_backend_native();
-                // Merge custom certificates for native-tls
-                if !custom_certs.is_empty() {
-                    client_builder.tls_certs_merge(custom_certs.to_vec())
-                } else {
-                    client_builder
-                }
-            }
-            TlsBackend::Rustls => {
-                let client_builder = client_builder.tls_backend_rustls();
-                // Merge custom certificates for rustls with platform-verifier
-                if !custom_certs.is_empty() {
-                    client_builder.tls_certs_merge(custom_certs.to_vec())
-                } else {
-                    client_builder
-                }
-            }
-            TlsBackend::RustlsWebpki => {
-                let client_builder = client_builder
-                    .tls_backend_rustls()
-                    .tls_certs_only(WEBPKI_ROOT_CERTIFICATES.iter().cloned());
+            TlsBackend::Native => client_builder.tls_backend_native(),
+            TlsBackend::Rustls => client_builder.tls_backend_rustls(),
+        };
 
-                // Merge custom certificates on top of webpki-root-certs
-                if !custom_certs.is_empty() {
-                    client_builder.tls_certs_merge(custom_certs.to_vec())
-                } else {
-                    client_builder
-                }
+        // Configure the certificate source
+        let client_builder = if self.system_certs {
+            // Use the platform's native certificate store.
+            if !custom_certs.is_empty() {
+                client_builder.tls_certs_merge(custom_certs.to_vec())
+            } else {
+                client_builder
+            }
+        } else {
+            // Use bundled webpki-root-certs certificates.
+            let client_builder =
+                client_builder.tls_certs_only(WEBPKI_ROOT_CERTIFICATES.iter().cloned());
+
+            // Merge custom certificates on top of webpki-root-certs.
+            if !custom_certs.is_empty() {
+                client_builder.tls_certs_merge(custom_certs.to_vec())
+            } else {
+                client_builder
             }
         };
 

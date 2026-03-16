@@ -258,9 +258,11 @@ pub(crate) async fn lock(
             Ok(ExitStatus::Failure)
         }
         Err(ProjectError::Operation(err)) => {
-            diagnostics::OperationDiagnostic::with_tls_backend(client_builder.tls_backend())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+            diagnostics::OperationDiagnostic::with_system_certs(
+                client_builder.system_certs(),
+            )
+            .report(err)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
         Err(err) => Err(err.into()),
     }

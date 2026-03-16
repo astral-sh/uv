@@ -1959,6 +1959,7 @@ impl TestContext {
             EnvVars::SSL_CERT_DIR,
             EnvVars::SSL_CERT_FILE,
             EnvVars::UV_NATIVE_TLS,
+            EnvVars::UV_SYSTEM_CERTS,
         ];
 
         for env_var in EnvVars::all_names()
