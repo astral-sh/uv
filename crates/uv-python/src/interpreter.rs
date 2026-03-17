@@ -1149,6 +1149,16 @@ impl InterpreterInfo {
 
         let canonical = canonicalize_executable(&absolute).map_err(handle_io_error)?;
 
+        // If the executable is inside a virtual environment, include the `pyvenv.cfg`
+        // content in the cache key. This ensures the cache is invalidated when the virtual
+        // environment is recreated with different settings (e.g., `--system-site-packages`),
+        // even if the underlying Python executable hasn't changed.
+        let pyvenv_cfg_content = absolute
+            .parent()
+            .and_then(|p| p.parent())
+            .map(|venv_root| venv_root.join("pyvenv.cfg"))
+            .and_then(|pyvenv_cfg| fs::read_to_string(&pyvenv_cfg).ok());
+
         let cache_entry = cache.entry(
             CacheBucket::Interpreter,
             // Shard interpreter metadata by host architecture, operating system, and version, to
@@ -1169,23 +1179,19 @@ impl InterpreterInfo {
             // absolute path refers to different interpreters with matching ctimes, e.g., if you
             // have a `.venv/bin/python` pointing to both Python 3.12 and Python 3.13 that were
             // modified at the same time.
-            format!("{}.msgpack", cache_digest(&(&absolute, &canonical))),
+            //
+            // We also include the `pyvenv.cfg` content so that recreating a virtual environment
+            // with different configuration (e.g., toggling `--system-site-packages`) produces a
+            // different cache key, avoiding stale results.
+            format!(
+                "{}.msgpack",
+                cache_digest(&(&absolute, &canonical, &pyvenv_cfg_content))
+            ),
         );
 
         // We check the timestamp of the canonicalized executable to check if an underlying
         // interpreter has been modified.
-        let mut modified = Timestamp::from_path(canonical).map_err(handle_io_error)?;
-
-        // If the executable is inside a virtual environment, also consider the `pyvenv.cfg`
-        // timestamp. This ensures the cache is invalidated when the virtual environment is
-        // recreated with different settings (e.g., `--system-site-packages`), even if the
-        // underlying Python executable hasn't changed.
-        if let Some(venv_root) = absolute.parent().and_then(|p| p.parent()) {
-            let pyvenv_cfg = venv_root.join("pyvenv.cfg");
-            if let Ok(cfg_timestamp) = Timestamp::from_path(&pyvenv_cfg) {
-                modified = std::cmp::max(modified, cfg_timestamp);
-            }
-        }
+        let modified = Timestamp::from_path(canonical).map_err(handle_io_error)?;
 
         // Read from the cache.
         if cache
