@@ -358,26 +358,25 @@ jobs:
           manylinux: 2_17
           docker-options: -e CARGO
           args: --release --locked --out dist --features self-update --compatibility pypi
-          # See: https://github.com/sfackler/rust-openssl/issues/2036#issuecomment-1724324145
           before-script-linux: |
             # Install the 32-bit cross target on 64-bit (noop if we're already on 64-bit)
             rustup target add ${{ matrix.target }}
             # If we're running on rhel centos, install needed packages.
             if command -v yum &> /dev/null; then
-                yum update -y && yum install -y perl-core openssl openssl-devel pkgconfig libatomic
+                yum update -y && yum install -y pkgconfig libatomic
 
                 # Install cross build requirements
                 if [[ "${{ matrix.target }}" == "i686-unknown-linux-gnu" ]]; then
                   yum install -y glibc-devel.i686 libstdc++-devel.i686 libatomic.i686
                 fi
 
-                # We need to symlink libatomic in order to build openssl with -latomic flag.
+                # Symlink libatomic so the linker can find it with -latomic.
                 if [[ -f "/usr/lib/libatomic.so.1" && ! -f "/usr/lib/libatomic.so" ]]; then
                     ln -s /usr/lib/libatomic.so.1 /usr/lib/libatomic.so
                 fi
             else
                 # If we're running on debian-based system.
-                apt update -y && apt-get install -y libssl-dev openssl pkg-config
+                apt update -y && apt-get install -y pkg-config
             fi
             # Install cargo extensions as a static musl binary so it runs in any container.
             scripts/install-cargo-extensions.sh
@@ -608,9 +607,7 @@ jobs:
             apt-get update && apt-get install -y gcc-s390x-linux-gnu binutils-s390x-linux-gnu
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-          # OpenSSL requires a target of z10+ but gcc defaults to z9
-          # See https://github.com/openssl/openssl/issues/27323
-          CFLAGS_s390x_unknown_linux_gnu: -march=z10
+
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         name: "Test wheel"
         with:
