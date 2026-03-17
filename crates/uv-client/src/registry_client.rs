@@ -1135,7 +1135,14 @@ impl RegistryClient {
             if let Some(authorization) = req.headers().get("authorization") {
                 headers.append("authorization", authorization.clone());
             }
-            // Specify identity encoding to prevent double compression from async_http_range_reader and reqwest
+            // These range requests need the bytes from the wheel archive itself.
+            // After `reqwest` moved decompression to tower-http[1], this path could receive
+            // transparently decompressed responses. That breaks the byte offsets used by
+            // `AsyncHttpRangeReader` and can later fail with errors like `Invalid gzip header`.[2]
+            // We request identity encoding so the range reader always sees the wheel bytes.
+            //
+            // [1]: https://github.com/seanmonstar/reqwest/pull/2840
+            // [2]: https://github.com/astral-sh/async_http_range_reader/pull/3#discussion_r2700194798
             headers.insert(
                 reqwest::header::ACCEPT_ENCODING,
                 reqwest::header::HeaderValue::from_static("identity"),
