@@ -224,17 +224,7 @@ jobs:
 
       - name: "Create a virtual environment"
         run: |
-          ./uv venv -c -p 3.13.12 --managed-python
-
-      - name: "Verify venv uses installed interpreter"
-        run: |
-          base_executable=$(.venv/bin/python -c 'import sys; print(sys._base_executable)')
-          expected="$GITHUB_WORKSPACE/.python/cpython-3.13-linux-armv7-gnueabihf/bin/python3.13"
-          if [[ "$base_executable" != "$expected" ]]; then
-            echo "Expected: $expected"
-            echo "Found:    $base_executable"
-            exit 1
-          fi
+          ./uv venv -c -p 3.13.12 --managed-python --no-python-downloads
 
   integration-test-free-threaded-windows-x86_64:
     name: "free-threaded on windows"
