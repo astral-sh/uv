@@ -6,6 +6,7 @@ use itertools::Itertools;
 use reqwest::{Certificate, Identity};
 use rustls_native_certs::{CertificateResult, load_certs_from_paths};
 use rustls_pki_types::CertificateDer;
+use tracing::debug;
 
 use uv_fs::Simplified;
 use uv_static::EnvVars;
@@ -173,7 +174,16 @@ impl Certificates {
     pub(crate) fn to_reqwest_certs(&self) -> Vec<Certificate> {
         self.0
             .iter()
-            .filter_map(|cert| Certificate::from_der(cert).ok())
+            // `Certificate::from_der` returns a `Result` for backend compatibility, but these
+            // certificates come from `rustls-native-certs` and are already validated DER certs.
+            // In our rustls-based client configuration this conversion is expected to succeed.
+            .filter_map(|cert| match Certificate::from_der(cert) {
+                Ok(certificate) => Some(certificate),
+                Err(err) => {
+                    debug!("Failed to convert DER certificate to reqwest certificate: {err}");
+                    None
+                }
+            })
             .collect()
     }
 
