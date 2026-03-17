@@ -33,8 +33,8 @@ use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DryRun, EditableMode, EnvFile,
     ExportFormat, ExtrasSpecification, GitLfsSetting, HashCheckingMode, IndexStrategy,
     InstallOptions, KeyringProviderType, NoBinary, NoBuild, NoSources, PipCompileFormat,
-    ProjectBuildBackend, ProxyUrl, Reinstall, RequiredVersion, TargetTriple, TlsBackend,
-    TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
+    ProjectBuildBackend, ProxyUrl, Reinstall, RequiredVersion, TargetTriple, TrustedHost,
+    TrustedPublishing, Upgrade, VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
@@ -240,7 +240,6 @@ pub(crate) fn resolve_preview(
 pub(crate) struct NetworkSettings {
     pub(crate) connectivity: Connectivity,
     pub(crate) offline: Flag,
-    pub(crate) tls_backend: TlsBackend,
     pub(crate) system_certs: bool,
     pub(crate) http_proxy: Option<ProxyUrl>,
     pub(crate) https_proxy: Option<ProxyUrl>,
@@ -297,8 +296,6 @@ impl NetworkSettings {
             }
         };
 
-        let tls_backend = args.tls_backend.unwrap_or_default();
-
         // Resolve whether to use system certificates.
         // `--system-certs` takes precedence, then `UV_SYSTEM_CERTS`, then `--native-tls`.
         let system_certs = match flag(args.system_certs, args.no_system_certs, "system-certs") {
@@ -336,7 +333,6 @@ impl NetworkSettings {
         Self {
             connectivity,
             offline,
-            tls_backend,
             system_certs,
             http_proxy,
             https_proxy,

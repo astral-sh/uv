@@ -15,8 +15,7 @@ use uv_auth::Service;
 use uv_cache::CacheArgs;
 use uv_configuration::{
     ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier, PipCompileFormat,
-    ProjectBuildBackend, TargetTriple, TlsBackend, TrustedHost, TrustedPublishing,
-    VersionControlSystem,
+    ProjectBuildBackend, TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettingEntry, ConfigSettingPackageEntry, Index, IndexUrl, Origin, PipExtraIndex,
@@ -262,13 +261,6 @@ pub struct GlobalArgs {
 
     #[arg(global = true, long, overrides_with("system_certs"), hide = true)]
     pub no_system_certs: bool,
-
-    /// The TLS backend to use for HTTPS connections
-    ///
-    /// - `rustls`: Use rustls (default)
-    /// - `native`: Use the platform's native TLS implementation
-    #[arg(global = true, long, value_enum)]
-    pub tls_backend: Option<TlsBackend>,
 
     /// Disable network access [env: UV_OFFLINE=]
     ///

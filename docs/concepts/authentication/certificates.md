@@ -5,16 +5,8 @@ are used to verify the identity of these servers, ensuring that connections are 
 
 ## TLS backend
 
-The [`--tls-backend`](../../reference/cli.md#uv) flag controls which TLS implementation uv uses:
-
-- **[`rustls`](https://github.com/rustls/rustls)** (default): A memory-safe TLS implementation.
-- **`native`**: The platform's native TLS implementation, wrapped by the
-  [`native-tls`](https://docs.rs/native-tls/latest/native_tls/) crate (SChannel on Windows, Secure
-  Transport on macOS, OpenSSL on Linux).
-
-When using `rustls`, uv uses [`aws-lc-rs`](https://github.com/aws/aws-lc-rs) as the underlying
-cryptography provider. `aws-lc-rs` is a Rust wrapper around [AWS-LC](https://github.com/aws/aws-lc),
-a general-purpose cryptographic library maintained by AWS.
+uv uses [`rustls`](https://github.com/rustls/rustls), a memory-safe TLS implementation written in
+Rust, with [`aws-lc-rs`](https://github.com/aws/aws-lc-rs) as the cryptography provider.
 
 ## System certificates
 

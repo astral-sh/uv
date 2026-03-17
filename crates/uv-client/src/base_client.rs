@@ -32,7 +32,7 @@ use url::Url;
 
 use uv_auth::{AuthMiddleware, Credentials, CredentialsCache, Indexes, PyxTokenStore};
 use uv_configuration::ProxyUrlKind;
-use uv_configuration::{KeyringProviderType, ProxyUrl, TlsBackend, TrustedHost};
+use uv_configuration::{KeyringProviderType, ProxyUrl, TrustedHost};
 
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
@@ -88,7 +88,6 @@ pub struct BaseClientBuilder<'a> {
     keyring: KeyringProviderType,
     preview: Preview,
     allow_insecure_host: Vec<TrustedHost>,
-    tls_backend: TlsBackend,
     system_certs: bool,
     retries: u32,
     pub connectivity: Connectivity,
@@ -161,7 +160,6 @@ impl Default for BaseClientBuilder<'_> {
             keyring: KeyringProviderType::default(),
             preview: Preview::default(),
             allow_insecure_host: vec![],
-            tls_backend: TlsBackend::default(),
             system_certs: false,
             connectivity: Connectivity::Online,
             retries: DEFAULT_RETRIES,
@@ -190,7 +188,6 @@ impl Default for BaseClientBuilder<'_> {
 impl<'a> BaseClientBuilder<'a> {
     pub fn new(
         connectivity: Connectivity,
-        tls_backend: TlsBackend,
         system_certs: bool,
         allow_insecure_host: Vec<TrustedHost>,
         preview: Preview,
@@ -201,7 +198,6 @@ impl<'a> BaseClientBuilder<'a> {
         Self {
             preview,
             allow_insecure_host,
-            tls_backend,
             system_certs,
             retries,
             connectivity,
@@ -367,10 +363,6 @@ impl<'a> BaseClientBuilder<'a> {
         self.credentials_cache.store_credentials(url, credentials);
     }
 
-    pub fn tls_backend(&self) -> TlsBackend {
-        self.tls_backend
-    }
-
     pub fn is_offline(&self) -> bool {
         matches!(self.connectivity, Connectivity::Offline)
     }
@@ -525,11 +517,7 @@ impl<'a> BaseClientBuilder<'a> {
             Security::Insecure => client_builder.danger_accept_invalid_certs(true),
         };
 
-        // Configure the TLS backend
-        let client_builder = match self.tls_backend {
-            TlsBackend::Native => client_builder.tls_backend_native(),
-            TlsBackend::Rustls => client_builder.tls_backend_rustls(),
-        };
+        let client_builder = client_builder.tls_backend_rustls();
 
         // Configure the certificate source.
         let client_builder = if self.system_certs {

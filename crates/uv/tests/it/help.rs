@@ -59,8 +59,6 @@ fn help() {
           --system-certs
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_SYSTEM_CERTS=]
-          --tls-backend <TLS_BACKEND>
-              The TLS backend to use for HTTPS connections [possible values: rustls, native]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -142,8 +140,6 @@ fn help_flag() {
           --system-certs
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_SYSTEM_CERTS=]
-          --tls-backend <TLS_BACKEND>
-              The TLS backend to use for HTTPS connections [possible values: rustls, native]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -224,8 +220,6 @@ fn help_short_flag() {
           --system-certs
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_SYSTEM_CERTS=]
-          --tls-backend <TLS_BACKEND>
-              The TLS backend to use for HTTPS connections [possible values: rustls, native]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -384,15 +378,6 @@ fn help_subcommand() {
               However, in some cases, you may want to use the platform's native certificate store,
               especially if you're relying on a corporate trust root (e.g., for a mandatory proxy)
               that's included in your system's certificate store.
-
-          --tls-backend <TLS_BACKEND>
-              The TLS backend to use for HTTPS connections
-              
-              - `rustls`: Use rustls (default) - `native`: Use the platform's native TLS implementation
-
-              Possible values:
-              - rustls: Use rustls
-              - native: Use the platform's native TLS implementation
 
           --offline
               Disable network access.
@@ -678,15 +663,6 @@ fn help_subsubcommand() {
               especially if you're relying on a corporate trust root (e.g., for a mandatory proxy)
               that's included in your system's certificate store.
 
-          --tls-backend <TLS_BACKEND>
-              The TLS backend to use for HTTPS connections
-              
-              - `rustls`: Use rustls (default) - `native`: Use the platform's native TLS implementation
-
-              Possible values:
-              - rustls: Use rustls
-              - native: Use the platform's native TLS implementation
-
           --offline
               Disable network access.
               
@@ -806,8 +782,6 @@ fn help_flag_subcommand() {
           --system-certs
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_SYSTEM_CERTS=]
-          --tls-backend <TLS_BACKEND>
-              The TLS backend to use for HTTPS connections [possible values: rustls, native]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -892,8 +866,6 @@ fn help_flag_subsubcommand() {
           --system-certs
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_SYSTEM_CERTS=]
-          --tls-backend <TLS_BACKEND>
-              The TLS backend to use for HTTPS connections [possible values: rustls, native]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -1056,8 +1028,6 @@ fn help_with_global_option() {
           --system-certs
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_SYSTEM_CERTS=]
-          --tls-backend <TLS_BACKEND>
-              The TLS backend to use for HTTPS connections [possible values: rustls, native]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -1181,8 +1151,6 @@ fn help_with_no_pager() {
           --system-certs
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_SYSTEM_CERTS=]
-          --tls-backend <TLS_BACKEND>
-              The TLS backend to use for HTTPS connections [possible values: rustls, native]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
