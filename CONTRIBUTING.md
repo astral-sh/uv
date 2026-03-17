@@ -53,6 +53,14 @@ On Fedora-based distributions, you can install a C compiler with:
 sudo dnf install gcc
 ```
 
+On Windows, [NASM](https://www.nasm.us/) is required for building the TLS backend (`aws-lc-sys`):
+
+```shell
+winget install NASM.NASM
+```
+
+After installation, add `C:\Program Files\NASM` to your `PATH`.
+
 ## Testing
 
 For running tests, we recommend [nextest](https://nexte.st/).
