@@ -262,7 +262,7 @@ jobs:
         # See: https://aws.github.io/aws-lc-rs/requirements/windows.html#build-requirements
         if: contains(matrix.platform.target, 'x86') || contains(matrix.platform.target, 'i686')
         run: |
-          choco install nasm -y
+          winget install NASM.NASM --accept-source-agreements --accept-package-agreements
           echo "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append
       # uv
       - name: "Build wheels"
