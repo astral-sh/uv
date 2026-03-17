@@ -259,7 +259,18 @@ jobs:
       - name: "Install cross-compilation toolchain"
         run: |
           sudo dpkg --add-architecture armhf
-          sudo sed -i 's/^deb /deb [arch=arm64] /' /etc/apt/sources.list.d/*.list
+          # Pin existing sources to arm64 only so apt doesn't try to fetch armhf from them.
+          # Use DEB822 format (.sources) if present, otherwise fall back to .list files.
+          # Remove any third-party lists that can't handle multi-arch gracefully.
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
+          for f in /etc/apt/sources.list.d/*.sources; do
+            if [ -f "$f" ] && ! grep -q '^Architectures:' "$f"; then
+              sudo sed -i '/^Types:/a Architectures: arm64' "$f"
+            fi
+          done
+          for f in /etc/apt/sources.list.d/*.list; do
+            [ -f "$f" ] && sudo sed -i 's/^deb \([^[]\)/deb [arch=arm64] \1/' "$f"
+          done
           echo "deb [arch=armhf] http://ports.ubuntu.com/ $(lsb_release -cs) main universe" | sudo tee /etc/apt/sources.list.d/armhf.list
           echo "deb [arch=armhf] http://ports.ubuntu.com/ $(lsb_release -cs)-updates main universe" | sudo tee -a /etc/apt/sources.list.d/armhf.list
           sudo apt-get update
