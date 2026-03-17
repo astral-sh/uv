@@ -8,23 +8,15 @@ are used to verify the identity of these servers, ensuring that connections are 
 uv uses [`rustls`](https://github.com/rustls/rustls), a memory-safe TLS implementation written in
 Rust, with [`aws-lc-rs`](https://github.com/aws/aws-lc-rs) as the cryptography provider.
 
-The following certificate algorithms are supported:
+uv supports the following X.509 certificate signature algorithms:
 
-- ECDSA P-256 + SHA-256
-- ECDSA P-256 + SHA-384
-- ECDSA P-384 + SHA-256
-- ECDSA P-384 + SHA-384
+- ECDSA P-256 (SHA-256, SHA-384)
+- ECDSA P-384 (SHA-256, SHA-384)
+- ECDSA P-521 (SHA-256, SHA-384, SHA-512)
 - Ed25519
-- RSA PKCS#1 2048–8192 bit + SHA-256
-- RSA PKCS#1 2048–8192 bit + SHA-384
-- RSA PKCS#1 2048–8192 bit + SHA-512
-- RSA PKCS#1 3072–8192 bit + SHA-384
-- RSA-PSS 2048–8192 bit + SHA-256
-- RSA-PSS 2048–8192 bit + SHA-384
-- RSA-PSS 2048–8192 bit + SHA-512
-- ECDSA P-521 + SHA-256
-- ECDSA P-521 + SHA-384
-- ECDSA P-521 + SHA-512
+- RSA PKCS#1 2048–8192 bit (SHA-256, SHA-384, SHA-512)
+- RSA PKCS#1 3072–8192 bit (SHA-384)
+- RSA-PSS 2048–8192 bit (SHA-256, SHA-384, SHA-512)
 
 ## System certificates
 

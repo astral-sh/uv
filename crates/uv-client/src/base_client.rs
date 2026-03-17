@@ -524,11 +524,11 @@ impl<'a> BaseClientBuilder<'a> {
         // `SSL_CERT_FILE` and `SSL_CERT_DIR` override the default certificate source entirely,
         // matching the conventions of OpenSSL, Go, and `rustls-native-certs`.
         let client_builder = if let Some(custom_certs) = custom_certs {
-            client_builder.tls_certs_only(custom_certs.iter().cloned())
+            client_builder.tls_certs_only(custom_certs.to_reqwest_certs())
         } else if self.system_certs {
             client_builder
         } else {
-            client_builder.tls_certs_only(Certificates::webpki_roots().iter().cloned())
+            client_builder.tls_certs_only(Certificates::webpki_roots().to_reqwest_certs())
         };
 
         // Configure mTLS.
