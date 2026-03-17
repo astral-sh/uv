@@ -2,13 +2,12 @@ use std::error::Error;
 use std::fmt::Debug;
 use std::fmt::Write;
 use std::num::ParseIntError;
-use std::path::Path;
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime, SystemTimeError};
 use std::{env, io, iter};
 
 use anyhow::anyhow;
-use fs_err as fs;
+
 use http::{
     HeaderMap, HeaderName, HeaderValue, Method, StatusCode,
     header::{
@@ -17,9 +16,7 @@ use http::{
     },
 };
 use itertools::Itertools;
-use reqwest::{
-    Certificate, Client, ClientBuilder, IntoUrl, NoProxy, Proxy, Request, Response, multipart,
-};
+use reqwest::{Client, ClientBuilder, IntoUrl, NoProxy, Proxy, Request, Response, multipart};
 use reqwest_middleware::{ClientWithMiddleware, Middleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{
@@ -36,7 +33,7 @@ use url::Url;
 use uv_auth::{AuthMiddleware, Credentials, CredentialsCache, Indexes, PyxTokenStore};
 use uv_configuration::ProxyUrlKind;
 use uv_configuration::{KeyringProviderType, ProxyUrl, TlsBackend, TrustedHost};
-use uv_fs::Simplified;
+
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
 use uv_preview::Preview;
@@ -48,7 +45,7 @@ use uv_warnings::warn_user_once;
 
 use crate::linehaul::LineHaul;
 use crate::middleware::OfflineMiddleware;
-use crate::tls::read_identity;
+use crate::tls::{Certificates, read_identity};
 use crate::{Connectivity, WrappedReqwestError};
 
 pub const DEFAULT_RETRIES: u32 = 3;
@@ -71,13 +68,6 @@ pub const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// reqwest does not support something like a read timeout for uploads, so we have to set a (large)
 /// timeout on the entire upload.
 pub const DEFAULT_READ_TIMEOUT_UPLOAD: Duration = Duration::from_mins(15);
-
-static WEBPKI_ROOT_CERTIFICATES: LazyLock<Vec<Certificate>> = LazyLock::new(|| {
-    webpki_root_certs::TLS_SERVER_ROOT_CERTS
-        .iter()
-        .filter_map(|cert_der| Certificate::from_der(cert_der).ok())
-        .collect()
-});
 
 /// Selectively skip parts or the entire auth middleware.
 #[derive(Debug, Clone, Copy, Default)]
@@ -470,135 +460,6 @@ impl<'a> BaseClientBuilder<'a> {
         }
     }
 
-    /// Try to load certificates from PEM data, supporting both bundles and single certs.
-    fn try_load_certificates(cert_data: &[u8]) -> Option<Vec<Certificate>> {
-        Certificate::from_pem_bundle(cert_data)
-            .or_else(|_| Certificate::from_pem(cert_data).map(|cert| vec![cert]))
-            .ok()
-    }
-
-    /// Load CA certificates from `SSL_CERT_FILE` and `SSL_CERT_DIR` environment variables.
-    /// Returns a vector of certificates that can be merged with the OS certificate store.
-    fn load_certs_from_env() -> Vec<Certificate> {
-        let mut certs = Vec::new();
-
-        if let Ok(cert_file) = env::var(EnvVars::SSL_CERT_FILE) {
-            let cert_path = Path::new(&cert_file);
-            if !cert_path.exists() {
-                warn_user_once!(
-                    "Ignoring invalid `SSL_CERT_FILE`. File does not exist: {}.",
-                    cert_path.simplified_display().cyan()
-                );
-            } else {
-                match fs_err::read(cert_path) {
-                    Ok(cert_data) => match Self::try_load_certificates(&cert_data) {
-                        Some(loaded_certs) => {
-                            debug!(
-                                "Loaded {} certificate(s) from SSL_CERT_FILE: {}",
-                                loaded_certs.len(),
-                                cert_file
-                            );
-                            certs.extend(loaded_certs);
-                        }
-                        None => {
-                            warn_user_once!(
-                                "Failed to parse certificate from `SSL_CERT_FILE` ({})",
-                                cert_path.simplified_display().cyan()
-                            );
-                        }
-                    },
-                    Err(err) => {
-                        warn_user_once!(
-                            "Failed to read `SSL_CERT_FILE` ({}): {err}",
-                            cert_path.simplified_display().cyan()
-                        );
-                    }
-                }
-            }
-        }
-
-        if let Ok(cert_dirs) = env::var(EnvVars::SSL_CERT_DIR) {
-            if !cert_dirs.is_empty() {
-                let paths: Vec<_> = env::split_paths(&cert_dirs).collect();
-                let (existing, missing): (Vec<_>, Vec<_>) = paths.iter().partition(|p| p.exists());
-
-                if existing.is_empty() {
-                    let end_note = if missing.len() == 1 {
-                        "The directory does not exist."
-                    } else {
-                        "The entries do not exist."
-                    };
-                    warn_user_once!(
-                        "Ignoring invalid `SSL_CERT_DIR`. {end_note}: {}.",
-                        missing
-                            .iter()
-                            .map(Simplified::simplified_display)
-                            .join(", ")
-                            .cyan()
-                    );
-                } else {
-                    // Warn about missing entries
-                    if !missing.is_empty() {
-                        let end_note = if missing.len() == 1 {
-                            "The following directory does not exist:"
-                        } else {
-                            "The following entries do not exist:"
-                        };
-                        warn_user_once!(
-                            "Invalid entries in `SSL_CERT_DIR`. {end_note}: {}.",
-                            missing
-                                .iter()
-                                .map(Simplified::simplified_display)
-                                .join(", ")
-                                .cyan()
-                        );
-                    }
-
-                    // Load certificates from existing directories
-                    for dir in existing {
-                        let Ok(entries) = fs::read_dir(dir) else {
-                            continue;
-                        };
-
-                        for entry in entries.flatten() {
-                            let path = entry.path();
-                            // Only process files with .crt, .pem, or .cer extensions
-                            let Some(ext) = path.extension() else {
-                                continue;
-                            };
-                            if !matches!(ext.to_str(), Some("crt" | "pem" | "cer")) {
-                                continue;
-                            }
-
-                            let Ok(cert_data) = fs::read(&path) else {
-                                continue;
-                            };
-
-                            match Self::try_load_certificates(&cert_data) {
-                                Some(loaded_certs) => {
-                                    debug!(
-                                        "Loaded {} certificate(s) from SSL_CERT_DIR: {}",
-                                        loaded_certs.len(),
-                                        path.simplified_display()
-                                    );
-                                    certs.extend(loaded_certs);
-                                }
-                                None => {
-                                    debug!(
-                                        "Failed to parse certificate from {}",
-                                        path.simplified_display()
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        certs
-    }
-
     fn create_secure_and_insecure_clients(
         &self,
         read_timeout: Duration,
@@ -613,17 +474,16 @@ impl<'a> BaseClientBuilder<'a> {
             let _ = write!(user_agent_string, " {output}");
         }
 
-        // Load custom CA certificates from SSL_CERT_FILE and SSL_CERT_DIR.
-        // These certificates will be merged with the OS certificate store when using rustls,
-        // or added programmatically when using native-tls.
-        let custom_certs = Self::load_certs_from_env();
+        // Load custom CA certificates from `SSL_CERT_FILE` and `SSL_CERT_DIR`.
+        // These are merged on top of the active certificate source (bundled roots or system certs).
+        let custom_certs = Certificates::from_env();
 
         // Create a secure client that validates certificates.
         let raw_client = self.create_client(
             &user_agent_string,
             read_timeout,
             connect_timeout,
-            &custom_certs,
+            custom_certs.clone(),
             Security::Secure,
             self.redirect_policy,
         );
@@ -633,7 +493,7 @@ impl<'a> BaseClientBuilder<'a> {
             &user_agent_string,
             read_timeout,
             connect_timeout,
-            &custom_certs,
+            custom_certs,
             Security::Insecure,
             self.redirect_policy,
         );
@@ -646,7 +506,7 @@ impl<'a> BaseClientBuilder<'a> {
         user_agent: &str,
         read_timeout: Duration,
         connect_timeout: Duration,
-        custom_certs: &[Certificate],
+        custom_certs: Certificates,
         security: Security,
         redirect_policy: RedirectPolicy,
     ) -> Client {
@@ -671,25 +531,20 @@ impl<'a> BaseClientBuilder<'a> {
             TlsBackend::Rustls => client_builder.tls_backend_rustls(),
         };
 
-        // Configure the certificate source
+        // Configure the certificate source.
         let client_builder = if self.system_certs {
             // Use the platform's native certificate store.
-            if !custom_certs.is_empty() {
-                client_builder.tls_certs_merge(custom_certs.to_vec())
-            } else {
-                client_builder
-            }
+            client_builder
         } else {
-            // Use bundled webpki-root-certs certificates.
-            let client_builder =
-                client_builder.tls_certs_only(WEBPKI_ROOT_CERTIFICATES.iter().cloned());
+            // Use bundled Mozilla root certificates.
+            client_builder.tls_certs_only(Certificates::webpki_roots().iter().cloned())
+        };
 
-            // Merge custom certificates on top of webpki-root-certs.
-            if !custom_certs.is_empty() {
-                client_builder.tls_certs_merge(custom_certs.to_vec())
-            } else {
-                client_builder
-            }
+        // Merge custom certificates from `SSL_CERT_FILE` and `SSL_CERT_DIR`.
+        let client_builder = if !custom_certs.is_empty() {
+            client_builder.tls_certs_merge(custom_certs.into_vec())
+        } else {
+            client_builder
         };
 
         // Configure mTLS.
