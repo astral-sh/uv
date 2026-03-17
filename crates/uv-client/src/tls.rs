@@ -62,7 +62,7 @@ impl Certificates {
                         file.simplified_display().cyan()
                     );
                 }
-                Some(Self::from_certificate_result(result))
+                Some(Self::from(result))
             }
             Ok(_) => {
                 warn_user_once!(
@@ -142,7 +142,7 @@ impl Certificates {
                     dir.simplified_display().cyan()
                 );
             }
-            certs.merge(Self::from_certificate_result(result));
+            certs.merge(Self::from(result));
         }
 
         Some(certs)
@@ -151,12 +151,6 @@ impl Certificates {
     /// Load certificates from explicit file and directory paths.
     fn from_paths(file: Option<&Path>, dir: Option<&Path>) -> CertificateResult {
         load_certs_from_paths(file, dir)
-    }
-
-    fn from_certificate_result(result: CertificateResult) -> Self {
-        let mut certs = Self(result.certs);
-        certs.dedup();
-        certs
     }
 
     fn dedup(&mut self) {
@@ -191,6 +185,12 @@ impl Certificates {
     #[cfg(test)]
     fn iter(&self) -> impl Iterator<Item = &CertificateDer<'static>> {
         self.0.iter()
+    }
+}
+
+impl From<CertificateResult> for Certificates {
+    fn from(result: CertificateResult) -> Self {
+        Self(result.certs)
     }
 }
 
@@ -266,10 +266,8 @@ mod tests {
         let cert_path = dir.path().join("cert.pem");
         fs_err::write(&cert_path, generate_cert_pem()).unwrap();
 
-        let first =
-            Certificates::from_certificate_result(Certificates::from_paths(Some(&cert_path), None));
-        let second =
-            Certificates::from_certificate_result(Certificates::from_paths(Some(&cert_path), None));
+        let first = Certificates::from(Certificates::from_paths(Some(&cert_path), None));
+        let second = Certificates::from(Certificates::from_paths(Some(&cert_path), None));
 
         let mut merged = first;
         merged.merge(second);
