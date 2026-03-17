@@ -17,7 +17,7 @@ pub(crate) struct CommitInfo {
     commits_since_last_tag: u32,
 }
 
-/// Version information for the uv tool itself (`uv self version`).
+/// Version information for uv itself (e.g., in `uv self version`).
 #[derive(Serialize)]
 pub struct SelfVersionInfo {
     /// Name of the package (always "uv").
