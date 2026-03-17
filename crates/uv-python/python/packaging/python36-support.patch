@@ -1,3 +1,11 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] python36-support
+
+Remove `from __future__ import annotations` and quote PEP 604 (`X | Y`) union
+annotations and PEP 585 (`dict[K, V]`) lowercase generics so these vendored
+modules remain compatible with Python 3.6.
+
+---
 diff --git a/crates/uv-python/python/packaging/_elffile.py b/crates/uv-python/python/packaging/_elffile.py
 index 8dc7fb32a..f1907a595 100644
 --- a/crates/uv-python/python/packaging/_elffile.py
