@@ -8841,6 +8841,10 @@ fn preview_features() {
 }
 
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
 fn system_certs_cli_aliases_override_env() {
     let context = uv_test::test_context!("3.12");
 
