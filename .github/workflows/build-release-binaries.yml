@@ -257,6 +257,9 @@ jobs:
         shell: bash
         run: scripts/install-cargo-extensions.sh
       - name: "Install NASM"
+        # NASM is required for x86/x86-64 Windows targets by aws-lc-sys.
+        # On aarch64-pc-windows-msvc, it uses clang-cl instead.
+        # See: https://aws.github.io/aws-lc-rs/requirements/windows.html#build-requirements
         if: contains(matrix.platform.target, 'x86') || contains(matrix.platform.target, 'i686')
         run: |
           choco install nasm -y
