@@ -273,7 +273,6 @@ jobs:
           args: --release --locked --out dist --features self-update,windows-gui-bin --compatibility pypi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.cmd
-          AWS_LC_SYS_NO_PREFIX: "1"
       - name: "Test wheel"
         shell: bash
         run: |
