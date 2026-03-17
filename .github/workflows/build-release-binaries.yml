@@ -235,10 +235,10 @@ jobs:
         platform:
           - target: x86_64-pc-windows-msvc
             arch: x64
-            runner: github-windows-2022-x86_64-8
+            runner: github-windows-2025-x86_64-8
           - target: i686-pc-windows-msvc
             arch: x86
-            runner: github-windows-2022-x86_64-8
+            runner: github-windows-2025-x86_64-8
           - target: aarch64-pc-windows-msvc
             arch: arm64
             runner: github-windows-11-aarch64-8
