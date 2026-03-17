@@ -69,6 +69,7 @@ fn setup_test_certificates() -> Result<TestCertificates> {
 unsafe fn clear_ssl_env_vars() {
     unsafe {
         std::env::remove_var(EnvVars::UV_NATIVE_TLS);
+        std::env::remove_var(EnvVars::UV_SYSTEM_CERTS);
         std::env::remove_var(EnvVars::SSL_CERT_FILE);
         std::env::remove_var(EnvVars::SSL_CERT_DIR);
         std::env::remove_var(EnvVars::SSL_CLIENT_CERT);
