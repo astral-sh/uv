@@ -6208,6 +6208,8 @@ dependencies = [
  "rmp-serde",
  "rustc-hash",
  "rustls",
+ "rustls-native-certs",
+ "rustls-pki-types",
  "serde",
  "serde_json",
  "tempfile",

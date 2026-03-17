@@ -227,6 +227,8 @@ rkyv = { version = "0.8.14", features = ["bytecheck"] }
 rmp-serde = { version = "1.3.0" }
 rust-netrc = { version = "0.1.2" }
 rustc-hash = { version = "2.0.0" }
+rustls-native-certs = { version = "0.8.3" }
+rustls-pki-types = { version = "1.14.0" }
 rustix = { version = "1.0.0", default-features = false, features = [
   "fs",
   "std",

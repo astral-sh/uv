@@ -8,6 +8,24 @@ are used to verify the identity of these servers, ensuring that connections are 
 uv uses [`rustls`](https://github.com/rustls/rustls), a memory-safe TLS implementation written in
 Rust, with [`aws-lc-rs`](https://github.com/aws/aws-lc-rs) as the cryptography provider.
 
+The following certificate algorithms are supported:
+
+- ECDSA P-256 + SHA-256
+- ECDSA P-256 + SHA-384
+- ECDSA P-384 + SHA-256
+- ECDSA P-384 + SHA-384
+- Ed25519
+- RSA PKCS#1 2048–8192 bit + SHA-256
+- RSA PKCS#1 2048–8192 bit + SHA-384
+- RSA PKCS#1 2048–8192 bit + SHA-512
+- RSA PKCS#1 3072–8192 bit + SHA-384
+- RSA-PSS 2048–8192 bit + SHA-256
+- RSA-PSS 2048–8192 bit + SHA-384
+- RSA-PSS 2048–8192 bit + SHA-512
+- ECDSA P-521 + SHA-256
+- ECDSA P-521 + SHA-384
+- ECDSA P-521 + SHA-512
+
 ## System certificates
 
 By default, uv uses bundled Mozilla root certificates for TLS verification. In some cases, you may
@@ -27,15 +45,23 @@ the operating system's certificate verifier.
 To use custom CA certificates, set the
 [`SSL_CERT_FILE`](../../reference/environment.md#ssl_cert_file) environment variable to the path of
 a PEM-encoded certificate bundle (e.g., `certs.pem`, `ca-bundle.crt`), or set
-[`SSL_CERT_DIR`](../../reference/environment.md#ssl_cert_dir) to a directory containing PEM-encoded
-certificate files (`.pem`, `.crt`, or `.cer` extensions). DER-encoded files are not supported.
+[`SSL_CERT_DIR`](../../reference/environment.md#ssl_cert_dir) to one or more directories containing
+PEM-encoded certificate files. Multiple entries are supported, separated using a platform-specific
+delimiter (`:` on Unix, `;` on Windows).
+
+Certificates are usually stored with `.pem`, `.crt`, or `.cer` extensions, but uv will attempt to
+read a certificate from any regular file in the provided `SSL_CERT_DIR`.
+
+Files that cannot be parsed as PEM certificates are ignored. uv resolves symlinks and ignores
+dangling symlinks.
+
+DER-encoded files are not supported.
 
 When set, these environment variables **override** the default certificate source entirely — only
-the provided certificates will be trusted. This matches the behavior of OpenSSL, Go, and other
-standard TLS consumers of these variables.
+the provided certificates will be trusted.
 
 `SSL_CERT_FILE` can point to a single certificate or a bundle containing multiple certificates.
-`SSL_CERT_DIR` can contain multiple certificate files; uv will load all valid certificates from the
+`SSL_CERT_DIR` can include multiple directory entries; uv will load all valid certificates from each
 directory.
 
 If client certificate authentication (mTLS) is desired, set the

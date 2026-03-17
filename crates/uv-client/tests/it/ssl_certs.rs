@@ -325,6 +325,50 @@ async fn test_ssl_cert_dir_bundle_files() -> Result<()> {
     Ok(())
 }
 
+/// Test that OpenSSL hash-based filenames in `SSL_CERT_DIR` are loaded correctly.
+// SAFETY: This test is meant to run with single thread configuration
+#[tokio::test]
+#[allow(unsafe_code)]
+async fn test_ssl_cert_dir_hash_named_files() -> Result<()> {
+    unsafe {
+        clear_ssl_env_vars();
+    }
+
+    let certs = setup_test_certificates()?;
+
+    let hash_dir = certs._temp_dir.path().join("hashes");
+    fs_err::create_dir_all(&hash_dir)?;
+    fs_err::write(hash_dir.join("5d30f3c5.3"), certs.ca_cert.public.pem())?;
+
+    unsafe {
+        std::env::set_var(EnvVars::SSL_CERT_DIR, hash_dir.as_os_str());
+    }
+
+    let (server_task, addr) = start_https_user_agent_server(&certs.server_cert).await?;
+    let url = DisplaySafeUrl::from_str(&format!("https://{addr}"))?;
+    let cache = Cache::temp()?.init().await?;
+    let client =
+        RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache)
+            .build();
+
+    let res = client
+        .cached_client()
+        .uncached()
+        .for_host(&url)
+        .get(Url::from(url))
+        .send()
+        .await;
+
+    unsafe {
+        clear_ssl_env_vars();
+    }
+
+    assert!(res.is_ok());
+    let _ = server_task.await?;
+
+    Ok(())
+}
+
 /// Test that mTLS works when `SSL_CLIENT_CERT` is set.
 // SAFETY: This test is meant to run with single thread configuration
 #[tokio::test]

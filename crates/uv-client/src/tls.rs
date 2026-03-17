@@ -1,11 +1,11 @@
-use std::io::Read;
-use std::path::Path;
+use std::env;
+use std::io::{self, Read};
+use std::path::PathBuf;
 use std::sync::LazyLock;
-use std::{env, io};
 
-use itertools::Itertools;
 use reqwest::{Certificate, Identity};
-use tracing::debug;
+use rustls_native_certs::load_certs_from_paths;
+use rustls_pki_types::CertificateDer;
 
 use uv_fs::Simplified;
 use uv_static::EnvVars;
@@ -31,99 +31,65 @@ impl Certificates {
 
     /// Load custom CA certificates from `SSL_CERT_FILE` and `SSL_CERT_DIR` environment variables.
     ///
-    /// Returns `None` if no sources could be successfully read (env vars unset, paths don't
-    /// exist, etc.), indicating the default certificate source should be used. Returns
-    /// `Some(certs)` when at least one file or directory was successfully read, even if no
-    /// certificates were parsed from it.
+    /// Delegates to [`rustls_native_certs::load_certs_from_paths`] for the actual certificate
+    /// loading, which handles PEM parsing, symlink resolution, OpenSSL hash-named files, and
+    /// deduplication.
+    ///
+    /// Returns `None` if neither environment variable is set. Returns `Some(certs)` when either
+    /// variable is set, even if no certificates were successfully loaded, so the environment
+    /// override remains authoritative.
     pub(crate) fn from_env() -> Option<Self> {
-        let mut certs = Self::default();
-        let mut has_source = false;
+        let cert_file = env::var_os(EnvVars::SSL_CERT_FILE).map(PathBuf::from);
+        let cert_dirs = env::var_os(EnvVars::SSL_CERT_DIR);
+
+        if cert_file.is_none() && cert_dirs.is_none() {
+            return None;
+        }
+
+        let mut der_certs: Vec<CertificateDer<'static>> = Vec::new();
 
         // Load from `SSL_CERT_FILE`.
-        if let Ok(cert_file) = env::var(EnvVars::SSL_CERT_FILE) {
-            let path = Path::new(&cert_file);
-            match Self::from_file(path) {
-                Ok(loaded) => {
-                    debug!(
-                        "Loaded {} certificate(s) from `SSL_CERT_FILE`: {}",
-                        loaded.iter().count(),
-                        path.simplified_display()
-                    );
-                    has_source = true;
-                    certs.extend(loaded);
-                }
-                Err(err) => {
+        if let Some(ref file) = cert_file {
+            let result = load_certs_from_paths(Some(file), None);
+            for err in &result.errors {
+                warn_user_once!(
+                    "Failed to load `SSL_CERT_FILE` ({}): {err}",
+                    file.simplified_display().cyan()
+                );
+            }
+            der_certs.extend(result.certs);
+        }
+
+        // Load from `SSL_CERT_DIR` (colon-separated on Unix, semicolon on Windows).
+        if let Some(ref dirs) = cert_dirs {
+            for dir in env::split_paths(dirs) {
+                let result = load_certs_from_paths(None, Some(&dir));
+                for err in &result.errors {
                     warn_user_once!(
-                        "Ignoring invalid `SSL_CERT_FILE` ({}): {err}",
-                        path.simplified_display().cyan()
+                        "Failed to load `SSL_CERT_DIR` ({}): {err}",
+                        dir.simplified_display().cyan()
                     );
                 }
+                der_certs.extend(result.certs);
             }
         }
 
-        // Load from `SSL_CERT_DIR`.
-        if let Ok(cert_dirs) = env::var(EnvVars::SSL_CERT_DIR) {
-            if !cert_dirs.is_empty() {
-                let paths: Vec<_> = env::split_paths(&cert_dirs).collect();
-                let (existing, missing): (Vec<_>, Vec<_>) = paths.iter().partition(|p| p.exists());
+        // Deduplicate, matching rustls-native-certs behavior.
+        der_certs.sort_unstable_by(|a, b| a.as_ref().cmp(b.as_ref()));
+        der_certs.dedup();
 
-                if existing.is_empty() {
-                    let end_note = if missing.len() == 1 {
-                        "The directory does not exist."
-                    } else {
-                        "The entries do not exist."
-                    };
-                    warn_user_once!(
-                        "Ignoring invalid `SSL_CERT_DIR`. {end_note}: {}.",
-                        missing
-                            .iter()
-                            .map(Simplified::simplified_display)
-                            .join(", ")
-                            .cyan()
-                    );
-                } else {
-                    if !missing.is_empty() {
-                        let end_note = if missing.len() == 1 {
-                            "The following directory does not exist:"
-                        } else {
-                            "The following entries do not exist:"
-                        };
-                        warn_user_once!(
-                            "Invalid entries in `SSL_CERT_DIR`. {end_note}: {}.",
-                            missing
-                                .iter()
-                                .map(Simplified::simplified_display)
-                                .join(", ")
-                                .cyan()
-                        );
-                    }
+        // Convert to reqwest certificates.
+        let certs = der_certs
+            .into_iter()
+            .filter_map(|der| Certificate::from_der(&der).ok())
+            .collect();
 
-                    for dir in existing {
-                        match Self::from_dir(dir) {
-                            Ok(loaded) => {
-                                has_source = true;
-                                certs.extend(loaded);
-                            }
-                            Err(err) => {
-                                warn_user_once!(
-                                    "Failed to read `SSL_CERT_DIR` ({}): {err}",
-                                    dir.simplified_display().cyan()
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // TODO(zanieb): For consistency with other tools, return `Some` when the variable is
-        // set to a non-empty value, even if no sources could be read.
-        // See https://github.com/astral-sh/uv/issues/18526
-        if has_source { Some(certs) } else { None }
+        Some(Self(certs))
     }
 
     /// Load certificates from a PEM file (single cert or bundle).
-    fn from_file(path: &Path) -> Result<Self, CertificateError> {
+    #[cfg(test)]
+    fn from_file(path: &std::path::Path) -> Result<Self, CertificateError> {
         let cert_data = fs_err::read(path)?;
         let certs = Self::load(&cert_data).map_err(CertificateError::Reqwest)?;
         Ok(Self(certs))
@@ -131,43 +97,30 @@ impl Certificates {
 
     /// Load all certificate files from a directory.
     ///
-    /// Only files with `.crt`, `.pem`, or `.cer` extensions are loaded.
-    /// Individual file errors are logged and skipped.
-    fn from_dir(dir: &Path) -> Result<Self, CertificateError> {
+    /// Any regular file in the directory is considered, including OpenSSL hash-based filenames
+    /// like `fd3003c5.0`. Individual file errors are logged and skipped.
+    #[cfg(test)]
+    fn from_dir(dir: &std::path::Path) -> Result<Self, CertificateError> {
         let mut certs = Vec::new();
         for entry in fs_err::read_dir(dir)? {
-            let entry = match entry {
-                Ok(entry) => entry,
-                Err(err) => {
-                    debug!(
-                        "Skipping directory entry in {}: {err}",
-                        dir.simplified_display()
-                    );
-                    continue;
-                }
-            };
+            let entry = entry?;
             let path = entry.path();
 
-            // Only process files with .crt, .pem, or .cer extensions.
-            if !matches!(
-                path.extension().and_then(|ext| ext.to_str()),
-                Some("crt" | "pem" | "cer")
-            ) {
+            let metadata = match fs_err::metadata(&path) {
+                Ok(metadata) => metadata,
+                Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                    // Skip dangling symlinks.
+                    continue;
+                }
+                Err(err) => return Err(err.into()),
+            };
+
+            if !metadata.is_file() {
                 continue;
             }
 
-            match Self::from_file(&path) {
-                Ok(loaded) => {
-                    debug!(
-                        "Loaded {} certificate(s) from {}",
-                        loaded.iter().count(),
-                        path.simplified_display()
-                    );
-                    certs.extend(loaded.0);
-                }
-                Err(err) => {
-                    debug!("Skipping {}: {err}", path.simplified_display());
-                }
+            if let Ok(loaded) = Self::from_file(&path) {
+                certs.extend(loaded.0);
             }
         }
 
@@ -180,11 +133,13 @@ impl Certificates {
     }
 
     /// Extend with certificates from another collection.
-    pub(crate) fn extend(&mut self, other: Self) {
+    #[cfg(test)]
+    fn extend(&mut self, other: Self) {
         self.0.extend(other.0);
     }
 
     /// Load certificates from PEM data, supporting both bundles and single certs.
+    #[cfg(test)]
     fn load(cert_data: &[u8]) -> Result<Vec<Certificate>, reqwest::Error> {
         let certs = Certificate::from_pem_bundle(cert_data)
             .or_else(|_| Certificate::from_pem(cert_data).map(|cert| vec![cert]))?;
@@ -215,6 +170,8 @@ pub(crate) fn read_identity(
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use super::*;
 
     /// Generate a self-signed certificate and return the PEM-encoded public cert.
@@ -286,10 +243,20 @@ mod tests {
     }
 
     #[test]
-    fn test_from_dir_ignores_wrong_extensions() {
+    fn test_from_dir_accepts_hash_named_files() {
         let dir = tempfile::tempdir().unwrap();
-        fs_err::write(dir.path().join("cert.txt"), generate_cert_pem()).unwrap();
-        fs_err::write(dir.path().join("cert"), generate_cert_pem()).unwrap();
+        fs_err::write(dir.path().join("5d30f3c5.3"), generate_cert_pem()).unwrap();
+        fs_err::write(dir.path().join("fd3003c5.0"), generate_cert_pem()).unwrap();
+
+        let certs = Certificates::from_dir(dir.path()).unwrap();
+        assert!(certs.iter().count() > 0);
+    }
+
+    #[test]
+    fn test_from_dir_ignores_invalid_files() {
+        let dir = tempfile::tempdir().unwrap();
+        fs_err::write(dir.path().join("cert.txt"), "not a certificate").unwrap();
+        fs_err::write(dir.path().join("cert"), "still not a certificate").unwrap();
 
         let certs = Certificates::from_dir(dir.path()).unwrap();
         assert_eq!(certs.iter().count(), 0);

@@ -669,8 +669,13 @@ impl EnvVars {
     /// Multiple entries are supported, separated using a platform-specific delimiter (`:` on Unix,
     /// `;` on Windows).
     ///
-    /// Only files with `.pem`, `.crt`, or `.cer` extensions are loaded. Only PEM-encoded files are
-    /// supported, i.e., DER-encoded files are not supported.
+    /// Certificates are usually stored with `.pem`, `.crt`, or `.cer` extensions, but uv will
+    /// attempt to read a certificate from any regular file in the provided `SSL_CERT_DIR`.
+    ///
+    /// Files that cannot be parsed as PEM certificates are ignored. uv resolves symlinks and
+    /// ignores dangling symlinks.
+    ///
+    /// Only PEM-encoded files are supported, i.e., DER-encoded files are not supported.
     ///
     /// When set, this overrides the default certificate source (bundled Mozilla roots or system
     /// certificates). Only the certificates in this directory will be trusted.
