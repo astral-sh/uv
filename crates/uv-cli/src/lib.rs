@@ -5138,81 +5138,32 @@ pub struct FormatArgs {
 
 #[derive(Args)]
 pub struct AuditArgs {
-    /// Include optional dependencies from the specified extra name.
-    ///
-    /// May be provided more than once.
-    ///
-    /// This option is only available when running in a project.
-    #[arg(
-        long,
-        conflicts_with = "all_extras",
-        conflicts_with = "only_group",
-        value_delimiter = ',',
-        value_parser = extra_name_with_clap_error,
-        value_hint = ValueHint::Other,
-    )]
-    pub extra: Option<Vec<ExtraName>>,
-
-    /// Include all optional dependencies.
-    ///
-    /// Optional dependencies are defined via `project.optional-dependencies` in a `pyproject.toml`.
-    ///
-    /// This option is only available when running in a project.
-    #[arg(long, conflicts_with = "extra", conflicts_with = "only_group")]
-    pub all_extras: bool,
-
-    /// Exclude the specified optional dependencies, if `--all-extras` is supplied.
+    /// Don't audit the specified optional dependencies.
     ///
     /// May be provided multiple times.
     #[arg(long, value_hint = ValueHint::Other)]
     pub no_extra: Vec<ExtraName>,
 
-    #[arg(long, overrides_with("all_extras"), hide = true)]
-    pub no_all_extras: bool,
-
-    /// Include the development dependency group [env: UV_DEV=]
-    ///
-    /// Development dependencies are defined via `dependency-groups.dev` or
-    /// `tool.uv.dev-dependencies` in a `pyproject.toml`.
-    ///
-    /// This option is an alias for `--group dev`.
-    ///
-    /// This option is only available when running in a project.
-    #[arg(long, overrides_with("no_dev"), hide = true, value_parser = clap::builder::BoolishValueParser::new())]
-    pub dev: bool,
-
-    /// Disable the development dependency group [env: UV_NO_DEV=]
+    /// Don't audit the development dependency group [env: UV_NO_DEV=]
     ///
     /// This option is an alias of `--no-group dev`.
-    /// See `--no-default-groups` to disable all default groups instead.
+    /// See `--no-default-groups` to exclude all default groups instead.
     ///
     /// This option is only available when running in a project.
-    #[arg(long, overrides_with("dev"), value_parser = clap::builder::BoolishValueParser::new())]
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_dev: bool,
 
-    /// Include dependencies from the specified dependency group.
-    ///
-    /// May be provided multiple times.
-    #[arg(long, conflicts_with_all = ["only_group", "only_dev"], value_hint = ValueHint::Other)]
-    pub group: Vec<GroupName>,
-
-    /// Disable the specified dependency group.
-    ///
-    /// This option always takes precedence over default groups,
-    /// `--all-groups`, and `--group`.
+    /// Don't audit the specified dependency group.
     ///
     /// May be provided multiple times.
     #[arg(long, env = EnvVars::UV_NO_GROUP, value_delimiter = ' ', value_hint = ValueHint::Other)]
     pub no_group: Vec<GroupName>,
 
-    /// Ignore the default dependency groups.
-    ///
-    /// uv includes the groups defined in `tool.uv.default-groups` by default.
-    /// This disables that option, however, specific groups can still be included with `--group`.
+    /// Don't audit the default dependency groups.
     #[arg(long, env = EnvVars::UV_NO_DEFAULT_GROUPS, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_default_groups: bool,
 
-    /// Only include dependencies from the specified dependency group.
+    /// Only audit dependencies from the specified dependency group.
     ///
     /// The project and its dependencies will be omitted.
     ///
@@ -5220,13 +5171,7 @@ pub struct AuditArgs {
     #[arg(long, conflicts_with_all = ["group", "dev", "all_groups"], value_hint = ValueHint::Other)]
     pub only_group: Vec<GroupName>,
 
-    /// Include dependencies from all dependency groups.
-    ///
-    /// `--no-group` can be used to exclude specific groups.
-    #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
-    pub all_groups: bool,
-
-    /// Only include the development dependency group.
+    /// Only audit the development dependency group.
     ///
     /// The project and its dependencies will be omitted.
     ///

@@ -2506,17 +2506,11 @@ impl AuditSettings {
         environment: EnvironmentOptions,
     ) -> Self {
         let AuditArgs {
-            extra,
-            all_extras,
             no_extra,
-            no_all_extras,
-            dev,
             no_dev,
-            group,
             no_group,
             no_default_groups,
             only_group,
-            all_groups,
             only_dev,
             script: _,
             python_version,
@@ -2534,7 +2528,6 @@ impl AuditSettings {
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
-        let dev = dev || environment.dev.value == Some(true);
         let no_dev = no_dev || environment.no_dev.value == Some(true);
 
         // Resolve flags from CLI and environment variables.
@@ -2546,23 +2539,23 @@ impl AuditSettings {
 
         Self {
             extras: ExtrasSpecification::from_args(
-                extra.unwrap_or_default(),
+                vec![],
                 no_extra,
                 // TODO(ww): support no_default_extras?
                 false,
                 // TODO(ww): support only_extra?
                 vec![],
-                flag(all_extras, no_all_extras, "all-extras").unwrap_or_default(),
+                true,
             ),
             groups: DependencyGroups::from_args(
-                dev,
+                true,
                 no_dev,
                 only_dev,
-                group,
+                vec![],
                 no_group,
                 no_default_groups,
                 only_group,
-                all_groups,
+                true,
             ),
             lock_check: resolve_lock_check(locked),
             frozen: resolve_frozen(frozen),
