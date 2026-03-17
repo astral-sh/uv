@@ -321,13 +321,10 @@
       "description": "Whether the project is managed by uv. If `false`, uv will ignore the project when\n`uv run` is invoked.",
       "type": ["boolean", "null"]
     },
-    "system-certs": {
-      "description": "Whether to load TLS certificates from the platform's native certificate store.\n\nBy default, uv uses bundled Mozilla root certificates. When enabled, this loads\ncertificates from the platform's native certificate store instead.",
-      "type": ["boolean", "null"]
-    },
     "native-tls": {
       "description": "Whether to load TLS certificates from the platform's native certificate store.\n\nBy default, uv uses bundled Mozilla root certificates. When enabled, this loads\ncertificates from the platform's native certificate store instead.\n\n(Deprecated: use `system-certs` instead.)",
-      "type": ["boolean", "null"]
+      "type": ["boolean", "null"],
+      "deprecated": true
     },
     "no-binary": {
       "description": "Don't install pre-built wheels.\n\nThe given packages will be built and installed from source. The resolver will still use\npre-built wheels to extract package metadata, if available.",
@@ -523,6 +520,10 @@
           "type": "null"
         }
       ]
+    },
+    "system-certs": {
+      "description": "Whether to load TLS certificates from the platform's native certificate store.\n\nBy default, uv uses bundled Mozilla root certificates. When enabled, this loads\ncertificates from the platform's native certificate store instead.",
+      "type": ["boolean", "null"]
     },
     "torch-backend": {
       "description": "The backend to use when fetching packages in the PyTorch ecosystem.\n\nWhen set, uv will ignore the configured index URLs for packages in the PyTorch ecosystem,\nand will instead use the defined backend.\n\nFor example, when set to `cpu`, uv will use the CPU-only PyTorch index; when set to `cu126`,\nuv will use the PyTorch index for CUDA 12.6.\n\nThe `auto` mode will attempt to detect the appropriate PyTorch index based on the currently\ninstalled CUDA drivers.\n\nThis setting is only respected by `uv pip` commands.\n\nThis option is in preview and may change in any future release.",
