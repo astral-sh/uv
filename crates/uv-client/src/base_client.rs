@@ -16,7 +16,9 @@ use http::{
     },
 };
 use itertools::Itertools;
-use reqwest::{Client, ClientBuilder, IntoUrl, NoProxy, Proxy, Request, Response, multipart};
+use reqwest::{
+    Certificate, Client, ClientBuilder, IntoUrl, NoProxy, Proxy, Request, Response, multipart,
+};
 use reqwest_middleware::{ClientWithMiddleware, Middleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{
@@ -468,7 +470,10 @@ impl<'a> BaseClientBuilder<'a> {
 
         // Load custom CA certificates from `SSL_CERT_FILE` and `SSL_CERT_DIR`.
         // When set, these override the default certificate source entirely.
-        let custom_certs = Certificates::from_env();
+        //
+        // Convert to reqwest certificates once, rather than cloning the raw DER
+        // bytes for each client.
+        let custom_certs = Certificates::from_env().map(|certs| certs.to_reqwest_certs());
 
         // Create a secure client that validates certificates.
         let raw_client = self.create_client(
@@ -498,7 +503,7 @@ impl<'a> BaseClientBuilder<'a> {
         user_agent: &str,
         read_timeout: Duration,
         connect_timeout: Duration,
-        custom_certs: Option<Certificates>,
+        custom_certs: Option<Vec<Certificate>>,
         security: Security,
         redirect_policy: RedirectPolicy,
     ) -> Client {
@@ -524,7 +529,7 @@ impl<'a> BaseClientBuilder<'a> {
         // `SSL_CERT_FILE` and `SSL_CERT_DIR` override the default certificate source entirely,
         // matching the conventions of OpenSSL, Go, and `rustls-native-certs`.
         let client_builder = if let Some(custom_certs) = custom_certs {
-            client_builder.tls_certs_only(custom_certs.to_reqwest_certs())
+            client_builder.tls_certs_only(custom_certs)
         } else if self.system_certs {
             client_builder
         } else {

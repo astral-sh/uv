@@ -1,7 +1,6 @@
 use std::env;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
-use std::sync::LazyLock;
 
 use itertools::Itertools;
 use reqwest::{Certificate, Identity};
@@ -12,22 +11,17 @@ use uv_fs::Simplified;
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 
-/// Bundled Mozilla root certificates in DER form.
-static WEBPKI_ROOT_CERTIFICATES: LazyLock<Vec<CertificateDer<'static>>> = LazyLock::new(|| {
-    webpki_root_certs::TLS_SERVER_ROOT_CERTS
-        .iter()
-        .map(|cert_der| CertificateDer::from(cert_der.as_ref().to_vec()))
-        .collect()
-});
-
 /// A collection of TLS certificates in DER form.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Certificates(Vec<CertificateDer<'static>>);
 
 impl Certificates {
     /// Load the bundled Mozilla root certificates.
+    ///
+    /// Each [`CertificateDer`] in [`webpki_root_certs::TLS_SERVER_ROOT_CERTS`] borrows from static
+    /// data, so cloning into the [`Vec`] only copies the fat pointer, not the certificate bytes.
     pub(crate) fn webpki_roots() -> Self {
-        Self(WEBPKI_ROOT_CERTIFICATES.clone())
+        Self(webpki_root_certs::TLS_SERVER_ROOT_CERTS.to_vec())
     }
 
     /// Load custom CA certificates from `SSL_CERT_FILE` and `SSL_CERT_DIR` environment variables.
