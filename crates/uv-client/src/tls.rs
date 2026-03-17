@@ -135,7 +135,17 @@ impl Certificates {
     /// Individual file errors are logged and skipped.
     fn from_dir(dir: &Path) -> Result<Self, CertificateError> {
         let mut certs = Vec::new();
-        for entry in fs_err::read_dir(dir)?.flatten() {
+        for entry in fs_err::read_dir(dir)? {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(err) => {
+                    debug!(
+                        "Skipping directory entry in {}: {err}",
+                        dir.simplified_display()
+                    );
+                    continue;
+                }
+            };
             let path = entry.path();
 
             // Only process files with .crt, .pem, or .cer extensions.
