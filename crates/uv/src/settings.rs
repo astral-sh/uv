@@ -251,6 +251,7 @@ pub(crate) struct NetworkSettings {
 }
 
 impl NetworkSettings {
+    #[allow(deprecated)]
     pub(crate) fn resolve(
         args: &GlobalArgs,
         workspace: Option<&FilesystemOptions>,
@@ -301,7 +302,12 @@ impl NetworkSettings {
                 true
             } else {
                 workspace
-                    .and_then(|workspace| workspace.globals.native_tls)
+                    .and_then(|workspace| {
+                        workspace
+                            .globals
+                            .system_certs
+                            .or(workspace.globals.native_tls)
+                    })
                     .unwrap_or(false)
             };
 

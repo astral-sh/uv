@@ -25,8 +25,9 @@ want to use the platform's native certificate store instead — for example, if 
 corporate trust root (e.g., for a mandatory proxy) that's included in your system's certificate
 store.
 
-To use system certificates, pass the [`--system-certs`](../../reference/cli.md#uv) flag or set the
-[`UV_SYSTEM_CERTS`](../../reference/environment.md#uv_system_certs) environment variable to `true`.
+To use system certificates, pass the [`--system-certs`](../../reference/cli.md#uv) flag, set the
+[`UV_SYSTEM_CERTS`](../../reference/environment.md#uv_system_certs) environment variable to `true`,
+or set [`system-certs = true`](../../reference/settings.md#system-certs) in `uv.toml`.
 
 When using system certificates, certificate verification is performed by
 [`rustls-platform-verifier`](https://github.com/rustls/rustls-platform-verifier), which delegates to

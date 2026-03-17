@@ -300,11 +300,13 @@ fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
 /// Validate that an [`Options`] contains no fields that `uv.toml` would mask
 ///
 /// This is essentially the inverse of [`validate_uv_toml`].
+#[allow(deprecated)]
 fn warn_uv_toml_masked_fields(options: &Options) {
     let Options {
         globals:
             GlobalOptions {
                 required_version,
+                system_certs,
                 native_tls,
                 offline,
                 no_cache,
@@ -391,6 +393,9 @@ fn warn_uv_toml_masked_fields(options: &Options) {
 
     if required_version.is_some() {
         masked_fields.push("required-version");
+    }
+    if system_certs.is_some() {
+        masked_fields.push("system-certs");
     }
     if native_tls.is_some() {
         masked_fields.push("native-tls");

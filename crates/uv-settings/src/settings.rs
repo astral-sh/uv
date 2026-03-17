@@ -238,8 +238,22 @@ pub struct GlobalOptions {
     ///
     /// By default, uv uses bundled Mozilla root certificates. When enabled, this loads
     /// certificates from the platform's native certificate store instead.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        uv_toml_only = true,
+        example = r#"
+            system-certs = true
+        "#
+    )]
+    pub system_certs: Option<bool>,
+    /// Whether to load TLS certificates from the platform's native certificate store.
     ///
-    /// This is equivalent to `system-certs = true`.
+    /// By default, uv uses bundled Mozilla root certificates. When enabled, this loads
+    /// certificates from the platform's native certificate store instead.
+    ///
+    /// Deprecated: use `system-certs` instead.
+    #[deprecated(note = "use `system-certs` instead")]
     #[option(
         default = "false",
         value_type = "bool",
@@ -2184,6 +2198,7 @@ pub struct OptionsWire {
     // #[serde(flatten)]
     // globals: GlobalOptions
     required_version: Option<RequiredVersion>,
+    system_certs: Option<bool>,
     native_tls: Option<bool>,
     offline: Option<bool>,
     no_cache: Option<bool>,
@@ -2280,9 +2295,11 @@ pub struct OptionsWire {
 }
 
 impl From<OptionsWire> for Options {
+    #[allow(deprecated)]
     fn from(value: OptionsWire) -> Self {
         let OptionsWire {
             required_version,
+            system_certs,
             native_tls,
             offline,
             no_cache,
@@ -2359,6 +2376,7 @@ impl From<OptionsWire> for Options {
         Self {
             globals: GlobalOptions {
                 required_version,
+                system_certs,
                 native_tls,
                 offline,
                 no_cache,
