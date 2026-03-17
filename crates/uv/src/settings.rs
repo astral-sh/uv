@@ -285,8 +285,8 @@ impl NetworkSettings {
             Connectivity::Online
         };
 
-        // Resolve the `--native-tls` flag. When enabled, it sets both the TLS backend to
-        // native-tls and enables system certificates (unless overridden by more specific flags).
+        // Resolve the `--native-tls` flag. This is a legacy alias for `--system-certs` — it
+        // enables system certificates but does NOT change the TLS backend.
         let native_tls = match flag(args.native_tls, args.no_native_tls, "native-tls") {
             Some(value) => value,
             None => {
@@ -297,14 +297,7 @@ impl NetworkSettings {
             }
         };
 
-        // Resolve TLS backend. `--tls-backend` takes precedence, then `--native-tls`.
-        let tls_backend = if let Some(backend) = args.tls_backend {
-            backend
-        } else if native_tls {
-            TlsBackend::Native
-        } else {
-            TlsBackend::default()
-        };
+        let tls_backend = args.tls_backend.unwrap_or_default();
 
         // Resolve whether to use system certificates.
         // `--system-certs` takes precedence, then `UV_SYSTEM_CERTS`, then `--native-tls`.

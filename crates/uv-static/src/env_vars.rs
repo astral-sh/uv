@@ -108,8 +108,8 @@ impl EnvVars {
     pub const UV_BREAK_SYSTEM_PACKAGES: &'static str = "UV_BREAK_SYSTEM_PACKAGES";
 
     /// Equivalent to the `--native-tls` command-line argument. If set to `true`, uv will
-    /// use the platform's native TLS backend and load certificates from the system certificate
-    /// store.
+    /// load TLS certificates from the platform's native certificate store instead of the
+    /// bundled Mozilla root certificates.
     #[attr_added_in("0.1.19")]
     pub const UV_NATIVE_TLS: &'static str = "UV_NATIVE_TLS";
 

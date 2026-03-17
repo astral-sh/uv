@@ -133,7 +133,7 @@ impl OperationDiagnostic {
             pip::operations::Error::Resolve(uv_resolver::ResolveError::Client(err))
                 if !self.system_certs && err.is_ssl() =>
             {
-                native_tls_hint(err);
+                system_certs_hint(err);
                 None
             }
             pip::operations::Error::OutdatedEnvironment => {
@@ -335,7 +335,7 @@ pub(crate) fn no_solution_hint(err: Box<uv_resolver::NoSolutionError>, help: Str
 /// Render a [`uv_resolver::NoSolutionError`] with a help message.
 // https://github.com/rust-lang/rust/issues/147648
 #[allow(unused_assignments)]
-pub(crate) fn native_tls_hint(err: uv_client::Error) {
+pub(crate) fn system_certs_hint(err: uv_client::Error) {
     #[derive(Debug, miette::Diagnostic)]
     #[diagnostic()]
     struct Error {
@@ -363,7 +363,7 @@ pub(crate) fn native_tls_hint(err: uv_client::Error) {
         err,
         help: format!(
             "Consider enabling use of system TLS certificates with the `{}` command-line flag",
-            "--native-tls".green()
+            "--system-certs".green()
         ),
     });
     anstream::eprint!("{report:?}");

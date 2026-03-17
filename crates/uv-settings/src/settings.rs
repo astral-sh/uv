@@ -234,12 +234,12 @@ pub struct GlobalOptions {
         "#
     )]
     pub required_version: Option<RequiredVersion>,
-    /// Whether to use the platform's native TLS backend and certificate store.
+    /// Whether to load TLS certificates from the platform's native certificate store.
     ///
-    /// By default, uv uses the `rustls` TLS backend with bundled Mozilla root certificates.
+    /// By default, uv uses bundled Mozilla root certificates. When enabled, this loads
+    /// certificates from the platform's native certificate store instead.
     ///
-    /// When enabled, this switches both the TLS backend to the platform's native implementation
-    /// and the certificate source to the system certificate store.
+    /// This is equivalent to `system-certs = true`.
     #[option(
         default = "false",
         value_type = "bool",

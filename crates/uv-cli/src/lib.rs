@@ -236,17 +236,13 @@ pub struct GlobalArgs {
     )]
     pub color: Option<ColorChoice>,
 
-    /// Whether to use the platform's native TLS backend and certificate store [env:
+    /// Whether to load TLS certificates from the platform's native certificate store [env:
     /// UV_NATIVE_TLS=]
     ///
-    /// By default, uv uses the `rustls` TLS backend with bundled Mozilla root certificates.
+    /// By default, uv uses bundled Mozilla root certificates. When enabled, this flag loads
+    /// certificates from the platform's native certificate store instead.
     ///
-    /// When enabled, this flag switches both the TLS backend to the platform's native
-    /// implementation and the certificate source to the system certificate store. This is
-    /// equivalent to `--tls-backend native --system-certs`.
-    ///
-    /// Use `--tls-backend` and `--system-certs` for independent control over the TLS backend
-    /// and certificate source.
+    /// This is equivalent to `--system-certs`.
     #[arg(global = true, long, value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_native_tls"), hide = true)]
     pub native_tls: bool,
 

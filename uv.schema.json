@@ -322,7 +322,7 @@
       "type": ["boolean", "null"]
     },
     "native-tls": {
-      "description": "Whether to use the platform's native TLS backend and certificate store.\n\nBy default, uv uses the `rustls` TLS backend with bundled Mozilla root certificates.\n\nWhen enabled, this switches both the TLS backend to the platform's native implementation\nand the certificate source to the system certificate store.",
+      "description": "Whether to load TLS certificates from the platform's native certificate store.\n\nBy default, uv uses bundled Mozilla root certificates. When enabled, this loads\ncertificates from the platform's native certificate store instead.\n\nThis is equivalent to `system-certs = true`.",
       "type": ["boolean", "null"]
     },
     "no-binary": {
