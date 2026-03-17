@@ -444,7 +444,7 @@ def get_operating_system_and_architecture():
         version = None
         architecture = version_arch
 
-    if sys.version_info < (3, 7):
+    if sys.version_info < (3, 6):
         print(
             json.dumps(
                 {
