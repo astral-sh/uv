@@ -29,9 +29,9 @@ pub(crate) fn detect_hardware_floating_point_support() -> Result<bool, Error> {
 /// On native ARM-32 systems, the `"vfp"` flag (and variants like `"vfpv3"`, `"vfpd32"`)
 /// indicates hardware floating-point support.
 ///
-/// On AArch64 kernels running ARM-32 userspace (e.g., armv7l containers on aarch64 hosts,
-/// or 32-bit Raspberry Pi OS on 64-bit hardware), `/proc/cpuinfo` reports AArch64-style
-/// feature flags instead of ARM-32 flags. The `"fp"` feature is mandatory on all AArch64
+/// On `AArch64` kernels running ARM-32 userspace (e.g., armv7l containers on aarch64 hosts,
+/// or 32-bit Raspberry Pi OS on 64-bit hardware), `/proc/cpuinfo` reports `AArch64`-style
+/// feature flags instead of ARM-32 flags. The `"fp"` feature is mandatory on all `AArch64`
 /// CPUs and indicates hardware floating-point support. We match `"fp"` as a discrete token
 /// to avoid false-matching the `"vfp"` substring (already handled separately).
 ///
@@ -67,7 +67,7 @@ mod tests {
         assert!(has_hardware_float_features(features));
     }
 
-    /// AArch64 kernel running ARM-32 userspace — no "vfp" flag, but "fp" is present.
+    /// `AArch64` kernel running ARM-32 userspace — no "vfp" flag, but "fp" is present.
     /// This is the scenario from <https://github.com/astral-sh/uv/issues/18509>.
     #[test]
     #[cfg(target_os = "linux")]

@@ -307,9 +307,13 @@ jobs:
         run: |
           ./target/armv7-unknown-linux-gnueabihf/no-debug/uv venv -c -p 3.13 --managed-python
 
-      - name: "Check is armv7l"
+      - name: "Check Python runs"
         run: |
-          .venv/bin/python -c "import platform; arch = platform.machine(); print(f'Architecture: {arch}'); assert arch in ('armv7l', 'armv8l'), f'Expected armv7l or armv8l, got {arch}'"
+          # The installed Python is an armv7 (gnueabihf) binary running on an aarch64 kernel.
+          # platform.machine() returns the kernel architecture (aarch64), not the userspace arch,
+          # since there is no linux32 personality set. We accept both armv7l/armv8l (containerized
+          # environments with modified uname) and aarch64 (bare metal).
+          .venv/bin/python -c "import platform; arch = platform.machine(); print(f'Architecture: {arch}'); assert arch in ('armv7l', 'armv8l', 'aarch64'), f'Unexpected architecture: {arch}'"
 
   integration-test-windows-aarch64-implicit:
     name: "aarch64 windows implicit"
