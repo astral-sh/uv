@@ -1362,12 +1362,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     target_version,
                     token,
                     dry_run,
+                    quiet_if_unchanged,
                 }),
         }) => {
             commands::self_update(
                 target_version,
                 token,
                 dry_run,
+                quiet_if_unchanged,
                 printer,
                 client_builder.subcommand(vec!["self".to_owned(), "update".to_owned()]),
             )

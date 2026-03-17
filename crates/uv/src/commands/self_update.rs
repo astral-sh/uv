@@ -16,6 +16,7 @@ pub(crate) async fn self_update(
     version: Option<String>,
     token: Option<String>,
     dry_run: bool,
+    quiet_if_unchanged: bool,
     printer: Printer,
     client_builder: BaseClientBuilder<'_>,
 ) -> Result<ExitStatus> {
@@ -94,15 +95,17 @@ pub(crate) async fn self_update(
         return Ok(ExitStatus::Error);
     }
 
-    writeln!(
-        printer.stderr(),
-        "{}",
-        format_args!(
-            "{}{} Checking for updates...",
-            "info".cyan().bold(),
-            ":".bold()
-        )
-    )?;
+    if !quiet_if_unchanged {
+        writeln!(
+            printer.stderr(),
+            "{}",
+            format_args!(
+                "{}{} Checking for updates...",
+                "info".cyan().bold(),
+                ":".bold()
+            )
+        )?;
+    }
 
     let update_request = if let Some(version) = version {
         UpdateRequest::SpecificTag(version)
@@ -131,14 +134,16 @@ pub(crate) async fn self_update(
                 version.bold().white(),
             )?;
         } else {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                format_args!(
-                    "You're on the latest version of uv ({})",
-                    format!("v{}", env!("CARGO_PKG_VERSION")).bold().white()
-                )
-            )?;
+            if !quiet_if_unchanged {
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    format_args!(
+                        "You're on the latest version of uv ({})",
+                        format!("v{}", env!("CARGO_PKG_VERSION")).bold().white()
+                    )
+                )?;
+            }
         }
         return Ok(ExitStatus::Success);
     }
@@ -184,16 +189,18 @@ pub(crate) async fn self_update(
             )?;
         }
         Ok(None) => {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                format_args!(
-                    "{}{} You're on the latest version of uv ({})",
-                    "success".green().bold(),
-                    ":".bold(),
-                    format!("v{}", env!("CARGO_PKG_VERSION")).bold().cyan()
-                )
-            )?;
+            if !quiet_if_unchanged {
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    format_args!(
+                        "{}{} You're on the latest version of uv ({})",
+                        "success".green().bold(),
+                        ":".bold(),
+                        format!("v{}", env!("CARGO_PKG_VERSION")).bold().cyan()
+                    )
+                )?;
+            }
         }
         Err(err) => {
             return if let AxoupdateError::Reqwest(err) = err {
