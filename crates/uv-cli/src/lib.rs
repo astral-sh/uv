@@ -5168,7 +5168,7 @@ pub struct AuditArgs {
     /// The project and its dependencies will be omitted.
     ///
     /// May be provided multiple times. Implies `--no-default-groups`.
-    #[arg(long, conflicts_with_all = ["group", "dev", "all_groups"], value_hint = ValueHint::Other)]
+    #[arg(long, value_hint = ValueHint::Other)]
     pub only_group: Vec<GroupName>,
 
     /// Only audit the development dependency group.
@@ -5176,7 +5176,7 @@ pub struct AuditArgs {
     /// The project and its dependencies will be omitted.
     ///
     /// This option is an alias for `--only-group dev`. Implies `--no-default-groups`.
-    #[arg(long, conflicts_with_all = ["group", "all_groups", "no_dev"])]
+    #[arg(long, conflicts_with_all = ["no_dev"])]
     pub only_dev: bool,
 
     /// Assert that the `uv.lock` will remain unchanged [env: UV_LOCKED=]

@@ -85,7 +85,7 @@ pub(crate) async fn audit(
         LockTarget::Workspace(_) => DefaultExtras::default(),
         LockTarget::Script(_) => DefaultExtras::default(),
     };
-    let _extras = extras.with_defaults(default_extras);
+    let extras = extras.with_defaults(default_extras);
 
     // Determine whether we're performing a universal audit.
     let universal = python_version.is_none() && python_platform.is_none();
@@ -187,35 +187,10 @@ pub(crate) async fn audit(
 
     // TODO: validate the sets of requested extras/groups against the lockfile?
 
-    // Build the list of auditable packages, skipping workspace members. Workspace members are
-    // local by definition and have no meaningful external package identity to look up in a vuln
-    // service. We also skip packages without a version, since we can't query for them.
-    //
-    // This mirrors the logic in `TreeDisplay::new`: for single-member workspaces, `lock.members()`
-    // is empty and the root package (source at path "") is the implicit member.
-    let workspace_root_name = lock.root().map(uv_resolver::Package::name);
-    let auditable: Vec<_> = lock
-        .packages()
-        .iter()
-        .filter(|p| {
-            if lock.members().is_empty() {
-                // Single-member workspace: skip the implicit root.
-                workspace_root_name != Some(p.name())
-            } else {
-                !lock.members().contains(p.name())
-            }
-        })
-        .filter_map(|p| {
-            let Some(version) = p.version() else {
-                trace!(
-                    "Skipping audit for {} because it has no version information",
-                    p.name()
-                );
-                return None;
-            };
-            Some((p.name(), version))
-        })
-        .collect();
+    // Build the list of auditable packages by traversing the lockfile from workspace roots,
+    // respecting the user's extras and dependency-group filters. Workspace members are excluded
+    // (they are local and have no external package identity), as are packages without a version.
+    let auditable = lock.packages_for_audit(&extras, &groups);
 
     // Perform the audit.
     let reporter = AuditReporter::from(printer);
