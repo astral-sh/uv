@@ -18,26 +18,25 @@ store.
 To use system certificates, pass the [`--system-certs`](../../reference/cli.md#uv) flag or set the
 [`UV_SYSTEM_CERTS`](../../reference/environment.md#uv_system_certs) environment variable to `true`.
 
-When using system certificates with the `rustls` backend, certificate verification is performed by
+When using system certificates, certificate verification is performed by
 [`rustls-platform-verifier`](https://github.com/rustls/rustls-platform-verifier), which delegates to
-the operating system's certificate verifier. When using the `native` backend, the platform's TLS
-implementation handles verification directly.
+the operating system's certificate verifier.
 
 ## Custom certificates
 
-To use custom CA certificates, you can set the
+To use custom CA certificates, set the
 [`SSL_CERT_FILE`](../../reference/environment.md#ssl_cert_file) environment variable to the path of
-a certificate bundle (PEM format), or set
-[`SSL_CERT_DIR`](../../reference/environment.md#ssl_cert_dir) to a directory containing certificate
-files (`.pem`, `.crt`, or `.cer` extensions).
+a PEM-encoded certificate bundle (e.g., `certs.pem`, `ca-bundle.crt`), or set
+[`SSL_CERT_DIR`](../../reference/environment.md#ssl_cert_dir) to a directory containing PEM-encoded
+certificate files (`.pem`, `.crt`, or `.cer` extensions). DER-encoded files are not supported.
 
-Custom certificates are merged with the certificate store used by the active configuration, e.g.,
-when using system certificates (via `--system-certs`), they are layered on top of the platform's
-certificate store.
+When set, these environment variables **override** the default certificate source entirely — only
+the provided certificates will be trusted. This matches the behavior of OpenSSL, Go, and other
+standard TLS consumers of these variables.
 
 `SSL_CERT_FILE` can point to a single certificate or a bundle containing multiple certificates.
-`SSL_CERT_DIR` can contain multiple certificate files, and uv will load all valid certificates from
-the directory.
+`SSL_CERT_DIR` can contain multiple certificate files; uv will load all valid certificates from the
+directory.
 
 If client certificate authentication (mTLS) is desired, set the
 [`SSL_CLIENT_CERT`](../../reference/environment.md#ssl_client_cert) environment variable to the path

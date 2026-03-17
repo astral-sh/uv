@@ -467,7 +467,7 @@ impl<'a> BaseClientBuilder<'a> {
         }
 
         // Load custom CA certificates from `SSL_CERT_FILE` and `SSL_CERT_DIR`.
-        // These are merged on top of the active certificate source (bundled roots or system certs).
+        // When set, these override the default certificate source entirely.
         let custom_certs = Certificates::from_env();
 
         // Create a secure client that validates certificates.
@@ -520,19 +520,15 @@ impl<'a> BaseClientBuilder<'a> {
         let client_builder = client_builder.tls_backend_rustls();
 
         // Configure the certificate source.
-        let client_builder = if self.system_certs {
-            // Use the platform's native certificate store.
-            client_builder
-        } else {
-            // Use bundled Mozilla root certificates.
-            client_builder.tls_certs_only(Certificates::webpki_roots().iter().cloned())
-        };
-
-        // Merge custom certificates from `SSL_CERT_FILE` and `SSL_CERT_DIR`.
+        //
+        // `SSL_CERT_FILE` and `SSL_CERT_DIR` override the default certificate source entirely,
+        // matching the conventions of OpenSSL, Go, and `rustls-native-certs`.
         let client_builder = if !custom_certs.is_empty() {
-            client_builder.tls_certs_merge(custom_certs.into_vec())
-        } else {
+            client_builder.tls_certs_only(custom_certs.iter().cloned())
+        } else if self.system_certs {
             client_builder
+        } else {
+            client_builder.tls_certs_only(Certificates::webpki_roots().iter().cloned())
         };
 
         // Configure mTLS.

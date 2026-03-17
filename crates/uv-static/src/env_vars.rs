@@ -654,17 +654,26 @@ impl EnvVars {
     #[attr_added_in("0.2.16")]
     pub const XDG_BIN_HOME: &'static str = "XDG_BIN_HOME";
 
-    /// Custom certificate bundle file path for SSL connections.
+    /// Path to a CA certificate bundle file for TLS connections.
     ///
-    /// Takes precedence over `UV_NATIVE_TLS` when set.
+    /// Requires a PEM-encoded certificate file (e.g., `certs.pem`, `ca-bundle.crt`). DER-encoded
+    /// files are not supported.
+    ///
+    /// When set, this overrides the default certificate source (bundled Mozilla roots or system
+    /// certificates). Only the certificates in this file will be trusted.
     #[attr_added_in("0.1.14")]
     pub const SSL_CERT_FILE: &'static str = "SSL_CERT_FILE";
 
-    /// Custom path for certificate bundles for SSL connections.
-    /// Multiple entries are supported separated using a platform-specific
-    /// delimiter (`:` on Unix, `;` on Windows).
+    /// Path to a directory containing PEM-encoded CA certificate files for TLS connections.
     ///
-    /// Takes precedence over `UV_NATIVE_TLS` when set.
+    /// Multiple entries are supported, separated using a platform-specific delimiter (`:` on Unix,
+    /// `;` on Windows).
+    ///
+    /// Only files with `.pem`, `.crt`, or `.cer` extensions are loaded. Only PEM-encoded files are
+    /// supported, i.e., DER-encoded files are not supported.
+    ///
+    /// When set, this overrides the default certificate source (bundled Mozilla roots or system
+    /// certificates). Only the certificates in this directory will be trusted.
     #[attr_added_in("0.9.10")]
     pub const SSL_CERT_DIR: &'static str = "SSL_CERT_DIR";
 
