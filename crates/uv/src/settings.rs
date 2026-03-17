@@ -284,30 +284,26 @@ impl NetworkSettings {
             Connectivity::Online
         };
 
-        // Resolve the `--native-tls` flag. This is a legacy alias for `--system-certs` — it
-        // enables system certificates but does NOT change the TLS backend.
-        let native_tls = match flag(args.native_tls, args.no_native_tls, "native-tls") {
-            Some(value) => value,
-            None => {
-                environment.native_tls.value == Some(true)
-                    || workspace
-                        .and_then(|workspace| workspace.globals.native_tls)
-                        .unwrap_or(false)
-            }
-        };
-
         // Resolve whether to use system certificates.
-        // `--system-certs` takes precedence, then `UV_SYSTEM_CERTS`, then `--native-tls`.
-        let system_certs = match flag(args.system_certs, args.no_system_certs, "system-certs") {
-            Some(value) => value,
-            None => {
-                if let Some(true) = environment.system_certs.value {
-                    true
-                } else {
-                    native_tls
-                }
-            }
-        };
+        //
+        // `--native-tls` is a legacy alias for `--system-certs` — it enables system certificates
+        // but does NOT change the TLS backend. Any explicit CLI setting should take precedence
+        // over environment variables and workspace configuration, regardless of which spelling is
+        // used.
+        let system_certs =
+            if let Some(value) = flag(args.system_certs, args.no_system_certs, "system-certs") {
+                value
+            } else if let Some(value) = flag(args.native_tls, args.no_native_tls, "native-tls") {
+                value
+            } else if let Some(true) = environment.system_certs.value {
+                true
+            } else if let Some(true) = environment.native_tls.value {
+                true
+            } else {
+                workspace
+                    .and_then(|workspace| workspace.globals.native_tls)
+                    .unwrap_or(false)
+            };
 
         let allow_insecure_host = args
             .allow_insecure_host
