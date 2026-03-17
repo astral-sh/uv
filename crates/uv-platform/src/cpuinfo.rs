@@ -16,12 +16,34 @@ use procfs::{CpuInfo, Current};
 pub(crate) fn detect_hardware_floating_point_support() -> Result<bool, Error> {
     let cpu_info = CpuInfo::current().map_err(Error::other)?;
     if let Some(features) = cpu_info.fields.get("Features") {
-        if features.contains("vfp") {
-            return Ok(true); // "vfp" found: hard-float (gnueabihf) detected
+        if has_hardware_float_features(features) {
+            return Ok(true);
         }
     }
 
     Ok(false) // Default to soft-float (gnueabi) if no "vfp" flag is found
+}
+
+/// Check if a `/proc/cpuinfo` `Features` string indicates hardware floating-point support.
+///
+/// On native ARM-32 systems, the `"vfp"` flag (and variants like `"vfpv3"`, `"vfpd32"`)
+/// indicates hardware floating-point support.
+///
+/// On AArch64 kernels running ARM-32 userspace (e.g., armv7l containers on aarch64 hosts,
+/// or 32-bit Raspberry Pi OS on 64-bit hardware), `/proc/cpuinfo` reports AArch64-style
+/// feature flags instead of ARM-32 flags. The `"fp"` feature is mandatory on all AArch64
+/// CPUs and indicates hardware floating-point support. We match `"fp"` as a discrete token
+/// to avoid false-matching the `"vfp"` substring (already handled separately).
+///
+/// See: <https://github.com/astral-sh/uv/issues/18509>
+#[cfg(target_os = "linux")]
+fn has_hardware_float_features(features: &str) -> bool {
+    // ARM-32 style: "vfp" (also matches "vfpv3", "vfpd32", etc.)
+    if features.contains("vfp") {
+        return true;
+    }
+    // AArch64 style: "fp" as a discrete feature token
+    features.split_whitespace().any(|feature| feature == "fp")
 }
 
 /// For non-Linux systems or architectures, the function will return `false` as hardware floating-point detection
@@ -30,4 +52,45 @@ pub(crate) fn detect_hardware_floating_point_support() -> Result<bool, Error> {
 #[expect(clippy::unnecessary_wraps)]
 pub(crate) fn detect_hardware_floating_point_support() -> Result<bool, Error> {
     Ok(false) // Non-Linux or non-ARM systems: hardware floating-point detection is not applicable
+}
+
+#[cfg(test)]
+mod tests {
+    #[cfg(target_os = "linux")]
+    use super::has_hardware_float_features;
+
+    /// Native ARM-32 (e.g., Raspberry Pi with 32-bit kernel) — "vfp" flag present.
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn arm32_native_hard_float() {
+        let features = "half thumb fastmult vfp edsp neon vfpv3 tls vfpv4 idiva idivt vfpd32 lpae evtstrm crc32";
+        assert!(has_hardware_float_features(features));
+    }
+
+    /// AArch64 kernel running ARM-32 userspace — no "vfp" flag, but "fp" is present.
+    /// This is the scenario from <https://github.com/astral-sh/uv/issues/18509>.
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn aarch64_kernel_with_arm32_userspace() {
+        let features =
+            "fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm";
+        assert!(has_hardware_float_features(features));
+    }
+
+    /// ARM-32 without any floating-point support — neither "vfp" nor "fp".
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn arm32_soft_float() {
+        let features = "swp half thumb fastmult edsp";
+        assert!(!has_hardware_float_features(features));
+    }
+
+    /// "fp" must match as a discrete token, not as a substring of other features.
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn fp_only_matches_as_discrete_token() {
+        // "fphp" contains "fp" as a prefix but should not match on its own
+        let features = "asimd fphp asimdhp";
+        assert!(!has_hardware_float_features(features));
+    }
 }
