@@ -9,6 +9,6 @@ The files are licensed under BSD-2-Clause OR Apache-2.0.
 
 The following patches have been applied:
 
-- `python36-support.patch`: Removes `from __future__ import annotations` and replaces PEP 604
-  (`X | Y`) union types and PEP 585 (`dict[K, V]`) lowercase generics with their `typing` module
-  equivalents (`Optional`, `Dict`, `Tuple`), making the vendored modules compatible with Python 3.6.
+- `python36-support.patch`: Removes `from __future__ import annotations` and quotes PEP 604
+  (`X | Y`) union types and PEP 585 (`dict[K, V]`) lowercase generics to preserve compatibility
+  with Python 3.6 while keeping the newer annotation spellings.

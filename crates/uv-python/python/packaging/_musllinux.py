@@ -8,7 +8,7 @@ import functools
 import re
 import subprocess
 import sys
-from typing import Iterator, NamedTuple, Optional, Sequence
+from typing import Iterator, NamedTuple, Sequence
 
 from ._elffile import ELFFile
 
@@ -18,7 +18,7 @@ class _MuslVersion(NamedTuple):
     minor: int
 
 
-def _parse_musl_version(output: str) -> Optional[_MuslVersion]:
+def _parse_musl_version(output: str) -> "_MuslVersion | None":
     lines = [n for n in (n.strip() for n in output.splitlines()) if n]
     if len(lines) < 2 or lines[0][:4] != "musl":
         return None
@@ -29,7 +29,7 @@ def _parse_musl_version(output: str) -> Optional[_MuslVersion]:
 
 
 @functools.lru_cache()
-def _get_musl_version(executable: str) -> Optional[_MuslVersion]:
+def _get_musl_version(executable: str) -> "_MuslVersion | None":
     """Detect currently-running musl runtime version.
 
     This is done by checking the specified executable's dynamic linking
