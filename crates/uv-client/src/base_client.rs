@@ -498,7 +498,7 @@ impl<'a> BaseClientBuilder<'a> {
         user_agent: &str,
         read_timeout: Duration,
         connect_timeout: Duration,
-        custom_certs: Certificates,
+        custom_certs: Option<Certificates>,
         security: Security,
         redirect_policy: RedirectPolicy,
     ) -> Client {
@@ -523,7 +523,7 @@ impl<'a> BaseClientBuilder<'a> {
         //
         // `SSL_CERT_FILE` and `SSL_CERT_DIR` override the default certificate source entirely,
         // matching the conventions of OpenSSL, Go, and `rustls-native-certs`.
-        let client_builder = if !custom_certs.is_empty() {
+        let client_builder = if let Some(custom_certs) = custom_certs {
             client_builder.tls_certs_only(custom_certs.iter().cloned())
         } else if self.system_certs {
             client_builder

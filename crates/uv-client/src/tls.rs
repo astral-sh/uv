@@ -30,8 +30,15 @@ impl Certificates {
     }
 
     /// Load custom CA certificates from `SSL_CERT_FILE` and `SSL_CERT_DIR` environment variables.
-    pub(crate) fn from_env() -> Self {
+    /// Load custom CA certificates from `SSL_CERT_FILE` and `SSL_CERT_DIR` environment variables.
+    ///
+    /// Returns `None` if no sources could be successfully read (env vars unset, paths don't
+    /// exist, etc.), indicating the default certificate source should be used. Returns
+    /// `Some(certs)` when at least one file or directory was successfully read, even if no
+    /// certificates were parsed from it.
+    pub(crate) fn from_env() -> Option<Self> {
         let mut certs = Self::default();
+        let mut has_source = false;
 
         // Load from `SSL_CERT_FILE`.
         if let Ok(cert_file) = env::var(EnvVars::SSL_CERT_FILE) {
@@ -43,6 +50,7 @@ impl Certificates {
                         loaded.iter().count(),
                         path.simplified_display()
                     );
+                    has_source = true;
                     certs.extend(loaded);
                 }
                 Err(err) => {
@@ -56,60 +64,63 @@ impl Certificates {
 
         // Load from `SSL_CERT_DIR`.
         if let Ok(cert_dirs) = env::var(EnvVars::SSL_CERT_DIR) {
-            if cert_dirs.is_empty() {
-                return certs;
-            }
+            if !cert_dirs.is_empty() {
+                let paths: Vec<_> = env::split_paths(&cert_dirs).collect();
+                let (existing, missing): (Vec<_>, Vec<_>) = paths.iter().partition(|p| p.exists());
 
-            let paths: Vec<_> = env::split_paths(&cert_dirs).collect();
-            let (existing, missing): (Vec<_>, Vec<_>) = paths.iter().partition(|p| p.exists());
-
-            if existing.is_empty() {
-                let end_note = if missing.len() == 1 {
-                    "The directory does not exist."
+                if existing.is_empty() {
+                    let end_note = if missing.len() == 1 {
+                        "The directory does not exist."
+                    } else {
+                        "The entries do not exist."
+                    };
+                    warn_user_once!(
+                        "Ignoring invalid `SSL_CERT_DIR`. {end_note}: {}.",
+                        missing
+                            .iter()
+                            .map(Simplified::simplified_display)
+                            .join(", ")
+                            .cyan()
+                    );
                 } else {
-                    "The entries do not exist."
-                };
-                warn_user_once!(
-                    "Ignoring invalid `SSL_CERT_DIR`. {end_note}: {}.",
-                    missing
-                        .iter()
-                        .map(Simplified::simplified_display)
-                        .join(", ")
-                        .cyan()
-                );
-                return certs;
-            }
-
-            if !missing.is_empty() {
-                let end_note = if missing.len() == 1 {
-                    "The following directory does not exist:"
-                } else {
-                    "The following entries do not exist:"
-                };
-                warn_user_once!(
-                    "Invalid entries in `SSL_CERT_DIR`. {end_note}: {}.",
-                    missing
-                        .iter()
-                        .map(Simplified::simplified_display)
-                        .join(", ")
-                        .cyan()
-                );
-            }
-
-            for dir in existing {
-                match Self::from_dir(dir) {
-                    Ok(loaded) => certs.extend(loaded),
-                    Err(err) => {
+                    if !missing.is_empty() {
+                        let end_note = if missing.len() == 1 {
+                            "The following directory does not exist:"
+                        } else {
+                            "The following entries do not exist:"
+                        };
                         warn_user_once!(
-                            "Failed to read `SSL_CERT_DIR` ({}): {err}",
-                            dir.simplified_display().cyan()
+                            "Invalid entries in `SSL_CERT_DIR`. {end_note}: {}.",
+                            missing
+                                .iter()
+                                .map(Simplified::simplified_display)
+                                .join(", ")
+                                .cyan()
                         );
+                    }
+
+                    for dir in existing {
+                        match Self::from_dir(dir) {
+                            Ok(loaded) => {
+                                has_source = true;
+                                certs.extend(loaded);
+                            }
+                            Err(err) => {
+                                warn_user_once!(
+                                    "Failed to read `SSL_CERT_DIR` ({}): {err}",
+                                    dir.simplified_display().cyan()
+                                );
+                            }
+                        }
                     }
                 }
             }
         }
 
-        certs
+        // TODO(zanieb): For consistency with other tools, return `Some` when the variable is
+        // set to a non-empty value, even if no sources could be read.
+        // See https://github.com/astral-sh/uv/issues/18526
+        if has_source { Some(certs) } else { None }
     }
 
     /// Load certificates from a PEM file (single cert or bundle).
@@ -152,16 +163,6 @@ impl Certificates {
         }
 
         Ok(Self(certs))
-    }
-
-    /// Returns `true` if there are no certificates.
-    pub(crate) fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-
-    /// Consume into the inner `Vec<Certificate>`.
-    pub(crate) fn into_vec(self) -> Vec<Certificate> {
-        self.0
     }
 
     /// Iterate over the certificates.
@@ -228,7 +229,7 @@ mod tests {
 
         // Invalid PEM content is not an IO error — it parses successfully but yields no certs.
         let certs = Certificates::from_file(&path).unwrap();
-        assert!(certs.is_empty());
+        assert_eq!(certs.iter().count(), 0);
     }
 
     #[test]
@@ -238,7 +239,7 @@ mod tests {
         fs_err::write(&path, generate_cert_pem()).unwrap();
 
         let certs = Certificates::from_file(&path).unwrap();
-        assert!(!certs.is_empty());
+        assert!(certs.iter().count() > 0);
     }
 
     #[test]
@@ -249,7 +250,7 @@ mod tests {
         fs_err::write(&path, bundle).unwrap();
 
         let certs = Certificates::from_file(&path).unwrap();
-        assert!(!certs.is_empty());
+        assert!(certs.iter().count() > 0);
     }
 
     #[test]
@@ -262,7 +263,7 @@ mod tests {
     fn test_from_dir_empty() {
         let dir = tempfile::tempdir().unwrap();
         let certs = Certificates::from_dir(dir.path()).unwrap();
-        assert!(certs.is_empty());
+        assert_eq!(certs.iter().count(), 0);
     }
 
     #[test]
@@ -272,7 +273,7 @@ mod tests {
         fs_err::write(dir.path().join("cert.crt"), generate_cert_pem()).unwrap();
 
         let certs = Certificates::from_dir(dir.path()).unwrap();
-        assert!(!certs.is_empty());
+        assert!(certs.iter().count() > 0);
     }
 
     #[test]
@@ -282,13 +283,13 @@ mod tests {
         fs_err::write(dir.path().join("cert"), generate_cert_pem()).unwrap();
 
         let certs = Certificates::from_dir(dir.path()).unwrap();
-        assert!(certs.is_empty());
+        assert_eq!(certs.iter().count(), 0);
     }
 
     #[test]
     fn test_webpki_roots_not_empty() {
         let certs = Certificates::webpki_roots();
-        assert!(!certs.is_empty());
+        assert!(certs.iter().count() > 0);
     }
 
     #[test]
