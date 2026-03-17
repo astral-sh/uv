@@ -252,7 +252,7 @@ pub struct GlobalOptions {
     /// By default, uv uses bundled Mozilla root certificates. When enabled, this loads
     /// certificates from the platform's native certificate store instead.
     ///
-    /// Deprecated: use `system-certs` instead.
+    /// (Deprecated: use `system-certs` instead.)
     #[deprecated(note = "use `system-certs` instead")]
     #[option(
         default = "false",
