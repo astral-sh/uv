@@ -9230,10 +9230,10 @@ fn system_certs_config_aliases() -> anyhow::Result<()> {
     "#
     );
 
-    config.write_str(indoc::indoc! {r#"
+    config.write_str(indoc::indoc! {r"
         system-certs = false
         native-tls = true
-    "#})?;
+    "})?;
 
     uv_snapshot!(context.filters(), add_shared_args(context.version())
         .arg("--show-settings"), @r#"
