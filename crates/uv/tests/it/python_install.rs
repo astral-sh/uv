@@ -4370,8 +4370,8 @@ fn python_install_compile_bytecode_pypy() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.11.13 in [TIME]
-     + pypy-3.11.13-[PLATFORM] (pypy3.11)
+    Installed Python 3.11.15 in [TIME]
+     + pypy-3.11.15-[PLATFORM] (pypy3.11)
     Bytecode compiled [COUNT] files in [TIME]
     ");
 }
