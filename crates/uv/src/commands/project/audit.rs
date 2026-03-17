@@ -247,9 +247,7 @@ pub(crate) async fn audit(
         n_packages: auditable.len(),
         findings: all_findings,
     };
-    display.render()?;
-
-    Ok(ExitStatus::Success)
+    display.render()
 }
 
 struct AuditResults {
@@ -259,7 +257,7 @@ struct AuditResults {
 }
 
 impl AuditResults {
-    fn render(&self) -> Result<()> {
+    fn render(&self) -> Result<ExitStatus> {
         let (vulns, statuses): (Vec<_>, Vec<_>) =
             self.findings.iter().partition_map(|finding| match finding {
                 Finding::Vulnerability(vuln) => itertools::Either::Left(vuln),
@@ -291,6 +289,8 @@ impl AuditResults {
             "Found {vuln_banner} and {status_banner} in {packages}",
             packages = format!("{npackages} packages", npackages = self.n_packages).bold()
         )?;
+
+        let has_findings = !vulns.is_empty() || !statuses.is_empty();
 
         if !vulns.is_empty() {
             writeln!(self.printer.stdout_important(), "\nVulnerabilities:\n")?;
@@ -357,6 +357,10 @@ impl AuditResults {
             // any adverse project statuses at the moment.
         }
 
-        Ok(())
+        if has_findings {
+            Ok(ExitStatus::Failure)
+        } else {
+            Ok(ExitStatus::Success)
+        }
     }
 }
