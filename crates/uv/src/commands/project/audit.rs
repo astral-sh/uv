@@ -185,8 +185,6 @@ pub(crate) async fn audit(
         )
     });
 
-    // TODO: validate the sets of requested extras/groups against the lockfile?
-
     // Build the list of auditable packages by traversing the lockfile from workspace roots,
     // respecting the user's extras and dependency-group filters. Workspace members are excluded
     // (they are local and have no external package identity), as are packages without a version.
