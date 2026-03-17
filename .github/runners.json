@@ -1,0 +1,52 @@
+{
+  "ubuntu-x86_64-1": [{ "label": "ubuntu-slim", "free": true }],
+  "ubuntu-x86_64-4-github": [{ "label": "ubuntu-latest", "free": true }],
+  "ubuntu-x86_64-4": [
+    { "label": "depot-ubuntu-24.04-4", "free": false },
+    { "label": "ubuntu-latest", "free": true }
+  ],
+  "ubuntu-x86_64-8": [
+    { "label": "depot-ubuntu-24.04-8", "free": false },
+    { "label": "ubuntu-latest", "free": true }
+  ],
+  "ubuntu-x86_64-16": [
+    { "label": "depot-ubuntu-24.04-16", "free": false },
+    { "label": "ubuntu-latest", "free": true }
+  ],
+  "ubuntu-aarch64-2": [
+    { "label": "github-ubuntu-24.04-aarch64-2", "free": false },
+    { "label": "ubuntu-24.04-arm", "free": true }
+  ],
+  "ubuntu-aarch64-4": [
+    { "label": "github-ubuntu-24.04-aarch64-4", "free": false },
+    { "label": "ubuntu-24.04-arm", "free": true }
+  ],
+  "ubuntu-22-04-aarch64-4": [
+    { "label": "depot-ubuntu-22.04-arm-4", "free": false },
+    { "label": "ubuntu-24.04-arm", "free": true }
+  ],
+  "macos-aarch64": [{ "label": "macos-14", "free": true }],
+  "macos-aarch64-8": [
+    { "label": "depot-macos-14", "free": false },
+    { "label": "macos-14", "free": true }
+  ],
+  "macos-x86_64": [{ "label": "macos-15-intel", "free": true }],
+  "macos-x86_64-12": [
+    { "label": "macos-latest-large", "free": false },
+    { "label": "macos-15-intel", "free": true }
+  ],
+  "windows-x86_64": [{ "label": "windows-latest", "free": true }],
+  "windows-x86_64-8": [
+    { "label": "github-windows-2022-x86_64-8", "free": false },
+    { "label": "windows-latest", "free": true }
+  ],
+  "windows-x86_64-16": [
+    { "label": "github-windows-2025-x86_64-16", "free": false },
+    { "label": "windows-latest", "free": true }
+  ],
+  "windows-aarch64": [{ "label": "windows-11-arm", "free": true }],
+  "windows-aarch64-8": [
+    { "label": "github-windows-11-aarch64-8", "free": false },
+    { "label": "windows-11-arm", "free": true }
+  ]
+}

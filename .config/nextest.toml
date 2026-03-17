@@ -15,12 +15,24 @@ fail-fast = false
 [profile.ci-linux]
 inherits = "ci"
 
+[profile.ci-linux-free]
+inherits = "ci-linux"
+slow-timeout = { period = "30s", terminate-after = 12 }
+
 [profile.ci-macos]
 inherits = "ci"
 test-threads = 12
 
+[profile.ci-macos-free]
+inherits = "ci-macos"
+slow-timeout = { period = "30s", terminate-after = 12 }
+
 [profile.ci-windows]
 inherits = "ci"
+
+[profile.ci-windows-free]
+inherits = "ci-windows"
+slow-timeout = { period = "30s", terminate-after = 12 }
 
 [test-groups]
 serial = { max-threads = 1 }
