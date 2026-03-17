@@ -34129,6 +34129,121 @@ fn lock_supported_environment_wheel_only_package_requires_compatible_wheels() ->
     Ok(())
 }
 
+/// An abi3 wheel (e.g., `cp37-abi3`) should be considered compatible with any Python version at or
+/// above the tag's version. When `tool.uv.environments` constrains to a specific Python version
+/// (e.g., 3.12), the resolver should recognize that a `cp37-abi3` wheel covers that environment
+/// rather than treating the `cp37` tag as an exact Python 3.7 requirement.
+#[test]
+fn lock_supported_environment_abi3_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Create a local flat index with the abi3 test wheel.
+    let index_dir = context.temp_dir.child("local_index");
+    fs_err::create_dir_all(&index_dir)?;
+
+    for entry in fs_err::read_dir(context.workspace_root.join("test/links"))? {
+        let entry = entry?;
+        let path = entry.path();
+        if path
+            .file_name()
+            .and_then(|file_name| file_name.to_str())
+            .is_some_and(|file_name| file_name.starts_with("abi3_package"))
+        {
+            let dest = index_dir.join(path.file_name().unwrap());
+            fs_err::copy(&path, &dest)?;
+        }
+    }
+
+    let project = context.temp_dir.child("project");
+    fs_err::create_dir_all(&project)?;
+
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["abi3-package"]
+
+        [tool.uv]
+        environments = [
+            "sys_platform == 'linux' and platform_machine == 'x86_64' and python_version == '3.12'",
+        ]
+
+        [[tool.uv.index]]
+        name = "local"
+        url = "{}"
+        format = "flat"
+        "#,
+        index_dir.portable_display()
+    })?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&project), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = fs_err::read_to_string(project.join("uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+        supported-markers = [
+            "python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "abi3-package"
+        version = "1.0.0"
+        source = { registry = "[TEMP_DIR]/local_index" }
+        wheels = [
+            { path = "[TEMP_DIR]/local_index/abi3_package-1.0.0-cp37-abi3-manylinux_2_17_x86_64.whl" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "abi3-package", marker = "python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "abi3-package" }]
+        "#
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").current_dir(&project), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// If an index is filtered out (e.g., it's the second `default = true` index defined in the file),
 /// we should still consider the lockfile valid if it's referenced by name, regardless of whether
 /// it's defined in a dependency group or the top-level `project.dependencies` field.
