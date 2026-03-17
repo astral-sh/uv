@@ -30,7 +30,6 @@ impl Certificates {
     }
 
     /// Load custom CA certificates from `SSL_CERT_FILE` and `SSL_CERT_DIR` environment variables.
-    /// Load custom CA certificates from `SSL_CERT_FILE` and `SSL_CERT_DIR` environment variables.
     ///
     /// Returns `None` if no sources could be successfully read (env vars unset, paths don't
     /// exist, etc.), indicating the default certificate source should be used. Returns
