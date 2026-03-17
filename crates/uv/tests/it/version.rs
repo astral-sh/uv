@@ -2351,10 +2351,7 @@ fn self_version_json() -> Result<()> {
                 r#"commits_since_last_tag": .*"#,
                 r#"commits_since_last_tag": [COUNT]"#,
             ),
-            (
-                r#"target_triple": (".*"|null)"#,
-                r#"target_triple": "[TARGET]""#,
-            ),
+            (r#"target_triple": ".*""#, r#"target_triple": "[TARGET]""#),
         ])
         .collect::<Vec<_>>();
 

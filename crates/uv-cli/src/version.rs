@@ -17,56 +17,71 @@ pub(crate) struct CommitInfo {
     commits_since_last_tag: u32,
 }
 
-/// uv's version.
+/// Version information for the uv tool itself (`uv self version`).
 #[derive(Serialize)]
-pub struct VersionInfo {
-    /// Name of the package (or "uv" if printing uv's own version)
-    pub package_name: Option<String>,
-    /// version, such as "0.5.1"
+pub struct SelfVersionInfo {
+    /// Name of the package (always "uv").
+    package_name: String,
+    /// Version, such as "0.5.1".
     version: String,
     /// Information about the git commit we may have been built from.
     ///
     /// `None` if not built from a git repo or if retrieval failed.
-    // TODO(breaking): Add `#[serde(skip_serializing_if = "Option::is_none")]`
     commit_info: Option<CommitInfo>,
     /// The target triple for which uv was built (e.g., `x86_64-unknown-linux-gnu`).
-    ///
-    /// `None` for project versions.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    target_triple: Option<String>,
+    target_triple: String,
 }
 
-impl VersionInfo {
+/// Version information for a project (`uv version`).
+#[derive(Serialize)]
+pub struct ProjectVersionInfo {
+    /// Name of the package.
+    pub package_name: Option<String>,
+    /// Version, such as "0.5.1".
+    version: String,
+    /// Information about the git commit uv was built from.
+    ///
+    /// Always `null` for project versions, kept for backwards compatibility.
+    // TODO(zanieb): Remove this field in a breaking release.
+    commit_info: Option<CommitInfo>,
+}
+
+impl ProjectVersionInfo {
     pub fn new(package_name: Option<&PackageName>, version: &Version) -> Self {
         Self {
             package_name: package_name.map(ToString::to_string),
             version: version.to_string(),
             commit_info: None,
-            target_triple: None,
         }
     }
 }
 
-impl fmt::Display for VersionInfo {
-    /// Formatted version information: "<version>[+<commits>] (<commit> <date> [<target>])"
+impl fmt::Display for SelfVersionInfo {
+    /// Formatted version information: "<version>[+<commits>] (<commit> <date> <target>)"
     ///
     /// This is intended for consumption by `clap` to provide `uv --version`,
-    /// and intentionally omits the name of the package
+    /// and intentionally omits the name of the package.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.version)?;
         if let Some(ci) = &self.commit_info {
             if ci.commits_since_last_tag > 0 {
                 write!(f, "+{}", ci.commits_since_last_tag)?;
             }
-            write!(f, " ({} {}", ci.short_commit_hash, ci.commit_date)?;
-            if let Some(target_triple) = &self.target_triple {
-                write!(f, " {target_triple}")?;
-            }
-            write!(f, ")")?;
-        } else if let Some(target_triple) = &self.target_triple {
-            write!(f, " ({target_triple})")?;
+            write!(
+                f,
+                " ({} {} {})",
+                ci.short_commit_hash, ci.commit_date, self.target_triple
+            )?;
+        } else {
+            write!(f, " ({})", self.target_triple)?;
         }
         Ok(())
+    }
+}
+
+impl fmt::Display for ProjectVersionInfo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.version)
     }
 }
 
@@ -80,14 +95,14 @@ impl fmt::Display for CommitInfo {
     }
 }
 
-impl From<VersionInfo> for clap::builder::Str {
-    fn from(val: VersionInfo) -> Self {
+impl From<SelfVersionInfo> for clap::builder::Str {
+    fn from(val: SelfVersionInfo) -> Self {
         val.to_string().into()
     }
 }
 
 /// Returns information about uv's version.
-pub fn uv_self_version() -> VersionInfo {
+pub fn uv_self_version() -> SelfVersionInfo {
     // Environment variables are only read at compile-time
     macro_rules! option_env_str {
         ($name:expr) => {
@@ -112,11 +127,11 @@ pub fn uv_self_version() -> VersionInfo {
     // Target triple is set by Cargo via `build.rs`
     let target_triple = env!("RUST_HOST_TARGET").to_string();
 
-    VersionInfo {
-        package_name: Some("uv".to_owned()),
+    SelfVersionInfo {
+        package_name: "uv".to_owned(),
         version,
         commit_info,
-        target_triple: Some(target_triple),
+        target_triple,
     }
 }
 
@@ -124,68 +139,40 @@ pub fn uv_self_version() -> VersionInfo {
 mod tests {
     use insta::{assert_json_snapshot, assert_snapshot};
 
-    use super::{CommitInfo, VersionInfo};
+    use super::{CommitInfo, SelfVersionInfo};
 
     #[test]
     fn version_formatting() {
-        let version = VersionInfo {
-            package_name: Some("uv".to_string()),
+        let version = SelfVersionInfo {
+            package_name: "uv".to_string(),
             version: "0.0.0".to_string(),
             commit_info: None,
-            target_triple: None,
-        };
-        assert_snapshot!(version, @"0.0.0");
-    }
-
-    #[test]
-    fn version_formatting_with_commit_info() {
-        let version = VersionInfo {
-            package_name: Some("uv".to_string()),
-            version: "0.0.0".to_string(),
-            commit_info: Some(CommitInfo {
-                short_commit_hash: "53b0f5d92".to_string(),
-                commit_hash: "53b0f5d924110e5b26fbf09f6fd3a03d67b475b7".to_string(),
-                last_tag: Some("v0.0.1".to_string()),
-                commit_date: "2023-10-19".to_string(),
-                commits_since_last_tag: 0,
-            }),
-            target_triple: None,
-        };
-        assert_snapshot!(version, @"0.0.0 (53b0f5d92 2023-10-19)");
-    }
-
-    #[test]
-    fn version_formatting_with_target_triple() {
-        let version = VersionInfo {
-            package_name: Some("uv".to_string()),
-            version: "0.0.0".to_string(),
-            commit_info: Some(CommitInfo {
-                short_commit_hash: "53b0f5d92".to_string(),
-                commit_hash: "53b0f5d924110e5b26fbf09f6fd3a03d67b475b7".to_string(),
-                last_tag: Some("v0.0.1".to_string()),
-                commit_date: "2023-10-19".to_string(),
-                commits_since_last_tag: 0,
-            }),
-            target_triple: Some("x86_64-unknown-linux-gnu".to_string()),
-        };
-        assert_snapshot!(version, @"0.0.0 (53b0f5d92 2023-10-19 x86_64-unknown-linux-gnu)");
-    }
-
-    #[test]
-    fn version_formatting_with_target_triple_only() {
-        let version = VersionInfo {
-            package_name: Some("uv".to_string()),
-            version: "0.0.0".to_string(),
-            commit_info: None,
-            target_triple: Some("x86_64-unknown-linux-gnu".to_string()),
+            target_triple: "x86_64-unknown-linux-gnu".to_string(),
         };
         assert_snapshot!(version, @"0.0.0 (x86_64-unknown-linux-gnu)");
     }
 
     #[test]
+    fn version_formatting_with_commit_info() {
+        let version = SelfVersionInfo {
+            package_name: "uv".to_string(),
+            version: "0.0.0".to_string(),
+            commit_info: Some(CommitInfo {
+                short_commit_hash: "53b0f5d92".to_string(),
+                commit_hash: "53b0f5d924110e5b26fbf09f6fd3a03d67b475b7".to_string(),
+                last_tag: Some("v0.0.1".to_string()),
+                commit_date: "2023-10-19".to_string(),
+                commits_since_last_tag: 0,
+            }),
+            target_triple: "x86_64-unknown-linux-gnu".to_string(),
+        };
+        assert_snapshot!(version, @"0.0.0 (53b0f5d92 2023-10-19 x86_64-unknown-linux-gnu)");
+    }
+
+    #[test]
     fn version_formatting_with_commits_since_last_tag() {
-        let version = VersionInfo {
-            package_name: Some("uv".to_string()),
+        let version = SelfVersionInfo {
+            package_name: "uv".to_string(),
             version: "0.0.0".to_string(),
             commit_info: Some(CommitInfo {
                 short_commit_hash: "53b0f5d92".to_string(),
@@ -194,15 +181,15 @@ mod tests {
                 commit_date: "2023-10-19".to_string(),
                 commits_since_last_tag: 24,
             }),
-            target_triple: None,
+            target_triple: "x86_64-unknown-linux-gnu".to_string(),
         };
-        assert_snapshot!(version, @"0.0.0+24 (53b0f5d92 2023-10-19)");
+        assert_snapshot!(version, @"0.0.0+24 (53b0f5d92 2023-10-19 x86_64-unknown-linux-gnu)");
     }
 
     #[test]
     fn version_serializable() {
-        let version = VersionInfo {
-            package_name: Some("uv".to_string()),
+        let version = SelfVersionInfo {
+            package_name: "uv".to_string(),
             version: "0.0.0".to_string(),
             commit_info: Some(CommitInfo {
                 short_commit_hash: "53b0f5d92".to_string(),
@@ -211,7 +198,7 @@ mod tests {
                 commit_date: "2023-10-19".to_string(),
                 commits_since_last_tag: 0,
             }),
-            target_triple: Some("x86_64-unknown-linux-gnu".to_string()),
+            target_triple: "x86_64-unknown-linux-gnu".to_string(),
         };
         assert_json_snapshot!(version, @r#"
         {
