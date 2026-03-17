@@ -179,11 +179,6 @@ jobs:
         run: |
           ./uv pip install -v anyio
 
-  # Regression test for https://github.com/astral-sh/uv/issues/18509.
-  # This runs an armv7 uv binary on an AArch64 Linux runner, which reproduces
-  # the relevant host/kernel condition from the reported armhf-on-aarch64 setup:
-  # /proc/cpuinfo exposes AArch64-style feature flags while uv must still select
-  # the armv7 hard-float (gnueabihf) managed Python variant.
   integration-test-linux-armv7-on-aarch64:
     name: "armv7 on aarch64 linux"
     timeout-minutes: 20
