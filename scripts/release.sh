@@ -26,3 +26,7 @@ uv lock
 
 echo "Generating JSON schema..."
 cargo dev generate-json-schema
+
+echo "Creating release branch..."
+git checkout -b "release/$(uv version --short)"
+git commit -am "Bump version to $(uv version --short)"

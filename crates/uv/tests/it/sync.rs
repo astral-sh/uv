@@ -6802,6 +6802,72 @@ fn sync_active_project_environment() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "test-python-managed")]
+fn sync_active_project_environment_with_relative_managed_python_dir() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_python_download_cache()
+        .with_empty_python_install_mirror();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#,
+    )?;
+
+    context
+        .venv()
+        .env(EnvVars::UV_PYTHON_INSTALL_DIR, ".python-installs")
+        .env(EnvVars::UV_PYTHON_PREFERENCE, "only-managed")
+        .env(EnvVars::UV_PYTHON_DOWNLOADS, "automatic")
+        .arg("foobar")
+        .assert()
+        .success();
+
+    context
+        .temp_dir
+        .child(".python-installs")
+        .assert(predicate::path::is_dir());
+
+    for _ in 0..2 {
+        let assert = context
+            .sync()
+            .env(EnvVars::UV_PYTHON_INSTALL_DIR, ".python-installs")
+            .env(EnvVars::UV_PYTHON_PREFERENCE, "only-managed")
+            .env(EnvVars::UV_PYTHON_DOWNLOADS, "automatic")
+            .env(EnvVars::VIRTUAL_ENV, "foobar")
+            .arg("--active")
+            .assert()
+            .success();
+
+        let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+        assert!(
+            !stderr.contains("Removed virtual environment at: foobar"),
+            "expected `uv sync --active` to reuse the active environment, stderr was:\n{stderr}"
+        );
+        assert!(
+            !stderr.contains("Creating virtual environment at: foobar"),
+            "expected `uv sync --active` to reuse the active environment, stderr was:\n{stderr}"
+        );
+    }
+
+    context
+        .temp_dir
+        .child(".venv")
+        .assert(predicate::path::missing());
+    context
+        .temp_dir
+        .child("foobar")
+        .assert(predicate::path::is_dir());
+
+    Ok(())
+}
+
+#[test]
 fn sync_active_script_environment() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_virtualenv_bin()

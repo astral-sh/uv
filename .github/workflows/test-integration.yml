@@ -95,6 +95,43 @@ jobs:
           echo "$CONDA_PREFIX"
           ./uv pip install anyio
 
+  integration-test-conda-macos-x86_64:
+    name: "conda on macos x86-64"
+    timeout-minutes: 10
+    runs-on: macos-15-intel # github-macos-15-x86_64-4
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: conda-incubator/setup-miniconda@fc2d68f6413eb2d87b895e92f8584b5b94a10167 # v3.3.0
+        with:
+          miniconda-version: latest
+          activate-environment: uv
+          python-version: "3.12"
+
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-macos-x86_64-${{ inputs.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: Conda info
+        shell: bash -el {0}
+        run: conda info
+
+      - name: "Install a package with macOS macOS 11.0 wheels"
+        shell: bash -el {0}
+        run: |
+          # greenlet has `macosx_11_0_universal2` wheels. Previously, conda interpreters on Intel
+          # macOS reported the incorrect platform tag `macosx_10_16` causing uv to consider the
+          # wheel incompatible. See https://github.com/astral-sh/uv/issues/14267
+          #
+          # Using `--only-binary` ensures this fails if the platform tags are wrong instead of
+          # falling back to a source build.
+          ./uv pip install --no-build 'greenlet==3.3.2'
+
   integration-test-deadsnakes-39-linux:
     name: "deadsnakes python3.9 on ubuntu"
     timeout-minutes: 15

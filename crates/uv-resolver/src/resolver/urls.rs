@@ -6,9 +6,10 @@ use tracing::debug;
 use uv_cache_key::CanonicalUrl;
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
-use uv_pep508::{MarkerTree, VerbatimUrl};
+use uv_pep508::VerbatimUrl;
 use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl, VerbatimParsedUrl};
 
+use crate::resolver::ForkMap;
 use crate::{DependencyMode, Manifest, ResolveError, ResolverEnvironment};
 
 /// The URLs that are allowed for packages.
@@ -25,7 +26,7 @@ pub(crate) struct Urls {
     /// URL requirements in overrides. An override URL replaces all requirements and constraints
     /// URLs. There can be multiple URLs for the same package as long as they are in different
     /// forks.
-    overrides: FxHashMap<PackageName, Vec<(MarkerTree, VerbatimParsedUrl)>>,
+    overrides: ForkMap<VerbatimParsedUrl>,
     /// URLs from regular requirements or from constraints. There can be multiple URLs for the same
     /// package as long as they are in different forks.
     regular: FxHashMap<PackageName, Vec<VerbatimParsedUrl>>,
@@ -39,8 +40,7 @@ impl Urls {
         dependencies: DependencyMode,
     ) -> Self {
         let mut regular: FxHashMap<PackageName, Vec<VerbatimParsedUrl>> = FxHashMap::default();
-        let mut overrides: FxHashMap<PackageName, Vec<(MarkerTree, VerbatimParsedUrl)>> =
-            FxHashMap::default();
+        let mut overrides = ForkMap::default();
 
         // Add all direct regular requirements and constraints URL.
         for requirement in manifest.requirements_no_overrides(env, dependencies) {
@@ -85,10 +85,7 @@ impl Urls {
             // a requirements.txt entry `./anyio`, we still use the URL. See
             // `allow_recursive_url_local_path_override_constraint`.
             regular.remove(&requirement.name);
-            overrides
-                .entry(requirement.name.clone())
-                .or_default()
-                .push((requirement.marker, url));
+            overrides.add(requirement.as_ref(), url);
         }
 
         Self { overrides, regular }
@@ -108,16 +105,10 @@ impl Urls {
         url: Option<&'a VerbatimParsedUrl>,
         git: &'a GitResolver,
     ) -> Result<impl Iterator<Item = &'a VerbatimParsedUrl>, ResolveError> {
-        if let Some(override_urls) = self.get_overrides(name) {
-            Ok(Either::Left(Either::Left(override_urls.iter().filter_map(
-                |(marker, url)| {
-                    if env.included_by_marker(*marker) {
-                        Some(url)
-                    } else {
-                        None
-                    }
-                },
-            ))))
+        if self.overrides.contains_key(name) {
+            Ok(Either::Left(Either::Left(
+                self.overrides.get(name, env).into_iter(),
+            )))
         } else if let Some(url) = url {
             let url =
                 self.canonicalize_allowed_url(env, name, git, &url.verbatim, &url.parsed_url)?;
@@ -129,12 +120,7 @@ impl Urls {
 
     /// Return `true` if the package has any URL (from overrides or regular requirements).
     pub(crate) fn any_url(&self, name: &PackageName) -> bool {
-        self.get_overrides(name).is_some() || self.get_regular(name).is_some()
-    }
-
-    /// Return the [`VerbatimUrl`] override for the given package, if any.
-    fn get_overrides(&self, package: &PackageName) -> Option<&[(MarkerTree, VerbatimParsedUrl)]> {
-        self.overrides.get(package).map(Vec::as_slice)
+        self.overrides.contains_key(name) || self.get_regular(name).is_some()
     }
 
     /// Return the allowed [`VerbatimUrl`]s for given package from regular requirements and

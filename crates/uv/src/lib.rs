@@ -111,6 +111,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     }
 
     // Determine the project directory.
+    //
+    // If `--project` points to a `pyproject.toml` file, resolve to its parent directory,
+    // since downstream code (e.g., `FilesystemOptions::find`) expects a directory.
     let project_dir = cli
         .top_level
         .global_args
@@ -119,6 +122,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         .map(std::path::absolute)
         .transpose()?
         .map(uv_fs::normalize_path_buf)
+        .map(|path| {
+            path.file_name()
+                .filter(|name| *name == "pyproject.toml")
+                .filter(|_| path.is_file())
+                .and_then(|_| path.parent())
+                .map(Path::to_path_buf)
+                .unwrap_or(path)
+        })
         .map(Cow::Owned)
         .unwrap_or_else(|| Cow::Borrowed(&*CWD));
 
@@ -134,11 +145,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     if !skip_project_validation {
         if let Some(project_path) = cli.top_level.global_args.project.as_ref() {
-            // Resolve the preview flags until this becomes stabilized. We check CLI args and
-            // the `UV_PREVIEW` env var, but not workspace config (which requires reading from
-            // the project directory that may not exist).
+            // Resolve the preview flags until this becomes stabilized. We do
+            // not pass a workspace configuration as this would require reading
+            // from the project directory which might not exist.
             let preview = Preview::from_args(
-                cli.top_level.global_args.preview || environment.preview.value == Some(true),
+                settings::resolve_preview(&cli.top_level.global_args, None, &environment),
                 cli.top_level.global_args.no_preview,
                 &cli.top_level.global_args.preview_features,
             );
@@ -156,18 +167,18 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     project_path.user_display()
                 );
             } else if !project_dir.is_dir() {
-                // On Unix, this always fails downstream (e.g., "Not a directory" when
-                // trying to read `uv.toml`), so we bail with a clear error message.
-                // On Windows, this is currently non-fatal, so we only error with the
-                // preview flag.
-                if cfg!(unix) || preview.is_enabled(PreviewFeature::ProjectDirectoryMustExist) {
+                // `--project path/to/pyproject.toml` is resolved to its parent above,
+                // so this only triggers for other file types (see #18508).
+                if preview.is_enabled(PreviewFeature::ProjectDirectoryMustExist) {
                     bail!(
                         "Project path `{}` is not a directory",
                         project_path.user_display()
                     );
                 }
                 warn_user_once!(
-                    "Project path `{}` is not a directory. Use `--preview-features project-directory-must-exist` to error on this.",
+                    "Project path `{}` is not a directory. \
+                    This will become an error in a future release. \
+                    Use `--preview-features project-directory-must-exist` to error on this now.",
                     project_path.user_display()
                 );
             }
