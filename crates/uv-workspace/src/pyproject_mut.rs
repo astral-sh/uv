@@ -1545,11 +1545,51 @@ fn update_requirement(old: &mut Requirement, new: &Requirement, has_source: bool
 
 /// Removes all occurrences of dependencies with the given name from the given `deps` array.
 fn remove_dependency(name: &PackageName, deps: &mut Array) -> Vec<Requirement> {
-    // Remove matching dependencies.
+    // Remove in reverse to preserve indices. Before each removal, transfer the item's
+    // prefix (which may contain end-of-line comments belonging to the previous line) to
+    // the next item or array trailing so comments are not lost.
+    //
+    // For example, in:
+    // ```toml
+    // dependencies = [
+    //     "numpy>=2.4.3", # essential comment
+    //     "requests>=2.32.5",
+    // ]
+    // ```
+    //
+    // The comment `# essential comment` is stored by `toml_edit` in the prefix of
+    // `requests`. When `requests` is removed, we transfer it so it remains on the
+    // `numpy` line.
     let removed = find_dependencies(name, None, deps)
         .into_iter()
-        .rev() // Reverse to preserve indices as we remove them.
+        .rev()
         .filter_map(|(i, _)| {
+            let prefix = deps
+                .get(i)
+                .and_then(|item| item.decor().prefix().and_then(|s| s.as_str()))
+                .unwrap_or("")
+                .to_string();
+
+            if !prefix.is_empty() {
+                if let Some(next) = deps.get(i + 1) {
+                    // Transfer removed item's prefix to the next item's prefix.
+                    let existing = next
+                        .decor()
+                        .prefix()
+                        .and_then(|s| s.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    deps.get_mut(i + 1)
+                        .unwrap()
+                        .decor_mut()
+                        .set_prefix(format!("{prefix}{existing}"));
+                } else {
+                    // No next item; move comments to the array trailing.
+                    let existing = deps.trailing().as_str().unwrap_or("").to_string();
+                    deps.set_trailing(format!("{prefix}{existing}"));
+                }
+            }
+
             deps.remove(i)
                 .as_str()
                 .and_then(|req| Requirement::from_str(req).ok())
@@ -1750,9 +1790,11 @@ fn split_specifiers(req: &str) -> (&str, &str) {
 
 #[cfg(test)]
 mod test {
-    use super::{AddBoundsKind, reformat_array_multiline, split_specifiers};
+    use super::{AddBoundsKind, reformat_array_multiline, remove_dependency, split_specifiers};
+    use insta::assert_snapshot;
     use std::str::FromStr;
     use toml_edit::DocumentMut;
+    use uv_normalize::PackageName;
     use uv_pep440::Version;
 
     #[test]
@@ -1926,5 +1968,192 @@ dependencies = [
                 .to_string();
             assert_eq!(actual, expected, "{version}");
         }
+    }
+
+    #[test]
+    fn remove_preserves_end_of_line_comment_on_previous_item() {
+        let toml = r#"
+[project]
+dependencies = [
+    "numpy>=2.4.3", # this comment is clearly essential
+    "requests>=2.32.5",
+]
+"#;
+        let mut doc: DocumentMut = toml.parse().unwrap();
+        let deps = doc["project"]["dependencies"]
+            .as_array_mut()
+            .expect("dependencies array");
+
+        let name = PackageName::from_str("requests").unwrap();
+        remove_dependency(&name, deps);
+
+        assert_snapshot!(
+            doc.to_string(),
+            @r#"
+[project]
+dependencies = [
+    "numpy>=2.4.3", # this comment is clearly essential
+]
+"#
+        );
+    }
+
+    #[test]
+    fn remove_preserves_end_of_line_comment_on_previous_item_middle() {
+        let toml = r#"
+[project]
+dependencies = [
+    "numpy>=2.4.3", # numpy comment
+    "requests>=2.32.5",
+    "flask>=3.0.0",
+]
+"#;
+        let mut doc: DocumentMut = toml.parse().unwrap();
+        let deps = doc["project"]["dependencies"]
+            .as_array_mut()
+            .expect("dependencies array");
+
+        let name = PackageName::from_str("requests").unwrap();
+        remove_dependency(&name, deps);
+
+        assert_snapshot!(
+            doc.to_string(),
+            @r#"
+[project]
+dependencies = [
+    "numpy>=2.4.3", # numpy comment
+    "flask>=3.0.0",
+]
+"#
+        );
+    }
+
+    #[test]
+    fn remove_preserves_own_line_comment_above_removed_item() {
+        let toml = r#"
+[project]
+dependencies = [
+    "numpy>=2.4.3",
+    # This is a comment about requests
+    "requests>=2.32.5",
+]
+"#;
+        let mut doc: DocumentMut = toml.parse().unwrap();
+        let deps = doc["project"]["dependencies"]
+            .as_array_mut()
+            .expect("dependencies array");
+
+        let name = PackageName::from_str("requests").unwrap();
+        remove_dependency(&name, deps);
+
+        assert_snapshot!(
+            doc.to_string(),
+            @r#"
+[project]
+dependencies = [
+    "numpy>=2.4.3",
+    # This is a comment about requests
+]
+"#
+        );
+    }
+
+    #[test]
+    fn remove_item_with_trailing_comment_last() {
+        // When the removed item itself has an end-of-line comment and is the last item,
+        // toml_edit stores the comment in the array trailing. The comment is preserved
+        // (as an own-line comment in the trailing section) but moves position since it
+        // can no longer be on the removed item's line.
+        let toml = r#"
+[project]
+dependencies = [
+    "requests>=2.32.5",
+    "numpy>=2.4.3", # comment on numpy
+]
+"#;
+        let mut doc: DocumentMut = toml.parse().unwrap();
+        let deps = doc["project"]["dependencies"]
+            .as_array_mut()
+            .expect("dependencies array");
+
+        let name = PackageName::from_str("numpy").unwrap();
+        remove_dependency(&name, deps);
+
+        assert_snapshot!(
+            doc.to_string(),
+            @r#"
+[project]
+dependencies = [
+    "requests>=2.32.5",
+    # comment on numpy
+]
+"#
+        );
+    }
+
+    #[test]
+    fn remove_item_with_trailing_comment_middle() {
+        // When the removed item has an end-of-line comment and is in the middle,
+        // toml_edit stores the comment in the next item's prefix. After removal,
+        // reformat_array_multiline repositions it as an own-line comment.
+        let toml = r#"
+[project]
+dependencies = [
+    "requests>=2.32.5",
+    "numpy>=2.4.3", # comment on numpy
+    "flask>=3.0.0",
+]
+"#;
+        let mut doc: DocumentMut = toml.parse().unwrap();
+        let deps = doc["project"]["dependencies"]
+            .as_array_mut()
+            .expect("dependencies array");
+
+        let name = PackageName::from_str("numpy").unwrap();
+        remove_dependency(&name, deps);
+
+        assert_snapshot!(
+            doc.to_string(),
+            @r#"
+[project]
+dependencies = [
+    "requests>=2.32.5",
+    # comment on numpy
+    "flask>=3.0.0",
+]
+"#
+        );
+    }
+
+    #[test]
+    fn remove_multiple_adjacent_matches_preserves_comment_order() {
+        let toml = r#"
+[project]
+dependencies = [
+    "iniconfig>=2.0.0", # comment on iniconfig
+    "typing-extensions>=4.0.0 ; python_version < '3.11'", # comment on first typing-extensions
+    "typing-extensions>=4.0.0 ; python_version >= '3.11'",
+    "sniffio>=1.3.0",
+]
+"#;
+        let mut doc: DocumentMut = toml.parse().unwrap();
+        let deps = doc["project"]["dependencies"]
+            .as_array_mut()
+            .expect("dependencies array");
+
+        let name = PackageName::from_str("typing-extensions").unwrap();
+        remove_dependency(&name, deps);
+
+        assert_snapshot!(
+            doc.to_string(),
+            @r#"
+[project]
+dependencies = [
+    "iniconfig>=2.0.0", # comment on iniconfig
+    # comment on first typing-extensions
+    "sniffio>=1.3.0",
+]
+"#
+        );
     }
 }
