@@ -223,6 +223,135 @@ jobs:
           ./uv run python -c ""
           ./uv run -p 3.13t python -c ""
 
+  integration-test-linux-aarch64:
+    name: "aarch64 linux"
+    timeout-minutes: 15
+    runs-on: github-ubuntu-24.04-aarch64-2
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-linux-aarch64-${{ inputs.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Install Python via uv"
+        run: |
+          ./uv python install -v 3.13.12
+
+      - name: "Verify platform detection"
+        run: |
+          python_path=$(./uv python find 3.13)
+          expected="$HOME/.local/share/uv/python/cpython-3.13-linux-aarch64-gnu/bin/python3.13"
+          if [[ "$python_path" != "$expected" ]]; then
+            echo "Expected: $expected"
+            echo "Found:    $python_path"
+            exit 1
+          fi
+
+      - name: "Create a virtual environment (stdlib)"
+        run: |
+          $(./uv python find 3.13) -m venv .venv-stdlib
+          .venv-stdlib/bin/python --version
+
+      - name: "Create a virtual environment (uv)"
+        run: |
+          ./uv venv -c -p 3.13.12 --managed-python
+
+      - name: "Check version"
+        run: |
+          .venv/bin/python --version
+
+      - name: "Check is aarch64"
+        run: |
+          .venv/bin/python -c "import platform; arch = platform.machine(); print(f'Architecture: {arch}'); assert arch == 'aarch64', f'Expected aarch64, got {arch}'"
+
+      - name: "Check install"
+        run: |
+          ./uv pip install -v anyio
+
+      - name: "Check uv run"
+        run: |
+          ./uv run python -c ""
+          ./uv run -p 3.13 python -c ""
+
+  # Regression test for https://github.com/astral-sh/uv/issues/18509
+  # Running an armv7 binary on an aarch64 host reproduces the scenario where
+  # /proc/cpuinfo reports aarch64-style features (no "vfp" flag), causing uv
+  # to incorrectly select the soft-float (gnueabi) Python variant.
+  integration-test-linux-armv7-on-aarch64:
+    name: "armv7 on aarch64 linux"
+    timeout-minutes: 30
+    runs-on: github-ubuntu-24.04-aarch64-4
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: "Install cross-compilation toolchain"
+        run: |
+          sudo dpkg --add-architecture armhf
+          # Pin existing sources to arm64 only so apt doesn't try to fetch armhf from them.
+          # Use DEB822 format (.sources) if present, otherwise fall back to .list files.
+          # Remove any third-party lists that can't handle multi-arch gracefully.
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
+          for f in /etc/apt/sources.list.d/*.sources; do
+            if [ -f "$f" ] && ! grep -q '^Architectures:' "$f"; then
+              sudo sed -i '/^Types:/a Architectures: arm64' "$f"
+            fi
+          done
+          for f in /etc/apt/sources.list.d/*.list; do
+            [ -f "$f" ] && sudo sed -i 's/^deb \([^[]\)/deb [arch=arm64] \1/' "$f"
+          done
+          echo "deb [arch=armhf] http://ports.ubuntu.com/ $(lsb_release -cs) main universe" | sudo tee /etc/apt/sources.list.d/armhf.list
+          echo "deb [arch=armhf] http://ports.ubuntu.com/ $(lsb_release -cs)-updates main universe" | sudo tee -a /etc/apt/sources.list.d/armhf.list
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-linux-gnueabihf libc6:armhf
+          rustup target add armv7-unknown-linux-gnueabihf
+
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+
+      - name: "Cross-compile uv for armv7"
+        env:
+          CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
+        run: cargo build --profile no-debug --target armv7-unknown-linux-gnueabihf --bin uv
+
+      - name: "Verify armv7 binary runs on aarch64"
+        run: |
+          file ./target/armv7-unknown-linux-gnueabihf/no-debug/uv
+          ./target/armv7-unknown-linux-gnueabihf/no-debug/uv --version
+
+      - name: "Install Python via uv"
+        run: |
+          ./target/armv7-unknown-linux-gnueabihf/no-debug/uv python install -v 3.13
+
+      - name: "Verify hard-float variant selected"
+        run: |
+          python_path=$(./target/armv7-unknown-linux-gnueabihf/no-debug/uv python find 3.13)
+          echo "Found: $python_path"
+          if [[ "$python_path" != *"gnueabihf"* ]]; then
+            echo "ERROR: Expected gnueabihf (hard-float) variant but got: $python_path"
+            echo "This indicates uv incorrectly detected soft-float on armv7l running on aarch64"
+            exit 1
+          fi
+
+      - name: "Create a virtual environment"
+        run: |
+          ./target/armv7-unknown-linux-gnueabihf/no-debug/uv venv -c -p 3.13 --managed-python
+
+      - name: "Check Python runs"
+        run: |
+          # The installed Python is an armv7 (gnueabihf) binary running on an aarch64 kernel.
+          # platform.machine() returns the kernel architecture (aarch64), not the userspace arch,
+          # since there is no linux32 personality set. We accept both armv7l/armv8l (containerized
+          # environments with modified uname) and aarch64 (bare metal).
+          .venv/bin/python -c "import platform; arch = platform.machine(); print(f'Architecture: {arch}'); assert arch in ('armv7l', 'armv8l', 'aarch64'), f'Unexpected architecture: {arch}'"
+
   integration-test-windows-aarch64-implicit:
     name: "aarch64 windows implicit"
     timeout-minutes: 10
