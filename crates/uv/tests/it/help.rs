@@ -942,6 +942,7 @@ fn help_unknown_subcommand() {
         export
         tree
         format
+        audit
         tool
         python
         pip
