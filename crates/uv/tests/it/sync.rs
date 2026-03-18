@@ -16338,3 +16338,103 @@ fn sync_centralized_env_switch_python() -> Result<()> {
 
     Ok(())
 }
+
+/// When `--active` is set and `VIRTUAL_ENV` points to a different environment,
+/// centralized mode should be skipped and the active environment should be used.
+#[test]
+fn sync_centralized_env_active_overrides() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#,
+    )?;
+
+    // Create a separate virtual environment to use as the active env.
+    let active_venv = context.temp_dir.child("my-active-env");
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(active_venv.path())
+        .arg("-p")
+        .arg("3.12"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: my-active-env
+    Activate with: source my-active-env/[BIN]/activate
+    ");
+
+    // Sync with --active and VIRTUAL_ENV pointing to the separate env.
+    // Centralized mode should be skipped; the active env should be used directly.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--active")
+        .arg("--preview-features")
+        .arg("centralized-envs")
+        .env("VIRTUAL_ENV", active_venv.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+
+    assert!(
+        fs_err::read_link(context.temp_dir.child(".venv").path()).is_err(),
+        "No .venv symlink should be created when --active overrides centralized mode"
+    );
+
+    Ok(())
+}
+
+/// When `--active` is set but `VIRTUAL_ENV` is not set, centralized mode should
+/// still apply normally.
+#[test]
+fn sync_centralized_env_active_without_virtual_env() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#,
+    )?;
+
+    // Sync with --active but no VIRTUAL_ENV set.
+    // Should fall through to centralized mode.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--active")
+        .arg("--preview-features")
+        .arg("centralized-envs")
+        .env_remove("VIRTUAL_ENV"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment `project-[HASH]` in the centralized store
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+
+    assert!(
+        context.temp_dir.child(".venv").path().is_symlink(),
+        ".venv should be a symlink when centralized mode is active"
+    );
+
+    Ok(())
+}
