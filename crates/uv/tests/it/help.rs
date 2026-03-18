@@ -27,8 +27,7 @@ fn help() {
       export                     Export the project's lockfile to an alternate format
       tree                       Display the project's dependency tree
       format                     Format Python code in the project
-      audit                      Audit the project's lockfile for known vulnerabilities and unmaintained
-                                 dependencies
+      audit                      Audit the project's dependencies
       tool                       Run and install commands provided by Python packages
       python                     Manage Python versions and installations
       pip                        Manage Python packages with a pip-compatible interface
@@ -110,7 +109,7 @@ fn help_flag() {
       export   Export the project's lockfile to an alternate format
       tree     Display the project's dependency tree
       format   Format Python code in the project
-      audit    Audit the project's lockfile for known vulnerabilities and unmaintained dependencies
+      audit    Audit the project's dependencies
       tool     Run and install commands provided by Python packages
       python   Manage Python versions and installations
       pip      Manage Python packages with a pip-compatible interface
@@ -190,7 +189,7 @@ fn help_short_flag() {
       export   Export the project's lockfile to an alternate format
       tree     Display the project's dependency tree
       format   Format Python code in the project
-      audit    Audit the project's lockfile for known vulnerabilities and unmaintained dependencies
+      audit    Audit the project's dependencies
       tool     Run and install commands provided by Python packages
       python   Manage Python versions and installations
       pip      Manage Python packages with a pip-compatible interface
@@ -1001,8 +1000,7 @@ fn help_with_global_option() {
       export                     Export the project's lockfile to an alternate format
       tree                       Display the project's dependency tree
       format                     Format Python code in the project
-      audit                      Audit the project's lockfile for known vulnerabilities and unmaintained
-                                 dependencies
+      audit                      Audit the project's dependencies
       tool                       Run and install commands provided by Python packages
       python                     Manage Python versions and installations
       pip                        Manage Python packages with a pip-compatible interface
@@ -1125,8 +1123,7 @@ fn help_with_no_pager() {
       export                     Export the project's lockfile to an alternate format
       tree                       Display the project's dependency tree
       format                     Format Python code in the project
-      audit                      Audit the project's lockfile for known vulnerabilities and unmaintained
-                                 dependencies
+      audit                      Audit the project's dependencies
       tool                       Run and install commands provided by Python packages
       python                     Manage Python versions and installations
       pip                        Manage Python packages with a pip-compatible interface
