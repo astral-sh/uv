@@ -34,8 +34,9 @@ impl Certificates {
 
     /// Load custom CA certificates from `SSL_CERT_FILE` and `SSL_CERT_DIR` environment variables.
     ///
-    /// Delegates path loading to [`rustls_native_certs::load_certs_from_paths`] while preserving
-    /// uv's compatibility behavior for invalid environment variable values.
+    /// Returns `None` if neither variable is set, if the referenced files or directories are
+    /// missing or inaccessible, or if no valid certificates are found (with a warning in each
+    /// case). Delegates path loading to [`rustls_native_certs::load_certs_from_paths`].
     pub(crate) fn from_env() -> Option<Self> {
         let mut certs = Self::default();
         let mut has_source = false;
@@ -59,7 +60,8 @@ impl Certificates {
 
     /// Load certificates from the value of `SSL_CERT_FILE`.
     ///
-    /// Returns `None` if the value is empty.
+    /// Returns `None` if the value is empty, the path does not refer to an accessible file,
+    /// or the file contains no valid certificates.
     fn from_ssl_cert_file(ssl_cert_file: &std::ffi::OsStr) -> Option<Self> {
         if ssl_cert_file.is_empty() {
             return None;
@@ -75,7 +77,15 @@ impl Certificates {
                         file.simplified_display().cyan()
                     );
                 }
-                Some(Self::from(result))
+                let certs = Self::from(result);
+                if certs.0.is_empty() {
+                    warn_user_once!(
+                        "Ignoring `SSL_CERT_FILE`. No certificates found in: {}.",
+                        file.simplified_display().cyan()
+                    );
+                    return None;
+                }
+                Some(certs)
             }
             Ok(_) => {
                 warn_user_once!(
@@ -106,7 +116,8 @@ impl Certificates {
     /// The value may include multiple entries, separated by a platform-specific delimiter (`:` on
     /// Unix, `;` on Windows).
     ///
-    /// Returns `None` if the value is empty.
+    /// Returns `None` if the value is empty, no listed directories exist, or no valid
+    /// certificates are found.
     fn from_ssl_cert_dir(ssl_cert_dir: &std::ffi::OsStr) -> Option<Self> {
         if ssl_cert_dir.is_empty() {
             return None;
@@ -149,8 +160,8 @@ impl Certificates {
         }
 
         let mut certs = Self::default();
-        for dir in existing {
-            let result = Self::from_paths(None, Some(&dir));
+        for dir in &existing {
+            let result = Self::from_paths(None, Some(dir));
             for err in &result.errors {
                 warn_user_once!(
                     "Failed to load `SSL_CERT_DIR` ({}): {err}",
@@ -158,6 +169,18 @@ impl Certificates {
                 );
             }
             certs.merge(Self::from(result));
+        }
+
+        if certs.0.is_empty() {
+            warn_user_once!(
+                "Ignoring `SSL_CERT_DIR`. No certificates found in: {}.",
+                existing
+                    .iter()
+                    .map(Simplified::simplified_display)
+                    .join(", ")
+                    .cyan()
+            );
+            return None;
         }
 
         Some(certs)
@@ -260,6 +283,16 @@ mod tests {
     }
 
     #[test]
+    fn test_from_ssl_cert_file_no_valid_certs_returns_none() {
+        let dir = tempfile::tempdir().unwrap();
+        let cert_path = dir.path().join("empty.pem");
+        fs_err::write(&cert_path, "not a certificate").unwrap();
+
+        let certs = Certificates::from_ssl_cert_file(cert_path.as_os_str());
+        assert!(certs.is_none());
+    }
+
+    #[test]
     fn test_from_ssl_cert_dir_empty_value_returns_none() {
         let certs = Certificates::from_ssl_cert_dir(OsString::new().as_os_str());
         assert!(certs.is_none());
@@ -276,13 +309,12 @@ mod tests {
     }
 
     #[test]
-    fn test_from_ssl_cert_dir_empty_existing_returns_some() {
+    fn test_from_ssl_cert_dir_empty_existing_returns_none() {
         let dir = tempfile::tempdir().unwrap();
         let cert_dirs = std::env::join_paths([dir.path()]).unwrap();
 
         let certs = Certificates::from_ssl_cert_dir(cert_dirs.as_os_str());
-        assert!(certs.is_some());
-        assert_eq!(certs.unwrap().iter().count(), 0);
+        assert!(certs.is_none());
     }
 
     #[test]

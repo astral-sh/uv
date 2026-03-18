@@ -469,7 +469,10 @@ impl<'a> BaseClientBuilder<'a> {
         }
 
         // Load custom CA certificates from `SSL_CERT_FILE` and `SSL_CERT_DIR`.
-        // When set, these override the default certificate source entirely.
+        // When set and containing valid certificates, these override the default
+        // certificate source entirely. If the files or directories are missing,
+        // inaccessible, or yield no certificates, they are ignored with a warning
+        // and the default source is used instead.
         //
         // Convert to reqwest certificates once, rather than cloning the raw DER
         // bytes for each client.
@@ -526,8 +529,9 @@ impl<'a> BaseClientBuilder<'a> {
 
         // Configure the certificate source.
         //
-        // `SSL_CERT_FILE` and `SSL_CERT_DIR` override the default certificate source entirely,
-        // matching the conventions of OpenSSL, Go, and `rustls-native-certs`.
+        // `SSL_CERT_FILE` and `SSL_CERT_DIR` override the default certificate source when they
+        // contain valid certificates. If set but empty or unparseable, they are ignored with a
+        // warning.
         let client_builder = if let Some(custom_certs) = custom_certs {
             client_builder.tls_certs_only(custom_certs)
         } else if self.system_certs {
