@@ -78,6 +78,7 @@ insta = { workspace = true }
 rcgen = { workspace = true }
 regex = { workspace = true }
 rustls = { workspace = true }
+temp-env = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-rustls = { workspace = true }
