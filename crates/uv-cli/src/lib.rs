@@ -1183,6 +1183,9 @@ pub enum ProjectCommand {
     )]
     Format(FormatArgs),
     /// Audit the project's dependencies.
+    ///
+    /// Dependencies are audited for known vulnerabilities, as well
+    /// as 'adverse' statuses such as deprecation and quarantine.
     #[command(
         after_help = "Use `uv help audit` for more details.",
         after_long_help = ""
