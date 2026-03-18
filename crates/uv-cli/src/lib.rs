@@ -1184,8 +1184,6 @@ pub enum ProjectCommand {
     Format(FormatArgs),
     /// Audit the project's lockfile for known vulnerabilities and unmaintained dependencies.
     #[command(
-        // NOTE: Hidden while in development.
-        hide = true,
         after_help = "Use `uv help audit` for more details.",
         after_long_help = ""
     )]
