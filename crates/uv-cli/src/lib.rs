@@ -1182,10 +1182,11 @@ pub enum ProjectCommand {
         after_long_help = ""
     )]
     Format(FormatArgs),
-    /// Audit the project's lockfile for known vulnerabilities and unmaintained dependencies.
+    /// Audit the project's dependencies.
+    ///
+    /// Dependencies are audited for known vulnerabilities, as well
+    /// as 'adverse' statuses such as deprecation and quarantine.
     #[command(
-        // NOTE: Hidden while in development.
-        hide = true,
         after_help = "Use `uv help audit` for more details.",
         after_long_help = ""
     )]
