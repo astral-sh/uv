@@ -168,18 +168,22 @@ impl Certificates {
         load_certs_from_paths(file, dir)
     }
 
+    /// Remove duplicate certificates, sorting by DER bytes.
     fn dedup(&mut self) {
         self.0
             .sort_unstable_by(|left, right| left.as_ref().cmp(right.as_ref()));
         self.0.dedup();
     }
 
+    /// Merge another set of certificates into this one.
+    ///
+    /// After merging, duplicates are removed.
     fn merge(&mut self, other: Self) {
         self.0.extend(other.0);
         self.dedup();
     }
 
-    /// Convert certificates to reqwest certificate objects.
+    /// Convert certificates to reqwest [`Certificate`] objects.
     pub(crate) fn to_reqwest_certs(&self) -> Vec<Certificate> {
         self.0
             .iter()
