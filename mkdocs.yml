@@ -258,6 +258,8 @@ nav:
           - reference/policies/index.md
           - Versioning: reference/policies/versioning.md
           - Platform support: reference/policies/platforms.md
+          - Python support: reference/policies/python.md
+          - Rust support: reference/policies/rust.md
           - License: reference/policies/license.md
 validation:
   omitted_files: warn
