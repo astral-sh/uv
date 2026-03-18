@@ -14660,16 +14660,15 @@ dependencies = [
 requires-dist = [{ name = "iniconfig", specifier = "!=2.0.0" }]
     "#)?;
 
-    // BUG(#12276): `uv lock --check` should detect that iniconfig 2.0.0 violates
-    // the `!=2.0.0` specifier, but currently it does not. When the bug is fixed,
-    // this snapshot should change to `success: false` / `exit_code: 1`.
+    // `uv lock --check` detects that iniconfig 2.0.0 violates the `!=2.0.0` specifier.
     uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--check` was provided. To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
@@ -14746,16 +14745,15 @@ dependencies = [
 requires-dist = [{ name = "iniconfig", specifier = "<2" }]
     "#)?;
 
-    // BUG(#12276): `uv lock --check` should detect that iniconfig 2.0.0 violates
-    // the `<2` specifier, but currently it does not. When the bug is fixed,
-    // this snapshot should change to `success: false` / `exit_code: 1`.
+    // `uv lock --check` detects that iniconfig 2.0.0 violates the `<2` specifier.
     uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--check` was provided. To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
@@ -14861,9 +14859,262 @@ wheels = [
 ]
     "#)?;
 
-    // BUG(#12276): `uv lock --check` should detect that idna 3.6 violates
-    // the `<3.4` constraint dependency, but currently it does not. When the
-    // bug is fixed, this snapshot should change to `success: false` / `exit_code: 1`.
+    // `uv lock --check` detects that idna 3.6 violates the `<3.4` constraint dependency.
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--check` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
+/// Test that `uv lock --check` does not spuriously flag a valid forked lockfile
+/// where the same package has different versions under different fork markers.
+///
+/// When `markupsafe<2 ; sys_platform != 'win32'` and
+/// `markupsafe==2.0.0 ; sys_platform == 'win32'` are both in `dependencies`,
+/// the lockfile legitimately contains `markupsafe 1.1.1` (non-win32 fork) and
+/// `markupsafe 2.0.0` (win32 fork). The specifier validation must not check
+/// `markupsafe 2.0.0` against the `<2` specifier since that specifier only
+/// applies to the non-win32 fork.
+#[test]
+fn check_locked_version_valid_forked_resolution() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["markupsafe<2 ; sys_platform != 'win32'", "markupsafe==2.0.0 ; sys_platform == 'win32'"]
+        "#,
+    )?;
+
+    // Generate a valid forked lock file.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    // The valid forked lockfile should pass `--check` without re-resolving.
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Test that `uv lock --locked --offline` accepts a valid forked dependency-group lockfile
+/// without trying to re-resolve it.
+///
+/// Before the fix, the dependency-group specifier check ignored the dependency edge marker,
+/// so it incorrectly treated `markupsafe 1.1.1` (non-Windows) as violating the Windows-only
+/// `==2.0.0` requirement. That caused `--locked` to re-resolve, which fails here because the
+/// cache is cleared and `--offline` is provided.
+#[test]
+fn check_locked_version_valid_forked_dependency_group_resolution_offline_locked() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["markupsafe<2 ; sys_platform != 'win32'", "markupsafe==2.0.0 ; sys_platform == 'win32'"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    fs_err::remove_dir_all(&context.cache_dir)?;
+    context.cache_dir.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Test that `uv lock --check` detects when a locked version violates a
+/// specifier in `dependency-groups` (dev dependencies).
+///
+/// When the lockfile is tampered so that a dev dependency's locked version
+/// does not satisfy the specifier recorded in `package.metadata.requires-dev`,
+/// `uv lock --check` should flag the lockfile as needing an update.
+#[test]
+fn check_locked_version_violates_dependency_group_specifier() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["iniconfig>=2"]
+        "#,
+    )?;
+
+    // Generate a valid lock file.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Verify the lock is valid.
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Tamper with the lock file: replace iniconfig 2.0.0 with 1.1.1 which
+    // violates `>=2` from the dev dependency group. Keep the metadata specifier
+    // intact so that metadata-matching checks pass — only the version check
+    // should catch this.
+    let lock = context.temp_dir.child("uv.lock");
+    lock.write_str(r#"
+version = 1
+revision = 3
+requires-python = ">=3.12"
+
+[options]
+exclude-newer = "2024-03-25T00:00:00Z"
+
+[[package]]
+name = "iniconfig"
+version = "1.1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/23/a2/97899f6bd0e7c613571f83e1afc724ac9a43b1090e00f4b154a803e4ceb0/iniconfig-1.1.1.tar.gz", hash = "sha256:bc3af051d7d14b2ee5ef9969666def0cd1a000e121eaea580d4a313df4b37f32", size = 8104, upload-time = "2021-03-22T07:41:06.562Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", hash = "sha256:011e24c64b7f47f6ebd835bb12a743f2fbe9a26d4cecaa7f53bc4f35ee9da8b3", size = 4990, upload-time = "2021-03-22T07:41:04.667Z" },
+]
+
+[[package]]
+name = "project"
+version = "0.1.0"
+source = { virtual = "." }
+
+[package.dev-dependencies]
+dev = [
+    { name = "iniconfig" },
+]
+
+[package.metadata]
+
+[package.metadata.requires-dev]
+dev = [{ name = "iniconfig", specifier = ">=2" }]
+    "#)?;
+
+    // `uv lock --check` should detect that iniconfig 1.1.1 violates the `>=2`
+    // specifier from the dev dependency group.
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--check` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
+/// Test that `uv lock --check` detects a marker-scoped specifier violation in a local package.
+///
+/// The local package `a` legitimately resolves to `markupsafe 1.1.1` on non-Windows and
+/// `markupsafe 2.0.0` on Windows. If the non-Windows edge is tampered to point to
+/// `markupsafe 2.1.5`, `uv lock --check` should reject the lockfile because the
+/// `sys_platform != 'win32'` dependency no longer satisfies `<2`.
+#[test]
+fn check_locked_version_violates_marker_scoped_local_dependency_specifier() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let package_dir = context.temp_dir.child("a");
+    package_dir.create_dir_all()?;
+    package_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["markupsafe<2 ; sys_platform != 'win32'", "markupsafe==2.0.0 ; sys_platform == 'win32'"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv.sources]
+        a = { path = "./a" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
     uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
     success: true
     exit_code: 0
@@ -14871,6 +15122,45 @@ wheels = [
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    let lock = lock.replace(
+        r#"{ name = "markupsafe", version = "1.1.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32'" }"#,
+        r#"{ name = "markupsafe", version = "2.1.5", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32'" }"#,
+    );
+    let lock = lock.replace(
+        indoc! {r#"
+        [[package]]
+        name = "markupsafe"
+        version = "1.1.1"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+            "sys_platform != 'win32'",
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/b9/2e/64db92e53b86efccfaea71321f597fa2e1b2bd3853d8ce658568f7a13094/MarkupSafe-1.1.1.tar.gz", hash = "sha256:29872e92839765e546828bb7754a68c418d927cd064fd4708fab9fe9c8bb116b", size = 19151, upload-time = "2019-02-24T01:05:32.989Z" }
+        "#},
+        indoc! {r#"
+        [[package]]
+        name = "markupsafe"
+        version = "2.1.5"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+            "sys_platform != 'win32'",
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/87/5b/aae44c6655f3801e81aa3eef09dbbf012431987ba564d7231722f68df02d/MarkupSafe-2.1.5.tar.gz", hash = "sha256:d283d37a890ba4c1ae73ffadf8046435c76e7bc2247bbb63c00bd1a709c6544b", size = 19384, upload-time = "2024-02-02T16:31:22.863Z" }
+        "#},
+    );
+    context.temp_dir.child("uv.lock").write_str(&lock)?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--check` was provided. To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
