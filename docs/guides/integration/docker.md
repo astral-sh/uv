@@ -474,6 +474,9 @@ For example:
 FROM python:3.12-slim AS builder
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
+# Use the system Python across both stages
+ENV UV_PYTHON_DOWNLOADS=0
+
 # Change the working directory to the `app` directory
 WORKDIR /app
 
@@ -493,7 +496,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 FROM python:3.12-slim
 
 # Copy the environment, but not the source code
-COPY --from=builder --chown=app:app /app/.venv /app/.venv
+COPY --from=builder /app/.venv /app/.venv
 
 # Run the application
 CMD ["/app/.venv/bin/hello"]
