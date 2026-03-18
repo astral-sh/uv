@@ -250,6 +250,37 @@ impl TestClient {
         vars
     }
 
+    /// Assert that an HTTPS connection to a public host succeeds.
+    #[cfg(feature = "test-pypi")]
+    async fn expect_https_connect_succeeds_for_host(&self, host: &str) {
+        let url = DisplaySafeUrl::from_str(&format!("https://{host}/")).unwrap();
+        let vars = self.ssl_vars();
+        let system_certs = self.system_certs;
+        async_with_vars(vars, async {
+            let response = send_request_to(&url, system_certs).await;
+            assert!(
+                response.is_ok(),
+                "expected successful response to {host}, got: {:?}",
+                response.err()
+            );
+        })
+        .await;
+    }
+
+    /// Assert that an HTTPS connection to a public host fails with a TLS
+    /// error on the client side.
+    #[cfg(feature = "test-pypi")]
+    async fn expect_https_connect_fails_for_host(&self, host: &str) {
+        let url = DisplaySafeUrl::from_str(&format!("https://{host}/")).unwrap();
+        let vars = self.ssl_vars();
+        let system_certs = self.system_certs;
+        async_with_vars(vars, async {
+            let response = send_request_to(&url, system_certs).await;
+            assert_connection_error(&response);
+        })
+        .await;
+    }
+
     /// Start an HTTPS server, send a request inside `async_with_vars`, and
     /// hand the response + server task to `check`.
     async fn run_https<F, Fut>(&self, cert: &TestCertificate, check: F)
@@ -299,6 +330,14 @@ async fn send_request(
     system_certs: bool,
 ) -> Result<reqwest::Response, reqwest_middleware::Error> {
     let url = DisplaySafeUrl::from_str(&format!("https://{addr}")).unwrap();
+    send_request_to(&url, system_certs).await
+}
+
+/// Send a GET request to an arbitrary URL using a fresh registry client.
+async fn send_request_to(
+    url: &DisplaySafeUrl,
+    system_certs: bool,
+) -> Result<reqwest::Response, reqwest_middleware::Error> {
     let cache = Cache::temp().unwrap().init().await.unwrap();
     let base = BaseClientBuilder::default()
         .no_retry_delay(true)
@@ -307,8 +346,8 @@ async fn send_request(
     client
         .cached_client()
         .uncached()
-        .for_host(&url)
-        .get(Url::from(url))
+        .for_host(url)
+        .get(Url::from(url.clone()))
         .send()
         .await
 }
@@ -559,21 +598,6 @@ async fn test_system_certs_with_ssl_cert_file_valid() -> Result<()> {
     Ok(())
 }
 
-/// When `system_certs` is enabled, `SSL_CERT_FILE` still overrides the
-/// certificate source — a wrong cert is rejected instead of falling back to
-/// the system roots.
-#[tokio::test]
-async fn test_system_certs_with_ssl_cert_file_wrong_cert_rejected() -> Result<()> {
-    let cert_a = TestCertificate::new()?;
-    let cert_b = TestCertificate::new()?;
-    client()
-        .system_certs(true)
-        .ssl_cert_file(&cert_a.trust_path)
-        .expect_https_connect_fails(&cert_b)
-        .await;
-    Ok(())
-}
-
 /// When `system_certs` is enabled, `SSL_CERT_DIR` still overrides the
 /// certificate source.
 #[tokio::test]
@@ -588,18 +612,58 @@ async fn test_system_certs_with_ssl_cert_dir_valid() -> Result<()> {
     Ok(())
 }
 
-/// When `system_certs` is enabled, `SSL_CERT_DIR` still overrides the
-/// certificate source — a wrong cert is rejected instead of falling back to
-/// the system roots.
+/// Webpki roots include the CA for pypi.org, so a connection succeeds without
+/// any custom configuration.
+#[cfg(feature = "test-pypi")]
 #[tokio::test]
-async fn test_system_certs_with_ssl_cert_dir_wrong_cert_rejected() -> Result<()> {
-    let cert_a = TestCertificate::new()?;
-    let cert_b = TestCertificate::new()?;
-    let dir = cert_a.ca_pem_dir();
+async fn test_webpki_roots_trusts_pypi() -> Result<()> {
+    client()
+        .expect_https_connect_succeeds_for_host("pypi.org")
+        .await;
+    Ok(())
+}
+
+/// System certificate roots include the CA for pypi.org, so a connection
+/// succeeds when `system_certs` is enabled.
+#[cfg(feature = "test-pypi")]
+#[tokio::test]
+async fn test_system_certs_trusts_pypi() -> Result<()> {
+    client()
+        .system_certs(true)
+        .expect_https_connect_succeeds_for_host("pypi.org")
+        .await;
+    Ok(())
+}
+
+/// When `system_certs` is enabled and `SSL_CERT_FILE` is set to a self-signed
+/// CA, a public host (whose CA is in the system store but not in the override
+/// file) is rejected — proving that `SSL_CERT_FILE` replaces rather than
+/// supplements the system roots.
+#[cfg(feature = "test-pypi")]
+#[tokio::test]
+async fn test_system_certs_with_ssl_cert_file_replaces_system_roots() -> Result<()> {
+    let cert = TestCertificate::new()?;
+    client()
+        .system_certs(true)
+        .ssl_cert_file(&cert.trust_path)
+        .expect_https_connect_fails_for_host("pypi.org")
+        .await;
+    Ok(())
+}
+
+/// When `system_certs` is enabled and `SSL_CERT_DIR` points to a directory
+/// with only a self-signed CA, a public host (whose CA is in the system store
+/// but not in the override directory) is rejected — proving that `SSL_CERT_DIR`
+/// replaces rather than supplements the system roots.
+#[cfg(feature = "test-pypi")]
+#[tokio::test]
+async fn test_system_certs_with_ssl_cert_dir_replaces_system_roots() -> Result<()> {
+    let cert = TestCertificate::new()?;
+    let dir = cert.ca_pem_dir();
     client()
         .system_certs(true)
         .ssl_cert_dir(dir.path())
-        .expect_https_connect_fails(&cert_b)
+        .expect_https_connect_fails_for_host("pypi.org")
         .await;
     Ok(())
 }
