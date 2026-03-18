@@ -179,6 +179,48 @@ jobs:
         run: |
           ./uv pip install -v anyio
 
+  integration-test-linux-armv7-on-aarch64:
+    name: "armv7 on aarch64 linux"
+    timeout-minutes: 20
+    runs-on: github-ubuntu-24.04-aarch64-4
+    env:
+      UV_PYTHON_INSTALL_DIR: ${{ github.workspace }}/.python
+
+    steps:
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-linux-armv7-gnueabihf-${{ inputs.sha }}
+
+      - name: "Install armhf runtime"
+        run: |
+          sudo dpkg --add-architecture armhf
+          sudo apt-get update
+          sudo apt-get install -y libc6:armhf libgcc-s1:armhf
+
+      - name: "Prepare binary"
+        run: |
+          chmod +x ./uv
+          chmod +x ./uvx
+
+      - name: "Install Python via uv"
+        run: |
+          ./uv python install -v 3.13.12
+
+      - name: "Verify hard-float variant selected"
+        run: |
+          python_path=$(./uv python find 3.13)
+          expected="$GITHUB_WORKSPACE/.python/cpython-3.13-linux-armv7-gnueabihf/bin/python3.13"
+          if [[ "$python_path" != "$expected" ]]; then
+            echo "Expected: $expected"
+            echo "Found:    $python_path"
+            exit 1
+          fi
+
+      - name: "Create a virtual environment"
+        run: |
+          ./uv venv -c -p 3.13.12 --managed-python --no-python-downloads
+
   integration-test-free-threaded-windows-x86_64:
     name: "free-threaded on windows"
     timeout-minutes: 10
