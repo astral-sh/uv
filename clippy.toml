@@ -11,6 +11,7 @@ doc-valid-idents = [
   "PowerShell",
   "CycloneDX",
   "SemVer",
+  "AArch64",
   "UV_DEV",
   "UV_FROZEN",
   "UV_ISOLATED",
