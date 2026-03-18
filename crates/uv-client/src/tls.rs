@@ -19,9 +19,16 @@ pub(crate) struct Certificates(Vec<CertificateDer<'static>>);
 impl Certificates {
     /// Load the bundled Mozilla root certificates.
     ///
-    /// Each [`CertificateDer`] in [`webpki_root_certs::TLS_SERVER_ROOT_CERTS`] borrows from static
-    /// data, so cloning into the [`Vec`] only copies the fat pointer, not the certificate bytes.
+    /// We use `webpki-root-certs` (which gives us [`CertificateDer`] values) rather than the more
+    /// space-efficient `webpki-roots` (pre-parsed [`TrustAnchor`] values) because reqwest's
+    /// [`ClientBuilder::tls_certs_only`] accepts [`Certificate`] values built from DER bytes. Using
+    /// `webpki-roots` would require constructing a [`rustls::ClientConfig`] manually and passing it
+    /// via the semver-unstable [`ClientBuilder::tls_backend_preconfigured`], which also means
+    /// taking ownership of ALPN, SNI, certificate verification, and mTLS configuration that reqwest
+    /// otherwise handles for us.
     pub(crate) fn webpki_roots() -> Self {
+        // Each [`CertificateDer`] in [`webpki_root_certs::TLS_SERVER_ROOT_CERTS`] borrows from static
+        // data, so cloning into the [`Vec`] only copies the fat pointer, not the certificate bytes.
         Self(webpki_root_certs::TLS_SERVER_ROOT_CERTS.to_vec())
     }
 
