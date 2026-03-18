@@ -201,7 +201,11 @@ pub(crate) async fn venv(
     if centralized {
         writeln!(
             printer.stderr(),
-            "Creating virtual environment {with_seed}in the centralized store",
+            "Creating virtual environment `{}` {with_seed}in the centralized store",
+            path.file_name()
+                .unwrap_or(path.as_os_str())
+                .to_string_lossy()
+                .cyan(),
         )?;
     } else {
         writeln!(

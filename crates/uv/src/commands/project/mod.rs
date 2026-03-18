@@ -1583,7 +1583,11 @@ impl ProjectEnvironment {
                 if centralized {
                     writeln!(
                         printer.stderr(),
-                        "Creating virtual environment in the centralized store"
+                        "Creating virtual environment `{}` in the centralized store",
+                        root.file_name()
+                            .unwrap_or(root.as_os_str())
+                            .to_string_lossy()
+                            .cyan(),
                     )?;
                 } else {
                     writeln!(

@@ -1992,7 +1992,7 @@ fn create_venv_centralized() {
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment in the centralized store
+    Creating virtual environment `project-[HASH]` in the centralized store
     Activate with: source .venv/[BIN]/activate
     "
     );
@@ -2037,7 +2037,7 @@ fn create_venv_centralized_already_exists() {
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment in the centralized store
+    Creating virtual environment `project-[HASH]` in the centralized store
     Activate with: source .venv/[BIN]/activate
     "
     );
@@ -2054,7 +2054,7 @@ fn create_venv_centralized_already_exists() {
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment in the centralized store
+    Creating virtual environment `project-[HASH]` in the centralized store
     error: Failed to create virtual environment
       Caused by: A virtual environment already exists in the centralized environment store. Use `--clear` to replace it
     "
@@ -2073,7 +2073,7 @@ fn create_venv_centralized_already_exists() {
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment in the centralized store
+    Creating virtual environment `project-[HASH]` in the centralized store
     Activate with: source .venv/[BIN]/activate
     "
     );

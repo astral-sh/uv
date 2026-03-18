@@ -15996,7 +15996,7 @@ fn sync_centralized_env() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment in the centralized store
+    Creating virtual environment `project-[HASH]` in the centralized store
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -16173,7 +16173,7 @@ fn sync_centralized_env_no_collision() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment in the centralized store
+    Creating virtual environment `my-project-[HASH]` in the centralized store
     Resolved 1 package in [TIME]
     Checked in [TIME]
     ");
@@ -16190,7 +16190,7 @@ fn sync_centralized_env_no_collision() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment in the centralized store
+    Creating virtual environment `my-project-[HASH]` in the centralized store
     Resolved 1 package in [TIME]
     Checked in [TIME]
     ");
@@ -16240,7 +16240,7 @@ fn sync_centralized_env_virtual_workspace() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment in the centralized store
+    Creating virtual environment `temp-[HASH]` in the centralized store
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -16283,7 +16283,7 @@ fn sync_centralized_env_switch_python() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment in the centralized store
+    Creating virtual environment `project-[HASH]` in the centralized store
     Resolved 1 package in [TIME]
     Checked in [TIME]
     ");
@@ -16302,7 +16302,7 @@ fn sync_centralized_env_switch_python() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
-    Creating virtual environment in the centralized store
+    Creating virtual environment `project-[HASH]` in the centralized store
     Resolved 1 package in [TIME]
     Checked in [TIME]
     ");
