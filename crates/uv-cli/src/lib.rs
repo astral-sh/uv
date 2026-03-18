@@ -854,10 +854,6 @@ pub struct SelfUpdateArgs {
     /// Run without performing the update.
     #[arg(long)]
     pub dry_run: bool,
-
-    /// Suppress output when no update is available.
-    #[arg(long)]
-    pub quiet_if_unchanged: bool,
 }
 
 #[derive(Args)]

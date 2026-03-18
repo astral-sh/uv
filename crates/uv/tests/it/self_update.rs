@@ -59,10 +59,25 @@ fn test_self_update_offline_error() {
 }
 
 #[test]
-fn test_self_update_offline_error_with_quiet_if_unchanged() {
+fn test_self_update_offline_error_with_quiet() {
     let context = uv_test::test_context!("3.12");
 
-    uv_snapshot!(context.self_update().arg("--offline").arg("--quiet-if-unchanged"),
+    uv_snapshot!(context.self_update().arg("--offline").arg("--quiet"),
+    @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Self-update is not possible because network connectivity is disabled (i.e., with `--offline`)
+    ");
+}
+
+#[test]
+fn test_self_update_offline_error_with_double_quiet() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.self_update().arg("--offline").arg("--quiet").arg("--quiet"),
     @r"
     success: false
     exit_code: 1

@@ -1,4 +1,4 @@
-use std::fmt::Write;
+use std::fmt::{Display, Write};
 
 use anyhow::Result;
 use axoupdater::{AxoUpdater, AxoupdateError, UpdateRequest};
@@ -16,20 +16,15 @@ pub(crate) async fn self_update(
     version: Option<String>,
     token: Option<String>,
     dry_run: bool,
-    quiet_if_unchanged: bool,
     printer: Printer,
     client_builder: BaseClientBuilder<'_>,
 ) -> Result<ExitStatus> {
     if client_builder.is_offline() {
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format_args!(
-                "{}{} Self-update is not possible because network connectivity is disabled (i.e., with `--offline`)",
-                "error".red().bold(),
-                ":".bold()
-            )
-        )?;
+        write_error(format_args!(
+            "{}{} Self-update is not possible because network connectivity is disabled (i.e., with `--offline`)",
+            "error".red().bold(),
+            ":".bold()
+        ));
         return Ok(ExitStatus::Failure);
     }
 
@@ -44,20 +39,16 @@ pub(crate) async fn self_update(
     // uv was likely installed via a package manager.
     let Ok(updater) = updater.load_receipt() else {
         debug!("No receipt found; assuming uv was installed via a package manager");
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format_args!(
-                concat!(
-                    "{}{} Self-update is only available for uv binaries installed via the standalone installation scripts.",
-                    "\n",
-                    "\n",
-                    "If you installed uv with pip, brew, or another package manager, update uv with `pip install --upgrade`, `brew upgrade`, or similar."
-                ),
-                "error".red().bold(),
-                ":".bold()
-            )
-        )?;
+        write_error(format_args!(
+            concat!(
+                "{}{} Self-update is only available for uv binaries installed via the standalone installation scripts.",
+                "\n",
+                "\n",
+                "If you installed uv with pip, brew, or another package manager, update uv with `pip install --upgrade`, `brew upgrade`, or similar."
+            ),
+            "error".red().bold(),
+            ":".bold()
+        ));
         return Ok(ExitStatus::Error);
     };
 
@@ -76,34 +67,29 @@ pub(crate) async fn self_update(
         let current_exe = std::env::current_exe()?;
         let receipt_prefix = updater.install_prefix_root()?;
 
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format_args!(
-                concat!(
-                    "{}{} Self-update is only available for uv binaries installed via the standalone installation scripts.",
-                    "\n",
-                    "\n",
-                    "The current executable is at `{}` but the standalone installer was used to install uv to `{}`. Are multiple copies of uv installed?"
-                ),
-                "error".red().bold(),
-                ":".bold(),
-                current_exe.simplified_display().bold().cyan(),
-                receipt_prefix.simplified_display().bold().cyan()
-            )
-        )?;
+        write_error(format_args!(
+            concat!(
+                "{}{} Self-update is only available for uv binaries installed via the standalone installation scripts.",
+                "\n",
+                "\n",
+                "The current executable is at `{}` but the standalone installer was used to install uv to `{}`. Are multiple copies of uv installed?"
+            ),
+            "error".red().bold(),
+            ":".bold(),
+            current_exe.simplified_display().bold().cyan(),
+            receipt_prefix.simplified_display().bold().cyan()
+        ));
         return Ok(ExitStatus::Error);
     }
 
-    if !quiet_if_unchanged {
-        writeln!(
-            printer.stderr(),
-            "{}",
+    if shows_progress(printer) {
+        write_message(
+            printer,
             format_args!(
                 "{}{} Checking for updates...",
                 "info".cyan().bold(),
                 ":".bold()
-            )
+            ),
         )?;
     }
 
@@ -127,23 +113,22 @@ pub(crate) async fn self_update(
                     format!("v{version}")
                 }
             };
-            writeln!(
-                printer.stderr(),
-                "Would update uv from {} to {}",
-                format!("v{}", env!("CARGO_PKG_VERSION")).bold().white(),
-                version.bold().white(),
+            write_message(
+                printer,
+                format_args!(
+                    "Would update uv from {} to {}",
+                    format!("v{}", env!("CARGO_PKG_VERSION")).bold().white(),
+                    version.bold().white(),
+                ),
             )?;
-        } else {
-            if !quiet_if_unchanged {
-                writeln!(
-                    printer.stderr(),
-                    "{}",
-                    format_args!(
-                        "You're on the latest version of uv ({})",
-                        format!("v{}", env!("CARGO_PKG_VERSION")).bold().white()
-                    )
-                )?;
-            }
+        } else if shows_no_update(printer) {
+            write_message(
+                printer,
+                format_args!(
+                    "You're on the latest version of uv ({})",
+                    format!("v{}", env!("CARGO_PKG_VERSION")).bold().white()
+                ),
+            )?;
         }
         return Ok(ExitStatus::Success);
     }
@@ -172,9 +157,8 @@ pub(crate) async fn self_update(
                 format!("to {}", format!("v{}", result.new_version).bold().cyan())
             };
 
-            writeln!(
-                printer.stderr(),
-                "{}",
+            write_message(
+                printer,
                 format_args!(
                     "{}{} {direction} uv {}! {}",
                     "success".green().bold(),
@@ -185,36 +169,30 @@ pub(crate) async fn self_update(
                         result.new_version_tag
                     )
                     .cyan()
-                )
+                ),
             )?;
         }
-        Ok(None) => {
-            if !quiet_if_unchanged {
-                writeln!(
-                    printer.stderr(),
-                    "{}",
-                    format_args!(
-                        "{}{} You're on the latest version of uv ({})",
-                        "success".green().bold(),
-                        ":".bold(),
-                        format!("v{}", env!("CARGO_PKG_VERSION")).bold().cyan()
-                    )
-                )?;
-            }
+        Ok(None) if shows_no_update(printer) => {
+            write_message(
+                printer,
+                format_args!(
+                    "{}{} You're on the latest version of uv ({})",
+                    "success".green().bold(),
+                    ":".bold(),
+                    format!("v{}", env!("CARGO_PKG_VERSION")).bold().cyan()
+                ),
+            )?;
         }
+        Ok(None) => {}
         Err(err) => {
             return if let AxoupdateError::Reqwest(err) = err {
                 if err.status() == Some(http::StatusCode::FORBIDDEN) && token.is_none() {
-                    writeln!(
-                        printer.stderr(),
-                        "{}",
-                        format_args!(
-                            "{}{} GitHub API rate limit exceeded. Please provide a GitHub token via the {} option.",
-                            "error".red().bold(),
-                            ":".bold(),
-                            "`--token`".green().bold()
-                        )
-                    )?;
+                    write_error(format_args!(
+                        "{}{} GitHub API rate limit exceeded. Please provide a GitHub token via the {} option.",
+                        "error".red().bold(),
+                        ":".bold(),
+                        "`--token`".green().bold()
+                    ));
                     Ok(ExitStatus::Error)
                 } else {
                     Err(WrappedReqwestError::from(err).into())
@@ -226,4 +204,26 @@ pub(crate) async fn self_update(
     }
 
     Ok(ExitStatus::Success)
+}
+
+fn shows_progress(printer: Printer) -> bool {
+    !matches!(printer, Printer::Quiet | Printer::Silent)
+}
+
+fn shows_no_update(printer: Printer) -> bool {
+    !matches!(printer, Printer::Quiet | Printer::Silent)
+}
+
+fn write_message(message_printer: Printer, message: impl Display) -> std::fmt::Result {
+    match message_printer {
+        Printer::Silent => Ok(()),
+        Printer::Quiet => writeln!(message_printer.stdout_important(), "{message}"),
+        Printer::Default | Printer::Verbose | Printer::NoProgress => {
+            writeln!(message_printer.stderr(), "{message}")
+        }
+    }
+}
+
+fn write_error(message: impl Display) {
+    anstream::eprintln!("{message}");
 }
