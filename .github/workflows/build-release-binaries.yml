@@ -273,6 +273,8 @@ jobs:
           args: --release --locked --out dist --features self-update,windows-gui-bin --compatibility pypi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.cmd
+          # Disable prebuilt NASM objects so we always compile assembly from source.
+          AWS_LC_SYS_PREBUILT_NASM: "0"
       - name: "Test wheel"
         shell: bash
         run: |
