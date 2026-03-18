@@ -134,6 +134,85 @@ async fn assert_server_no_cert_error(server_task: tokio::task::JoinHandle<Result
     );
 }
 
+/// Test that a self-signed server certificate is rejected when no custom certs are configured.
+///
+/// With all `SSL_CERT_*` variables cleared, the client uses the bundled webpki roots which do
+/// not include our test CA.
+#[tokio::test]
+async fn test_no_custom_certs_rejects_self_signed() -> Result<()> {
+    let certs = setup_test_certificates()?;
+
+    async_with_vars(cleared_ssl_vars(), async {
+        let (server_task, addr) = start_https_user_agent_server(&certs.standalone_cert)
+            .await
+            .unwrap();
+
+        let res = send_request(addr).await;
+        assert_connection_error(&res);
+
+        // The server accepted the TCP connection but the TLS handshake failed on the client
+        // side, so the server task may or may not have errored — we just ensure it doesn't panic.
+        let _ = server_task.await;
+    })
+    .await;
+
+    Ok(())
+}
+
+/// Test that a server presenting an untrusted certificate is rejected, even when a different
+/// custom cert is configured via `SSL_CERT_FILE`.
+#[tokio::test]
+async fn test_ssl_cert_file_wrong_cert_rejected() -> Result<()> {
+    let certs = setup_test_certificates()?;
+
+    // Trust only the standalone cert, but the server presents the CA-signed server cert.
+    let mut vars = cleared_ssl_vars();
+    vars.push((
+        EnvVars::SSL_CERT_FILE,
+        Some(certs.standalone_public_path.to_str().unwrap()),
+    ));
+
+    async_with_vars(vars, async {
+        let (server_task, addr) = start_https_user_agent_server(&certs.server_cert)
+            .await
+            .unwrap();
+
+        let res = send_request(addr).await;
+        assert_connection_error(&res);
+
+        let _ = server_task.await;
+    })
+    .await;
+
+    Ok(())
+}
+
+/// Test that a nonexistent `SSL_CERT_FILE` is ignored and the client falls back to defaults.
+///
+/// Since the defaults (webpki roots) don't include our self-signed cert, the connection fails.
+#[tokio::test]
+async fn test_ssl_cert_file_nonexistent_falls_back() -> Result<()> {
+    let certs = setup_test_certificates()?;
+
+    let missing_path = certs._temp_dir.path().join("missing.pem");
+    let mut vars = cleared_ssl_vars();
+    vars.push((EnvVars::SSL_CERT_FILE, Some(missing_path.to_str().unwrap())));
+
+    async_with_vars(vars, async {
+        let (server_task, addr) = start_https_user_agent_server(&certs.standalone_cert)
+            .await
+            .unwrap();
+
+        let res = send_request(addr).await;
+        assert_connection_error(&res);
+
+        let _ = server_task.await;
+    })
+    .await;
+
+    Ok(())
+}
+
 /// Test that a valid certificate from `SSL_CERT_FILE` is trusted by the client.
 #[tokio::test]
 async fn test_ssl_cert_file_valid() -> Result<()> {
@@ -301,6 +380,94 @@ async fn test_ssl_cert_dir_hash_named_files() -> Result<()> {
         assert!(res.is_ok());
 
         let _ = server_task.await.unwrap();
+    })
+    .await;
+
+    Ok(())
+}
+
+/// Test that `SSL_CERT_DIR` supports multiple colon-separated directories.
+///
+/// Certs are split across two directories; each directory only has one cert, but both servers
+/// should be trusted.
+#[tokio::test]
+async fn test_ssl_cert_dir_multiple_directories() -> Result<()> {
+    let certs = setup_test_certificates()?;
+
+    let dir_a = certs._temp_dir.path().join("dir_a");
+    let dir_b = certs._temp_dir.path().join("dir_b");
+    fs_err::create_dir_all(&dir_a)?;
+    fs_err::create_dir_all(&dir_b)?;
+
+    // Standalone cert in dir_a, CA cert in dir_b
+    fs_err::write(
+        dir_a.join("standalone.pem"),
+        certs.standalone_cert.public.pem(),
+    )?;
+    fs_err::write(dir_b.join("ca.pem"), certs.ca_cert.public.pem())?;
+
+    let combined = std::env::join_paths([&dir_a, &dir_b]).unwrap();
+
+    let mut vars = cleared_ssl_vars();
+    vars.push((EnvVars::SSL_CERT_DIR, Some(combined.to_str().unwrap())));
+
+    async_with_vars(vars, async {
+        // Server using standalone cert (from dir_a)
+        let (server_task, addr) = start_https_user_agent_server(&certs.standalone_cert)
+            .await
+            .unwrap();
+
+        let res = send_request(addr).await;
+        assert!(res.is_ok());
+
+        let _ = server_task.await.unwrap();
+
+        // Server using CA-signed cert (from dir_b)
+        let (server_task, addr) = start_https_user_agent_server(&certs.server_cert)
+            .await
+            .unwrap();
+
+        let res = send_request(addr).await;
+        assert!(res.is_ok());
+
+        let _ = server_task.await.unwrap();
+    })
+    .await;
+
+    Ok(())
+}
+
+/// Test that `SSL_CLIENT_CERT` with invalid content is ignored and mTLS fails.
+///
+/// The server requires a client certificate, but `SSL_CLIENT_CERT` points to a file with
+/// garbage content so no valid identity can be loaded.
+#[tokio::test]
+async fn test_mtls_with_invalid_client_cert() -> Result<()> {
+    let certs = setup_test_certificates()?;
+
+    let invalid_cert_path = certs._temp_dir.path().join("invalid_client.pem");
+    fs_err::write(&invalid_cert_path, "not a valid certificate or key")?;
+
+    let mut vars = cleared_ssl_vars();
+    vars.push((
+        EnvVars::SSL_CERT_FILE,
+        Some(certs.ca_public_path.to_str().unwrap()),
+    ));
+    vars.push((
+        EnvVars::SSL_CLIENT_CERT,
+        Some(invalid_cert_path.to_str().unwrap()),
+    ));
+
+    async_with_vars(vars, async {
+        let (server_task, addr) =
+            start_https_mtls_user_agent_server(&certs.ca_cert, &certs.server_cert)
+                .await
+                .unwrap();
+
+        let res = send_request(addr).await;
+        assert_connection_error(&res);
+
+        assert_server_no_cert_error(server_task).await;
     })
     .await;
 
