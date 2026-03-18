@@ -530,7 +530,7 @@ impl<'a> BaseClientBuilder<'a> {
         // Configure the certificate source.
         //
         // `SSL_CERT_FILE` and `SSL_CERT_DIR` override the default certificate source when they
-        // contain valid certificates. If set but empty or unparseable, they are ignored with a
+        // contain valid certificates. If set but empty or unparsable, they are ignored with a
         // warning.
         let client_builder = if let Some(custom_certs) = custom_certs {
             client_builder.tls_certs_only(custom_certs)
