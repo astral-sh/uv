@@ -2124,3 +2124,30 @@ fn create_venv_centralized_explicit_path() {
     // `.venv` should not exist.
     assert!(!context.temp_dir.child(".venv").exists());
 }
+
+/// `uv venv --preview-features centralized-envs` outside a project should
+/// create a local `.venv` as normal (centralized mode requires a project).
+#[test]
+fn create_venv_centralized_no_project() {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--python")
+        .arg("3.12")
+        .arg("--preview-features")
+        .arg("centralized-envs"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+
+    // `.venv` should be a real directory, not a symlink.
+    assert!(context.temp_dir.child(".venv").is_dir());
+    assert!(fs_err::read_link(context.temp_dir.child(".venv").path()).is_err());
+}
