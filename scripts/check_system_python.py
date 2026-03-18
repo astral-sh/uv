@@ -14,12 +14,14 @@ import sys
 import tempfile
 
 
-def install_package(*, uv: str, package: str):
+def install_package(*, uv: str, package: str, version: str = None):
     """Install a package into the system Python."""
 
-    logging.info(f"Installing the package `{package}`.")
+    requirement = f"{package}=={version}" if version is not None else package
+
+    logging.info(f"Installing the package `{requirement}`.")
     subprocess.run(
-        [uv, "pip", "install", package, "--system"] + allow_externally_managed,
+        [uv, "pip", "install", requirement, "--system"] + allow_externally_managed,
         cwd=temp_dir,
         check=True,
     )
@@ -71,6 +73,24 @@ if __name__ == "__main__":
     )
     python = ["--python", args.python] if args.python else []
 
+    # Pin packages to the last versions that support older Python interpreters.
+    if sys.version_info < (3, 7):
+        pylint_version = "2.12.2"
+        numpy_version = "1.19.5"
+        pydantic_core_version = None
+    elif sys.version_info < (3, 8):
+        pylint_version = "2.17.7"
+        numpy_version = "1.21.6"
+        pydantic_core_version = "2.14.6"
+    else:
+        pylint_version = None
+        numpy_version = None
+        pydantic_core_version = None
+
+    pylint_requirement = (
+        f"pylint=={pylint_version}" if pylint_version is not None else "pylint"
+    )
+
     if args.check_python_version:
         version = ".".join(map(str, sys.version_info[:3]))
         if args.check_python_version != version and not version.startswith(
@@ -114,7 +134,7 @@ if __name__ == "__main__":
         # Install the package (`pylint`).
         logging.info("Installing the package `pylint`.")
         subprocess.run(
-            [uv, "pip", "install", "pylint", "--system", "--verbose"]
+            [uv, "pip", "install", pylint_requirement, "--system", "--verbose"]
             + allow_externally_managed
             + python,
             cwd=temp_dir,
@@ -188,7 +208,7 @@ if __name__ == "__main__":
         env["CONDA_PREFIX"] = ""
         env["VIRTUAL_ENV"] = ""
         subprocess.run(
-            [uv, "pip", "install", "pylint", "--verbose"],
+            [uv, "pip", "install", pylint_requirement, "--verbose"],
             cwd=temp_dir,
             check=True,
             env=env,
@@ -241,7 +261,7 @@ if __name__ == "__main__":
         #
         # NumPy doesn't distribute wheels for Python 3.13 or GraalPy (at time of writing).
         if sys.version_info < (3, 13) and sys.implementation.name != "graalpy":
-            install_package(uv=uv, package="numpy")
+            install_package(uv=uv, package="numpy", version=numpy_version)
 
         # Attempt to install `pydantic_core`.
         # This ensures that we can successfully install and recognize a package that may
@@ -249,8 +269,14 @@ if __name__ == "__main__":
         #
         # `pydantic_core` doesn't distribute wheels for non-CPython interpreters, nor
         # for Python 3.13 (at time of writing).
-        if sys.version_info < (3, 13) and sys.implementation.name == "cpython":
-            install_package(uv=uv, package="pydantic_core")
+        if (
+            sys.version_info >= (3, 7)
+            and sys.version_info < (3, 13)
+            and sys.implementation.name == "cpython"
+        ):
+            install_package(
+                uv=uv, package="pydantic_core", version=pydantic_core_version
+            )
 
         # Next, create a virtual environment with `venv`, to ensure that `uv` can
         # interoperate with `venv` virtual environments.
@@ -265,7 +291,7 @@ if __name__ == "__main__":
         # Install the package (`pylint`) into the virtual environment.
         logging.info("Installing into `venv` virtual environment...")
         subprocess.run(
-            [uv, "pip", "install", "pylint", "--verbose"],
+            [uv, "pip", "install", pylint_requirement, "--verbose"],
             cwd=temp_dir,
             check=True,
             env=env,

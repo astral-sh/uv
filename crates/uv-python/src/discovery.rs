@@ -709,7 +709,7 @@ fn find_all_minor(
                     let minor = captures["minor"].parse().ok();
                     if let Some(minor) = minor {
                         // Optimization: Skip generally unsupported Python versions without querying.
-                        if minor < 7 {
+                        if minor < 6 {
                             return false;
                         }
                         // Optimization 2: Skip excluded Python (minor) versions without querying.
@@ -2793,23 +2793,23 @@ impl VersionRequest {
                 }
             }
             Self::MajorMinor(major, minor, _) => {
-                if (*major, *minor) < (3, 7) {
+                if (*major, *minor) < (3, 6) {
                     return Err(format!(
-                        "Python <3.7 is not supported but {major}.{minor} was requested."
+                        "Python <3.6 is not supported but {major}.{minor} was requested."
                     ));
                 }
             }
             Self::MajorMinorPatch(major, minor, patch, _) => {
-                if (*major, *minor) < (3, 7) {
+                if (*major, *minor) < (3, 6) {
                     return Err(format!(
-                        "Python <3.7 is not supported but {major}.{minor}.{patch} was requested."
+                        "Python <3.6 is not supported but {major}.{minor}.{patch} was requested."
                     ));
                 }
             }
             Self::MajorMinorPrerelease(major, minor, prerelease, _) => {
-                if (*major, *minor) < (3, 7) {
+                if (*major, *minor) < (3, 6) {
                     return Err(format!(
-                        "Python <3.7 is not supported but {major}.{minor}{prerelease} was requested."
+                        "Python <3.6 is not supported but {major}.{minor}{prerelease} was requested."
                     ));
                 }
             }

@@ -221,23 +221,23 @@ fn python_list_unsupported_version() {
         .with_filtered_python_keys();
 
     // Request a low version
-    uv_snapshot!(context.filters(), context.python_list().arg("3.6"), @"
+    uv_snapshot!(context.filters(), context.python_list().arg("3.5"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Invalid version request: Python <3.7 is not supported but 3.6 was requested.
+    error: Invalid version request: Python <3.6 is not supported but 3.5 was requested.
     ");
 
     // Request a low version with a patch
-    uv_snapshot!(context.filters(), context.python_list().arg("3.6.9"), @"
+    uv_snapshot!(context.filters(), context.python_list().arg("3.5.9"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Invalid version request: Python <3.7 is not supported but 3.6.9 was requested.
+    error: Invalid version request: Python <3.6 is not supported but 3.5.9 was requested.
     ");
 
     // Request a really low version
@@ -247,7 +247,7 @@ fn python_list_unsupported_version() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Invalid version request: Python <3.7 is not supported but 2.6 was requested.
+    error: Invalid version request: Python <3.6 is not supported but 2.6 was requested.
     ");
 
     // Request a really low version with a patch
@@ -257,7 +257,7 @@ fn python_list_unsupported_version() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Invalid version request: Python <3.7 is not supported but 2.6.8 was requested.
+    error: Invalid version request: Python <3.6 is not supported but 2.6.8 was requested.
     ");
 
     // Request a future version
