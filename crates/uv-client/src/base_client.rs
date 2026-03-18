@@ -1277,6 +1277,17 @@ pub fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retry
                 return Some(Retryable::Transient);
             }
 
+            // Check for WSL-specific errors (hyper BufError/SendRequest)
+            // https://github.com/astral-sh/uv/issues/18538
+            let err_str = io_err.to_string().to_lowercase();
+            if err_str.contains("buferror")
+                || err_str.contains("unexpected")
+                || err_str.contains("sendrequest")
+            {
+                trace!("Transient WSL IO error: `{}`", io_err);
+                return Some(Retryable::Transient);
+            }
+
             trace!(
                 "Fatal IO error `{}`, not a transient IO error kind",
                 io_err.kind()
