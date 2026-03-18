@@ -1032,7 +1032,7 @@ impl ToolUpgradeSettings {
         // Enable `--upgrade` by default.
         let installer = ResolverInstallerArgs {
             index_args,
-            upgrade: upgrade_package.is_empty(),
+            upgrade: true,
             no_upgrade: false,
             upgrade_package,
             reinstall,
