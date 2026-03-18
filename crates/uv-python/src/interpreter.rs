@@ -1149,6 +1149,18 @@ impl InterpreterInfo {
 
         let canonical = canonicalize_executable(&absolute).map_err(handle_io_error)?;
 
+        // Determine if the executable is in a virtual environment, and if so, whether
+        // `include-system-site-packages` is enabled. This affects the interpreter's
+        // behavior (e.g., which packages are visible), so it must be part of the cache key.
+        let include_system_site_packages = absolute
+            .parent()
+            .and_then(|parent| parent.parent())
+            .and_then(|venv_root| {
+                PyVenvConfiguration::parse(venv_root.join("pyvenv.cfg"))
+                    .ok()
+                    .map(|cfg| cfg.include_system_site_packages())
+            });
+
         let cache_entry = cache.entry(
             CacheBucket::Interpreter,
             // Shard interpreter metadata by host architecture, operating system, and version, to
@@ -1169,7 +1181,14 @@ impl InterpreterInfo {
             // absolute path refers to different interpreters with matching ctimes, e.g., if you
             // have a `.venv/bin/python` pointing to both Python 3.12 and Python 3.13 that were
             // modified at the same time.
-            format!("{}.msgpack", cache_digest(&(&absolute, &canonical))),
+            //
+            // We also include `include_system_site_packages` in the cache key to avoid cache
+            // pollution when the same virtual environment is recreated with different settings.
+            // See: https://github.com/astral-sh/uv/issues/18510
+            format!(
+                "{}.msgpack",
+                cache_digest(&(&absolute, &canonical, include_system_site_packages))
+            ),
         );
 
         // We check the timestamp of the canonicalized executable to check if an underlying
