@@ -51,7 +51,13 @@ impl Certificates {
     }
 
     /// Load certificates from the value of `SSL_CERT_FILE`.
+    ///
+    /// Returns `None` if the value is empty.
     fn from_ssl_cert_file(ssl_cert_file: &std::ffi::OsStr) -> Option<Self> {
+        if ssl_cert_file.is_empty() {
+            return None;
+        }
+
         let file = PathBuf::from(ssl_cert_file);
         match file.metadata() {
             Ok(metadata) if metadata.is_file() => {
@@ -92,6 +98,8 @@ impl Certificates {
     ///
     /// The value may include multiple entries, separated by a platform-specific delimiter (`:` on
     /// Unix, `;` on Windows).
+    ///
+    /// Returns `None` if the value is empty.
     fn from_ssl_cert_dir(ssl_cert_dir: &std::ffi::OsStr) -> Option<Self> {
         if ssl_cert_dir.is_empty() {
             return None;
@@ -231,6 +239,12 @@ mod tests {
         let missing_file = dir.path().join("missing.pem");
 
         let certs = Certificates::from_ssl_cert_file(missing_file.as_os_str());
+        assert!(certs.is_none());
+    }
+
+    #[test]
+    fn test_from_ssl_cert_file_empty_value_returns_none() {
+        let certs = Certificates::from_ssl_cert_file(OsString::new().as_os_str());
         assert!(certs.is_none());
     }
 
