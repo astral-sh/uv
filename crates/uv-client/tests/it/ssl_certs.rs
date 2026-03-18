@@ -1,3 +1,4 @@
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -16,7 +17,7 @@ use crate::http_util::{
     start_https_mtls_user_agent_server, start_https_user_agent_server, test_cert_dir,
 };
 
-/// Test certificate paths and data returned by setup
+/// Test certificate paths and data returned by setup.
 struct TestCertificates {
     _temp_dir: tempfile::TempDir,
     standalone_cert: SelfSigned,
@@ -27,7 +28,7 @@ struct TestCertificates {
     client_combined_path: PathBuf,
 }
 
-/// Set up test certificates and return paths
+/// Set up test certificates and return paths.
 fn setup_test_certificates() -> Result<TestCertificates> {
     let cert_dir = test_cert_dir();
     fs_err::create_dir_all(&cert_dir)?;
@@ -76,7 +77,23 @@ fn cleared_ssl_vars() -> Vec<(&'static str, Option<&'static str>)> {
     ]
 }
 
-/// Assert that a connection error occurred due to TLS issues
+/// Send a GET request to the given server address using a fresh registry client.
+async fn send_request(addr: SocketAddr) -> Result<reqwest::Response, reqwest_middleware::Error> {
+    let url = DisplaySafeUrl::from_str(&format!("https://{addr}")).unwrap();
+    let cache = Cache::temp().unwrap().init().await.unwrap();
+    let client =
+        RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache)
+            .build();
+    client
+        .cached_client()
+        .uncached()
+        .for_host(&url)
+        .get(Url::from(url))
+        .send()
+        .await
+}
+
+/// Assert that a connection error occurred due to TLS issues.
 fn assert_connection_error(res: &Result<reqwest::Response, reqwest_middleware::Error>) {
     let Some(reqwest_middleware::Error::Middleware(middleware_error)) = res.as_ref().err() else {
         panic!("expected middleware error, got: {res:?}");
@@ -96,7 +113,7 @@ fn assert_connection_error(res: &Result<reqwest::Response, reqwest_middleware::E
     assert!(reqwest_error.is_connect());
 }
 
-/// Assert that the server encountered a "no certificates presented" error
+/// Assert that the server encountered a "no certificates presented" error.
 async fn assert_server_no_cert_error(server_task: tokio::task::JoinHandle<Result<()>>) {
     let server_res = server_task.await.expect("server task panicked");
     let Err(anyhow_err) = server_res else {
@@ -132,21 +149,10 @@ async fn test_ssl_cert_file_valid() -> Result<()> {
         let (server_task, addr) = start_https_user_agent_server(&certs.standalone_cert)
             .await
             .unwrap();
-        let url = DisplaySafeUrl::from_str(&format!("https://{addr}")).unwrap();
-        let cache = Cache::temp().unwrap().init().await.unwrap();
-        let client =
-            RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache)
-                .build();
 
-        let res = client
-            .cached_client()
-            .uncached()
-            .for_host(&url)
-            .get(Url::from(url))
-            .send()
-            .await;
-
+        let res = send_request(addr).await;
         assert!(res.is_ok());
+
         let _ = server_task.await.unwrap();
     })
     .await;
@@ -176,21 +182,10 @@ async fn test_ssl_cert_file_bundle() -> Result<()> {
         let (server_task, addr) = start_https_user_agent_server(&certs.server_cert)
             .await
             .unwrap();
-        let url = DisplaySafeUrl::from_str(&format!("https://{addr}")).unwrap();
-        let cache = Cache::temp().unwrap().init().await.unwrap();
-        let client =
-            RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache)
-                .build();
 
-        let res = client
-            .cached_client()
-            .uncached()
-            .for_host(&url)
-            .get(Url::from(url))
-            .send()
-            .await;
-
+        let res = send_request(addr).await;
         assert!(res.is_ok());
+
         let _ = server_task.await.unwrap();
     })
     .await;
@@ -225,42 +220,20 @@ async fn test_ssl_cert_file_and_dir_combined() -> Result<()> {
         let (server_task, addr) = start_https_user_agent_server(&certs.standalone_cert)
             .await
             .unwrap();
-        let url = DisplaySafeUrl::from_str(&format!("https://{addr}")).unwrap();
-        let cache = Cache::temp().unwrap().init().await.unwrap();
-        let client =
-            RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache)
-                .build();
 
-        let res = client
-            .cached_client()
-            .uncached()
-            .for_host(&url)
-            .get(Url::from(url))
-            .send()
-            .await;
-
+        let res = send_request(addr).await;
         assert!(res.is_ok());
+
         let _ = server_task.await.unwrap();
 
         // Test with CA-signed cert (from SSL_CERT_DIR)
         let (server_task, addr) = start_https_user_agent_server(&certs.server_cert)
             .await
             .unwrap();
-        let url = DisplaySafeUrl::from_str(&format!("https://{addr}")).unwrap();
-        let cache = Cache::temp().unwrap().init().await.unwrap();
-        let client =
-            RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache)
-                .build();
 
-        let res = client
-            .cached_client()
-            .uncached()
-            .for_host(&url)
-            .get(Url::from(url))
-            .send()
-            .await;
-
+        let res = send_request(addr).await;
         assert!(res.is_ok());
+
         let _ = server_task.await.unwrap();
     })
     .await;
@@ -292,21 +265,10 @@ async fn test_ssl_cert_dir_bundle_files() -> Result<()> {
         let (server_task, addr) = start_https_user_agent_server(&certs.standalone_cert)
             .await
             .unwrap();
-        let url = DisplaySafeUrl::from_str(&format!("https://{addr}")).unwrap();
-        let cache = Cache::temp().unwrap().init().await.unwrap();
-        let client =
-            RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache)
-                .build();
 
-        let res = client
-            .cached_client()
-            .uncached()
-            .for_host(&url)
-            .get(Url::from(url))
-            .send()
-            .await;
-
+        let res = send_request(addr).await;
         assert!(res.is_ok());
+
         let _ = server_task.await.unwrap();
     })
     .await;
@@ -315,6 +277,10 @@ async fn test_ssl_cert_dir_bundle_files() -> Result<()> {
 }
 
 /// Test that OpenSSL hash-based filenames in `SSL_CERT_DIR` are loaded correctly.
+///
+/// The filename `5d30f3c5.3` is not the actual OpenSSL hash of the CA cert — it's an arbitrary
+/// name matching the `[hex].[digit]` pattern to verify that such files are loaded from the
+/// directory.
 #[tokio::test]
 async fn test_ssl_cert_dir_hash_named_files() -> Result<()> {
     let certs = setup_test_certificates()?;
@@ -330,21 +296,10 @@ async fn test_ssl_cert_dir_hash_named_files() -> Result<()> {
         let (server_task, addr) = start_https_user_agent_server(&certs.server_cert)
             .await
             .unwrap();
-        let url = DisplaySafeUrl::from_str(&format!("https://{addr}")).unwrap();
-        let cache = Cache::temp().unwrap().init().await.unwrap();
-        let client =
-            RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache)
-                .build();
 
-        let res = client
-            .cached_client()
-            .uncached()
-            .for_host(&url)
-            .get(Url::from(url))
-            .send()
-            .await;
-
+        let res = send_request(addr).await;
         assert!(res.is_ok());
+
         let _ = server_task.await.unwrap();
     })
     .await;
@@ -372,21 +327,10 @@ async fn test_mtls_with_client_cert() -> Result<()> {
             start_https_mtls_user_agent_server(&certs.ca_cert, &certs.server_cert)
                 .await
                 .unwrap();
-        let url = DisplaySafeUrl::from_str(&format!("https://{addr}")).unwrap();
-        let cache = Cache::temp().unwrap().init().await.unwrap();
-        let client =
-            RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache)
-                .build();
 
-        let res = client
-            .cached_client()
-            .uncached()
-            .for_host(&url)
-            .get(Url::from(url))
-            .send()
-            .await;
-
+        let res = send_request(addr).await;
         assert!(res.is_ok());
+
         let _ = server_task.await.unwrap();
     })
     .await;
@@ -410,21 +354,10 @@ async fn test_mtls_without_client_cert() -> Result<()> {
             start_https_mtls_user_agent_server(&certs.ca_cert, &certs.server_cert)
                 .await
                 .unwrap();
-        let url = DisplaySafeUrl::from_str(&format!("https://{addr}")).unwrap();
-        let cache = Cache::temp().unwrap().init().await.unwrap();
-        let client =
-            RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache)
-                .build();
 
-        let res = client
-            .cached_client()
-            .uncached()
-            .for_host(&url)
-            .get(Url::from(url))
-            .send()
-            .await;
-
+        let res = send_request(addr).await;
         assert_connection_error(&res);
+
         assert_server_no_cert_error(server_task).await;
     })
     .await;
