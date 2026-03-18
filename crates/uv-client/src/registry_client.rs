@@ -1138,8 +1138,8 @@ impl RegistryClient {
             // These range requests need the bytes from the wheel archive itself.
             // After `reqwest` moved decompression to tower-http[1], this path could receive
             // transparently decompressed responses. That breaks the byte offsets used by
-            // `AsyncHttpRangeReader` and can later fail with errors like `Invalid gzip header`.[2]
-            // We request identity encoding so the range reader always sees the wheel bytes.
+            // `AsyncHttpRangeReader` and results in us incorrectly trying to double-decompress gzip streams[2].
+            // We request with `Accept: identity` so that the range reader always sees the compressed wheel bytes.
             //
             // [1]: https://github.com/seanmonstar/reqwest/pull/2840
             // [2]: https://github.com/astral-sh/async_http_range_reader/pull/3#discussion_r2700194798
