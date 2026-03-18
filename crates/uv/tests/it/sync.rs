@@ -16431,10 +16431,141 @@ fn sync_centralized_env_active_without_virtual_env() -> Result<()> {
     Checked in [TIME]
     ");
 
+    let link_target = fs_err::read_link(context.temp_dir.child(".venv").path())?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_snapshot!(
+            link_target.portable_display().to_string(),
+            @"[CACHE_DIR]/environments-v2/project-[HASH]"
+        );
+    });
+
+    Ok(())
+}
+
+/// Test centralized mode with various pre-existing `.venv` states:
+/// symlink, plain file, empty directory, and non-empty non-venv directory.
+#[test]
+fn sync_centralized_env_existing_venv_states() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#,
+    )?;
+
+    let venv = context.temp_dir.child(".venv");
+
+    // Case 1: .venv is an existing symlink/junction pointing somewhere else
+    let other_dir = context.temp_dir.child("other-dir");
+    other_dir.create_dir_all()?;
+    uv_fs::create_symlink(other_dir.path(), venv.path())?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features")
+        .arg("centralized-envs"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment `project-[HASH]` in the centralized store
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+
+    // Centralized mode should replace the symlink.
+    let link_target = fs_err::read_link(venv.path())?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_snapshot!(
+            link_target.portable_display().to_string(),
+            @"[CACHE_DIR]/environments-v2/project-[HASH]"
+        );
+    });
+
     assert!(
-        context.temp_dir.child(".venv").path().is_symlink(),
-        ".venv should be a symlink when centralized mode is active"
+        other_dir.is_dir(),
+        "The overridden symlink should not have affected its target"
     );
+
+    uv_fs::remove_symlink(venv.path())?;
+
+    // Case 2: .venv is an existing plain file
+    fs_err::write(venv.path(), "foo bar baz")?;
+    assert!(venv.path().is_file());
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features")
+        .arg("centralized-envs"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+
+    // Centralized mode should replace the plain file.
+    let link_target = fs_err::read_link(venv.path())?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_snapshot!(
+            link_target.portable_display().to_string(),
+            @"[CACHE_DIR]/environments-v2/project-[HASH]"
+        );
+    });
+
+    uv_fs::remove_symlink(venv.path())?;
+
+    // Case 3: .venv is an empty directory
+    fs_err::create_dir(venv.path())?;
+    assert!(venv.path().is_dir());
+    assert!(fs_err::read_dir(venv.path())?.next().is_none());
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features")
+        .arg("centralized-envs"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+
+    // Centralized mode should replace the empty directory.
+    let link_target = fs_err::read_link(venv.path())?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_snapshot!(
+            link_target.portable_display().to_string(),
+            @"[CACHE_DIR]/environments-v2/project-[HASH]"
+        );
+    });
+
+    uv_fs::remove_symlink(venv.path())?;
+
+    // Case 4: .venv is a non-empty directory without pyvenv.cfg
+    fs_err::create_dir(venv.path())?;
+    fs_err::write(venv.path().join("some-file.txt"), "not a venv")?;
+
+    // Centralized mode should NOT replace a non-empty non-venv directory.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features")
+        .arg("centralized-envs"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: failed to create file `[VENV]/`: Is a directory (os error 21)
+    ");
 
     Ok(())
 }
