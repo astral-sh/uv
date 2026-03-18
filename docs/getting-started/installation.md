@@ -262,7 +262,7 @@ If you need to remove uv from your system, follow these steps:
         Before removing the binaries, you may want to remove any data that uv has stored. See the
         [storage reference](../reference/storage.md) for details on where uv stores data.
 
-2.  Remove the uv, uvx, and uvw binaries:
+2.  Remove the uv, and uvx binaries:
 
     === "macOS and Linux"
 
