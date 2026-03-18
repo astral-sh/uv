@@ -66,15 +66,18 @@ fn setup_test_certificates() -> Result<TestCertificates> {
     })
 }
 
-/// Returns the list of SSL-related environment variables to clear (set to `None`).
-fn cleared_ssl_vars() -> Vec<(&'static str, Option<&'static str>)> {
-    vec![
+/// Build the environment variable list for a test: all SSL-related variables are cleared, then
+/// the given overrides are applied.
+fn ssl_vars<'a>(overrides: &[(&'static str, &'a str)]) -> Vec<(&'static str, Option<&'a str>)> {
+    let mut vars: Vec<(&'static str, Option<&'a str>)> = vec![
         (EnvVars::UV_NATIVE_TLS, None),
         (EnvVars::UV_SYSTEM_CERTS, None),
         (EnvVars::SSL_CERT_FILE, None),
         (EnvVars::SSL_CERT_DIR, None),
         (EnvVars::SSL_CLIENT_CERT, None),
-    ]
+    ];
+    vars.extend(overrides.iter().map(|(k, v)| (*k, Some(*v))));
+    vars
 }
 
 /// Send a GET request to the given server address using a fresh registry client.
@@ -142,7 +145,7 @@ async fn assert_server_no_cert_error(server_task: tokio::task::JoinHandle<Result
 async fn test_no_custom_certs_rejects_self_signed() -> Result<()> {
     let certs = setup_test_certificates()?;
 
-    async_with_vars(cleared_ssl_vars(), async {
+    async_with_vars(ssl_vars(&[]), async {
         let (server_task, addr) = start_https_user_agent_server(&certs.standalone_cert)
             .await
             .unwrap();
@@ -166,22 +169,22 @@ async fn test_ssl_cert_file_wrong_cert_rejected() -> Result<()> {
     let certs = setup_test_certificates()?;
 
     // Trust only the standalone cert, but the server presents the CA-signed server cert.
-    let mut vars = cleared_ssl_vars();
-    vars.push((
-        EnvVars::SSL_CERT_FILE,
-        Some(certs.standalone_public_path.to_str().unwrap()),
-    ));
+    async_with_vars(
+        ssl_vars(&[(
+            EnvVars::SSL_CERT_FILE,
+            certs.standalone_public_path.to_str().unwrap(),
+        )]),
+        async {
+            let (server_task, addr) = start_https_user_agent_server(&certs.server_cert)
+                .await
+                .unwrap();
 
-    async_with_vars(vars, async {
-        let (server_task, addr) = start_https_user_agent_server(&certs.server_cert)
-            .await
-            .unwrap();
+            let res = send_request(addr).await;
+            assert_connection_error(&res);
 
-        let res = send_request(addr).await;
-        assert_connection_error(&res);
-
-        let _ = server_task.await;
-    })
+            let _ = server_task.await;
+        },
+    )
     .await;
 
     Ok(())
@@ -195,19 +198,19 @@ async fn test_ssl_cert_file_nonexistent_falls_back() -> Result<()> {
     let certs = setup_test_certificates()?;
 
     let missing_path = certs._temp_dir.path().join("missing.pem");
-    let mut vars = cleared_ssl_vars();
-    vars.push((EnvVars::SSL_CERT_FILE, Some(missing_path.to_str().unwrap())));
+    async_with_vars(
+        ssl_vars(&[(EnvVars::SSL_CERT_FILE, missing_path.to_str().unwrap())]),
+        async {
+            let (server_task, addr) = start_https_user_agent_server(&certs.standalone_cert)
+                .await
+                .unwrap();
 
-    async_with_vars(vars, async {
-        let (server_task, addr) = start_https_user_agent_server(&certs.standalone_cert)
-            .await
-            .unwrap();
+            let res = send_request(addr).await;
+            assert_connection_error(&res);
 
-        let res = send_request(addr).await;
-        assert_connection_error(&res);
-
-        let _ = server_task.await;
-    })
+            let _ = server_task.await;
+        },
+    )
     .await;
 
     Ok(())
@@ -218,22 +221,22 @@ async fn test_ssl_cert_file_nonexistent_falls_back() -> Result<()> {
 async fn test_ssl_cert_file_valid() -> Result<()> {
     let certs = setup_test_certificates()?;
 
-    let mut vars = cleared_ssl_vars();
-    vars.push((
-        EnvVars::SSL_CERT_FILE,
-        Some(certs.standalone_public_path.to_str().unwrap()),
-    ));
+    async_with_vars(
+        ssl_vars(&[(
+            EnvVars::SSL_CERT_FILE,
+            certs.standalone_public_path.to_str().unwrap(),
+        )]),
+        async {
+            let (server_task, addr) = start_https_user_agent_server(&certs.standalone_cert)
+                .await
+                .unwrap();
 
-    async_with_vars(vars, async {
-        let (server_task, addr) = start_https_user_agent_server(&certs.standalone_cert)
-            .await
-            .unwrap();
+            let res = send_request(addr).await;
+            assert!(res.is_ok());
 
-        let res = send_request(addr).await;
-        assert!(res.is_ok());
-
-        let _ = server_task.await.unwrap();
-    })
+            let _ = server_task.await.unwrap();
+        },
+    )
     .await;
 
     Ok(())
@@ -254,19 +257,19 @@ async fn test_ssl_cert_file_bundle() -> Result<()> {
         ),
     )?;
 
-    let mut vars = cleared_ssl_vars();
-    vars.push((EnvVars::SSL_CERT_FILE, Some(bundle_path.to_str().unwrap())));
+    async_with_vars(
+        ssl_vars(&[(EnvVars::SSL_CERT_FILE, bundle_path.to_str().unwrap())]),
+        async {
+            let (server_task, addr) = start_https_user_agent_server(&certs.server_cert)
+                .await
+                .unwrap();
 
-    async_with_vars(vars, async {
-        let (server_task, addr) = start_https_user_agent_server(&certs.server_cert)
-            .await
-            .unwrap();
+            let res = send_request(addr).await;
+            assert!(res.is_ok());
 
-        let res = send_request(addr).await;
-        assert!(res.is_ok());
-
-        let _ = server_task.await.unwrap();
-    })
+            let _ = server_task.await.unwrap();
+        },
+    )
     .await;
 
     Ok(())
@@ -284,37 +287,36 @@ async fn test_ssl_cert_file_and_dir_combined() -> Result<()> {
         certs.ca_cert.public.pem(),
     )?;
 
-    let mut vars = cleared_ssl_vars();
-    vars.push((
-        EnvVars::SSL_CERT_FILE,
-        Some(certs.standalone_public_path.to_str().unwrap()),
-    ));
-    vars.push((
-        EnvVars::SSL_CERT_DIR,
-        Some(second_cert_dir.to_str().unwrap()),
-    ));
+    async_with_vars(
+        ssl_vars(&[
+            (
+                EnvVars::SSL_CERT_FILE,
+                certs.standalone_public_path.to_str().unwrap(),
+            ),
+            (EnvVars::SSL_CERT_DIR, second_cert_dir.to_str().unwrap()),
+        ]),
+        async {
+            // Test with standalone cert (from SSL_CERT_FILE)
+            let (server_task, addr) = start_https_user_agent_server(&certs.standalone_cert)
+                .await
+                .unwrap();
 
-    async_with_vars(vars, async {
-        // Test with standalone cert (from SSL_CERT_FILE)
-        let (server_task, addr) = start_https_user_agent_server(&certs.standalone_cert)
-            .await
-            .unwrap();
+            let res = send_request(addr).await;
+            assert!(res.is_ok());
 
-        let res = send_request(addr).await;
-        assert!(res.is_ok());
+            let _ = server_task.await.unwrap();
 
-        let _ = server_task.await.unwrap();
+            // Test with CA-signed cert (from SSL_CERT_DIR)
+            let (server_task, addr) = start_https_user_agent_server(&certs.server_cert)
+                .await
+                .unwrap();
 
-        // Test with CA-signed cert (from SSL_CERT_DIR)
-        let (server_task, addr) = start_https_user_agent_server(&certs.server_cert)
-            .await
-            .unwrap();
+            let res = send_request(addr).await;
+            assert!(res.is_ok());
 
-        let res = send_request(addr).await;
-        assert!(res.is_ok());
-
-        let _ = server_task.await.unwrap();
-    })
+            let _ = server_task.await.unwrap();
+        },
+    )
     .await;
 
     Ok(())
@@ -337,19 +339,19 @@ async fn test_ssl_cert_dir_bundle_files() -> Result<()> {
         ),
     )?;
 
-    let mut vars = cleared_ssl_vars();
-    vars.push((EnvVars::SSL_CERT_DIR, Some(bundle_dir.to_str().unwrap())));
+    async_with_vars(
+        ssl_vars(&[(EnvVars::SSL_CERT_DIR, bundle_dir.to_str().unwrap())]),
+        async {
+            let (server_task, addr) = start_https_user_agent_server(&certs.standalone_cert)
+                .await
+                .unwrap();
 
-    async_with_vars(vars, async {
-        let (server_task, addr) = start_https_user_agent_server(&certs.standalone_cert)
-            .await
-            .unwrap();
+            let res = send_request(addr).await;
+            assert!(res.is_ok());
 
-        let res = send_request(addr).await;
-        assert!(res.is_ok());
-
-        let _ = server_task.await.unwrap();
-    })
+            let _ = server_task.await.unwrap();
+        },
+    )
     .await;
 
     Ok(())
@@ -368,19 +370,19 @@ async fn test_ssl_cert_dir_hash_named_files() -> Result<()> {
     fs_err::create_dir_all(&hash_dir)?;
     fs_err::write(hash_dir.join("5d30f3c5.3"), certs.ca_cert.public.pem())?;
 
-    let mut vars = cleared_ssl_vars();
-    vars.push((EnvVars::SSL_CERT_DIR, Some(hash_dir.to_str().unwrap())));
+    async_with_vars(
+        ssl_vars(&[(EnvVars::SSL_CERT_DIR, hash_dir.to_str().unwrap())]),
+        async {
+            let (server_task, addr) = start_https_user_agent_server(&certs.server_cert)
+                .await
+                .unwrap();
 
-    async_with_vars(vars, async {
-        let (server_task, addr) = start_https_user_agent_server(&certs.server_cert)
-            .await
-            .unwrap();
+            let res = send_request(addr).await;
+            assert!(res.is_ok());
 
-        let res = send_request(addr).await;
-        assert!(res.is_ok());
-
-        let _ = server_task.await.unwrap();
-    })
+            let _ = server_task.await.unwrap();
+        },
+    )
     .await;
 
     Ok(())
@@ -408,30 +410,30 @@ async fn test_ssl_cert_dir_multiple_directories() -> Result<()> {
 
     let combined = std::env::join_paths([&dir_a, &dir_b]).unwrap();
 
-    let mut vars = cleared_ssl_vars();
-    vars.push((EnvVars::SSL_CERT_DIR, Some(combined.to_str().unwrap())));
+    async_with_vars(
+        ssl_vars(&[(EnvVars::SSL_CERT_DIR, combined.to_str().unwrap())]),
+        async {
+            // Server using standalone cert (from dir_a)
+            let (server_task, addr) = start_https_user_agent_server(&certs.standalone_cert)
+                .await
+                .unwrap();
 
-    async_with_vars(vars, async {
-        // Server using standalone cert (from dir_a)
-        let (server_task, addr) = start_https_user_agent_server(&certs.standalone_cert)
-            .await
-            .unwrap();
+            let res = send_request(addr).await;
+            assert!(res.is_ok());
 
-        let res = send_request(addr).await;
-        assert!(res.is_ok());
+            let _ = server_task.await.unwrap();
 
-        let _ = server_task.await.unwrap();
+            // Server using CA-signed cert (from dir_b)
+            let (server_task, addr) = start_https_user_agent_server(&certs.server_cert)
+                .await
+                .unwrap();
 
-        // Server using CA-signed cert (from dir_b)
-        let (server_task, addr) = start_https_user_agent_server(&certs.server_cert)
-            .await
-            .unwrap();
+            let res = send_request(addr).await;
+            assert!(res.is_ok());
 
-        let res = send_request(addr).await;
-        assert!(res.is_ok());
-
-        let _ = server_task.await.unwrap();
-    })
+            let _ = server_task.await.unwrap();
+        },
+    )
     .await;
 
     Ok(())
@@ -448,27 +450,29 @@ async fn test_mtls_with_invalid_client_cert() -> Result<()> {
     let invalid_cert_path = certs._temp_dir.path().join("invalid_client.pem");
     fs_err::write(&invalid_cert_path, "not a valid certificate or key")?;
 
-    let mut vars = cleared_ssl_vars();
-    vars.push((
-        EnvVars::SSL_CERT_FILE,
-        Some(certs.ca_public_path.to_str().unwrap()),
-    ));
-    vars.push((
-        EnvVars::SSL_CLIENT_CERT,
-        Some(invalid_cert_path.to_str().unwrap()),
-    ));
+    async_with_vars(
+        ssl_vars(&[
+            (
+                EnvVars::SSL_CERT_FILE,
+                certs.ca_public_path.to_str().unwrap(),
+            ),
+            (
+                EnvVars::SSL_CLIENT_CERT,
+                invalid_cert_path.to_str().unwrap(),
+            ),
+        ]),
+        async {
+            let (server_task, addr) =
+                start_https_mtls_user_agent_server(&certs.ca_cert, &certs.server_cert)
+                    .await
+                    .unwrap();
 
-    async_with_vars(vars, async {
-        let (server_task, addr) =
-            start_https_mtls_user_agent_server(&certs.ca_cert, &certs.server_cert)
-                .await
-                .unwrap();
+            let res = send_request(addr).await;
+            assert_connection_error(&res);
 
-        let res = send_request(addr).await;
-        assert_connection_error(&res);
-
-        assert_server_no_cert_error(server_task).await;
-    })
+            assert_server_no_cert_error(server_task).await;
+        },
+    )
     .await;
 
     Ok(())
@@ -479,27 +483,29 @@ async fn test_mtls_with_invalid_client_cert() -> Result<()> {
 async fn test_mtls_with_client_cert() -> Result<()> {
     let certs = setup_test_certificates()?;
 
-    let mut vars = cleared_ssl_vars();
-    vars.push((
-        EnvVars::SSL_CERT_FILE,
-        Some(certs.ca_public_path.to_str().unwrap()),
-    ));
-    vars.push((
-        EnvVars::SSL_CLIENT_CERT,
-        Some(certs.client_combined_path.to_str().unwrap()),
-    ));
+    async_with_vars(
+        ssl_vars(&[
+            (
+                EnvVars::SSL_CERT_FILE,
+                certs.ca_public_path.to_str().unwrap(),
+            ),
+            (
+                EnvVars::SSL_CLIENT_CERT,
+                certs.client_combined_path.to_str().unwrap(),
+            ),
+        ]),
+        async {
+            let (server_task, addr) =
+                start_https_mtls_user_agent_server(&certs.ca_cert, &certs.server_cert)
+                    .await
+                    .unwrap();
 
-    async_with_vars(vars, async {
-        let (server_task, addr) =
-            start_https_mtls_user_agent_server(&certs.ca_cert, &certs.server_cert)
-                .await
-                .unwrap();
+            let res = send_request(addr).await;
+            assert!(res.is_ok());
 
-        let res = send_request(addr).await;
-        assert!(res.is_ok());
-
-        let _ = server_task.await.unwrap();
-    })
+            let _ = server_task.await.unwrap();
+        },
+    )
     .await;
 
     Ok(())
@@ -510,23 +516,23 @@ async fn test_mtls_with_client_cert() -> Result<()> {
 async fn test_mtls_without_client_cert() -> Result<()> {
     let certs = setup_test_certificates()?;
 
-    let mut vars = cleared_ssl_vars();
-    vars.push((
-        EnvVars::SSL_CERT_FILE,
-        Some(certs.ca_public_path.to_str().unwrap()),
-    ));
+    async_with_vars(
+        ssl_vars(&[(
+            EnvVars::SSL_CERT_FILE,
+            certs.ca_public_path.to_str().unwrap(),
+        )]),
+        async {
+            let (server_task, addr) =
+                start_https_mtls_user_agent_server(&certs.ca_cert, &certs.server_cert)
+                    .await
+                    .unwrap();
 
-    async_with_vars(vars, async {
-        let (server_task, addr) =
-            start_https_mtls_user_agent_server(&certs.ca_cert, &certs.server_cert)
-                .await
-                .unwrap();
+            let res = send_request(addr).await;
+            assert_connection_error(&res);
 
-        let res = send_request(addr).await;
-        assert_connection_error(&res);
-
-        assert_server_no_cert_error(server_task).await;
-    })
+            assert_server_no_cert_error(server_task).await;
+        },
+    )
     .await;
 
     Ok(())
