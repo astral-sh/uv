@@ -111,16 +111,24 @@ impl TestCertificate {
 /// and verify the outcome.
 struct TestClient {
     overrides: Vec<(&'static str, String)>,
+    system_certs: bool,
 }
 
 /// Create a [`TestClient`] with no environment overrides.
 fn client() -> TestClient {
     TestClient {
         overrides: Vec::new(),
+        system_certs: false,
     }
 }
 
 impl TestClient {
+    /// Enable or disable system certificate loading.
+    fn system_certs(mut self, enabled: bool) -> Self {
+        self.system_certs = enabled;
+        self
+    }
+
     /// Set `SSL_CERT_FILE` to `path`.
     fn ssl_cert_file(self, path: &Path) -> Self {
         self.with_env(EnvVars::SSL_CERT_FILE, path.to_str().unwrap())
@@ -186,9 +194,15 @@ impl TestClient {
         .await;
     }
 
-    /// Assert that an mTLS connection to `cert`'s server fails because no
-    /// valid client certificate was presented.
-    async fn expect_mtls_connect_fails(&self, cert: &TestCertificate) {
+    /// Assert that an mTLS connection to `cert`'s server fails and the server
+    /// reports a specific TLS error.
+    async fn expect_mtls_connect_fails_with_server_tls_error<F>(
+        &self,
+        cert: &TestCertificate,
+        assert_tls_error: F,
+    ) where
+        F: FnOnce(&rustls::Error),
+    {
         self.run_mtls(cert, |response, server_task| async move {
             assert_connection_error(&response);
 
@@ -205,6 +219,15 @@ impl TestClient {
             let Some(tls_err) = wrapped_err.downcast_ref::<rustls::Error>() else {
                 panic!("expected rustls::Error, got: {wrapped_err}");
             };
+            assert_tls_error(tls_err);
+        })
+        .await;
+    }
+
+    /// Assert that an mTLS connection to `cert`'s server fails because no
+    /// valid client certificate was presented.
+    async fn expect_mtls_connect_fails(&self, cert: &TestCertificate) {
+        self.expect_mtls_connect_fails_with_server_tls_error(cert, |tls_err| {
             assert!(
                 matches!(tls_err, rustls::Error::NoCertificatesPresented),
                 "expected NoCertificatesPresented, got: {tls_err}"
@@ -238,9 +261,10 @@ impl TestClient {
         Fut: std::future::Future<Output = ()>,
     {
         let vars = self.ssl_vars();
+        let system_certs = self.system_certs;
         async_with_vars(vars, async {
             let (server_task, addr) = start_https_user_agent_server(&cert.server).await.unwrap();
-            let response = send_request(addr).await;
+            let response = send_request(addr, system_certs).await;
             check(response, server_task).await;
         })
         .await;
@@ -257,11 +281,12 @@ impl TestClient {
         Fut: std::future::Future<Output = ()>,
     {
         let vars = self.ssl_vars();
+        let system_certs = self.system_certs;
         async_with_vars(vars, async {
             let (server_task, addr) = start_https_mtls_user_agent_server(&cert.ca, &cert.server)
                 .await
                 .unwrap();
-            let response = send_request(addr).await;
+            let response = send_request(addr, system_certs).await;
             check(response, server_task).await;
         })
         .await;
@@ -269,12 +294,16 @@ impl TestClient {
 }
 
 /// Send a GET request to the given server address using a fresh registry client.
-async fn send_request(addr: SocketAddr) -> Result<reqwest::Response, reqwest_middleware::Error> {
+async fn send_request(
+    addr: SocketAddr,
+    system_certs: bool,
+) -> Result<reqwest::Response, reqwest_middleware::Error> {
     let url = DisplaySafeUrl::from_str(&format!("https://{addr}")).unwrap();
     let cache = Cache::temp().unwrap().init().await.unwrap();
-    let client =
-        RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache)
-            .build();
+    let base = BaseClientBuilder::default()
+        .no_retry_delay(true)
+        .with_system_certs(system_certs);
+    let client = RegistryClientBuilder::new(base, cache).build();
     client
         .cached_client()
         .uncached()
@@ -334,6 +363,20 @@ async fn test_ssl_cert_file_nonexistent_falls_back() -> Result<()> {
     let missing = dir.path().join("missing.pem");
     client()
         .ssl_cert_file(&missing)
+        .expect_https_connect_fails(&cert)
+        .await;
+    Ok(())
+}
+
+/// A nonexistent `SSL_CERT_DIR` is ignored; the client falls back to webpki
+/// roots which don't include our test CA.
+#[tokio::test]
+async fn test_ssl_cert_dir_nonexistent_falls_back() -> Result<()> {
+    let cert = TestCertificate::new()?;
+    let dir = TempDir::new()?;
+    let missing = dir.path().join("missing-certs");
+    client()
+        .ssl_cert_dir(&missing)
         .expect_https_connect_fails(&cert)
         .await;
     Ok(())
@@ -405,7 +448,7 @@ async fn test_ssl_cert_dir_hash_named_files() -> Result<()> {
     Ok(())
 }
 
-/// `SSL_CERT_DIR` supports multiple colon-separated directories.  Certs are
+/// `SSL_CERT_DIR` supports multiple platform-separated directories. Certs are
 /// split across two directories; each only has one cert, but both are trusted.
 #[tokio::test]
 async fn test_ssl_cert_dir_multiple_directories() -> Result<()> {
@@ -417,6 +460,23 @@ async fn test_ssl_cert_dir_multiple_directories() -> Result<()> {
     let c = client().ssl_cert_dirs(&[dir_a.path(), dir_b.path()]);
     c.expect_https_connect_succeeds(&cert_a).await;
     c.expect_https_connect_succeeds(&cert_b).await;
+    Ok(())
+}
+
+/// Missing entries in `SSL_CERT_DIR` do not prevent valid directories from
+/// being loaded.
+#[tokio::test]
+async fn test_ssl_cert_dir_multiple_directories_with_missing_entry() -> Result<()> {
+    let cert = TestCertificate::new()?;
+
+    let dir = cert.ca_pem_dir();
+    let scratch = TempDir::new()?;
+    let missing = scratch.path().join("missing-certs");
+
+    client()
+        .ssl_cert_dirs(&[&missing, dir.path()])
+        .expect_https_connect_succeeds(&cert)
+        .await;
     Ok(())
 }
 
@@ -450,6 +510,31 @@ async fn test_mtls_with_client_cert() -> Result<()> {
     Ok(())
 }
 
+/// mTLS rejects a syntactically valid client certificate from the wrong trust
+/// domain.
+#[tokio::test]
+async fn test_mtls_with_wrong_client_cert() -> Result<()> {
+    let server_cert = TestCertificate::new()?;
+    let other_cert = TestCertificate::new()?;
+    client()
+        .ssl_cert_file(&server_cert.trust_path)
+        .ssl_client_cert(&other_cert.client_cert_path)
+        .expect_mtls_connect_fails_with_server_tls_error(&server_cert, |tls_err| {
+            assert!(
+                matches!(
+                    tls_err,
+                    rustls::Error::InvalidCertificate(
+                        rustls::CertificateError::BadSignature
+                            | rustls::CertificateError::UnknownIssuer
+                    )
+                ),
+                "expected InvalidCertificate(BadSignature | UnknownIssuer), got: {tls_err}"
+            );
+        })
+        .await;
+    Ok(())
+}
+
 /// mTLS rejects connections when no client certificate is presented.
 #[tokio::test]
 async fn test_mtls_without_client_cert() -> Result<()> {
@@ -457,6 +542,64 @@ async fn test_mtls_without_client_cert() -> Result<()> {
     client()
         .ssl_cert_file(&cert.trust_path)
         .expect_mtls_connect_fails(&cert)
+        .await;
+    Ok(())
+}
+
+/// When `system_certs` is enabled, `SSL_CERT_FILE` still overrides the
+/// certificate source — a valid cert connects successfully.
+#[tokio::test]
+async fn test_system_certs_with_ssl_cert_file_valid() -> Result<()> {
+    let cert = TestCertificate::new()?;
+    client()
+        .system_certs(true)
+        .ssl_cert_file(&cert.trust_path)
+        .expect_https_connect_succeeds(&cert)
+        .await;
+    Ok(())
+}
+
+/// When `system_certs` is enabled, `SSL_CERT_FILE` still overrides the
+/// certificate source — a wrong cert is rejected instead of falling back to
+/// the system roots.
+#[tokio::test]
+async fn test_system_certs_with_ssl_cert_file_wrong_cert_rejected() -> Result<()> {
+    let cert_a = TestCertificate::new()?;
+    let cert_b = TestCertificate::new()?;
+    client()
+        .system_certs(true)
+        .ssl_cert_file(&cert_a.trust_path)
+        .expect_https_connect_fails(&cert_b)
+        .await;
+    Ok(())
+}
+
+/// When `system_certs` is enabled, `SSL_CERT_DIR` still overrides the
+/// certificate source.
+#[tokio::test]
+async fn test_system_certs_with_ssl_cert_dir_valid() -> Result<()> {
+    let cert = TestCertificate::new()?;
+    let dir = cert.ca_pem_dir();
+    client()
+        .system_certs(true)
+        .ssl_cert_dir(dir.path())
+        .expect_https_connect_succeeds(&cert)
+        .await;
+    Ok(())
+}
+
+/// When `system_certs` is enabled, `SSL_CERT_DIR` still overrides the
+/// certificate source — a wrong cert is rejected instead of falling back to
+/// the system roots.
+#[tokio::test]
+async fn test_system_certs_with_ssl_cert_dir_wrong_cert_rejected() -> Result<()> {
+    let cert_a = TestCertificate::new()?;
+    let cert_b = TestCertificate::new()?;
+    let dir = cert_a.ca_pem_dir();
+    client()
+        .system_certs(true)
+        .ssl_cert_dir(dir.path())
+        .expect_https_connect_fails(&cert_b)
         .await;
     Ok(())
 }

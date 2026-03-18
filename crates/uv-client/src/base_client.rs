@@ -256,6 +256,12 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     #[must_use]
+    pub fn with_system_certs(mut self, system_certs: bool) -> Self {
+        self.system_certs = system_certs;
+        self
+    }
+
+    #[must_use]
     pub fn markers(mut self, markers: &'a MarkerEnvironment) -> Self {
         self.markers = Some(markers);
         self
