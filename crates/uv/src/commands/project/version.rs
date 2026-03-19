@@ -7,7 +7,7 @@ use owo_colors::OwoColorize;
 
 use tracing::debug;
 use uv_cache::Cache;
-use uv_cli::version::VersionInfo;
+use uv_cli::version::ProjectVersionInfo;
 use uv_cli::{VersionBump, VersionBumpSpec, VersionFormat};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
@@ -47,7 +47,19 @@ pub(crate) fn self_version(
     printer: Printer,
 ) -> Result<ExitStatus> {
     let version_info = uv_cli::version::uv_self_version();
-    print_version(version_info, None, short, output_format, printer)?;
+    match output_format {
+        VersionFormat::Text => {
+            if short {
+                writeln!(printer.stdout(), "{}", version_info.cyan())?;
+            } else {
+                writeln!(printer.stdout(), "uv {}", version_info.cyan())?;
+            }
+        }
+        VersionFormat::Json => {
+            let string = serde_json::to_string_pretty(&version_info)?;
+            writeln!(printer.stdout(), "{string}")?;
+        }
+    }
 
     Ok(ExitStatus::Success)
 }
@@ -349,8 +361,8 @@ pub(crate) async fn project_version(
     };
 
     // Report the results
-    let old_version = VersionInfo::new(Some(&name), &old_version);
-    let new_version = new_version.map(|version| VersionInfo::new(Some(&name), &version));
+    let old_version = ProjectVersionInfo::new(Some(&name), &old_version);
+    let new_version = new_version.map(|version| ProjectVersionInfo::new(Some(&name), &version));
     print_version(old_version, new_version, short, output_format, printer)?;
 
     Ok(status)
@@ -521,7 +533,7 @@ async fn print_frozen_version(
     };
 
     // Finally, print!
-    let old_version = VersionInfo::new(Some(name), version);
+    let old_version = ProjectVersionInfo::new(Some(name), version);
     print_version(old_version, None, short, output_format, printer)?;
 
     Ok(ExitStatus::Success)
@@ -708,8 +720,8 @@ async fn lock_and_sync(
 }
 
 fn print_version(
-    old_version: VersionInfo,
-    new_version: Option<VersionInfo>,
+    old_version: ProjectVersionInfo,
+    new_version: Option<ProjectVersionInfo>,
     short: bool,
     output_format: VersionFormat,
     printer: Printer,
