@@ -21,7 +21,7 @@ use uv_distribution_types::{
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
-use uv_platform_tags::{AbiTag, IncompatibleTag, TagCompatibility, Tags};
+use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, Tags};
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::PythonEnvironment;
 use uv_types::HashStrategy;
@@ -55,12 +55,158 @@ impl fmt::Display for IncompatibleWheelKind {
 
 /// A hint describing why a wheel is incompatible.
 #[derive(Debug)]
-struct IncompatibleWheelHint(String);
+enum IncompatibleWheelHint {
+    /// The wheel targets a different Python version than the current interpreter.
+    Python {
+        wheel_tags: Vec<LanguageTag>,
+        current: Option<LanguageTag>,
+    },
+    /// The wheel targets a different ABI than the current interpreter.
+    Abi {
+        wheel_tags: Vec<AbiTag>,
+        current: Option<AbiTag>,
+    },
+    /// The wheel targets a GIL-enabled interpreter, but the current one is free-threaded.
+    FreethreadedAbi {
+        wheel_tags: Vec<AbiTag>,
+        current: Option<AbiTag>,
+    },
+    /// The wheel targets a different platform than the current one.
+    Platform {
+        wheel_tags: Vec<PlatformTag>,
+        current: Option<PlatformTag>,
+    },
+}
 
 impl fmt::Display for IncompatibleWheelHint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
+        match self {
+            Self::Python {
+                wheel_tags,
+                current,
+            } => {
+                if let Some(current) = current {
+                    write!(
+                        f,
+                        "The wheel is compatible with {}, but you're using {}",
+                        format_language_tags(wheel_tags),
+                        format_language_tag(*current),
+                    )
+                } else {
+                    write!(f, "The wheel requires {}", format_language_tags(wheel_tags),)
+                }
+            }
+            Self::Abi {
+                wheel_tags,
+                current,
+            } => {
+                if let Some(current) = current {
+                    write!(
+                        f,
+                        "The wheel is compatible with {}, but you're using {}",
+                        format_abi_tags(wheel_tags),
+                        format_abi_tag(*current),
+                    )
+                } else {
+                    write!(f, "The wheel requires {}", format_abi_tags(wheel_tags))
+                }
+            }
+            Self::FreethreadedAbi {
+                wheel_tags,
+                current,
+            } => {
+                let current_display = if let Some(current) = current {
+                    format_abi_tag(*current)
+                } else {
+                    "free-threaded Python".to_string()
+                };
+                let wheel_display = wheel_tags
+                    .iter()
+                    .map(|tag| match tag {
+                        AbiTag::Abi3 => format!("the stable ABI (`{}`)", tag.cyan()),
+                        _ => {
+                            if let Some(pretty) = tag.pretty() {
+                                format!("the {} ABI (`{}`)", pretty.cyan(), tag.cyan())
+                            } else {
+                                format!("`{}`", tag.cyan())
+                            }
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                write!(
+                    f,
+                    "You're using {current_display}, but the wheel was built for {wheel_display}, which requires a GIL-enabled interpreter"
+                )
+            }
+            Self::Platform {
+                wheel_tags,
+                current,
+            } => {
+                if let Some(current) = current {
+                    write!(
+                        f,
+                        "The wheel is compatible with {}, but you're on {}",
+                        format_platform_tags(wheel_tags),
+                        format_platform_tag(current),
+                    )
+                } else {
+                    write!(f, "The wheel requires {}", format_platform_tags(wheel_tags),)
+                }
+            }
+        }
     }
+}
+
+/// Format a single language tag with optional pretty name and cyan coloring.
+fn format_language_tag(tag: LanguageTag) -> String {
+    if let Some(pretty) = tag.pretty() {
+        format!("{} (`{}`)", pretty.cyan(), tag.cyan())
+    } else {
+        format!("`{}`", tag.cyan())
+    }
+}
+
+/// Format a list of language tags as a comma-separated string.
+fn format_language_tags(tags: &[LanguageTag]) -> String {
+    tags.iter()
+        .map(|tag| format_language_tag(*tag))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Format a single ABI tag with optional pretty name and cyan coloring.
+fn format_abi_tag(tag: AbiTag) -> String {
+    if let Some(pretty) = tag.pretty() {
+        format!("{} (`{}`)", pretty.cyan(), tag.cyan())
+    } else {
+        format!("`{}`", tag.cyan())
+    }
+}
+
+/// Format a list of ABI tags as a comma-separated string.
+fn format_abi_tags(tags: &[AbiTag]) -> String {
+    tags.iter()
+        .map(|tag| format_abi_tag(*tag))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Format a single platform tag with optional pretty name and cyan coloring.
+fn format_platform_tag(tag: &PlatformTag) -> String {
+    if let Some(pretty) = tag.pretty() {
+        format!("{} (`{}`)", pretty.cyan(), tag.cyan())
+    } else {
+        format!("`{}`", tag.cyan())
+    }
+}
+
+/// Format a list of platform tags as a comma-separated string.
+fn format_platform_tags(tags: &[PlatformTag]) -> String {
+    tags.iter()
+        .map(format_platform_tag)
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 impl fmt::Display for IncompatibleWheelError {
@@ -594,149 +740,22 @@ fn generate_wheel_compatibility_hint(
     };
 
     match incompatible_tag {
-        IncompatibleTag::Python => {
-            let wheel_tags = filename.python_tags();
-            let current_tag = tags.python_tag();
-
-            if let Some(current) = current_tag {
-                let message = if let Some(pretty) = current.pretty() {
-                    format!("{} (`{}`)", pretty.cyan(), current.cyan())
-                } else {
-                    format!("`{}`", current.cyan())
-                };
-
-                Some(IncompatibleWheelHint(format!(
-                    "The wheel is compatible with {}, but you're using {}",
-                    wheel_tags
-                        .iter()
-                        .map(|tag| if let Some(pretty) = tag.pretty() {
-                            format!("{} (`{}`)", pretty.cyan(), tag.cyan())
-                        } else {
-                            format!("`{}`", tag.cyan())
-                        })
-                        .collect::<Vec<_>>()
-                        .join(", "),
-                    message
-                )))
-            } else {
-                Some(IncompatibleWheelHint(format!(
-                    "The wheel requires {}",
-                    wheel_tags
-                        .iter()
-                        .map(|tag| if let Some(pretty) = tag.pretty() {
-                            format!("{} (`{}`)", pretty.cyan(), tag.cyan())
-                        } else {
-                            format!("`{}`", tag.cyan())
-                        })
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )))
-            }
-        }
-        IncompatibleTag::FreethreadedAbi => {
-            let wheel_abi = filename
-                .abi_tags()
-                .iter()
-                .map(|tag| match tag {
-                    AbiTag::Abi3 => format!("the stable ABI (`{}`)", tag.cyan()),
-                    _ => {
-                        if let Some(pretty) = tag.pretty() {
-                            format!("the {} ABI (`{}`)", pretty.cyan(), tag.cyan())
-                        } else {
-                            format!("`{}`", tag.cyan())
-                        }
-                    }
-                })
-                .collect::<Vec<_>>()
-                .join(", ");
-            let current = if let Some(current) = tags.abi_tag() {
-                if let Some(pretty) = current.pretty() {
-                    format!("{} (`{}`)", pretty.cyan(), current.cyan())
-                } else {
-                    format!("`{}`", current.cyan())
-                }
-            } else {
-                "free-threaded Python".to_string()
-            };
-            Some(IncompatibleWheelHint(format!(
-                "You're using {current}, but the wheel was built for {wheel_abi}, which requires a GIL-enabled interpreter"
-            )))
-        }
-        IncompatibleTag::Abi => {
-            let wheel_tags = filename.abi_tags();
-            let current_tag = tags.abi_tag();
-            if let Some(current) = current_tag {
-                let message = if let Some(pretty) = current.pretty() {
-                    format!("{} (`{}`)", pretty.cyan(), current.cyan())
-                } else {
-                    format!("`{}`", current.cyan())
-                };
-                Some(IncompatibleWheelHint(format!(
-                    "The wheel is compatible with {}, but you're using {}",
-                    wheel_tags
-                        .iter()
-                        .map(|tag| if let Some(pretty) = tag.pretty() {
-                            format!("{} (`{}`)", pretty.cyan(), tag.cyan())
-                        } else {
-                            format!("`{}`", tag.cyan())
-                        })
-                        .collect::<Vec<_>>()
-                        .join(", "),
-                    message
-                )))
-            } else {
-                Some(IncompatibleWheelHint(format!(
-                    "The wheel requires {}",
-                    wheel_tags
-                        .iter()
-                        .map(|tag| if let Some(pretty) = tag.pretty() {
-                            format!("{} (`{}`)", pretty.cyan(), tag.cyan())
-                        } else {
-                            format!("`{}`", tag.cyan())
-                        })
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )))
-            }
-        }
-        IncompatibleTag::Platform => {
-            let wheel_tags = filename.platform_tags();
-            let current_tag = tags.platform_tag();
-
-            if let Some(current) = current_tag {
-                let message = if let Some(pretty) = current.pretty() {
-                    format!("{} (`{}`)", pretty.cyan(), current.cyan())
-                } else {
-                    format!("`{}`", current.cyan())
-                };
-                Some(IncompatibleWheelHint(format!(
-                    "The wheel is compatible with {}, but you're on {}",
-                    wheel_tags
-                        .iter()
-                        .map(|tag| if let Some(pretty) = tag.pretty() {
-                            format!("{} (`{}`)", pretty.cyan(), tag.cyan())
-                        } else {
-                            format!("`{}`", tag.cyan())
-                        })
-                        .collect::<Vec<_>>()
-                        .join(", "),
-                    message
-                )))
-            } else {
-                Some(IncompatibleWheelHint(format!(
-                    "The wheel requires {}",
-                    wheel_tags
-                        .iter()
-                        .map(|tag| if let Some(pretty) = tag.pretty() {
-                            format!("{} (`{}`)", pretty.cyan(), tag.cyan())
-                        } else {
-                            format!("`{}`", tag.cyan())
-                        })
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )))
-            }
-        }
+        IncompatibleTag::Python => Some(IncompatibleWheelHint::Python {
+            wheel_tags: filename.python_tags().to_vec(),
+            current: tags.python_tag(),
+        }),
+        IncompatibleTag::FreethreadedAbi => Some(IncompatibleWheelHint::FreethreadedAbi {
+            wheel_tags: filename.abi_tags().to_vec(),
+            current: tags.abi_tag(),
+        }),
+        IncompatibleTag::Abi => Some(IncompatibleWheelHint::Abi {
+            wheel_tags: filename.abi_tags().to_vec(),
+            current: tags.abi_tag(),
+        }),
+        IncompatibleTag::Platform => Some(IncompatibleWheelHint::Platform {
+            wheel_tags: filename.platform_tags().to_vec(),
+            current: tags.platform_tag().cloned(),
+        }),
         _ => None,
     }
 }
