@@ -14,6 +14,7 @@ use std::process::{Command, Stdio};
 use std::str::FromStr;
 use std::sync::LazyLock;
 use std::{env, fmt};
+use target_lexicon::Endianness;
 use tracing::trace;
 use uv_fs::Simplified;
 use uv_static::EnvVars;
@@ -367,22 +368,38 @@ fn find_ld_path_from_root_and_arch(root: &Path, architecture: Arch) -> Option<Pa
 /// Return expected dynamic linker paths for the given architecture, in
 /// preference order.
 fn dynamic_linker_candidates(architecture: Arch) -> Option<&'static [&'static str]> {
-    match architecture.family() {
+    let family = architecture.family();
+
+    match family {
         target_lexicon::Architecture::X86_64 => {
             Some(&["/lib64/ld-linux-x86-64.so.2", "/lib/ld-musl-x86_64.so.1"])
         }
         target_lexicon::Architecture::X86_32(_) => {
             Some(&["/lib/ld-linux.so.2", "/lib/ld-musl-i386.so.1"])
         }
-        target_lexicon::Architecture::Aarch64(_) => {
-            Some(&["/lib/ld-linux-aarch64.so.1", "/lib/ld-musl-aarch64.so.1"])
-        }
-        target_lexicon::Architecture::Arm(_) => Some(&[
-            "/lib/ld-linux-armhf.so.3",
-            "/lib/ld-linux.so.3",
-            "/lib/ld-musl-armhf.so.1",
-            "/lib/ld-musl-arm.so.1",
-        ]),
+        target_lexicon::Architecture::Aarch64(_) => match family.endianness().ok()? {
+            Endianness::Little => {
+                Some(&["/lib/ld-linux-aarch64.so.1", "/lib/ld-musl-aarch64.so.1"])
+            }
+            Endianness::Big => Some(&[
+                "/lib/ld-linux-aarch64_be.so.1",
+                "/lib/ld-musl-aarch64_be.so.1",
+            ]),
+        },
+        target_lexicon::Architecture::Arm(_) => match family.endianness().ok()? {
+            Endianness::Little => Some(&[
+                "/lib/ld-linux-armhf.so.3",
+                "/lib/ld-linux.so.3",
+                "/lib/ld-musl-armhf.so.1",
+                "/lib/ld-musl-arm.so.1",
+            ]),
+            Endianness::Big => Some(&[
+                "/lib/ld-linux-armhf.so.3",
+                "/lib/ld-linux.so.3",
+                "/lib/ld-musl-armebhf.so.1",
+                "/lib/ld-musl-armeb.so.1",
+            ]),
+        },
         target_lexicon::Architecture::Powerpc64 => {
             Some(&["/lib64/ld64.so.1", "/lib/ld-musl-powerpc64.so.1"])
         }
@@ -392,11 +409,17 @@ fn dynamic_linker_candidates(architecture: Arch) -> Option<&'static [&'static st
         target_lexicon::Architecture::S390x => Some(&["/lib/ld64.so.1", "/lib/ld-musl-s390x.so.1"]),
         target_lexicon::Architecture::Riscv64(_) => Some(&[
             "/lib/ld-linux-riscv64-lp64d.so.1",
+            "/lib/ld-linux-riscv64-lp64.so.1",
             "/lib/ld-musl-riscv64.so.1",
+            "/lib/ld-musl-riscv64-sp.so.1",
+            "/lib/ld-musl-riscv64-sf.so.1",
         ]),
         target_lexicon::Architecture::LoongArch64 => Some(&[
             "/lib64/ld-linux-loongarch-lp64d.so.1",
+            "/lib64/ld-linux-loongarch-lp64s.so.1",
             "/lib/ld-musl-loongarch64.so.1",
+            "/lib/ld-musl-loongarch64-sp.so.1",
+            "/lib/ld-musl-loongarch64-sf.so.1",
         ]),
         _ => None,
     }
