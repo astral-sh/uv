@@ -1,6 +1,6 @@
 pub use workspace::{
     DiscoveryOptions, Editability, MemberDiscovery, ProjectDiscovery, ProjectWorkspace,
-    RequiresPythonSources, VenvPath, VirtualProject, Workspace, WorkspaceCache, WorkspaceError,
+    RequiresPythonSources, ProjectEnvironmentPath, VirtualProject, Workspace, WorkspaceCache, WorkspaceError,
     WorkspaceMember, centralized_environment_root,
 };
 

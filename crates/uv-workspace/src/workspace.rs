@@ -33,18 +33,20 @@ use crate::pyproject::{
 /// Distinguishes between the default `.venv` path and an overridden path
 /// (from `UV_PROJECT_ENVIRONMENT` or `VIRTUAL_ENV` with `--active`).
 #[derive(Debug, Clone)]
-pub enum VenvPath {
+pub enum ProjectEnvironmentPath {
     /// The default `.venv` path in the project directory.
     Default(PathBuf),
-    /// An overridden path from `UV_PROJECT_ENVIRONMENT` or `VIRTUAL_ENV`.
+    /// An overridden path from `UV_PROJECT_ENVIRONMENT`.
     Override(PathBuf),
+    /// The active virtual environment from `VIRTUAL_ENV` (via `--active`).
+    Active(PathBuf),
 }
 
-impl VenvPath {
+impl ProjectEnvironmentPath {
     /// Returns the path.
     pub fn path(&self) -> &Path {
         match self {
-            Self::Default(path) | Self::Override(path) => path,
+            Self::Default(path) | Self::Override(path) | Self::Active(path) => path,
         }
     }
 
@@ -56,12 +58,12 @@ impl VenvPath {
     /// Consumes self and returns the inner `PathBuf`.
     pub fn into_path_buf(self) -> PathBuf {
         match self {
-            Self::Default(path) | Self::Override(path) => path,
+            Self::Default(path) | Self::Override(path) | Self::Active(path) => path,
         }
     }
 }
 
-impl std::ops::Deref for VenvPath {
+impl std::ops::Deref for ProjectEnvironmentPath {
     type Target = Path;
 
     fn deref(&self) -> &Path {
@@ -69,7 +71,7 @@ impl std::ops::Deref for VenvPath {
     }
 }
 
-impl AsRef<Path> for VenvPath {
+impl AsRef<Path> for ProjectEnvironmentPath {
     fn as_ref(&self) -> &Path {
         self.path()
     }
@@ -759,9 +761,9 @@ impl Workspace {
     ///
     /// > **Note**: For centralized environments use [`centralized_environment_root`] instead of
     /// > this function.
-    pub fn venv(&self, active: Option<bool>) -> VenvPath {
+    pub fn venv(&self, active: Option<bool>) -> ProjectEnvironmentPath {
         /// Resolve the `UV_PROJECT_ENVIRONMENT` value, if any.
-        fn from_project_environment_variable(workspace: &Workspace) -> Option<VenvPath> {
+        fn from_project_environment_variable(workspace: &Workspace) -> Option<ProjectEnvironmentPath> {
             let value = std::env::var_os(EnvVars::UV_PROJECT_ENVIRONMENT)?;
 
             if value.is_empty() {
@@ -770,15 +772,15 @@ impl Workspace {
 
             let path = PathBuf::from(value);
             if path.is_absolute() {
-                return Some(VenvPath::Override(path));
+                return Some(ProjectEnvironmentPath::Override(path));
             }
 
             // Resolve the path relative to the install path.
-            Some(VenvPath::Override(workspace.install_path.join(path)))
+            Some(ProjectEnvironmentPath::Override(workspace.install_path.join(path)))
         }
 
         /// Resolve the `VIRTUAL_ENV` variable, if any.
-        fn from_virtual_env_variable() -> Option<VenvPath> {
+        fn from_virtual_env_variable() -> Option<ProjectEnvironmentPath> {
             let value = std::env::var_os(EnvVars::VIRTUAL_ENV)?;
 
             if value.is_empty() {
@@ -787,17 +789,17 @@ impl Workspace {
 
             let path = PathBuf::from(value);
             if path.is_absolute() {
-                return Some(VenvPath::Override(path));
+                return Some(ProjectEnvironmentPath::Active(path));
             }
 
             // Resolve the path relative to current directory.
             // Note this differs from `UV_PROJECT_ENVIRONMENT`
-            Some(VenvPath::Override(CWD.join(path)))
+            Some(ProjectEnvironmentPath::Active(CWD.join(path)))
         }
 
         // Determine the default value.
         let project_env = from_project_environment_variable(self)
-            .unwrap_or_else(|| VenvPath::Default(self.install_path.join(".venv")));
+            .unwrap_or_else(|| ProjectEnvironmentPath::Default(self.install_path.join(".venv")));
 
         // Warn if it conflicts with `VIRTUAL_ENV`
         if let Some(from_virtual_env) = from_virtual_env_variable() {
