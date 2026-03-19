@@ -38,6 +38,14 @@ pub struct PythonInstallation {
 }
 
 impl PythonInstallation {
+    /// Create a new [`PythonInstallation`] from a source and interpreter.
+    pub fn new(source: PythonSource, interpreter: Interpreter) -> Self {
+        Self {
+            source,
+            interpreter,
+        }
+    }
+
     /// Find an installed [`PythonInstallation`].
     ///
     /// This is the standard interface for discovering a Python installation for creating
@@ -348,6 +356,13 @@ impl PythonInstallation {
     /// Return the [`LenientImplementationName`] of the Python installation as reported by its interpreter.
     pub fn implementation(&self) -> LenientImplementationName {
         LenientImplementationName::from(self.interpreter.implementation_name())
+    }
+
+    /// Returns `true` if this is a managed (uv-installed) Python installation.
+    ///
+    /// Uses the source as a fast path, then falls back to checking the interpreter's base prefix.
+    pub fn is_managed(&self) -> bool {
+        self.source.is_managed() || self.interpreter.is_managed()
     }
 
     /// Whether this is a CPython installation.

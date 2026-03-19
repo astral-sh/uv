@@ -170,11 +170,7 @@ pub(crate) async fn list(
             .filter_map(Result::ok)
             // Apply the `PythonPreference` to discovered interpreters, since we may have
             // expanded it above
-            .filter(|installation| match python_preference {
-                PythonPreference::OnlyManaged => installation.interpreter().is_managed(),
-                PythonPreference::OnlySystem => !installation.interpreter().is_managed(),
-                PythonPreference::Managed | PythonPreference::System => true,
-            }))
+            .filter(|installation| python_preference.allows_installation(installation)))
             }
             PythonListKinds::Downloads => None,
         };
