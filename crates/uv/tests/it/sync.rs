@@ -7199,8 +7199,9 @@ fn sync_workspace_custom_environment_path() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
      + iniconfig==2.0.0
     ");
 
@@ -7242,7 +7243,8 @@ fn sync_workspace_custom_environment_path() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: foo
     Resolved 3 packages in [TIME]
-    Installed 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
      + iniconfig==2.0.0
     ");
 
@@ -7288,7 +7290,7 @@ fn sync_workspace_custom_environment_path() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Checked in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     context
