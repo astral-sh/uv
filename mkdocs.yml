@@ -187,6 +187,9 @@ nav:
       - Migration:
           - guides/migration/index.md
           - From pip to a uv project: guides/migration/pip-to-project.md
+          - From pip to uv pip: guides/migration/pip.md
+          - From Poetry: guides/migration/poetry.md
+          - From Pipenv: guides/migration/pipenv.md
       - Integrations:
           - guides/integration/index.md
           - Docker: guides/integration/docker.md
