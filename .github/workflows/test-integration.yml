@@ -753,7 +753,7 @@ jobs:
           docker run --rm \
             -v "$PWD/uv:/uv" \
             -v "$PWD/test/integration/termux.sh:/test-termux.sh" \
-            termux/termux-docker:x86_64 \
+            ghcr.io/astral-sh/termux-python:latest \
             /entrypoint.sh bash /test-termux.sh
 
   integration-test-github-actions:
