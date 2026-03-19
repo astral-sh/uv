@@ -10,13 +10,10 @@ Rust, with [`aws-lc-rs`](https://github.com/aws/aws-lc-rs) as the cryptography p
 
 uv supports the following X.509 certificate signature algorithms:
 
-- ECDSA P-256 (SHA-256, SHA-384)
-- ECDSA P-384 (SHA-256, SHA-384)
-- ECDSA P-521 (SHA-256, SHA-384, SHA-512)
+- ECDSA (P-256, P-384, P-521) with SHA-256, SHA-384, or SHA-512
 - Ed25519
-- RSA PKCS#1 2048–8192 bit (SHA-256, SHA-384, SHA-512)
-- RSA PKCS#1 3072–8192 bit (SHA-384)
-- RSA-PSS 2048–8192 bit (SHA-256, SHA-384, SHA-512)
+- RSA PKCS#1 v1.5 (2048–8192 bit) with SHA-256, SHA-384, or SHA-512
+- RSA-PSS (2048–8192 bit) with SHA-256, SHA-384, or SHA-512
 
 ## System certificates
 
