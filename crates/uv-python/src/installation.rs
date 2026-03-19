@@ -38,15 +38,6 @@ pub struct PythonInstallation {
 }
 
 impl PythonInstallation {
-    /// Create a new [`PythonInstallation`] from a source, interpreter tuple.
-    pub(crate) fn from_tuple(tuple: (PythonSource, Interpreter)) -> Self {
-        let (source, interpreter) = tuple;
-        Self {
-            source,
-            interpreter,
-        }
-    }
-
     /// Find an installed [`PythonInstallation`].
     ///
     /// This is the standard interface for discovering a Python installation for creating
