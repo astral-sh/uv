@@ -3,6 +3,41 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.10.12
+
+Released on 2026-03-19.
+
+### Python
+
+- Add pypy 3.11.15 ([#18468](https://github.com/astral-sh/uv/pull/18468))
+- Add support for using Python 3.6 interpreters ([#18454](https://github.com/astral-sh/uv/pull/18454))
+
+### Enhancements
+
+- Include uv's target triple in version report ([#18520](https://github.com/astral-sh/uv/pull/18520))
+- Allow comma separated values in `--no-emit-package` ([#18565](https://github.com/astral-sh/uv/pull/18565))
+
+### Preview features
+
+- Show `uv audit` in the CLI help ([#18540](https://github.com/astral-sh/uv/pull/18540))
+
+### Bug fixes
+
+- Improve reporting of managed interpreter symlinks in `uv python list` ([#18459](https://github.com/astral-sh/uv/pull/18459))
+- Preserve end-of-line comments on previous entries when removing dependencies ([#18557](https://github.com/astral-sh/uv/pull/18557))
+- Treat abi3 wheel Python version as a lower bound ([#18536](https://github.com/astral-sh/uv/pull/18536))
+- Detect hard-float support on aarch64 kernels running armv7 userspace ([#18530](https://github.com/astral-sh/uv/pull/18530))
+
+
+### Documentation
+
+- Add Python 3.15 to supported versions ([#18552](https://github.com/astral-sh/uv/pull/18552))
+- Adjust the PyPy note ([#18548](https://github.com/astral-sh/uv/pull/18548))
+- Move Pyodide to Tier 2 in the Python support policy ([#18561](https://github.com/astral-sh/uv/pull/18561))
+- Move Rust and Python version support out of the Platform support policy ([#18535](https://github.com/astral-sh/uv/pull/18535))
+- Update Docker guide with changes from `uv-docker-example` ([#18558](https://github.com/astral-sh/uv/pull/18558))
+- Update the Python version policy ([#18559](https://github.com/astral-sh/uv/pull/18559))
+
 ## 0.10.11
 
 Released on 2026-03-16.
