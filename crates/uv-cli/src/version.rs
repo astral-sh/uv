@@ -124,7 +124,7 @@ pub fn uv_self_version() -> SelfVersionInfo {
             .map_or(0, |value| value.parse::<u32>().unwrap_or(0)),
     });
 
-    // Target triple is set by Cargo via `build.rs`
+    // Set by `uv-cli/build.rs`
     let target_triple = env!("RUST_HOST_TARGET").to_string();
 
     SelfVersionInfo {
