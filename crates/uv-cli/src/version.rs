@@ -57,7 +57,7 @@ impl ProjectVersionInfo {
 }
 
 impl fmt::Display for SelfVersionInfo {
-    /// Formatted version information: "<version>[+<commits>] (<commit> <date> <target>)"
+    /// Formatted version information: "<version>[+<commits>] ([<commit> <date> ]<target>)"
     ///
     /// This is intended for consumption by `clap` to provide `uv --version`,
     /// and intentionally omits the name of the package.
