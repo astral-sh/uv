@@ -2654,6 +2654,8 @@ async fn run_project(
                 cache,
                 printer,
                 globals.preview,
+                args.service,
+                args.service_url,
             ))
             .await
         }

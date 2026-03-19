@@ -11,6 +11,7 @@ use clap::error::ErrorKind;
 use clap::{Args, Parser, Subcommand};
 use clap::{ValueEnum, ValueHint};
 
+use uv_audit::service::VulnerabilityService;
 use uv_auth::Service;
 use uv_cache::CacheArgs;
 use uv_configuration::{
@@ -5267,6 +5268,16 @@ pub struct AuditArgs {
     /// `aarch64-apple-darwin`.
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
+
+    /// The service to use for vulnerability lookups.
+    #[arg(long, value_enum, default_value = "osv")]
+    pub service: VulnerabilityService,
+
+    /// The URL to use for the vulnerability service API.
+    ///
+    /// If not provided, the default URL for the selected service will be used.
+    #[arg(long, value_hint = ValueHint::Url)]
+    pub service_url: Option<String>,
 }
 
 #[derive(Args)]

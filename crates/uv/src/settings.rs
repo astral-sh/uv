@@ -6,6 +6,7 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use rustc_hash::FxHashSet;
+use uv_audit::service::VulnerabilityService;
 
 use crate::commands::{PythonUpgrade, PythonUpgradeSource};
 use uv_auth::Service;
@@ -2477,6 +2478,8 @@ pub(crate) struct AuditSettings {
     pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) settings: ResolverSettings,
+    pub(crate) service: VulnerabilityService,
+    pub(crate) service_url: Option<String>,
 }
 
 impl AuditSettings {
@@ -2506,6 +2509,8 @@ impl AuditSettings {
             frozen,
             build,
             resolver,
+            service,
+            service_url,
         } = args;
 
         let filesystem_install_mirrors = filesystem
@@ -2551,6 +2556,8 @@ impl AuditSettings {
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
+            service,
+            service_url,
         }
     }
 }
