@@ -40,13 +40,15 @@ Tier 3 platforms may not be built or tested, but uv will accept patches to fix b
 
 ## Linux versions
 
-uv publishes separate Linux artifacts for glibc-based and musl-based distributions.
+On Linux, compatibility is determined by libc version.
+
+uv publishes both glibc-based and musl-based distributions.
 
 For glibc-based Linux distributions, uv publishes
 [manylinux-compatible](https://peps.python.org/pep-0600/) wheels and corresponding binaries. These
 artifacts depend on glibc being available on the host system. In a manylinux wheel tag, the version
 encodes the minimum supported glibc version for that wheel; for example, `manylinux_2_17_x86_64`
-means glibc 2.17+ on x86_64.
+requires glibc 2.17+.
 
 uv's official glibc-based wheels and binaries are published for the following targets:
 
@@ -58,8 +60,7 @@ uv's official glibc-based wheels and binaries are published for the following ta
 - `riscv64gc-unknown-linux-gnu` (`manylinux_2_31_riscv64`)
 - `s390x-unknown-linux-gnu` (`manylinux_2_17_s390x`)
 
-For musl-based Linux distributions, such as Alpine, uv publishes wheels and fully statically linked
-musl binaries for the following targets:
+uv also publishes musl-based wheels and fully statically linked binaries for the following targets:
 
 - `x86_64-unknown-linux-musl` (`musllinux_1_1_x86_64`)
 - `aarch64-unknown-linux-musl` (`musllinux_1_1_aarch64`)
