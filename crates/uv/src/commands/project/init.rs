@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fmt::Write;
 use std::iter;
 use std::path::{Path, PathBuf};
@@ -15,13 +16,12 @@ use uv_client::BaseClientBuilder;
 use uv_configuration::{
     DependencyGroupsWithDefaults, ProjectBuildBackend, VersionControlError, VersionControlSystem,
 };
-use uv_distribution_types::{Requirement, RequirementSource};
 use uv_distribution_types::RequiresPython;
 use uv_fs::{CWD, Simplified};
 use uv_git::GIT;
 use uv_normalize::PackageName;
-use uv_pep440::{Version, VersionSpecifiers};
-use uv_pep508::MarkerTree;
+use uv_pep440::Version;
+use uv_pep508::{MarkerTree, Requirement};
 use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
@@ -455,30 +455,40 @@ async fn init_project(
                 .project
                 .as_ref()
                 .and_then(|project| project.dependencies.as_ref())
-                .is_some()
+                .is_some_and(|dependencies| !dependencies.is_empty())
             {
-                pyproject.add_dependency(
-                    &Requirement {
-                        name: name.clone(),
-                        extras: Box::new([]),
-                        groups: Box::new([]),
-                        marker: MarkerTree::default(),
-                        source: RequirementSource::Registry {
-                            specifier: VersionSpecifiers::empty(),
-                            index: None,
-                            conflict: None,
+                let root_name = workspace
+                    .pyproject_toml()
+                    .project
+                    .as_ref()
+                    .map(|project| &project.name);
+                let mut members = workspace
+                    .packages()
+                    .keys()
+                    .filter(|member| root_name != Some(*member))
+                    .cloned()
+                    .collect::<BTreeSet<_>>();
+                members.insert(name.clone());
+
+                for member in members {
+                    pyproject.add_dependency(
+                        &Requirement {
+                            name: member,
+                            extras: Box::new([]),
+                            version_or_url: None,
+                            marker: MarkerTree::default(),
+                            origin: None,
                         },
-                        origin: None,
-                    },
-                    Some(&Source::Workspace {
-                        workspace: true,
-                        editable: None,
-                        marker: MarkerTree::default(),
-                        extra: None,
-                        group: None,
-                    }),
-                    false,
-                )?;
+                        Some(&Source::Workspace {
+                            workspace: true,
+                            editable: None,
+                            marker: MarkerTree::default(),
+                            extra: None,
+                            group: None,
+                        }),
+                        false,
+                    )?;
+                }
             }
 
             // Save the modified `pyproject.toml`.

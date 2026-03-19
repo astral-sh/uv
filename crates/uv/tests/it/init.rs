@@ -1499,8 +1499,8 @@ fn init_workspace() -> Result<()> {
         ]
 
         [tool.uv.sources]
-        foo = { workspace = true }
         bar = { workspace = true }
+        foo = { workspace = true }
         "#
         );
     });
@@ -1562,9 +1562,9 @@ fn init_workspace() -> Result<()> {
         ]
 
         [tool.uv.sources]
-        foo = { workspace = true }
         bar = { workspace = true }
         baz = { workspace = true }
+        foo = { workspace = true }
         "#
         );
     });
