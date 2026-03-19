@@ -15,11 +15,13 @@ use uv_client::BaseClientBuilder;
 use uv_configuration::{
     DependencyGroupsWithDefaults, ProjectBuildBackend, VersionControlError, VersionControlSystem,
 };
+use uv_distribution_types::{Requirement, RequirementSource};
 use uv_distribution_types::RequiresPython;
 use uv_fs::{CWD, Simplified};
 use uv_git::GIT;
 use uv_normalize::PackageName;
-use uv_pep440::Version;
+use uv_pep440::{Version, VersionSpecifiers};
+use uv_pep508::MarkerTree;
 use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
@@ -30,6 +32,7 @@ use uv_scripts::{Pep723Script, ScriptTag};
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
+use uv_workspace::pyproject::Source;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceCache, WorkspaceError};
 
@@ -444,6 +447,39 @@ async fn init_project(
                 DependencyTarget::PyProjectToml,
             )?;
             pyproject.add_workspace(path.strip_prefix(workspace.install_path())?)?;
+
+            // Add the new member as a workspace dependency of the root project by default.
+            // Skip this for "virtual" workspaces that do not define a `[project]` table.
+            if workspace
+                .pyproject_toml()
+                .project
+                .as_ref()
+                .and_then(|project| project.dependencies.as_ref())
+                .is_some()
+            {
+                pyproject.add_dependency(
+                    &Requirement {
+                        name: name.clone(),
+                        extras: Box::new([]),
+                        groups: Box::new([]),
+                        marker: MarkerTree::default(),
+                        source: RequirementSource::Registry {
+                            specifier: VersionSpecifiers::empty(),
+                            index: None,
+                            conflict: None,
+                        },
+                        origin: None,
+                    },
+                    Some(&Source::Workspace {
+                        workspace: true,
+                        editable: None,
+                        marker: MarkerTree::default(),
+                        extra: None,
+                        group: None,
+                    }),
+                    false,
+                )?;
+            }
 
             // Save the modified `pyproject.toml`.
             fs_err::write(

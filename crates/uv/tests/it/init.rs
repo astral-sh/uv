@@ -1436,12 +1436,18 @@ fn init_workspace() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["anyio==3.7.0"]
+        dependencies = [
+            "anyio==3.7.0",
+            "foo",
+        ]
 
         [tool.uv.workspace]
         members = [
             "foo",
         ]
+
+        [tool.uv.sources]
+        foo = { workspace = true }
         "#
         );
     });
@@ -1480,13 +1486,21 @@ fn init_workspace() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["anyio==3.7.0"]
+        dependencies = [
+            "anyio==3.7.0",
+            "bar",
+            "foo",
+        ]
 
         [tool.uv.workspace]
         members = [
             "foo",
             "bar",
         ]
+
+        [tool.uv.sources]
+        foo = { workspace = true }
+        bar = { workspace = true }
         "#
         );
     });
@@ -1533,7 +1547,12 @@ fn init_workspace() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["anyio==3.7.0"]
+        dependencies = [
+            "anyio==3.7.0",
+            "bar",
+            "baz",
+            "foo",
+        ]
 
         [tool.uv.workspace]
         members = [
@@ -1541,6 +1560,11 @@ fn init_workspace() -> Result<()> {
             "bar",
             "baz",
         ]
+
+        [tool.uv.sources]
+        foo = { workspace = true }
+        bar = { workspace = true }
+        baz = { workspace = true }
         "#
         );
     });
@@ -1621,12 +1645,18 @@ fn init_workspace_relative_sub_package() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["anyio==3.7.0"]
+        dependencies = [
+            "anyio==3.7.0",
+            "foo",
+        ]
 
         [tool.uv.workspace]
         members = [
             "foo",
         ]
+
+        [tool.uv.sources]
+        foo = { workspace = true }
         "#
         );
     });
@@ -1718,12 +1748,18 @@ fn init_workspace_outside() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["anyio==3.7.0"]
+        dependencies = [
+            "anyio==3.7.0",
+            "foo",
+        ]
 
         [tool.uv.workspace]
         members = [
             "foo",
         ]
+
+        [tool.uv.sources]
+        foo = { workspace = true }
         "#
         );
     });
