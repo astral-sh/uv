@@ -41,6 +41,7 @@ uv has Tier 2 support for:
 
 - PyPy
 - GraalPy
+- Pyodide
 
 uv is "expected to work" with these implementations. uv also supports managed installations of these
 Python implementations, but the builds are not maintained by Astral.
@@ -48,6 +49,5 @@ Python implementations, but the builds are not maintained by Astral.
 uv has Tier 3 support for:
 
 - Pyston
-- Pyodide
 
 uv "should work" with these implementations, but stability may vary.
