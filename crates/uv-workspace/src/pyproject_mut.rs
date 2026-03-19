@@ -1564,29 +1564,29 @@ fn remove_dependency(name: &PackageName, deps: &mut Array) -> Vec<Requirement> {
         .into_iter()
         .rev()
         .filter_map(|(i, _)| {
-            let prefix = deps
+            if let Some(prefix) = deps
                 .get(i)
                 .and_then(|item| item.decor().prefix().and_then(|s| s.as_str()))
-                .unwrap_or("")
-                .to_string();
-
-            if !prefix.is_empty() {
-                if let Some(next) = deps.get(i + 1) {
+                .filter(|s| !s.is_empty())
+            {
+                let prefix = prefix.to_string();
+                if let Some(next) = deps.get(i + 1)
+                    && let Some(existing) = next.decor().prefix().and_then(|s| s.as_str())
+                {
                     // Transfer removed item's prefix to the next item's prefix.
-                    let existing = next
-                        .decor()
-                        .prefix()
-                        .and_then(|s| s.as_str())
-                        .unwrap_or("")
-                        .to_string();
+                    let existing = existing.to_string();
                     deps.get_mut(i + 1)
                         .unwrap()
                         .decor_mut()
                         .set_prefix(format!("{prefix}{existing}"));
-                } else {
+                } else if let Some(next) = deps.get_mut(i + 1) {
+                    // Next item exists but has no prefix; use ours directly.
+                    next.decor_mut().set_prefix(&prefix);
+                } else if let Some(existing) = deps.trailing().as_str() {
                     // No next item; move comments to the array trailing.
-                    let existing = deps.trailing().as_str().unwrap_or("").to_string();
                     deps.set_trailing(format!("{prefix}{existing}"));
+                } else {
+                    deps.set_trailing(&prefix);
                 }
             }
 
