@@ -2282,8 +2282,8 @@ impl PythonSource {
         }
     }
 
-    /// Whether this source is "explicit", i.e., directly provided by the user or environment
-    /// rather than discovered by searching.
+    /// Whether this source is "explicit", e.g., it was directly provided by the user or is
+    /// an active virtual environment.
     pub(crate) fn is_explicit(self) -> bool {
         match self {
             Self::ProvidedPath
