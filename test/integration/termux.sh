@@ -5,10 +5,6 @@ set -euxo pipefail
 cp /uv /data/data/com.termux/files/usr/bin/uv
 chmod +x /data/data/com.termux/files/usr/bin/uv
 
-# Update the package index and install Python
-pkg update -y
-pkg install -y python
-
 # Test uv
 uv --version
 
