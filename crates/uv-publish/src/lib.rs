@@ -171,7 +171,40 @@ pub struct CheckUrlClient<'a> {
     pub cache: &'a Cache,
 }
 
+/// Whether an HTTP status code represents a transient error that should be retried.
+///
+/// Retries on server errors (5xx), 408 Request Timeout, and 429 Too Many Requests,
+/// matching the classification used by the retry middleware for non-streaming requests
+/// (see `is_retryable_status_error` in `uv-client`).
+fn is_retryable_status(status: Option<StatusCode>) -> bool {
+    let Some(status) = status else {
+        return false;
+    };
+    status.is_server_error()
+        || status == StatusCode::REQUEST_TIMEOUT
+        || status == StatusCode::TOO_MANY_REQUESTS
+}
+
 impl PublishSendError {
+    /// The HTTP status code, if this error was caused by an HTTP response.
+    fn status(&self) -> Option<StatusCode> {
+        match self {
+            Self::Status(status, _)
+            | Self::StatusNoBody(status, _)
+            | Self::StatusProblemDetails(status, _)
+            | Self::PermissionDenied(status, _) => Some(*status),
+            _ => None,
+        }
+    }
+
+    /// Whether this error represents a transient HTTP status that should be retried.
+    ///
+    /// Retries on server errors (5xx), 408 Request Timeout, and 429 Too Many Requests,
+    /// matching the classification used by the retry middleware for non-streaming requests.
+    fn is_retryable(&self) -> bool {
+        is_retryable_status(self.status())
+    }
+
     /// Extract `code` from the PyPI json error response, if any.
     ///
     /// The error response from PyPI contains crucial context, such as the difference between
@@ -605,13 +638,28 @@ pub async fn upload(
             }
         };
 
-        return match handle_response(&current_registry, response).await {
+        match handle_response(&current_registry, response).await {
             Ok(()) => {
                 // Upload successful; for PyPI this can also mean a hash match in a raced upload
                 // (but it doesn't tell us), for other registries it should mean a fresh upload.
-                Ok(true)
+                return Ok(true);
             }
             Err(err) => {
+                // Retry on transient HTTP status codes (e.g., 503 Service Unavailable).
+                if err.is_retryable() {
+                    if let Some(backoff) = retry_state.should_retry_transient() {
+                        warn!(
+                            "Transient server error ({}), retrying upload for `{}`",
+                            err.status()
+                                .and_then(|s| s.canonical_reason())
+                                .unwrap_or("Unknown"),
+                            group.file.user_display(),
+                        );
+                        retry_state.sleep_backoff(backoff).await;
+                        continue;
+                    }
+                }
+
                 if matches!(
                     err,
                     PublishSendError::Status(..) | PublishSendError::StatusNoBody(..)
@@ -631,13 +679,13 @@ pub async fn upload(
                         }
                     }
                 }
-                Err(PublishError::PublishSend(
+                return Err(PublishError::PublishSend(
                     group.file.clone(),
                     current_registry.clone().into(),
                     err.into(),
-                ))
+                ));
             }
-        };
+        }
     }
 }
 
@@ -887,6 +935,20 @@ pub async fn upload_two_phase(
             }
 
             let status = response.status();
+
+            // Retry on transient HTTP status codes (e.g., 503 Service Unavailable).
+            if is_retryable_status(Some(status)) {
+                if let Some(backoff) = retry_state.should_retry_transient() {
+                    warn!(
+                        "Transient server error ({}), retrying S3 upload for `{}`",
+                        status.canonical_reason().unwrap_or("Unknown"),
+                        group.file.user_display(),
+                    );
+                    retry_state.sleep_backoff(backoff).await;
+                    continue;
+                }
+            }
+
             let body = response.text().await.unwrap_or_default();
             return Err(PublishError::S3Upload(
                 group.file.clone(),
@@ -1508,6 +1570,13 @@ mod tests {
     }
 
     async fn mock_server_upload(mock_server: &MockServer) -> Result<bool, PublishError> {
+        mock_server_upload_with_retries(mock_server, 0).await
+    }
+
+    async fn mock_server_upload_with_retries(
+        mock_server: &MockServer,
+        retries: u32,
+    ) -> Result<bool, PublishError> {
         let raw_filename = "tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl";
         let file = PathBuf::from("../../test/links/").join(raw_filename);
         let filename = DistFilename::try_from_normalized_filename(raw_filename).unwrap();
@@ -1523,11 +1592,19 @@ mod tests {
             .await
             .unwrap();
 
+        // Set the middleware retries to 0 because streaming bodies can't be cloned;
+        // `upload()` rolls its own retry loop using the separate `retry_policy` below.
+        // See the matching setup in `crates/uv/src/commands/publish.rs`.
         let client = BaseClientBuilder::default()
             .redirect(RedirectPolicy::NoRedirect)
             .retries(0)
             .auth_integration(AuthIntegration::NoAuthMiddleware)
             .build();
+
+        let retry_policy = BaseClientBuilder::default()
+            .retries(retries)
+            .no_retry_delay(true)
+            .retry_policy();
 
         let download_concurrency = Arc::new(Semaphore::new(1));
         let registry = DisplaySafeUrl::parse(&format!("{}/final", &mock_server.uri())).unwrap();
@@ -1536,7 +1613,7 @@ mod tests {
             &form_metadata,
             &registry,
             &client,
-            client.retry_policy(),
+            retry_policy,
             &Credentials::basic(Some("ferris".to_string()), Some("F3RR!S".to_string())),
             None,
             &download_concurrency,
@@ -2255,6 +2332,146 @@ mod tests {
             @"
         error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
           Caused by: Server returned status code 400 Bad Request. Server message: Bad Request, Missing required field `name`
+        "
+        );
+    }
+
+    /// 503 Service Unavailable is retried and succeeds after transient failure.
+    #[tokio::test]
+    async fn upload_retry_on_503() {
+        let mock_server = MockServer::start().await;
+
+        // First request returns 503, second returns 200.
+        Mock::given(method("POST"))
+            .and(path("/final"))
+            .respond_with(ResponseTemplate::new(503))
+            .up_to_n_times(1)
+            .mount(&mock_server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/final"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&mock_server)
+            .await;
+
+        assert!(
+            mock_server_upload_with_retries(&mock_server, 3)
+                .await
+                .unwrap()
+        );
+    }
+
+    /// 503 Service Unavailable exhausts the retry budget and fails.
+    #[tokio::test]
+    async fn upload_retry_on_503_exhausted() {
+        let mock_server = MockServer::start().await;
+
+        // All requests return 503.
+        Mock::given(method("POST"))
+            .and(path("/final"))
+            .respond_with(ResponseTemplate::new(503))
+            .mount(&mock_server)
+            .await;
+
+        let err = mock_server_upload_with_retries(&mock_server, 1)
+            .await
+            .unwrap_err();
+
+        let mut capture = String::new();
+        write_error_chain(&err, &mut capture, "error", AnsiColors::Red).unwrap();
+
+        let capture = capture.replace(&mock_server.uri(), "[SERVER]");
+        let capture = anstream::adapter::strip_str(&capture);
+        assert_snapshot!(
+            &capture,
+            @"
+        error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
+          Caused by: Server returned status code 503 Service Unavailable. Server says:
+        "
+        );
+    }
+
+    /// 429 Too Many Requests is retried.
+    #[tokio::test]
+    async fn upload_retry_on_429() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/final"))
+            .respond_with(ResponseTemplate::new(429))
+            .up_to_n_times(1)
+            .mount(&mock_server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/final"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&mock_server)
+            .await;
+
+        assert!(
+            mock_server_upload_with_retries(&mock_server, 3)
+                .await
+                .unwrap()
+        );
+    }
+
+    /// 400 Bad Request is never retried (not transient).
+    #[tokio::test]
+    async fn upload_no_retry_on_400() {
+        let mock_server = MockServer::start().await;
+
+        // First request returns 400, second would return 200 — but we shouldn't reach it.
+        Mock::given(method("POST"))
+            .and(path("/final"))
+            .respond_with(ResponseTemplate::new(400).set_body_string("Bad request"))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let err = mock_server_upload_with_retries(&mock_server, 3)
+            .await
+            .unwrap_err();
+
+        let mut capture = String::new();
+        write_error_chain(&err, &mut capture, "error", AnsiColors::Red).unwrap();
+
+        let capture = capture.replace(&mock_server.uri(), "[SERVER]");
+        let capture = anstream::adapter::strip_str(&capture);
+        assert_snapshot!(
+            &capture,
+            @"
+        error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
+          Caused by: Server returned status code 400 Bad Request. Server says: Bad request
+        "
+        );
+    }
+
+    /// 403 Forbidden is never retried (not transient).
+    #[tokio::test]
+    async fn upload_no_retry_on_403() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/final"))
+            .respond_with(ResponseTemplate::new(403).set_body_string("Forbidden"))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let err = mock_server_upload_with_retries(&mock_server, 3)
+            .await
+            .unwrap_err();
+
+        let mut capture = String::new();
+        write_error_chain(&err, &mut capture, "error", AnsiColors::Red).unwrap();
+
+        let capture = capture.replace(&mock_server.uri(), "[SERVER]");
+        let capture = anstream::adapter::strip_str(&capture);
+        assert_snapshot!(
+            &capture,
+            @"
+        error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
+          Caused by: Server returned status code 403 Forbidden. Server says: Forbidden
         "
         );
     }

@@ -1362,6 +1362,31 @@ impl RetryState {
         }
     }
 
+    /// Determines whether a known-transient failure should be retried.
+    ///
+    /// Unlike [`should_retry`](Self::should_retry), this skips error classification — the caller
+    /// has already determined the error is transient (e.g., a retryable HTTP status code like
+    /// 503 Service Unavailable).
+    ///
+    /// Returns the backoff duration if the retry budget has not been exhausted.
+    #[must_use]
+    pub fn should_retry_transient(&mut self) -> Option<Duration> {
+        let now = SystemTime::now();
+        let retry_decision = self
+            .retry_policy
+            .should_retry(self.start_time, self.total_retries);
+        if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
+            let duration = execute_after
+                .duration_since(now)
+                .unwrap_or_else(|_| Duration::default());
+
+            self.total_retries += 1;
+            return Some(duration);
+        }
+
+        None
+    }
+
     /// Wait before retrying the request.
     pub async fn sleep_backoff(&self, duration: Duration) {
         debug!(
