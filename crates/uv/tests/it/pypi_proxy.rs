@@ -13,6 +13,8 @@
 //! | `/basic-auth/simple/{pkg}/`         | `public:heron` | Simple API JSON, file URLs → `/basic-auth/files/…`     |
 //! | `/basic-auth/relative/simple/{pkg}/`| `public:heron` | Simple API JSON, file URLs are relative                |
 //! | `/basic-auth/files/…`              | `public:heron` | 302 redirect → `files.pythonhosted.org`                |
+//! | `/bearer-auth/simple/{pkg}/`        | Bearer token   | Simple API JSON, file URLs → `/bearer-auth/files/…`    |
+//! | `/bearer-auth/files/…`             | Bearer token   | 302 redirect → `files.pythonhosted.org`                |
 //! | `/basic-auth-heron/simple/{pkg}/`   | `public:heron` | Same as basic-auth but separate location               |
 //! | `/basic-auth-heron/files/…`        | `public:heron` | 302 redirect → `files.pythonhosted.org`                |
 //! | `/basic-auth-eagle/simple/{pkg}/`   | `public:eagle` | Same, different password                               |
@@ -23,6 +25,12 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 use serde_json::json;
+
+const PYX_TEST_TOKEN: &str = "pyx-test-token";
+
+pub(crate) fn pyx_test_token() -> &'static str {
+    PYX_TEST_TOKEN
+}
 
 /// Package metadata needed to build Simple API responses.
 struct PackageEntry {
@@ -326,12 +334,28 @@ pub(crate) async fn start() -> PypiProxy {
                 .headers
                 .get(&http::header::AUTHORIZATION)
                 .and_then(parse_basic_auth);
+            let bearer_auth = req
+                .headers
+                .get(&http::header::AUTHORIZATION)
+                .and_then(parse_bearer_auth);
 
             // Route: /basic-auth/files/...
             if let Some(rest) = path.strip_prefix("/basic-auth/files/") {
                 if auth
                     .as_ref()
                     .is_some_and(|(u, p)| u == "public" && p == "heron")
+                {
+                    let target = format!("https://files.pythonhosted.org/{rest}");
+                    return ResponseTemplate::new(302).insert_header("Location", target);
+                }
+                return unauthorized_response();
+            }
+
+            // Route: /bearer-auth/files/...
+            if let Some(rest) = path.strip_prefix("/bearer-auth/files/") {
+                if bearer_auth
+                    .as_ref()
+                    .is_some_and(|token| token == PYX_TEST_TOKEN)
                 {
                     let target = format!("https://files.pythonhosted.org/{rest}");
                     return ResponseTemplate::new(302).insert_header("Location", target);
@@ -392,6 +416,22 @@ pub(crate) async fn start() -> PypiProxy {
                 {
                     if let Some(entries) = db.get(pkg) {
                         let file_prefix = format!("{server_uri}/basic-auth/files");
+                        let body = build_simple_api_response(pkg, entries, &file_prefix);
+                        return simple_api_response(&body);
+                    }
+                    return ResponseTemplate::new(404);
+                }
+                return unauthorized_response();
+            }
+
+            // Route: /bearer-auth/simple/{pkg}/
+            if let Some(pkg) = extract_package_name(path, "/bearer-auth/simple/") {
+                if bearer_auth
+                    .as_ref()
+                    .is_some_and(|token| token == PYX_TEST_TOKEN)
+                {
+                    if let Some(entries) = db.get(pkg) {
+                        let file_prefix = format!("{server_uri}/bearer-auth/files");
                         let body = build_simple_api_response(pkg, entries, &file_prefix);
                         return simple_api_response(&body);
                     }
@@ -485,6 +525,14 @@ fn parse_basic_auth(value: &wiremock::http::HeaderValue) -> Option<(String, Stri
     let decoded = String::from_utf8(decoded).ok()?;
     let (user, pass) = decoded.split_once(':')?;
     Some((user.to_string(), pass.to_string()))
+}
+
+/// Parse a `Bearer <token>` Authorization header.
+fn parse_bearer_auth(value: &wiremock::http::HeaderValue) -> Option<String> {
+    let s = value.as_bytes();
+    let s = std::str::from_utf8(s).ok()?;
+    let token = s.strip_prefix("Bearer ")?;
+    Some(token.to_string())
 }
 
 fn unauthorized_response() -> wiremock::ResponseTemplate {
