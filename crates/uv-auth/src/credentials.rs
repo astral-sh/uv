@@ -284,22 +284,17 @@ impl Credentials {
     /// Parse [`Credentials`] from an authorization header, if any.
     ///
     /// HTTP Basic and Bearer Authentication are both supported.
-    /// [`None`] will be returned if another authorization scheme is detected.
-    ///
-    /// Panics if the authentication is not conformant to the HTTP Basic Authentication scheme:
-    /// - The contents must be base64 encoded
-    /// - There must be a `:` separator
+    /// Returns [`None`] if the header uses an unrecognized scheme or if
+    /// the value is malformed (e.g. invalid base64 or missing `:`).
     pub(crate) fn from_header_value(header: &HeaderValue) -> Option<Self> {
         // Parse a `Basic` authentication header.
         if let Some(mut value) = header.as_bytes().strip_prefix(b"Basic ") {
             let mut decoder = DecoderReader::new(&mut value, &BASE64_STANDARD);
             let mut buf = String::new();
-            decoder
-                .read_to_string(&mut buf)
-                .expect("HTTP Basic Authentication should be base64 encoded");
-            let (username, password) = buf
-                .split_once(':')
-                .expect("HTTP Basic Authentication should include a `:` separator");
+            if decoder.read_to_string(&mut buf).is_err() {
+                return None;
+            }
+            let (username, password) = buf.split_once(':')?;
             let username = if username.is_empty() {
                 None
             } else {
@@ -682,5 +677,20 @@ mod tests {
         let token = "super_secret_token";
         let credentials = Credentials::bearer(token.into());
         insta::assert_compact_debug_snapshot!(credentials, @"Bearer { token: **** }");
+    }
+
+    #[test]
+    fn from_header_value_invalid_base64() {
+        let header = HeaderValue::from_static("Basic not-valid-base64!!!");
+        assert_eq!(Credentials::from_header_value(&header), None);
+    }
+
+    #[test]
+    fn from_header_value_missing_colon() {
+        use base64::Engine;
+        let encoded = BASE64_STANDARD.encode("usernameonly");
+        let value = format!("Basic {encoded}");
+        let header = HeaderValue::from_str(&value).unwrap();
+        assert_eq!(Credentials::from_header_value(&header), None);
     }
 }
