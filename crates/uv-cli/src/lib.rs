@@ -1194,10 +1194,11 @@ pub enum ProjectCommand {
         after_long_help = ""
     )]
     Format(FormatArgs),
-    /// Audit the project's lockfile for known vulnerabilities and unmaintained dependencies.
+    /// Audit the project's dependencies.
+    ///
+    /// Dependencies are audited for known vulnerabilities, as well
+    /// as 'adverse' statuses such as deprecation and quarantine.
     #[command(
-        // NOTE: Hidden while in development.
-        hide = true,
         after_help = "Use `uv help audit` for more details.",
         after_long_help = ""
     )]
@@ -1695,7 +1696,7 @@ pub struct PipCompileArgs {
 
     /// Specify a package to omit from the output resolution. Its dependencies will still be
     /// included in the resolution. Equivalent to pip-compile's `--unsafe-package` option.
-    #[arg(long, alias = "unsafe-package", value_hint = ValueHint::Other)]
+    #[arg(long, alias = "unsafe-package", value_delimiter = ',', value_hint = ValueHint::Other)]
     pub no_emit_package: Option<Vec<PackageName>>,
 
     /// Include `--index-url` and `--extra-index-url` entries in the generated output file.
@@ -5011,6 +5012,7 @@ pub struct ExportArgs {
         long,
         alias = "no-install-package",
         conflicts_with = "only_emit_package",
+        value_delimiter = ',',
         value_hint = ValueHint::Other,
     )]
     pub no_emit_package: Vec<PackageName>,
@@ -5021,6 +5023,7 @@ pub struct ExportArgs {
         alias = "only-install-package",
         conflicts_with = "no_emit_package",
         hide = true,
+        value_delimiter = ',',
         value_hint = ValueHint::Other,
     )]
     pub only_emit_package: Vec<PackageName>,

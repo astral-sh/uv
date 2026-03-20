@@ -1056,7 +1056,7 @@
       ]
     },
     "LinkMode": {
-      "description": "The method to use when linking.\n\nDefaults to [`Clone`](LinkMode::Clone) on macOS and Linux (which support copy-on-write on\nAPFS and btrfs/xfs/bcachefs respectively), and [`Hardlink`](LinkMode::Hardlink) on other\nplatforms.",
+      "description": "The method to use when linking.\n\nDefaults to [`LinkMode::Clone`] on macOS and Linux (which support copy-on-write on\nAPFS and btrfs/xfs/bcachefs respectively), and [`LinkMode::Hardlink`] on other\nplatforms.",
       "oneOf": [
         {
           "description": "Clone (i.e., copy-on-write) packages from the source into the destination.",

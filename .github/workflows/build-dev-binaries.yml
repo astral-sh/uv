@@ -71,6 +71,42 @@ jobs:
             ./target/no-debug/uvx
           retention-days: 1
 
+  build-binary-linux-armv7-gnueabihf:
+    name: "linux armv7 gnueabihf"
+    timeout-minutes: 15
+    runs-on: github-ubuntu-24.04-x86_64-8
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: "Install mold"
+        run: ./scripts/install-mold.sh
+
+      - name: "Setup armv7"
+        run: |
+          sudo apt-get update
+          sudo apt-get install gcc-arm-linux-gnueabihf
+          rustup target add armv7-unknown-linux-gnueabihf
+
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+
+      - name: "Build"
+        env:
+          CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
+        run: cargo build --profile no-debug --target armv7-unknown-linux-gnueabihf --bin uv --bin uvx
+
+      - name: "Upload binary"
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: uv-linux-armv7-gnueabihf-${{ github.sha }}
+          path: |
+            ./target/armv7-unknown-linux-gnueabihf/no-debug/uv
+            ./target/armv7-unknown-linux-gnueabihf/no-debug/uvx
+          retention-days: 1
+
   build-binary-linux-musl:
     name: "linux musl"
     timeout-minutes: 10

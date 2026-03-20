@@ -95,6 +95,54 @@ jobs:
       - name: "Validate global Python install"
         run: python scripts/check_system_python.py --uv ./uv
 
+  system-test-python-36:
+    timeout-minutes: 10
+    name: "python3.6 on debian buster"
+    runs-on: ubuntu-latest
+    container: python:3.6-buster
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-linux-musl-${{ inputs.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Print Python path"
+        run: echo $(which python3)
+
+      - name: "Validate global Python install"
+        run: python3 scripts/check_system_python.py --uv ./uv
+
+  system-test-python-37:
+    timeout-minutes: 10
+    name: "python3.7 on debian buster"
+    runs-on: ubuntu-latest
+    container: python:3.7-buster
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-linux-musl-${{ inputs.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Print Python path"
+        run: echo $(which python3)
+
+      - name: "Validate global Python install"
+        run: python3 scripts/check_system_python.py --uv ./uv
+
   # Currently failing, see https://github.com/astral-sh/uv/issues/13811
   # system-test-opensuse:
   #   timeout-minutes: 5
@@ -267,6 +315,60 @@ jobs:
 
       - name: "Validate global Python install"
         run: pyston scripts/check_system_python.py --uv ./uv
+
+  system-test-chainguard-dev:
+    timeout-minutes: 10
+    name: "python on chainguard-dev"
+    runs-on: ubuntu-latest
+    container:
+      image: cgr.dev/chainguard/python:latest-dev@sha256:db41945938344dbd06cec33c6573a42191ee3dddf2b152e454c13b20dc684c35
+      options: --user root --entrypoint /bin/sh
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-linux-libc-${{ inputs.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Print Python path"
+        run: echo $(which python)
+
+      - name: "Validate global Python install"
+        run: python scripts/check_system_python.py --uv ./uv
+
+  # The Chainguard distroless image has no shell, so we can't use `container:`
+  # directly. Instead, we run on ubuntu-latest and use `docker run` to execute
+  # inside the image.
+  system-test-chainguard:
+    timeout-minutes: 10
+    name: "python on chainguard"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-linux-libc-${{ inputs.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Validate global Python install"
+        run: |
+          docker run --rm --user root \
+            -v "${{ github.workspace }}:/app" \
+            -w /app \
+            cgr.dev/chainguard/python:latest@sha256:c789723622cfc4a6b5d604a59250e3f708d0b4bb64cabb39a17c47119a224179 \
+            scripts/check_system_python.py --uv ./uv
 
   system-test-alpine:
     timeout-minutes: 10
