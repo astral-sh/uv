@@ -19,7 +19,7 @@ const MACH_O_MAGICS: [[u8; 4]; 6] = [
 pub fn is_macos_executable(path: &Path) -> bool {
     use std::io::Read;
 
-    let Ok(mut file) = std::fs::File::open(path) else {
+    let Ok(mut file) = fs_err::File::open(path) else {
         return false;
     };
 

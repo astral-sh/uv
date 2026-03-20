@@ -7272,6 +7272,7 @@ dependencies = [
 name = "uv-unix"
 version = "0.0.32"
 dependencies = [
+ "fs-err",
  "goblin",
  "nix 0.31.2",
  "tempfile",
