@@ -265,10 +265,19 @@ pub fn link_wheel_files(
 
     // The `RECORD` file is modified during installation, so it needs a real
     // copy rather than a link back to the cache.
-    let options = LinkOptions::new(link_mode)
+    let mut options = LinkOptions::new(link_mode)
         .with_mutable_copy_filter(|p: &Path| p.ends_with("RECORD"))
         .with_copy_locks(state.copy_locks())
         .with_on_existing_directory(OnExistingDirectory::Merge);
+
+    // On macOS, hardlink Mach-O executables instead of reflinking to preserve the inode.
+    // Code-signature verification is cached per-inode; reflinking creates a new inode and
+    // forces expensive re-validation on first execution.
+    #[cfg(target_os = "macos")]
+    {
+        options = options.with_wants_preserved_inode_filter(wants_preserved_inode);
+    }
+
     let used_link_mode = link_dir(wheel, site_packages, &options)?;
 
     if used_link_mode == LinkMode::Clone {
@@ -322,4 +331,20 @@ fn register_installed_paths(
         }
     }
     Ok(count)
+}
+
+/// Check if a file should be hardlinked to preserve its inode when cloning on macOS.
+///
+/// Skips known non-executable extensions (`.py`, `.pyc`, etc.) to avoid opening every file,
+/// then falls through to Mach-O magic-byte detection for the rest.
+#[cfg(target_os = "macos")]
+fn wants_preserved_inode(path: &std::path::Path) -> bool {
+    // Fast-reject extensions that are never Mach-O.
+    if let Some(ext) = path.extension() {
+        if ext == "py" || ext == "pyc" || ext == "pyo" || ext == "pyd" || ext == "a" || ext == "pth"
+        {
+            return false;
+        }
+    }
+    uv_unix::macho::is_macos_executable(path)
 }

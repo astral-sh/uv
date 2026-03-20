@@ -156,6 +156,7 @@ goblin = { version = "0.10.0", default-features = false, features = [
   "std",
   "elf32",
   "elf64",
+  "mach64",
   "endian_fd",
 ] }
 h2 = { version = "0.4.7" }

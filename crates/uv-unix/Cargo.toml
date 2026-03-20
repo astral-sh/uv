@@ -16,5 +16,9 @@ doctest = false
 workspace = true
 
 [target.'cfg(unix)'.dependencies]
+goblin = { workspace = true }
 nix = { workspace = true }
 thiserror = { workspace = true }
+
+[target.'cfg(unix)'.dev-dependencies]
+tempfile = { workspace = true }

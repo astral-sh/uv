@@ -6540,6 +6540,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-shell",
  "uv-trampoline-builder",
+ "uv-unix",
  "uv-warnings",
  "walkdir",
 ]
@@ -7271,7 +7272,9 @@ dependencies = [
 name = "uv-unix"
 version = "0.0.32"
 dependencies = [
+ "goblin",
  "nix 0.31.2",
+ "tempfile",
  "thiserror 2.0.18",
 ]
 

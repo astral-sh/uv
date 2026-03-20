@@ -140,6 +140,11 @@ pub struct LinkOptions<'a, F = fn(&Path) -> bool> {
     copy_locks: Option<&'a CopyLocks>,
     /// What to do when the destination directory already exists.
     on_existing_directory: OnExistingDirectory,
+    /// Predicate that returns `true` for source files that prefer their inode to be preserved.
+    ///
+    /// When in [`LinkMode::Clone`] mode, files matching this predicate will be hard-linked
+    /// instead of reflinked (copy-on-write).
+    wants_preserved_inode: Option<fn(&Path) -> bool>,
 }
 
 impl LinkOptions<'static> {
@@ -150,6 +155,7 @@ impl LinkOptions<'static> {
             needs_mutable_copy: |_| false,
             copy_locks: None,
             on_existing_directory: OnExistingDirectory::default(),
+            wants_preserved_inode: None,
         }
     }
 }
@@ -174,6 +180,7 @@ impl<'a, F> LinkOptions<'a, F> {
             needs_mutable_copy: f,
             copy_locks: self.copy_locks,
             on_existing_directory: self.on_existing_directory,
+            wants_preserved_inode: self.wants_preserved_inode,
         }
     }
 
@@ -188,6 +195,7 @@ impl<'a, F> LinkOptions<'a, F> {
             needs_mutable_copy: self.needs_mutable_copy,
             copy_locks: Some(locks),
             on_existing_directory: self.on_existing_directory,
+            wants_preserved_inode: self.wants_preserved_inode,
         }
     }
 
@@ -199,6 +207,25 @@ impl<'a, F> LinkOptions<'a, F> {
             needs_mutable_copy: self.needs_mutable_copy,
             copy_locks: self.copy_locks,
             on_existing_directory,
+            wants_preserved_inode: self.wants_preserved_inode,
+        }
+    }
+
+    /// Set a predicate for files that prefer their inode to be preserved when linking.
+    ///
+    /// This does not guarantee preservation of the inode.
+    ///
+    /// When in [`LinkMode::Clone`] mode, files matching this predicate will be hard-linked
+    /// rather than reflinked (copy-on-write). This keeps the destination sharing the same
+    /// inode as the source.
+    #[must_use]
+    pub fn with_wants_preserved_inode_filter(self, f: fn(&Path) -> bool) -> Self {
+        LinkOptions {
+            mode: self.mode,
+            needs_mutable_copy: self.needs_mutable_copy,
+            copy_locks: self.copy_locks,
+            on_existing_directory: self.on_existing_directory,
+            wants_preserved_inode: Some(f),
         }
     }
 
@@ -213,6 +240,13 @@ impl<'a, F> LinkOptions<'a, F> {
             fs_err::copy(from, to)?;
             Ok(())
         }
+    }
+
+    /// Returns `true` if `path` matches the [`wants_preserved_inode`](Self::wants_preserved_inode)
+    /// predicate.
+    fn wants_preserved_inode(&self, path: &Path) -> bool {
+        self.wants_preserved_inode
+            .is_some_and(|predicate| predicate(path))
     }
 }
 
@@ -457,6 +491,10 @@ fn reflink_with_permissions(from: &Path, to: &Path) -> io::Result<()> {
 }
 
 /// Attempt to reflink a single file, falling back via [`link_file`] on failure.
+///
+/// If a [`wants_preserved_inode`](LinkOptions::wants_preserved_inode) predicate is set and the source file
+/// matches, the file is hard-linked instead of reflinked so the destination shares the
+/// original inode. On macOS this avoids cold-start code-signature re-validation.
 fn reflink_file_with_fallback<F>(
     path: &Path,
     target: &Path,
@@ -466,6 +504,12 @@ fn reflink_file_with_fallback<F>(
 where
     F: Fn(&Path) -> bool,
 {
+    // Hardlink files that need their inode preserved (e.g. Mach-O executables on macOS),
+    // reusing the existing hardlink machinery with its fallback and retry logic.
+    if options.wants_preserved_inode(path) {
+        return hardlink_file_with_fallback(path, target, state, options);
+    }
+
     match state.attempt {
         LinkAttempt::Initial => match reflink_with_permissions(path, target) {
             Ok(()) => Ok(state.mode_working()),
@@ -571,12 +615,11 @@ where
 }
 
 /// Clone a directory by merging into an existing destination.
+///
+/// If a [`wants_preserved_inode`](LinkOptions::wants_preserved_inode) filter is set, matching files are
+/// hard-linked instead of reflinked so they keep the source inode.
 #[cfg(target_os = "macos")]
-fn clone_dir_merge<F>(
-    src: &Path,
-    dst: &Path,
-    _options: &LinkOptions<'_, F>,
-) -> Result<(), LinkError>
+fn clone_dir_merge<F>(src: &Path, dst: &Path, options: &LinkOptions<'_, F>) -> Result<(), LinkError>
 where
     F: Fn(&Path) -> bool,
 {
@@ -590,7 +633,7 @@ where
             match reflink_copy::reflink(&src_path, &dst_path) {
                 Ok(()) => {}
                 Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
-                    clone_dir_merge(&src_path, &dst_path, _options)?;
+                    clone_dir_merge(&src_path, &dst_path, options)?;
                 }
                 Err(err) => {
                     return Err(LinkError::Reflink {
@@ -601,7 +644,15 @@ where
                 }
             }
         } else {
-            // Try to clone the file
+            // Hardlink files that need their inode preserved, reusing the
+            // existing hardlink machinery.
+            if options.wants_preserved_inode(&src_path) {
+                let state = LinkState::new(LinkMode::Hardlink);
+                link_file(&src_path, &dst_path, state, options)?;
+                continue;
+            }
+
+            // For remaining files, use reflink (copy-on-write)
             match reflink_copy::reflink(&src_path, &dst_path) {
                 Ok(()) => {}
                 Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
@@ -1992,5 +2043,125 @@ mod tests {
             "Expected Hardlink or Copy fallback, got {result:?}"
         );
         verify_test_tree(dst_dir.path());
+    }
+
+    #[cfg(unix)]
+    mod wants_preserved_inode_tests {
+        use super::*;
+        use std::os::unix::fs::MetadataExt;
+
+        /// Simple extension-based predicate for testing the plumbing.
+        fn is_so_file(path: &Path) -> bool {
+            path.extension().is_some_and(|ext| ext == "so")
+        }
+
+        #[test]
+        fn test_clone_hardlinks_matching_files() {
+            let Some(src_dir) = cow_tempdir() else {
+                eprintln!("Skipping: UV_INTERNAL__TEST_COW_FS not set");
+                return;
+            };
+            let Some(dst_dir) = cow_tempdir() else {
+                unreachable!();
+            };
+
+            fs_err::create_dir_all(src_dir.path().join("pkg")).unwrap();
+            fs_err::write(src_dir.path().join("pkg/native.so"), "native code").unwrap();
+            fs_err::write(src_dir.path().join("pkg/module.py"), "print('hello')").unwrap();
+
+            // Pre-create destination so merge is triggered
+            fs_err::create_dir_all(dst_dir.path().join("pkg")).unwrap();
+            fs_err::write(dst_dir.path().join("pkg/.gitkeep"), "").unwrap();
+
+            let options = LinkOptions::new(LinkMode::Clone)
+                .with_wants_preserved_inode_filter(is_so_file)
+                .with_on_existing_directory(OnExistingDirectory::Merge);
+            let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+            assert_eq!(result, LinkMode::Clone);
+
+            // .so matched the predicate → hardlinked (same inode)
+            let src_ino = fs_err::metadata(src_dir.path().join("pkg/native.so"))
+                .unwrap()
+                .ino();
+            let dst_ino = fs_err::metadata(dst_dir.path().join("pkg/native.so"))
+                .unwrap()
+                .ino();
+            assert_eq!(src_ino, dst_ino, ".so should share inode (hardlinked)");
+
+            // .py did NOT match → reflinked (different inode)
+            let src_py_ino = fs_err::metadata(src_dir.path().join("pkg/module.py"))
+                .unwrap()
+                .ino();
+            let dst_py_ino = fs_err::metadata(dst_dir.path().join("pkg/module.py"))
+                .unwrap()
+                .ino();
+            assert_ne!(
+                src_py_ino, dst_py_ino,
+                ".py should have different inode (reflinked)"
+            );
+        }
+
+        #[test]
+        fn test_clone_without_filter_reflinks_everything() {
+            let Some(src_dir) = cow_tempdir() else {
+                eprintln!("Skipping: UV_INTERNAL__TEST_COW_FS not set");
+                return;
+            };
+            let Some(dst_dir) = cow_tempdir() else {
+                unreachable!();
+            };
+
+            fs_err::create_dir_all(src_dir.path().join("pkg")).unwrap();
+            fs_err::write(src_dir.path().join("pkg/native.so"), "native code").unwrap();
+
+            fs_err::create_dir_all(dst_dir.path().join("pkg")).unwrap();
+            fs_err::write(dst_dir.path().join("pkg/.gitkeep"), "").unwrap();
+
+            // No filter → everything reflinked
+            let options = LinkOptions::new(LinkMode::Clone)
+                .with_on_existing_directory(OnExistingDirectory::Merge);
+            link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+            let src_ino = fs_err::metadata(src_dir.path().join("pkg/native.so"))
+                .unwrap()
+                .ino();
+            let dst_ino = fs_err::metadata(dst_dir.path().join("pkg/native.so"))
+                .unwrap()
+                .ino();
+            assert_ne!(
+                src_ino, dst_ino,
+                ".so should be reflinked when no filter is set"
+            );
+        }
+
+        #[test]
+        fn test_walk_and_link_honours_filter() {
+            let Some(src_dir) = cow_tempdir() else {
+                eprintln!("Skipping: UV_INTERNAL__TEST_COW_FS not set");
+                return;
+            };
+            let Some(dst_dir) = cow_tempdir() else {
+                unreachable!();
+            };
+
+            fs_err::write(src_dir.path().join("lib.so"), "native").unwrap();
+            fs_err::write(src_dir.path().join("data.txt"), "data").unwrap();
+
+            // Pre-create destination to force merge
+            fs_err::write(dst_dir.path().join(".gitkeep"), "").unwrap();
+
+            let options = LinkOptions::new(LinkMode::Clone)
+                .with_wants_preserved_inode_filter(is_so_file)
+                .with_on_existing_directory(OnExistingDirectory::Merge);
+            link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+            let src_ino = fs_err::metadata(src_dir.path().join("lib.so"))
+                .unwrap()
+                .ino();
+            let dst_ino = fs_err::metadata(dst_dir.path().join("lib.so"))
+                .unwrap()
+                .ino();
+            assert_eq!(src_ino, dst_ino, ".so should share inode (hardlinked)");
+        }
     }
 }
