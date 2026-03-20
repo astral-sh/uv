@@ -120,6 +120,17 @@ if __name__ == "__main__":
                 f"Script was ran with {our_python_path} but `python` resolves to {system_python_path}"
             )
 
+    # Ensure that pip is available (e.g., the Chainguard distroless image ships
+    # Python but not pip).
+    try:
+        import pip  # noqa: F401
+    except ModuleNotFoundError:
+        logging.info("pip not found, running ensurepip...")
+        subprocess.run(
+            [sys.executable, "-m", "ensurepip"],
+            check=True,
+        )
+
     # Create a temporary directory.
     with tempfile.TemporaryDirectory() as temp_dir:
         # Ensure that the package (`pylint`) isn't installed.
