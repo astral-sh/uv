@@ -258,6 +258,26 @@ impl KeyringProvider {
         credentials.map(|(username, password)| Credentials::basic(Some(username), Some(password)))
     }
 
+    /// Returns the command names to try when spawning the keyring subprocess.
+    ///
+    /// On WSL, the `keyring` Python tool may not be installed natively but a Windows
+    /// `keyring.exe` may be available on `PATH` via WSL interop. When the `WSL_INTEROP`
+    /// environment variable is set, `keyring.exe` is included as a fallback so that a
+    /// Windows-side keyring installation can be used for credential retrieval.
+    fn keyring_commands() -> &'static [&'static str] {
+        if Self::has_wsl_interop() {
+            &["keyring", "keyring.exe"]
+        } else {
+            &["keyring"]
+        }
+    }
+
+    /// Check whether WSL interop is available by looking for the `WSL_INTEROP`
+    /// environment variable, which the WSL runtime sets when interop is enabled.
+    fn has_wsl_interop() -> bool {
+        std::env::var_os("WSL_INTEROP").is_some()
+    }
+
     #[instrument(skip(self))]
     async fn fetch_subprocess(
         &self,
@@ -265,29 +285,37 @@ impl KeyringProvider {
         username: Option<&str>,
     ) -> Option<(String, String)> {
         // https://github.com/pypa/pip/blob/24.0/src/pip/_internal/network/auth.py#L136-L141
-        let mut command = Command::new("keyring");
-        command.arg("get").arg(service_name);
+        let child = Self::keyring_commands().iter().find_map(|cmd| {
+            let mut command = Command::new(cmd);
+            command.arg("get").arg(service_name);
 
-        if let Some(username) = username {
-            command.arg(username);
-        } else {
-            command.arg("--mode").arg("creds");
-        }
-
-        let child = command
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            // If we're using `--mode creds`, we need to capture the output in order to avoid
-            // showing users an "unrecognized arguments: --mode" error; otherwise, we stream stderr
-            // so the user has visibility into keyring's behavior if it's doing something slow
-            .stderr(if username.is_some() {
-                Stdio::inherit()
+            if let Some(username) = username {
+                command.arg(username);
             } else {
-                Stdio::piped()
-            })
-            .spawn()
-            .inspect_err(|err| warn!("Failure running `keyring` command: {err}"))
-            .ok()?;
+                command.arg("--mode").arg("creds");
+            }
+
+            command
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                // If we're using `--mode creds`, we need to capture the output in order to avoid
+                // showing users an "unrecognized arguments: --mode" error; otherwise, we stream
+                // stderr so the user has visibility into keyring's behavior if it's doing
+                // something slow
+                .stderr(if username.is_some() {
+                    Stdio::inherit()
+                } else {
+                    Stdio::piped()
+                })
+                .spawn()
+                .inspect_err(|err| debug!("Failed to spawn `{cmd}`: {err}"))
+                .ok()
+        });
+
+        let Some(child) = child else {
+            warn!("Could not find a `keyring` executable");
+            return None;
+        };
 
         let output = child
             .wait_with_output()
@@ -623,5 +651,50 @@ mod tests {
             .fetch(DisplaySafeUrl::ref_cast(&url), Some("user"))
             .await;
         assert_eq!(credentials, None);
+    }
+
+    #[test]
+    fn keyring_commands_includes_keyring() {
+        // All platforms must try `keyring` as the first command.
+        assert_eq!(KeyringProvider::keyring_commands()[0], "keyring");
+    }
+
+    #[test]
+    fn has_wsl_interop_reflects_env() {
+        // When WSL_INTEROP is not set, should return false (unless actually on WSL).
+        let had_var = std::env::var_os("WSL_INTEROP").is_some();
+        if !had_var {
+            assert!(!KeyringProvider::has_wsl_interop());
+        }
+    }
+
+    #[test]
+    fn keyring_commands_without_wsl() {
+        // Without WSL_INTEROP, only `keyring` should be tried.
+        if std::env::var_os("WSL_INTEROP").is_none() {
+            assert_eq!(KeyringProvider::keyring_commands(), &["keyring"]);
+        }
+    }
+
+    #[test]
+    fn keyring_commands_with_wsl_interop() {
+        // Simulate WSL by temporarily setting WSL_INTEROP.
+        let original = std::env::var_os("WSL_INTEROP");
+        // SAFETY: This test is run serially (single-threaded test binary) and we
+        // restore the original value before returning.
+        unsafe {
+            std::env::set_var("WSL_INTEROP", "/run/WSL/1_interop");
+        }
+        assert_eq!(
+            KeyringProvider::keyring_commands(),
+            &["keyring", "keyring.exe"]
+        );
+        // Restore original state.
+        unsafe {
+            match original {
+                Some(val) => std::env::set_var("WSL_INTEROP", val),
+                None => std::env::remove_var("WSL_INTEROP"),
+            }
+        }
     }
 }
