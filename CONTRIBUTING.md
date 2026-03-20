@@ -54,8 +54,8 @@ sudo dnf install gcc
 ```
 
 On Windows, [NASM](https://www.nasm.us/) is required for building the TLS backend (`aws-lc-sys`). If
-it is not present, a prebuilt blob provided by `aws-lc-sys1` will be used instead. WinGet can be
-used to install NASM:
+it is not present, a prebuilt blob provided by `aws-lc-sys` will be used instead. WinGet can be used
+to install NASM:
 
 ```shell
 winget install NASM.NASM
