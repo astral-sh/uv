@@ -53,6 +53,7 @@ url = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }
+temp-env = { workspace = true }
 tempfile = { workspace = true }
 test-log = { workspace = true }
 tokio = { workspace = true }
