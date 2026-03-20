@@ -714,6 +714,7 @@ pub fn untar_zst_file<R: std::io::Read>(reader: R, target: impl AsRef<Path>) -> 
     let decompressed = zstd::Decoder::new(reader).map_err(Error::Io)?;
     let mut archive = tar::Archive::new(decompressed);
     archive.set_preserve_mtime(false);
+    archive.set_preserve_permissions(false);
     archive.unpack(target).map_err(Error::io_or_compression)?;
     Ok(())
 }
