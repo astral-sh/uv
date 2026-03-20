@@ -16,6 +16,7 @@ doctest = false
 uv-auth = { workspace = true }
 uv-cache = { workspace = true }
 uv-client = { workspace = true }
+uv-errors = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution-filename = { workspace = true }
 uv-distribution-types = { workspace = true }
@@ -52,6 +53,7 @@ wiremock = { workspace = true }
 anstream = { workspace = true }
 insta = { workspace = true }
 fastrand = { workspace = true }
+owo-colors = { workspace = true }
 
 [features]
 # Test only feature to enable non-HTTPS URL handling

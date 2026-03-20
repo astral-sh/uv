@@ -1490,9 +1490,9 @@ mod tests {
         FormMetadata, PublishError, Reporter, UploadDistribution, build_upload_request,
         group_files, upload,
     };
+    use owo_colors::AnsiColors;
     use tokio::sync::Semaphore;
-    use uv_warnings::owo_colors::AnsiColors;
-    use uv_warnings::write_error_chain;
+    use uv_errors::write_error_chain;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 

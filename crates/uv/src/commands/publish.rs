@@ -13,6 +13,7 @@ use uv_client::{
 };
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_types::{IndexCapabilities, IndexLocations, IndexUrl};
+use uv_errors::write_error_chain;
 use uv_preview::{Preview, PreviewFeature};
 use uv_publish::{
     CheckUrlClient, FormMetadata, PublishError, TrustedPublishResult, check_trusted_publishing,
@@ -20,7 +21,7 @@ use uv_publish::{
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_settings::EnvironmentOptions;
-use uv_warnings::{warn_user_once, write_error_chain};
+use uv_warnings::warn_user_once;
 
 use crate::commands::reporters::PublishReporter;
 use crate::commands::{ExitStatus, human_readable_bytes};

@@ -10,6 +10,7 @@ use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, DryRun, TargetTriple};
 use uv_distribution_types::{ExtraBuildRequires, Requirement, RequirementSource};
+use uv_errors::write_error_chain;
 use uv_fs::CWD;
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
@@ -21,7 +22,6 @@ use uv_python::{
 use uv_requirements::RequirementsSpecification;
 use uv_settings::{Combine, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::{InstalledTools, Tool};
-use uv_warnings::write_error_chain;
 use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::{
