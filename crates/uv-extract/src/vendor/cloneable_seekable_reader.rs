@@ -87,23 +87,24 @@ impl<R: Read + Seek + HasLength> Seek for CloneableSeekableReader<R> {
             SeekFrom::Start(pos) => pos,
             SeekFrom::End(offset_from_end) => {
                 let file_len = self.ascertain_file_length();
-                if -offset_from_end as u64 > file_len {
-                    return Err(std::io::Error::new(
+                file_len
+                    .checked_add_signed(offset_from_end)
+                    .ok_or_else(|| {
+                        std::io::Error::new(
+                            std::io::ErrorKind::InvalidInput,
+                            "Seek too far backwards",
+                        )
+                    })?
+            }
+            SeekFrom::Current(offset_from_pos) => self
+                .pos
+                .checked_add_signed(offset_from_pos)
+                .ok_or_else(|| {
+                    std::io::Error::new(
                         std::io::ErrorKind::InvalidInput,
-                        "Seek too far backwards",
-                    ));
-                }
-                // TODO, once stabilised, use checked_add_signed
-                file_len - (-offset_from_end as u64)
-            }
-            // TODO, once stabilised, use checked_add_signed
-            SeekFrom::Current(offset_from_pos) => {
-                if offset_from_pos > 0 {
-                    self.pos + (offset_from_pos as u64)
-                } else {
-                    self.pos - ((-offset_from_pos) as u64)
-                }
-            }
+                        "Seek out of range",
+                    )
+                })?,
         };
         self.pos = new_pos;
         Ok(new_pos)
@@ -169,5 +170,23 @@ mod test {
         assert_eq!(out[0], 8);
         assert_eq!(out[1], 9);
         assert!(reader.read_exact(&mut out).is_err());
+    }
+
+    #[test]
+    fn seek_current_i64_min_returns_error() {
+        let buf: Vec<u8> = vec![0, 1, 2, 3];
+        let buf = Cursor::new(buf);
+        let mut reader = CloneableSeekableReader::new(buf);
+        let result = reader.seek(SeekFrom::Current(i64::MIN));
+        assert!(result.is_err(), "SeekFrom::Current(i64::MIN) should not panic");
+    }
+
+    #[test]
+    fn seek_end_i64_min_returns_error() {
+        let buf: Vec<u8> = vec![0, 1, 2, 3];
+        let buf = Cursor::new(buf);
+        let mut reader = CloneableSeekableReader::new(buf);
+        let result = reader.seek(SeekFrom::End(i64::MIN));
+        assert!(result.is_err(), "SeekFrom::End(i64::MIN) should not panic");
     }
 }
