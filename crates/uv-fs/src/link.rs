@@ -494,7 +494,7 @@ fn reflink_with_permissions(from: &Path, to: &Path) -> io::Result<()> {
 ///
 /// If a [`wants_preserved_inode`](LinkOptions::wants_preserved_inode) predicate is set and the source file
 /// matches, the file is hard-linked instead of reflinked so the destination shares the
-/// original inode. On macOS this avoids cold-start code-signature re-validation.
+/// original inode.
 fn reflink_file_with_fallback<F>(
     path: &Path,
     target: &Path,
@@ -504,8 +504,7 @@ fn reflink_file_with_fallback<F>(
 where
     F: Fn(&Path) -> bool,
 {
-    // Hardlink files that need their inode preserved (e.g. Mach-O executables on macOS),
-    // reusing the existing hardlink machinery with its fallback and retry logic.
+    // Hardlink files that need their inode preserved
     if options.wants_preserved_inode(path) {
         return hardlink_file_with_fallback(path, target, state, options);
     }
