@@ -820,6 +820,80 @@ impl Lock {
         })
     }
 
+    /// Returns the set of package names reachable from the given lockfile dependencies.
+    pub fn reachable_packages_from_dependencies(
+        &self,
+        dependencies: &[Dependency],
+        workspace_members: &BTreeSet<PackageName>,
+        stop_at_workspace_members: bool,
+    ) -> BTreeSet<PackageName> {
+        let initial = dependencies
+            .iter()
+            .map(|dependency| self.find_by_id(&dependency.package_id));
+        self.reachable_packages(initial, workspace_members, stop_at_workspace_members)
+    }
+
+    /// Returns the set of package names reachable from the given lockfile requirements.
+    pub fn reachable_packages_from_requirements<'a>(
+        &self,
+        requirements: impl IntoIterator<Item = &'a Requirement>,
+        workspace_members: &BTreeSet<PackageName>,
+        stop_at_workspace_members: bool,
+    ) -> BTreeSet<PackageName> {
+        let mut seen = FxHashSet::default();
+        let initial = requirements
+            .into_iter()
+            .flat_map(|requirement| {
+                self.packages
+                    .iter()
+                    .filter(move |package| package.name() == &requirement.name)
+            })
+            .filter(|package| seen.insert(&package.id));
+        self.reachable_packages(initial, workspace_members, stop_at_workspace_members)
+    }
+
+    fn reachable_packages<'a>(
+        &'a self,
+        initial: impl IntoIterator<Item = &'a Package>,
+        workspace_members: &BTreeSet<PackageName>,
+        stop_at_workspace_members: bool,
+    ) -> BTreeSet<PackageName> {
+        let mut reachable = BTreeSet::new();
+        let mut seen = FxHashSet::default();
+        let mut queue = VecDeque::new();
+
+        for package in initial {
+            if seen.insert(&package.id) {
+                queue.push_back(package);
+            }
+        }
+
+        while let Some(package) = queue.pop_front() {
+            let is_workspace_member = workspace_members.contains(package.name());
+            if !is_workspace_member || !stop_at_workspace_members {
+                reachable.insert(package.name().clone());
+            }
+
+            if is_workspace_member && stop_at_workspace_members {
+                continue;
+            }
+
+            for dependency in package
+                .dependencies()
+                .iter()
+                .chain(package.optional_dependencies().values().flatten())
+                .chain(package.resolved_dependency_groups().values().flatten())
+            {
+                let dependency_package = self.find_by_id(&dependency.package_id);
+                if seen.insert(&dependency_package.id) {
+                    queue.push_back(dependency_package);
+                }
+            }
+        }
+
+        reachable
+    }
+
     /// Returns the supported environments that were used to generate this
     /// lock.
     ///

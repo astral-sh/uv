@@ -43,14 +43,14 @@ impl<'lock> From<&'lock Pep723Script> for LockTarget<'lock> {
 
 #[derive(Debug, Default)]
 struct DirectDependencyContexts {
-    any: BTreeSet<PackageName>,
+    base: BTreeSet<PackageName>,
     extras: BTreeSet<(PackageName, ExtraName)>,
     groups: BTreeSet<(PackageName, GroupName)>,
 }
 
 impl DirectDependencyContexts {
-    fn insert_any(&mut self, requirement: &uv_pep508::Requirement<VerbatimParsedUrl>) {
-        self.any.insert(requirement.name.clone());
+    fn insert_base(&mut self, requirement: &uv_pep508::Requirement<VerbatimParsedUrl>) {
+        self.base.insert(requirement.name.clone());
     }
 
     fn insert_extra(
@@ -88,7 +88,7 @@ impl DirectDependencyContexts {
                         .ok()
                 }) {
                     let requirement: uv_pep508::Requirement<VerbatimParsedUrl> = requirement.into();
-                    self.insert_any(&requirement);
+                    self.insert_base(&requirement);
                 }
             }
 
@@ -103,7 +103,6 @@ impl DirectDependencyContexts {
                     }) {
                         let requirement: uv_pep508::Requirement<VerbatimParsedUrl> =
                             requirement.into();
-                        self.insert_any(&requirement);
                         self.insert_extra(&requirement, extra);
                     }
                 }
@@ -113,7 +112,6 @@ impl DirectDependencyContexts {
         let dependency_groups = FlatDependencyGroups::from_pyproject_toml(path, pyproject_toml)?;
         for (group, flat_group) in dependency_groups {
             for requirement in &flat_group.requirements {
-                self.insert_any(requirement);
                 self.insert_group(requirement, &group);
             }
         }
@@ -130,11 +128,84 @@ impl DirectDependencyContexts {
         match (extra, group) {
             (Some(extra), None) => self.extras.contains(&(package.clone(), extra.clone())),
             (None, Some(group)) => self.groups.contains(&(package.clone(), group.clone())),
-            (None, None) => self.any.contains(package),
+            (None, None) => self.base.contains(package),
             // Sources have either `extra` or `group`, never both, so this case is unreachable
             // via `source_scopes`.
             (Some(_), Some(_)) => false,
         }
+    }
+}
+
+#[derive(Debug, Default)]
+struct ReachableDependencyContexts {
+    all: BTreeSet<PackageName>,
+    base: BTreeSet<PackageName>,
+    extras: BTreeSet<(PackageName, ExtraName)>,
+    groups: BTreeSet<(PackageName, GroupName)>,
+}
+
+impl ReachableDependencyContexts {
+    fn extend_base(&mut self, packages: BTreeSet<PackageName>) {
+        self.all.extend(packages.iter().cloned());
+        self.base.extend(packages);
+    }
+
+    fn extend_extra(&mut self, extra: &ExtraName, packages: BTreeSet<PackageName>) {
+        for package in packages {
+            self.all.insert(package.clone());
+            self.extras.insert((package, extra.clone()));
+        }
+    }
+
+    fn extend_group(&mut self, group: &GroupName, packages: BTreeSet<PackageName>) {
+        for package in packages {
+            self.all.insert(package.clone());
+            self.groups.insert((package, group.clone()));
+        }
+    }
+
+    fn reaches(
+        &self,
+        package: &PackageName,
+        extra: Option<&ExtraName>,
+        group: Option<&GroupName>,
+    ) -> bool {
+        match (extra, group) {
+            (Some(extra), None) => self.extras.contains(&(package.clone(), extra.clone())),
+            (None, Some(group)) => self.groups.contains(&(package.clone(), group.clone())),
+            (None, None) => self.all.contains(package),
+            (Some(_), Some(_)) => false,
+        }
+    }
+
+    fn requires_unscoped_constraint(
+        &self,
+        package: &PackageName,
+        direct_contexts: &DirectDependencyContexts,
+    ) -> bool {
+        if direct_contexts.base.contains(package) {
+            return false;
+        }
+
+        if self.base.contains(package) {
+            return true;
+        }
+
+        if self.extras.iter().any(|(reachable_package, extra)| {
+            reachable_package == package
+                && !direct_contexts
+                    .extras
+                    .contains(&(package.clone(), extra.clone()))
+        }) {
+            return true;
+        }
+
+        self.groups.iter().any(|(reachable_package, group)| {
+            reachable_package == package
+                && !direct_contexts
+                    .groups
+                    .contains(&(package.clone(), group.clone()))
+        })
     }
 }
 
@@ -155,135 +226,121 @@ fn source_scopes(
         .collect()
 }
 
-fn source_scope(
-    source: &uv_workspace::pyproject::Source,
-) -> (Option<ExtraName>, Option<GroupName>) {
-    (source.extra().cloned(), source.group().cloned())
+fn package_reachable_contexts(
+    lock: &Lock,
+    package: &uv_resolver::Package,
+    workspace_members: &BTreeSet<PackageName>,
+    stop_at_workspace_members: bool,
+) -> ReachableDependencyContexts {
+    let mut contexts = ReachableDependencyContexts::default();
+    contexts.extend_base(lock.reachable_packages_from_dependencies(
+        package.dependencies(),
+        workspace_members,
+        stop_at_workspace_members,
+    ));
+    for (extra, dependencies) in package.optional_dependencies() {
+        contexts.extend_extra(
+            extra,
+            lock.reachable_packages_from_dependencies(
+                dependencies,
+                workspace_members,
+                stop_at_workspace_members,
+            ),
+        );
+    }
+    for (group, dependencies) in package.resolved_dependency_groups() {
+        contexts.extend_group(
+            group,
+            lock.reachable_packages_from_dependencies(
+                dependencies,
+                workspace_members,
+                stop_at_workspace_members,
+            ),
+        );
+    }
+    contexts
 }
 
-fn source_with_marker(
-    source: &uv_workspace::pyproject::Source,
-    marker: MarkerTree,
-) -> uv_workspace::pyproject::Source {
-    match source {
-        uv_workspace::pyproject::Source::Git {
-            git,
-            subdirectory,
-            rev,
-            tag,
-            branch,
-            lfs,
-            extra,
+fn manifest_reachable_contexts(
+    lock: &Lock,
+    workspace_members: &BTreeSet<PackageName>,
+    stop_at_workspace_members: bool,
+) -> ReachableDependencyContexts {
+    let mut contexts = ReachableDependencyContexts::default();
+    let mut base_requirements = Vec::new();
+    let mut extra_requirements: BTreeMap<ExtraName, Vec<&Requirement>> = BTreeMap::new();
+
+    for requirement in lock.requirements() {
+        if let Some(extra) = requirement.marker.top_level_extra_name() {
+            extra_requirements
+                .entry(extra.into_owned())
+                .or_default()
+                .push(requirement);
+        } else {
+            base_requirements.push(requirement);
+        }
+    }
+
+    contexts.extend_base(lock.reachable_packages_from_requirements(
+        base_requirements,
+        workspace_members,
+        stop_at_workspace_members,
+    ));
+    for (extra, requirements) in extra_requirements {
+        contexts.extend_extra(
+            &extra,
+            lock.reachable_packages_from_requirements(
+                requirements,
+                workspace_members,
+                stop_at_workspace_members,
+            ),
+        );
+    }
+    for (group, requirements) in lock.dependency_groups() {
+        contexts.extend_group(
             group,
-            ..
-        } => uv_workspace::pyproject::Source::Git {
-            git: git.clone(),
-            subdirectory: subdirectory.clone(),
-            rev: rev.clone(),
-            tag: tag.clone(),
-            branch: branch.clone(),
-            lfs: *lfs,
-            marker,
-            extra: extra.clone(),
-            group: group.clone(),
-        },
-        uv_workspace::pyproject::Source::Url {
-            url,
-            subdirectory,
-            extra,
-            group,
-            ..
-        } => uv_workspace::pyproject::Source::Url {
-            url: url.clone(),
-            subdirectory: subdirectory.clone(),
-            marker,
-            extra: extra.clone(),
-            group: group.clone(),
-        },
-        uv_workspace::pyproject::Source::Path {
-            path,
-            editable,
-            package,
-            extra,
-            group,
-            ..
-        } => uv_workspace::pyproject::Source::Path {
-            path: path.clone(),
-            editable: *editable,
-            package: *package,
-            marker,
-            extra: extra.clone(),
-            group: group.clone(),
-        },
-        uv_workspace::pyproject::Source::Registry {
-            index,
-            extra,
-            group,
-            ..
-        } => uv_workspace::pyproject::Source::Registry {
-            index: index.clone(),
-            marker,
-            extra: extra.clone(),
-            group: group.clone(),
-        },
-        uv_workspace::pyproject::Source::Workspace {
-            workspace,
-            editable,
-            extra,
-            group,
-            ..
-        } => uv_workspace::pyproject::Source::Workspace {
-            workspace: *workspace,
-            editable: *editable,
-            marker,
-            extra: extra.clone(),
-            group: group.clone(),
-        },
+            lock.reachable_packages_from_requirements(
+                requirements.iter(),
+                workspace_members,
+                stop_at_workspace_members,
+            ),
+        );
+    }
+
+    contexts
+}
+
+fn workspace_project_reachable_contexts(
+    lock: &Lock,
+    workspace: &Workspace,
+    project_name: Option<&PackageName>,
+    stop_at_workspace_members: bool,
+) -> ReachableDependencyContexts {
+    let workspace_members = workspace
+        .packages()
+        .keys()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+
+    if let Some(project_name) = project_name {
+        let package = if stop_at_workspace_members {
+            lock.root().filter(|package| package.name() == project_name)
+        } else {
+            lock.packages()
+                .iter()
+                .find(|package| package.name() == project_name)
+        };
+
+        package.map_or_else(ReachableDependencyContexts::default, |package| {
+            package_reachable_contexts(lock, package, &workspace_members, stop_at_workspace_members)
+        })
+    } else {
+        manifest_reachable_contexts(lock, &workspace_members, stop_at_workspace_members)
     }
 }
 
-fn filter_workspace_root_transitive_sources(
-    workspace: &Workspace,
-) -> BTreeMap<PackageName, uv_workspace::pyproject::Sources> {
-    workspace
-        .sources()
-        .iter()
-        .filter_map(|(package, sources)| {
-            let filtered = sources
-                .iter()
-                .filter_map(|source| {
-                    let mut marker = source.marker();
-                    for member_source in workspace
-                        .packages()
-                        .values()
-                        .filter(|member| member.root() != workspace.install_path())
-                        .filter_map(|member| {
-                            member
-                                .pyproject_toml()
-                                .tool
-                                .as_ref()
-                                .and_then(|tool| tool.uv.as_ref())
-                                .and_then(|uv| uv.sources.as_ref())
-                                .and_then(|sources| sources.inner().get(package))
-                        })
-                        .flat_map(uv_workspace::pyproject::Sources::iter)
-                        .filter(|member_source| source_scope(member_source) == source_scope(source))
-                    {
-                        if marker.is_disjoint(member_source.marker()) {
-                            continue;
-                        }
-                        marker.and(member_source.marker().negate());
-                        if marker == MarkerTree::FALSE {
-                            break;
-                        }
-                    }
-
-                    (marker != MarkerTree::FALSE).then(|| source_with_marker(source, marker))
-                })
-                .collect::<uv_workspace::pyproject::Sources>();
-            (!filtered.is_empty()).then(|| (package.clone(), filtered))
-        })
-        .collect()
+fn script_reachable_contexts(lock: &Lock) -> ReachableDependencyContexts {
+    manifest_reachable_contexts(lock, &BTreeSet::default(), false)
 }
 
 struct WorkspaceProjectTransitiveSources<'a> {
@@ -294,6 +351,7 @@ struct WorkspaceProjectTransitiveSources<'a> {
     inherited_sources: &'a BTreeMap<PackageName, uv_workspace::pyproject::Sources>,
     project_indexes: &'a [Index],
     direct_contexts: &'a DirectDependencyContexts,
+    reachable_contexts: &'a ReachableDependencyContexts,
 }
 
 fn lower_workspace_project_transitive_source_constraints(
@@ -311,6 +369,7 @@ fn lower_workspace_project_transitive_source_constraints(
         inherited_sources,
         project_indexes,
         direct_contexts,
+        reachable_contexts,
     } = project;
 
     let package_names = project_sources
@@ -333,7 +392,16 @@ fn lower_workspace_project_transitive_source_constraints(
         };
 
         for (extra, group) in source_scopes(package_sources) {
-            if direct_contexts.is_direct(&package, extra.as_ref(), group.as_ref()) {
+            let should_lower = match (extra.as_ref(), group.as_ref()) {
+                (None, None) => {
+                    reachable_contexts.requires_unscoped_constraint(&package, direct_contexts)
+                }
+                _ => {
+                    reachable_contexts.reaches(&package, extra.as_ref(), group.as_ref())
+                        && !direct_contexts.is_direct(&package, extra.as_ref(), group.as_ref())
+                }
+            };
+            if !should_lower {
                 continue;
             }
 
@@ -781,7 +849,7 @@ impl<'lock> LockTarget<'lock> {
     /// constraints.
     pub(crate) fn lower_transitive_source_constraints(
         self,
-        conflicts: &Conflicts,
+        lock: &Lock,
         locations: &IndexLocations,
         source_strategy: &NoSources,
         credentials_cache: &CredentialsCache,
@@ -792,25 +860,7 @@ impl<'lock> LockTarget<'lock> {
 
         match self {
             Self::Workspace(workspace) => {
-                let root_has_project_conflict = workspace
-                    .pyproject_toml()
-                    .project
-                    .as_ref()
-                    .is_some_and(|project| {
-                        conflicts.iter().any(|set| {
-                            set.iter().any(|item| {
-                                item.package() == &project.name
-                                    && matches!(item.kind(), uv_pypi_types::ConflictKind::Project)
-                            })
-                        })
-                    });
-
                 let empty_sources = BTreeMap::default();
-                let root_sources = if root_has_project_conflict {
-                    workspace.sources().clone()
-                } else {
-                    filter_workspace_root_transitive_sources(workspace)
-                };
                 let mut lowered_constraints = Vec::new();
 
                 if !workspace.is_non_project() || !workspace.sources().is_empty() {
@@ -828,6 +878,16 @@ impl<'lock> LockTarget<'lock> {
                         workspace.install_path(),
                         workspace.pyproject_toml(),
                     )?;
+                    let reachable_contexts = workspace_project_reachable_contexts(
+                        lock,
+                        workspace,
+                        workspace
+                            .pyproject_toml()
+                            .project
+                            .as_ref()
+                            .map(|project| &project.name),
+                        true,
+                    );
 
                     lowered_constraints.extend(
                         lower_workspace_project_transitive_source_constraints(
@@ -839,10 +899,11 @@ impl<'lock> LockTarget<'lock> {
                                     .map(|project| project.name.clone()),
                                 project_path: workspace.install_path().join("pyproject.toml"),
                                 project_root: workspace.install_path(),
-                                project_sources: &root_sources,
+                                project_sources: workspace.sources(),
                                 inherited_sources: &empty_sources,
                                 project_indexes,
                                 direct_contexts: &direct_contexts,
+                                reachable_contexts: &reachable_contexts,
                             },
                             workspace,
                             locations,
@@ -875,27 +936,35 @@ impl<'lock> LockTarget<'lock> {
                         .and_then(|tool| tool.uv.as_ref())
                         .and_then(|uv| uv.index.as_deref())
                         .unwrap_or(&empty_indexes);
+                    let project_name = project_member
+                        .pyproject_toml()
+                        .project
+                        .as_ref()
+                        .map(|project| project.name.clone());
 
                     let mut direct_contexts = DirectDependencyContexts::default();
                     direct_contexts.collect_from_pyproject_toml(
                         project_member.root(),
                         project_member.pyproject_toml(),
                     )?;
+                    let reachable_contexts = workspace_project_reachable_contexts(
+                        lock,
+                        workspace,
+                        project_name.as_ref(),
+                        false,
+                    );
 
                     lowered_constraints.extend(
                         lower_workspace_project_transitive_source_constraints(
                             WorkspaceProjectTransitiveSources {
-                                project_name: project_member
-                                    .pyproject_toml()
-                                    .project
-                                    .as_ref()
-                                    .map(|project| project.name.clone()),
+                                project_name,
                                 project_path: project_member.root().join("pyproject.toml"),
                                 project_root: project_member.root(),
                                 project_sources,
                                 inherited_sources: workspace.sources(),
                                 project_indexes,
                                 direct_contexts: &direct_contexts,
+                                reachable_contexts: &reachable_contexts,
                             },
                             workspace,
                             locations,
@@ -905,7 +974,10 @@ impl<'lock> LockTarget<'lock> {
                     );
                 }
 
-                Ok(lowered_constraints)
+                Ok(lowered_constraints
+                    .into_iter()
+                    .filter(|requirement| !is_noop_constraint(requirement))
+                    .collect())
             }
             Self::Script(script) => {
                 let empty_indexes = Vec::default();
@@ -933,13 +1005,15 @@ impl<'lock> LockTarget<'lock> {
                 let direct_contexts = {
                     let mut direct_contexts = DirectDependencyContexts::default();
                     for requirement in script.metadata.dependencies.iter().flatten() {
-                        direct_contexts.insert_any(requirement);
                         if let Some(extra) = requirement.marker.top_level_extra_name() {
                             direct_contexts.insert_extra(requirement, extra.as_ref());
+                        } else {
+                            direct_contexts.insert_base(requirement);
                         }
                     }
                     direct_contexts
                 };
+                let reachable_contexts = script_reachable_contexts(lock);
 
                 let mut lowered_constraints = Vec::new();
                 for (package, package_sources) in sources_map {
@@ -953,7 +1027,14 @@ impl<'lock> LockTarget<'lock> {
                             continue;
                         }
 
-                        if direct_contexts.is_direct(package, extra.as_ref(), None) {
+                        let should_lower = if extra.is_none() {
+                            reachable_contexts
+                                .requires_unscoped_constraint(package, &direct_contexts)
+                        } else {
+                            reachable_contexts.reaches(package, extra.as_ref(), None)
+                                && !direct_contexts.is_direct(package, extra.as_ref(), None)
+                        };
+                        if !should_lower {
                             continue;
                         }
 

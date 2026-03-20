@@ -2473,6 +2473,63 @@ fn lock_project_with_transitive_group_sources_conflict() -> Result<()> {
     Ok(())
 }
 
+/// An unscoped source should still apply transitively even when the package is direct in a
+/// different conflicting group.
+#[test]
+fn lock_transitive_source_with_direct_conflicting_group() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        group1 = ["idna"]
+        group2 = ["anyio==3.7.0"]
+
+        [tool.uv]
+        conflicts = [
+          [
+            { group = "group1" },
+            { group = "group2" },
+          ],
+        ]
+
+        [tool.uv.sources]
+        idna = { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--only-group=group2"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.2 (from https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl)
+     + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
+
 /// Lock a workspace where a member depends on a package with a transitively sourced dependency.
 #[test]
 fn lock_workspace_member_with_transitive_sources() -> Result<()> {
@@ -2631,6 +2688,63 @@ fn lock_workspace_member_transitive_sources_override_workspace_transitive_source
     ));
     assert!(!lock.contains(
         "source = { url = \"https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl\" }"
+    ));
+
+    Ok(())
+}
+
+/// A member-local transitive source should be ignored when the member never reaches that package.
+#[test]
+fn lock_workspace_member_unused_transitive_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0", "member"]
+
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv.sources]
+        member = { workspace = true }
+        idna = { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl" }
+        "#,
+    )?;
+
+    let member = context.temp_dir.child("member");
+    fs_err::create_dir_all(&member)?;
+    member.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["sniffio==1.3.1"]
+
+        [tool.uv.sources]
+        idna = { url = "https://files.pythonhosted.org/packages/04/a2/d918dcd22354d8958fe113e1a3630137e0fc8b44859ade3063982eacd2a4/idna-3.3-py3-none-any.whl" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(lock.contains(
+        "source = { url = \"https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl\" }"
+    ));
+    assert!(!lock.contains(
+        "source = { url = \"https://files.pythonhosted.org/packages/04/a2/d918dcd22354d8958fe113e1a3630137e0fc8b44859ade3063982eacd2a4/idna-3.3-py3-none-any.whl\" }"
     ));
 
     Ok(())
@@ -4252,13 +4366,129 @@ fn lock_root_and_workspace_member_with_conflicting_transitive_sources() -> Resul
 
     uv_snapshot!(context.filters(), context.lock(), @"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Requirements contain conflicting URLs for package `idna` in all marker environments:
-    - https://files.pythonhosted.org/packages/04/a2/d918dcd22354d8958fe113e1a3630137e0fc8b44859ade3063982eacd2a4/idna-3.3-py3-none-any.whl
-    - https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl
+      × Failed to resolve dependencies for `anyio` (v3.7.0)
+      ╰─▶ Requirements contain conflicting URLs for package `idna` in all marker environments:
+          - https://files.pythonhosted.org/packages/04/a2/d918dcd22354d8958fe113e1a3630137e0fc8b44859ade3063982eacd2a4/idna-3.3-py3-none-any.whl
+          - https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl
+      help: `anyio` (v3.7.0) was included because `a` (v0.1.0) depends on `anyio==3.7.0`
+    ");
+
+    Ok(())
+}
+
+/// A root extra that reaches a transitive package should still conflict with a workspace member's
+/// distinct source for that package.
+#[test]
+fn lock_root_extra_and_workspace_member_with_conflicting_transitive_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [project.optional-dependencies]
+        extra1 = ["anyio==3.7.0"]
+
+        [tool.uv.workspace]
+        members = ["a"]
+
+        [tool.uv.sources]
+        a = { workspace = true }
+        idna = { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl" }
+        "#,
+    )?;
+
+    let project_a = context.temp_dir.child("a");
+    project_a.create_dir_all()?;
+    project_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv.sources]
+        idna = { url = "https://files.pythonhosted.org/packages/04/a2/d918dcd22354d8958fe113e1a3630137e0fc8b44859ade3063982eacd2a4/idna-3.3-py3-none-any.whl" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to resolve dependencies for `anyio` (v3.7.0)
+      ╰─▶ Requirements contain conflicting URLs for package `idna` in all marker environments:
+          - https://files.pythonhosted.org/packages/04/a2/d918dcd22354d8958fe113e1a3630137e0fc8b44859ade3063982eacd2a4/idna-3.3-py3-none-any.whl
+          - https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl
+      help: `anyio` (v3.7.0) was included because `a` (v0.1.0) depends on `anyio==3.7.0`
+    ");
+
+    Ok(())
+}
+
+/// A root dependency group that reaches a transitive package should still conflict with a
+/// workspace member's distinct source for that package.
+#[test]
+fn lock_root_group_and_workspace_member_with_conflicting_transitive_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [dependency-groups]
+        group1 = ["anyio==3.7.0"]
+
+        [tool.uv.workspace]
+        members = ["a"]
+
+        [tool.uv.sources]
+        a = { workspace = true }
+        idna = { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl" }
+        "#,
+    )?;
+
+    let project_a = context.temp_dir.child("a");
+    project_a.create_dir_all()?;
+    project_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv.sources]
+        idna = { url = "https://files.pythonhosted.org/packages/04/a2/d918dcd22354d8958fe113e1a3630137e0fc8b44859ade3063982eacd2a4/idna-3.3-py3-none-any.whl" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to resolve dependencies for `anyio` (v3.7.0)
+      ╰─▶ Requirements contain conflicting URLs for package `idna` in all marker environments:
+          - https://files.pythonhosted.org/packages/04/a2/d918dcd22354d8958fe113e1a3630137e0fc8b44859ade3063982eacd2a4/idna-3.3-py3-none-any.whl
+          - https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl
+      help: `anyio` (v3.7.0) was included because `a` (v0.1.0) depends on `anyio==3.7.0`
     ");
 
     Ok(())
