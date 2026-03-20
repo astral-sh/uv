@@ -41,7 +41,9 @@ impl DependencySource {
             RequirementSource::Registry { index, .. }
                 if matches!(
                     requirement.origin.as_ref(),
-                    Some(RequirementOrigin::Group(_, Some(_), _))
+                    Some(RequirementOrigin::Project(_, _))
+                        | Some(RequirementOrigin::Extra(_, Some(_), _))
+                        | Some(RequirementOrigin::Group(_, Some(_), _))
                 ) =>
             {
                 index

@@ -33,6 +33,7 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{MIN_VERSION, Version, VersionSpecifiers, release_specifiers_to_ranges};
 use uv_pep508::{
     MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
+    RequirementOrigin,
 };
 use uv_platform_tags::{IncompatibleTag, Tags};
 use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKindRef, Conflicts, VerbatimParsedUrl};
@@ -2035,6 +2036,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             Either::Left(Either::Left(self.requirements_for_extra(
                 dev_dependencies.get(dev).into_iter().flatten(),
                 extra,
+                Some(dev),
                 env,
                 python_marker,
                 python_requirement,
@@ -2047,6 +2049,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             Either::Left(Either::Right(self.requirements_for_extra(
                 dependencies.iter(),
                 extra,
+                None,
                 env,
                 python_marker,
                 python_requirement,
@@ -2056,6 +2059,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 .requirements_for_extra(
                     dependencies.iter(),
                     extra,
+                    None,
                     env,
                     python_marker,
                     python_requirement,
@@ -2077,6 +2081,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 for requirement in self.requirements_for_extra(
                     dependencies,
                     Some(&extra),
+                    None,
                     env,
                     python_marker,
                     python_requirement,
@@ -2146,6 +2151,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &'data self,
         dependencies: impl IntoIterator<Item = &'data Requirement> + 'parameters,
         extra: Option<&'parameters ExtraName>,
+        group: Option<&'parameters GroupName>,
         env: &'parameters ResolverEnvironment,
         python_marker: MarkerTree,
         python_requirement: &'parameters PythonRequirement,
@@ -2168,6 +2174,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 iter::once(requirement.clone()).chain(self.constraints_for_requirement(
                     requirement,
                     extra,
+                    group,
                     env,
                     python_marker,
                     python_requirement,
@@ -2234,6 +2241,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &'data self,
         requirement: Cow<'data, Requirement>,
         extra: Option<&'parameters ExtraName>,
+        group: Option<&'parameters GroupName>,
         env: &'parameters ResolverEnvironment,
         python_marker: MarkerTree,
         python_requirement: &'parameters PythonRequirement,
@@ -2320,6 +2328,43 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 if !env.included_by_marker(constraint.marker) {
                     trace!("Skipping {constraint} because of {env}");
                     return None;
+                }
+
+                // If the constraint originates from an extra- or group-scoped transitive source,
+                // filter it to matching forks only.
+                match constraint.origin.as_ref() {
+                    Some(RequirementOrigin::Project(_, project_name)) => {
+                        if !env.included_by_group(ConflictItemRef::from(project_name)) {
+                            return None;
+                        }
+                    }
+                    Some(RequirementOrigin::Extra(_, project_name, source_extra)) => {
+                        if let Some(extra) = extra && extra != source_extra {
+                            return None;
+                        }
+
+                        if let Some(project_name) = project_name
+                            && !env.included_by_group(ConflictItemRef::from((
+                                project_name,
+                                source_extra,
+                            )))
+                        {
+                            return None;
+                        }
+                    }
+                    Some(RequirementOrigin::Group(_, project_name, source_group)) => {
+                        if let Some(group) = group && group != source_group {
+                            return None;
+                        }
+
+                        if let Some(project_name) = project_name
+                            && !env
+                                .included_by_group(ConflictItemRef::from((project_name, source_group)))
+                        {
+                            return None;
+                        }
+                    }
+                    _ => {}
                 }
 
                 // If the constraint isn't relevant for the current platform, skip it.

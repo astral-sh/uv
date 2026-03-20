@@ -199,26 +199,14 @@ impl SourcedDependencyGroups {
     ) -> Result<(), MetadataError> {
         for (name, sources) in sources {
             for source in sources.iter() {
-                if let Some(group) = source.group() {
+                if let Some(group) = source.group()
                     // If the group doesn't exist at all, error.
-                    let Some(flat_group) = dependency_groups.get(group) else {
-                        return Err(MetadataError::MissingSourceGroup(
-                            name.clone(),
-                            group.clone(),
-                        ));
-                    };
-
-                    // If there is no such requirement with the group, error.
-                    if !flat_group
-                        .requirements
-                        .iter()
-                        .any(|requirement| requirement.name == *name)
-                    {
-                        return Err(MetadataError::IncompleteSourceGroup(
-                            name.clone(),
-                            group.clone(),
-                        ));
-                    }
+                    && dependency_groups.get(group).is_none()
+                {
+                    return Err(MetadataError::MissingSourceGroup(
+                        name.clone(),
+                        group.clone(),
+                    ));
                 }
             }
         }

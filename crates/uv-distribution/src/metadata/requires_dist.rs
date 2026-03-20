@@ -226,47 +226,24 @@ impl RequiresDist {
     ) -> Result<(), MetadataError> {
         for (name, sources) in sources {
             for source in sources.iter() {
-                if let Some(extra) = source.extra() {
+                if let Some(extra) = source.extra()
                     // If the extra doesn't exist at all, error.
-                    if !metadata.provides_extra.contains(extra) {
-                        return Err(MetadataError::MissingSourceExtra(
-                            name.clone(),
-                            extra.clone(),
-                        ));
-                    }
-
-                    // If there is no such requirement with the extra, error.
-                    if !metadata.requires_dist.iter().any(|requirement| {
-                        requirement.name == *name
-                            && requirement.marker.top_level_extra_name().as_deref() == Some(extra)
-                    }) {
-                        return Err(MetadataError::IncompleteSourceExtra(
-                            name.clone(),
-                            extra.clone(),
-                        ));
-                    }
+                    && !metadata.provides_extra.contains(extra)
+                {
+                    return Err(MetadataError::MissingSourceExtra(
+                        name.clone(),
+                        extra.clone(),
+                    ));
                 }
 
-                if let Some(group) = source.group() {
+                if let Some(group) = source.group()
                     // If the group doesn't exist at all, error.
-                    let Some(flat_group) = dependency_groups.get(group) else {
-                        return Err(MetadataError::MissingSourceGroup(
-                            name.clone(),
-                            group.clone(),
-                        ));
-                    };
-
-                    // If there is no such requirement with the group, error.
-                    if !flat_group
-                        .requirements
-                        .iter()
-                        .any(|requirement| requirement.name == *name)
-                    {
-                        return Err(MetadataError::IncompleteSourceGroup(
-                            name.clone(),
-                            group.clone(),
-                        ));
-                    }
+                    && dependency_groups.get(group).is_none()
+                {
+                    return Err(MetadataError::MissingSourceGroup(
+                        name.clone(),
+                        group.clone(),
+                    ));
                 }
             }
         }

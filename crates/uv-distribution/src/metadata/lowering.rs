@@ -34,7 +34,7 @@ enum RequirementOrigin {
 
 impl LoweredRequirement {
     /// Combine `project.dependencies` or `project.optional-dependencies` with `tool.uv.sources`.
-    pub(crate) fn from_requirement<'data>(
+    pub fn from_requirement<'data>(
         requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
         project_name: Option<&'data PackageName>,
         project_dir: &'data Path,

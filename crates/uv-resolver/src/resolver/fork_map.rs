@@ -58,6 +58,12 @@ impl ForkScope {
             | RequirementSource::Directory { .. } => None,
         };
         conflict.or_else(|| match requirement.origin.as_ref() {
+            Some(RequirementOrigin::Project(_, project_name)) => {
+                Some(ConflictItem::from(project_name.clone()))
+            }
+            Some(RequirementOrigin::Extra(_, Some(project_name), extra)) => {
+                Some(ConflictItem::from((project_name.clone(), extra.clone())))
+            }
             Some(RequirementOrigin::Group(_, Some(project_name), group)) => {
                 Some(ConflictItem::from((project_name.clone(), group.clone())))
             }

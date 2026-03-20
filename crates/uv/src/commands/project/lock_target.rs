@@ -1,18 +1,23 @@
 use itertools::Either;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
-use tracing::info_span;
+use std::str::FromStr;
+use tracing::{debug, info_span};
 
 use uv_auth::CredentialsCache;
 use uv_configuration::{DependencyGroupsWithDefaults, NoSources};
 use uv_distribution::LoweredRequirement;
-use uv_distribution_types::{Index, IndexLocations, Requirement, RequiresPython};
-use uv_normalize::{GroupName, PackageName};
-use uv_pep508::RequirementOrigin;
-use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
+use uv_distribution_types::{
+    Index, IndexLocations, Requirement, RequirementSource, RequiresPython,
+};
+use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_pep508::{MarkerTree, RequirementOrigin};
+use uv_pypi_types::{Conflicts, LenientRequirement, SupportedEnvironments, VerbatimParsedUrl};
 use uv_resolver::{Lock, LockVersion, VERSION};
 use uv_scripts::Pep723Script;
-use uv_workspace::dependency_groups::{DependencyGroupError, FlatDependencyGroup};
+use uv_workspace::dependency_groups::{
+    DependencyGroupError, FlatDependencyGroup, FlatDependencyGroups,
+};
 use uv_workspace::{Editability, Workspace, WorkspaceMember};
 
 use crate::commands::project::{ProjectError, find_requires_python};
@@ -34,6 +39,350 @@ impl<'lock> From<&'lock Pep723Script> for LockTarget<'lock> {
     fn from(script: &'lock Pep723Script) -> Self {
         LockTarget::Script(script)
     }
+}
+
+#[derive(Debug, Default)]
+struct DirectDependencyContexts {
+    any: BTreeSet<PackageName>,
+    extras: BTreeSet<(PackageName, ExtraName)>,
+    groups: BTreeSet<(PackageName, GroupName)>,
+}
+
+impl DirectDependencyContexts {
+    fn insert_any(&mut self, requirement: &uv_pep508::Requirement<VerbatimParsedUrl>) {
+        self.any.insert(requirement.name.clone());
+    }
+
+    fn insert_extra(
+        &mut self,
+        requirement: &uv_pep508::Requirement<VerbatimParsedUrl>,
+        extra: &ExtraName,
+    ) {
+        self.extras
+            .insert((requirement.name.clone(), extra.clone()));
+    }
+
+    fn insert_group(
+        &mut self,
+        requirement: &uv_pep508::Requirement<VerbatimParsedUrl>,
+        group: &GroupName,
+    ) {
+        self.groups
+            .insert((requirement.name.clone(), group.clone()));
+    }
+
+    /// Populate direct dependency contexts from a `pyproject.toml`'s project table and dependency
+    /// groups.
+    fn collect_from_pyproject_toml(
+        &mut self,
+        path: &Path,
+        pyproject_toml: &uv_workspace::pyproject::PyProjectToml,
+    ) -> Result<(), DependencyGroupError> {
+        if let Some(project) = &pyproject_toml.project {
+            if let Some(dependencies) = &project.dependencies {
+                for requirement in dependencies.iter().filter_map(|dependency| {
+                    LenientRequirement::<VerbatimParsedUrl>::from_str(dependency)
+                        .inspect_err(|err| {
+                            debug!("Failed to parse dependency `{dependency}`: {err}");
+                        })
+                        .ok()
+                }) {
+                    let requirement: uv_pep508::Requirement<VerbatimParsedUrl> = requirement.into();
+                    self.insert_any(&requirement);
+                }
+            }
+
+            if let Some(optional_dependencies) = &project.optional_dependencies {
+                for (extra, dependencies) in optional_dependencies {
+                    for requirement in dependencies.iter().filter_map(|dependency| {
+                        LenientRequirement::<VerbatimParsedUrl>::from_str(dependency)
+                            .inspect_err(|err| {
+                                debug!("Failed to parse dependency `{dependency}`: {err}");
+                            })
+                            .ok()
+                    }) {
+                        let requirement: uv_pep508::Requirement<VerbatimParsedUrl> =
+                            requirement.into();
+                        self.insert_any(&requirement);
+                        self.insert_extra(&requirement, extra);
+                    }
+                }
+            }
+        }
+
+        let dependency_groups = FlatDependencyGroups::from_pyproject_toml(path, pyproject_toml)?;
+        for (group, flat_group) in dependency_groups {
+            for requirement in &flat_group.requirements {
+                self.insert_any(requirement);
+                self.insert_group(requirement, &group);
+            }
+        }
+
+        Ok(())
+    }
+
+    fn is_direct(
+        &self,
+        package: &PackageName,
+        extra: Option<&ExtraName>,
+        group: Option<&GroupName>,
+    ) -> bool {
+        match (extra, group) {
+            (Some(extra), None) => self.extras.contains(&(package.clone(), extra.clone())),
+            (None, Some(group)) => self.groups.contains(&(package.clone(), group.clone())),
+            (None, None) => self.any.contains(package),
+            // Sources have either `extra` or `group`, never both, so this case is unreachable
+            // via `source_scopes`.
+            (Some(_), Some(_)) => false,
+        }
+    }
+}
+
+fn is_noop_constraint(requirement: &Requirement) -> bool {
+    matches!(
+        &requirement.source,
+        RequirementSource::Registry { specifier, index, .. }
+            if specifier.is_empty() && index.is_none()
+    )
+}
+
+fn source_scopes(
+    sources: &uv_workspace::pyproject::Sources,
+) -> BTreeSet<(Option<ExtraName>, Option<GroupName>)> {
+    sources
+        .iter()
+        .map(|source| (source.extra().cloned(), source.group().cloned()))
+        .collect()
+}
+
+fn source_scope(
+    source: &uv_workspace::pyproject::Source,
+) -> (Option<ExtraName>, Option<GroupName>) {
+    (source.extra().cloned(), source.group().cloned())
+}
+
+fn source_with_marker(
+    source: &uv_workspace::pyproject::Source,
+    marker: MarkerTree,
+) -> uv_workspace::pyproject::Source {
+    match source {
+        uv_workspace::pyproject::Source::Git {
+            git,
+            subdirectory,
+            rev,
+            tag,
+            branch,
+            lfs,
+            extra,
+            group,
+            ..
+        } => uv_workspace::pyproject::Source::Git {
+            git: git.clone(),
+            subdirectory: subdirectory.clone(),
+            rev: rev.clone(),
+            tag: tag.clone(),
+            branch: branch.clone(),
+            lfs: *lfs,
+            marker,
+            extra: extra.clone(),
+            group: group.clone(),
+        },
+        uv_workspace::pyproject::Source::Url {
+            url,
+            subdirectory,
+            extra,
+            group,
+            ..
+        } => uv_workspace::pyproject::Source::Url {
+            url: url.clone(),
+            subdirectory: subdirectory.clone(),
+            marker,
+            extra: extra.clone(),
+            group: group.clone(),
+        },
+        uv_workspace::pyproject::Source::Path {
+            path,
+            editable,
+            package,
+            extra,
+            group,
+            ..
+        } => uv_workspace::pyproject::Source::Path {
+            path: path.clone(),
+            editable: *editable,
+            package: *package,
+            marker,
+            extra: extra.clone(),
+            group: group.clone(),
+        },
+        uv_workspace::pyproject::Source::Registry {
+            index,
+            extra,
+            group,
+            ..
+        } => uv_workspace::pyproject::Source::Registry {
+            index: index.clone(),
+            marker,
+            extra: extra.clone(),
+            group: group.clone(),
+        },
+        uv_workspace::pyproject::Source::Workspace {
+            workspace,
+            editable,
+            extra,
+            group,
+            ..
+        } => uv_workspace::pyproject::Source::Workspace {
+            workspace: *workspace,
+            editable: *editable,
+            marker,
+            extra: extra.clone(),
+            group: group.clone(),
+        },
+    }
+}
+
+fn filter_workspace_root_transitive_sources(
+    workspace: &Workspace,
+) -> BTreeMap<PackageName, uv_workspace::pyproject::Sources> {
+    workspace
+        .sources()
+        .iter()
+        .filter_map(|(package, sources)| {
+            let filtered = sources
+                .iter()
+                .filter_map(|source| {
+                    let mut marker = source.marker();
+                    for member_source in workspace
+                        .packages()
+                        .values()
+                        .filter(|member| member.root() != workspace.install_path())
+                        .filter_map(|member| {
+                            member
+                                .pyproject_toml()
+                                .tool
+                                .as_ref()
+                                .and_then(|tool| tool.uv.as_ref())
+                                .and_then(|uv| uv.sources.as_ref())
+                                .and_then(|sources| sources.inner().get(package))
+                        })
+                        .flat_map(uv_workspace::pyproject::Sources::iter)
+                        .filter(|member_source| source_scope(member_source) == source_scope(source))
+                    {
+                        if marker.is_disjoint(member_source.marker()) {
+                            continue;
+                        }
+                        marker.and(member_source.marker().negate());
+                        if marker == MarkerTree::FALSE {
+                            break;
+                        }
+                    }
+
+                    (marker != MarkerTree::FALSE).then(|| source_with_marker(source, marker))
+                })
+                .collect::<uv_workspace::pyproject::Sources>();
+            (!filtered.is_empty()).then(|| (package.clone(), filtered))
+        })
+        .collect()
+}
+
+struct WorkspaceProjectTransitiveSources<'a> {
+    project_name: Option<PackageName>,
+    project_path: PathBuf,
+    project_root: &'a Path,
+    project_sources: &'a BTreeMap<PackageName, uv_workspace::pyproject::Sources>,
+    inherited_sources: &'a BTreeMap<PackageName, uv_workspace::pyproject::Sources>,
+    project_indexes: &'a [Index],
+    direct_contexts: &'a DirectDependencyContexts,
+}
+
+fn lower_workspace_project_transitive_source_constraints(
+    project: WorkspaceProjectTransitiveSources<'_>,
+    workspace: &Workspace,
+    locations: &IndexLocations,
+    source_strategy: &NoSources,
+    credentials_cache: &CredentialsCache,
+) -> Result<Vec<Requirement>, uv_distribution::MetadataError> {
+    let WorkspaceProjectTransitiveSources {
+        project_name,
+        project_path,
+        project_root,
+        project_sources,
+        inherited_sources,
+        project_indexes,
+        direct_contexts,
+    } = project;
+
+    let package_names = project_sources
+        .keys()
+        .chain(inherited_sources.keys())
+        .cloned()
+        .collect::<BTreeSet<_>>();
+
+    let mut lowered_constraints = Vec::new();
+    for package in package_names {
+        if source_strategy.for_package(&package) {
+            continue;
+        }
+
+        let Some(package_sources) = project_sources
+            .get(&package)
+            .or_else(|| inherited_sources.get(&package))
+        else {
+            continue;
+        };
+
+        for (extra, group) in source_scopes(package_sources) {
+            if direct_contexts.is_direct(&package, extra.as_ref(), group.as_ref()) {
+                continue;
+            }
+
+            let origin = if let Some(extra) = &extra {
+                RequirementOrigin::Extra(project_path.clone(), project_name.clone(), extra.clone())
+            } else if let Some(group) = &group {
+                RequirementOrigin::Group(project_path.clone(), project_name.clone(), group.clone())
+            } else if let Some(project_name) = &project_name {
+                RequirementOrigin::Project(project_path.clone(), project_name.clone())
+            } else {
+                RequirementOrigin::Workspace
+            };
+
+            let requirement_name = package.clone();
+            let mut lowered = LoweredRequirement::from_requirement(
+                uv_pep508::Requirement {
+                    name: package.clone(),
+                    extras: Box::default(),
+                    marker: MarkerTree::TRUE,
+                    version_or_url: None,
+                    origin: Some(origin),
+                },
+                project_name.as_ref(),
+                project_root,
+                project_sources,
+                project_indexes,
+                extra.as_ref(),
+                group.as_ref(),
+                locations,
+                workspace,
+                None,
+                credentials_cache,
+            )
+            .map(move |requirement| match requirement {
+                Ok(requirement) => Ok(requirement.into_inner()),
+                Err(err) => Err(uv_distribution::MetadataError::LoweringError(
+                    requirement_name.clone(),
+                    Box::new(err),
+                )),
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+            lowered_constraints.append(&mut lowered);
+        }
+    }
+
+    Ok(lowered_constraints
+        .into_iter()
+        .filter(|requirement| !is_noop_constraint(requirement))
+        .collect())
 }
 
 impl<'lock> LockTarget<'lock> {
@@ -424,6 +773,227 @@ impl<'lock> LockTarget<'lock> {
                         }
                     })
                     .collect::<Result<_, _>>()?)
+            }
+        }
+    }
+
+    /// Lower any `tool.uv.sources` entries that refer to transitive dependencies into synthetic
+    /// constraints.
+    pub(crate) fn lower_transitive_source_constraints(
+        self,
+        conflicts: &Conflicts,
+        locations: &IndexLocations,
+        source_strategy: &NoSources,
+        credentials_cache: &CredentialsCache,
+    ) -> Result<Vec<Requirement>, uv_distribution::MetadataError> {
+        if source_strategy.all() {
+            return Ok(Vec::new());
+        }
+
+        match self {
+            Self::Workspace(workspace) => {
+                let root_has_project_conflict = workspace
+                    .pyproject_toml()
+                    .project
+                    .as_ref()
+                    .is_some_and(|project| {
+                        conflicts.iter().any(|set| {
+                            set.iter().any(|item| {
+                                item.package() == &project.name
+                                    && matches!(item.kind(), uv_pypi_types::ConflictKind::Project)
+                            })
+                        })
+                    });
+
+                let empty_sources = BTreeMap::default();
+                let root_sources = if root_has_project_conflict {
+                    workspace.sources().clone()
+                } else {
+                    filter_workspace_root_transitive_sources(workspace)
+                };
+                let mut lowered_constraints = Vec::new();
+
+                if !workspace.is_non_project() || !workspace.sources().is_empty() {
+                    let empty_indexes = vec![];
+                    let project_indexes = workspace
+                        .pyproject_toml()
+                        .tool
+                        .as_ref()
+                        .and_then(|tool| tool.uv.as_ref())
+                        .and_then(|uv| uv.index.as_deref())
+                        .unwrap_or(&empty_indexes);
+
+                    let mut direct_contexts = DirectDependencyContexts::default();
+                    direct_contexts.collect_from_pyproject_toml(
+                        workspace.install_path(),
+                        workspace.pyproject_toml(),
+                    )?;
+
+                    lowered_constraints.extend(
+                        lower_workspace_project_transitive_source_constraints(
+                            WorkspaceProjectTransitiveSources {
+                                project_name: workspace
+                                    .pyproject_toml()
+                                    .project
+                                    .as_ref()
+                                    .map(|project| project.name.clone()),
+                                project_path: workspace.install_path().join("pyproject.toml"),
+                                project_root: workspace.install_path(),
+                                project_sources: &root_sources,
+                                inherited_sources: &empty_sources,
+                                project_indexes,
+                                direct_contexts: &direct_contexts,
+                            },
+                            workspace,
+                            locations,
+                            source_strategy,
+                            credentials_cache,
+                        )?,
+                    );
+                }
+
+                for project_member in workspace.packages().values() {
+                    if project_member.root() == workspace.install_path() {
+                        continue;
+                    }
+
+                    let empty_sources = BTreeMap::default();
+                    let project_sources = project_member
+                        .pyproject_toml()
+                        .tool
+                        .as_ref()
+                        .and_then(|tool| tool.uv.as_ref())
+                        .and_then(|uv| uv.sources.as_ref())
+                        .map(uv_workspace::pyproject::ToolUvSources::inner)
+                        .unwrap_or(&empty_sources);
+
+                    let empty_indexes = vec![];
+                    let project_indexes = project_member
+                        .pyproject_toml()
+                        .tool
+                        .as_ref()
+                        .and_then(|tool| tool.uv.as_ref())
+                        .and_then(|uv| uv.index.as_deref())
+                        .unwrap_or(&empty_indexes);
+
+                    let mut direct_contexts = DirectDependencyContexts::default();
+                    direct_contexts.collect_from_pyproject_toml(
+                        project_member.root(),
+                        project_member.pyproject_toml(),
+                    )?;
+
+                    lowered_constraints.extend(
+                        lower_workspace_project_transitive_source_constraints(
+                            WorkspaceProjectTransitiveSources {
+                                project_name: project_member
+                                    .pyproject_toml()
+                                    .project
+                                    .as_ref()
+                                    .map(|project| project.name.clone()),
+                                project_path: project_member.root().join("pyproject.toml"),
+                                project_root: project_member.root(),
+                                project_sources,
+                                inherited_sources: workspace.sources(),
+                                project_indexes,
+                                direct_contexts: &direct_contexts,
+                            },
+                            workspace,
+                            locations,
+                            source_strategy,
+                            credentials_cache,
+                        )?,
+                    );
+                }
+
+                Ok(lowered_constraints)
+            }
+            Self::Script(script) => {
+                let empty_indexes = Vec::default();
+                let indexes = script
+                    .metadata
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|uv| uv.top_level.index.as_deref())
+                    .unwrap_or(&empty_indexes);
+
+                let empty_sources = BTreeMap::default();
+                let sources_map = script
+                    .metadata
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|uv| uv.sources.as_ref())
+                    .unwrap_or(&empty_sources);
+
+                if sources_map.is_empty() {
+                    return Ok(Vec::new());
+                }
+
+                let direct_contexts = {
+                    let mut direct_contexts = DirectDependencyContexts::default();
+                    for requirement in script.metadata.dependencies.iter().flatten() {
+                        direct_contexts.insert_any(requirement);
+                        if let Some(extra) = requirement.marker.top_level_extra_name() {
+                            direct_contexts.insert_extra(requirement, extra.as_ref());
+                        }
+                    }
+                    direct_contexts
+                };
+
+                let mut lowered_constraints = Vec::new();
+                for (package, package_sources) in sources_map {
+                    if source_strategy.for_package(package) {
+                        continue;
+                    }
+
+                    for (extra, group) in source_scopes(package_sources) {
+                        // Dependency groups are not supported in script metadata.
+                        if group.is_some() {
+                            continue;
+                        }
+
+                        if direct_contexts.is_direct(package, extra.as_ref(), None) {
+                            continue;
+                        }
+
+                        let origin = if let Some(extra) = &extra {
+                            RequirementOrigin::Extra(script.path.clone(), None, extra.clone())
+                        } else {
+                            RequirementOrigin::File(script.path.clone())
+                        };
+
+                        let requirement_name = package.clone();
+                        let mut lowered = LoweredRequirement::from_non_workspace_requirement(
+                            uv_pep508::Requirement {
+                                name: package.clone(),
+                                extras: Box::default(),
+                                marker: MarkerTree::TRUE,
+                                version_or_url: None,
+                                origin: Some(origin),
+                            },
+                            script.path.parent().unwrap(),
+                            sources_map,
+                            indexes,
+                            locations,
+                            credentials_cache,
+                        )
+                        .map(move |requirement| match requirement {
+                            Ok(requirement) => Ok(requirement.into_inner()),
+                            Err(err) => Err(uv_distribution::MetadataError::LoweringError(
+                                requirement_name.clone(),
+                                Box::new(err),
+                            )),
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                        lowered_constraints.append(&mut lowered);
+                    }
+                }
+
+                Ok(lowered_constraints
+                    .into_iter()
+                    .filter(|requirement| !is_noop_constraint(requirement))
+                    .collect())
             }
         }
     }

@@ -2083,6 +2083,741 @@ fn lock_project_with_constraint_sources() -> Result<()> {
     Ok(())
 }
 
+/// Lock a project with `tool.uv.sources` that apply to an indirect dependency.
+#[test]
+fn lock_project_with_transitive_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv.sources]
+        idna = { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    // Install the base dependencies from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.2 (from https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl)
+     + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
+
+/// Lock a project with an extra-scoped `tool.uv.sources` entry that applies to an indirect
+/// dependency in that extra.
+#[test]
+fn lock_project_with_transitive_extra_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        extra1 = ["anyio==3.7.0"]
+
+        [tool.uv.sources]
+        idna = { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl", extra = "extra1" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra").arg("extra1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.2 (from https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl)
+     + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
+
+/// Lock a project where two conflicting extras each have an extra-scoped transitive source
+/// override for the same package, targeting different URLs.
+#[test]
+fn lock_project_with_transitive_extra_sources_conflict() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        extra1 = ["anyio==3.7.0"]
+        extra2 = ["anyio==3.7.0"]
+
+        [tool.uv]
+        conflicts = [
+          [
+            { extra = "extra1" },
+            { extra = "extra2" },
+          ],
+        ]
+
+        [tool.uv.sources]
+        idna = [
+            { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl", extra = "extra1" },
+            { url = "https://files.pythonhosted.org/packages/04/a2/d918dcd22354d8958fe113e1a3630137e0fc8b44859ade3063982eacd2a4/idna-3.3-py3-none-any.whl", extra = "extra2" },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(lock.contains("idna-3.2-py3-none-any.whl"));
+    assert!(lock.contains("idna-3.3-py3-none-any.whl"));
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra").arg("extra1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.2 (from https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl)
+     + sniffio==1.3.1
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra").arg("extra2"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - idna==3.2 (from https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl)
+     + idna==3.3 (from https://files.pythonhosted.org/packages/04/a2/d918dcd22354d8958fe113e1a3630137e0fc8b44859ade3063982eacd2a4/idna-3.3-py3-none-any.whl)
+    ");
+
+    Ok(())
+}
+
+/// Lock a project with a group-scoped `tool.uv.sources` entry that applies to an indirect
+/// dependency in that group.
+#[test]
+fn lock_project_with_transitive_group_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["anyio==3.7.0"]
+
+        [tool.uv.sources]
+        idna = { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl", group = "dev" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    // Install only the `dev` dependency-group from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--only-group=dev"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.2 (from https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl)
+     + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
+
+/// Lock a project where both base dependencies and a dependency group transitively depend on the
+/// same package, and a `group`-scoped source override is declared for that package. In universal
+/// resolution (no conflicts), the override applies globally — including base dependency resolution
+/// — because only a single version can be selected.
+#[test]
+fn lock_project_with_transitive_group_sources_shared_dep() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [dependency-groups]
+        dev = ["anyio==3.7.0"]
+
+        [tool.uv.sources]
+        idna = { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl", group = "dev" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    // The group-scoped source applies universally in non-conflict mode: base deps also get idna
+    // from the overridden URL, because universal resolution selects a single version per package.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-group=dev"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.2 (from https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl)
+     + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
+
+/// Lock a project where two conflicting groups each have a group-scoped transitive source override
+/// for the same package, targeting different URLs.
+#[test]
+fn lock_project_with_transitive_group_sources_conflict() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        group1 = ["anyio==3.7.0"]
+        group2 = ["anyio==3.7.0"]
+
+        [tool.uv]
+        conflicts = [
+          [
+            { group = "group1" },
+            { group = "group2" },
+          ],
+        ]
+
+        [tool.uv.sources]
+        idna = [
+            { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl", group = "group1" },
+            { url = "https://files.pythonhosted.org/packages/04/a2/d918dcd22354d8958fe113e1a3630137e0fc8b44859ade3063982eacd2a4/idna-3.3-py3-none-any.whl", group = "group2" },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    // Both idna versions should appear in the lockfile, each scoped to its group.
+    assert!(lock.contains("idna-3.2-py3-none-any.whl"));
+    assert!(lock.contains("idna-3.3-py3-none-any.whl"));
+
+    // Install only group1 and verify it gets idna 3.2.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--only-group=group1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.2 (from https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl)
+     + sniffio==1.3.1
+    ");
+
+    // Install only group2 and verify it gets idna 3.3.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--only-group=group2"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - idna==3.2 (from https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl)
+     + idna==3.3 (from https://files.pythonhosted.org/packages/04/a2/d918dcd22354d8958fe113e1a3630137e0fc8b44859ade3063982eacd2a4/idna-3.3-py3-none-any.whl)
+    ");
+
+    Ok(())
+}
+
+/// Lock a workspace where a member depends on a package with a transitively sourced dependency.
+#[test]
+fn lock_workspace_member_with_transitive_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["member"]
+
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv.sources]
+        member = { workspace = true }
+        idna = { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl" }
+        "#,
+    )?;
+
+    let member = context.temp_dir.child("member");
+    fs_err::create_dir_all(&member)?;
+    member.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(lock.contains(
+        "source = { url = \"https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl\" }"
+    ));
+
+    Ok(())
+}
+
+/// Lock a workspace where a member applies a transitive source via its own `tool.uv.sources`
+/// table.
+#[test]
+fn lock_workspace_member_with_member_transitive_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["member"]
+
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv.sources]
+        member = { workspace = true }
+        "#,
+    )?;
+
+    let member = context.temp_dir.child("member");
+    fs_err::create_dir_all(&member)?;
+    member.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv.sources]
+        idna = { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(lock.contains(
+        "source = { url = \"https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl\" }"
+    ));
+
+    Ok(())
+}
+
+/// Lock a workspace where a member-local transitive source overrides an inherited workspace
+/// transitive source for the same package.
+#[test]
+fn lock_workspace_member_transitive_sources_override_workspace_transitive_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["member"]
+
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv.sources]
+        member = { workspace = true }
+        idna = { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl" }
+        "#,
+    )?;
+
+    let member = context.temp_dir.child("member");
+    fs_err::create_dir_all(&member)?;
+    member.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv.sources]
+        idna = { url = "https://files.pythonhosted.org/packages/04/a2/d918dcd22354d8958fe113e1a3630137e0fc8b44859ade3063982eacd2a4/idna-3.3-py3-none-any.whl" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(lock.contains(
+        "source = { url = \"https://files.pythonhosted.org/packages/04/a2/d918dcd22354d8958fe113e1a3630137e0fc8b44859ade3063982eacd2a4/idna-3.3-py3-none-any.whl\" }"
+    ));
+    assert!(!lock.contains(
+        "source = { url = \"https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl\" }"
+    ));
+
+    Ok(())
+}
+
+/// Lock a project with `tool.uv.sources` that apply to an indirect dependency, then re-lock with
+/// `--no-sources`.
+#[test]
+fn lock_project_with_transitive_sources_no_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv.sources]
+        idna = { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    context.lock().arg("--no-sources").assert().success();
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.2
+     + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
+
+/// Lock a project with `tool.uv.sources` that apply to an indirect dependency, then change the
+/// source and verify `--locked` invalidation.
+#[test]
+fn lock_project_with_transitive_sources_locked() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv.sources]
+        idna = { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv.sources]
+        idna = { url = "https://files.pythonhosted.org/packages/04/a2/d918dcd22354d8958fe113e1a3630137e0fc8b44859ade3063982eacd2a4/idna-3.3-py3-none-any.whl" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Updated idna v3.2 -> v3.3
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.3 (from https://files.pythonhosted.org/packages/04/a2/d918dcd22354d8958fe113e1a3630137e0fc8b44859ade3063982eacd2a4/idna-3.3-py3-none-any.whl)
+     + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
+
+/// Lock a project with `tool.uv.sources` that apply to an indirect dependency via an explicit
+/// index.
+#[tokio::test]
+async fn lock_project_with_transitive_source_index() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    // Create a direct local dependency.
+    let pkg_a = context.temp_dir.child("pkg_a");
+    fs_err::create_dir_all(&pkg_a)?;
+    pkg_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "pkg-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+        "#,
+    )?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["pkg-a"]
+
+        [tool.uv.sources]
+        pkg-a = {{ path = "./pkg_a", editable = true }}
+        iniconfig = {{ index = "proxy" }}
+
+        [[tool.uv.index]]
+        name = "proxy"
+        url = "{proxy_uri}/simple"
+        explicit = true
+        "#,
+        proxy_uri = proxy.uri(),
+    ))?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let proxy_uri = proxy.uri();
+    assert!(lock.contains(&proxy_uri));
+
+    Ok(())
+}
+
 /// Lock a project with `uv.tool.build-constraint-dependencies`.
 #[test]
 fn lock_project_with_build_constraints() -> Result<()> {
@@ -3275,6 +4010,820 @@ fn lock_conflicting_workspace_members() -> Result<()> {
     ----- stderr -----
     error: Package `example` and package `subexample` are incompatible with the declared conflicts: {example, subexample}
     ");
+
+    Ok(())
+}
+
+/// Member-local transitive sources should remain scoped to the conflicting workspace member that
+/// declared them.
+#[test]
+fn lock_conflicting_workspace_members_with_member_transitive_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a", "b"]
+
+        [tool.uv.workspace]
+        members = ["a", "b"]
+
+        [tool.uv]
+        conflicts = [
+          [
+            { package = "a" },
+            { package = "b" },
+          ],
+        ]
+
+        [tool.uv.sources]
+        a = { workspace = true }
+        b = { workspace = true }
+        "#,
+    )?;
+
+    let project_a = context.temp_dir.child("a");
+    project_a.create_dir_all()?;
+    project_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv.sources]
+        idna = { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl" }
+        "#,
+    )?;
+
+    let project_b = context.temp_dir.child("b");
+    project_b.create_dir_all()?;
+    project_b.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
+    Resolved 7 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(lock.contains("idna-3.2-py3-none-any.whl"));
+    assert!(lock.contains(
+        r#"name = "idna"
+version = "3.6"
+source = { registry = "https://pypi.org/simple" }"#
+    ));
+
+    Ok(())
+}
+
+/// A root project and a conflicting workspace member should be able to use different transitive
+/// source overrides for the same package.
+#[test]
+fn lock_conflicting_root_and_workspace_member_with_transitive_source_conflict() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0", "a"]
+
+        [tool.uv.workspace]
+        members = ["a"]
+
+        [tool.uv]
+        conflicts = [
+          [
+            { package = "root" },
+            { package = "a" },
+          ],
+        ]
+
+        [tool.uv.sources]
+        a = { workspace = true }
+        idna = { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl" }
+        "#,
+    )?;
+
+    let project_a = context.temp_dir.child("a");
+    project_a.create_dir_all()?;
+    project_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv.sources]
+        idna = { url = "https://files.pythonhosted.org/packages/04/a2/d918dcd22354d8958fe113e1a3630137e0fc8b44859ade3063982eacd2a4/idna-3.3-py3-none-any.whl" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
+    Resolved 6 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(lock.contains("idna-3.2-py3-none-any.whl"));
+    assert!(lock.contains("idna-3.3-py3-none-any.whl"));
+
+    Ok(())
+}
+
+/// A root project and workspace member should be able to use different transitive sources in
+/// disjoint marker environments.
+#[test]
+fn lock_root_and_workspace_member_with_disjoint_transitive_source_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0", "a"]
+
+        [tool.uv.workspace]
+        members = ["a"]
+
+        [tool.uv.sources]
+        a = { workspace = true }
+        idna = { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl", marker = "platform_system == 'Darwin'" }
+        "#,
+    )?;
+
+    let project_a = context.temp_dir.child("a");
+    project_a.create_dir_all()?;
+    project_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv.sources]
+        idna = { url = "https://files.pythonhosted.org/packages/04/a2/d918dcd22354d8958fe113e1a3630137e0fc8b44859ade3063982eacd2a4/idna-3.3-py3-none-any.whl", marker = "platform_system != 'Darwin'" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(lock.contains("idna-3.2-py3-none-any.whl"));
+    assert!(lock.contains("idna-3.3-py3-none-any.whl"));
+    assert!(lock.contains("marker = \"sys_platform == 'darwin'\""));
+    assert!(lock.contains("marker = \"sys_platform != 'darwin'\""));
+
+    Ok(())
+}
+
+/// A root project and workspace member should fail if they need the same transitive package from
+/// different sources without an explicit package conflict.
+#[test]
+fn lock_root_and_workspace_member_with_conflicting_transitive_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0", "a"]
+
+        [tool.uv.workspace]
+        members = ["a"]
+
+        [tool.uv.sources]
+        a = { workspace = true }
+        idna = { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl" }
+        "#,
+    )?;
+
+    let project_a = context.temp_dir.child("a");
+    project_a.create_dir_all()?;
+    project_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv.sources]
+        idna = { url = "https://files.pythonhosted.org/packages/04/a2/d918dcd22354d8958fe113e1a3630137e0fc8b44859ade3063982eacd2a4/idna-3.3-py3-none-any.whl" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Requirements contain conflicting URLs for package `idna` in all marker environments:
+    - https://files.pythonhosted.org/packages/04/a2/d918dcd22354d8958fe113e1a3630137e0fc8b44859ade3063982eacd2a4/idna-3.3-py3-none-any.whl
+    - https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl
+    ");
+
+    Ok(())
+}
+
+/// A member-local transitive source override should still win if the root project doesn't reach
+/// the package outside the workspace member.
+#[test]
+fn lock_root_and_workspace_member_with_unrelated_root_dependency_and_transitive_sources()
+-> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["sniffio==1.3.1", "a"]
+
+        [tool.uv.workspace]
+        members = ["a"]
+
+        [tool.uv.sources]
+        a = { workspace = true }
+        idna = { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl" }
+        "#,
+    )?;
+
+    let project_a = context.temp_dir.child("a");
+    project_a.create_dir_all()?;
+    project_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv.sources]
+        idna = { url = "https://files.pythonhosted.org/packages/04/a2/d918dcd22354d8958fe113e1a3630137e0fc8b44859ade3063982eacd2a4/idna-3.3-py3-none-any.whl" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(lock.contains(
+        "source = { url = \"https://files.pythonhosted.org/packages/04/a2/d918dcd22354d8958fe113e1a3630137e0fc8b44859ade3063982eacd2a4/idna-3.3-py3-none-any.whl\" }"
+    ));
+    assert!(!lock.contains(
+        "source = { url = \"https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl\" }"
+    ));
+
+    Ok(())
+}
+
+/// Conflicting workspace members should be able to mix a member-local transitive source override
+/// with an inherited workspace transitive source.
+#[test]
+fn lock_conflicting_workspace_members_with_member_and_workspace_transitive_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a", "b"]
+
+        [tool.uv.workspace]
+        members = ["a", "b"]
+
+        [tool.uv]
+        conflicts = [
+          [
+            { package = "a" },
+            { package = "b" },
+          ],
+        ]
+
+        [tool.uv.sources]
+        a = { workspace = true }
+        b = { workspace = true }
+        idna = { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl" }
+        "#,
+    )?;
+
+    let project_a = context.temp_dir.child("a");
+    project_a.create_dir_all()?;
+    project_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv.sources]
+        idna = { url = "https://files.pythonhosted.org/packages/04/a2/d918dcd22354d8958fe113e1a3630137e0fc8b44859ade3063982eacd2a4/idna-3.3-py3-none-any.whl" }
+        "#,
+    )?;
+
+    let project_b = context.temp_dir.child("b");
+    project_b.create_dir_all()?;
+    project_b.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
+    Resolved 8 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(lock.contains("idna-3.2-py3-none-any.whl"));
+    assert!(lock.contains("idna-3.3-py3-none-any.whl"));
+
+    Ok(())
+}
+
+/// A root project and workspace member should be able to use different transitive explicit
+/// indexes in disjoint marker environments.
+#[tokio::test]
+async fn lock_root_and_workspace_member_with_disjoint_transitive_source_index_markers() -> Result<()>
+{
+    let context = uv_test::test_context!("3.12");
+    let proxy1 = crate::pypi_proxy::start().await;
+    let proxy2 = crate::pypi_proxy::start().await;
+
+    let pkg_a = context.temp_dir.child("pkg-a");
+    pkg_a.create_dir_all()?;
+    pkg_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "pkg-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["pkg-a", "a"]
+
+        [tool.uv.workspace]
+        members = ["a"]
+
+        [tool.uv.sources]
+        a = {{ workspace = true }}
+        pkg-a = {{ path = "./pkg-a", editable = true }}
+        iniconfig = {{ index = "root-proxy", marker = "platform_system == 'Darwin'" }}
+
+        [[tool.uv.index]]
+        name = "root-proxy"
+        url = "{proxy1}/simple"
+        explicit = true
+        "#,
+            proxy1 = proxy1.uri(),
+        ))?;
+
+    let project_a = context.temp_dir.child("a");
+    project_a.create_dir_all()?;
+    project_a.child("pyproject.toml").write_str(&format!(
+        r#"
+        [project]
+        name = "a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["pkg-a"]
+
+        [tool.uv.sources]
+        pkg-a = {{ path = "../pkg-a", editable = true }}
+        iniconfig = {{ index = "member-proxy", marker = "platform_system != 'Darwin'" }}
+
+        [[tool.uv.index]]
+        name = "member-proxy"
+        url = "{proxy2}/simple"
+        explicit = true
+        "#,
+        proxy2 = proxy2.uri(),
+    ))?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(lock.contains(&proxy1.uri().to_string()));
+    assert!(lock.contains(&proxy2.uri().to_string()));
+    assert!(lock.contains("marker = \"sys_platform == 'darwin'\""));
+    assert!(lock.contains("marker = \"sys_platform != 'darwin'\""));
+
+    Ok(())
+}
+
+/// A root project and workspace member should fail if they need the same transitive package from
+/// different explicit indexes without an explicit package conflict.
+#[tokio::test]
+async fn lock_root_and_workspace_member_with_conflicting_transitive_source_indexes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy1 = crate::pypi_proxy::start().await;
+    let proxy2 = crate::pypi_proxy::start().await;
+
+    let pkg_a = context.temp_dir.child("pkg-a");
+    pkg_a.create_dir_all()?;
+    pkg_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "pkg-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["pkg-a", "a"]
+
+        [tool.uv.workspace]
+        members = ["a"]
+
+        [tool.uv.sources]
+        a = {{ workspace = true }}
+        pkg-a = {{ path = "./pkg-a", editable = true }}
+        iniconfig = {{ index = "root-proxy" }}
+
+        [[tool.uv.index]]
+        name = "root-proxy"
+        url = "{proxy1}/simple"
+        explicit = true
+        "#,
+            proxy1 = proxy1.uri(),
+        ))?;
+
+    let project_a = context.temp_dir.child("a");
+    project_a.create_dir_all()?;
+    project_a.child("pyproject.toml").write_str(&format!(
+        r#"
+        [project]
+        name = "a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["pkg-a"]
+
+        [tool.uv.sources]
+        pkg-a = {{ path = "../pkg-a", editable = true }}
+        iniconfig = {{ index = "member-proxy" }}
+
+        [[tool.uv.index]]
+        name = "member-proxy"
+        url = "{proxy2}/simple"
+        explicit = true
+        "#,
+        proxy2 = proxy2.uri(),
+    ))?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Requirements contain conflicting indexes for package `iniconfig` in all marker environments:
+    - http://[LOCALHOST]/simple
+    - http://[LOCALHOST]/simple
+    ");
+
+    Ok(())
+}
+
+/// A member-local transitive explicit index should still win if the root project doesn't reach the
+/// package outside the workspace member.
+#[tokio::test]
+async fn lock_root_and_workspace_member_with_unrelated_root_dependency_and_transitive_source_indexes()
+-> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy1 = crate::pypi_proxy::start().await;
+    let proxy2 = crate::pypi_proxy::start().await;
+
+    let pkg_a = context.temp_dir.child("pkg-a");
+    pkg_a.create_dir_all()?;
+    pkg_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "pkg-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["sniffio==1.3.1", "a"]
+
+        [tool.uv.workspace]
+        members = ["a"]
+
+        [tool.uv.sources]
+        a = {{ workspace = true }}
+        iniconfig = {{ index = "root-proxy" }}
+
+        [[tool.uv.index]]
+        name = "root-proxy"
+        url = "{proxy1}/simple"
+        explicit = true
+        "#,
+            proxy1 = proxy1.uri(),
+        ))?;
+
+    let project_a = context.temp_dir.child("a");
+    project_a.create_dir_all()?;
+    project_a.child("pyproject.toml").write_str(&format!(
+        r#"
+        [project]
+        name = "a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["pkg-a"]
+
+        [tool.uv.sources]
+        pkg-a = {{ path = "../pkg-a", editable = true }}
+        iniconfig = {{ index = "member-proxy" }}
+
+        [[tool.uv.index]]
+        name = "member-proxy"
+        url = "{proxy2}/simple"
+        explicit = true
+        "#,
+        proxy2 = proxy2.uri(),
+    ))?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(lock.contains(&proxy2.uri().to_string()));
+    assert!(!lock.contains(&proxy1.uri().to_string()));
+
+    Ok(())
+}
+
+/// A root project and a conflicting workspace member should be able to use different transitive
+/// explicit index overrides for the same package.
+#[tokio::test]
+async fn lock_conflicting_root_and_workspace_member_with_transitive_source_index_conflict()
+-> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy1 = crate::pypi_proxy::start().await;
+    let proxy2 = crate::pypi_proxy::start().await;
+
+    let pkg_a = context.temp_dir.child("pkg-a");
+    pkg_a.create_dir_all()?;
+    pkg_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "pkg-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["pkg-a", "a"]
+
+        [tool.uv.workspace]
+        members = ["a"]
+
+        [tool.uv]
+        conflicts = [
+          [
+            {{ package = "root" }},
+            {{ package = "a" }},
+          ],
+        ]
+
+        [tool.uv.sources]
+        a = {{ workspace = true }}
+        pkg-a = {{ path = "./pkg-a", editable = true }}
+        iniconfig = {{ index = "root-proxy" }}
+
+        [[tool.uv.index]]
+        name = "root-proxy"
+        url = "{proxy1}/simple"
+        explicit = true
+        "#,
+            proxy1 = proxy1.uri(),
+        ))?;
+
+    let project_a = context.temp_dir.child("a");
+    project_a.create_dir_all()?;
+    project_a.child("pyproject.toml").write_str(&format!(
+        r#"
+        [project]
+        name = "a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["pkg-a"]
+
+        [tool.uv.sources]
+        pkg-a = {{ path = "../pkg-a", editable = true }}
+        iniconfig = {{ index = "member-proxy" }}
+
+        [[tool.uv.index]]
+        name = "member-proxy"
+        url = "{proxy2}/simple"
+        explicit = true
+        "#,
+        proxy2 = proxy2.uri(),
+    ))?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
+    Resolved 4 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(lock.contains(&proxy1.uri().to_string()));
+    assert!(lock.contains(&proxy2.uri().to_string()));
+
+    Ok(())
+}
+
+/// Conflicting workspace members should be able to carry different member-local transitive sources
+/// for the same package.
+#[test]
+fn lock_conflicting_workspace_members_with_member_transitive_source_conflict() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a", "b"]
+
+        [tool.uv.workspace]
+        members = ["a", "b"]
+
+        [tool.uv]
+        conflicts = [
+          [
+            { package = "a" },
+            { package = "b" },
+          ],
+        ]
+
+        [tool.uv.sources]
+        a = { workspace = true }
+        b = { workspace = true }
+        "#,
+    )?;
+
+    let project_a = context.temp_dir.child("a");
+    project_a.create_dir_all()?;
+    project_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv.sources]
+        idna = { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl" }
+        "#,
+    )?;
+
+    let project_b = context.temp_dir.child("b");
+    project_b.create_dir_all()?;
+    project_b.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv.sources]
+        idna = { url = "https://files.pythonhosted.org/packages/04/a2/d918dcd22354d8958fe113e1a3630137e0fc8b44859ade3063982eacd2a4/idna-3.3-py3-none-any.whl" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
+    Resolved 8 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(lock.contains("idna-3.2-py3-none-any.whl"));
+    assert!(lock.contains("idna-3.3-py3-none-any.whl"));
 
     Ok(())
 }
@@ -23805,8 +25354,8 @@ fn lock_multiple_index_with_missing_extra() -> Result<()> {
     Ok(())
 }
 
-/// Sources will be ignored when an `extra` is applied, but the dependency isn't in an optional
-/// group.
+/// Sources with an `extra` are accepted even when the package is only transitively present under
+/// that extra.
 #[test]
 fn lock_multiple_index_with_absent_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -23836,13 +25385,12 @@ fn lock_multiple_index_with_absent_extra() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r#"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `project @ file://[TEMP_DIR]/`
-      ╰─▶ Source entry for `jinja2` only applies to extra `cu118`, but `jinja2` was not found under the `project.optional-dependencies` section for that extra. When an extra is present on a source (e.g., `extra = "cu118"`), the relevant package must be included in the `project.optional-dependencies` section for that extra (e.g., `project.optional-dependencies = { "cu118" = ["jinja2"] }`).
+    Resolved 3 packages in [TIME]
     "#);
 
     Ok(())
@@ -23887,8 +25435,8 @@ fn lock_multiple_index_with_missing_group() -> Result<()> {
     Ok(())
 }
 
-/// Sources will be ignored when a `group` is applied, but the dependency isn't in a dependency
-/// group.
+/// Sources with a `group` are accepted even when the package is only transitively present under
+/// that group.
 #[test]
 fn lock_multiple_index_with_absent_group() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -23918,13 +25466,12 @@ fn lock_multiple_index_with_absent_group() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r#"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `project @ file://[TEMP_DIR]/`
-      ╰─▶ Source entry for `jinja2` only applies to dependency group `cu118`, but `jinja2` was not found under the `dependency-groups` section for that group. When a group is present on a source (e.g., `group = "cu118"`), the relevant package must be included in the `dependency-groups` section for that extra (e.g., `dependency-groups = { "cu118" = ["jinja2"] }`).
+    Resolved 3 packages in [TIME]
     "#);
 
     Ok(())
@@ -28896,6 +30443,56 @@ fn lock_script() -> Result<()> {
     Resolved 4 packages in [TIME]
     The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
+
+    Ok(())
+}
+
+#[test]
+fn lock_script_with_transitive_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "anyio==3.7.0",
+        # ]
+        #
+        # [tool.uv.sources]
+        # idna = { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl" }
+        # ///
+
+        import anyio
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let lock = context.read("script.py.lock");
+    assert!(lock.contains("idna-3.2-py3-none-any.whl"));
+
+    context
+        .lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--no-sources")
+        .assert()
+        .success();
+
+    let lock = context.read("script.py.lock");
+    assert!(lock.contains("name = \"idna\""));
+    assert!(lock.contains("source = { registry = \"https://pypi.org/simple\" }"));
+    assert!(!lock.contains(
+        "source = { url = \"https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl\" }"
+    ));
 
     Ok(())
 }

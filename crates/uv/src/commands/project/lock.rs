@@ -16,17 +16,18 @@ use uv_configuration::{
     Upgrade,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
+use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
 use uv_distribution_types::{
     DependencyMetadata, HashGeneration, Index, IndexLocations, NameRequirementSpecification,
-    Requirement, RequiresPython, UnresolvedRequirementSpecification,
+    Requirement, RequirementSource, RequiresPython, UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
+use uv_pep508::{MarkerTree, RequirementOrigin};
 use uv_preview::{Preview, PreviewFeature};
-use uv_pypi_types::{ConflictKind, Conflicts, SupportedEnvironments};
+use uv_pypi_types::{ConflictKind, Conflicts, ParsedUrl, SupportedEnvironments};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_requirements::ExtrasResolver;
 use uv_requirements::upgrade::{LockedRequirements, read_lock_requirements};
@@ -75,6 +76,332 @@ impl LockResult {
             Self::Changed(_, lock) => lock,
         }
     }
+}
+
+fn root_has_project_conflict(workspace: &Workspace, conflicts: &Conflicts) -> bool {
+    workspace
+        .pyproject_toml()
+        .project
+        .as_ref()
+        .is_some_and(|project| {
+            conflicts.iter().any(|set| {
+                set.iter().any(|item| {
+                    item.package() == &project.name && matches!(item.kind(), ConflictKind::Project)
+                })
+            })
+        })
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum BaseSourceIdentity {
+    Url(ParsedUrl),
+    Index(uv_distribution_types::IndexUrl),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct BaseSourceConstraint {
+    identity: BaseSourceIdentity,
+    marker: MarkerTree,
+}
+
+impl BaseSourceConstraint {
+    fn from_requirement(requirement: &Requirement) -> Option<Self> {
+        let identity = match &requirement.source {
+            RequirementSource::Registry {
+                index: Some(index), ..
+            } => BaseSourceIdentity::Index(index.url.clone()),
+            RequirementSource::Registry { index: None, .. } => return None,
+            RequirementSource::Url { .. }
+            | RequirementSource::Git { .. }
+            | RequirementSource::Path { .. }
+            | RequirementSource::Directory { .. } => BaseSourceIdentity::Url(
+                requirement
+                    .source
+                    .to_verbatim_parsed_url()?
+                    .parsed_url
+                    .clone(),
+            ),
+        };
+        Some(Self {
+            identity,
+            marker: requirement.marker,
+        })
+    }
+}
+
+fn lower_base_source_constraints(
+    package: &PackageName,
+    project_name: Option<&PackageName>,
+    project_path: &Path,
+    project_root: &Path,
+    project_sources: &BTreeMap<PackageName, uv_workspace::pyproject::Sources>,
+    project_indexes: &[Index],
+    workspace: &Workspace,
+    locations: &IndexLocations,
+    credentials_cache: &uv_auth::CredentialsCache,
+) -> Result<Vec<BaseSourceConstraint>, ProjectError> {
+    if !project_sources.contains_key(package) {
+        return Ok(Vec::new());
+    }
+
+    let origin = if let Some(project_name) = project_name {
+        RequirementOrigin::Project(project_path.to_path_buf(), project_name.clone())
+    } else {
+        RequirementOrigin::Workspace
+    };
+
+    let requirement_name = package.clone();
+    let lowered = LoweredRequirement::from_requirement(
+        uv_pep508::Requirement {
+            name: package.clone(),
+            extras: Box::default(),
+            marker: MarkerTree::TRUE,
+            version_or_url: None,
+            origin: Some(origin),
+        },
+        project_name,
+        project_root,
+        project_sources,
+        project_indexes,
+        None,
+        None,
+        locations,
+        workspace,
+        None,
+        credentials_cache,
+    )
+    .map(move |requirement| match requirement {
+        Ok(requirement) => Ok(requirement.into_inner()),
+        Err(err) => Err(uv_distribution::MetadataError::LoweringError(
+            requirement_name.clone(),
+            Box::new(err),
+        )),
+    })
+    .collect::<Result<Vec<_>, _>>()?;
+
+    let mut constraints = Vec::new();
+    for requirement in lowered {
+        let Some(constraint) = BaseSourceConstraint::from_requirement(&requirement) else {
+            continue;
+        };
+        if !constraints.contains(&constraint) {
+            constraints.push(constraint);
+        }
+    }
+    Ok(constraints)
+}
+
+fn conflicting_constraints<'a>(
+    root_constraints: &'a [BaseSourceConstraint],
+    member_constraints: &'a [BaseSourceConstraint],
+) -> Option<(&'a BaseSourceConstraint, &'a BaseSourceConstraint)> {
+    root_constraints.iter().find_map(|root_constraint| {
+        member_constraints.iter().find_map(|member_constraint| {
+            (root_constraint.identity != member_constraint.identity
+                && !root_constraint.marker.is_disjoint(member_constraint.marker))
+            .then_some((root_constraint, member_constraint))
+        })
+    })
+}
+
+fn conflicting_shadowed_source_error(
+    package_name: PackageName,
+    root_constraint: &BaseSourceConstraint,
+    member_constraint: &BaseSourceConstraint,
+) -> ProjectError {
+    match (&root_constraint.identity, &member_constraint.identity) {
+        (BaseSourceIdentity::Index(root_index), BaseSourceIdentity::Index(member_index)) => {
+            let mut indexes = vec![root_index.clone(), member_index.clone()];
+            indexes.sort();
+            ProjectError::Operation(
+                uv_resolver::ResolveError::ConflictingIndexesForEnvironment {
+                    package_name,
+                    indexes,
+                    env: ResolverEnvironment::universal(vec![]),
+                }
+                .into(),
+            )
+        }
+        (BaseSourceIdentity::Url(root_url), BaseSourceIdentity::Url(member_url)) => {
+            let mut urls = vec![root_url.clone(), member_url.clone()];
+            urls.sort();
+            ProjectError::Operation(
+                uv_resolver::ResolveError::ConflictingUrls {
+                    package_name,
+                    urls,
+                    env: ResolverEnvironment::universal(vec![]),
+                }
+                .into(),
+            )
+        }
+        (BaseSourceIdentity::Index(root_index), BaseSourceIdentity::Url(member_url)) => {
+            ProjectError::Anyhow(anyhow::anyhow!(
+                "Requirements contain conflicting sources for package `{}` in all marker environments:\n- {}\n- {}",
+                package_name,
+                root_index,
+                uv_redacted::DisplaySafeUrl::from(member_url.clone()),
+            ))
+        }
+        (BaseSourceIdentity::Url(root_url), BaseSourceIdentity::Index(member_index)) => {
+            ProjectError::Anyhow(anyhow::anyhow!(
+                "Requirements contain conflicting sources for package `{}` in all marker environments:\n- {}\n- {}",
+                package_name,
+                uv_redacted::DisplaySafeUrl::from(root_url.clone()),
+                member_index,
+            ))
+        }
+    }
+}
+
+fn reachable_root_non_workspace_packages(
+    lock: &Lock,
+    root_name: &PackageName,
+    workspace_members: &BTreeMap<PackageName, WorkspaceMember>,
+) -> BTreeSet<PackageName> {
+    let Some(root) = lock.find_by_name(root_name).ok().flatten() else {
+        return BTreeSet::new();
+    };
+
+    let mut reachable = BTreeSet::new();
+    let mut pending = root
+        .dependencies()
+        .iter()
+        .map(|dependency| dependency.package_name().clone())
+        .collect::<Vec<_>>();
+
+    while let Some(package) = pending.pop() {
+        if workspace_members.contains_key(&package) || !reachable.insert(package.clone()) {
+            continue;
+        }
+
+        let Some(package) = lock.find_by_name(&package).ok().flatten() else {
+            continue;
+        };
+
+        pending.extend(
+            package
+                .dependencies()
+                .iter()
+                .map(|dependency| dependency.package_name().clone()),
+        );
+    }
+
+    reachable
+}
+
+fn validate_shadowed_root_workspace_transitive_sources(
+    target: LockTarget,
+    lock: &Lock,
+    conflicts: &Conflicts,
+    locations: &IndexLocations,
+    credentials_cache: &uv_auth::CredentialsCache,
+) -> Result<(), ProjectError> {
+    let LockTarget::Workspace(workspace) = target else {
+        return Ok(());
+    };
+
+    let Some(root_name) = workspace
+        .pyproject_toml()
+        .project
+        .as_ref()
+        .map(|project| project.name.clone())
+    else {
+        return Ok(());
+    };
+
+    if root_has_project_conflict(workspace, conflicts) {
+        return Ok(());
+    }
+
+    let reachable = reachable_root_non_workspace_packages(lock, &root_name, workspace.packages());
+    if reachable.is_empty() {
+        return Ok(());
+    }
+
+    let empty_indexes = vec![];
+    let root_indexes = workspace
+        .pyproject_toml()
+        .tool
+        .as_ref()
+        .and_then(|tool| tool.uv.as_ref())
+        .and_then(|uv| uv.index.as_deref())
+        .unwrap_or(&empty_indexes);
+
+    for package in workspace.sources().keys() {
+        if !reachable.contains(package) {
+            continue;
+        }
+
+        let root_constraints = lower_base_source_constraints(
+            package,
+            Some(&root_name),
+            &workspace.install_path().join("pyproject.toml"),
+            workspace.install_path(),
+            workspace.sources(),
+            root_indexes,
+            workspace,
+            locations,
+            credentials_cache,
+        )?;
+        if root_constraints.is_empty() {
+            continue;
+        }
+
+        for member in workspace.packages().values() {
+            if member.root() == workspace.install_path() {
+                continue;
+            }
+
+            let empty_sources = BTreeMap::default();
+            let member_sources = member
+                .pyproject_toml()
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.sources.as_ref())
+                .map(uv_workspace::pyproject::ToolUvSources::inner)
+                .unwrap_or(&empty_sources);
+            if !member_sources.contains_key(package) {
+                continue;
+            }
+
+            let member_indexes = member
+                .pyproject_toml()
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.index.as_deref())
+                .unwrap_or(&empty_indexes);
+            let member_name = member
+                .pyproject_toml()
+                .project
+                .as_ref()
+                .map(|project| project.name.clone());
+            let member_constraints = lower_base_source_constraints(
+                package,
+                member_name.as_ref(),
+                &member.root().join("pyproject.toml"),
+                member.root(),
+                member_sources,
+                member_indexes,
+                workspace,
+                locations,
+                credentials_cache,
+            )?;
+            let Some((root_constraint, member_constraint)) =
+                conflicting_constraints(&root_constraints, &member_constraints)
+            else {
+                continue;
+            };
+            return Err(conflicting_shadowed_source_error(
+                package.clone(),
+                root_constraint,
+                member_constraint,
+            ));
+        }
+    }
+
+    Ok(())
 }
 
 /// Resolve the project requirements into a lockfile.
@@ -500,6 +827,16 @@ async fn do_lock(
     let dependency_groups = target.dependency_groups()?;
     let source_trees = vec![];
 
+    // Collect the conflicts.
+    let mut conflicts = target.conflicts();
+    if let LockTarget::Workspace(workspace) = target {
+        if let Some(groups) = &workspace.pyproject_toml().dependency_groups {
+            if let Some(project) = &workspace.pyproject_toml().project {
+                conflicts.expand_transitive_group_includes(&project.name, groups);
+            }
+        }
+    }
+
     // If necessary, lower the overrides and constraints.
     let requirements = target.lower(
         requirements,
@@ -513,12 +850,18 @@ async fn do_lock(
         sources,
         client_builder.credentials_cache(),
     )?;
-    let constraints = target.lower(
+    let mut constraints = target.lower(
         constraints,
         index_locations,
         sources,
         client_builder.credentials_cache(),
     )?;
+    constraints.extend(target.lower_transitive_source_constraints(
+        &conflicts,
+        index_locations,
+        sources,
+        client_builder.credentials_cache(),
+    )?);
     let build_constraints = target.lower(
         build_constraints,
         index_locations,
@@ -537,16 +880,6 @@ async fn do_lock(
             Ok((name, requirements))
         })
         .collect::<Result<BTreeMap<_, _>, ProjectError>>()?;
-
-    // Collect the conflicts.
-    let mut conflicts = target.conflicts();
-    if let LockTarget::Workspace(workspace) = target {
-        if let Some(groups) = &workspace.pyproject_toml().dependency_groups {
-            if let Some(project) = &workspace.pyproject_toml().project {
-                conflicts.expand_transitive_group_includes(&project.name, groups);
-            }
-        }
-    }
 
     // Check if any conflicts contain project-level conflicts
     if !preview.is_enabled(PreviewFeature::PackageConflicts)
@@ -966,6 +1299,19 @@ async fn do_lock(
             )
             .await?;
 
+            let lock = Lock::from_resolution(
+                &resolution,
+                target.install_path(),
+                lock_supported_environments.clone().into_markers(),
+            )?;
+            validate_shadowed_root_workspace_transitive_sources(
+                target,
+                &lock,
+                &conflicts,
+                index_locations,
+                client.credentials_cache(),
+            )?;
+
             // Print the success message after completing resolution.
             logger.on_complete(resolution.len(), start, printer)?;
 
@@ -985,14 +1331,10 @@ async fn do_lock(
             .relative_to(target.install_path())?;
 
             let previous = existing_lock.map(ValidatedLock::into_lock);
-            let lock = Lock::from_resolution(
-                &resolution,
-                target.install_path(),
-                lock_supported_environments.clone().into_markers(),
-            )?
-            .with_manifest(manifest)
-            .with_conflicts(conflicts)
-            .with_required_environments(lock_required_environments.into_markers());
+            let lock = lock
+                .with_manifest(manifest)
+                .with_conflicts(conflicts)
+                .with_required_environments(lock_required_environments.into_markers());
 
             if previous.as_ref().is_some_and(|previous| *previous == lock) {
                 Ok(LockResult::Unchanged(lock))

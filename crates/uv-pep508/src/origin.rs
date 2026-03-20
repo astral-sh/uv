@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use uv_normalize::{GroupName, PackageName};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 
 /// The origin of a dependency, e.g., a `-r requirements.txt` file.
 #[derive(
@@ -12,6 +12,8 @@ pub enum RequirementOrigin {
     File(PathBuf),
     /// The requirement was provided via a local project (e.g., a `pyproject.toml` file).
     Project(PathBuf, PackageName),
+    /// The requirement was provided via a local project's extra (e.g., a `pyproject.toml` file).
+    Extra(PathBuf, Option<PackageName>, ExtraName),
     /// The requirement was provided via a local project's group (e.g., a `pyproject.toml` file).
     Group(PathBuf, Option<PackageName>, GroupName),
     /// The requirement was provided via a workspace.
@@ -24,6 +26,7 @@ impl RequirementOrigin {
         match self {
             Self::File(path) => path.as_path(),
             Self::Project(path, _) => path.as_path(),
+            Self::Extra(path, _, _) => path.as_path(),
             Self::Group(path, _, _) => path.as_path(),
             // Multiple toml are merged and difficult to track files where Requirement is defined. Returns a dummy path instead.
             Self::Workspace => Path::new("(workspace)"),

@@ -25,6 +25,13 @@ impl std::fmt::Display for SourceAnnotation {
                 RequirementOrigin::Project(path, project_name) => {
                     write!(f, "{project_name} ({})", path.portable_display())
                 }
+                RequirementOrigin::Extra(path, project_name, extra) => {
+                    if let Some(project_name) = project_name {
+                        write!(f, "{project_name} ({}[{extra}])", path.portable_display())
+                    } else {
+                        write!(f, "({}[{extra}])", path.portable_display())
+                    }
+                }
                 RequirementOrigin::Group(path, project_name, group) => {
                     if let Some(project_name) = project_name {
                         write!(f, "{project_name} ({}:{group})", path.portable_display())
@@ -46,6 +53,18 @@ impl std::fmt::Display for SourceAnnotation {
                 RequirementOrigin::Project(path, project_name) => {
                     // Project is not used for override
                     write!(f, "--override {project_name} ({})", path.portable_display())
+                }
+                RequirementOrigin::Extra(path, project_name, extra) => {
+                    // Extra is not used for override
+                    if let Some(project_name) = project_name {
+                        write!(
+                            f,
+                            "--override {project_name} ({}[{extra}])",
+                            path.portable_display()
+                        )
+                    } else {
+                        write!(f, "--override ({}[{extra}])", path.portable_display())
+                    }
                 }
                 RequirementOrigin::Group(path, project_name, group) => {
                     // Group is not used for override

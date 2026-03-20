@@ -397,6 +397,11 @@ pub struct ConflictMarker {
 }
 
 impl ConflictMarker {
+    /// Returns the underlying marker tree.
+    pub fn combined(self) -> MarkerTree {
+        self.marker
+    }
+
     /// A constant conflict marker that always evaluates to `true`.
     pub const TRUE: Self = Self {
         marker: MarkerTree::TRUE,
