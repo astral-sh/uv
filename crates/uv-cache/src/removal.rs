@@ -5,6 +5,8 @@
 use std::io;
 use std::path::Path;
 
+use uv_fs::to_verbatim_path;
+
 use crate::CleanReporter;
 
 /// Remove a file or directory and all its contents, returning a [`Removal`] with
@@ -212,8 +214,22 @@ fn set_not_readonly(path: &Path) -> io::Result<bool> {
     Ok(true)
 }
 
+/// Returns `true` if the error may be caused by Windows Win32 path normalization stripping
+/// trailing dots or spaces from filenames.
+fn is_windows_path_normalization_error(error: &io::Error) -> bool {
+    if cfg!(windows) {
+        matches!(
+            error.kind(),
+            io::ErrorKind::NotFound | io::ErrorKind::InvalidInput
+        )
+    } else {
+        false
+    }
+}
+
 /// Like [`fs_err::remove_file`], but attempts to change the permissions to force the file to be
-/// deleted (if it is readonly).
+/// deleted (if it is readonly), and retries with a verbatim path on Windows when the filename
+/// contains special characters (trailing dots or spaces) that Win32 normalizes away.
 fn remove_file(path: &Path) -> io::Result<()> {
     match fs_err::remove_file(path) {
         Ok(()) => Ok(()),
@@ -223,12 +239,20 @@ fn remove_file(path: &Path) -> io::Result<()> {
         {
             fs_err::remove_file(path)
         }
+        Err(err) if is_windows_path_normalization_error(&err) => {
+            let verbatim = to_verbatim_path(path);
+            if verbatim == path {
+                return Err(err);
+            }
+            fs_err::remove_file(&verbatim)
+        }
         Err(err) => Err(err),
     }
 }
 
 /// Like [`fs_err::remove_dir`], but attempts to change the permissions to force the directory to
-/// be deleted (if it is readonly).
+/// be deleted (if it is readonly), and retries with a verbatim path on Windows when the directory
+/// name contains special characters that Win32 normalizes away.
 fn remove_dir(path: &Path) -> io::Result<()> {
     match fs_err::remove_dir(path) {
         Ok(()) => Ok(()),
@@ -238,12 +262,20 @@ fn remove_dir(path: &Path) -> io::Result<()> {
         {
             fs_err::remove_dir(path)
         }
+        Err(err) if is_windows_path_normalization_error(&err) => {
+            let verbatim = to_verbatim_path(path);
+            if verbatim == path {
+                return Err(err);
+            }
+            fs_err::remove_dir(&verbatim)
+        }
         Err(err) => Err(err),
     }
 }
 
 /// Like [`fs_err::remove_dir_all`], but attempts to change the permissions to force the directory
-/// to be deleted (if it is readonly).
+/// to be deleted (if it is readonly), and retries with a verbatim path on Windows when the
+/// directory name contains special characters that Win32 normalizes away.
 fn remove_dir_all(path: &Path) -> io::Result<()> {
     match fs_err::remove_dir_all(path) {
         Ok(()) => Ok(()),
@@ -252,6 +284,13 @@ fn remove_dir_all(path: &Path) -> io::Result<()> {
                 && set_readable(path).unwrap_or(false) =>
         {
             fs_err::remove_dir_all(path)
+        }
+        Err(err) if is_windows_path_normalization_error(&err) => {
+            let verbatim = to_verbatim_path(path);
+            if verbatim == path {
+                return Err(err);
+            }
+            fs_err::remove_dir_all(&verbatim)
         }
         Err(err) => Err(err),
     }

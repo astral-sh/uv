@@ -691,6 +691,56 @@ impl<Reader: tokio::io::AsyncRead + Unpin, Callback: Fn(usize) + Unpin> tokio::i
     }
 }
 
+/// Convert a path to a Windows verbatim path (`\\?\`-prefixed) to bypass Win32 path
+/// normalization that strips trailing dots and spaces from filenames.
+///
+/// On non-Windows platforms, this returns the path unchanged.
+///
+/// Already-verbatim paths (prefixed with `\\?\` or `\\?\UNC\`) are returned as-is.
+pub fn to_verbatim_path(path: &Path) -> PathBuf {
+    if cfg!(windows) {
+        #[cfg(windows)]
+        {
+            use std::ffi::OsString;
+            use std::os::windows::ffi::OsStrExt;
+            use std::os::windows::ffi::OsStringExt;
+            use std::path::Prefix;
+
+            if let Some(std::path::Component::Prefix(prefix)) = path.components().next() {
+                match prefix.kind() {
+                    // Already verbatim - return as-is.
+                    Prefix::Verbatim(_) | Prefix::VerbatimDisk(_) | Prefix::VerbatimUNC(..) => {
+                        return path.to_path_buf();
+                    }
+                    // `\\server\share` -> `\\?\UNC\server\share\...`
+                    Prefix::UNC(server, share) => {
+                        let mut result = OsString::from(r"\\?\UNC\");
+                        result.push(server);
+                        result.push(r"\");
+                        result.push(share);
+                        // Append the rest of the path after the UNC prefix.
+                        let wide: Vec<u16> = path.as_os_str().encode_wide().collect();
+                        let prefix_wide: Vec<u16> =
+                            prefix.as_os_str().encode_wide().collect();
+                        if wide.len() > prefix_wide.len() {
+                            let suffix = OsString::from_wide(&wide[prefix_wide.len()..]);
+                            result.push(suffix);
+                        }
+                        return PathBuf::from(result);
+                    }
+                    // `C:\...` -> `\\?\C:\...`
+                    Prefix::Disk(_) | Prefix::DeviceNS(_) => {
+                        let mut result = OsString::from(r"\\?\");
+                        result.push(path.as_os_str());
+                        return PathBuf::from(result);
+                    }
+                }
+            }
+        }
+    }
+    path.to_path_buf()
+}
+
 /// Recursively copy a directory and its contents.
 pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
     fs_err::create_dir_all(&dst)?;
@@ -704,4 +754,43 @@ pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Re
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn to_verbatim_path_noop_on_unix() {
+        // On non-Windows platforms, the path should be returned unchanged.
+        if !cfg!(windows) {
+            let path = Path::new("/tmp/some/path/file.");
+            assert_eq!(to_verbatim_path(path), path.to_path_buf());
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn to_verbatim_path_disk_prefix() {
+        let path = Path::new(r"C:\Users\test\file.");
+        assert_eq!(
+            to_verbatim_path(path),
+            PathBuf::from(r"\\?\C:\Users\test\file.")
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn to_verbatim_path_already_verbatim() {
+        let path = Path::new(r"\\?\C:\Users\test\file.");
+        assert_eq!(to_verbatim_path(path), path.to_path_buf());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn to_verbatim_path_unc() {
+        let path = Path::new(r"\\server\share\file.");
+        let result = to_verbatim_path(path);
+        assert!(result.starts_with(r"\\?\UNC\"));
+    }
 }
