@@ -720,8 +720,7 @@ pub fn to_verbatim_path(path: &Path) -> PathBuf {
                         result.push(share);
                         // Append the rest of the path after the UNC prefix.
                         let wide: Vec<u16> = path.as_os_str().encode_wide().collect();
-                        let prefix_wide: Vec<u16> =
-                            prefix.as_os_str().encode_wide().collect();
+                        let prefix_wide: Vec<u16> = prefix.as_os_str().encode_wide().collect();
                         if wide.len() > prefix_wide.len() {
                             let suffix = OsString::from_wide(&wide[prefix_wide.len()..]);
                             result.push(suffix);
@@ -790,7 +789,9 @@ mod tests {
     #[test]
     fn to_verbatim_path_unc() {
         let path = Path::new(r"\\server\share\file.");
-        let result = to_verbatim_path(path);
-        assert!(result.starts_with(r"\\?\UNC\"));
+        assert_eq!(
+            to_verbatim_path(path),
+            PathBuf::from(r"\\?\UNC\server\share\file.")
+        );
     }
 }
