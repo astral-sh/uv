@@ -644,8 +644,7 @@ where
                 }
             }
         } else {
-            // Hardlink files that need their inode preserved, reusing the
-            // existing hardlink machinery.
+            // Hardlink files that want their inode preserved
             if options.wants_preserved_inode(&src_path) {
                 let state = LinkState::new(LinkMode::Hardlink);
                 link_file(&src_path, &dst_path, state, options)?;
