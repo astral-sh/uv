@@ -100,10 +100,7 @@ impl<R: Read + Seek + HasLength> Seek for CloneableSeekableReader<R> {
                 .pos
                 .checked_add_signed(offset_from_pos)
                 .ok_or_else(|| {
-                    std::io::Error::new(
-                        std::io::ErrorKind::InvalidInput,
-                        "Seek out of range",
-                    )
+                    std::io::Error::new(std::io::ErrorKind::InvalidInput, "Seek out of range")
                 })?,
         };
         self.pos = new_pos;
@@ -178,7 +175,10 @@ mod test {
         let buf = Cursor::new(buf);
         let mut reader = CloneableSeekableReader::new(buf);
         let result = reader.seek(SeekFrom::Current(i64::MIN));
-        assert!(result.is_err(), "SeekFrom::Current(i64::MIN) should not panic");
+        assert!(
+            result.is_err(),
+            "SeekFrom::Current(i64::MIN) should not panic"
+        );
     }
 
     #[test]
