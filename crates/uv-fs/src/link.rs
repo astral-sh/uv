@@ -652,7 +652,6 @@ where
                 continue;
             }
 
-            // For remaining files, use reflink (copy-on-write)
             match reflink_copy::reflink(&src_path, &dst_path) {
                 Ok(()) => {}
                 Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
