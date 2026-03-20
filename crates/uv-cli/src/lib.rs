@@ -6811,8 +6811,10 @@ pub struct IndexArgs {
     ///
     /// Index names can be used to reference indexes defined in the project, workspace, user, or
     /// system configuration. If a directory exists with the same name as a defined index, the
-    /// directory will be used (with a warning). Use `./` or `../` on Unix or `.\\`, `..\\`, `./`
-    /// or `../` on Windows to disambiguate relative paths from index names.
+    /// directory will be used (with a warning). Use `./` or `../` on Unix or `.\\`, `..\\`, `./` or
+    /// `../` on Windows to disambiguate relative paths from index names. Enable the
+    /// `index-assume-name` preview feature to pick the named index in favour of a directory of the
+    /// same name.
     //
     // The nested Vec structure (`Vec<Vec<Maybe<IndexArg>>>`) is required for clap's
     // value parsing mechanism, which processes one value at a time, in order to handle
