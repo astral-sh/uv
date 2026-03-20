@@ -83,6 +83,7 @@ plugins:
         "configuration/indexes.md": "concepts/indexes.md"
         "configuration/environment.md": "reference/environment.md"
         "guides/export.md": "concepts/projects/export.md"
+        "guides/integration/dependency-bots.md": "guides/integration/renovate.md"
   - llmstxt:
       markdown_description: |
         You can use uv to install Python dependencies, run scripts, manage virtual environments,
@@ -117,7 +118,8 @@ plugins:
           - guides/integration/pytorch.md
           - guides/integration/fastapi.md
           - guides/integration/alternative-indexes.md
-          - guides/integration/dependency-bots.md
+          - guides/integration/renovate.md
+          - guides/integration/dependabot.md
           - guides/integration/aws-lambda.md
           - guides/integration/coiled.md
         Projects:
@@ -198,7 +200,8 @@ nav:
           - PyTorch: guides/integration/pytorch.md
           - FastAPI: guides/integration/fastapi.md
           - Alternative indexes: guides/integration/alternative-indexes.md
-          - Dependency bots: guides/integration/dependency-bots.md
+          - Renovate: guides/integration/renovate.md
+          - Dependabot: guides/integration/dependabot.md
           - AWS Lambda: guides/integration/aws-lambda.md
           - Coiled: guides/integration/coiled.md
   - Concepts:
