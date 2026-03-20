@@ -714,8 +714,13 @@ impl<'a> BaseClientBuilder<'a> {
                             .with_indexes(self.indexes.clone())
                             .with_keyring(self.keyring.to_provider())
                             .with_preview(self.preview);
-                        if let Ok(token_store) = PyxTokenStore::from_settings() {
-                            auth_middleware = auth_middleware.with_pyx_token_store(token_store);
+                        match PyxTokenStore::from_settings() {
+                            Ok(token_store) => {
+                                auth_middleware = auth_middleware.with_pyx_token_store(token_store);
+                            }
+                            Err(err) => {
+                                warn!("Failed to initialize PyxTokenStore: {err}");
+                            }
                         }
                         client = client.with(auth_middleware);
                     }
@@ -727,8 +732,13 @@ impl<'a> BaseClientBuilder<'a> {
                             .with_keyring(self.keyring.to_provider())
                             .with_preview(self.preview)
                             .with_only_authenticated(true);
-                        if let Ok(token_store) = PyxTokenStore::from_settings() {
-                            auth_middleware = auth_middleware.with_pyx_token_store(token_store);
+                        match PyxTokenStore::from_settings() {
+                            Ok(token_store) => {
+                                auth_middleware = auth_middleware.with_pyx_token_store(token_store);
+                            }
+                            Err(err) => {
+                                warn!("Failed to initialize PyxTokenStore: {err}");
+                            }
                         }
                         client = client.with(auth_middleware);
                     }

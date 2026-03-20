@@ -198,7 +198,13 @@ impl<'a> RegistryClientBuilder<'a> {
             client,
             read_timeout,
             flat_indexes: Arc::default(),
-            pyx_token_store: PyxTokenStore::from_settings().ok(),
+            pyx_token_store: match PyxTokenStore::from_settings() {
+                Ok(store) => Some(store),
+                Err(err) => {
+                    warn!("Failed to initialize PyxTokenStore: {err}");
+                    None
+                }
+            },
         }
     }
 
@@ -228,7 +234,13 @@ impl<'a> RegistryClientBuilder<'a> {
             client,
             read_timeout,
             flat_indexes: Arc::default(),
-            pyx_token_store: PyxTokenStore::from_settings().ok(),
+            pyx_token_store: match PyxTokenStore::from_settings() {
+                Ok(store) => Some(store),
+                Err(err) => {
+                    warn!("Failed to initialize PyxTokenStore: {err}");
+                    None
+                }
+            },
         }
     }
 }
