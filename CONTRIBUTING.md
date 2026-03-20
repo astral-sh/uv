@@ -269,7 +269,7 @@ To preview any changes to the documentation locally:
 3. Run the development server with:
 
    ```shell
-   uv run --group docs mkdocs serve -f mkdocs.yml
+   uv run --only-group docs mkdocs serve -f mkdocs.yml
    ```
 
 The documentation should then be available locally at
