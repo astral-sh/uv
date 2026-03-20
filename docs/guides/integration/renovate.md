@@ -1,20 +1,17 @@
 ---
-title: Using uv with dependency bots
-description: A guide to using uv with dependency bots like Renovate and Dependabot.
+title: Using uv with Renovate
+description: A guide to using uv with the Renovate dependency bot.
 ---
 
-# Dependency bots
+# Renovate
 
 It is considered best practice to regularly update dependencies, to avoid being exposed to
 vulnerabilities, limit incompatibilities between dependencies, and avoid complex upgrades when
-upgrading from a too old version. A variety of tools can help staying up-to-date by creating
-automated pull requests. Several of them support uv, or have work underway to support it.
-
-## Renovate
+upgrading from a too old version.
 
 uv is supported by [Renovate](https://github.com/renovatebot/renovate).
 
-### `uv.lock` output
+## `uv.lock` output
 
 Renovate uses the presence of a `uv.lock` file to determine that uv is used for managing
 dependencies, and will suggest upgrades to
@@ -37,7 +34,7 @@ option:
 }
 ```
 
-### Inline script metadata
+## Inline script metadata
 
 Renovate supports updating dependencies defined using
 [inline script metadata](../scripts.md/#declaring-script-dependencies).
@@ -65,7 +62,7 @@ like so:
     script (https://github.com/renovatebot/renovate/issues/33591), so if you rely on this feature
     for a script, the lock file will need to be manually updated.
 
-### Dependency cooldown
+## Dependency cooldown
 
 If you use [`exclude-newer`](../../reference/settings.md#exclude-newer) option, it is recommended to
 also set the equivalent
@@ -90,44 +87,4 @@ For instance, if you've set `exclude-newer` to `1 week`, you can set:
   // Or enable for every ecosystem.
   minimumReleaseAge: "1 week",
 }
-```
-
-## Dependabot
-
-Dependabot has announced support for uv, but there are some use cases that are not yet working. See
-[astral-sh/uv#2512](https://github.com/astral-sh/uv/issues/2512) for updates.
-
-Dependabot supports updating `uv.lock` files. To enable it, add the uv `package-ecosystem` to your
-`updates` list in the `dependabot.yml`:
-
-```yaml title="dependabot.yml"
-version: 2
-
-updates:
-  - package-ecosystem: "uv"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-```
-
-### Dependency cooldown
-
-If you use [`exclude-newer`](../../reference/settings.md#exclude-newer) option, it is recommended to
-also set the equivalent
-[`cooldown`](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference#cooldown-)
-option in Dependabot, to avoid ending up with pull requests where uv would not be able to lock the
-dependencies.
-
-For instance, if you've set `exclude-newer` to `1 week`, you can set:
-
-```yaml title="dependabot.yml"
-version: 2
-
-updates:
-  - package-ecosystem: "uv"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    cooldown:
-      default-days: 7
 ```
