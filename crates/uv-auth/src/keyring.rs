@@ -679,22 +679,11 @@ mod tests {
     #[test]
     fn keyring_commands_with_wsl_interop() {
         // Simulate WSL by temporarily setting WSL_INTEROP.
-        let original = std::env::var_os("WSL_INTEROP");
-        // SAFETY: This test is run serially (single-threaded test binary) and we
-        // restore the original value before returning.
-        unsafe {
-            std::env::set_var("WSL_INTEROP", "/run/WSL/1_interop");
-        }
-        assert_eq!(
-            KeyringProvider::keyring_commands(),
-            &["keyring", "keyring.exe"]
-        );
-        // Restore original state.
-        unsafe {
-            match original {
-                Some(val) => std::env::set_var("WSL_INTEROP", val),
-                None => std::env::remove_var("WSL_INTEROP"),
-            }
-        }
+        temp_env::with_var("WSL_INTEROP", Some("/run/WSL/1_interop"), || {
+            assert_eq!(
+                KeyringProvider::keyring_commands(),
+                &["keyring", "keyring.exe"]
+            );
+        });
     }
 }
