@@ -96,7 +96,7 @@ jobs:
 
   benchmarks-simulated:
     name: "simulated"
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04-4
     if: ${{ github.repository == 'astral-sh/uv' }}
     timeout-minutes: 20
     steps:
