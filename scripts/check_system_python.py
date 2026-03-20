@@ -152,13 +152,9 @@ if __name__ == "__main__":
         if code.returncode != 0:
             raise Exception("The package `pylint` isn't installed (but should be).")
 
-        # TODO(charlie): Windows is failing to find the `pylint` binary, despite
-        # confirmation that it's being written to the intended location.
-        if os.name != "nt":
-            logging.info("Checking that `pylint` is in the path.")
-            code = subprocess.run(["which", "pylint"], cwd=temp_dir)
-            if code.returncode != 0:
-                raise Exception("The package `pylint` isn't in the path.")
+        logging.info("Checking that `pylint` is in the path.")
+        if shutil.which("pylint") is None:
+            raise Exception("The package `pylint` isn't in the path.")
 
         # Uninstall the package (`pylint`).
         logging.info("Uninstalling the package `pylint`.")
