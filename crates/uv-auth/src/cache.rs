@@ -86,7 +86,10 @@ impl CredentialsCache {
         realm: Realm,
         username: Username,
     ) -> Option<Arc<Authentication>> {
-        let realms = self.realms.read().unwrap();
+        let realms = self.realms.read().unwrap_or_else(|poisoned| {
+            trace!("Realm cache lock was poisoned, recovering");
+            poisoned.into_inner()
+        });
         let given_username = username.is_some();
         let key = (realm, username);
 
@@ -124,7 +127,10 @@ impl CredentialsCache {
         url: &DisplaySafeUrl,
         username: &Username,
     ) -> Option<Arc<Authentication>> {
-        let urls = self.urls.read().unwrap();
+        let urls = self.urls.read().unwrap_or_else(|poisoned| {
+            trace!("URL cache lock was poisoned, recovering");
+            poisoned.into_inner()
+        });
         let credentials = urls.get(url);
         if let Some(credentials) = credentials {
             if username.is_none() || username.as_deref() == credentials.username() {
@@ -159,7 +165,10 @@ impl CredentialsCache {
         self.insert_realm((Realm::from(url), Username::none()), &credentials);
 
         // Insert an entry for the URL
-        let mut urls = self.urls.write().unwrap();
+        let mut urls = self.urls.write().unwrap_or_else(|poisoned| {
+            trace!("URL cache lock was poisoned, recovering");
+            poisoned.into_inner()
+        });
         urls.insert(url, credentials);
     }
 
@@ -176,7 +185,10 @@ impl CredentialsCache {
             return None;
         }
 
-        let mut realms = self.realms.write().unwrap();
+        let mut realms = self.realms.write().unwrap_or_else(|poisoned| {
+            trace!("Realm cache lock was poisoned, recovering");
+            poisoned.into_inner()
+        });
 
         // Always replace existing entries if we have a password or token
         if credentials.is_authenticated() {
@@ -385,5 +397,28 @@ mod tests {
             DisplaySafeUrl::parse("https://username:password@second-example.com/foobar").unwrap();
         cache.insert(&url, credentials.clone());
         assert_eq!(cache.get_url(&url, &username), Some(credentials.clone()));
+    }
+
+    #[test]
+    fn test_poisoned_lock_recovery() {
+        use std::sync::Arc;
+        use std::thread;
+
+        let cache = Arc::new(CredentialsCache::new());
+        let cache_clone = cache.clone();
+
+        let handle = thread::spawn(move || {
+            let _realms = cache_clone.realms.write().unwrap();
+            panic!("intentional panic to poison the lock");
+        });
+        let _ = handle.join();
+
+        let url = DisplaySafeUrl::parse("https://example.com/simple/").unwrap();
+        let creds = Credentials::basic(Some("user".into()), Some("pass".into()));
+        cache.insert(&url, Arc::new(Authentication::from(creds)));
+
+        let username = Username::new(Some("user".into()));
+        let result = cache.get_url(&url, &username);
+        assert!(result.is_some(), "should recover from poisoned lock");
     }
 }
