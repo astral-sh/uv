@@ -78,21 +78,52 @@ pub(crate) async fn wheel_metadata_from_remote_zip(
     .map_err(|err| ErrorKind::Metadata(debug_name.to_string(), err))?;
 
     let offset = metadata_entry.header_offset();
-    let size = metadata_entry.compressed_size()
-        + 30 // Header size in bytes
-        + metadata_entry.filename().as_bytes().len() as u64;
+    let size = metadata_entry
+        .compressed_size()
+        .checked_add(30) // Header size in bytes
+        .and_then(|s| s.checked_add(metadata_entry.filename().as_bytes().len() as u64))
+        .ok_or_else(|| {
+            ErrorKind::Metadata(
+                debug_name.to_string(),
+                uv_metadata::Error::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "metadata entry size overflowed",
+                )),
+            )
+        })?;
 
     // The zip archive uses as BufReader which reads in chunks of 8192. To ensure we prefetch
     // enough data we round the size up to the nearest multiple of the buffer size.
     let buffer_size = 8192;
-    let size = size.div_ceil(buffer_size) * buffer_size;
+    let size = size
+        .div_ceil(buffer_size)
+        .checked_mul(buffer_size)
+        .ok_or_else(|| {
+            ErrorKind::Metadata(
+                debug_name.to_string(),
+                uv_metadata::Error::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "prefetch size alignment overflowed",
+                )),
+            )
+        })?;
+
+    let end = offset.checked_add(size).ok_or_else(|| {
+        ErrorKind::Metadata(
+            debug_name.to_string(),
+            uv_metadata::Error::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "prefetch range end overflowed",
+            )),
+        )
+    })?;
 
     // Fetch the bytes from the zip archive that contain the requested file.
     reader
         .inner_mut()
         .get_mut()
         .get_mut()
-        .prefetch(offset..offset + size)
+        .prefetch(offset..end)
         .await;
 
     // Read the contents of the METADATA file
