@@ -771,7 +771,13 @@ impl PubGrubReportFormatter<'_> {
             return None;
         };
 
-        let candidate = selector.select_no_preference(name, set, version_maps, env)?;
+        let candidate = selector.select_no_preference(
+            name,
+            set,
+            version_maps,
+            env,
+            tags.is_none().then_some(self.python_requirement.target()),
+        )?;
 
         let prioritized = candidate.prioritized()?;
 

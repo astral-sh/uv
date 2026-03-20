@@ -1313,6 +1313,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             index,
             env,
             self.tags.as_ref(),
+            self.tags
+                .as_ref()
+                .is_none()
+                .then_some(python_requirement.target()),
         ) else {
             // Short circuit: we couldn't find _any_ versions for a package.
             return Ok(None);
@@ -1333,22 +1337,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 )));
             }
         };
-
-        // Re-check wheel tags against the forked Python requirement. The cached wheel
-        // compatibility in the version map may have been computed before we split the resolver on a
-        // narrower Python range.
-        if !dist.implied_markers().is_true()
-            && dist.prioritized().is_some_and(|prioritized| {
-                !prioritized.has_compatible_wheel(python_requirement.target())
-            })
-        {
-            return Ok(Some(ResolverVersion::Unavailable(
-                candidate.version().clone(),
-                UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
-                    IncompatibleWheel::Tag(IncompatibleTag::AbiPythonVersion),
-                )),
-            )));
-        }
 
         // Check whether the version is incompatible due to its Python requirement.
         if let Some((requires_python, incompatibility)) =
@@ -1588,6 +1576,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             index,
             env,
             self.tags.as_ref(),
+            self.tags
+                .as_ref()
+                .is_none()
+                .then_some(python_requirement.target()),
         ) else {
             return Ok(None);
         };
@@ -2614,6 +2606,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     None,
                     &env,
                     self.tags.as_ref(),
+                    self.tags
+                        .as_ref()
+                        .is_none()
+                        .then_some(self.python_requirement.target()),
                 ) else {
                     return Ok(None);
                 };
@@ -3611,14 +3607,11 @@ impl<'a> From<ResolvedDistRef<'a>> for Request {
             ResolvedDistRef::InstallableRegistryBuiltDist {
                 wheel, prioritized, ..
             } => {
-                assert_eq!(
-                    Some(&wheel.filename),
-                    prioritized.best_wheel().map(|(wheel, _)| &wheel.filename),
-                    "expected chosen wheel to match best wheel"
-                );
                 // This is okay because we're only here if the prioritized dist
                 // has at least one wheel, so this always succeeds.
-                let built = prioritized.built_dist().expect("at least one wheel");
+                let built = prioritized
+                    .built_dist_for(wheel)
+                    .expect("selected wheel should be preserved");
                 Self::Dist(Dist::Built(BuiltDist::Registry(built)))
             }
             ResolvedDistRef::Installed { dist } => Self::Installed(dist.clone()),

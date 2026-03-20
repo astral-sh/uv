@@ -228,9 +228,13 @@ impl BatchPrefetcherRunner {
                     compatible,
                     previous,
                 } => {
-                    if let Some(candidate) =
-                        selector.select_no_preference(name, &compatible, version_map, env)
-                    {
+                    if let Some(candidate) = selector.select_no_preference(
+                        name,
+                        &compatible,
+                        version_map,
+                        env,
+                        Some(python_requirement.target()),
+                    ) {
                         let compatible = compatible.intersection(
                             &Range::singleton(candidate.version().clone()).complement(),
                         );
@@ -263,9 +267,13 @@ impl BatchPrefetcherRunner {
                             }
                         };
                     }
-                    if let Some(candidate) =
-                        selector.select_no_preference(name, &range, version_map, env)
-                    {
+                    if let Some(candidate) = selector.select_no_preference(
+                        name,
+                        &range,
+                        version_map,
+                        env,
+                        Some(python_requirement.target()),
+                    ) {
                         phase = BatchPrefetchStrategy::InOrder {
                             previous: candidate.version().clone(),
                         };
