@@ -5826,6 +5826,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+ "temp-env",
  "tempfile",
  "test-log",
  "thiserror",
