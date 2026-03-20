@@ -282,7 +282,10 @@ impl CachedClient {
                 .boxed_local()
                 .await?
         } else {
-            debug!("No cache entry for: {}", DisplaySafeUrl::from_url(req.url().clone()));
+            debug!(
+                "No cache entry for: {}",
+                DisplaySafeUrl::from_url(req.url().clone())
+            );
             let (response, cache_policy) = self.fresh_request(req, cache_control).await?;
             CachedResponse::ModifiedOrNew {
                 response,
@@ -343,7 +346,10 @@ impl CachedClient {
                 // If we got a modified response, but it's a 304, then a validator failed (e.g., the
                 // ETag didn't match). We need to make a fresh request.
                 if response.status() == http::StatusCode::NOT_MODIFIED {
-                    warn!("Server returned unusable 304 for: {}", DisplaySafeUrl::from_url(fresh_req.url().clone()));
+                    warn!(
+                        "Server returned unusable 304 for: {}",
+                        DisplaySafeUrl::from_url(fresh_req.url().clone())
+                    );
                     self.resend_and_heal_cache(
                         fresh_req,
                         cache_entry,
@@ -525,9 +531,7 @@ impl CachedClient {
             },
             BeforeRequest::NoMatch => {
                 // This shouldn't happen; if it does, we'll override the cache.
-                warn!(
-                    "Cached response doesn't match current request for: {url}",
-                );
+                warn!("Cached response doesn't match current request for: {url}",);
                 let (response, cache_policy) = self.fresh_request(req, cache_control).await?;
                 CachedResponse::ModifiedOrNew {
                     response,
