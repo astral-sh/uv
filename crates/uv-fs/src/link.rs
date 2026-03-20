@@ -12,8 +12,8 @@ use walkdir::WalkDir;
 
 /// The method to use when linking.
 ///
-/// Defaults to [`Clone`](LinkMode::Clone) on macOS and Linux (which support copy-on-write on
-/// APFS and btrfs/xfs/bcachefs respectively), and [`Hardlink`](LinkMode::Hardlink) on other
+/// Defaults to [`LinkMode::Clone`] on macOS and Linux (which support copy-on-write on
+/// APFS and btrfs/xfs/bcachefs respectively), and [`LinkMode::Hardlink`] on other
 /// platforms.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -51,7 +51,7 @@ impl Default for LinkMode {
 }
 
 impl LinkMode {
-    /// Returns `true` if the link mode is [`Symlink`](LinkMode::Symlink).
+    /// Returns `true` if the link mode is [`LinkMode::Symlink`].
     pub fn is_symlink(&self) -> bool {
         matches!(self, Self::Symlink)
     }
@@ -134,7 +134,7 @@ pub struct LinkOptions<'a, F = fn(&Path) -> bool> {
     /// The linking strategy to use.
     mode: LinkMode,
     /// Predicate that returns `true` for files that need a mutable (safe to
-    /// write) copy. Only applied in hardlink and symlink modes.
+    /// write) copy. Only applied in [`LinkMode::Hardlink`] and [`LinkMode::Symlink`] modes.
     needs_mutable_copy: F,
     /// Optional locks for synchronized copying during concurrent operations.
     copy_locks: Option<&'a CopyLocks>,
@@ -232,9 +232,9 @@ enum LinkAttempt {
 
 /// Tracks the active linking strategy and whether it has been confirmed to work.
 ///
-/// When the strategy's [`LinkAttempt`] is [`Initial`](LinkAttempt::Initial) and the first
-/// file operation fails, [`next_mode`](Self::next_mode) transitions to the next fallback.
-/// When the attempt is [`Subsequent`](LinkAttempt::Subsequent) and a file fails, it is
+/// When the strategy's [`LinkAttempt`] is [`LinkAttempt::Initial`] and the first
+/// file operation fails, [`Self::next_mode`] transitions to the next fallback.
+/// When the attempt is [`LinkAttempt::Subsequent`] and a file fails, it is
 /// either a hard error (the strategy was confirmed to work, so this is a real failure) or,
 /// for reflink, a transition to the next fallback.
 #[derive(Debug, Clone, Copy)]
@@ -264,10 +264,10 @@ impl LinkState {
 
     /// Transition to the next fallback strategy in the chain.
     ///
-    /// - `Clone` → `Hardlink`
-    /// - `Hardlink` → `Copy`
-    /// - `Symlink` → `Copy`
-    /// - `Copy` → Failure
+    /// - [`LinkMode::Clone`] → [`LinkMode::Hardlink`]
+    /// - [`LinkMode::Hardlink`] → [`LinkMode::Copy`]
+    /// - [`LinkMode::Symlink`] → [`LinkMode::Copy`]
+    /// - [`LinkMode::Copy`] → Failure
     fn next_mode(self) -> Self {
         debug_assert!(
             self.mode != LinkMode::Copy,
