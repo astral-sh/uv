@@ -1334,6 +1334,22 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
         };
 
+        // Re-check wheel tags against the forked Python requirement. The cached wheel
+        // compatibility in the version map may have been computed before we split the resolver on a
+        // narrower Python range.
+        if !dist.implied_markers().is_true()
+            && dist.prioritized().is_some_and(|prioritized| {
+                !prioritized.has_compatible_wheel(python_requirement.target())
+            })
+        {
+            return Ok(Some(ResolverVersion::Unavailable(
+                candidate.version().clone(),
+                UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
+                    IncompatibleWheel::Tag(IncompatibleTag::AbiPythonVersion),
+                )),
+            )));
+        }
+
         // Check whether the version is incompatible due to its Python requirement.
         if let Some((requires_python, incompatibility)) =
             Self::check_requires_python(dist, python_requirement)
@@ -1389,6 +1405,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             range,
             preferences,
             env,
+            python_requirement,
             pubgrub,
             pins,
             request_sink,
@@ -1443,6 +1460,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         range: &Range<Version>,
         preferences: &Preferences,
         env: &ResolverEnvironment,
+        python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
         pins: &mut FilePins,
         request_sink: &Sender<Request>,
@@ -1500,6 +1518,45 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             version: None,
                         },
                     ];
+                    return Ok(Some(ResolverVersion::Forked(forks)));
+                }
+            }
+        }
+
+        // If this wheel-only version doesn't cover the project's minimum supported Python version,
+        // fork at the earliest supported wheel tag and let the lower fork pick an older version.
+        if matches!(self.options.fork_strategy, ForkStrategy::RequiresPython) {
+            if let Some(requires_python) = dist
+                .prioritized()
+                .and_then(|prioritized| prioritized.wheel_requires_python())
+                .filter(|requires_python| python_requirement.raises(requires_python.range()))
+            {
+                let forks = fork_version_by_python_requirement(
+                    requires_python.specifiers(),
+                    python_requirement,
+                    env,
+                );
+                if !forks.is_empty() {
+                    debug!(
+                        "Forking Python requirement `{}` on wheel tags `{}` for {}=={} ({})",
+                        python_requirement.target(),
+                        requires_python,
+                        name,
+                        candidate.version(),
+                        forks
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
+                    let forks = forks
+                        .into_iter()
+                        .map(|env| VersionFork {
+                            env,
+                            id,
+                            version: None,
+                        })
+                        .collect();
                     return Ok(Some(ResolverVersion::Forked(forks)));
                 }
             }

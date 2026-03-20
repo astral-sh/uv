@@ -12,7 +12,7 @@ use uv_pypi_types::{HashDigest, Yanked};
 
 use crate::{
     File, InstalledDist, KnownPlatform, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
-    ResolvedDistRef,
+    RequiresPython, ResolvedDistRef,
 };
 
 /// A collection of distributions that have been filtered by relevance.
@@ -569,6 +569,25 @@ impl PrioritizedDist {
         self.0.best_wheel_index.map(|i| &self.0.wheels[i])
     }
 
+    /// Returns the minimum Python version supported by any compatible wheel in this distribution.
+    pub fn wheel_requires_python(&self) -> Option<RequiresPython> {
+        let lower = self
+            .0
+            .wheels
+            .iter()
+            .filter(|(_, compatibility)| compatibility.is_compatible())
+            .filter_map(|(wheel, _)| wheel_python_lower_bound(&wheel.filename))
+            .min()?;
+        Some(RequiresPython::greater_than_equal_version(&lower))
+    }
+
+    /// Returns `true` if any compatible wheel matches the given Python requirement.
+    pub fn has_compatible_wheel(&self, requires_python: &RequiresPython) -> bool {
+        self.0.wheels.iter().any(|(wheel, compatibility)| {
+            compatibility.is_compatible() && requires_python.matches_wheel_tag(&wheel.filename)
+        })
+    }
+
     /// Returns an iterator of all wheels and the source distribution, if any.
     pub fn files(&self) -> impl Iterator<Item = &File> {
         self.0
@@ -1029,6 +1048,56 @@ fn implied_python_markers(filename: &WheelFilename) -> MarkerTree {
     }
 
     marker
+}
+
+fn wheel_python_lower_bound(filename: &WheelFilename) -> Option<Version> {
+    let mut lower = None;
+
+    for python_tag in filename.python_tags() {
+        let candidate = match python_tag {
+            LanguageTag::None => return None,
+            LanguageTag::Python { major: 2, .. }
+            | LanguageTag::CPythonMajor { major: 2 }
+            | LanguageTag::CPython {
+                python_version: (2, ..),
+            }
+            | LanguageTag::PyPy {
+                python_version: (2, ..),
+            }
+            | LanguageTag::GraalPy {
+                python_version: (2, ..),
+            }
+            | LanguageTag::Pyston {
+                python_version: (2, ..),
+            } => continue,
+            LanguageTag::Python { major, minor: None } | LanguageTag::CPythonMajor { major } => {
+                Version::new([u64::from(*major)])
+            }
+            LanguageTag::Python {
+                major,
+                minor: Some(minor),
+            }
+            | LanguageTag::CPython {
+                python_version: (major, minor),
+            }
+            | LanguageTag::PyPy {
+                python_version: (major, minor),
+            }
+            | LanguageTag::GraalPy {
+                python_version: (major, minor),
+            }
+            | LanguageTag::Pyston {
+                python_version: (major, minor),
+            } => Version::new([u64::from(*major), u64::from(*minor)]),
+        };
+
+        lower = Some(match lower {
+            Some(existing) => std::cmp::min(existing, candidate),
+            None => candidate,
+        });
+    }
+
+    lower
 }
 
 #[cfg(test)]
