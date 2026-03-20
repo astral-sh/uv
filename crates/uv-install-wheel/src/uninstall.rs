@@ -37,8 +37,16 @@ pub fn uninstall_wheel(dist_info: &Path) -> Result<Uninstall, Error> {
 
     // Uninstall the files, keeping track of any directories that are left empty.
     let mut visited = BTreeSet::new();
+    let normalized_site_packages = normalize_path(site_packages);
     for entry in &record {
-        let path = site_packages.join(&entry.path);
+        let path = normalize_path(&site_packages.join(&entry.path));
+        if !path.starts_with(&normalized_site_packages) {
+            trace!(
+                "Skipping RECORD entry that resolves outside site-packages: {}",
+                entry.path
+            );
+            continue;
+        }
 
         // On Windows, deleting the current executable is a special case.
         #[cfg(windows)]
@@ -346,4 +354,50 @@ fn normalize_path(path: &Path) -> PathBuf {
         }
     }
     ret
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn normalize_path_rejects_traversal() {
+        let site_packages = Path::new("/usr/lib/python3.12/site-packages");
+        let malicious = site_packages.join("../../../etc/passwd");
+        let normalized = normalize_path(&malicious);
+        assert!(
+            !normalized.starts_with(site_packages),
+            "path with .. components should not resolve inside site-packages: {}",
+            normalized.display()
+        );
+    }
+
+    #[test]
+    fn normalize_path_allows_normal_entries() {
+        let site_packages = Path::new("/usr/lib/python3.12/site-packages");
+        let normal = site_packages.join("requests/__init__.py");
+        let normalized = normalize_path(&normal);
+        assert!(
+            normalized.starts_with(site_packages),
+            "normal path should remain inside site-packages: {}",
+            normalized.display()
+        );
+    }
+
+    #[test]
+    fn normalize_path_handles_dot_components() {
+        let site_packages = Path::new("/usr/lib/python3.12/site-packages");
+        let dotted = site_packages.join("./requests/./__init__.py");
+        let normalized = normalize_path(&dotted);
+        assert!(
+            normalized.starts_with(site_packages),
+            "path with . components should stay inside site-packages: {}",
+            normalized.display()
+        );
+        assert_eq!(
+            normalized,
+            Path::new("/usr/lib/python3.12/site-packages/requests/__init__.py")
+        );
+    }
 }
