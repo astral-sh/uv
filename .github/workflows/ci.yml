@@ -86,6 +86,7 @@ jobs:
             [[ "$file" =~ ^crates/uv-build/ ]] && uv_build_changed=1
             [[ "$file" == "Dockerfile" ]] && dockerfile_changed=1
             [[ "$file" == ".github/workflows/build-docker.yml" ]] && docker_workflow_changed=1
+            [[ "$file" == ".github/workflows/bench.yml" ]] && bench_workflow_changed=1
             [[ "$file" == ".github/workflows/test-integration.yml" || "$file" =~ ^test/integration/ || "$file" == "scripts/check_registry.py" || "$file" == "scripts/check_cache_compat.py" || "$file" == "scripts/registries-test.py" ]] && integration_changed=1
             [[ "$file" == ".github/workflows/test-system.yml" ]] && system_workflow_changed=1
             [[ "$file" =~ ^docs/ || "$file" =~ ^mkdocs.*\.yml$ || "$file" =~ \.md$ || "$file" =~ ^bin/ || "$file" =~ ^assets/ ]] && continue
@@ -107,7 +108,7 @@ jobs:
           [[ $publish_changed || $has_publish_label || $has_extended_label || $on_main_branch ]] && test_publish=1
           [[ ! $has_skip_label && ($trampoline_code_changed || $trampoline_workflow_changed || $rust_deps_changed || $on_main_branch) ]] && test_windows_trampoline=1
           [[ $on_main_branch || $cache_relevant_changed ]] && save_rust_cache=1
-          [[ ! $has_skip_label && ($any_rust_changed || $on_main_branch) ]] && run_bench=1
+          [[ ! $has_skip_label && ($any_rust_changed || $bench_workflow_changed || $on_main_branch) ]] && run_bench=1
           [[ ! $has_skip_label ]] && test_smoke=1
           [[ ! $has_skip_label ]] && test_ecosystem=1
           [[ $has_integration_label || $has_extended_label || $on_main_branch || $integration_changed ]] && test_integration=1
