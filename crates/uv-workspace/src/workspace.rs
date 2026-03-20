@@ -1,5 +1,6 @@
 //! Resolve the current [`ProjectWorkspace`] or [`Workspace`].
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -19,7 +20,11 @@ use uv_normalize::{DEV_DEPENDENCIES, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerTree, VerbatimUrl};
 
+use uv_preview::PreviewFeature;
 use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
+use uv_python::{
+    EnvironmentPreference, Interpreter, PythonInstallation, PythonPreference, PythonRequest,
+};
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 
@@ -27,6 +32,16 @@ use crate::dependency_groups::{DependencyGroupError, FlatDependencyGroup, FlatDe
 use crate::pyproject::{
     Project, PyProjectToml, PyprojectTomlError, Source, Sources, ToolUvSources, ToolUvWorkspace,
 };
+
+/// A concrete interpreter or a python version request
+#[derive(Debug, Clone, Copy)]
+pub enum InterpreterOrRequest<'a> {
+    Interpreter(&'a Interpreter),
+    Request {
+        request: &'a PythonRequest,
+        preference: PythonPreference,
+    },
+}
 
 /// The resolved path to a workspace's virtual environment.
 ///
@@ -40,13 +55,18 @@ pub enum ProjectEnvironmentPath {
     Override(PathBuf),
     /// The active virtual environment from `VIRTUAL_ENV` (via `--active`).
     Active(PathBuf),
+    /// An environment in the cache.
+    Centralized(PathBuf),
 }
 
 impl ProjectEnvironmentPath {
     /// Returns the path.
     pub fn path(&self) -> &Path {
         match self {
-            Self::Default(path) | Self::Override(path) | Self::Active(path) => path,
+            Self::Default(path)
+            | Self::Override(path)
+            | Self::Active(path)
+            | Self::Centralized(path) => path,
         }
     }
 
@@ -55,10 +75,18 @@ impl ProjectEnvironmentPath {
         matches!(self, Self::Default(_))
     }
 
+    /// Returns `true` if this is a centralized environment.
+    pub fn is_centralized(&self) -> bool {
+        matches!(self, Self::Centralized(_))
+    }
+
     /// Consumes self and returns the inner `PathBuf`.
     pub fn into_path_buf(self) -> PathBuf {
         match self {
-            Self::Default(path) | Self::Override(path) | Self::Active(path) => path,
+            Self::Default(path)
+            | Self::Override(path)
+            | Self::Active(path)
+            | Self::Centralized(path) => path,
         }
     }
 }
@@ -758,12 +786,16 @@ impl Workspace {
     /// If `active` is `true`, the `VIRTUAL_ENV` variable will be preferred. If it is `false`, any
     /// warnings about mismatch between the active environment and the project environment will be
     /// silenced.
-    ///
-    /// > **Note**: For centralized environments use [`centralized_environment_root`] instead of
-    /// > this function.
-    pub fn venv(&self, active: Option<bool>) -> ProjectEnvironmentPath {
+    pub fn venv(
+        &self,
+        active: Option<bool>,
+        interp_or_req: InterpreterOrRequest<'_>,
+        cache: &Cache,
+    ) -> ProjectEnvironmentPath {
         /// Resolve the `UV_PROJECT_ENVIRONMENT` value, if any.
-        fn from_project_environment_variable(workspace: &Workspace) -> Option<ProjectEnvironmentPath> {
+        fn from_project_environment_variable(
+            workspace: &Workspace,
+        ) -> Option<ProjectEnvironmentPath> {
             let value = std::env::var_os(EnvVars::UV_PROJECT_ENVIRONMENT)?;
 
             if value.is_empty() {
@@ -776,7 +808,9 @@ impl Workspace {
             }
 
             // Resolve the path relative to the install path.
-            Some(ProjectEnvironmentPath::Override(workspace.install_path.join(path)))
+            Some(ProjectEnvironmentPath::Override(
+                workspace.install_path.join(path),
+            ))
         }
 
         /// Resolve the `VIRTUAL_ENV` variable, if any.
@@ -795,6 +829,43 @@ impl Workspace {
             // Resolve the path relative to current directory.
             // Note this differs from `UV_PROJECT_ENVIRONMENT`
             Some(ProjectEnvironmentPath::Active(CWD.join(path)))
+        }
+
+        fn from_cache(
+            default: &Path,
+            workspace: &Workspace,
+            interp_or_req: InterpreterOrRequest<'_>,
+            cache: &Cache,
+        ) -> Option<ProjectEnvironmentPath> {
+            if !uv_preview::is_enabled(PreviewFeature::CentralizedEnvs) {
+                return None;
+            }
+
+            // Check if the default path is already a normal directory containing a venv.
+            if uv_fs::is_virtualenv_base(default) && fs_err::read_link(default).is_err() {
+                return None;
+            }
+
+            let interpreter = match interp_or_req {
+                InterpreterOrRequest::Interpreter(interpreter) => Some(Cow::Borrowed(interpreter)),
+                InterpreterOrRequest::Request {
+                    request,
+                    preference,
+                } => PythonInstallation::find(
+                    request,
+                    EnvironmentPreference::OnlySystem,
+                    preference,
+                    None,
+                    cache,
+                    uv_preview::get(),
+                )
+                .map(PythonInstallation::into_interpreter)
+                .map(Cow::Owned)
+                .ok(),
+            }?;
+            Some(ProjectEnvironmentPath::Centralized(
+                centralized_environment_root(workspace, cache, &interpreter),
+            ))
         }
 
         // Determine the default value.
@@ -832,7 +903,13 @@ impl Workspace {
             }
         }
 
-        project_env
+        if project_env.is_default()
+            && let Some(project_env) = from_cache(&project_env, self, interp_or_req, cache)
+        {
+            project_env
+        } else {
+            project_env
+        }
     }
 
     /// The members of the workspace.
@@ -1918,7 +1995,7 @@ impl VirtualProject {
 /// The hash includes the interpreter's marker environment (`platform_system`, `platform_machine`,
 /// `implementation_name`, and `python_version`) as well as the current platform's OS,
 /// architecture, and libc.
-pub fn centralized_environment_root(
+fn centralized_environment_root(
     workspace: &Workspace,
     cache: &Cache,
     interpreter: &uv_python::Interpreter,

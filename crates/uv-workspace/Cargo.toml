@@ -20,6 +20,7 @@ uv-build-backend = { workspace = true, features = ["schemars"] }
 uv-cache = { workspace = true }
 uv-cache-key = { workspace = true }
 uv-configuration = { workspace = true }
+uv-preview = { workspace = true }
 uv-python = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio", "schemars"] }

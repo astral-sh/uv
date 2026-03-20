@@ -21,7 +21,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_normalize::DefaultGroups;
-use uv_preview::{Preview, PreviewFeature};
+use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
@@ -32,7 +32,7 @@ use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStra
 use uv_virtualenv::OnExisting;
 use uv_warnings::warn_user;
 use uv_workspace::{
-    DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError, centralized_environment_root,
+    DiscoveryOptions, InterpreterOrRequest, VirtualProject, WorkspaceCache, WorkspaceError,
 };
 
 use crate::commands::ExitStatus;
@@ -113,14 +113,6 @@ pub(crate) async fn venv(
         }
     };
 
-    // Centralized mode requires: preview flag, no explicit path, a project, and the
-    // project's venv path must be the default (not overridden by UV_PROJECT_ENVIRONMENT).
-    let centralized = preview.is_enabled(PreviewFeature::CentralizedEnvs)
-        && path.is_none()
-        && project
-            .as_ref()
-            .is_some_and(|p| p.workspace().venv(Some(false)).is_default());
-
     let reporter = PythonDownloadReporter::single(printer);
 
     // If the default dependency-groups demand a higher requires-python
@@ -164,21 +156,24 @@ pub(crate) async fn venv(
     };
 
     // Determine the path
-    let path = if centralized && let Some(project) = project.as_ref() {
-        centralized_environment_root(project.workspace(), cache, &interpreter)
+    //
+    // Only use the project environment path if we're invoked from the root.
+    // This isn't strictly necessary and we may want to change it later, but this
+    // avoids a breaking change when adding project environment support to `uv venv`.
+    let (path, centralized) = if let Some(project) = project.as_ref() {
+        if path.is_none() && project.workspace().install_path() == project_dir {
+            let env_path = project.workspace().venv(
+                Some(false),
+                InterpreterOrRequest::Interpreter(&interpreter),
+                cache,
+            );
+            let centralized = env_path.is_centralized();
+            (env_path.into_path_buf(), centralized)
+        } else {
+            (path.unwrap_or(PathBuf::from(".venv")), false)
+        }
     } else {
-        path.unwrap_or_else(|| {
-            project
-                .as_ref()
-                .and_then(|project| {
-                    // Only use the project environment path if we're invoked from the root
-                    // This isn't strictly necessary and we may want to change it later, but this
-                    // avoids a breaking change when adding project environment support to `uv venv`.
-                    (project.workspace().install_path() == project_dir)
-                        .then(|| project.workspace().venv(Some(false)).into_path_buf())
-                })
-                .unwrap_or(PathBuf::from(".venv"))
-        })
+        (path.unwrap_or(PathBuf::from(".venv")), false)
     };
 
     // Check if the discovered Python version is incompatible with the current workspace

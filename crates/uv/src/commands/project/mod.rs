@@ -48,9 +48,7 @@ use uv_virtualenv::remove_virtualenv;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::pyproject::{ExtraBuildDependency, PyProjectToml};
-use uv_workspace::{
-    RequiresPythonSources, Workspace, WorkspaceCache, centralized_environment_root,
-};
+use uv_workspace::{InterpreterOrRequest, RequiresPythonSources, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::{Changelog, Modifications};
@@ -979,34 +977,16 @@ impl ProjectInterpreter {
         )
         .await?;
 
-        let venv_path = workspace.venv(active);
-
-        // Centralized mode is only active when the venv path is the default (.venv),
-        // the preview flag is enabled, and .venv is not already a real directory.
-        //
-        // We can't return early because once we have an interpreter and a path,
-        // we don't know if it exists. And even if it does exist, it could still
-        // be "unusable" for some reason. So we play it safe and just let the
-        // rest of the code handle it as normal.
-        //
-        // TODO(tk): Find some less weird way of achieving this whole thing.
-        let (root, is_centralized) = if preview.is_enabled(PreviewFeature::CentralizedEnvs)
-            && venv_path.is_default()
-            && (!uv_fs::is_virtualenv_base(&*venv_path) || fs_err::read_link(&*venv_path).is_ok())
-            && let Ok(installation) = PythonInstallation::find(
-                python_request.as_ref().unwrap_or(&PythonRequest::Default),
-                EnvironmentPreference::OnlySystem,
-                python_preference,
-                None,
-                cache,
-                preview,
-            ) {
-            let centralized =
-                centralized_environment_root(workspace, cache, &installation.into_interpreter());
-            (centralized, true)
-        } else {
-            (venv_path.into_path_buf(), false)
-        };
+        let env_path = workspace.venv(
+            active,
+            InterpreterOrRequest::Request {
+                request: python_request.as_ref().unwrap_or(&PythonRequest::Default),
+                preference: python_preference,
+            },
+            cache,
+        );
+        let is_centralized = env_path.is_centralized();
+        let root = env_path.into_path_buf();
 
         match PythonEnvironment::from_root(&root, cache) {
             Ok(venv) => {
@@ -1482,16 +1462,13 @@ impl ProjectEnvironment {
 
             // Otherwise, create a virtual environment with the discovered interpreter.
             ProjectInterpreter::Interpreter(interpreter) => {
-                let venv_path = workspace.venv(active);
-                let centralized = preview.is_enabled(PreviewFeature::CentralizedEnvs)
-                    && venv_path.is_default()
-                    && (!uv_fs::is_virtualenv_base(&*venv_path)
-                        || fs_err::read_link(&*venv_path).is_ok());
-                let root = if centralized {
-                    centralized_environment_root(workspace, cache, &interpreter)
-                } else {
-                    workspace.venv(active).into_path_buf()
-                };
+                let env_path = workspace.venv(
+                    active,
+                    InterpreterOrRequest::Interpreter(&interpreter),
+                    cache,
+                );
+                let centralized = env_path.is_centralized();
+                let root = env_path.into_path_buf();
 
                 // Avoid removing things that are not virtual environments
                 let replace = match (root.try_exists(), root.join("pyvenv.cfg").try_exists()) {
@@ -1506,7 +1483,7 @@ impl ProjectEnvironment {
                             false
                         } else {
                             return Err(ProjectError::InvalidProjectEnvironmentDir(
-                                root,
+                                root.clone(),
                                 "it is not a compatible environment but cannot be recreated because it is not a virtual environment".to_string(),
                             ));
                         }
@@ -1514,7 +1491,7 @@ impl ProjectEnvironment {
                     // Similarly, if we can't _tell_ if it exists we should bail
                     (_, Err(err)) | (Err(err), _) => {
                         return Err(ProjectError::InvalidProjectEnvironmentDir(
-                            root,
+                            root.clone(),
                             format!(
                                 "it is not a compatible environment but cannot be recreated because uv cannot determine if it is a virtual environment: {err}"
                             ),
