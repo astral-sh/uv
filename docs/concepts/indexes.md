@@ -142,8 +142,11 @@ password (or access token).
 
 !!! tip
 
-    See the [alternative index guide](../guides/integration/alternative-indexes.md) for details on
-    authenticating with specific private index providers, e.g., from AWS, Azure, or GCP.
+    See the dedicated guides for authenticating with specific private index providers:
+    [Azure Artifacts](../guides/integration/azure.md),
+    [Google Artifact Registry](../guides/integration/google.md),
+    [AWS CodeArtifact](../guides/integration/aws.md), and
+    [JFrog Artifactory](../guides/integration/jfrog.md).
 
 ### Providing credentials directly
 

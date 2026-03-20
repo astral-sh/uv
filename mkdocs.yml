@@ -84,6 +84,7 @@ plugins:
         "configuration/environment.md": "reference/environment.md"
         "guides/export.md": "concepts/projects/export.md"
         "guides/integration/dependency-bots.md": "guides/integration/renovate.md"
+        "guides/integration/alternative-indexes.md": "concepts/authentication/third-party.md"
   - llmstxt:
       markdown_description: |
         You can use uv to install Python dependencies, run scripts, manage virtual environments,
@@ -117,7 +118,10 @@ plugins:
           - guides/integration/pre-commit.md
           - guides/integration/pytorch.md
           - guides/integration/fastapi.md
-          - guides/integration/alternative-indexes.md
+          - guides/integration/azure.md
+          - guides/integration/google.md
+          - guides/integration/aws.md
+          - guides/integration/jfrog.md
           - guides/integration/renovate.md
           - guides/integration/dependabot.md
           - guides/integration/aws-lambda.md
@@ -199,7 +203,10 @@ nav:
           - Pre-commit: guides/integration/pre-commit.md
           - PyTorch: guides/integration/pytorch.md
           - FastAPI: guides/integration/fastapi.md
-          - Alternative indexes: guides/integration/alternative-indexes.md
+          - Azure Artifacts: guides/integration/azure.md
+          - Google Artifact Registry: guides/integration/google.md
+          - AWS CodeArtifact: guides/integration/aws.md
+          - JFrog Artifactory: guides/integration/jfrog.md
           - Renovate: guides/integration/renovate.md
           - Dependabot: guides/integration/dependabot.md
           - AWS Lambda: guides/integration/aws-lambda.md
