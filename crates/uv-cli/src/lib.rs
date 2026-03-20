@@ -3763,7 +3763,7 @@ pub struct RunArgs {
     /// cleared, uv will fail to detect the recursion depth.
     ///
     /// If uv reaches the maximum recursion depth, it will exit with an error.
-    #[arg(long, hide = true, env = EnvVars::UV_RUN_MAX_RECURSION_DEPTH)]
+    #[arg(long, hide = true)]
     pub max_recursion_depth: Option<u32>,
 
     /// The platform for which requirements should be installed.
