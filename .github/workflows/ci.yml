@@ -87,7 +87,7 @@ jobs:
             [[ "$file" == "Dockerfile" ]] && dockerfile_changed=1
             [[ "$file" == ".github/workflows/build-docker.yml" ]] && docker_workflow_changed=1
             [[ "$file" == ".github/workflows/test-integration.yml" || "$file" =~ ^test/integration/ || "$file" == "scripts/check_registry.py" || "$file" == "scripts/check_cache_compat.py" || "$file" == "scripts/registries-test.py" ]] && integration_changed=1
-            [[ "$file" == ".github/workflows/test-system.yml" ]] && system_workflow_changed=1
+            [[ "$file" == ".github/workflows/test-system.yml" || "$file" == "scripts/check_system_python.py" || "$file" == "scripts/check_embedded_python.py" ]] && system_changed=1
             [[ "$file" =~ ^docs/ || "$file" =~ ^mkdocs.*\.yml$ || "$file" =~ \.md$ || "$file" =~ ^bin/ || "$file" =~ ^assets/ ]] && continue
             any_code_changed=1
           done <<< "$(git diff --name-only "${BASE_SHA:-origin/main}...HEAD")"
@@ -111,7 +111,7 @@ jobs:
           [[ ! $has_skip_label ]] && test_smoke=1
           [[ ! $has_skip_label ]] && test_ecosystem=1
           [[ $has_integration_label || $has_extended_label || $on_main_branch || $integration_changed ]] && test_integration=1
-          [[ $has_system_label || $has_extended_label || $on_main_branch || $system_workflow_changed ]] && test_system=1
+          [[ $has_system_label || $has_extended_label || $on_main_branch || $system_changed ]] && test_system=1
           [[ $has_macos_label || $has_extended_label || $on_main_branch || $build_release_binaries ]] && test_macos=1
           [[ ! $has_build_skip_label && ! $has_build_skip_docker_label && ($docker_build_changed || $has_build_push_docker_label) ]] && build_docker=1
           [[ $has_build_push_docker_label ]] && push_docker=1
