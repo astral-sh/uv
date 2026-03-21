@@ -1,7 +1,8 @@
 use itertools::Either;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
-use tracing::info_span;
+use std::str::FromStr;
+use tracing::{debug, info_span};
 
 use uv_auth::CredentialsCache;
 use uv_configuration::{DependencyGroupsWithDefaults, NoSources};
@@ -11,10 +12,12 @@ use uv_distribution_types::{
 };
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::{MarkerTree, RequirementOrigin};
-use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
+use uv_pypi_types::{Conflicts, LenientRequirement, SupportedEnvironments, VerbatimParsedUrl};
 use uv_resolver::{Lock, LockVersion, VERSION};
 use uv_scripts::Pep723Script;
-use uv_workspace::dependency_groups::{DependencyGroupError, FlatDependencyGroup};
+use uv_workspace::dependency_groups::{
+    DependencyGroupError, FlatDependencyGroup, FlatDependencyGroups,
+};
 use uv_workspace::{Editability, Workspace, WorkspaceMember};
 
 use crate::commands::project::{ProjectError, find_requires_python};
@@ -35,6 +38,99 @@ impl<'lock> From<&'lock Workspace> for LockTarget<'lock> {
 impl<'lock> From<&'lock Pep723Script> for LockTarget<'lock> {
     fn from(script: &'lock Pep723Script) -> Self {
         LockTarget::Script(script)
+    }
+}
+
+#[derive(Debug, Default)]
+struct DirectDependencyContexts {
+    base: BTreeSet<PackageName>,
+    extras: BTreeSet<(PackageName, ExtraName)>,
+    groups: BTreeSet<(PackageName, GroupName)>,
+}
+
+impl DirectDependencyContexts {
+    fn insert_base(&mut self, requirement: &uv_pep508::Requirement<VerbatimParsedUrl>) {
+        self.base.insert(requirement.name.clone());
+    }
+
+    fn insert_extra(
+        &mut self,
+        requirement: &uv_pep508::Requirement<VerbatimParsedUrl>,
+        extra: &ExtraName,
+    ) {
+        self.extras
+            .insert((requirement.name.clone(), extra.clone()));
+    }
+
+    fn insert_group(
+        &mut self,
+        requirement: &uv_pep508::Requirement<VerbatimParsedUrl>,
+        group: &GroupName,
+    ) {
+        self.groups
+            .insert((requirement.name.clone(), group.clone()));
+    }
+
+    /// Populate direct dependency contexts from a `pyproject.toml`'s project table and dependency
+    /// groups.
+    fn collect_from_pyproject_toml(
+        &mut self,
+        path: &Path,
+        pyproject_toml: &uv_workspace::pyproject::PyProjectToml,
+    ) -> Result<(), DependencyGroupError> {
+        if let Some(project) = &pyproject_toml.project {
+            if let Some(dependencies) = &project.dependencies {
+                for requirement in dependencies.iter().filter_map(|dependency| {
+                    LenientRequirement::<VerbatimParsedUrl>::from_str(dependency)
+                        .inspect_err(|err| {
+                            debug!("Failed to parse dependency `{dependency}`: {err}");
+                        })
+                        .ok()
+                }) {
+                    let requirement: uv_pep508::Requirement<VerbatimParsedUrl> = requirement.into();
+                    self.insert_base(&requirement);
+                }
+            }
+
+            if let Some(optional_dependencies) = &project.optional_dependencies {
+                for (extra, dependencies) in optional_dependencies {
+                    for requirement in dependencies.iter().filter_map(|dependency| {
+                        LenientRequirement::<VerbatimParsedUrl>::from_str(dependency)
+                            .inspect_err(|err| {
+                                debug!("Failed to parse dependency `{dependency}`: {err}");
+                            })
+                            .ok()
+                    }) {
+                        let requirement: uv_pep508::Requirement<VerbatimParsedUrl> =
+                            requirement.into();
+                        self.insert_extra(&requirement, extra);
+                    }
+                }
+            }
+        }
+
+        let dependency_groups = FlatDependencyGroups::from_pyproject_toml(path, pyproject_toml)?;
+        for (group, flat_group) in dependency_groups {
+            for requirement in &flat_group.requirements {
+                self.insert_group(requirement, &group);
+            }
+        }
+
+        Ok(())
+    }
+
+    fn is_direct(
+        &self,
+        package: &PackageName,
+        extra: Option<&ExtraName>,
+        group: Option<&GroupName>,
+    ) -> bool {
+        match (extra, group) {
+            (Some(extra), None) => self.extras.contains(&(package.clone(), extra.clone())),
+            (None, Some(group)) => self.groups.contains(&(package.clone(), group.clone())),
+            (None, None) => self.base.contains(package),
+            (Some(_), Some(_)) => false,
+        }
     }
 }
 
@@ -62,6 +158,7 @@ fn collect_workspace_project_transitive_source_overlays(
     project_sources: &BTreeMap<PackageName, uv_workspace::pyproject::Sources>,
     inherited_sources: &BTreeMap<PackageName, uv_workspace::pyproject::Sources>,
     project_indexes: &[Index],
+    direct_contexts: &DirectDependencyContexts,
     workspace: &Workspace,
     locations: &IndexLocations,
     source_strategy: &NoSources,
@@ -87,6 +184,10 @@ fn collect_workspace_project_transitive_source_overlays(
         };
 
         for (extra, group) in source_scopes(package_sources) {
+            if direct_contexts.is_direct(&package, extra.as_ref(), group.as_ref()) {
+                continue;
+            }
+
             let origin = if let Some(extra) = &extra {
                 RequirementOrigin::Extra(project_path.clone(), project_name.clone(), extra.clone())
             } else if let Some(group) = &group {
@@ -571,6 +672,11 @@ impl<'lock> LockTarget<'lock> {
                         .and_then(|tool| tool.uv.as_ref())
                         .and_then(|uv| uv.index.as_deref())
                         .unwrap_or(&empty_indexes);
+                    let mut direct_contexts = DirectDependencyContexts::default();
+                    direct_contexts.collect_from_pyproject_toml(
+                        workspace.install_path(),
+                        workspace.pyproject_toml(),
+                    )?;
 
                     overlays.extend(collect_workspace_project_transitive_source_overlays(
                         workspace
@@ -583,6 +689,7 @@ impl<'lock> LockTarget<'lock> {
                         workspace.sources(),
                         &empty_sources,
                         project_indexes,
+                        &direct_contexts,
                         workspace,
                         locations,
                         source_strategy,
@@ -613,6 +720,11 @@ impl<'lock> LockTarget<'lock> {
                         .and_then(|tool| tool.uv.as_ref())
                         .and_then(|uv| uv.index.as_deref())
                         .unwrap_or(&empty_indexes);
+                    let mut direct_contexts = DirectDependencyContexts::default();
+                    direct_contexts.collect_from_pyproject_toml(
+                        project_member.root(),
+                        project_member.pyproject_toml(),
+                    )?;
 
                     overlays.extend(collect_workspace_project_transitive_source_overlays(
                         project_member
@@ -625,6 +737,7 @@ impl<'lock> LockTarget<'lock> {
                         project_sources,
                         workspace.sources(),
                         project_indexes,
+                        &direct_contexts,
                         workspace,
                         locations,
                         source_strategy,
@@ -657,6 +770,18 @@ impl<'lock> LockTarget<'lock> {
                     return Ok(Vec::new());
                 }
 
+                let direct_contexts = {
+                    let mut direct_contexts = DirectDependencyContexts::default();
+                    for requirement in script.metadata.dependencies.iter().flatten() {
+                        if let Some(extra) = requirement.marker.top_level_extra_name() {
+                            direct_contexts.insert_extra(requirement, extra.as_ref());
+                        } else {
+                            direct_contexts.insert_base(requirement);
+                        }
+                    }
+                    direct_contexts
+                };
+
                 let mut overlays = Vec::new();
                 for (package, package_sources) in sources_map {
                     if source_strategy.for_package(package) {
@@ -665,6 +790,9 @@ impl<'lock> LockTarget<'lock> {
 
                     for (extra, group) in source_scopes(package_sources) {
                         if group.is_some() {
+                            continue;
+                        }
+                        if direct_contexts.is_direct(package, extra.as_ref(), None) {
                             continue;
                         }
 

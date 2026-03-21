@@ -16,8 +16,8 @@ use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
 /// The source constraint carried by a single dependency edge.
 ///
 /// Most dependency edges are source-agnostic and use [`DependencySource::Unspecified`]. Direct
-/// URLs and group-scoped explicit indexes use a concrete source so fork construction can keep
-/// that source information attached to the edge that introduced it.
+/// URLs and local/context-scoped explicit indexes use a concrete source so fork construction can
+/// keep that source information attached to the edge that introduced it.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(crate) enum DependencySource {
     /// The dependency does not carry an edge-local source constraint.
@@ -34,23 +34,14 @@ pub(crate) enum DependencySource {
 impl DependencySource {
     /// Derive the edge-local source constraint from a requirement.
     ///
-    /// Registry requirements only carry a source here when they are tied to a group-scoped
-    /// explicit index. Direct URL-like requirements always preserve their verbatim URL.
+    /// Registry requirements only carry a source here when they are tied to a local context
+    /// (`project`, `extra`, `group`, `workspace`, or script file) with an explicit index. Direct
+    /// URL-like requirements always preserve their verbatim URL.
     pub(crate) fn from_requirement(requirement: &Requirement) -> Self {
         match &requirement.source {
-            RequirementSource::Registry { index, .. }
-                if matches!(
-                    requirement.origin.as_ref(),
-                    Some(RequirementOrigin::Project(_, _))
-                        | Some(RequirementOrigin::Extra(_, Some(_), _))
-                        | Some(RequirementOrigin::Group(_, Some(_), _))
-                ) =>
-            {
-                index
-                    .clone()
-                    .map(Self::ExplicitIndex)
-                    .unwrap_or(Self::Unspecified)
-            }
+            RequirementSource::Registry {
+                index: Some(index), ..
+            } if requirement.origin.is_some() => Self::ExplicitIndex(index.clone()),
             RequirementSource::Registry { .. } => Self::Unspecified,
             RequirementSource::Url { .. }
             | RequirementSource::Git { .. }

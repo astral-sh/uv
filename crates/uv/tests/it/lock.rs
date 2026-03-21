@@ -2926,8 +2926,10 @@ async fn lock_project_with_transitive_source_index() -> Result<()> {
     ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    let proxy_uri = proxy.uri();
-    assert!(lock.contains(&proxy_uri));
+    assert!(lock.contains(&format!(
+        "source = {{ registry = \"{}/simple\" }}",
+        proxy.uri()
+    )));
 
     Ok(())
 }
@@ -4705,12 +4707,18 @@ async fn lock_root_and_workspace_member_with_disjoint_transitive_source_index_ma
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 5 packages in [TIME]
     ");
 
     let lock = context.read("uv.lock");
-    assert!(lock.contains(&proxy1.uri().to_string()));
-    assert!(lock.contains(&proxy2.uri().to_string()));
+    assert!(lock.contains(&format!(
+        "source = {{ registry = \"{}/simple\" }}",
+        proxy1.uri()
+    )));
+    assert!(lock.contains(&format!(
+        "source = {{ registry = \"{}/simple\" }}",
+        proxy2.uri()
+    )));
     assert!(lock.contains("marker = \"sys_platform == 'darwin'\""));
     assert!(lock.contains("marker = \"sys_platform != 'darwin'\""));
 
@@ -4788,13 +4796,15 @@ async fn lock_root_and_workspace_member_with_conflicting_transitive_source_index
 
     uv_snapshot!(context.filters(), context.lock(), @"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Requirements contain conflicting indexes for package `iniconfig` in all marker environments:
-    - http://[LOCALHOST]/simple
-    - http://[LOCALHOST]/simple
+      × Failed to resolve dependencies for `pkg-a` (v0.1.0)
+      ╰─▶ Requirements contain conflicting indexes for package `iniconfig` in all marker environments:
+          - http://[LOCALHOST]/simple
+          - http://[LOCALHOST]/simple
+      help: `pkg-a` (v0.1.0) was included because `a` (v0.1.0) depends on `pkg-a`
     ");
 
     Ok(())
@@ -4879,8 +4889,14 @@ async fn lock_root_and_workspace_member_with_unrelated_root_dependency_and_trans
     ");
 
     let lock = context.read("uv.lock");
-    assert!(lock.contains(&proxy2.uri().to_string()));
-    assert!(!lock.contains(&proxy1.uri().to_string()));
+    assert!(lock.contains(&format!(
+        "source = {{ registry = \"{}/simple\" }}",
+        proxy2.uri()
+    )));
+    assert!(!lock.contains(&format!(
+        "source = {{ registry = \"{}/simple\" }}",
+        proxy1.uri()
+    )));
 
     Ok(())
 }
@@ -4970,12 +4986,18 @@ async fn lock_conflicting_root_and_workspace_member_with_transitive_source_index
 
     ----- stderr -----
     warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
-    Resolved 4 packages in [TIME]
+    Resolved 5 packages in [TIME]
     ");
 
     let lock = context.read("uv.lock");
-    assert!(lock.contains(&proxy1.uri().to_string()));
-    assert!(lock.contains(&proxy2.uri().to_string()));
+    assert!(lock.contains(&format!(
+        "source = {{ registry = \"{}/simple\" }}",
+        proxy1.uri()
+    )));
+    assert!(lock.contains(&format!(
+        "source = {{ registry = \"{}/simple\" }}",
+        proxy2.uri()
+    )));
 
     Ok(())
 }
@@ -19984,6 +20006,114 @@ fn lock_non_project_sources() -> Result<()> {
     Ok(())
 }
 
+/// Lock a non-project workspace root with an unscoped transitive explicit index source.
+#[tokio::test]
+async fn lock_non_project_transitive_source_index() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let pkg_a = context.temp_dir.child("pkg_a");
+    fs_err::create_dir_all(&pkg_a)?;
+    pkg_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "pkg-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"
+        [tool.uv.workspace]
+        members = []
+
+        [tool.uv]
+        dev-dependencies = ["pkg-a"]
+
+        [tool.uv.sources]
+        pkg-a = {{ path = "./pkg_a", editable = true }}
+        iniconfig = {{ index = "proxy" }}
+
+        [[tool.uv.index]]
+        name = "proxy"
+        url = "{proxy_uri}/simple"
+        explicit = true
+        "#,
+            proxy_uri = proxy.uri(),
+        ))?;
+
+    context.lock().assert().success();
+
+    let lock = context.read("uv.lock");
+    assert!(lock.contains(&format!(
+        "source = {{ registry = \"{}/simple\" }}",
+        proxy.uri()
+    )));
+
+    context.lock().arg("--locked").assert().success();
+
+    Ok(())
+}
+
+/// Lock a non-project workspace root with a group-scoped transitive explicit index source.
+#[tokio::test]
+async fn lock_non_project_group_transitive_source_index() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let pkg_a = context.temp_dir.child("pkg_a");
+    fs_err::create_dir_all(&pkg_a)?;
+    pkg_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "pkg-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"
+        [tool.uv.workspace]
+        members = []
+
+        [dependency-groups]
+        lint = ["pkg-a"]
+
+        [tool.uv.sources]
+        pkg-a = {{ path = "./pkg_a", editable = true }}
+        iniconfig = {{ index = "proxy", group = "lint" }}
+
+        [[tool.uv.index]]
+        name = "proxy"
+        url = "{proxy_uri}/simple"
+        explicit = true
+        "#,
+            proxy_uri = proxy.uri(),
+        ))?;
+
+    context.lock().assert().success();
+
+    let lock = context.read("uv.lock");
+    assert!(lock.contains(&format!(
+        "source = {{ registry = \"{}/simple\" }}",
+        proxy.uri()
+    )));
+
+    context.lock().arg("--locked").assert().success();
+
+    Ok(())
+}
+
 /// `coverage` defines a `toml` extra, but it doesn't enable any dependencies after Python 3.11.
 #[test]
 fn lock_dropped_dev_extra() -> Result<()> {
@@ -30724,6 +30854,74 @@ fn lock_script_with_transitive_sources() -> Result<()> {
     assert!(!lock.contains(
         "source = { url = \"https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl\" }"
     ));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn lock_script_with_transitive_source_index() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let pkg_a = context.temp_dir.child("pkg_a");
+    fs_err::create_dir_all(&pkg_a)?;
+    pkg_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "pkg-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(&format!(
+        r#"# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#   "pkg-a",
+# ]
+#
+# [tool.uv.sources]
+# pkg-a = {{ path = "pkg_a" }}
+# iniconfig = {{ index = "proxy" }}
+#
+# [[tool.uv.index]]
+# name = "proxy"
+# url = "{proxy_uri}/simple"
+# explicit = true
+# ///
+
+import pkg_a
+"#,
+        proxy_uri = proxy.uri(),
+    ))?;
+
+    context
+        .lock()
+        .arg("--script")
+        .arg("script.py")
+        .assert()
+        .success();
+
+    let lock = context.read("script.py.lock");
+    assert!(lock.contains(&format!(
+        "source = {{ registry = \"{}/simple\" }}",
+        proxy.uri()
+    )));
+
+    context
+        .lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--locked")
+        .assert()
+        .success();
 
     Ok(())
 }
