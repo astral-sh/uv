@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::sync::OnceLock;
 use std::{
     fmt::{Debug, Display, Formatter},
@@ -238,9 +239,45 @@ impl Display for PreviewFeature {
     }
 }
 
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for PreviewFeature {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("PreviewFeature")
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        let choices: Vec<&str> = BitFlags::<Self>::all().iter().map(Self::as_str).collect();
+        schemars::json_schema!({
+            "type": "string",
+            "enum": choices,
+        })
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for PreviewFeature {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s: Cow<'de, str> = serde::Deserialize::deserialize(deserializer)?;
+        Self::from_str(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+impl serde::Serialize for PreviewFeature {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
 #[derive(Debug, Error, Clone)]
-#[error("Unknown feature flag")]
-pub struct PreviewFeatureParseError;
+#[error("unknown preview feature: `{input}`")]
+pub struct PreviewFeatureParseError {
+    input: String,
+}
 
 impl FromStr for PreviewFeature {
     type Err = PreviewFeatureParseError;
@@ -275,7 +312,11 @@ impl FromStr for PreviewFeature {
             "publish-require-normalized" => Self::PublishRequireNormalized,
             "audit" => Self::Audit,
             "project-directory-must-exist" => Self::ProjectDirectoryMustExist,
-            _ => return Err(PreviewFeatureParseError),
+            _ => {
+                return Err(PreviewFeatureParseError {
+                    input: s.to_string(),
+                });
+            }
         })
     }
 }
@@ -303,18 +344,6 @@ impl Preview {
         Self {
             flags: BitFlags::all(),
         }
-    }
-
-    pub fn from_args(preview: bool, no_preview: bool, preview_features: &[PreviewFeature]) -> Self {
-        if no_preview {
-            return Self::default();
-        }
-
-        if preview {
-            return Self::all();
-        }
-
-        Self::new(preview_features)
     }
 
     /// Check if a single feature is enabled.
@@ -441,28 +470,6 @@ mod tests {
     }
 
     #[test]
-    fn test_preview_from_args() {
-        // Test no preview and no no_preview, and no features
-        let preview = Preview::from_args(false, false, &[]);
-        assert_eq!(preview.to_string(), "disabled");
-
-        // Test no_preview
-        let preview = Preview::from_args(true, true, &[]);
-        assert_eq!(preview.to_string(), "disabled");
-
-        // Test preview (all features)
-        let preview = Preview::from_args(true, false, &[]);
-        assert_eq!(preview.to_string(), "enabled");
-
-        // Test specific features
-        let features = vec![PreviewFeature::PythonUpgrade, PreviewFeature::JsonOutput];
-        let preview = Preview::from_args(false, false, &features);
-        assert!(preview.is_enabled(PreviewFeature::PythonUpgrade));
-        assert!(preview.is_enabled(PreviewFeature::JsonOutput));
-        assert!(!preview.is_enabled(PreviewFeature::Pylock));
-    }
-
-    #[test]
     fn test_preview_feature_as_str() {
         assert_eq!(
             PreviewFeature::PythonInstallDefault.as_str(),
@@ -561,5 +568,21 @@ mod tests {
     #[should_panic(expected = "uv_preview::test::with_features")]
     fn test_global_preview_panic_uninitialized() {
         let _preview = get();
+    }
+
+    #[test]
+    fn test_serde_roundtrip() {
+        let input = r#"["python-upgrade", "format"]"#;
+
+        let deserialized: Vec<PreviewFeature> = serde_json::from_str(input).unwrap();
+        assert_eq!(deserialized.len(), 2);
+        assert_eq!(deserialized[0], PreviewFeature::PythonUpgrade);
+        assert_eq!(deserialized[1], PreviewFeature::Format);
+
+        let serialized = serde_json::to_string(&deserialized).unwrap();
+        insta::assert_snapshot!(serialized, @r#"["python-upgrade","format"]"#);
+
+        let roundtrip: Vec<PreviewFeature> = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(roundtrip, deserialized);
     }
 }
