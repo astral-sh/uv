@@ -267,7 +267,7 @@ jobs:
           set -euo pipefail
 
           # Extract the image and tags from the matrix variable
-          IFS=',' read -r BASE_IMAGE BASE_TAGS <<< "${{ matrix.image-mapping }}"
+          IFS=',' read -r BASE_IMAGE BASE_TAGS <<< "${IMAGE_MAPPING}"
 
           # Generate Dockerfile content
           cat <<EOF > Dockerfile
@@ -308,6 +308,7 @@ jobs:
           # Use the tag from the base image we just pushed; fall back to `latest` on dry-runs
           # since the base image isn't pushed to the registry.
           UV_BASE_TAG: ${{ needs.docker-plan.outputs.push == 'true' && needs.docker-publish-base.outputs.image-version || 'latest' }}
+          IMAGE_MAPPING: ${{ matrix.image-mapping }}
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
