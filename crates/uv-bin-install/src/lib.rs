@@ -34,6 +34,7 @@ use uv_redacted::DisplaySafeUrl;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Binary {
     Ruff,
+    Uv,
 }
 
 impl Binary {
@@ -50,6 +51,7 @@ impl Binary {
             ]
             .into_iter()
             .collect(),
+            Self::Uv => VersionSpecifiers::empty(),
         }
     }
 
@@ -59,13 +61,11 @@ impl Binary {
     pub fn name(&self) -> &'static str {
         match self {
             Self::Ruff => "ruff",
+            Self::Uv => "uv",
         }
     }
 
     /// Get the ordered list of download URLs for a specific version and platform.
-    ///
-    /// The default Astral mirror is returned first, followed by the canonical GitHub URL as a
-    /// fallback.
     pub fn download_urls(
         &self,
         version: &Version,
@@ -88,22 +88,42 @@ impl Binary {
                     })?,
                 ])
             }
+            Self::Uv => {
+                let canonical = format!(
+                    "{UV_GITHUB_URL_PREFIX}{version}/uv-{platform}.{}",
+                    format.extension()
+                );
+                Ok(vec![DisplaySafeUrl::parse(&canonical).map_err(|err| {
+                    Error::UrlParse {
+                        url: canonical,
+                        source: err,
+                    }
+                })?])
+            }
         }
     }
 
-    /// Return the ordered list of manifest URLs to try: the default Astral mirror first, then the
-    /// canonical URL as a fallback.
+    /// Return the ordered list of manifest URLs to try for this binary.
     fn manifest_urls(self) -> Vec<DisplaySafeUrl> {
         let name = self.name();
-        // These are static strings so parsing cannot fail.
-        vec![
-            DisplaySafeUrl::parse(&format!("{VERSIONS_MANIFEST_MIRROR}/{name}.ndjson")).unwrap(),
-            DisplaySafeUrl::parse(&format!("{VERSIONS_MANIFEST_URL}/{name}.ndjson")).unwrap(),
-        ]
+        match self {
+            // These are static strings so parsing cannot fail.
+            Self::Ruff => vec![
+                DisplaySafeUrl::parse(&format!("{VERSIONS_MANIFEST_MIRROR}/{name}.ndjson"))
+                    .unwrap(),
+                DisplaySafeUrl::parse(&format!("{VERSIONS_MANIFEST_URL}/{name}.ndjson")).unwrap(),
+            ],
+            Self::Uv => {
+                vec![
+                    DisplaySafeUrl::parse(&format!("{VERSIONS_MANIFEST_URL}/{name}.ndjson"))
+                        .unwrap(),
+                ]
+            }
+        }
     }
 
-    /// Given a canonical artifact URL (e.g., from the versions manifest), return an ordered list
-    /// of URLs to try: the default Astral mirror first, then the canonical URL as a fallback.
+    /// Given a canonical artifact URL (e.g., from the versions manifest), return the ordered list
+    /// of URLs to try for this binary.
     fn mirror_urls(self, canonical_url: DisplaySafeUrl) -> Vec<DisplaySafeUrl> {
         match self {
             Self::Ruff => {
@@ -115,6 +135,7 @@ impl Binary {
                 }
                 vec![canonical_url]
             }
+            Self::Uv => vec![canonical_url],
         }
     }
 
@@ -200,6 +221,9 @@ impl fmt::Display for BinVersion {
 /// The canonical GitHub URL prefix for Ruff releases.
 const RUFF_GITHUB_URL_PREFIX: &str = "https://github.com/astral-sh/ruff/releases/download/";
 
+/// The canonical GitHub URL prefix for uv releases.
+const UV_GITHUB_URL_PREFIX: &str = "https://github.com/astral-sh/uv/releases/download/";
+
 /// The default Astral mirror for Ruff releases.
 ///
 /// This mirror is tried first for Ruff downloads. If it fails, uv falls back to the canonical
@@ -243,8 +267,6 @@ pub struct ResolvedVersion {
     /// The version number.
     pub version: Version,
     /// The ordered list of download URLs to try for this version and current platform.
-    ///
-    /// The default Astral mirror is listed first, with the canonical GitHub URL as a fallback.
     pub artifact_urls: Vec<DisplaySafeUrl>,
     /// The archive format.
     pub archive_format: ArchiveFormat,
@@ -840,6 +862,29 @@ mod tests {
     use uv_redacted::DisplaySafeUrl;
 
     use super::*;
+
+    #[test]
+    fn test_uv_download_urls() {
+        let urls = Binary::Uv
+            .download_urls(
+                &Version::new([0, 6, 0]),
+                "x86_64-unknown-linux-gnu",
+                ArchiveFormat::TarGz,
+            )
+            .expect("uv download URLs should be valid");
+
+        let urls = urls
+            .into_iter()
+            .map(|url| url.to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            urls,
+            vec![
+                "https://github.com/astral-sh/uv/releases/download/0.6.0/uv-x86_64-unknown-linux-gnu.tar.gz"
+                    .to_string(),
+            ]
+        );
+    }
 
     /// Verify that `should_try_next_url` returns `true` even for streaming errors
     /// that `retryable_on_request_failure` does not recognise as transient.
