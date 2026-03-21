@@ -455,6 +455,12 @@ uv cannot assert that the `uv.lock` file is up-to-date without each of the works
 initial sync. The next sync, after all the workspace members have been copied, can still use
 `--locked` and will validate that the lockfile is correct for all workspace members.
 
+!!! tip
+
+    If the workspace contains multiple members but only one is needed for the image, add the
+    `--package <name>` option to the `uv sync` commands above to install only the dependencies
+    and source of that specific member.
+
 ### Non-editable installs
 
 By default, uv installs projects and workspace members in editable mode, such that changes to the
