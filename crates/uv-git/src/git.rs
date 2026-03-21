@@ -341,7 +341,17 @@ impl GitRemote {
 
 impl GitDatabase {
     /// Checkouts to a revision at `destination` from this database.
-    pub(crate) fn copy_to(&self, rev: GitOid, destination: &Path) -> Result<GitCheckout> {
+    ///
+    /// The `remote_url` is the original upstream URL of the repository. It is
+    /// used to set the origin remote on the checkout so that relative submodule
+    /// URLs (e.g., `../other-repo`) resolve against the upstream host instead of
+    /// the local cache path.
+    pub(crate) fn copy_to(
+        &self,
+        rev: GitOid,
+        destination: &Path,
+        remote_url: &DisplaySafeUrl,
+    ) -> Result<GitCheckout> {
         // If the existing checkout exists, and it is fresh, use it.
         // A non-fresh checkout can happen if the checkout operation was
         // interrupted. In that case, the checkout gets deleted and a new
@@ -352,7 +362,7 @@ impl GitDatabase {
             .filter(GitCheckout::is_fresh)
         {
             Some(co) => co.with_lfs_ready(self.lfs_ready),
-            None => GitCheckout::clone_into(destination, self, rev)?,
+            None => GitCheckout::clone_into(destination, self, rev, remote_url)?,
         };
         Ok(checkout)
     }
@@ -404,7 +414,12 @@ impl GitCheckout {
 
     /// Clone a repo for a `revision` into a local path from a `database`.
     /// This is a filesystem-to-filesystem clone.
-    fn clone_into(into: &Path, database: &GitDatabase, revision: GitOid) -> Result<Self> {
+    fn clone_into(
+        into: &Path,
+        database: &GitDatabase,
+        revision: GitOid,
+        remote_url: &DisplaySafeUrl,
+    ) -> Result<Self> {
         let dirname = into.parent().unwrap();
         fs_err::create_dir_all(dirname)?;
         match fs_err::remove_dir_all(into) {
@@ -439,7 +454,7 @@ impl GitCheckout {
 
         let repo = GitRepository::open(into)?;
         let checkout = Self::new(revision, repo);
-        let lfs_ready = checkout.reset(database.lfs_ready)?;
+        let lfs_ready = checkout.reset(database.lfs_ready, remote_url)?;
         Ok(checkout.with_lfs_ready(lfs_ready))
     }
 
@@ -479,7 +494,7 @@ impl GitCheckout {
     /// *doesn't* exist, and then once we're done we create the file.
     ///
     /// [`.ok`]: CHECKOUT_READY_LOCK
-    fn reset(&self, with_lfs: Option<bool>) -> Result<Option<bool>> {
+    fn reset(&self, with_lfs: Option<bool>, remote_url: &DisplaySafeUrl) -> Result<Option<bool>> {
         let ok_file = self.repo.path.join(CHECKOUT_READY_LOCK);
         let _ = paths::remove_file(&ok_file);
 
@@ -495,6 +510,17 @@ impl GitCheckout {
             .arg("--hard")
             .arg(self.revision.as_str())
             .env(EnvVars::GIT_LFS_SKIP_SMUDGE, lfs_skip_smudge)
+            .cwd(&self.repo.path)
+            .exec_with_output()?;
+
+        // Point the origin remote at the real upstream URL so that relative
+        // submodule URLs (e.g., `../other-repo` in `.gitmodules`) resolve
+        // against the upstream host rather than the local cache path.
+        ProcessBuilder::new(GIT.as_ref()?)
+            .arg("remote")
+            .arg("set-url")
+            .arg("origin")
+            .arg(remote_url.as_str())
             .cwd(&self.repo.path)
             .exec_with_output()?;
 

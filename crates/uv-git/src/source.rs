@@ -168,7 +168,7 @@ impl GitSource {
         // Check out `actual_rev` from the database to a scoped location on the
         // filesystem. This will use hard links and such to ideally make the
         // checkout operation here pretty fast.
-        let checkout = db.copy_to(actual_rev, &checkout_path)?;
+        let checkout = db.copy_to(actual_rev, &checkout_path, &remote)?;
 
         // Report the checkout operation to the reporter.
         if let Some(task) = maybe_task {
