@@ -27,6 +27,7 @@ pub use resolver::{
     PackageVersionsResult, Reporter as ResolverReporter, Resolver, ResolverEnvironment,
     ResolverProvider, VersionsResponse, WheelMetadataResult,
 };
+pub use transitive_sources::TransitiveSources;
 pub use universal_marker::{ConflictMarker, UniversalMarker};
 pub use version_map::VersionMap;
 pub use yanks::AllowedYanks;
@@ -64,6 +65,7 @@ mod redirect;
 mod resolution;
 mod resolution_mode;
 mod resolver;
+mod transitive_sources;
 mod universal_marker;
 mod version_map;
 mod yanks;

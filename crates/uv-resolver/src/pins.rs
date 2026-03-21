@@ -25,16 +25,14 @@ pub(crate) struct FilePins(FxHashMap<(PackageName, uv_pep440::Version), FilePin>
 // final resolution).
 impl FilePins {
     /// Pin a candidate package.
-    ///
-    /// Within a single fork, the same `(name, version)` always resolves to the same distribution,
-    /// so we skip construction when an entry already exists.
     pub(crate) fn insert(&mut self, candidate: &Candidate, dist: &CompatibleDist) {
-        self.0
-            .entry((candidate.name().clone(), candidate.version().clone()))
-            .or_insert_with(|| FilePin {
+        self.0.insert(
+            (candidate.name().clone(), candidate.version().clone()),
+            FilePin {
                 dist: dist.for_installation().to_owned(),
                 metadata_id: dist.for_resolution().distribution_id(),
-            });
+            },
+        );
     }
 
     /// Return the pinned file for the given package name and version, if it exists.

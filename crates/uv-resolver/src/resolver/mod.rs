@@ -25,8 +25,8 @@ use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier, IncompatibleDist,
     IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations, IndexMetadata,
-    IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement, ResolvedDist,
-    ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
+    IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement,
+    RequirementSource, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -38,7 +38,7 @@ use uv_pep508::{
 use uv_platform_tags::{IncompatibleTag, Tags};
 use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKindRef, Conflicts, VerbatimParsedUrl};
 use uv_torch::TorchStrategy;
-use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
+use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider, RequestedRequirements};
 use uv_warnings::warn_user_once;
 
 use crate::candidate_selector::{Candidate, CandidateDist, CandidateSelector};
@@ -77,6 +77,7 @@ pub use crate::resolver::provider::{
 pub use crate::resolver::reporter::{BuildId, Reporter};
 use crate::resolver::system::SystemDependency;
 pub(crate) use crate::resolver::urls::Urls;
+use crate::transitive_sources::TransitiveSources;
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::yanks::AllowedYanks;
 use crate::{
@@ -114,12 +115,14 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     overrides: Overrides,
     excludes: Excludes,
     preferences: Preferences,
+    lookaheads: Vec<RequestedRequirements>,
     git: GitResolver,
     capabilities: IndexCapabilities,
     locations: IndexLocations,
     exclusions: Exclusions,
     urls: Urls,
     indexes: Indexes,
+    transitive_sources: TransitiveSources,
     dependency_mode: DependencyMode,
     hasher: HashStrategy,
     env: ResolverEnvironment,
@@ -244,7 +247,9 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             overrides: manifest.overrides,
             excludes: manifest.excludes,
             preferences: manifest.preferences,
+            lookaheads: manifest.lookaheads,
             exclusions: manifest.exclusions,
+            transitive_sources: manifest.transitive_sources,
             hasher: hasher.clone(),
             locations: locations.clone(),
             env,
@@ -312,6 +317,30 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
 }
 
 impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackages> {
+    fn seed_lookahead_source_contexts(&self, state: &mut ForkState) {
+        for lookahead in &self.lookaheads {
+            for requirement in self.overrides.apply(lookahead.requirements()) {
+                if !requirement.evaluate_markers(state.env.marker_environment(), lookahead.extras())
+                {
+                    continue;
+                }
+
+                for dependency in
+                    PubGrubDependency::from_requirement(&self.conflicts, requirement, None, None)
+                {
+                    let package_id = state
+                        .pubgrub
+                        .package_store
+                        .alloc(dependency.package.clone());
+                    let contexts = state.package_contexts.entry(package_id).or_default();
+                    for source_context in dependency.source_contexts {
+                        contexts.insert(source_context);
+                    }
+                }
+            }
+        }
+    }
+
     #[instrument(skip_all)]
     fn solve(
         self: Arc<Self>,
@@ -346,6 +375,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         );
         let mut preferences = self.preferences.clone();
         let mut forked_states = self.env.initial_forked_states(state)?;
+        for state in &mut forked_states {
+            self.seed_lookahead_source_contexts(state);
+        }
         let mut resolutions = vec![];
 
         'FORK: while let Some(mut state) = forked_states.pop() {
@@ -396,6 +428,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     .map(|(id, range)| (&state.pubgrub.package_store[id], range)),
                                 &self.urls,
                                 &self.indexes,
+                                &self.transitive_sources,
                                 &state.python_requirement,
                                 request_sink,
                             )?;
@@ -613,6 +646,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     continue;
                 }
 
+                let current_source_contexts = state
+                    .package_contexts
+                    .get(&next_id)
+                    .cloned()
+                    .unwrap_or_default();
+
                 // Retrieve that package dependencies.
                 let forked_deps = self.get_dependencies_forking(
                     next_id,
@@ -623,6 +662,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &state.env,
                     &state.python_requirement,
                     &state.pubgrub,
+                    &current_source_contexts,
+                    &current_source_contexts,
+                    true,
                 )?;
 
                 match forked_deps {
@@ -955,6 +997,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 version: _,
                 parent: _,
                 source: _,
+                source_contexts: _,
             } = dependency;
             let url = package.name().and_then(|name| state.fork_urls.get(name));
             let index = package.name().and_then(|name| state.fork_indexes.get(name));
@@ -1032,6 +1075,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         packages: impl Iterator<Item = (&'data PubGrubPackage, &'data Range<Version>)>,
         urls: &Urls,
         indexes: &Indexes,
+        transitive_sources: &TransitiveSources,
         python_requirement: &PythonRequirement,
         request_sink: &Sender<Request>,
     ) -> Result<(), ResolveError> {
@@ -1052,8 +1096,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             if urls.any_url(name) {
                 continue;
             }
-            // Avoid visiting packages that may use an explicit index.
-            if indexes.contains_key(name) {
+            // Avoid visiting packages that may use an explicit index or a transitive source
+            // overlay. Those source decisions are resolved as dependency edges are expanded.
+            if indexes.contains_key(name) || transitive_sources.contains_key(name) {
                 continue;
             }
             request_sink.blocking_send(Request::Prefetch(
@@ -1731,6 +1776,81 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         }
     }
 
+    fn apply_transitive_sources(
+        &self,
+        requirement: &Requirement,
+        group_name: Option<&GroupName>,
+        parent_package: &PubGrubPackage,
+        full_source_contexts: &BTreeSet<RequirementOrigin>,
+        new_source_contexts: &BTreeSet<RequirementOrigin>,
+        first_visit: bool,
+    ) -> Vec<PubGrubDependency> {
+        let mut dependencies = Vec::new();
+
+        if first_visit {
+            dependencies.extend(
+                PubGrubDependency::from_requirement(
+                    &self.conflicts,
+                    Cow::Borrowed(requirement),
+                    group_name,
+                    Some(parent_package),
+                )
+                .map(|mut dependency| {
+                    dependency.source_contexts = full_source_contexts.clone();
+                    dependency
+                }),
+            );
+        }
+
+        for source_context in new_source_contexts {
+            let Some(overlays) = self
+                .transitive_sources
+                .get(&requirement.name, source_context)
+            else {
+                continue;
+            };
+            for overlay in overlays {
+                if matches!(
+                    &overlay.source,
+                    RequirementSource::Registry { specifier, index, .. }
+                        if specifier.is_empty() && index.is_none()
+                ) {
+                    continue;
+                }
+
+                let mut marker = requirement.marker;
+                marker.and(overlay.marker);
+                if marker.is_false() {
+                    continue;
+                }
+
+                let overlay_requirement = Requirement {
+                    name: requirement.name.clone(),
+                    extras: requirement.extras.clone(),
+                    groups: requirement.groups.clone(),
+                    marker,
+                    source: overlay.source.clone(),
+                    origin: overlay.origin.clone(),
+                };
+
+                dependencies.extend(
+                    PubGrubDependency::from_requirement(
+                        &self.conflicts,
+                        Cow::Owned(overlay_requirement),
+                        group_name,
+                        Some(parent_package),
+                    )
+                    .map(|mut dependency| {
+                        dependency.source_contexts = full_source_contexts.clone();
+                        dependency
+                    }),
+                );
+            }
+        }
+
+        dependencies
+    }
+
     /// Given a candidate package and version, return its dependencies.
     #[instrument(skip_all, fields(%package, %version))]
     fn get_dependencies_forking(
@@ -1743,6 +1863,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
+        full_source_contexts: &BTreeSet<RequirementOrigin>,
+        new_source_contexts: &BTreeSet<RequirementOrigin>,
+        first_visit: bool,
     ) -> Result<ForkedDependencies, ResolveError> {
         let result = self.get_dependencies(
             id,
@@ -1753,6 +1876,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             env,
             python_requirement,
             pubgrub,
+            full_source_contexts,
+            new_source_contexts,
+            first_visit,
         );
         if env.marker_environment().is_some() {
             result.map(|deps| match deps {
@@ -1778,6 +1904,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
+        full_source_contexts: &BTreeSet<RequirementOrigin>,
+        new_source_contexts: &BTreeSet<RequirementOrigin>,
+        first_visit: bool,
     ) -> Result<Dependencies, ResolveError> {
         let dependencies = match &**package {
             PubGrubPackageInner::Root(_) => {
@@ -1923,11 +2052,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 requirements
                     .filter(|requirement| !self.excludes.contains(&requirement.name))
                     .flat_map(|requirement| {
-                        PubGrubDependency::from_requirement(
-                            &self.conflicts,
-                            requirement,
+                        self.apply_transitive_sources(
+                            requirement.as_ref(),
                             group.as_ref(),
-                            Some(package),
+                            package,
+                            full_source_contexts,
+                            new_source_contexts,
+                            first_visit,
                         )
                     })
                     .chain(system_dependencies)
@@ -1953,6 +2084,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             version: Range::singleton(version.clone()),
                             parent: None,
                             source: DependencySource::Unspecified,
+                            source_contexts: full_source_contexts.clone(),
                         })
                         .collect(),
                 ));
@@ -1981,6 +2113,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     version: Range::singleton(version.clone()),
                                     parent: None,
                                     source: DependencySource::Unspecified,
+                                    source_contexts: full_source_contexts.clone(),
                                 })
                         })
                         .collect(),
@@ -2007,6 +2140,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             version: Range::singleton(version.clone()),
                             parent: None,
                             source: DependencySource::Unspecified,
+                            source_contexts: full_source_contexts.clone(),
                         })
                         .collect(),
                 ));
@@ -2918,6 +3052,8 @@ pub(crate) struct ForkState {
     /// dependencies). These priorities help determine which package to
     /// consider next during resolution.
     priorities: PubGrubPriorities,
+    /// The local-package source contexts currently associated with each package in this fork.
+    package_contexts: FxHashMap<Id<PubGrubPackage>, BTreeSet<RequirementOrigin>>,
     /// This keeps track of the set of versions for each package that we've
     /// already visited during resolution. This avoids doing redundant work.
     added_dependencies: FxHashMap<Id<PubGrubPackage>, FxHashSet<Version>>,
@@ -2972,6 +3108,7 @@ impl ForkState {
             fork_urls: ForkUrls::default(),
             fork_indexes: ForkIndexes::default(),
             priorities: PubGrubPriorities::default(),
+            package_contexts: FxHashMap::default(),
             added_dependencies: FxHashMap::default(),
             env,
             python_requirement,
@@ -2999,17 +3136,29 @@ impl ForkState {
                 version,
                 parent: _,
                 source,
+                source_contexts,
             } = dependency;
+
+            let package_id = self.pubgrub.package_store.alloc(package.clone());
+            let contexts = self.package_contexts.entry(package_id).or_default();
+            for source_context in source_contexts {
+                contexts.insert(source_context.clone());
+            }
 
             let mut has_url = false;
             if let Some(name) = package.name() {
-                // From the [`Requirement`] to [`PubGrubDependency`] conversion, we get a URL if the
-                // requirement was a URL requirement. `Urls` applies canonicalization to this and
-                // override URLs to both URL and registry requirements, which we then check for
-                // conflicts using [`ForkUrl`].
-                for url in urls.get_url(&self.env, name, source.verbatim_url(), git)? {
+                if let Some(url) = source.allowed_url() {
                     self.fork_urls.insert(name, url, &self.env)?;
                     has_url = true;
+                } else {
+                    // From the [`Requirement`] to [`PubGrubDependency`] conversion, we get a URL if the
+                    // requirement was a URL requirement. `Urls` applies canonicalization to this and
+                    // override URLs to both URL and registry requirements, which we then check for
+                    // conflicts using [`ForkUrl`].
+                    for url in urls.get_url(&self.env, name, source.verbatim_url(), git)? {
+                        self.fork_urls.insert(name, url, &self.env)?;
+                        has_url = true;
+                    }
                 }
 
                 if let Some(index) = source.explicit_index() {
@@ -3096,6 +3245,7 @@ impl ForkState {
                 version,
                 parent: _,
                 source: _,
+                source_contexts: _,
             } = dependency;
 
             let Some(base_package) = package.base_package() else {
@@ -3117,6 +3267,7 @@ impl ForkState {
                     version,
                     parent: _,
                     source: _,
+                    source_contexts: _,
                 } = dependency;
                 (package, version)
             }),

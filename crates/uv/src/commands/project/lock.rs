@@ -25,6 +25,7 @@ use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
+use uv_pep508::RequirementOrigin;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictKind, Conflicts, SupportedEnvironments};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
@@ -32,7 +33,7 @@ use uv_requirements::ExtrasResolver;
 use uv_requirements::upgrade::{LockedRequirements, read_lock_requirements};
 use uv_resolver::{
     FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, Package, PythonRequirement,
-    ResolverEnvironment, ResolverManifest, SatisfiesResult, UniversalMarker,
+    ResolverEnvironment, ResolverManifest, SatisfiesResult, TransitiveSources, UniversalMarker,
 };
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
@@ -544,6 +545,20 @@ async fn do_lock(
                 sources,
                 client_builder.credentials_cache(),
             )?;
+            let requirements = match target {
+                LockTarget::Workspace(workspace) if workspace.is_non_project() => requirements
+                    .into_iter()
+                    .map(|requirement| Requirement {
+                        origin: Some(RequirementOrigin::Group(
+                            workspace.install_path().join("pyproject.toml"),
+                            None,
+                            name.clone(),
+                        )),
+                        ..requirement
+                    })
+                    .collect(),
+                _ => requirements,
+            };
             Ok((name, requirements))
         })
         .collect::<Result<BTreeMap<_, _>, ProjectError>>()?;
@@ -796,248 +811,226 @@ async fn do_lock(
         preview,
     );
 
-    let mut transitive_constraints = Vec::new();
-    let mut seen_transitive_constraints = BTreeSet::from([Vec::new()]);
-    let mut warned_invalid_existing_lock = false;
+    let transitive_source_overlays =
+        target.transitive_source_overlays(index_locations, sources, client.credentials_cache())?;
+    let transitive_sources =
+        TransitiveSources::from_requirements(transitive_source_overlays.clone());
 
-    loop {
-        let mut constraints = base_constraints.clone();
-        constraints.extend(transitive_constraints.iter().cloned());
+    let constraints = base_constraints.clone();
 
-        let database = DistributionDatabase::new(
-            &client,
-            &build_dispatch,
-            concurrency.downloads_semaphore.clone(),
-        );
+    let database = DistributionDatabase::new(
+        &client,
+        &build_dispatch,
+        concurrency.downloads_semaphore.clone(),
+    );
 
-        // If any of the resolution-determining settings changed, invalidate the lock.
-        let validated_existing_lock = if let Some(existing_lock) = existing_lock.clone() {
-            match ValidatedLock::validate(
-                existing_lock,
-                target.install_path(),
-                packages,
-                &members,
-                required_members,
-                &requirements,
-                &dependency_groups,
-                &constraints,
-                &overrides,
-                &excludes,
-                &build_constraints,
-                &conflicts,
-                environments,
-                required_environments,
-                dependency_metadata,
-                interpreter,
-                &requires_python,
-                index_locations,
-                upgrade,
-                refresh,
-                &options,
+    // If any of the resolution-determining settings changed, invalidate the lock.
+    let validated_existing_lock = if let Some(existing_lock) = existing_lock {
+        match ValidatedLock::validate(
+            existing_lock,
+            target.install_path(),
+            packages,
+            &members,
+            required_members,
+            &requirements,
+            &dependency_groups,
+            &constraints,
+            &overrides,
+            &transitive_source_overlays,
+            &excludes,
+            &build_constraints,
+            &conflicts,
+            environments,
+            required_environments,
+            dependency_metadata,
+            interpreter,
+            &requires_python,
+            index_locations,
+            upgrade,
+            refresh,
+            &options,
+            &hasher,
+            state.index(),
+            &database,
+            printer,
+        )
+        .await
+        {
+            Ok(result) => Some(result),
+            Err(ProjectError::Lock(err)) if err.is_resolution() => {
+                // Resolver errors are not recoverable, as such errors can leave the resolver in a
+                // broken state. Specifically, tasks that fail with an error can be left as pending.
+                return Err(ProjectError::Lock(err));
+            }
+            Err(err) => {
+                warn_user!("Failed to validate existing lockfile: {err}");
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    match validated_existing_lock {
+        // Resolution from the lockfile succeeded.
+        Some(ValidatedLock::Satisfies(lock)) => {
+            // Print the success message after completing resolution.
+            logger.on_complete(lock.len(), start, printer)?;
+
+            Ok(LockResult::Unchanged(lock))
+        }
+
+        // The lockfile did not contain enough information to obtain a resolution, fallback
+        // to a fresh resolve.
+        validated_existing_lock => {
+            // Determine whether we can reuse the existing package versions.
+            let versions_lock = validated_existing_lock
+                .as_ref()
+                .and_then(|lock| match &lock {
+                    ValidatedLock::Satisfies(lock) => Some(lock),
+                    ValidatedLock::Preferable(lock) => Some(lock),
+                    ValidatedLock::Versions(lock) => Some(lock),
+                    ValidatedLock::Unusable(_) => None,
+                });
+
+            // If an existing lockfile exists, build up a set of preferences.
+            let LockedRequirements { preferences, git } = versions_lock
+                .map(|lock| read_lock_requirements(lock, target.install_path(), upgrade))
+                .transpose()?
+                .unwrap_or_default();
+
+            // Populate the Git resolver.
+            for ResolvedRepositoryReference { reference, sha } in git {
+                debug!("Inserting Git reference into resolver: `{reference:?}` at `{sha}`");
+                state.git().insert(reference, sha);
+            }
+
+            // Determine whether we can reuse the existing package forks.
+            let forks_lock = validated_existing_lock
+                .as_ref()
+                .and_then(|lock| match &lock {
+                    ValidatedLock::Satisfies(lock) => Some(lock),
+                    ValidatedLock::Preferable(lock) => Some(lock),
+                    ValidatedLock::Versions(_) => None,
+                    ValidatedLock::Unusable(_) => None,
+                });
+
+            // When we run the same resolution from the lockfile again, we could get a different result the
+            // second time due to the preferences causing us to skip a fork point (see the
+            // `preferences-dependent-forking` packse scenario). To avoid this, we store the forks in the
+            // lockfile. We read those after all the lockfile filters, to allow the forks to change when
+            // the environment changed, e.g. the python bound check above can lead to different forking.
+            let resolver_env = ResolverEnvironment::universal(
+                forks_lock
+                    .map(|lock| {
+                        lock.fork_markers()
+                            .iter()
+                            .copied()
+                            .map(UniversalMarker::combined)
+                            .collect()
+                    })
+                    .unwrap_or_else(|| {
+                        environments
+                            .cloned()
+                            .map(SupportedEnvironments::into_markers)
+                            .unwrap_or_default()
+                    }),
+            );
+
+            // Resolve the requirements.
+            let resolution = pip::operations::resolve(
+                ExtrasResolver::new(&hasher, state.index(), database)
+                    .with_reporter(Arc::new(ResolverReporter::from(printer)))
+                    .resolve(target.members_requirements())
+                    .await
+                    .map_err(|err| ProjectError::Operation(err.into()))?
+                    .into_iter()
+                    .chain(target.group_requirements())
+                    .chain(requirements.iter().cloned())
+                    .chain(
+                        dependency_groups
+                            .values()
+                            .flat_map(|requirements| requirements.iter().cloned()),
+                    )
+                    .map(UnresolvedRequirementSpecification::from)
+                    .collect(),
+                base_constraints
+                    .iter()
+                    .cloned()
+                    .map(NameRequirementSpecification::from)
+                    .chain(external.iter().cloned())
+                    .collect(),
+                overrides
+                    .iter()
+                    .cloned()
+                    .map(UnresolvedRequirementSpecification::from)
+                    .collect(),
+                excludes.clone(),
+                source_trees,
+                // The root is always null in workspaces, it "depends on" the projects
+                None,
+                packages.keys().cloned().collect(),
+                transitive_sources,
+                &extras,
+                &groups,
+                preferences,
+                EmptyInstalledPackages,
                 &hasher,
+                &Reinstall::default(),
+                upgrade,
+                None,
+                resolver_env,
+                python_requirement,
+                interpreter.markers(),
+                conflicts.clone(),
+                &client,
+                &flat_index,
                 state.index(),
-                &database,
+                &build_dispatch,
+                concurrency,
+                options,
+                Box::new(SummaryResolveLogger),
                 printer,
             )
-            .await
-            {
-                Ok(result) => Some(result),
-                Err(ProjectError::Lock(err)) if err.is_resolution() => {
-                    // Resolver errors are not recoverable, as such errors can leave the resolver in a
-                    // broken state. Specifically, tasks that fail with an error can be left as pending.
-                    return Err(ProjectError::Lock(err));
-                }
-                Err(err) => {
-                    if !warned_invalid_existing_lock {
-                        warn_user!("Failed to validate existing lockfile: {err}");
-                        warned_invalid_existing_lock = true;
-                    }
-                    None
-                }
-            }
-        } else {
-            None
-        };
+            .await?;
 
-        let mut resolved = None;
-        let candidate_lock = match validated_existing_lock {
-            Some(ValidatedLock::Satisfies(lock)) => lock,
-            validated_existing_lock => {
-                // Determine whether we can reuse the existing package versions.
-                let versions_lock = validated_existing_lock
-                    .as_ref()
-                    .and_then(|lock| match &lock {
-                        ValidatedLock::Satisfies(lock) => Some(lock),
-                        ValidatedLock::Preferable(lock) => Some(lock),
-                        ValidatedLock::Versions(lock) => Some(lock),
-                        ValidatedLock::Unusable(_) => None,
-                    });
+            let lock = Lock::from_resolution(
+                &resolution,
+                target.install_path(),
+                lock_supported_environments.clone().into_markers(),
+            )?;
 
-                // If an existing lockfile exists, build up a set of preferences.
-                let LockedRequirements { preferences, git } = versions_lock
-                    .map(|lock| read_lock_requirements(lock, target.install_path(), upgrade))
-                    .transpose()?
-                    .unwrap_or_default();
+            // Print the success message after completing resolution.
+            logger.on_complete(resolution.len(), start, printer)?;
 
-                // Populate the Git resolver.
-                for ResolvedRepositoryReference { reference, sha } in git {
-                    debug!("Inserting Git reference into resolver: `{reference:?}` at `{sha}`");
-                    state.git().insert(reference, sha);
-                }
+            // Notify the user of any resolution diagnostics.
+            pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
-                // Determine whether we can reuse the existing package forks.
-                let forks_lock = validated_existing_lock
-                    .as_ref()
-                    .and_then(|lock| match &lock {
-                        ValidatedLock::Satisfies(lock) => Some(lock),
-                        ValidatedLock::Preferable(lock) => Some(lock),
-                        ValidatedLock::Versions(_) => None,
-                        ValidatedLock::Unusable(_) => None,
-                    });
+            let manifest = ResolverManifest::new(
+                members,
+                requirements,
+                constraints,
+                overrides,
+                transitive_source_overlays,
+                excludes.clone(),
+                build_constraints,
+                dependency_groups,
+                dependency_metadata.values().cloned(),
+            )
+            .relative_to(target.install_path())?;
 
-                // When we run the same resolution from the lockfile again, we could get a different
-                // result the second time due to the preferences causing us to skip a fork point (see
-                // the `preferences-dependent-forking` packse scenario). To avoid this, we store the
-                // forks in the lockfile. We read those after all the lockfile filters, to allow the
-                // forks to change when the environment changed, e.g. the python bound check above can
-                // lead to different forking.
-                let resolver_env = ResolverEnvironment::universal(
-                    forks_lock
-                        .map(|lock| {
-                            lock.fork_markers()
-                                .iter()
-                                .copied()
-                                .map(UniversalMarker::combined)
-                                .collect()
-                        })
-                        .unwrap_or_else(|| {
-                            environments
-                                .cloned()
-                                .map(SupportedEnvironments::into_markers)
-                                .unwrap_or_default()
-                        }),
-                );
-
-                // Resolve the requirements.
-                let resolution = pip::operations::resolve(
-                    ExtrasResolver::new(&hasher, state.index(), database)
-                        .with_reporter(Arc::new(ResolverReporter::from(printer)))
-                        .resolve(target.members_requirements())
-                        .await
-                        .map_err(|err| ProjectError::Operation(err.into()))?
-                        .into_iter()
-                        .chain(target.group_requirements())
-                        .chain(requirements.iter().cloned())
-                        .chain(
-                            dependency_groups
-                                .values()
-                                .flat_map(|requirements| requirements.iter().cloned()),
-                        )
-                        .map(UnresolvedRequirementSpecification::from)
-                        .collect(),
-                    constraints
-                        .iter()
-                        .cloned()
-                        .map(NameRequirementSpecification::from)
-                        .chain(external.iter().cloned())
-                        .collect(),
-                    overrides
-                        .iter()
-                        .cloned()
-                        .map(UnresolvedRequirementSpecification::from)
-                        .collect(),
-                    excludes.clone(),
-                    source_trees.clone(),
-                    // The root is always null in workspaces, it "depends on" the projects
-                    None,
-                    packages.keys().cloned().collect(),
-                    &extras,
-                    &groups,
-                    preferences,
-                    EmptyInstalledPackages,
-                    &hasher,
-                    &Reinstall::default(),
-                    upgrade,
-                    None,
-                    resolver_env,
-                    python_requirement.clone(),
-                    interpreter.markers(),
-                    conflicts.clone(),
-                    &client,
-                    &flat_index,
-                    state.index(),
-                    &build_dispatch,
-                    concurrency,
-                    options.clone(),
-                    Box::new(SummaryResolveLogger),
-                    printer,
-                )
-                .await?;
-
-                let manifest = ResolverManifest::new(
-                    members.clone(),
-                    requirements.clone(),
-                    constraints.clone(),
-                    overrides.clone(),
-                    excludes.clone(),
-                    build_constraints.clone(),
-                    dependency_groups.clone(),
-                    dependency_metadata.values().cloned(),
-                )
-                .relative_to(target.install_path())?;
-                let lock = Lock::from_resolution(
-                    &resolution,
-                    target.install_path(),
-                    lock_supported_environments.clone().into_markers(),
-                )?
+            let previous = validated_existing_lock.map(ValidatedLock::into_lock);
+            let lock = lock
                 .with_manifest(manifest)
-                .with_conflicts(conflicts.clone())
-                .with_required_environments(lock_required_environments.clone().into_markers());
-                resolved = Some((validated_existing_lock, resolution));
-                lock
+                .with_conflicts(conflicts)
+                .with_required_environments(lock_required_environments.into_markers());
+
+            if previous.as_ref().is_some_and(|previous| *previous == lock) {
+                Ok(LockResult::Unchanged(lock))
+            } else {
+                Ok(LockResult::Changed(previous, lock))
             }
-        };
-
-        let next_transitive_constraints = target.lower_transitive_source_constraints(
-            &candidate_lock,
-            index_locations,
-            sources,
-            client.credentials_cache(),
-        )?;
-
-        if next_transitive_constraints == transitive_constraints {
-            if let Some((validated_existing_lock, resolution)) = resolved {
-                // Print the success message after completing resolution.
-                logger.on_complete(resolution.len(), start, printer)?;
-
-                // Notify the user of any resolution diagnostics.
-                pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
-
-                let previous = validated_existing_lock.map(ValidatedLock::into_lock);
-
-                return if previous
-                    .as_ref()
-                    .is_some_and(|previous| *previous == candidate_lock)
-                {
-                    Ok(LockResult::Unchanged(candidate_lock))
-                } else {
-                    Ok(LockResult::Changed(previous, candidate_lock))
-                };
-            }
-
-            // Resolution from the lockfile succeeded.
-            logger.on_complete(candidate_lock.len(), start, printer)?;
-            return Ok(LockResult::Unchanged(candidate_lock));
         }
-
-        let mut fingerprint = next_transitive_constraints.clone();
-        fingerprint.sort_unstable();
-        if !seen_transitive_constraints.insert(fingerprint) {
-            return Err(ProjectError::Anyhow(anyhow::anyhow!(
-                "transitive source constraints did not stabilize"
-            )));
-        }
-        transitive_constraints = next_transitive_constraints;
     }
 }
 
@@ -1067,6 +1060,7 @@ impl ValidatedLock {
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         constraints: &[Requirement],
         overrides: &[Requirement],
+        transitive_sources: &[Requirement],
         excludes: &[PackageName],
         build_constraints: &[Requirement],
         conflicts: &Conflicts,
@@ -1269,6 +1263,7 @@ impl ValidatedLock {
                 requirements,
                 constraints,
                 overrides,
+                transitive_sources,
                 excludes,
                 build_constraints,
                 dependency_groups,
@@ -1358,6 +1353,13 @@ impl ValidatedLock {
             SatisfiesResult::MismatchedOverrides(expected, actual) => {
                 debug!(
                     "Resolving despite existing lockfile due to mismatched overrides:\n  Requested: {:?}\n  Existing: {:?}",
+                    expected, actual
+                );
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedTransitiveSources(expected, actual) => {
+                debug!(
+                    "Resolving despite existing lockfile due to mismatched transitive sources:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))

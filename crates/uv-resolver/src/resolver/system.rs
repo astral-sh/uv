@@ -50,6 +50,7 @@ impl From<SystemDependency> for PubGrubDependency {
             version: Ranges::singleton(value.version),
             parent: None,
             source: DependencySource::Unspecified,
+            source_contexts: std::collections::BTreeSet::default(),
         }
     }
 }

@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::BTreeSet;
 use std::iter;
 
 use either::Either;
@@ -8,10 +9,7 @@ use uv_distribution_types::{IndexMetadata, Requirement, RequirementSource};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::RequirementOrigin;
-use uv_pypi_types::{
-    ConflictItemRef, Conflicts, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl,
-    ParsedUrl, VerbatimParsedUrl,
-};
+use uv_pypi_types::{ConflictItemRef, Conflicts, VerbatimParsedUrl};
 
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
 
@@ -27,6 +25,8 @@ pub(crate) enum DependencySource {
     Unspecified,
     /// The dependency was introduced by a direct URL-like requirement.
     Url(Box<VerbatimParsedUrl>),
+    /// The dependency was introduced by a local transitive source overlay.
+    AllowedUrl(Box<VerbatimParsedUrl>),
     /// The dependency was introduced by a requirement pinned to an explicit index.
     ExplicitIndex(IndexMetadata),
 }
@@ -59,7 +59,13 @@ impl DependencySource {
                 .source
                 .to_verbatim_parsed_url()
                 .map(Box::new)
-                .map(Self::Url)
+                .map(|url| {
+                    if requirement.origin.is_some() {
+                        Self::AllowedUrl(url)
+                    } else {
+                        Self::Url(url)
+                    }
+                })
                 .unwrap_or(Self::Unspecified),
         }
     }
@@ -67,8 +73,16 @@ impl DependencySource {
     /// Return the direct URL attached to this source, if any.
     pub(crate) fn verbatim_url(&self) -> Option<&VerbatimParsedUrl> {
         match self {
-            Self::Url(url) => Some(url.as_ref()),
+            Self::Url(url) | Self::AllowedUrl(url) => Some(url.as_ref()),
             Self::Unspecified | Self::ExplicitIndex(_) => None,
+        }
+    }
+
+    /// Return the URL attached to a local transitive source overlay, if any.
+    pub(crate) fn allowed_url(&self) -> Option<&VerbatimParsedUrl> {
+        match self {
+            Self::AllowedUrl(url) => Some(url.as_ref()),
+            Self::Unspecified | Self::Url(_) | Self::ExplicitIndex(_) => None,
         }
     }
 
@@ -76,9 +90,84 @@ impl DependencySource {
     pub(crate) fn explicit_index(&self) -> Option<&IndexMetadata> {
         match self {
             Self::ExplicitIndex(index) => Some(index),
-            Self::Unspecified | Self::Url(_) => None,
+            Self::Unspecified | Self::Url(_) | Self::AllowedUrl(_) => None,
         }
     }
+}
+
+fn base_source_context(origin: &RequirementOrigin) -> RequirementOrigin {
+    match origin {
+        RequirementOrigin::File(path) => RequirementOrigin::File(path.clone()),
+        RequirementOrigin::Project(path, project_name) => {
+            RequirementOrigin::Project(path.clone(), project_name.clone())
+        }
+        RequirementOrigin::Extra(path, Some(project_name), _) => {
+            RequirementOrigin::Project(path.clone(), project_name.clone())
+        }
+        RequirementOrigin::Extra(path, None, _) => RequirementOrigin::File(path.clone()),
+        RequirementOrigin::Group(path, Some(project_name), _) => {
+            RequirementOrigin::Project(path.clone(), project_name.clone())
+        }
+        RequirementOrigin::Group(_, None, _) | RequirementOrigin::Workspace => {
+            RequirementOrigin::Workspace
+        }
+    }
+}
+
+fn source_contexts_for_requirement(
+    origin: Option<&RequirementOrigin>,
+    extra: Option<&ExtraName>,
+    group: Option<&GroupName>,
+) -> BTreeSet<RequirementOrigin> {
+    let mut contexts = BTreeSet::new();
+
+    let Some(origin) = origin else {
+        return contexts;
+    };
+
+    let base = base_source_context(origin);
+    contexts.insert(base.clone());
+
+    match origin {
+        RequirementOrigin::Extra(path, project_name, source_extra) => {
+            contexts.insert(RequirementOrigin::Extra(
+                path.clone(),
+                project_name.clone(),
+                source_extra.clone(),
+            ));
+        }
+        RequirementOrigin::Group(path, project_name, source_group) => {
+            contexts.insert(RequirementOrigin::Group(
+                path.clone(),
+                project_name.clone(),
+                source_group.clone(),
+            ));
+        }
+        RequirementOrigin::Project(path, project_name) => {
+            if let Some(extra) = extra {
+                contexts.insert(RequirementOrigin::Extra(
+                    path.clone(),
+                    Some(project_name.clone()),
+                    extra.clone(),
+                ));
+            }
+            if let Some(group) = group {
+                contexts.insert(RequirementOrigin::Group(
+                    path.clone(),
+                    Some(project_name.clone()),
+                    group.clone(),
+                ));
+            }
+        }
+        RequirementOrigin::File(path) => {
+            if let Some(extra) = extra {
+                contexts.insert(RequirementOrigin::Extra(path.clone(), None, extra.clone()));
+            }
+        }
+        RequirementOrigin::Workspace => {}
+    }
+
+    contexts
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -107,6 +196,9 @@ pub(crate) struct PubGrubDependency {
     /// or group-scoped explicit indexes. Manifest-wide URL and index constraints are still applied
     /// separately via `Urls` and `Indexes`.
     pub(crate) source: DependencySource,
+
+    /// The originating local-package contexts that should propagate through this edge.
+    pub(crate) source_contexts: BTreeSet<RequirementOrigin>,
 }
 
 impl PubGrubDependency {
@@ -168,6 +260,11 @@ impl PubGrubDependency {
 
         // Add the package, plus any extra variants.
         iter.map(move |(extra, group)| {
+            let source_contexts = source_contexts_for_requirement(
+                requirement.origin.as_ref(),
+                extra.as_ref(),
+                group.as_ref(),
+            );
             let pubgrub_requirement =
                 PubGrubRequirement::from_requirement(&requirement, extra, group);
             let PubGrubRequirement {
@@ -185,6 +282,7 @@ impl PubGrubDependency {
                         None
                     },
                     source,
+                    source_contexts,
                 },
                 PubGrubPackageInner::Marker { .. } => Self {
                     package,
@@ -195,6 +293,7 @@ impl PubGrubDependency {
                         None
                     },
                     source,
+                    source_contexts,
                 },
                 PubGrubPackageInner::Extra { name, .. } => {
                     if group_name.is_none() {
@@ -208,6 +307,7 @@ impl PubGrubDependency {
                         version,
                         parent: None,
                         source,
+                        source_contexts,
                     }
                 }
                 PubGrubPackageInner::Group { name, .. } => {
@@ -222,6 +322,7 @@ impl PubGrubDependency {
                         version,
                         parent: None,
                         source,
+                        source_contexts,
                     }
                 }
                 PubGrubPackageInner::Root(_) => unreachable!("Root package in dependencies"),
@@ -266,68 +367,21 @@ impl PubGrubRequirement {
         extra: Option<ExtraName>,
         group: Option<GroupName>,
     ) -> Self {
-        let (verbatim_url, parsed_url) = match &requirement.source {
-            RequirementSource::Registry { specifier, .. } => {
-                return Self::from_registry_requirement(specifier, extra, group, requirement);
-            }
-            RequirementSource::Url {
-                subdirectory,
-                location,
-                ext,
-                url,
-            } => {
-                let parsed_url = ParsedUrl::Archive(ParsedArchiveUrl::from_source(
-                    location.clone(),
-                    subdirectory.clone(),
-                    *ext,
-                ));
-                (url, parsed_url)
-            }
-            RequirementSource::Git {
-                git,
-                url,
-                subdirectory,
-            } => {
-                let parsed_url =
-                    ParsedUrl::Git(ParsedGitUrl::from_source(git.clone(), subdirectory.clone()));
-                (url, parsed_url)
-            }
-            RequirementSource::Path {
-                ext,
-                url,
-                install_path,
-            } => {
-                let parsed_url = ParsedUrl::Path(ParsedPathUrl::from_source(
-                    install_path.clone(),
-                    *ext,
-                    url.to_url(),
-                ));
-                (url, parsed_url)
-            }
-            RequirementSource::Directory {
-                editable,
-                r#virtual,
-                url,
-                install_path,
-            } => {
-                let parsed_url = ParsedUrl::Directory(ParsedDirectoryUrl::from_source(
-                    install_path.clone(),
-                    *editable,
-                    *r#virtual,
-                    url.to_url(),
-                ));
-                (url, parsed_url)
-            }
+        let RequirementSource::Registry { specifier, .. } = &requirement.source else {
+            let source = DependencySource::from_requirement(requirement);
+            debug_assert!(matches!(
+                source,
+                DependencySource::Url(_) | DependencySource::AllowedUrl(_)
+            ));
+
+            return Self {
+                package: Self::package_for_requirement(requirement, extra, group),
+                version: Ranges::full(),
+                source,
+            };
         };
 
-        Self {
-            package: Self::package_for_requirement(requirement, extra, group),
-            version: Ranges::full(),
-            source: DependencySource::Url(Box::new(VerbatimParsedUrl {
-                parsed_url,
-                verbatim: verbatim_url.clone(),
-            })),
-        }
+        Self::from_registry_requirement(specifier, extra, group, requirement)
     }
 
     fn from_registry_requirement(

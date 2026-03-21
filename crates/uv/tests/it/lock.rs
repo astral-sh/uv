@@ -19942,6 +19942,7 @@ fn lock_non_project_sources() -> Result<()> {
         exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
+        transitive-sources = [{ name = "idna", url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl" }]
 
         [manifest.dependency-groups]
         dev = [{ name = "idna", url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl" }]

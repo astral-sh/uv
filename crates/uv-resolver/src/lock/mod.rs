@@ -1211,6 +1211,26 @@ impl Lock {
                 manifest_table.insert("overrides", value(overrides));
             }
 
+            if !self.manifest.transitive_sources.is_empty() {
+                let transitive_sources = self
+                    .manifest
+                    .transitive_sources
+                    .iter()
+                    .map(|requirement| {
+                        serde::Serialize::serialize(
+                            &requirement,
+                            toml_edit::ser::ValueSerializer::new(),
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let transitive_sources = match transitive_sources.as_slice() {
+                    [] => Array::new(),
+                    [requirement] => Array::from_iter([requirement]),
+                    transitive_sources => each_element_on_its_line_array(transitive_sources.iter()),
+                };
+                manifest_table.insert("transitive-sources", value(transitive_sources));
+            }
+
             if !self.manifest.excludes.is_empty() {
                 let excludes = self
                     .manifest
@@ -1512,6 +1532,7 @@ impl Lock {
         requirements: &[Requirement],
         constraints: &[Requirement],
         overrides: &[Requirement],
+        transitive_sources: &[Requirement],
         excludes: &[PackageName],
         build_constraints: &[Requirement],
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
@@ -1626,6 +1647,27 @@ impl Lock {
                 .collect::<Result<_, _>>()?;
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedOverrides(expected, actual));
+            }
+        }
+
+        // Validate that the lockfile was generated with the same transitive source overlays.
+        {
+            let expected: BTreeSet<_> = transitive_sources
+                .iter()
+                .cloned()
+                .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
+                .collect::<Result<_, _>>()?;
+            let actual: BTreeSet<_> = self
+                .manifest
+                .transitive_sources
+                .iter()
+                .cloned()
+                .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
+                .collect::<Result<_, _>>()?;
+            if expected != actual {
+                return Ok(SatisfiesResult::MismatchedTransitiveSources(
+                    expected, actual,
+                ));
             }
         }
 
@@ -2207,6 +2249,8 @@ pub enum SatisfiesResult<'lock> {
     MismatchedConstraints(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of overrides.
     MismatchedOverrides(BTreeSet<Requirement>, BTreeSet<Requirement>),
+    /// The lockfile uses a different set of transitive source overlays.
+    MismatchedTransitiveSources(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of excludes.
     MismatchedExcludes(BTreeSet<PackageName>, BTreeSet<PackageName>),
     /// The lockfile uses a different set of build constraints.
@@ -2327,6 +2371,9 @@ pub struct ResolverManifest {
     /// The overrides provided to the resolver.
     #[serde(default)]
     overrides: BTreeSet<Requirement>,
+    /// The transitive source overlays provided to the resolver.
+    #[serde(default)]
+    transitive_sources: BTreeSet<Requirement>,
     /// The excludes provided to the resolver.
     #[serde(default)]
     excludes: BTreeSet<PackageName>,
@@ -2346,6 +2393,7 @@ impl ResolverManifest {
         requirements: impl IntoIterator<Item = Requirement>,
         constraints: impl IntoIterator<Item = Requirement>,
         overrides: impl IntoIterator<Item = Requirement>,
+        transitive_sources: impl IntoIterator<Item = Requirement>,
         excludes: impl IntoIterator<Item = PackageName>,
         build_constraints: impl IntoIterator<Item = Requirement>,
         dependency_groups: impl IntoIterator<Item = (GroupName, Vec<Requirement>)>,
@@ -2356,6 +2404,7 @@ impl ResolverManifest {
             requirements: requirements.into_iter().collect(),
             constraints: constraints.into_iter().collect(),
             overrides: overrides.into_iter().collect(),
+            transitive_sources: transitive_sources.into_iter().collect(),
             excludes: excludes.into_iter().collect(),
             build_constraints: build_constraints.into_iter().collect(),
             dependency_groups: dependency_groups
@@ -2382,6 +2431,11 @@ impl ResolverManifest {
                 .collect::<Result<BTreeSet<_>, _>>()?,
             overrides: self
                 .overrides
+                .into_iter()
+                .map(|requirement| requirement.relative_to(root))
+                .collect::<Result<BTreeSet<_>, _>>()?,
+            transitive_sources: self
+                .transitive_sources
                 .into_iter()
                 .map(|requirement| requirement.relative_to(root))
                 .collect::<Result<BTreeSet<_>, _>>()?,

@@ -42,6 +42,7 @@ use uv_requirements::{
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
     Preferences, PythonRequirement, Resolver, ResolverEnvironment, ResolverOutput,
+    TransitiveSources,
 };
 use uv_tool::InstalledTools;
 use uv_types::{BuildContext, HashStrategy, InFlight, InstalledPackagesProvider};
@@ -112,6 +113,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     source_trees: Vec<SourceTree>,
     mut project: Option<PackageName>,
     workspace_members: BTreeSet<PackageName>,
+    transitive_sources: TransitiveSources,
     extras: &ExtrasSpecification,
     groups: &BTreeMap<PathBuf, DependencyGroups>,
     preferences: Vec<Preference>,
@@ -348,6 +350,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         workspace_members,
         exclusions,
         lookaheads,
+        transitive_sources,
     );
 
     // Resolve the dependencies.

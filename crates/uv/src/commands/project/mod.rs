@@ -38,7 +38,7 @@ use uv_requirements::upgrade::{LockedRequirements, read_lock_requirements};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
 use uv_resolver::{
     FlatIndex, Installable, Lock, OptionsBuilder, Preference, PythonRequirement,
-    ResolverEnvironment, ResolverOutput,
+    ResolverEnvironment, ResolverOutput, TransitiveSources,
 };
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
@@ -2178,6 +2178,7 @@ pub(crate) async fn resolve_environment(
         source_trees,
         project,
         BTreeSet::default(),
+        TransitiveSources::default(),
         &extras,
         &groups,
         preferences,
@@ -2573,6 +2574,7 @@ pub(crate) async fn update_environment(
         source_trees,
         project,
         BTreeSet::default(),
+        TransitiveSources::default(),
         &extras,
         &groups,
         preferences,

@@ -9,7 +9,7 @@ use uv_normalize::PackageName;
 use uv_types::RequestedRequirements;
 
 use crate::preferences::Preferences;
-use crate::{DependencyMode, Exclusions, ResolverEnvironment};
+use crate::{DependencyMode, Exclusions, ResolverEnvironment, TransitiveSources};
 
 /// A manifest of requirements, constraints, and preferences.
 #[derive(Clone, Debug)]
@@ -51,6 +51,9 @@ pub struct Manifest {
     /// determinations around "allowed" versions (for example, "allowed" URLs or "allowed"
     /// pre-release versions).
     pub(crate) lookaheads: Vec<RequestedRequirements>,
+
+    /// Context-scoped source overlays for transitive dependencies.
+    pub(crate) transitive_sources: TransitiveSources,
 }
 
 impl Manifest {
@@ -64,6 +67,7 @@ impl Manifest {
         workspace_members: BTreeSet<PackageName>,
         exclusions: Exclusions,
         lookaheads: Vec<RequestedRequirements>,
+        transitive_sources: TransitiveSources,
     ) -> Self {
         Self {
             requirements,
@@ -75,6 +79,7 @@ impl Manifest {
             workspace_members,
             exclusions,
             lookaheads,
+            transitive_sources,
         }
     }
 
@@ -89,6 +94,7 @@ impl Manifest {
             exclusions: Exclusions::default(),
             workspace_members: BTreeSet::new(),
             lookaheads: Vec::new(),
+            transitive_sources: TransitiveSources::default(),
         }
     }
 

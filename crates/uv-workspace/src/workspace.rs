@@ -14,7 +14,7 @@ use uv_distribution_types::{Index, Requirement, RequirementSource};
 use uv_fs::{CWD, Simplified};
 use uv_normalize::{DEV_DEPENDENCIES, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
-use uv_pep508::{MarkerTree, VerbatimUrl};
+use uv_pep508::{MarkerTree, RequirementOrigin, VerbatimUrl};
 use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
@@ -367,8 +367,9 @@ impl Workspace {
     pub fn members_requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
         self.packages.iter().filter_map(|(name, member)| {
             let url = VerbatimUrl::from_absolute_path(&member.root).expect("path is valid URL");
+            let project_name = member.pyproject_toml.project.as_ref()?.name.clone();
             Some(Requirement {
-                name: member.pyproject_toml.project.as_ref()?.name.clone(),
+                name: project_name.clone(),
                 extras: Box::new([]),
                 groups: Box::new([]),
                 marker: MarkerTree::TRUE,
@@ -396,7 +397,10 @@ impl Workspace {
                         url,
                     }
                 },
-                origin: None,
+                origin: Some(RequirementOrigin::Project(
+                    member.root.join("pyproject.toml"),
+                    project_name,
+                )),
             })
         })
     }
@@ -473,7 +477,7 @@ impl Workspace {
 
     /// Returns the set of all workspace member dependency groups.
     pub fn group_requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
-        self.packages.iter().filter_map(|(name, member)| {
+        self.packages.iter().flat_map(|(name, member)| {
             let url = VerbatimUrl::from_absolute_path(&member.root).expect("path is valid URL");
 
             let groups = {
@@ -496,36 +500,49 @@ impl Workspace {
                 }
                 groups
             };
-            if groups.is_empty() {
-                return None;
-            }
 
             let value = self.required_members.get(name);
             let is_required_member = value.is_some();
             let editability = value.copied().flatten();
+            let Some(project_name) = member
+                .pyproject_toml
+                .project
+                .as_ref()
+                .map(|project| project.name.clone())
+            else {
+                return Vec::new().into_iter();
+            };
 
-            Some(Requirement {
-                name: member.pyproject_toml.project.as_ref()?.name.clone(),
-                extras: Box::new([]),
-                groups: groups.into_boxed_slice(),
-                marker: MarkerTree::TRUE,
-                source: if member.pyproject_toml().is_package(!is_required_member) {
-                    RequirementSource::Directory {
-                        install_path: member.root.clone().into_boxed_path(),
-                        editable: Some(editability.unwrap_or(true)),
-                        r#virtual: Some(false),
-                        url,
-                    }
-                } else {
-                    RequirementSource::Directory {
-                        install_path: member.root.clone().into_boxed_path(),
-                        editable: Some(false),
-                        r#virtual: Some(true),
-                        url,
-                    }
-                },
-                origin: None,
-            })
+            groups
+                .into_iter()
+                .map(move |group| Requirement {
+                    name: project_name.clone(),
+                    extras: Box::new([]),
+                    groups: Box::new([group.clone()]),
+                    marker: MarkerTree::TRUE,
+                    source: if member.pyproject_toml().is_package(!is_required_member) {
+                        RequirementSource::Directory {
+                            install_path: member.root.clone().into_boxed_path(),
+                            editable: Some(editability.unwrap_or(true)),
+                            r#virtual: Some(false),
+                            url: url.clone(),
+                        }
+                    } else {
+                        RequirementSource::Directory {
+                            install_path: member.root.clone().into_boxed_path(),
+                            editable: Some(false),
+                            r#virtual: Some(true),
+                            url: url.clone(),
+                        }
+                    },
+                    origin: Some(RequirementOrigin::Group(
+                        member.root.join("pyproject.toml"),
+                        Some(project_name.clone()),
+                        group,
+                    )),
+                })
+                .collect::<Vec<_>>()
+                .into_iter()
         })
     }
 

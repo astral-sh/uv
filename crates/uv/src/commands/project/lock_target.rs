@@ -1,8 +1,7 @@
 use itertools::Either;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
-use tracing::{debug, info_span};
+use tracing::info_span;
 
 use uv_auth::CredentialsCache;
 use uv_configuration::{DependencyGroupsWithDefaults, NoSources};
@@ -12,12 +11,10 @@ use uv_distribution_types::{
 };
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::{MarkerTree, RequirementOrigin};
-use uv_pypi_types::{Conflicts, LenientRequirement, SupportedEnvironments, VerbatimParsedUrl};
+use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
 use uv_resolver::{Lock, LockVersion, VERSION};
 use uv_scripts::Pep723Script;
-use uv_workspace::dependency_groups::{
-    DependencyGroupError, FlatDependencyGroup, FlatDependencyGroups,
-};
+use uv_workspace::dependency_groups::{DependencyGroupError, FlatDependencyGroup};
 use uv_workspace::{Editability, Workspace, WorkspaceMember};
 
 use crate::commands::project::{ProjectError, find_requires_python};
@@ -41,174 +38,6 @@ impl<'lock> From<&'lock Pep723Script> for LockTarget<'lock> {
     }
 }
 
-#[derive(Debug, Default)]
-struct DirectDependencyContexts {
-    base: BTreeSet<PackageName>,
-    extras: BTreeSet<(PackageName, ExtraName)>,
-    groups: BTreeSet<(PackageName, GroupName)>,
-}
-
-impl DirectDependencyContexts {
-    fn insert_base(&mut self, requirement: &uv_pep508::Requirement<VerbatimParsedUrl>) {
-        self.base.insert(requirement.name.clone());
-    }
-
-    fn insert_extra(
-        &mut self,
-        requirement: &uv_pep508::Requirement<VerbatimParsedUrl>,
-        extra: &ExtraName,
-    ) {
-        self.extras
-            .insert((requirement.name.clone(), extra.clone()));
-    }
-
-    fn insert_group(
-        &mut self,
-        requirement: &uv_pep508::Requirement<VerbatimParsedUrl>,
-        group: &GroupName,
-    ) {
-        self.groups
-            .insert((requirement.name.clone(), group.clone()));
-    }
-
-    /// Populate direct dependency contexts from a `pyproject.toml`'s project table and dependency
-    /// groups.
-    fn collect_from_pyproject_toml(
-        &mut self,
-        path: &Path,
-        pyproject_toml: &uv_workspace::pyproject::PyProjectToml,
-    ) -> Result<(), DependencyGroupError> {
-        if let Some(project) = &pyproject_toml.project {
-            if let Some(dependencies) = &project.dependencies {
-                for requirement in dependencies.iter().filter_map(|dependency| {
-                    LenientRequirement::<VerbatimParsedUrl>::from_str(dependency)
-                        .inspect_err(|err| {
-                            debug!("Failed to parse dependency `{dependency}`: {err}");
-                        })
-                        .ok()
-                }) {
-                    let requirement: uv_pep508::Requirement<VerbatimParsedUrl> = requirement.into();
-                    self.insert_base(&requirement);
-                }
-            }
-
-            if let Some(optional_dependencies) = &project.optional_dependencies {
-                for (extra, dependencies) in optional_dependencies {
-                    for requirement in dependencies.iter().filter_map(|dependency| {
-                        LenientRequirement::<VerbatimParsedUrl>::from_str(dependency)
-                            .inspect_err(|err| {
-                                debug!("Failed to parse dependency `{dependency}`: {err}");
-                            })
-                            .ok()
-                    }) {
-                        let requirement: uv_pep508::Requirement<VerbatimParsedUrl> =
-                            requirement.into();
-                        self.insert_extra(&requirement, extra);
-                    }
-                }
-            }
-        }
-
-        let dependency_groups = FlatDependencyGroups::from_pyproject_toml(path, pyproject_toml)?;
-        for (group, flat_group) in dependency_groups {
-            for requirement in &flat_group.requirements {
-                self.insert_group(requirement, &group);
-            }
-        }
-
-        Ok(())
-    }
-
-    fn is_direct(
-        &self,
-        package: &PackageName,
-        extra: Option<&ExtraName>,
-        group: Option<&GroupName>,
-    ) -> bool {
-        match (extra, group) {
-            (Some(extra), None) => self.extras.contains(&(package.clone(), extra.clone())),
-            (None, Some(group)) => self.groups.contains(&(package.clone(), group.clone())),
-            (None, None) => self.base.contains(package),
-            // Sources have either `extra` or `group`, never both, so this case is unreachable
-            // via `source_scopes`.
-            (Some(_), Some(_)) => false,
-        }
-    }
-}
-
-#[derive(Debug, Default)]
-struct ReachableDependencyContexts {
-    all: BTreeSet<PackageName>,
-    base: BTreeSet<PackageName>,
-    extras: BTreeSet<(PackageName, ExtraName)>,
-    groups: BTreeSet<(PackageName, GroupName)>,
-}
-
-impl ReachableDependencyContexts {
-    fn extend_base(&mut self, packages: BTreeSet<PackageName>) {
-        self.all.extend(packages.iter().cloned());
-        self.base.extend(packages);
-    }
-
-    fn extend_extra(&mut self, extra: &ExtraName, packages: BTreeSet<PackageName>) {
-        for package in packages {
-            self.all.insert(package.clone());
-            self.extras.insert((package, extra.clone()));
-        }
-    }
-
-    fn extend_group(&mut self, group: &GroupName, packages: BTreeSet<PackageName>) {
-        for package in packages {
-            self.all.insert(package.clone());
-            self.groups.insert((package, group.clone()));
-        }
-    }
-
-    fn reaches(
-        &self,
-        package: &PackageName,
-        extra: Option<&ExtraName>,
-        group: Option<&GroupName>,
-    ) -> bool {
-        match (extra, group) {
-            (Some(extra), None) => self.extras.contains(&(package.clone(), extra.clone())),
-            (None, Some(group)) => self.groups.contains(&(package.clone(), group.clone())),
-            (None, None) => self.all.contains(package),
-            (Some(_), Some(_)) => false,
-        }
-    }
-
-    fn requires_unscoped_constraint(
-        &self,
-        package: &PackageName,
-        direct_contexts: &DirectDependencyContexts,
-    ) -> bool {
-        if direct_contexts.base.contains(package) {
-            return false;
-        }
-
-        if self.base.contains(package) {
-            return true;
-        }
-
-        if self.extras.iter().any(|(reachable_package, extra)| {
-            reachable_package == package
-                && !direct_contexts
-                    .extras
-                    .contains(&(package.clone(), extra.clone()))
-        }) {
-            return true;
-        }
-
-        self.groups.iter().any(|(reachable_package, group)| {
-            reachable_package == package
-                && !direct_contexts
-                    .groups
-                    .contains(&(package.clone(), group.clone()))
-        })
-    }
-}
-
 fn is_noop_constraint(requirement: &Requirement) -> bool {
     matches!(
         &requirement.source,
@@ -226,152 +55,18 @@ fn source_scopes(
         .collect()
 }
 
-fn package_reachable_contexts(
-    lock: &Lock,
-    package: &uv_resolver::Package,
-    workspace_members: &BTreeSet<PackageName>,
-    stop_at_workspace_members: bool,
-) -> ReachableDependencyContexts {
-    let mut contexts = ReachableDependencyContexts::default();
-    contexts.extend_base(lock.reachable_packages_from_dependencies(
-        package.dependencies(),
-        workspace_members,
-        stop_at_workspace_members,
-    ));
-    for (extra, dependencies) in package.optional_dependencies() {
-        contexts.extend_extra(
-            extra,
-            lock.reachable_packages_from_dependencies(
-                dependencies,
-                workspace_members,
-                stop_at_workspace_members,
-            ),
-        );
-    }
-    for (group, dependencies) in package.resolved_dependency_groups() {
-        contexts.extend_group(
-            group,
-            lock.reachable_packages_from_dependencies(
-                dependencies,
-                workspace_members,
-                stop_at_workspace_members,
-            ),
-        );
-    }
-    contexts
-}
-
-fn manifest_reachable_contexts(
-    lock: &Lock,
-    workspace_members: &BTreeSet<PackageName>,
-    stop_at_workspace_members: bool,
-) -> ReachableDependencyContexts {
-    let mut contexts = ReachableDependencyContexts::default();
-    let mut base_requirements = Vec::new();
-    let mut extra_requirements: BTreeMap<ExtraName, Vec<&Requirement>> = BTreeMap::new();
-
-    for requirement in lock.requirements() {
-        if let Some(extra) = requirement.marker.top_level_extra_name() {
-            extra_requirements
-                .entry(extra.into_owned())
-                .or_default()
-                .push(requirement);
-        } else {
-            base_requirements.push(requirement);
-        }
-    }
-
-    contexts.extend_base(lock.reachable_packages_from_requirements(
-        base_requirements,
-        workspace_members,
-        stop_at_workspace_members,
-    ));
-    for (extra, requirements) in extra_requirements {
-        contexts.extend_extra(
-            &extra,
-            lock.reachable_packages_from_requirements(
-                requirements,
-                workspace_members,
-                stop_at_workspace_members,
-            ),
-        );
-    }
-    for (group, requirements) in lock.dependency_groups() {
-        contexts.extend_group(
-            group,
-            lock.reachable_packages_from_requirements(
-                requirements.iter(),
-                workspace_members,
-                stop_at_workspace_members,
-            ),
-        );
-    }
-
-    contexts
-}
-
-fn workspace_project_reachable_contexts(
-    lock: &Lock,
-    workspace: &Workspace,
-    project_name: Option<&PackageName>,
-    stop_at_workspace_members: bool,
-) -> ReachableDependencyContexts {
-    let workspace_members = workspace
-        .packages()
-        .keys()
-        .cloned()
-        .collect::<BTreeSet<_>>();
-
-    if let Some(project_name) = project_name {
-        let package = if stop_at_workspace_members {
-            lock.root().filter(|package| package.name() == project_name)
-        } else {
-            lock.packages()
-                .iter()
-                .find(|package| package.name() == project_name)
-        };
-
-        package.map_or_else(ReachableDependencyContexts::default, |package| {
-            package_reachable_contexts(lock, package, &workspace_members, stop_at_workspace_members)
-        })
-    } else {
-        manifest_reachable_contexts(lock, &workspace_members, stop_at_workspace_members)
-    }
-}
-
-fn script_reachable_contexts(lock: &Lock) -> ReachableDependencyContexts {
-    manifest_reachable_contexts(lock, &BTreeSet::default(), false)
-}
-
-struct WorkspaceProjectTransitiveSources<'a> {
+fn collect_workspace_project_transitive_source_overlays(
     project_name: Option<PackageName>,
     project_path: PathBuf,
-    project_root: &'a Path,
-    project_sources: &'a BTreeMap<PackageName, uv_workspace::pyproject::Sources>,
-    inherited_sources: &'a BTreeMap<PackageName, uv_workspace::pyproject::Sources>,
-    project_indexes: &'a [Index],
-    direct_contexts: &'a DirectDependencyContexts,
-    reachable_contexts: &'a ReachableDependencyContexts,
-}
-
-fn lower_workspace_project_transitive_source_constraints(
-    project: WorkspaceProjectTransitiveSources<'_>,
+    project_root: &Path,
+    project_sources: &BTreeMap<PackageName, uv_workspace::pyproject::Sources>,
+    inherited_sources: &BTreeMap<PackageName, uv_workspace::pyproject::Sources>,
+    project_indexes: &[Index],
     workspace: &Workspace,
     locations: &IndexLocations,
     source_strategy: &NoSources,
     credentials_cache: &CredentialsCache,
 ) -> Result<Vec<Requirement>, uv_distribution::MetadataError> {
-    let WorkspaceProjectTransitiveSources {
-        project_name,
-        project_path,
-        project_root,
-        project_sources,
-        inherited_sources,
-        project_indexes,
-        direct_contexts,
-        reachable_contexts,
-    } = project;
-
     let package_names = project_sources
         .keys()
         .chain(inherited_sources.keys())
@@ -380,7 +75,7 @@ fn lower_workspace_project_transitive_source_constraints(
 
     let mut lowered_constraints = Vec::new();
     for package in package_names {
-        if source_strategy.for_package(&package) {
+        if source_strategy.for_package(&package) || workspace.packages().contains_key(&package) {
             continue;
         }
 
@@ -392,19 +87,6 @@ fn lower_workspace_project_transitive_source_constraints(
         };
 
         for (extra, group) in source_scopes(package_sources) {
-            let should_lower = match (extra.as_ref(), group.as_ref()) {
-                (None, None) => {
-                    reachable_contexts.requires_unscoped_constraint(&package, direct_contexts)
-                }
-                _ => {
-                    reachable_contexts.reaches(&package, extra.as_ref(), group.as_ref())
-                        && !direct_contexts.is_direct(&package, extra.as_ref(), group.as_ref())
-                }
-            };
-            if !should_lower {
-                continue;
-            }
-
             let origin = if let Some(extra) = &extra {
                 RequirementOrigin::Extra(project_path.clone(), project_name.clone(), extra.clone())
             } else if let Some(group) = &group {
@@ -416,34 +98,35 @@ fn lower_workspace_project_transitive_source_constraints(
             };
 
             let requirement_name = package.clone();
-            let mut lowered = LoweredRequirement::from_requirement(
-                uv_pep508::Requirement {
-                    name: package.clone(),
-                    extras: Box::default(),
-                    marker: MarkerTree::TRUE,
-                    version_or_url: None,
-                    origin: Some(origin),
-                },
-                project_name.as_ref(),
-                project_root,
-                project_sources,
-                project_indexes,
-                extra.as_ref(),
-                group.as_ref(),
-                locations,
-                workspace,
-                None,
-                credentials_cache,
-            )
-            .map(move |requirement| match requirement {
-                Ok(requirement) => Ok(requirement.into_inner()),
-                Err(err) => Err(uv_distribution::MetadataError::LoweringError(
-                    requirement_name.clone(),
-                    Box::new(err),
-                )),
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-            lowered_constraints.append(&mut lowered);
+            lowered_constraints.extend(
+                LoweredRequirement::from_requirement(
+                    uv_pep508::Requirement {
+                        name: package.clone(),
+                        extras: Box::default(),
+                        marker: MarkerTree::TRUE,
+                        version_or_url: None,
+                        origin: Some(origin),
+                    },
+                    project_name.as_ref(),
+                    project_root,
+                    project_sources,
+                    project_indexes,
+                    extra.as_ref(),
+                    group.as_ref(),
+                    locations,
+                    workspace,
+                    None,
+                    credentials_cache,
+                )
+                .map(move |requirement| match requirement {
+                    Ok(requirement) => Ok(requirement.into_inner()),
+                    Err(err) => Err(uv_distribution::MetadataError::LoweringError(
+                        requirement_name.clone(),
+                        Box::new(err),
+                    )),
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+            );
         }
     }
 
@@ -815,7 +498,25 @@ impl<'lock> LockTarget<'lock> {
 
                 Ok(requirements
                     .into_iter()
-                    .flat_map(|requirement| {
+                    .flat_map(|mut requirement| {
+                        if requirement.origin.is_none() {
+                            requirement.origin = Some(
+                                requirement
+                                    .marker
+                                    .top_level_extra_name()
+                                    .map(|extra| {
+                                        RequirementOrigin::Extra(
+                                            script.path.clone(),
+                                            None,
+                                            extra.into_owned(),
+                                        )
+                                    })
+                                    .unwrap_or_else(|| {
+                                        RequirementOrigin::File(script.path.clone())
+                                    }),
+                            );
+                        }
+
                         // Check if sources should be disabled for this specific package
                         if sources.for_package(&requirement.name) {
                             vec![Ok(Requirement::from(requirement))].into_iter()
@@ -845,11 +546,9 @@ impl<'lock> LockTarget<'lock> {
         }
     }
 
-    /// Lower any `tool.uv.sources` entries that refer to transitive dependencies into synthetic
-    /// constraints.
-    pub(crate) fn lower_transitive_source_constraints(
+    /// Collect any `tool.uv.sources` entries that can apply to transitive dependencies.
+    pub(crate) fn transitive_source_overlays(
         self,
-        lock: &Lock,
         locations: &IndexLocations,
         source_strategy: &NoSources,
         credentials_cache: &CredentialsCache,
@@ -861,7 +560,7 @@ impl<'lock> LockTarget<'lock> {
         match self {
             Self::Workspace(workspace) => {
                 let empty_sources = BTreeMap::default();
-                let mut lowered_constraints = Vec::new();
+                let mut overlays = Vec::new();
 
                 if !workspace.is_non_project() || !workspace.sources().is_empty() {
                     let empty_indexes = vec![];
@@ -873,44 +572,22 @@ impl<'lock> LockTarget<'lock> {
                         .and_then(|uv| uv.index.as_deref())
                         .unwrap_or(&empty_indexes);
 
-                    let mut direct_contexts = DirectDependencyContexts::default();
-                    direct_contexts.collect_from_pyproject_toml(
-                        workspace.install_path(),
-                        workspace.pyproject_toml(),
-                    )?;
-                    let reachable_contexts = workspace_project_reachable_contexts(
-                        lock,
-                        workspace,
+                    overlays.extend(collect_workspace_project_transitive_source_overlays(
                         workspace
                             .pyproject_toml()
                             .project
                             .as_ref()
-                            .map(|project| &project.name),
-                        true,
-                    );
-
-                    lowered_constraints.extend(
-                        lower_workspace_project_transitive_source_constraints(
-                            WorkspaceProjectTransitiveSources {
-                                project_name: workspace
-                                    .pyproject_toml()
-                                    .project
-                                    .as_ref()
-                                    .map(|project| project.name.clone()),
-                                project_path: workspace.install_path().join("pyproject.toml"),
-                                project_root: workspace.install_path(),
-                                project_sources: workspace.sources(),
-                                inherited_sources: &empty_sources,
-                                project_indexes,
-                                direct_contexts: &direct_contexts,
-                                reachable_contexts: &reachable_contexts,
-                            },
-                            workspace,
-                            locations,
-                            source_strategy,
-                            credentials_cache,
-                        )?,
-                    );
+                            .map(|project| project.name.clone()),
+                        workspace.install_path().join("pyproject.toml"),
+                        workspace.install_path(),
+                        workspace.sources(),
+                        &empty_sources,
+                        project_indexes,
+                        workspace,
+                        locations,
+                        source_strategy,
+                        credentials_cache,
+                    )?);
                 }
 
                 for project_member in workspace.packages().values() {
@@ -936,48 +613,26 @@ impl<'lock> LockTarget<'lock> {
                         .and_then(|tool| tool.uv.as_ref())
                         .and_then(|uv| uv.index.as_deref())
                         .unwrap_or(&empty_indexes);
-                    let project_name = project_member
-                        .pyproject_toml()
-                        .project
-                        .as_ref()
-                        .map(|project| project.name.clone());
 
-                    let mut direct_contexts = DirectDependencyContexts::default();
-                    direct_contexts.collect_from_pyproject_toml(
+                    overlays.extend(collect_workspace_project_transitive_source_overlays(
+                        project_member
+                            .pyproject_toml()
+                            .project
+                            .as_ref()
+                            .map(|project| project.name.clone()),
+                        project_member.root().join("pyproject.toml"),
                         project_member.root(),
-                        project_member.pyproject_toml(),
-                    )?;
-                    let reachable_contexts = workspace_project_reachable_contexts(
-                        lock,
+                        project_sources,
+                        workspace.sources(),
+                        project_indexes,
                         workspace,
-                        project_name.as_ref(),
-                        false,
-                    );
-
-                    lowered_constraints.extend(
-                        lower_workspace_project_transitive_source_constraints(
-                            WorkspaceProjectTransitiveSources {
-                                project_name,
-                                project_path: project_member.root().join("pyproject.toml"),
-                                project_root: project_member.root(),
-                                project_sources,
-                                inherited_sources: workspace.sources(),
-                                project_indexes,
-                                direct_contexts: &direct_contexts,
-                                reachable_contexts: &reachable_contexts,
-                            },
-                            workspace,
-                            locations,
-                            source_strategy,
-                            credentials_cache,
-                        )?,
-                    );
+                        locations,
+                        source_strategy,
+                        credentials_cache,
+                    )?);
                 }
 
-                Ok(lowered_constraints
-                    .into_iter()
-                    .filter(|requirement| !is_noop_constraint(requirement))
-                    .collect())
+                Ok(overlays)
             }
             Self::Script(script) => {
                 let empty_indexes = Vec::default();
@@ -1002,39 +657,14 @@ impl<'lock> LockTarget<'lock> {
                     return Ok(Vec::new());
                 }
 
-                let direct_contexts = {
-                    let mut direct_contexts = DirectDependencyContexts::default();
-                    for requirement in script.metadata.dependencies.iter().flatten() {
-                        if let Some(extra) = requirement.marker.top_level_extra_name() {
-                            direct_contexts.insert_extra(requirement, extra.as_ref());
-                        } else {
-                            direct_contexts.insert_base(requirement);
-                        }
-                    }
-                    direct_contexts
-                };
-                let reachable_contexts = script_reachable_contexts(lock);
-
-                let mut lowered_constraints = Vec::new();
+                let mut overlays = Vec::new();
                 for (package, package_sources) in sources_map {
                     if source_strategy.for_package(package) {
                         continue;
                     }
 
                     for (extra, group) in source_scopes(package_sources) {
-                        // Dependency groups are not supported in script metadata.
                         if group.is_some() {
-                            continue;
-                        }
-
-                        let should_lower = if extra.is_none() {
-                            reachable_contexts
-                                .requires_unscoped_constraint(package, &direct_contexts)
-                        } else {
-                            reachable_contexts.reaches(package, extra.as_ref(), None)
-                                && !direct_contexts.is_direct(package, extra.as_ref(), None)
-                        };
-                        if !should_lower {
                             continue;
                         }
 
@@ -1045,36 +675,36 @@ impl<'lock> LockTarget<'lock> {
                         };
 
                         let requirement_name = package.clone();
-                        let mut lowered = LoweredRequirement::from_non_workspace_requirement(
-                            uv_pep508::Requirement {
-                                name: package.clone(),
-                                extras: Box::default(),
-                                marker: MarkerTree::TRUE,
-                                version_or_url: None,
-                                origin: Some(origin),
-                            },
-                            script.path.parent().unwrap(),
-                            sources_map,
-                            indexes,
-                            locations,
-                            credentials_cache,
-                        )
-                        .map(move |requirement| match requirement {
-                            Ok(requirement) => Ok(requirement.into_inner()),
-                            Err(err) => Err(uv_distribution::MetadataError::LoweringError(
-                                requirement_name.clone(),
-                                Box::new(err),
-                            )),
-                        })
-                        .collect::<Result<Vec<_>, _>>()?;
-                        lowered_constraints.append(&mut lowered);
+                        overlays.extend(
+                            LoweredRequirement::from_non_workspace_requirement(
+                                uv_pep508::Requirement {
+                                    name: package.clone(),
+                                    extras: Box::default(),
+                                    marker: MarkerTree::TRUE,
+                                    version_or_url: None,
+                                    origin: Some(origin),
+                                },
+                                script.path.parent().unwrap(),
+                                sources_map,
+                                indexes,
+                                locations,
+                                credentials_cache,
+                            )
+                            .map(move |requirement| match requirement {
+                                Ok(requirement) => Ok(requirement.into_inner()),
+                                Err(err) => Err(uv_distribution::MetadataError::LoweringError(
+                                    requirement_name.clone(),
+                                    Box::new(err),
+                                )),
+                            })
+                            .collect::<Result<Vec<_>, _>>()?
+                            .into_iter()
+                            .filter(|requirement| !is_noop_constraint(requirement)),
+                        );
                     }
                 }
 
-                Ok(lowered_constraints
-                    .into_iter()
-                    .filter(|requirement| !is_noop_constraint(requirement))
-                    .collect())
+                Ok(overlays)
             }
         }
     }
