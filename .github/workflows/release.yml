@@ -139,8 +139,10 @@ jobs:
       - name: Generate local dist manifest
         shell: bash
         run: |
-          dist manifest ${{ needs.plan.outputs.tag-flag }} --output-format=json --no-local-paths --artifacts=local > target/distrib/local-dist-manifest.json
-          python3 scripts/patch-dist-manifest-checksums.py --manifest target/distrib/local-dist-manifest.json --artifacts-dir target/distrib
+          temp_manifest=target/local-dist-manifest.json.tmp
+          dist manifest ${{ needs.plan.outputs.tag-flag }} --output-format=json --no-local-paths --artifacts=local > "$temp_manifest"
+          python3 scripts/patch-dist-manifest-checksums.py --manifest "$temp_manifest" --artifacts-dir target/distrib
+          mv "$temp_manifest" target/distrib/local-dist-manifest.json
       - name: Upload synthesized local dist manifest
         uses: actions/upload-artifact@6027e3dd177782cd8ab9af838c04fd81a07f1d47
         with:
