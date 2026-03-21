@@ -3555,7 +3555,6 @@ fn compile_bytecode_cache() -> Result<()> {
             .join("bytecode-v0")
             .join("cpython312")
             .join("markupsafe-2.1.3")
-            .to_path_buf()
             .is_dir()
     );
 

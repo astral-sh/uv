@@ -15,6 +15,10 @@ fail-fast = false
 [profile.ci-linux]
 inherits = "ci"
 
+[[profile.ci-linux.overrides]]
+filter = 'test(/^python_install::python_install_compile_bytecode/)'
+slow-timeout = { period = "180s", terminate-after = 10 }
+
 [profile.ci-macos]
 inherits = "ci"
 test-threads = 12
@@ -33,6 +37,10 @@ test-group = 'serial'
 [[profile.default.overrides]]
 filter = 'package(uv-keyring)'
 test-group = 'serial'
+
+[[profile.ci-windows.overrides]]
+filter = 'test(/^python_install::python_install_compile_bytecode/)'
+slow-timeout = { period = "180s", terminate-after = 10 }
 
 [[profile.ci-windows.overrides]]
 platform = 'cfg(target_os = "windows")'
