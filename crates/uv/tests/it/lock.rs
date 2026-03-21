@@ -4641,6 +4641,178 @@ fn lock_upgrade_dry_run_multi_version() -> Result<()> {
     Ok(())
 }
 
+/// `--check --refresh` should not report changes when the lockfile is already
+/// canonical for workspace conflicts.
+///
+/// Regression test for: <https://github.com/astral-sh/uv/issues/18553>
+#[test]
+fn lock_check_refresh_workspace_conflicts() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "workspace-demo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["package-a"]
+
+        [project.optional-dependencies]
+        prod = ["package-a[prod]"]
+        non-prod = ["package-a[non-prod]"]
+
+        [tool.uv.workspace]
+        members = ["packages/package-a"]
+
+        [tool.uv.sources]
+        package-a = { workspace = true }
+
+        [tool.uv]
+        conflicts = [
+            [
+                { extra = "prod" },
+                { extra = "non-prod" },
+            ],
+        ]
+        "#,
+    )?;
+
+    let package_dir = context.temp_dir.child("packages").child("package-a");
+    package_dir.create_dir_all()?;
+    package_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        prod = ["sortedcontainers==2.3.0"]
+        non-prod = ["sortedcontainers==2.4.0"]
+
+        [tool.uv]
+        conflicts = [
+            [
+                { extra = "prod" },
+                { extra = "non-prod" },
+            ],
+        ]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        conflicts = [[
+            { package = "package-a", extra = "non-prod" },
+            { package = "package-a", extra = "prod" },
+        ], [
+            { package = "workspace-demo", extra = "non-prod" },
+            { package = "workspace-demo", extra = "prod" },
+        ]]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "package-a",
+            "workspace-demo",
+        ]
+
+        [[package]]
+        name = "package-a"
+        version = "0.1.0"
+        source = { editable = "packages/package-a" }
+
+        [package.optional-dependencies]
+        non-prod = [
+            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" } },
+        ]
+        prod = [
+            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" } },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "sortedcontainers", marker = "extra == 'non-prod'", specifier = "==2.4.0" },
+            { name = "sortedcontainers", marker = "extra == 'prod'", specifier = "==2.3.0" },
+        ]
+        provides-extras = ["prod", "non-prod"]
+
+        [[package]]
+        name = "sortedcontainers"
+        version = "2.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/14/10/6a9481890bae97da9edd6e737c9c3dec6aea3fc2fa53b0934037b35c89ea/sortedcontainers-2.3.0.tar.gz", hash = "sha256:59cc937650cf60d677c16775597c89a960658a09cf7c1a668f86e1e4464b10a1", size = 30509, upload-time = "2020-11-09T00:03:52.258Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/20/4d/a7046ae1a1a4cc4e9bbed194c387086f06b25038be596543d026946330c9/sortedcontainers-2.3.0-py2.py3-none-any.whl", hash = "sha256:37257a32add0a3ee490bb170b599e93095eed89a55da91fa9f48753ea12fd73f", size = 29479, upload-time = "2020-11-09T00:03:50.723Z" },
+        ]
+
+        [[package]]
+        name = "sortedcontainers"
+        version = "2.4.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f23394729afe52f3bf7adec04bf9ed2c820b39e19299111/sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88", size = 30594, upload-time = "2021-05-16T22:03:42.897Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575, upload-time = "2021-05-16T22:03:41.177Z" },
+        ]
+
+        [[package]]
+        name = "workspace-demo"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "package-a" },
+        ]
+
+        [package.optional-dependencies]
+        non-prod = [
+            { name = "package-a", extra = ["non-prod"], marker = "(extra == 'extra-14-workspace-demo-non-prod' and extra == 'extra-14-workspace-demo-prod') or (extra == 'extra-14-workspace-demo-non-prod' and extra == 'extra-9-package-a-non-prod') or (extra == 'extra-9-package-a-non-prod' and extra == 'extra-9-package-a-prod')" },
+        ]
+        prod = [
+            { name = "package-a", extra = ["prod"], marker = "(extra == 'extra-14-workspace-demo-non-prod' and extra == 'extra-14-workspace-demo-prod') or (extra == 'extra-14-workspace-demo-prod' and extra == 'extra-9-package-a-prod') or (extra == 'extra-9-package-a-non-prod' and extra == 'extra-9-package-a-prod')" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "package-a", editable = "packages/package-a" },
+            { name = "package-a", extras = ["non-prod"], marker = "extra == 'non-prod'", editable = "packages/package-a" },
+            { name = "package-a", extras = ["prod"], marker = "extra == 'prod'", editable = "packages/package-a" },
+        ]
+        provides-extras = ["prod", "non-prod"]
+        "#
+        );
+    });
+
+    context.lock().arg("--refresh").assert().success();
+    assert_eq!(lock, context.read("uv.lock"));
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--refresh"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Respect the locked version in an existing lockfile.
 #[test]
 fn lock_preference() -> Result<()> {
