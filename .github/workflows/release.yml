@@ -97,6 +97,7 @@ jobs:
     uses: ./.github/workflows/build-release-binaries.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
+      environment: release
     secrets: inherit
 
   custom-build-docker:

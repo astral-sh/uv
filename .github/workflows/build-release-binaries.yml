@@ -13,6 +13,10 @@ on:
       plan:
         required: false
         type: string
+      environment:
+        description: "GitHub environment for secrets (e.g., code signing certificates)"
+        required: false
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -86,6 +90,7 @@ jobs:
   macos-x86_64:
     name: x86_64-apple-darwin
     runs-on: depot-macos-14
+    environment: ${{ inputs.environment }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -110,6 +115,10 @@ jobs:
           args: --release --locked --out dist --features self-update --compatibility pypi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
+          CODE_SIGN_IDENTITY: ${{ secrets.CODE_SIGN_IDENTITY }}
+          CODE_SIGN_CERTIFICATE: ${{ secrets.CODE_SIGN_CERTIFICATE }}
+          CODE_SIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODE_SIGN_CERTIFICATE_PASSWORD }}
+          CODE_SIGN_ALLOW_UNTRUSTED: ${{ vars.CODE_SIGN_ALLOW_UNTRUSTED }}
       - name: "Upload wheels"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -143,6 +152,10 @@ jobs:
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
+          CODE_SIGN_IDENTITY: ${{ secrets.CODE_SIGN_IDENTITY }}
+          CODE_SIGN_CERTIFICATE: ${{ secrets.CODE_SIGN_CERTIFICATE }}
+          CODE_SIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODE_SIGN_CERTIFICATE_PASSWORD }}
+          CODE_SIGN_ALLOW_UNTRUSTED: ${{ vars.CODE_SIGN_ALLOW_UNTRUSTED }}
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -152,6 +165,7 @@ jobs:
   macos-aarch64:
     name: aarch64-apple-darwin
     runs-on: depot-macos-14
+    environment: ${{ inputs.environment }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -177,6 +191,10 @@ jobs:
           args: --release --locked --out dist --features self-update --compatibility pypi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
+          CODE_SIGN_IDENTITY: ${{ secrets.CODE_SIGN_IDENTITY }}
+          CODE_SIGN_CERTIFICATE: ${{ secrets.CODE_SIGN_CERTIFICATE }}
+          CODE_SIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODE_SIGN_CERTIFICATE_PASSWORD }}
+          CODE_SIGN_ALLOW_UNTRUSTED: ${{ vars.CODE_SIGN_ALLOW_UNTRUSTED }}
       - name: "Test wheel - aarch64"
         run: |
           pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
@@ -216,6 +234,10 @@ jobs:
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
+          CODE_SIGN_IDENTITY: ${{ secrets.CODE_SIGN_IDENTITY }}
+          CODE_SIGN_CERTIFICATE: ${{ secrets.CODE_SIGN_CERTIFICATE }}
+          CODE_SIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODE_SIGN_CERTIFICATE_PASSWORD }}
+          CODE_SIGN_ALLOW_UNTRUSTED: ${{ vars.CODE_SIGN_ALLOW_UNTRUSTED }}
       - name: "Test wheel - aarch64"
         run: |
           pip install ${PACKAGE_NAME}_build --no-index --find-links crates/uv-build/dist --force-reinstall
@@ -230,6 +252,7 @@ jobs:
   windows:
     name: ${{ matrix.platform.target }}
     runs-on: ${{ matrix.platform.runner }}
+    environment: ${{ inputs.environment }}
     strategy:
       matrix:
         platform:
@@ -256,6 +279,33 @@ jobs:
       - name: "Install cargo extensions"
         shell: bash
         run: scripts/install-cargo-extensions.sh
+      - name: "Prepare Windows signing certificate"
+        shell: pwsh
+        run: |
+          if (-not $env:CODE_SIGN_CERTIFICATE_BASE64) {
+            Write-Host "No signing certificate configured, skipping."
+            return
+          }
+
+          $certBytes = [Convert]::FromBase64String($env:CODE_SIGN_CERTIFICATE_BASE64)
+          $pfxPath = Join-Path $env:RUNNER_TEMP "codesign.pfx"
+          [IO.File]::WriteAllBytes($pfxPath, $certBytes)
+
+          # Find signtool.exe — it's not on PATH on GitHub Actions runners.
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1 -ExpandProperty FullName
+
+          if (-not $signtool) {
+            throw "signtool.exe not found in Windows SDK"
+          }
+
+          "CODE_SIGN_TOOL_PATH=$signtool" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "CODE_SIGN_CERTIFICATE_PATH=$pfxPath" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "CODE_SIGN_CERTIFICATE_PASSWORD=$($env:CODE_SIGN_CERTIFICATE_PASSWORD)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+        env:
+          CODE_SIGN_CERTIFICATE_BASE64: ${{ secrets.CODE_SIGN_CERTIFICATE_BASE64 }}
+          CODE_SIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODE_SIGN_CERTIFICATE_PASSWORD }}
 
       # uv
       - name: "Build wheels"
