@@ -1403,7 +1403,12 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             anyhow::bail!(message);
         }
         Commands::GenerateShellCompletion(args) => {
-            args.shell.generate(&mut Cli::command(), &mut stdout());
+            let mut cmd = Cli::command();
+            // For `uv run`, `uv tool run`, and `uv tool uvx`, disable external subcommand
+            // completion so that the zsh completer suggests executable command names
+            // (`_command_names -e`) instead of all files (`_default`).
+            patch_command_completions(&mut cmd);
+            args.shell.generate(&mut cmd, &mut stdout());
             Ok(ExitStatus::Success)
         }
         Commands::Tool(ToolNamespace {
@@ -1436,6 +1441,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                         uvx = uvx.arg(arg);
                     }
                 }
+                patch_command_completions(&mut uvx);
                 shell.generate(&mut uvx, &mut stdout());
                 return Ok(ExitStatus::Success);
             }
@@ -2763,6 +2769,7 @@ where
         runtime.shutdown_background();
         result
     };
+
     let result = std::thread::Builder::new()
         .name("main2".to_owned())
         .stack_size(min_stack_size)
@@ -2787,4 +2794,39 @@ where
             ExitStatus::Error.into()
         }
     }
+}
+
+/// Modify a [`clap::Command`] tree so that subcommands which accept external commands
+/// (i.e. `uv run`, `uv tool run`, `uv tool uvx`) complete executable names instead of
+/// all files. This is only used when generating shell completion scripts.
+fn patch_command_completions(cmd: &mut clap::Command) {
+    let arg = clap::Arg::new("command")
+        .num_args(1..)
+        .trailing_var_arg(true)
+        .value_hint(clap::ValueHint::CommandName);
+
+    // Patch `run` subcommand directly on `cmd`.
+    if let Some(run_cmd) = cmd.find_subcommand_mut("run") {
+        *run_cmd = replace_external_subcommands(run_cmd, arg.clone());
+    }
+
+    // Patch `tool run` and `tool uvx`.
+    if let Some(tool_cmd) = cmd.find_subcommand_mut("tool") {
+        for name in &["run", "uvx"] {
+            if let Some(sub) = tool_cmd.find_subcommand_mut(name) {
+                *sub = replace_external_subcommands(sub, arg.clone());
+            }
+        }
+    }
+}
+
+/// Replace the external subcommand on a command with a positional arg.
+///
+/// Clears both the `allow_external_subcommands` flag and the `external_value_parser`
+/// (which would otherwise re-enable the flag during `build()`).
+fn replace_external_subcommands(cmd: &mut clap::Command, arg: clap::Arg) -> clap::Command {
+    cmd.clone()
+        .allow_external_subcommands(false)
+        .external_subcommand_value_parser(None::<clap::builder::ValueParser>)
+        .arg(arg)
 }

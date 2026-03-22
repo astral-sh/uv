@@ -1097,6 +1097,36 @@ fn help_with_version() {
     ");
 }
 
+/// Ensure `uv run` completions suggest executable names, not all files.
+///
+/// See: <https://github.com/astral-sh/uv/issues/18549>
+#[test]
+fn zsh_completion_run_no_file_completions() {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    let output = context
+        .command()
+        .arg("generate-shell-completion")
+        .arg("zsh")
+        .output()
+        .expect("failed to run generate-shell-completion");
+
+    let stdout = String::from_utf8(output.stdout).expect("invalid utf8");
+
+    // The zsh completion script should NOT contain `_default` for external subcommands,
+    // which would complete all files instead of just executable commands.
+    assert!(
+        !stdout.contains("external_command:_default"),
+        "zsh completions should not use _default for external subcommand completion"
+    );
+
+    // It should use `_command_names -e` to complete executable names.
+    assert!(
+        stdout.contains("_command_names -e"),
+        "zsh completions should use _command_names for run subcommands"
+    );
+}
+
 #[test]
 fn help_with_no_pager() {
     let context = uv_test::test_context_with_versions!(&[]);
