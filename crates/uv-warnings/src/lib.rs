@@ -36,6 +36,11 @@ static PRINTER: Mutex<Option<PrinterCallback>> = Mutex::new(None);
 ///
 /// When set, all warnings will be routed through this callback instead of writing directly
 /// to stderr. This is used to coordinate with indicatif progress bars.
+///
+/// Note: only one printer callback can be active at a time. If multiple reporters call
+/// `set_printer` concurrently, the last one wins and `clear_printer` from an earlier
+/// reporter will remove the later reporter's callback. Callers should ensure only one
+/// reporter is active at a time.
 pub fn set_printer(callback: Box<dyn Fn(&str) + Send + Sync>) {
     if let Ok(mut printer) = PRINTER.lock() {
         *printer = Some(callback);
@@ -51,9 +56,12 @@ pub fn clear_printer() {
 
 /// Print a warning line, routing through the global printer callback if set,
 /// or falling back to `anstream::eprintln!`.
+///
+/// Uses `try_lock()` instead of `lock()` to avoid deadlocking if the callback
+/// (or anything it transitively calls) triggers another warning on the same thread.
 #[doc(hidden)]
 pub fn print_warning(line: &str) {
-    if let Ok(printer) = PRINTER.lock() {
+    if let Ok(printer) = PRINTER.try_lock() {
         if let Some(callback) = printer.as_ref() {
             callback(line);
             return;
@@ -164,11 +172,55 @@ pub fn write_error_chain(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
+
     use crate::write_error_chain;
+    use crate::{clear_printer, print_warning, set_printer};
     use anyhow::anyhow;
     use indoc::indoc;
     use insta::assert_snapshot;
     use owo_colors::AnsiColors;
+
+    #[test]
+    fn set_printer_routes_warnings_through_callback() {
+        let captured: Arc<Mutex<Vec<String>>> = Arc::default();
+        let captured_clone = captured.clone();
+        set_printer(Box::new(move |line| {
+            captured_clone.lock().unwrap().push(line.to_string());
+        }));
+
+        print_warning("test warning message");
+
+        let messages = captured.lock().unwrap();
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0], "test warning message");
+
+        clear_printer();
+    }
+
+    #[test]
+    fn clear_printer_restores_direct_stderr() {
+        let captured: Arc<Mutex<Vec<String>>> = Arc::default();
+        let captured_clone = captured.clone();
+        set_printer(Box::new(move |line| {
+            captured_clone.lock().unwrap().push(line.to_string());
+        }));
+
+        clear_printer();
+        // After clearing, this should go to stderr, not the callback.
+        print_warning("after clear");
+
+        let messages = captured.lock().unwrap();
+        assert!(messages.is_empty());
+    }
+
+    #[test]
+    fn print_warning_falls_through_when_no_printer_set() {
+        // Ensure no printer is set.
+        clear_printer();
+        // Should write to stderr without panicking.
+        print_warning("fallthrough warning");
+    }
 
     #[test]
     fn format_multiline_message() {
