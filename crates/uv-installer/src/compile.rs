@@ -87,20 +87,24 @@ fn parse_compile_timeout() -> Result<Option<Duration>, CompileError> {
     Ok(timeout)
 }
 
-/// Spawn compilation workers and wait for them to finish after all files have been sent.
-async fn spawn_workers_and_wait(
+/// Spawn compilation workers on dedicated threads.
+///
+/// Workers must be spawned **before** sending files into the bounded channel to avoid deadlock.
+/// Returns the worker handles; the caller must drop `sender` after sending all files, then
+/// call [`wait_for_workers`] to collect results.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Receiver is cloned for each worker; taking by value avoids borrow conflicts with #[instrument]"
+)]
+fn spawn_workers(
     working_dir: &Path,
     python_executable: &Path,
+    pip_compileall_py: &Path,
     receiver: async_channel::Receiver<PathBuf>,
-    sender: async_channel::Sender<PathBuf>,
     concurrency: &Concurrency,
-    cache: &Path,
     timeout: Option<Duration>,
-    send_error: Option<SendError<PathBuf>>,
-) -> Result<(), CompileError> {
+) -> Vec<impl std::future::Future<Output = std::thread::Result<Result<(), CompileError>>>> {
     let worker_count = concurrency.installs;
-    let tempdir = tempdir_in(cache).map_err(CompileError::TempFile)?;
-    let pip_compileall_py = tempdir.path().join("pip_compileall.py");
 
     debug!("Starting {} bytecode compilation workers", worker_count);
     let mut worker_handles = Vec::new();
@@ -110,7 +114,7 @@ async fn spawn_workers_and_wait(
         let worker = worker(
             working_dir.to_path_buf(),
             python_executable.to_path_buf(),
-            pip_compileall_py.clone(),
+            pip_compileall_py.to_path_buf(),
             receiver.clone(),
             timeout,
         );
@@ -135,17 +139,21 @@ async fn spawn_workers_and_wait(
 
         worker_handles.push(async { rx.await.unwrap() });
     }
-    // Make sure the channel gets closed when all workers exit.
-    drop(receiver);
 
-    // All workers will receive an error after the last item. Note that there are still
-    // up to worker_count * 10 items in the queue.
-    drop(sender);
+    worker_handles
+}
 
+/// Wait for all workers to finish and check for errors.
+async fn wait_for_workers(
+    worker_handles: Vec<
+        impl std::future::Future<Output = std::thread::Result<Result<(), CompileError>>>,
+    >,
+    send_error: Option<SendError<PathBuf>>,
+) -> Result<(), CompileError> {
     // Make sure all workers exit regularly, avoid hiding errors.
     for result in futures::future::join_all(worker_handles).await {
         match result {
-            // There spawning earlier errored due to a panic in a task.
+            // The spawning earlier errored due to a panic in a task.
             Err(_) => return Err(CompileError::Join),
             // The worker reports an error.
             Ok(Err(compile_error)) => return Err(compile_error),
@@ -189,7 +197,23 @@ pub async fn compile_tree(
     // A larger buffer is significantly faster than just 1 or the worker count.
     let (sender, receiver) = async_channel::bounded::<PathBuf>(worker_count * 10);
 
+    // Running Python with an actual file will produce better error messages.
+    let tempdir = tempdir_in(cache).map_err(CompileError::TempFile)?;
+    let pip_compileall_py = tempdir.path().join("pip_compileall.py");
+
     let timeout = parse_compile_timeout()?;
+
+    // Spawn workers BEFORE sending files to avoid deadlock on the bounded channel.
+    let worker_handles = spawn_workers(
+        dir,
+        python_executable,
+        &pip_compileall_py,
+        receiver.clone(),
+        concurrency,
+        timeout,
+    );
+    // Make sure the channel gets closed when all workers exit.
+    drop(receiver);
 
     // Start the producer, sending all `.py` files to workers.
     let mut source_files = 0;
@@ -228,17 +252,11 @@ pub async fn compile_tree(
         }
     }
 
-    spawn_workers_and_wait(
-        dir,
-        python_executable,
-        receiver,
-        sender,
-        concurrency,
-        cache,
-        timeout,
-        send_error,
-    )
-    .await?;
+    // All workers will receive an error after the last item. Note that there are still
+    // up to worker_count * 10 items in the queue.
+    drop(sender);
+
+    wait_for_workers(worker_handles, send_error).await?;
 
     Ok(source_files)
 }
@@ -261,7 +279,21 @@ pub async fn compile_files(
     let worker_count = concurrency.installs;
     let (sender, receiver) = async_channel::bounded::<PathBuf>(worker_count * 10);
 
+    let tempdir = tempdir_in(cache).map_err(CompileError::TempFile)?;
+    let pip_compileall_py = tempdir.path().join("pip_compileall.py");
+
     let timeout = parse_compile_timeout()?;
+
+    // Spawn workers BEFORE sending files to avoid deadlock on the bounded channel.
+    let worker_handles = spawn_workers(
+        cache,
+        python_executable,
+        &pip_compileall_py,
+        receiver.clone(),
+        concurrency,
+        timeout,
+    );
+    drop(receiver);
 
     // Send all file paths to workers.
     let source_files = files.len();
@@ -278,17 +310,9 @@ pub async fn compile_files(
         }
     }
 
-    spawn_workers_and_wait(
-        cache,
-        python_executable,
-        receiver,
-        sender,
-        concurrency,
-        cache,
-        timeout,
-        send_error,
-    )
-    .await?;
+    drop(sender);
+
+    wait_for_workers(worker_handles, send_error).await?;
 
     Ok(source_files)
 }
