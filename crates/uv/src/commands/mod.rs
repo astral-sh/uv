@@ -59,7 +59,7 @@ pub(crate) use tool::uninstall::uninstall as tool_uninstall;
 pub(crate) use tool::update_shell::update_shell as tool_update_shell;
 pub(crate) use tool::upgrade::upgrade as tool_upgrade;
 use tracing::debug;
-use uv_cache::Cache;
+use uv_cache::{Cache, CacheBucket};
 use uv_configuration::Concurrency;
 pub(crate) use uv_console::human_readable_bytes;
 use uv_distribution_types::CachedDist;
@@ -203,11 +203,156 @@ pub(super) async fn compile_bytecode(
     Ok(())
 }
 
+/// Return the Python implementation tag for bytecode cache keys (e.g., `cpython312`).
+fn python_tag(venv: &PythonEnvironment) -> String {
+    let interpreter = venv.interpreter();
+    let impl_name = interpreter.implementation_name().to_lowercase();
+    let major = interpreter.python_major();
+    let minor = interpreter.python_minor();
+    format!("{impl_name}{major}{minor}")
+}
+
+/// Return the bytecode cache directory for a specific package and Python version.
+///
+/// Layout: `bytecode-v0/{python_tag}/{invalidation_mode}/{package_name}-{version}-{wheel_id}/`
+///
+/// The cache key includes:
+/// - `python_tag`: Python implementation and version (e.g., `cpython312`)
+/// - `invalidation_mode`: The `PYC_INVALIDATION_MODE` used during compilation, so
+///   switching modes doesn't serve stale `.pyc` files with the wrong format
+/// - `wheel_id`: Derived from the wheel's cache path to distinguish different
+///   wheels that share a name and version (path installs, git installs, etc.)
+fn bytecode_cache_dir(
+    cache: &Cache,
+    tag: &str,
+    invalidation_mode: &str,
+    dist: &CachedDist,
+) -> PathBuf {
+    let wheel_id = dist
+        .path()
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    cache
+        .bucket(CacheBucket::Bytecode)
+        .join(tag)
+        .join(invalidation_mode)
+        .join(format!(
+            "{}-{}-{}",
+            dist.filename().name,
+            dist.filename().version,
+            wheel_id
+        ))
+}
+
+/// Marker file written after a cache entry is fully populated.
+const CACHE_COMPLETE_MARKER: &str = ".complete";
+
+/// Try to restore cached `.pyc` files for a distribution into `site_packages`.
+///
+/// Returns the number of files restored, or `0` if no cache entry exists.
+/// Only restores from cache entries that have a `.complete` marker, to avoid
+/// serving partially written caches from interrupted saves.
+fn restore_cached_bytecode(cache_dir: &Path, site_packages: &Path) -> anyhow::Result<usize> {
+    if !cache_dir.join(CACHE_COMPLETE_MARKER).is_file() {
+        // No complete cache entry — either doesn't exist or was partially written.
+        // Clean up any partial cache to allow a fresh save.
+        if cache_dir.is_dir() {
+            let _ = fs_err::remove_dir_all(cache_dir);
+        }
+        return Ok(0);
+    }
+
+    let mut count = 0usize;
+    for entry in walkdir::WalkDir::new(cache_dir) {
+        let entry = entry?;
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        let Ok(relative) = entry.path().strip_prefix(cache_dir) else {
+            continue;
+        };
+        // Skip the marker file itself.
+        if relative.as_os_str() == CACHE_COMPLETE_MARKER {
+            continue;
+        }
+        let target = site_packages.join(relative);
+        if let Some(parent) = target.parent() {
+            fs_err::create_dir_all(parent)?;
+        }
+        // Copy the .pyc file to site-packages. Use copy (not hardlink) since
+        // the cache is a long-lived directory and we don't want venv cleanup to
+        // affect it.
+        fs_err::copy(entry.path(), &target)?;
+        count += 1;
+    }
+    Ok(count)
+}
+
+/// Save compiled `.pyc` files from `site_packages` into the bytecode cache.
+///
+/// Only saves `.pyc` files that correspond to `.py` files listed in `py_files`.
+fn save_bytecode_to_cache(
+    cache_dir: &Path,
+    site_packages: &Path,
+    py_files: &[PathBuf],
+) -> anyhow::Result<()> {
+    fs_err::create_dir_all(cache_dir)?;
+
+    for py_file in py_files {
+        let Ok(relative) = py_file.strip_prefix(site_packages) else {
+            continue;
+        };
+
+        // Find __pycache__/*.pyc files for this source file.
+        let Some(parent) = py_file.parent() else {
+            continue;
+        };
+        let pycache_dir = parent.join("__pycache__");
+        if !pycache_dir.is_dir() {
+            continue;
+        }
+
+        let Some(stem) = relative.file_stem() else {
+            continue;
+        };
+        let stem = stem.to_string_lossy();
+
+        // Match files like `__init__.cpython-312.pyc` for source `__init__.py`.
+        if let Ok(entries) = fs_err::read_dir(&pycache_dir) {
+            for entry in entries {
+                let entry = entry?;
+                let name = entry.file_name();
+                let name_str = name.to_string_lossy();
+                if name_str.starts_with(&*stem) && name_str.ends_with(".pyc") {
+                    if let Ok(relative_pycache) = pycache_dir.strip_prefix(site_packages) {
+                        let cache_target = cache_dir.join(relative_pycache).join(&name);
+                        if let Some(parent) = cache_target.parent() {
+                            fs_err::create_dir_all(parent)?;
+                        }
+                        fs_err::copy(entry.path(), &cache_target)?;
+                    }
+                }
+            }
+        }
+    }
+
+    // Write completion marker so restore_cached_bytecode knows this is a
+    // complete cache entry, not a partially written one.
+    fs_err::write(cache_dir.join(CACHE_COMPLETE_MARKER), "")?;
+
+    Ok(())
+}
+
 /// Compile bytecode only for the given installed distributions.
 ///
 /// Reads each distribution's `RECORD` file to find installed `.py` files, then compiles only
 /// those files. This avoids recompiling the entire `site-packages` directory when only a few
 /// packages were installed or updated.
+///
+/// When bytecode caching is available, previously compiled `.pyc` files are restored from the
+/// cache instead of re-running the Python compiler. Newly compiled bytecode is saved to the
+/// cache for future use.
 pub(super) async fn compile_bytecode_for_installs(
     venv: &PythonEnvironment,
     installs: &[CachedDist],
@@ -220,7 +365,11 @@ pub(super) async fn compile_bytecode_for_installs(
     }
 
     let start = std::time::Instant::now();
-    let mut py_files: Vec<PathBuf> = Vec::new();
+    let tag = python_tag(venv);
+    let invalidation_mode =
+        std::env::var("PYC_INVALIDATION_MODE").unwrap_or_else(|_| "CHECKED_HASH".to_string());
+    let mut total_files = 0usize;
+    let mut cached_files = 0usize;
 
     // Collect all site-packages roots (purelib + platlib). On most systems these
     // are the same, but on some (e.g., Debian) they differ. RECORD entries for
@@ -233,15 +382,31 @@ pub(super) async fn compile_bytecode_for_installs(
         .collect();
 
     for site_packages in &all_site_packages {
+        // Separate distributions into cache hits and misses.
+        let mut files_to_compile: Vec<PathBuf> = Vec::new();
+        let mut dists_to_cache: Vec<(&CachedDist, Vec<PathBuf>)> = Vec::new();
+
         for dist in installs {
-            // Find the dist-info prefix from the cached wheel directory. The
-            // installer preserves the original directory names from the wheel,
-            // which may differ in case from the normalized package name (e.g.,
-            // `MarkupSafe-2.1.3.dist-info` vs `markupsafe-2.1.3.dist-info`).
+            let cache_dir = bytecode_cache_dir(cache, &tag, &invalidation_mode, dist);
+
+            // Try to restore cached bytecode.
+            let restored = restore_cached_bytecode(&cache_dir, site_packages)?;
+            if restored > 0 {
+                cached_files += restored;
+                total_files += restored;
+                debug!(
+                    "Restored {} cached bytecode files for {}-{}",
+                    restored,
+                    dist.filename().name,
+                    dist.filename().version
+                );
+                continue;
+            }
+
+            // Cache miss — collect .py files for compilation.
             let dist_info_prefix = match find_dist_info(dist.path()) {
                 Ok(prefix) => prefix,
                 Err(_) => {
-                    // Fall back to the normalized name if the cache dir is missing.
                     format!(
                         "{}-{}",
                         dist.filename().name.as_dist_info_name(),
@@ -259,6 +424,7 @@ pub(super) async fn compile_bytecode_for_installs(
                 Err(err) => return Err(err.into()),
             };
 
+            let mut dist_py_files = Vec::new();
             for entry in &record {
                 if Path::new(&entry.path)
                     .extension()
@@ -273,37 +439,62 @@ pub(super) async fn compile_bytecode_for_installs(
                     if all_site_packages.iter().any(|sp| full_path.starts_with(sp))
                         && full_path.exists()
                     {
-                        py_files.push(full_path);
+                        dist_py_files.push(full_path);
                     }
+                }
+            }
+
+            if !dist_py_files.is_empty() {
+                files_to_compile.extend(dist_py_files.iter().cloned());
+                dists_to_cache.push((dist, dist_py_files));
+            }
+        }
+
+        // Compile cache-miss files.
+        if !files_to_compile.is_empty() {
+            let compiled = compile_files(
+                files_to_compile,
+                venv.python_executable(),
+                concurrency,
+                cache.root(),
+                true, // Use hash-based validation for cached bytecode
+            )
+            .await
+            .context("Failed to bytecode-compile installed packages")?;
+            total_files += compiled;
+
+            // Save newly compiled .pyc files to cache.
+            for (dist, py_files) in &dists_to_cache {
+                let cache_dir = bytecode_cache_dir(cache, &tag, &invalidation_mode, dist);
+                if let Err(err) = save_bytecode_to_cache(&cache_dir, site_packages, py_files) {
+                    debug!(
+                        "Failed to cache bytecode for {}-{}: {err}",
+                        dist.filename().name,
+                        dist.filename().version
+                    );
                 }
             }
         }
     }
 
-    if py_files.is_empty() {
-        return Ok(());
+    if total_files > 0 {
+        let s = if total_files == 1 { "" } else { "s" };
+        let cache_note = if cached_files > 0 {
+            format!(" ({cached_files} cached)")
+        } else {
+            String::new()
+        };
+        writeln!(
+            printer.stderr(),
+            "{}",
+            format!(
+                "Bytecode compiled {} {}{cache_note}",
+                format!("{total_files} file{s}").bold(),
+                format!("in {}", elapsed(start.elapsed())).dimmed()
+            )
+            .dimmed()
+        )?;
     }
-
-    let files = compile_files(
-        py_files,
-        venv.python_executable(),
-        concurrency,
-        cache.root(),
-    )
-    .await
-    .context("Failed to bytecode-compile installed packages")?;
-
-    let s = if files == 1 { "" } else { "s" };
-    writeln!(
-        printer.stderr(),
-        "{}",
-        format!(
-            "Bytecode compiled {} {}",
-            format!("{files} file{s}").bold(),
-            format!("in {}", elapsed(start.elapsed())).dimmed()
-        )
-        .dimmed()
-    )?;
     Ok(())
 }
 

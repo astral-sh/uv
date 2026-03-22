@@ -3535,6 +3535,204 @@ fn compile_incremental() -> Result<()> {
     Ok(())
 }
 
+/// Install a package with bytecode compilation, reset the venv, reinstall, and verify
+/// that the bytecode cache is used (the "(N cached)" annotation appears in output).
+#[test]
+fn compile_bytecode_cache() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+
+    // First install — should compile and populate the bytecode cache.
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--compile")
+        .arg("--strict"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Bytecode compiled 2 files in [TIME]
+     + markupsafe==2.1.3
+    "
+    );
+
+    // Verify the bytecode cache directory was created.
+    // The cache key includes a wheel hash suffix, so match by prefix.
+    let cache_tag_dir = context
+        .cache_dir
+        .join("bytecode-v0")
+        .join("cpython312")
+        .join("CHECKED_HASH");
+    assert!(
+        cache_tag_dir.is_dir(),
+        "bytecode cache cpython312 directory should exist"
+    );
+    assert!(
+        fs_err::read_dir(&cache_tag_dir)
+            .expect("should be able to read cache dir")
+            .filter_map(Result::ok)
+            .any(|e| e
+                .file_name()
+                .to_string_lossy()
+                .starts_with("markupsafe-2.1.3")),
+        "cache entry for markupsafe-2.1.3 should exist under cpython312"
+    );
+
+    // Reset the venv to simulate a fresh install.
+    context.reset_venv();
+
+    // Second install — should restore bytecode from cache.
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--compile")
+        .arg("--strict"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Bytecode compiled 2 files in [TIME] (2 cached)
+     + markupsafe==2.1.3
+    "
+    );
+
+    // Verify .pyc files exist in the fresh venv.
+    assert!(
+        context
+            .site_packages()
+            .join("markupsafe")
+            .join("__pycache__")
+            .join("__init__.cpython-312.pyc")
+            .exists()
+    );
+
+    // Verify the import works and __file__ points to the current venv's
+    // site-packages, not some stale path from the original compilation.
+    // Use a cross-platform marker (.venv) instead of exact path comparison
+    // since path representations differ between Rust and Python on Windows.
+    let output = context
+        .assert_command("import markupsafe; print(markupsafe.__file__)")
+        .success();
+    let stdout = String::from_utf8_lossy(&output.get_output().stdout);
+    assert!(
+        stdout.contains(".venv") && stdout.contains("markupsafe"),
+        "markupsafe.__file__ should reference the current venv, got: {stdout}"
+    );
+
+    Ok(())
+}
+
+/// Verify that bytecode cache entries are keyed by Python version: compiling the same package
+/// with Python 3.12 and 3.13 should produce separate cache entries that don't interfere.
+#[test]
+fn compile_bytecode_cache_python_version_isolation() -> Result<()> {
+    // Install MarkupSafe with Python 3.12.
+    let context_312 = uv_test::test_context!("3.12");
+
+    let requirements_txt = context_312.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+
+    uv_snapshot!(context_312.pip_sync()
+        .arg("requirements.txt")
+        .arg("--compile")
+        .arg("--strict"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Bytecode compiled 2 files in [TIME]
+     + markupsafe==2.1.3
+    "
+    );
+
+    // Cache should be keyed under cpython312.
+    let cache_312_dir = context_312
+        .cache_dir
+        .join("bytecode-v0")
+        .join("cpython312")
+        .join("CHECKED_HASH");
+    assert!(
+        cache_312_dir.is_dir()
+            && fs_err::read_dir(&cache_312_dir)
+                .expect("read cache dir")
+                .filter_map(Result::ok)
+                .any(|e| e
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("markupsafe-2.1.3")),
+        "cache entry for cpython312/markupsafe-2.1.3 should exist"
+    );
+
+    // No cpython313 entry should exist in this cache.
+    let no_313 = context_312.cache_dir.join("bytecode-v0").join("cpython313");
+    assert!(
+        !no_313.exists(),
+        "cpython313 should not exist in 3.12's cache"
+    );
+
+    // Install the same package with Python 3.13 (separate cache).
+    let context_313 = uv_test::test_context!("3.13");
+
+    let requirements_txt_313 = context_313.temp_dir.child("requirements.txt");
+    requirements_txt_313.write_str("MarkupSafe==2.1.3")?;
+
+    uv_snapshot!(context_313.pip_sync()
+        .arg("requirements.txt")
+        .arg("--compile")
+        .arg("--strict"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Bytecode compiled 2 files in [TIME]
+     + markupsafe==2.1.3
+    "
+    );
+
+    // Cache should be keyed under cpython313.
+    let cache_313_dir = context_313
+        .cache_dir
+        .join("bytecode-v0")
+        .join("cpython313")
+        .join("CHECKED_HASH");
+    assert!(
+        cache_313_dir.is_dir()
+            && fs_err::read_dir(&cache_313_dir)
+                .expect("read cache dir")
+                .filter_map(Result::ok)
+                .any(|e| e
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("markupsafe-2.1.3")),
+        "cache entry for cpython313/markupsafe-2.1.3 should exist"
+    );
+
+    // No cpython312 entry should exist in 3.13's cache.
+    let no_312 = context_313.cache_dir.join("bytecode-v0").join("cpython312");
+    assert!(
+        !no_312.exists(),
+        "cpython312 should not exist in 3.13's cache"
+    );
+
+    Ok(())
+}
+
 /// Raise an error when an editable's `Requires-Python` constraint is not met.
 #[test]
 fn requires_python_editable() -> Result<()> {

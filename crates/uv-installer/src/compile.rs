@@ -103,6 +103,7 @@ fn spawn_workers(
     receiver: async_channel::Receiver<PathBuf>,
     concurrency: &Concurrency,
     timeout: Option<Duration>,
+    use_hash_validation: bool,
 ) -> Vec<impl std::future::Future<Output = std::thread::Result<Result<(), CompileError>>>> {
     let worker_count = concurrency.installs;
 
@@ -117,6 +118,7 @@ fn spawn_workers(
             pip_compileall_py.to_path_buf(),
             receiver.clone(),
             timeout,
+            use_hash_validation,
         );
 
         // Spawn each worker on a dedicated thread.
@@ -211,6 +213,7 @@ pub async fn compile_tree(
         receiver.clone(),
         concurrency,
         timeout,
+        false, // compile_tree uses default timestamp validation
     );
     // Make sure the channel gets closed when all workers exit.
     drop(receiver);
@@ -271,6 +274,7 @@ pub async fn compile_files(
     python_executable: &Path,
     concurrency: &Concurrency,
     cache: &Path,
+    use_hash_validation: bool,
 ) -> Result<usize, CompileError> {
     if files.is_empty() {
         return Ok(0);
@@ -292,6 +296,7 @@ pub async fn compile_files(
         receiver.clone(),
         concurrency,
         timeout,
+        use_hash_validation,
     );
     drop(receiver);
 
@@ -323,6 +328,7 @@ async fn worker(
     pip_compileall_py: PathBuf,
     receiver: Receiver<PathBuf>,
     timeout: Option<Duration>,
+    use_hash_validation: bool,
 ) -> Result<(), CompileError> {
     fs_err::tokio::write(&pip_compileall_py, COMPILEALL_SCRIPT)
         .await
@@ -335,8 +341,13 @@ async fn worker(
     let wait_until_ready = async {
         loop {
             // If the interpreter started successful, return it, else retry.
-            if let Some(child) =
-                launch_bytecode_compiler(&dir, &interpreter, &pip_compileall_py).await?
+            if let Some(child) = launch_bytecode_compiler(
+                &dir,
+                &interpreter,
+                &pip_compileall_py,
+                use_hash_validation,
+            )
+            .await?
             {
                 break Ok::<_, CompileError>(child);
             }
@@ -405,6 +416,7 @@ async fn launch_bytecode_compiler(
     dir: &Path,
     interpreter: &Path,
     pip_compileall_py: &Path,
+    use_hash_validation: bool,
 ) -> Result<
     Option<(
         Child,
@@ -415,16 +427,24 @@ async fn launch_bytecode_compiler(
     CompileError,
 > {
     // We input the paths through stdin and get the successful paths returned through stdout.
-    let mut bytecode_compiler = Command::new(interpreter)
+    let mut command = Command::new(interpreter);
+    command
         .arg(pip_compileall_py)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .current_dir(dir)
         // Otherwise stdout is buffered and we'll wait forever for a response
-        .env(EnvVars::PYTHONUNBUFFERED, "1")
-        .spawn()
-        .map_err(CompileError::PythonSubcommand)?;
+        .env(EnvVars::PYTHONUNBUFFERED, "1");
+
+    // When caching bytecode, default to hash-based validation so cached .pyc files
+    // remain valid regardless of source file mtime changes. Respect the user's
+    // explicit PYC_INVALIDATION_MODE if set.
+    if use_hash_validation && env::var(EnvVars::PYC_INVALIDATION_MODE).is_err() {
+        command.env(EnvVars::PYC_INVALIDATION_MODE, "CHECKED_HASH");
+    }
+
+    let mut bytecode_compiler = command.spawn().map_err(CompileError::PythonSubcommand)?;
 
     // https://stackoverflow.com/questions/49218599/write-to-child-process-stdin-in-rust/49597789#comment120223107_49597789
     // Unbuffered, we need to write immediately or the python process will get stuck waiting
