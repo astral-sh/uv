@@ -47,9 +47,9 @@ use uv_tool::InstalledTools;
 use uv_types::{BuildContext, HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
 
-use crate::commands::compile_bytecode;
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::reporters::{InstallReporter, PrepareReporter, ResolverReporter};
+use crate::commands::{compile_bytecode, compile_bytecode_for_installs};
 use crate::printer::Printer;
 
 /// Consolidate the requirements for an installation.
@@ -705,7 +705,17 @@ pub(crate) async fn install(
     }
 
     if compile {
-        compile_bytecode(venv, concurrency, cache, printer).await?;
+        if installs.is_empty() {
+            // Nothing was installed, but --compile was requested. Compile all of site-packages
+            // to handle the case where packages were previously installed without --compile.
+            // Note: this means `uv run --compile-bytecode` on a warm environment still pays the
+            // full-site-packages cost. A future improvement could distinguish explicit user
+            // requests (pip sync --compile) from implicit ones (uv run --compile-bytecode).
+            compile_bytecode(venv, concurrency, cache, printer).await?;
+        } else {
+            // Only compile the newly installed packages.
+            compile_bytecode_for_installs(venv, &installs, concurrency, cache, printer).await?;
+        }
     }
 
     // Construct a summary of the changes made to the environment.

@@ -3384,7 +3384,7 @@ fn compile() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-    Bytecode compiled 3 files in [TIME]
+    Bytecode compiled 2 files in [TIME]
      + markupsafe==2.1.3
     "
     );
@@ -3450,6 +3450,87 @@ fn recompile() -> Result<()> {
     );
 
     context.assert_command("import markupsafe").success();
+
+    Ok(())
+}
+
+/// Install a second package with bytecode compilation and verify only the new package's files
+/// are compiled, not the entire site-packages.
+#[test]
+fn compile_incremental() -> Result<()> {
+    use walkdir::WalkDir;
+
+    fn count_pyc_files(dir: &std::path::Path) -> usize {
+        WalkDir::new(dir)
+            .into_iter()
+            .filter_map(Result::ok)
+            .filter(|e| {
+                e.file_type().is_file() && e.path().extension().is_some_and(|ext| ext == "pyc")
+            })
+            .count()
+    }
+
+    let context = uv_test::test_context!("3.12");
+    let site_packages = context.site_packages();
+
+    // Install MarkupSafe with compilation.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--compile")
+        .arg("--strict"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Bytecode compiled 2 files in [TIME]
+     + markupsafe==2.1.3
+    "
+    );
+
+    // Record the .pyc count after the first install.
+    let pyc_after_first = count_pyc_files(&site_packages);
+    assert!(
+        pyc_after_first > 0,
+        "first install should produce .pyc files"
+    );
+
+    // Now add tomli and sync again with compilation. Only tomli's files should be compiled.
+    requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--compile")
+        .arg("--strict"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Bytecode compiled 4 files in [TIME]
+     + tomli==2.0.1
+    "
+    );
+
+    let pyc_after_second = count_pyc_files(&site_packages);
+
+    // The number of new .pyc files should equal the number of tomli's .py files (4),
+    // NOT the total .py files in site-packages. This proves targeted compilation.
+    let new_pyc_files = pyc_after_second - pyc_after_first;
+    assert_eq!(
+        new_pyc_files, 4,
+        "only tomli's 4 .py files should be compiled, not all of site-packages \
+         (had {pyc_after_first} .pyc before, {pyc_after_second} after)"
+    );
 
     Ok(())
 }
