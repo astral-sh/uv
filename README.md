@@ -6,6 +6,7 @@
 [![image](https://img.shields.io/pypi/pyversions/uv.svg)](https://pypi.python.org/pypi/uv)
 [![Actions status](https://github.com/astral-sh/uv/actions/workflows/ci.yml/badge.svg)](https://github.com/astral-sh/uv/actions)
 [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?logo=discord&logoColor=white)](https://discord.gg/astral-sh)
+[![gitcgr](https://gitcgr.com/badge/astral-sh/uv.svg)](https://gitcgr.com/astral-sh/uv)
 
 An extremely fast Python package and project manager, written in Rust.
 
