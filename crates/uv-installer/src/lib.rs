@@ -1,4 +1,4 @@
-pub use compile::{CompileError, compile_tree};
+pub use compile::{CompileError, compile_files, compile_tree};
 pub use installer::{Installer, Reporter as InstallReporter};
 pub use plan::{Plan, Planner};
 pub use preparer::{Error as PrepareError, Preparer, Reporter as PrepareReporter};
