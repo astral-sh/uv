@@ -1391,6 +1391,14 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv audit` command with options shared across scenarios.
+    pub fn audit(&self) -> Command {
+        let mut command = self.new_command();
+        command.arg("audit");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
     /// Create a `uv workspace metadata` command with options shared across scenarios.
     pub fn workspace_metadata(&self) -> Command {
         let mut command = self.new_command();
