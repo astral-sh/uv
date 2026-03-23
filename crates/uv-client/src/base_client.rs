@@ -601,7 +601,19 @@ impl<'a> BaseClientBuilder<'a> {
         let client_builder = if let Some(custom_certs) = custom_certs {
             client_builder.tls_certs_only(custom_certs)
         } else if self.system_certs {
-            client_builder
+            // On macOS and Windows, the platform verifier has a built-in trust store that is
+            // always available, so no extra roots are needed. On Linux, however, the platform
+            // verifier falls back to `rustls-native-certs` / `openssl-probe` which discover
+            // CA bundles from the filesystem — these may be absent in minimal environments
+            // (e.g., scratch containers). Merge the bundled Mozilla roots as a fallback so
+            // that basic connectivity works even without a system CA bundle.
+            //
+            // See: https://github.com/rustls/rustls-platform-verifier/blob/f60951917d1e8069e0c22cae1125294b3f653423/README.md#L39-L41
+            if cfg!(target_os = "linux") {
+                client_builder.tls_certs_merge(Certificates::webpki_roots().to_reqwest_certs())
+            } else {
+                client_builder
+            }
         } else {
             client_builder.tls_certs_only(Certificates::webpki_roots().to_reqwest_certs())
         };
