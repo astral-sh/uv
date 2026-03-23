@@ -875,11 +875,13 @@ impl Name for CompatibleDist<'_> {
                 wheel,
                 priority: _,
                 prioritized: _,
+                ..
             } => wheel.name(),
             Self::IncompatibleWheel {
                 sdist,
                 wheel: _,
                 prioritized: _,
+                ..
             } => sdist.name(),
         }
     }

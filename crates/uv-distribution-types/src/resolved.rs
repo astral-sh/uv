@@ -39,6 +39,8 @@ pub enum ResolvedDistRef<'a> {
         prioritized: &'a PrioritizedDist,
     },
     InstallableRegistryBuiltDist {
+        /// The selected wheel index in the prioritized distribution.
+        wheel_index: usize,
         /// The wheel that should be used.
         wheel: &'a RegistryBuiltWheel,
         /// The prioritized distribution that the wheel came from.
@@ -120,12 +122,15 @@ impl ResolvedDistRef<'_> {
                 }
             }
             Self::InstallableRegistryBuiltDist {
-                wheel, prioritized, ..
+                wheel,
+                wheel_index,
+                prioritized,
+                ..
             } => {
                 // This is okay because we're only here if the prioritized dist
                 // has at least one wheel, so this always succeeds.
                 let built = prioritized
-                    .built_dist_for(wheel)
+                    .built_dist_for_index(*wheel_index)
                     .expect("selected wheel should be preserved");
                 ResolvedDist::Installable {
                     dist: Arc::new(Dist::Built(BuiltDist::Registry(built))),

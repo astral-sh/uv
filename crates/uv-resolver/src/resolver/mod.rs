@@ -25,8 +25,8 @@ use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier, IncompatibleDist,
     IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations, IndexMetadata,
-    IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement, ResolvedDist,
-    ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
+    IndexUrl, InstalledDist, Name, PrioritizedDist, PythonRequirementKind, RemoteSource,
+    Requirement, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -585,6 +585,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 .partial_solution
                                 .unchanging_term_for_package(next_id),
                             &state.python_requirement,
+                            self.tags
+                                .as_ref()
+                                .is_none()
+                                .then_some(state.python_requirement.target()),
                             &self.selector,
                             &state.env,
                         )?;
@@ -1516,7 +1520,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         if matches!(self.options.fork_strategy, ForkStrategy::RequiresPython) {
             if let Some(requires_python) = dist
                 .prioritized()
-                .and_then(|prioritized| prioritized.wheel_requires_python())
+                .and_then(PrioritizedDist::wheel_requires_python)
                 .filter(|requires_python| python_requirement.raises(requires_python.range()))
             {
                 let forks = fork_version_by_python_requirement(
@@ -3605,12 +3609,15 @@ impl<'a> From<ResolvedDistRef<'a>> for Request {
                 Self::Dist(Dist::Source(SourceDist::Registry(source)))
             }
             ResolvedDistRef::InstallableRegistryBuiltDist {
-                wheel, prioritized, ..
+                wheel: _,
+                wheel_index,
+                prioritized,
+                ..
             } => {
                 // This is okay because we're only here if the prioritized dist
                 // has at least one wheel, so this always succeeds.
                 let built = prioritized
-                    .built_dist_for(wheel)
+                    .built_dist_for_index(wheel_index)
                     .expect("selected wheel should be preserved");
                 Self::Dist(Dist::Built(BuiltDist::Registry(built)))
             }

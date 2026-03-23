@@ -674,6 +674,7 @@ impl CandidateDist<'_> {
         }
     }
 
+    /// Build a candidate distribution view from a prioritized distribution for a Python requirement.
     fn from_prioritized<'a>(
         value: &'a PrioritizedDist,
         requires_python: Option<&RequiresPython>,

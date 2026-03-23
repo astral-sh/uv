@@ -161,14 +161,18 @@ fn lock_sdist_registry() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @"
+    uv_snapshot!(
+        context.filters(),
+        context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    ");
+    "
+    );
 
     let lock = context.read("uv.lock");
 
@@ -180,9 +184,6 @@ fn lock_sdist_registry() -> Result<()> {
         version = 1
         revision = 3
         requires-python = ">=3.12"
-
-        [options]
-        exclude-newer = "2025-01-29T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -205,7 +206,7 @@ fn lock_sdist_registry() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -19662,7 +19663,7 @@ fn lock_named_index_cli() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 4 packages in [TIME]
     ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
@@ -19675,6 +19676,10 @@ fn lock_named_index_cli() -> Result<()> {
         version = 1
         revision = 3
         requires-python = ">=3.12"
+        resolution-markers = [
+            "python_full_version >= '3.13'",
+            "python_full_version < '3.13'",
+        ]
 
         [options]
         exclude-newer = "2025-01-30T00:00:00Z"
@@ -19684,7 +19689,8 @@ fn lock_named_index_cli() -> Result<()> {
         version = "3.1.2"
         source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu121" }
         dependencies = [
-            { name = "markupsafe" },
+            { name = "markupsafe", version = "2.1.5", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu121" }, marker = "python_full_version < '3.13'" },
+            { name = "markupsafe", version = "3.0.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu121" }, marker = "python_full_version >= '3.13'" },
         ]
         wheels = [
             { url = "https://download.pytorch.org/whl/Jinja2-3.1.2-py3-none-any.whl", hash = "sha256:6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61", upload-time = "2025-01-29T22:50:57.275Z" },
@@ -19692,8 +19698,28 @@ fn lock_named_index_cli() -> Result<()> {
 
         [[package]]
         name = "markupsafe"
+        version = "2.1.5"
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu121" }
+        resolution-markers = [
+            "python_full_version < '3.13'",
+        ]
+        sdist = { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5.tar.gz", upload-time = "2025-01-29T22:50:57.539Z" }
+        wheels = [
+            { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-macosx_10_9_universal2.whl", hash = "sha256:8dec4936e9c3100156f8a2dc89c4b88d5c435175ff03413b443469c7c8c5f4d1", upload-time = "2025-01-29T22:50:57.538Z" },
+            { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:3c6b973f22eb18a789b1460b4b91bf04ae3f0c4234a0a6aa6b0a92f6f7b951d4", upload-time = "2025-01-29T22:50:57.539Z" },
+            { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:ac07bad82163452a6884fe8fa0963fb98c2346ba78d779ec06bd7a6262132aee", upload-time = "2025-01-29T22:50:57.539Z" },
+            { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f5dfb42c4604dddc8e4305050aa6deb084540643ed5804d7455b5df8fe16f5e5", upload-time = "2025-01-29T22:50:57.539Z" },
+            { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:ea3d8a3d18833cf4304cd2fc9cbb1efe188ca9b5efef2bdac7adc20594a0e46b", upload-time = "2025-01-29T22:50:57.539Z" },
+            { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-win_amd64.whl", hash = "sha256:823b65d8706e32ad2df51ed89496147a42a2a6e01c13cfb6ffb8b1e92bc910bb", upload-time = "2025-01-29T22:50:57.539Z" },
+        ]
+
+        [[package]]
+        name = "markupsafe"
         version = "3.0.2"
         source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu121" }
+        resolution-markers = [
+            "python_full_version >= '3.13'",
+        ]
         wheels = [
             { url = "https://download.pytorch.org/whl/MarkupSafe-3.0.2-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:15ab75ef81add55874e7ab7055e9c397312385bd9ced94920f2802310c930396", upload-time = "2025-01-29T22:50:57.539Z" },
         ]
@@ -23385,7 +23411,7 @@ fn lock_multiple_sources_index_non_total() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 4 packages in [TIME]
     ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
@@ -23399,8 +23425,10 @@ fn lock_multiple_sources_index_non_total() -> Result<()> {
         revision = 3
         requires-python = ">=3.12"
         resolution-markers = [
-            "sys_platform == 'win32'",
-            "sys_platform != 'win32'",
+            "python_full_version >= '3.13' and sys_platform == 'win32'",
+            "python_full_version < '3.13' and sys_platform == 'win32'",
+            "python_full_version >= '3.13' and sys_platform != 'win32'",
+            "python_full_version < '3.13' and sys_platform != 'win32'",
         ]
 
         [options]
@@ -23411,7 +23439,8 @@ fn lock_multiple_sources_index_non_total() -> Result<()> {
         version = "3.1.3"
         source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }
         dependencies = [
-            { name = "markupsafe" },
+            { name = "markupsafe", version = "2.1.5", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }, marker = "python_full_version < '3.13'" },
+            { name = "markupsafe", version = "3.0.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }, marker = "python_full_version >= '3.13'" },
         ]
         wheels = [
             { url = "https://download.pytorch.org/whl/Jinja2-3.1.3-py3-none-any.whl", hash = "sha256:7d6d50dd97d52cbc355597bd845fabfbac3f551e1f99619e39a35ce8c370b5fa", upload-time = "2025-01-29T22:50:57.275Z" },
@@ -23419,8 +23448,30 @@ fn lock_multiple_sources_index_non_total() -> Result<()> {
 
         [[package]]
         name = "markupsafe"
+        version = "2.1.5"
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }
+        resolution-markers = [
+            "python_full_version < '3.13' and sys_platform == 'win32'",
+            "python_full_version < '3.13' and sys_platform != 'win32'",
+        ]
+        sdist = { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5.tar.gz", upload-time = "2025-01-29T22:50:57.539Z" }
+        wheels = [
+            { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-macosx_10_9_universal2.whl", hash = "sha256:8dec4936e9c3100156f8a2dc89c4b88d5c435175ff03413b443469c7c8c5f4d1", upload-time = "2025-01-29T22:50:57.538Z" },
+            { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:3c6b973f22eb18a789b1460b4b91bf04ae3f0c4234a0a6aa6b0a92f6f7b951d4", upload-time = "2025-01-29T22:50:57.539Z" },
+            { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:ac07bad82163452a6884fe8fa0963fb98c2346ba78d779ec06bd7a6262132aee", upload-time = "2025-01-29T22:50:57.539Z" },
+            { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f5dfb42c4604dddc8e4305050aa6deb084540643ed5804d7455b5df8fe16f5e5", upload-time = "2025-01-29T22:50:57.539Z" },
+            { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:ea3d8a3d18833cf4304cd2fc9cbb1efe188ca9b5efef2bdac7adc20594a0e46b", upload-time = "2025-01-29T22:50:57.539Z" },
+            { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-win_amd64.whl", hash = "sha256:823b65d8706e32ad2df51ed89496147a42a2a6e01c13cfb6ffb8b1e92bc910bb", upload-time = "2025-01-29T22:50:57.539Z" },
+        ]
+
+        [[package]]
+        name = "markupsafe"
         version = "3.0.2"
         source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }
+        resolution-markers = [
+            "python_full_version >= '3.13' and sys_platform == 'win32'",
+            "python_full_version >= '3.13' and sys_platform != 'win32'",
+        ]
         wheels = [
             { url = "https://download.pytorch.org/whl/MarkupSafe-3.0.2-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:15ab75ef81add55874e7ab7055e9c397312385bd9ced94920f2802310c930396", upload-time = "2025-01-29T22:50:57.539Z" },
         ]
@@ -23449,7 +23500,7 @@ fn lock_multiple_sources_index_non_total() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 4 packages in [TIME]
     ");
 
     Ok(())
@@ -31549,6 +31600,7 @@ fn windows_arm64_required() -> Result<()> {
     Ok(())
 }
 
+/// Ensure universal locking forks a wheel-only package when newer wheels raise the Python floor.
 #[test]
 fn windows_amd64_splits_on_wheel_python_tags() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-08-01T00:00:00Z");
@@ -31647,6 +31699,106 @@ fn windows_amd64_splits_on_wheel_python_tags() -> Result<()> {
         "#
         );
     });
+
+    Ok(())
+}
+
+/// Ensure a compatible source distribution avoids unnecessary Python-tag forks for wheel-only coverage.
+#[test]
+fn windows_amd64_does_not_split_on_wheel_python_tags_with_compatible_sdist() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let root = context.temp_dir.child("simple-html");
+    fs_err::create_dir_all(&root)?;
+
+    let iniconfig = root.child("iniconfig");
+    fs_err::create_dir_all(&iniconfig)?;
+
+    let sdist = iniconfig.child("iniconfig-2.0.0.tar.gz");
+    download_to_disk(
+        "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz",
+        sdist.path(),
+    );
+
+    let downloaded_wheel = iniconfig.child("iniconfig-2.0.0-py3-none-any.whl");
+    download_to_disk(
+        "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl",
+        downloaded_wheel.path(),
+    );
+
+    let wheel = iniconfig.child("iniconfig-2.0.0-cp38-cp38-win_amd64.whl");
+    fs_err::rename(downloaded_wheel.path(), wheel.path())?;
+
+    let index = iniconfig.child("index.html");
+    index.write_str(&formatdoc! {r#"
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta name="pypi:repository-version" content="1.4" />
+          </head>
+          <body>
+            <h1>Links for iniconfig</h1>
+            <a
+              href="{}#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374"
+              data-requires-python=">=3.7"
+              data-upload-time="2023-01-07T11:08:09.864Z"
+            >
+              iniconfig-2.0.0-cp38-cp38-win_amd64.whl
+            </a>
+            <a
+              href="{}#sha256=2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3"
+              data-requires-python=">=3.7"
+              data-upload-time="2023-01-07T11:08:11.254Z"
+            >
+              iniconfig-2.0.0.tar.gz
+            </a>
+          </body>
+        </html>
+    "#,
+        Url::from_file_path(&wheel).unwrap().as_str(),
+        Url::from_file_path(&sdist).unwrap().as_str(),
+    })?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.7"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [tool.uv]
+        environments = [
+            "sys_platform == 'win32' and platform_machine == 'AMD64'",
+        ]
+        "#
+    })?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .lock()
+            .arg("--index-url")
+            .arg(Url::from_file_path(&root).unwrap().as_str()),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "
+    );
+
+    let lock = context.read("uv.lock");
+    assert!(!lock.contains("python_full_version"));
+    assert_eq!(
+        lock.matches("[[package]]\nname = \"iniconfig\"\nversion = \"2.0.0\"")
+            .count(),
+        1
+    );
+    assert!(lock.contains("iniconfig-2.0.0.tar.gz"));
+    assert!(lock.contains("iniconfig-2.0.0-cp38-cp38-win_amd64.whl"));
 
     Ok(())
 }

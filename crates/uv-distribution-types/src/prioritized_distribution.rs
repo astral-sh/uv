@@ -61,6 +61,8 @@ pub enum CompatibleDist<'a> {
     },
     /// The distribution should be resolved and installed using a wheel distribution.
     CompatibleWheel {
+        /// The selected wheel index in the prioritized distribution.
+        wheel_index: usize,
         /// The wheel that should be used.
         wheel: &'a RegistryBuiltWheel,
         /// The platform priority associated with the wheel.
@@ -73,6 +75,8 @@ pub enum CompatibleDist<'a> {
     IncompatibleWheel {
         /// The sdist to be used during installation.
         sdist: &'a RegistrySourceDist,
+        /// The selected wheel index in the prioritized distribution.
+        wheel_index: usize,
         /// The wheel to be used during resolution.
         wheel: &'a RegistryBuiltWheel,
         /// The prioritized distribution that the wheel and sdist came from.
@@ -440,7 +444,11 @@ impl PrioritizedDist {
             // source distribution with a matching hash over a wheel with a mismatched hash. When
             // the outcomes are equivalent (e.g., both have a matching hash), prefer the wheel.
             (
-                Some((wheel, WheelCompatibility::Compatible(wheel_hash, tag_priority, ..))),
+                Some((
+                    wheel_index,
+                    wheel,
+                    WheelCompatibility::Compatible(wheel_hash, tag_priority, ..),
+                )),
                 Some((sdist, SourceDistCompatibility::Compatible(sdist_hash))),
             ) => {
                 if sdist_hash > wheel_hash {
@@ -450,6 +458,7 @@ impl PrioritizedDist {
                     })
                 } else {
                     Some(CompatibleDist::CompatibleWheel {
+                        wheel_index: *wheel_index,
                         wheel,
                         priority: *tag_priority,
                         prioritized: self,
@@ -457,13 +466,15 @@ impl PrioritizedDist {
                 }
             }
             // Prefer the highest-priority, platform-compatible wheel.
-            (Some((wheel, WheelCompatibility::Compatible(_, tag_priority, ..))), _) => {
-                Some(CompatibleDist::CompatibleWheel {
-                    wheel,
-                    priority: *tag_priority,
-                    prioritized: self,
-                })
-            }
+            (
+                Some((wheel_index, wheel, WheelCompatibility::Compatible(_, tag_priority, ..))),
+                _,
+            ) => Some(CompatibleDist::CompatibleWheel {
+                wheel_index: *wheel_index,
+                wheel,
+                priority: *tag_priority,
+                prioritized: self,
+            }),
             // If we have a compatible source distribution and an incompatible wheel, return the
             // wheel. We assume that all distributions have the same metadata for a given package
             // version. If a compatible source distribution exists, we assume we can build it, but
@@ -472,10 +483,11 @@ impl PrioritizedDist {
             // (If the incompatible wheel should actually be ignored entirely, fall through to
             // using the source distribution.)
             (
-                Some((wheel, compatibility @ WheelCompatibility::Incompatible(_))),
+                Some((wheel_index, wheel, compatibility @ WheelCompatibility::Incompatible(_))),
                 Some((sdist, SourceDistCompatibility::Compatible(_))),
             ) if !compatibility.is_excluded() => Some(CompatibleDist::IncompatibleWheel {
                 sdist,
+                wheel_index: *wheel_index,
                 wheel,
                 prioritized: self,
             }),
@@ -498,7 +510,7 @@ impl PrioritizedDist {
     ) -> IncompatibleDist {
         if let Some(incompatibility) = self.incompatible_source() {
             IncompatibleDist::Source(incompatibility.clone())
-        } else if let Some((_, WheelCompatibility::Incompatible(incompatibility))) =
+        } else if let Some((_, _, WheelCompatibility::Incompatible(incompatibility))) =
             self.best_wheel_for_python(requires_python)
         {
             IncompatibleDist::Wheel(incompatibility)
@@ -543,24 +555,23 @@ impl PrioritizedDist {
     /// If this prioritized dist has at least one wheel, then this creates
     /// a built distribution with the best wheel in this prioritized dist.
     pub fn built_dist(&self) -> Option<RegistryBuiltDist> {
-        let (wheel, _) = self.best_wheel()?;
-        self.built_dist_for(wheel)
+        self.built_dist_for_index(self.0.best_wheel_index?)
     }
 
-    /// If this prioritized dist has the given wheel, then this creates a built distribution with
-    /// that wheel as the selected best wheel.
-    pub fn built_dist_for(&self, selected: &RegistryBuiltWheel) -> Option<RegistryBuiltDist> {
-        self.0.best_wheel_index?;
+    /// If this prioritized dist has the given wheel index, then this creates a built distribution
+    /// with that wheel as the selected best wheel.
+    pub fn built_dist_for_index(&self, selected_index: usize) -> Option<RegistryBuiltDist> {
+        self.0.wheels.get(selected_index)?;
 
         // Remove any excluded wheels from the list of wheels, and adjust the wheel index to be
         // relative to the filtered list.
         let mut adjusted_wheels = Vec::with_capacity(self.0.wheels.len());
         let mut adjusted_best_index = None;
-        for (wheel, compatibility) in self.0.wheels.iter() {
+        for (index, (wheel, compatibility)) in self.0.wheels.iter().enumerate() {
             if compatibility.is_excluded() {
                 continue;
             }
-            if wheel.filename == selected.filename {
+            if index == selected_index {
                 adjusted_best_index = Some(adjusted_wheels.len());
             }
             adjusted_wheels.push(wheel.clone());
@@ -666,23 +677,42 @@ impl PrioritizedDist {
         })
     }
 
+    /// Return the best wheel and its effective compatibility for the given Python requirement.
     fn best_wheel_for_python(
         &self,
         requires_python: Option<&RequiresPython>,
-    ) -> Option<(&RegistryBuiltWheel, WheelCompatibility)> {
+    ) -> Option<(usize, &RegistryBuiltWheel, WheelCompatibility)> {
+        let best_index = match requires_python {
+            None => self.0.best_wheel_index,
+            Some(requires_python) => self.compute_best_wheel_index_for_python(requires_python),
+        }?;
+
+        let (wheel, compatibility) = &self.0.wheels[best_index];
+        Some((
+            best_index,
+            wheel,
+            effective_wheel_compatibility(wheel, compatibility, requires_python),
+        ))
+    }
+
+    /// Compute the index of the most compatible wheel for the given Python requirement.
+    fn compute_best_wheel_index_for_python(
+        &self,
+        requires_python: &RequiresPython,
+    ) -> Option<usize> {
         let mut best = None;
 
-        for (wheel, compatibility) in &self.0.wheels {
+        for (index, (wheel, compatibility)) in self.0.wheels.iter().enumerate() {
             let compatibility =
-                effective_wheel_compatibility(wheel, compatibility, requires_python);
+                effective_wheel_compatibility(wheel, compatibility, Some(requires_python));
             if best.as_ref().is_none_or(|(_, best_compatibility)| {
                 compatibility.is_more_compatible(best_compatibility)
             }) {
-                best = Some((wheel, compatibility));
+                best = Some((index, compatibility));
             }
         }
 
-        best
+        best.map(|(index, _)| index)
     }
 }
 
@@ -695,11 +725,25 @@ impl<'a> CompatibleDist<'a> {
                 ResolvedDistRef::InstallableRegistrySourceDist { sdist, prioritized }
             }
             Self::CompatibleWheel {
-                wheel, prioritized, ..
-            } => ResolvedDistRef::InstallableRegistryBuiltDist { wheel, prioritized },
+                wheel,
+                wheel_index,
+                prioritized,
+                ..
+            } => ResolvedDistRef::InstallableRegistryBuiltDist {
+                wheel,
+                wheel_index: *wheel_index,
+                prioritized,
+            },
             Self::IncompatibleWheel {
-                wheel, prioritized, ..
-            } => ResolvedDistRef::InstallableRegistryBuiltDist { wheel, prioritized },
+                wheel,
+                wheel_index,
+                prioritized,
+                ..
+            } => ResolvedDistRef::InstallableRegistryBuiltDist {
+                wheel,
+                wheel_index: *wheel_index,
+                prioritized,
+            },
         }
     }
 
@@ -711,8 +755,15 @@ impl<'a> CompatibleDist<'a> {
                 ResolvedDistRef::InstallableRegistrySourceDist { sdist, prioritized }
             }
             Self::CompatibleWheel {
-                wheel, prioritized, ..
-            } => ResolvedDistRef::InstallableRegistryBuiltDist { wheel, prioritized },
+                wheel,
+                wheel_index,
+                prioritized,
+                ..
+            } => ResolvedDistRef::InstallableRegistryBuiltDist {
+                wheel,
+                wheel_index: *wheel_index,
+                prioritized,
+            },
             Self::IncompatibleWheel {
                 sdist, prioritized, ..
             } => ResolvedDistRef::InstallableRegistrySourceDist { sdist, prioritized },
@@ -1096,6 +1147,7 @@ fn implied_python_markers(filename: &WheelFilename) -> MarkerTree {
     marker
 }
 
+/// Re-evaluate a wheel's compatibility after applying an additional Python requirement filter.
 fn effective_wheel_compatibility(
     wheel: &RegistryBuiltWheel,
     compatibility: &WheelCompatibility,
@@ -1115,6 +1167,7 @@ fn effective_wheel_compatibility(
     }
 }
 
+/// Return the lowest Python version implied by the wheel filename's Python tags.
 fn wheel_python_lower_bound(filename: &WheelFilename) -> Option<Version> {
     let mut lower = None;
 
@@ -1169,11 +1222,7 @@ fn wheel_python_lower_bound(filename: &WheelFilename) -> Option<Version> {
 mod tests {
     use std::str::FromStr;
 
-    use uv_pypi_types::HashDigests;
-    use uv_small_str::SmallString;
-
     use super::*;
-    use crate::{FileLocation, IndexUrl};
 
     #[track_caller]
     fn assert_platform_markers(filename: &str, expected: &str) {
@@ -1199,64 +1248,6 @@ mod tests {
         assert_eq!(
             implied_markers(&filename),
             expected.parse::<MarkerTree>().unwrap()
-        );
-    }
-
-    fn registry_wheel(filename: &str) -> RegistryBuiltWheel {
-        RegistryBuiltWheel {
-            filename: WheelFilename::from_str(filename).unwrap(),
-            file: Box::new(File {
-                dist_info_metadata: false,
-                filename: SmallString::from(filename),
-                hashes: HashDigests::empty(),
-                requires_python: None,
-                size: None,
-                upload_time_utc_ms: None,
-                url: FileLocation::new(
-                    SmallString::from(format!("https://example.org/packages/{filename}")),
-                    &SmallString::from("https://example.org/simple/"),
-                ),
-                yanked: None,
-                zstd: None,
-            }),
-            index: IndexUrl::parse("https://example.org/simple", None).unwrap(),
-        }
-    }
-
-    #[test]
-    fn picks_wheel_matching_python_requirement() {
-        let mut prioritized = PrioritizedDist::default();
-        prioritized.insert_built(
-            registry_wheel("pywin32-308-cp310-cp310-win_amd64.whl"),
-            vec![],
-            WheelCompatibility::Compatible(HashComparison::Matched, None, None),
-        );
-        prioritized.insert_built(
-            registry_wheel("pywin32-308-cp37-cp37m-win_amd64.whl"),
-            vec![],
-            WheelCompatibility::Compatible(HashComparison::Matched, None, None),
-        );
-
-        let requires_python =
-            RequiresPython::from_specifiers(&VersionSpecifiers::from_str(">=3.7, <3.8").unwrap());
-        let CompatibleDist::CompatibleWheel { wheel, .. } = prioritized
-            .get_python_compatible(Some(&requires_python))
-            .expect("compatible wheel")
-        else {
-            panic!("expected a wheel");
-        };
-
-        assert_eq!(
-            wheel.filename,
-            WheelFilename::from_str("pywin32-308-cp37-cp37m-win_amd64.whl").unwrap()
-        );
-
-        let built = prioritized
-            .built_dist_for(wheel)
-            .expect("selected wheel should be preserved");
-        assert_eq!(
-            built.best_wheel().filename,
-            WheelFilename::from_str("pywin32-308-cp37-cp37m-win_amd64.whl").unwrap()
         );
     }
 

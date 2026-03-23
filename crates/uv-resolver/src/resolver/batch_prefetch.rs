@@ -13,7 +13,9 @@ use crate::resolver::Request;
 use crate::{
     InMemoryIndex, PythonRequirement, ResolveError, ResolverEnvironment, VersionsResponse,
 };
-use uv_distribution_types::{CompatibleDist, Identifier, IndexCapabilities, IndexMetadata};
+use uv_distribution_types::{
+    CompatibleDist, Identifier, IndexCapabilities, IndexMetadata, RequiresPython,
+};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::MarkerTree;
@@ -86,6 +88,7 @@ impl BatchPrefetcher {
         current_range: &Range<Version>,
         unchangeable_constraints: Option<&Term<Range<Version>>>,
         python_requirement: &PythonRequirement,
+        requires_python: Option<&RequiresPython>,
         selector: &CandidateSelector,
         env: &ResolverEnvironment,
     ) -> Result<(), ResolveError> {
@@ -134,6 +137,7 @@ impl BatchPrefetcher {
             &versions_response,
             phase,
             python_requirement,
+            requires_python,
             selector,
             env,
         )?;
@@ -214,6 +218,7 @@ impl BatchPrefetcherRunner {
         versions_response: &Arc<VersionsResponse>,
         mut phase: BatchPrefetchStrategy,
         python_requirement: &PythonRequirement,
+        requires_python: Option<&RequiresPython>,
         selector: &CandidateSelector,
         env: &ResolverEnvironment,
     ) -> Result<(), ResolveError> {
@@ -233,7 +238,7 @@ impl BatchPrefetcherRunner {
                         &compatible,
                         version_map,
                         env,
-                        Some(python_requirement.target()),
+                        requires_python,
                     ) {
                         let compatible = compatible.intersection(
                             &Range::singleton(candidate.version().clone()).complement(),
@@ -272,7 +277,7 @@ impl BatchPrefetcherRunner {
                         &range,
                         version_map,
                         env,
-                        Some(python_requirement.target()),
+                        requires_python,
                     ) {
                         phase = BatchPrefetchStrategy::InOrder {
                             previous: candidate.version().clone(),
