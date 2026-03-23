@@ -213,7 +213,8 @@ impl<'a, F> LinkOptions<'a, F> {
 
     /// Set a predicate for files that prefer their inode to be preserved when linking.
     ///
-    /// This does not guarantee preservation of the inode.
+    /// This does not guarantee preservation of the inode, e.g., a copy fallback may still
+    /// occur for files on different file systems.
     ///
     /// When in [`LinkMode::Clone`] mode, files matching this predicate will be hard-linked
     /// rather than reflinked (copy-on-write). This keeps the destination sharing the same
