@@ -7387,6 +7387,7 @@ dependencies = [
  "assert_cmd",
  "assert_fs",
  "fs-err",
+ "goblin",
  "rcgen",
  "tempfile",
  "thiserror 2.0.18",

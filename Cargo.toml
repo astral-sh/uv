@@ -157,6 +157,8 @@ goblin = { version = "0.10.0", default-features = false, features = [
   "elf32",
   "elf64",
   "endian_fd",
+  "pe32",
+  "pe64",
 ] }
 h2 = { version = "0.4.7" }
 hashbrown = { version = "0.16.0" }
