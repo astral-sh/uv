@@ -9,7 +9,7 @@ Released on 2026-03-23.
 
 ### Breaking changes
 
-This release includes changes to the networking stack used by uv. While we think that breakage will be rare, it is possible that these changes will result in the rejection of system certificates previously trusted by uv so we have marked the change as breaking out of an abundance of caution.
+This release includes changes to the networking stack used by uv. While we think that breakage will be rare, it is possible that these changes will result in the rejection of certificates previously trusted by uv so we have marked the change as breaking out of an abundance of caution.
 
 The changes are largely driven by the upgrade of reqwest, which powers uv's HTTP clients, to [v0.13](https://seanmonstar.com/blog/reqwest-v013-rustls-default/) which included some breaking changes to TLS certificate verification.
 
@@ -49,7 +49,7 @@ See [#18550](https://github.com/astral-sh/uv/pull/18550) for details.
 
 ### Python
 
-- Enable framepointers for improved profiling on Linux x86-64 and aarch64
+- Enable frame pointers for improved profiling on Linux x86-64 and aarch64
 
 See the [python-build-standalone release notes](https://github.com/astral-sh/python-build-standalone/releases/20260320) for details.
 
@@ -69,7 +69,7 @@ See the [python-build-standalone release notes](https://github.com/astral-sh/pyt
 
 ### Bug fixes
 
-- Find the linker on the file system when sniffing binaries fails ([#18457](https://github.com/astral-sh/uv/pull/18457))
+- Find the dynamic linker on the file system when sniffing binaries fails ([#18457](https://github.com/astral-sh/uv/pull/18457))
 - Fix export of conflicting workspace members with dependencies ([#18666](https://github.com/astral-sh/uv/pull/18666))
 - Respect installed settings in `uv tool list --outdated` ([#18586](https://github.com/astral-sh/uv/pull/18586))
 - Treat paths originating as PEP 508 URLs which contain expanded variables as relative ([#18680](https://github.com/astral-sh/uv/pull/18680))
@@ -80,7 +80,7 @@ See the [python-build-standalone release notes](https://github.com/astral-sh/pyt
 ### Documentation
 
 - Add details on Linux versions to the platform policy ([#18574](https://github.com/astral-sh/uv/pull/18574))
-- Clarify `FLASH_ATTENTION_SKIP_CUDA_BUILD ` guidance for `flash-attn` installs ([#18473](https://github.com/astral-sh/uv/pull/18473))
+- Clarify `FLASH_ATTENTION_SKIP_CUDA_BUILD` guidance for `flash-attn` installs ([#18473](https://github.com/astral-sh/uv/pull/18473))
 - Split the dependency bots page into two separate pages ([#18597](https://github.com/astral-sh/uv/pull/18597))
 - Split the alternative indexes page into separate pages ([#18607](https://github.com/astral-sh/uv/pull/18607))
 
