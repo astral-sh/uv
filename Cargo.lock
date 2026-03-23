@@ -6939,6 +6939,7 @@ dependencies = [
  "insta",
  "itertools 0.14.0",
  "owo-colors",
+ "rayon",
  "ref-cast",
  "regex",
  "reqwest",
