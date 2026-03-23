@@ -977,13 +977,12 @@ dependencies = [
 
 [[package]]
 name = "console"
-version = "0.16.2"
+version = "0.16.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03e45a4a8926227e4197636ba97a9fc9b00477e9f4bd711395687c5f0734bec4"
+checksum = "d64e8af5551369d19cf50138de61f1c42074ab970f74e99be916646777f8fc87"
 dependencies = [
  "encode_unicode",
  "libc",
- "once_cell",
  "unicode-width 0.2.2",
  "windows-sys 0.61.2",
 ]
@@ -2283,7 +2282,7 @@ version = "0.18.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "25470f23803092da7d239834776d653104d551bc4d7eacaf31e6837854b8e9eb"
 dependencies = [
- "console 0.16.2",
+ "console 0.16.3",
  "portable-atomic",
  "unicode-width 0.2.2",
  "unit-prefix",
@@ -5670,7 +5669,7 @@ dependencies = [
  "byteorder",
  "bytes",
  "clap",
- "console 0.16.2",
+ "console 0.16.3",
  "ctrlc",
  "diskus",
  "dotenvy",
@@ -6183,7 +6182,7 @@ dependencies = [
 name = "uv-console"
 version = "0.0.32"
 dependencies = [
- "console 0.16.2",
+ "console 0.16.3",
 ]
 
 [[package]]
@@ -6919,7 +6918,7 @@ version = "0.0.32"
 dependencies = [
  "anyhow",
  "configparser",
- "console 0.16.2",
+ "console 0.16.3",
  "fs-err",
  "futures",
  "rustc-hash",
@@ -7283,7 +7282,7 @@ version = "0.10.12"
 name = "uv-virtualenv"
 version = "0.0.32"
 dependencies = [
- "console 0.16.2",
+ "console 0.16.3",
  "fs-err",
  "itertools 0.14.0",
  "owo-colors",
