@@ -9,6 +9,9 @@ repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
 
+[features]
+test-pypi = []
+
 [lib]
 doctest = false
 
@@ -57,6 +60,8 @@ reqwest-retry = { workspace = true }
 rkyv = { workspace = true }
 rmp-serde = { workspace = true }
 rustc-hash = { workspace = true }
+rustls-native-certs = { workspace = true }
+rustls-pki-types = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 uv-platform = { workspace = true }
@@ -65,6 +70,7 @@ tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
+webpki-root-certs = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
@@ -75,6 +81,7 @@ insta = { workspace = true }
 rcgen = { workspace = true }
 regex = { workspace = true }
 rustls = { workspace = true }
+temp-env = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-rustls = { workspace = true }

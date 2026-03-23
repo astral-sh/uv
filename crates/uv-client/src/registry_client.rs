@@ -100,14 +100,6 @@ impl<'a> RegistryClientBuilder<'a> {
     }
 
     #[must_use]
-    pub fn built_in_root_certs(mut self, built_in_root_certs: bool) -> Self {
-        self.base_client_builder = self
-            .base_client_builder
-            .built_in_root_certs(built_in_root_certs);
-        self
-    }
-
-    #[must_use]
     pub fn cache(mut self, cache: Cache) -> Self {
         self.cache = cache;
         self
@@ -1147,7 +1139,18 @@ impl RegistryClient {
             if let Some(authorization) = req.headers().get("authorization") {
                 headers.append("authorization", authorization.clone());
             }
-
+            // These range requests need the bytes from the wheel archive itself.
+            // After `reqwest` moved decompression to tower-http[1], this path could receive
+            // transparently decompressed responses. That breaks the byte offsets used by
+            // `AsyncHttpRangeReader` and results in us incorrectly trying to double-decompress gzip streams[2].
+            // We request with `Accept: identity` so that the range reader always sees the compressed wheel bytes.
+            //
+            // [1]: https://github.com/seanmonstar/reqwest/pull/2840
+            // [2]: https://github.com/astral-sh/async_http_range_reader/pull/3#discussion_r2700194798
+            headers.insert(
+                reqwest::header::ACCEPT_ENCODING,
+                reqwest::header::HeaderValue::from_static("identity"),
+            );
             // This response callback is special, we actually make a number of subsequent requests to
             // fetch the file from the remote zip.
             let read_metadata_range_request = |response: Response| {

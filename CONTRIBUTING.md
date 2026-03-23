@@ -53,6 +53,17 @@ On Fedora-based distributions, you can install a C compiler with:
 sudo dnf install gcc
 ```
 
+On Windows, [NASM](https://www.nasm.us/) is required for building the TLS backend (`aws-lc-sys`). If
+it is not present, a prebuilt blob provided by `aws-lc-sys` will be used instead. WinGet can be used
+to install NASM:
+
+```shell
+winget install NASM.NASM
+```
+
+After installation, add `C:\Program Files\NASM` to your `PATH`. While the prebuilt blob will not be
+used when NASM is found, you can guarantee this behavior by setting `AWS_LC_SYS_PREBUILT_NASM=0`.
+
 ## Testing
 
 For running tests, we recommend [nextest](https://nexte.st/).

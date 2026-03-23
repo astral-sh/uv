@@ -34,18 +34,18 @@ static SUGGESTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::ne
 pub(crate) struct OperationDiagnostic {
     /// The hint to display to the user upon resolution failure.
     pub(crate) hint: Option<String>,
-    /// Whether native TLS is enabled.
-    pub(crate) native_tls: bool,
+    /// Whether system certificates are being used.
+    pub(crate) system_certs: bool,
     /// The context to display to the user upon resolution failure.
     pub(crate) context: Option<&'static str>,
 }
 
 impl OperationDiagnostic {
-    /// Create an [`OperationDiagnostic`] with the given native TLS setting.
+    /// Create an [`OperationDiagnostic`] with the given system certificates setting.
     #[must_use]
-    pub(crate) fn native_tls(native_tls: bool) -> Self {
+    pub(crate) fn with_system_certs(system_certs: bool) -> Self {
         Self {
-            native_tls,
+            system_certs,
             ..Default::default()
         }
     }
@@ -131,9 +131,9 @@ impl OperationDiagnostic {
                 }
             }
             pip::operations::Error::Resolve(uv_resolver::ResolveError::Client(err))
-                if !self.native_tls && err.is_ssl() =>
+                if !self.system_certs && err.is_ssl() =>
             {
-                native_tls_hint(err);
+                system_certs_hint(err);
                 None
             }
             pip::operations::Error::OutdatedEnvironment => {
@@ -335,7 +335,7 @@ pub(crate) fn no_solution_hint(err: Box<uv_resolver::NoSolutionError>, help: Str
 /// Render a [`uv_resolver::NoSolutionError`] with a help message.
 // https://github.com/rust-lang/rust/issues/147648
 #[allow(unused_assignments)]
-pub(crate) fn native_tls_hint(err: uv_client::Error) {
+pub(crate) fn system_certs_hint(err: uv_client::Error) {
     #[derive(Debug, miette::Diagnostic)]
     #[diagnostic()]
     struct Error {
@@ -363,7 +363,7 @@ pub(crate) fn native_tls_hint(err: uv_client::Error) {
         err,
         help: format!(
             "Consider enabling use of system TLS certificates with the `{}` command-line flag",
-            "--native-tls".green()
+            "--system-certs".green()
         ),
     });
     anstream::eprint!("{report:?}");

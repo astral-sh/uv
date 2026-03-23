@@ -34,8 +34,7 @@ tracing = { workspace = true }
 [dev-dependencies]
 insta = { workspace = true }
 reqwest = { workspace = true, default-features = false, features = [
-  "rustls-tls",
-  "rustls-tls-native-roots",
+  "rustls",
 ] }
 serde_json = { workspace = true }
 tokio = { workspace = true }

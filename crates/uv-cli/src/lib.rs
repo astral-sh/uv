@@ -236,20 +236,32 @@ pub struct GlobalArgs {
     )]
     pub color: Option<ColorChoice>,
 
-    /// Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
+    /// Whether to load TLS certificates from the platform's native certificate store [env:
+    /// UV_NATIVE_TLS=]
     ///
-    /// By default, uv loads certificates from the bundled `webpki-roots` crate. The
-    /// `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv
-    /// improves portability and performance (especially on macOS).
+    /// By default, uv uses bundled Mozilla root certificates. When enabled, this flag loads
+    /// certificates from the platform's native certificate store instead.
+    ///
+    /// This is equivalent to `--system-certs`.
+    #[arg(global = true, long, value_parser = clap::builder::BoolishValueParser::new(), overrides_with_all = ["no_native_tls", "system_certs", "no_system_certs"], hide = true)]
+    pub native_tls: bool,
+
+    #[arg(global = true, long, overrides_with_all = ["native_tls", "system_certs", "no_system_certs"], hide = true)]
+    pub no_native_tls: bool,
+
+    /// Whether to load TLS certificates from the platform's native certificate store [env: UV_SYSTEM_CERTS=]
+    ///
+    /// By default, uv uses bundled Mozilla root certificates, which improves portability and
+    /// performance (especially on macOS).
     ///
     /// However, in some cases, you may want to use the platform's native certificate store,
     /// especially if you're relying on a corporate trust root (e.g., for a mandatory proxy) that's
     /// included in your system's certificate store.
-    #[arg(global = true, long, value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_native_tls"))]
-    pub native_tls: bool,
+    #[arg(global = true, long, value_parser = clap::builder::BoolishValueParser::new(), overrides_with_all = ["no_system_certs", "native_tls", "no_native_tls"])]
+    pub system_certs: bool,
 
-    #[arg(global = true, long, overrides_with("native_tls"), hide = true)]
-    pub no_native_tls: bool,
+    #[arg(global = true, long, overrides_with_all = ["system_certs", "native_tls", "no_native_tls"], hide = true)]
+    pub no_system_certs: bool,
 
     /// Disable network access [env: UV_OFFLINE=]
     ///
