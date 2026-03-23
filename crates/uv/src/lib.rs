@@ -106,24 +106,20 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     //
     // If `--project` points to a `pyproject.toml` file, resolve to its parent directory,
     // since downstream code (e.g., `FilesystemOptions::find`) expects a directory.
-    let project_dir = cli
-        .top_level
-        .global_args
-        .project
-        .as_deref()
-        .map(std::path::absolute)
-        .transpose()?
-        .map(uv_fs::normalize_path_buf)
-        .map(|path| {
-            path.file_name()
-                .filter(|name| *name == "pyproject.toml")
-                .filter(|_| path.is_file())
-                .and_then(|_| path.parent())
-                .map(Path::to_path_buf)
-                .unwrap_or(path)
-        })
-        .map(Cow::Owned)
-        .unwrap_or_else(|| Cow::Borrowed(&*CWD));
+    let project_dir = if let Some(project) = &cli.top_level.global_args.project {
+        let path = uv_fs::normalize_path_buf(std::path::absolute(project)?);
+        if let Some(name) = path.file_name()
+            && name == "pyproject.toml"
+            && path.is_file()
+            && let Some(parent) = path.parent()
+        {
+            Cow::Owned(parent.to_path_buf())
+        } else {
+            Cow::Owned(path)
+        }
+    } else {
+        Cow::Borrowed(&*CWD)
+    };
 
     // Load environment variables not handled by Clap
     let environment = EnvironmentOptions::new()?;
