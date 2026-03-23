@@ -5271,7 +5271,7 @@ pub struct AuditArgs {
 
     /// The service format to use for vulnerability lookups.
     ///
-    /// This composes with `--service-url` to determine how `uv audt` interacts
+    /// This composes with `--service-url` to determine how `uv audit` interacts
     /// with vulnerability services. Every format has a default service, however
     /// users can also pass `--service-url` to use a different service with
     /// the same format, e.g. using OSV's API shape with an internally-hosted
