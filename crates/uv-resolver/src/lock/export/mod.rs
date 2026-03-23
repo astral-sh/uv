@@ -96,6 +96,11 @@ impl<'lock> ExportableRequirements<'lock> {
                     .or_insert_with(|| graph.add_node(Node::Package(dist)));
                 graph.add_edge(root, index, Edge::Prod(MarkerTree::TRUE));
 
+                // Track the activated project in the list of known conflicts.
+                if let Some(conflicts) = conflicts.as_mut() {
+                    conflicts.insert(ConflictItem::from(dist.id.name.clone()), MarkerTree::TRUE);
+                }
+
                 // Push its dependencies on the queue.
                 queue.push_back((dist, None));
                 let mut root_extras = Vec::new();
