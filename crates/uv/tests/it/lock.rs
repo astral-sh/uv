@@ -19254,6 +19254,53 @@ fn lock_unnamed_explicit_index() -> Result<()> {
     Ok(())
 }
 
+/// Error when an index cache-control override is not a valid HTTP header value.
+#[test]
+fn lock_invalid_index_cache_control() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [[tool.uv.index]]
+        name = "test"
+        url = "https://test.pypi.org/simple"
+        cache-control.api = """
+        max-age=600
+        """
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Failed to parse `pyproject.toml` during settings discovery:
+      TOML parse error at line 11, column 9
+         |
+      11 |         cache-control.api = \"\"\"
+         |         ^^^^^^^^^^^^^
+      `cache-control.api` must be a valid HTTP header value
+
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 11, column 9
+       |
+    11 |         cache-control.api = \"\"\"
+       |         ^^^^^^^^^^^^^
+    `cache-control.api` must be a valid HTTP header value
+    ");
+
+    Ok(())
+}
+
 #[tokio::test]
 async fn lock_named_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -33995,6 +34042,48 @@ fn lock_unsupported_wheel_url_requires_python() -> Result<()> {
 }
 
 #[test]
+fn lock_unsupported_wheel_url_supported_platform() -> Result<()> {
+    let context = uv_test::test_context!("3.11");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["numpy @ https://files.pythonhosted.org/packages/4d/1a/e85f0eea4cf03d6a0228f5c0256b53f2df4bc794706e7df019fc622e47f1/numpy-2.3.5-cp311-cp311-macosx_14_0_arm64.whl"]
+
+        [tool.uv]
+        environments = ["sys_platform == 'win32'"]
+        "#,
+    )?;
+
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([(
+            // This hint is only shown when the current platform doesn't match the target.
+            r"\n\n\s+hint: The resolution failed for an environment that is not the current one[^\n]*",
+            "",
+        )])
+        .collect();
+
+    uv_snapshot!(filters, context.lock(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies for split (markers: sys_platform == 'win32'):
+      ╰─▶ Because only numpy==2.3.5 is available and numpy==2.3.5 has no Windows-compatible wheels, we can conclude that all versions of numpy cannot be used.
+          And because your project depends on numpy, we can conclude that your project's requirements are unsatisfiable.
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn lock_unsupported_wheel_url_required_platform() -> Result<()> {
     let context = uv_test::test_context!("3.11");
 
@@ -34026,10 +34115,8 @@ fn lock_unsupported_wheel_url_required_platform() -> Result<()> {
     Ok(())
 }
 
-// TODO(charlie): This produces an empty entry in the lockfile (`pywin32` has no wheels for the
-// set of supported environments, and no source distribution).
 #[test]
-fn lock_supported_environment_wheel_only_package_can_produce_empty_entry() -> Result<()> {
+fn lock_supported_environment_wheel_only_package_requires_compatible_wheels() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -34042,24 +34129,113 @@ fn lock_supported_environment_wheel_only_package_can_produce_empty_entry() -> Re
         dependencies = ["pywin32"]
 
         [tool.uv]
-        environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+        environments = ["sys_platform == 'linux'"]
         "#,
     )?;
 
-    uv_snapshot!(
-        context.filters(),
-        context.lock(),
-        @"
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([(
+            // This hint is only shown when the current platform doesn't match the target.
+            r"\n\n\s+hint: The resolution failed for an environment that is not the current one[^\n]*",
+            "",
+        )])
+        .collect();
+
+    uv_snapshot!(filters, context.lock(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies for split (markers: sys_platform == 'linux'):
+      ╰─▶ Because only the following versions of pywin32 are available:
+              pywin32==222
+              pywin32==223
+              pywin32==224
+              pywin32==225
+              pywin32==226
+              pywin32==227
+              pywin32==228
+              pywin32==300
+              pywin32==301
+              pywin32==302
+              pywin32==303
+              pywin32==304
+              pywin32==305
+              pywin32==306
+              pywin32==307
+              pywin32==308
+          and pywin32<=305 has no wheels with a matching Python version tag (e.g., `cp312`), we can conclude that pywin32<=305 cannot be used.
+          And because pywin32>=306 has no Linux-compatible wheels and your project depends on pywin32, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: Wheels are available for `pywin32` (v305) with the following Python ABI tags: `cp36m`, `cp37m`, `cp38`, `cp39`, `cp310`, `cp311`
+    ");
+
+    Ok(())
+}
+
+/// An abi3 wheel (e.g., `cp37-abi3`) should be considered compatible with any Python version at or
+/// above the tag's version. When `tool.uv.environments` constrains to a specific Python version
+/// (e.g., 3.12), the resolver should recognize that a `cp37-abi3` wheel covers that environment
+/// rather than treating the `cp37` tag as an exact Python 3.7 requirement.
+#[test]
+fn lock_supported_environment_abi3_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Create a local flat index with the abi3 test wheel.
+    let index_dir = context.temp_dir.child("local_index");
+    fs_err::create_dir_all(&index_dir)?;
+
+    for entry in fs_err::read_dir(context.workspace_root.join("test/links"))? {
+        let entry = entry?;
+        let path = entry.path();
+        if path
+            .file_name()
+            .and_then(|file_name| file_name.to_str())
+            .is_some_and(|file_name| file_name.starts_with("abi3_package"))
+        {
+            let dest = index_dir.join(path.file_name().unwrap());
+            fs_err::copy(&path, &dest)?;
+        }
+    }
+
+    let project = context.temp_dir.child("project");
+    fs_err::create_dir_all(&project)?;
+
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["abi3-package"]
+
+        [tool.uv]
+        environments = [
+            "sys_platform == 'linux' and platform_machine == 'x86_64' and python_version == '3.12'",
+        ]
+
+        [[tool.uv.index]]
+        name = "local"
+        url = "{}"
+        format = "flat"
+        "#,
+        index_dir.portable_display()
+    })?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&project), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 2 packages in [TIME]
-    "
-    );
+    ");
 
-    let lock = context.read("uv.lock");
+    let lock = fs_err::read_to_string(project.join("uv.lock"))?;
 
     insta::with_settings!({
         filters => context.filters(),
@@ -34068,35 +34244,49 @@ fn lock_supported_environment_wheel_only_package_can_produce_empty_entry() -> Re
             lock, @r#"
         version = 1
         revision = 3
-        requires-python = "==3.12.*"
+        requires-python = ">=3.12"
         resolution-markers = [
-            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'",
         ]
         supported-markers = [
-            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'",
         ]
 
         [options]
-        exclude-newer = "2025-01-30T00:00:00Z"
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "abi3-package"
+        version = "1.0.0"
+        source = { registry = "[TEMP_DIR]/local_index" }
+        wheels = [
+            { path = "[TEMP_DIR]/local_index/abi3_package-1.0.0-cp37-abi3-manylinux_2_17_x86_64.whl" },
+        ]
 
         [[package]]
         name = "project"
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "pywin32", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+            { name = "abi3-package", marker = "python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'" },
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "pywin32" }]
-
-        [[package]]
-        name = "pywin32"
-        version = "308"
-        source = { registry = "https://pypi.org/simple" }
+        requires-dist = [{ name = "abi3-package" }]
         "#
         );
     });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").current_dir(&project), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    ");
 
     Ok(())
 }

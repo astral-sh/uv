@@ -27,6 +27,7 @@ fn help() {
       export                     Export the project's lockfile to an alternate format
       tree                       Display the project's dependency tree
       format                     Format Python code in the project
+      audit                      Audit the project's dependencies
       tool                       Run and install commands provided by Python packages
       python                     Manage Python versions and installations
       pip                        Manage Python packages with a pip-compatible interface
@@ -56,8 +57,9 @@ fn help() {
               Use verbose output
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
-          --native-tls
-              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
+          --system-certs
+              Whether to load TLS certificates from the platform's native certificate store [env:
+              UV_SYSTEM_CERTS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -108,6 +110,7 @@ fn help_flag() {
       export   Export the project's lockfile to an alternate format
       tree     Display the project's dependency tree
       format   Format Python code in the project
+      audit    Audit the project's dependencies
       tool     Run and install commands provided by Python packages
       python   Manage Python versions and installations
       pip      Manage Python packages with a pip-compatible interface
@@ -136,8 +139,9 @@ fn help_flag() {
               Use verbose output
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
-          --native-tls
-              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
+          --system-certs
+              Whether to load TLS certificates from the platform's native certificate store [env:
+              UV_SYSTEM_CERTS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -187,6 +191,7 @@ fn help_short_flag() {
       export   Export the project's lockfile to an alternate format
       tree     Display the project's dependency tree
       format   Format Python code in the project
+      audit    Audit the project's dependencies
       tool     Run and install commands provided by Python packages
       python   Manage Python versions and installations
       pip      Manage Python packages with a pip-compatible interface
@@ -215,8 +220,9 @@ fn help_short_flag() {
               Use verbose output
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
-          --native-tls
-              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
+          --system-certs
+              Whether to load TLS certificates from the platform's native certificate store [env:
+              UV_SYSTEM_CERTS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -365,18 +371,16 @@ fn help_subcommand() {
               - always: Enables colored output regardless of the detected environment
               - never:  Disables colored output
 
-          --native-tls
-              Whether to load TLS certificates from the platform's native store.
+          --system-certs
+              Whether to load TLS certificates from the platform's native certificate store [env:
+              UV_SYSTEM_CERTS=]
               
-              By default, uv loads certificates from the bundled `webpki-roots` crate. The
-              `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv
-              improves portability and performance (especially on macOS).
+              By default, uv uses bundled Mozilla root certificates, which improves portability and
+              performance (especially on macOS).
               
               However, in some cases, you may want to use the platform's native certificate store,
               especially if you're relying on a corporate trust root (e.g., for a mandatory proxy)
               that's included in your system's certificate store.
-
-              [env: UV_NATIVE_TLS=]
 
           --offline
               Disable network access.
@@ -651,18 +655,16 @@ fn help_subsubcommand() {
               - always: Enables colored output regardless of the detected environment
               - never:  Disables colored output
 
-          --native-tls
-              Whether to load TLS certificates from the platform's native store.
+          --system-certs
+              Whether to load TLS certificates from the platform's native certificate store [env:
+              UV_SYSTEM_CERTS=]
               
-              By default, uv loads certificates from the bundled `webpki-roots` crate. The
-              `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv
-              improves portability and performance (especially on macOS).
+              By default, uv uses bundled Mozilla root certificates, which improves portability and
+              performance (especially on macOS).
               
               However, in some cases, you may want to use the platform's native certificate store,
               especially if you're relying on a corporate trust root (e.g., for a mandatory proxy)
               that's included in your system's certificate store.
-
-              [env: UV_NATIVE_TLS=]
 
           --offline
               Disable network access.
@@ -780,8 +782,9 @@ fn help_flag_subcommand() {
               Use verbose output
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
-          --native-tls
-              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
+          --system-certs
+              Whether to load TLS certificates from the platform's native certificate store [env:
+              UV_SYSTEM_CERTS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -863,8 +866,9 @@ fn help_flag_subsubcommand() {
               Use verbose output
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
-          --native-tls
-              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
+          --system-certs
+              Whether to load TLS certificates from the platform's native certificate store [env:
+              UV_SYSTEM_CERTS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -908,6 +912,7 @@ fn help_unknown_subcommand() {
         export
         tree
         format
+        audit
         tool
         python
         pip
@@ -937,6 +942,7 @@ fn help_unknown_subcommand() {
         export
         tree
         format
+        audit
         tool
         python
         pip
@@ -995,6 +1001,7 @@ fn help_with_global_option() {
       export                     Export the project's lockfile to an alternate format
       tree                       Display the project's dependency tree
       format                     Format Python code in the project
+      audit                      Audit the project's dependencies
       tool                       Run and install commands provided by Python packages
       python                     Manage Python versions and installations
       pip                        Manage Python packages with a pip-compatible interface
@@ -1024,8 +1031,9 @@ fn help_with_global_option() {
               Use verbose output
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
-          --native-tls
-              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
+          --system-certs
+              Whether to load TLS certificates from the platform's native certificate store [env:
+              UV_SYSTEM_CERTS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -1117,6 +1125,7 @@ fn help_with_no_pager() {
       export                     Export the project's lockfile to an alternate format
       tree                       Display the project's dependency tree
       format                     Format Python code in the project
+      audit                      Audit the project's dependencies
       tool                       Run and install commands provided by Python packages
       python                     Manage Python versions and installations
       pip                        Manage Python packages with a pip-compatible interface
@@ -1146,8 +1155,9 @@ fn help_with_no_pager() {
               Use verbose output
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
-          --native-tls
-              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
+          --system-certs
+              Whether to load TLS certificates from the platform's native certificate store [env:
+              UV_SYSTEM_CERTS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>

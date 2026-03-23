@@ -54,6 +54,7 @@ from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Generator, Iterable, NamedTuple, Self
+from urllib.parse import unquote
 
 import httpx
 
@@ -190,9 +191,7 @@ class Finder:
 class CPythonFinder(Finder):
     implementation = ImplementationName.CPYTHON
 
-    RELEASE_URL = (
-        "https://api.github.com/repos/astral-sh/python-build-standalone/releases"
-    )
+    NDJSON_URL = "https://releases.astral.sh/github/versions/main/v1/python-build-standalone.ndjson"
 
     FLAVOR_PREFERENCES = [
         "install_only_stripped",
@@ -201,89 +200,52 @@ class CPythonFinder(Finder):
         "shared-noopt",
         "static-noopt",
     ]
-    SPECIAL_TRIPLES = {
-        "macos": "x86_64-apple-darwin",
-        "linux64": "x86_64-unknown-linux-gnu",
-        "windows-amd64": "x86_64-pc-windows",
-        "windows-x86": "i686-pc-windows",
-        "windows-amd64-shared": "x86_64-pc-windows",
-        "windows-x86-shared": "i686-pc-windows",
-        "linux64-musl": "x86_64-unknown-linux-musl",
-    }
     # Normalized mappings to match the Rust types
     ARCH_MAP = {
         "ppc64": "powerpc64",
         "ppc64le": "powerpc64le",
     }
-
-    _filename_re = re.compile(
-        r"""(?x)
-        ^
-            cpython-
-            (?P<ver>\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?)(?:\+\d+)?\+
-            (?P<date>\d+)-
-            # Note we lookahead to avoid matching "debug" as a triple as we'd
-            # prefer it matches as a build option; we could enumerate all known
-            # build options instead but this is the easy path forward
-            (?P<triple>[a-z\d_]+-[a-z\d]+(?>-[a-z\d]+)?-(?!debug(?:-|$))[a-z\d_]+)-
-            (?:(?P<build_options>.+)-)?
-            (?P<flavor>[a-z_]+)?
-            \.tar\.(?:gz|zst)
-        $
-        """
-    )
-
-    _legacy_filename_re = re.compile(
-        r"""(?x)
-        ^
-            cpython-
-            (?P<ver>\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?)(?:\+\d+)?-
-            (?P<triple>[a-z\d_-]+)-
-            (?P<build_options>(debug|pgo|noopt|lto|pgo\+lto))?-
-            (?P<date>[a-zA-z\d]+)
-            \.tar\.(?:gz|zst)
-        $
-        """
-    )
+    # Terminal flavor keywords used as the last component of an NDJSON variant string.
+    # All preceding "+" components are treated as build options.
+    KNOWN_FLAVORS = frozenset({"full", "install_only", "install_only_stripped"})
 
     def __init__(self, client: httpx.AsyncClient):
         self.client = client
 
     async def find(self) -> list[PythonDownload]:
-        downloads = await self._fetch_downloads()
-        await self._fetch_checksums(downloads, n=20)
-        return downloads
+        return await self._fetch_downloads()
 
-    async def _fetch_downloads(self, pages: int = 100) -> list[PythonDownload]:
-        """Fetch all the indygreg downloads from the release API."""
+    async def _fetch_downloads(self) -> list[PythonDownload]:
+        """Fetch all CPython downloads from the NDJSON release index."""
+        logging.info("Fetching CPython release index")
+        resp = await self.client.get(self.NDJSON_URL)
+        resp.raise_for_status()
+
         downloads_by_version: dict[Version, list[PythonDownload]] = {}
 
-        # Collect all available Python downloads
-        for page in range(1, pages + 1):
-            logging.info("Fetching CPython release page %d", page)
-            resp = await self.client.get(
-                self.RELEASE_URL, params={"page": page, "per_page": 10}
-            )
-            resp.raise_for_status()
-            rows = resp.json()
-            if not rows:
-                break
-            for row in rows:
-                # Sort the assets to ensure deterministic results
-                row["assets"].sort(key=lambda asset: asset["browser_download_url"])
-                for asset in row["assets"]:
-                    download = self._parse_download_asset(asset)
-                    if download is None:
-                        continue
-                    if (
-                        download.release < CPYTHON_MUSL_STATIC_RELEASE_END
-                        and download.triple.libc == "musl"
-                    ):
-                        continue
-                    logging.debug("Found %s (%s)", download.key(), download.filename)
-                    downloads_by_version.setdefault(download.version, []).append(
-                        download
-                    )
+        for line in resp.text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+
+            record = json.loads(line)
+            # Parse "3.11.15+20260303" → version="3.11.15", release=20260303
+            version_str, _, date_str = record["version"].partition("+")
+            version = Version.from_str(version_str)
+            release = int(date_str)
+
+            # Sort artifacts to ensure deterministic results
+            for artifact in sorted(record["artifacts"], key=lambda a: a["url"]):
+                download = self._parse_ndjson_artifact(version, release, artifact)
+                if download is None:
+                    continue
+                if (
+                    download.release < CPYTHON_MUSL_STATIC_RELEASE_END
+                    and download.triple.libc == "musl"
+                ):
+                    continue
+                logging.debug("Found %s (%s)", download.key(), download.filename)
+                downloads_by_version.setdefault(download.version, []).append(download)
 
         # Collapse CPython variants to a single flavor per triple and variant
         downloads = []
@@ -317,89 +279,40 @@ class CPythonFinder(Finder):
 
         return downloads
 
-    async def _fetch_checksums(self, downloads: list[PythonDownload], n: int) -> None:
-        """Fetch the checksums for the given downloads."""
-        checksum_urls = set()
-        for download in downloads:
-            # Skip the newer releases where we got the hash from the GitHub API
-            if download.sha256:
-                continue
-            release_base_url = download.url.rsplit("/", maxsplit=1)[0]
-            checksum_url = release_base_url + "/SHA256SUMS"
-            checksum_urls.add(checksum_url)
+    def _parse_ndjson_artifact(
+        self, version: Version, release: int, artifact: dict[str, Any]
+    ) -> PythonDownload | None:
+        """Parse a single NDJSON artifact entry into a PythonDownload."""
+        url = artifact["url"]
+        sha256 = artifact.get("sha256")
+        filename = unquote(url.rsplit("/", maxsplit=1)[-1])
 
-        async def fetch_checksums(url: str) -> httpx.Response | None:
-            try:
-                resp = await self.client.get(url)
-                resp.raise_for_status()
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code == 404:
-                    return None
-                raise
-            return resp
+        platform_str = artifact["platform"]
+        variant_str = artifact["variant"]
 
-        completed = 0
-        tasks = []
-        for batch in batched(checksum_urls, n):
-            logging.info(
-                "Fetching CPython checksums: %d/%d", completed, len(checksum_urls)
-            )
-            async with asyncio.TaskGroup() as tg:
-                for url in batch:
-                    task = tg.create_task(fetch_checksums(url))
-                    tasks.append(task)
-            completed += n
+        # On macOS, some builds encode build options as platform suffixes
+        # rather than variant components (e.g. "aarch64-apple-darwin-debug",
+        # "aarch64-apple-darwin-freethreaded"). Strip them and promote to
+        # build options.
+        platform_build_options: list[str] = []
+        for suffix in ("-debug", "-freethreaded"):
+            if platform_str.endswith(suffix):
+                platform_str = platform_str[: -len(suffix)]
+                platform_build_options.append(suffix.lstrip("-"))
 
-        checksums = {}
-        for task in tasks:
-            resp = task.result()
-            if resp is None:
-                continue
-            lines = resp.text.splitlines()
-            for line in lines:
-                checksum, filename = line.split(" ", maxsplit=1)
-                filename = filename.strip()
-                checksums[filename] = checksum
+        flavor, variant_build_options = self._parse_variant(variant_str)
+        build_options = platform_build_options + variant_build_options
 
-        for download in downloads:
-            if download.sha256:
-                continue
-            download.sha256 = checksums.get(download.filename)
-
-    def _parse_download_asset(self, asset: dict[str, Any]) -> PythonDownload | None:
-        """Parse a python-build-standalone download asset into a PythonDownload object."""
-        url = asset["browser_download_url"]
-        # Ex)
-        # https://github.com/astral-sh/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-aarch64-unknown-linux-gnu-lto-full.tar.zst
-        if url.endswith(".sha256"):
-            return None
-        release = int(url.rsplit("/")[-2])
-        filename = asset["name"]
-        sha256 = None
-        # On older versions, GitHub didn't backfill the digest.
-        if digest := asset["digest"]:
-            sha256 = digest.removeprefix("sha256:")
-
-        match = self._filename_re.match(filename) or self._legacy_filename_re.match(
-            filename
-        )
-        if match is None:
-            logging.debug("Skipping %s: no regex match", filename)
+        # Skip static builds (not supported)
+        if "static" in build_options:
+            logging.debug("Skipping %s: static unsupported", filename)
             return None
 
-        groups = match.groupdict()
-        version = groups["ver"]
-        triple = groups["triple"]
-        build_options = groups.get("build_options")
-        flavor = groups.get("flavor", "full")
-
-        build_options = build_options.split("+") if build_options else []
-        variant = Variant.from_build_options(build_options)
-        version = Version.from_str(version)
-        triple = self._normalize_triple(triple)
+        triple = self._normalize_triple(platform_str)
         if triple is None:
-            # Skip is logged in `_normalize_triple`
             return None
+
+        variant = Variant.from_build_options(build_options)
 
         return PythonDownload(
             release=release,
@@ -415,12 +328,25 @@ class CPythonFinder(Finder):
             sha256=sha256,
         )
 
-    def _normalize_triple(self, triple: str) -> PlatformTriple | None:
-        if "-static" in triple:
-            logging.debug("Skipping %r: static unsupported", triple)
-            return None
+    def _parse_variant(self, variant_str: str) -> tuple[str, list[str]]:
+        """Split an NDJSON variant string into (flavor, build_options).
 
-        triple = self.SPECIAL_TRIPLES.get(triple, triple)
+        The variant field uses "+" as separator. The last component is the
+        flavor when it is a known terminal keyword; everything preceding it
+        is a build option that may affect priority or variant classification.
+        Examples:
+          "install_only_stripped"   → ("install_only_stripped", [])
+          "pgo+lto+full"            → ("full", ["pgo", "lto"])
+          "freethreaded+debug+full" → ("full", ["freethreaded", "debug"])
+          "static-noopt+full"       → ("full", ["static-noopt"])
+        """
+        parts = variant_str.split("+")
+        if parts[-1] in self.KNOWN_FLAVORS:
+            return parts[-1], parts[:-1]
+        # Whole string is itself a flavor (e.g. "install_only_stripped" has no "+")
+        return variant_str, []
+
+    def _normalize_triple(self, triple: str) -> PlatformTriple | None:
         pieces = triple.split("-")
         try:
             arch = self._normalize_arch(pieces[0])

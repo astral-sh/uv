@@ -551,8 +551,10 @@ impl AuthMiddleware {
             return next.run(request, extensions).await;
         };
         let url = DisplaySafeUrl::from_url(request.url().clone());
-        if matches!(auth_policy, AuthPolicy::Always) && credentials.password().is_none() {
-            return Err(Error::Middleware(format_err!("Missing password for {url}")));
+        if matches!(auth_policy, AuthPolicy::Always) && !credentials.is_authenticated() {
+            return Err(Error::Middleware(format_err!(
+                "Incomplete credentials for {url}"
+            )));
         }
         let result = next.run(request, extensions).await;
 
@@ -582,9 +584,9 @@ impl AuthMiddleware {
     ) -> reqwest_middleware::Result<Response> {
         let credentials = Arc::new(credentials);
 
-        // If there's a password, send the request and cache
+        // If the request already contains complete authentication, send it and cache it.
         if credentials.is_authenticated() {
-            trace!("Request for {url} already contains username and password");
+            trace!("Request for {url} already contains complete authentication");
             return self
                 .complete_request(Some(credentials), request, extensions, next, auth_policy)
                 .await;
@@ -749,47 +751,44 @@ impl AuthMiddleware {
         }
 
         // If this is a known URL, authenticate it via the token store.
-        if let Some(base_client) = self.base_client.as_ref() {
-            if let Some(token_store) = self.pyx_token_store.as_ref() {
-                if token_store.is_known_url(url) {
-                    let mut token_state = self.pyx_token_state.lock().await;
-
-                    // If the token store is uninitialized, initialize it.
-                    let token = match *token_state {
-                        TokenState::Uninitialized => {
-                            trace!("Initializing token store for {url}");
-                            let generated = match token_store
-                                .access_token(base_client, DEFAULT_TOLERANCE_SECS)
-                                .await
-                            {
-                                Ok(Some(token)) => Some(token),
-                                Ok(None) => None,
-                                Err(err) => {
-                                    warn!("Failed to generate access tokens: {err}");
-                                    None
-                                }
-                            };
-                            *token_state = TokenState::Initialized(generated.clone());
-                            generated
-                        }
-                        TokenState::Initialized(ref tokens) => tokens.clone(),
-                    };
-
-                    let credentials = token.map(|token| {
-                        trace!("Using credentials from token store for {url}");
-                        Arc::new(Authentication::from(Credentials::from(token)))
-                    });
-
-                    // Register the fetch for this key
-                    self.cache().fetches.done(key.clone(), credentials.clone());
-
-                    return credentials;
-                }
+        let credentials = if let Some(credentials) = async {
+            let base_client = self.base_client.as_ref()?;
+            let token_store = self.pyx_token_store.as_ref()?;
+            if !token_store.is_known_url(url) {
+                return None;
             }
-        }
 
+            let mut token_state = self.pyx_token_state.lock().await;
+
+            // If the token store is uninitialized, initialize it.
+            let token = match *token_state {
+                TokenState::Uninitialized => {
+                    trace!("Initializing token store for {url}");
+                    let generated = match token_store
+                        .access_token(base_client, DEFAULT_TOLERANCE_SECS)
+                        .await
+                    {
+                        Ok(Some(token)) => Some(token),
+                        Ok(None) => None,
+                        Err(err) => {
+                            warn!("Failed to generate access tokens: {err}");
+                            None
+                        }
+                    };
+                    *token_state = TokenState::Initialized(generated.clone());
+                    generated
+                }
+                TokenState::Initialized(ref tokens) => tokens.clone(),
+            };
+
+            token.map(Credentials::from)
+        }
+        .await
+        {
+            debug!("Found credentials from token store for {url}");
+            Some(credentials)
         // Netrc support based on: <https://github.com/gribouille/netrc>.
-        let credentials = if let Some(credentials) = self.netrc.get().and_then(|netrc| {
+        } else if let Some(credentials) = self.netrc.get().and_then(|netrc| {
             debug!("Checking netrc for credentials for {url}");
             Credentials::from_netrc(
                 netrc,

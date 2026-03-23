@@ -384,6 +384,12 @@ pub(crate) async fn pip_compile(
         PythonRequirement::from_interpreter(&interpreter)
     };
 
+    let artifact_environments = if universal {
+        environments.clone()
+    } else {
+        SupportedEnvironments::default()
+    };
+
     // Determine the environment for the resolution.
     let (tags, resolver_env) = if universal {
         (
@@ -554,6 +560,7 @@ pub(crate) async fn pip_compile(
         .index_strategy(index_strategy)
         .torch_backend(torch_backend)
         .build_options(build_options.clone())
+        .artifact_environments(artifact_environments)
         .build();
 
     // Resolve the requirements.
@@ -590,9 +597,11 @@ pub(crate) async fn pip_compile(
     {
         Ok(resolution) => resolution,
         Err(err) => {
-            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::with_system_certs(
+                client_builder.system_certs(),
+            )
+            .report(err)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
     };
 

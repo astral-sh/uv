@@ -11,6 +11,7 @@ use clap::error::ErrorKind;
 use clap::{Args, Parser, Subcommand};
 use clap::{ValueEnum, ValueHint};
 
+use uv_audit::service::VulnerabilityServiceFormat;
 use uv_auth::Service;
 use uv_cache::CacheArgs;
 use uv_configuration::{
@@ -235,20 +236,32 @@ pub struct GlobalArgs {
     )]
     pub color: Option<ColorChoice>,
 
-    /// Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
+    /// Whether to load TLS certificates from the platform's native certificate store [env:
+    /// UV_NATIVE_TLS=]
     ///
-    /// By default, uv loads certificates from the bundled `webpki-roots` crate. The
-    /// `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv
-    /// improves portability and performance (especially on macOS).
+    /// By default, uv uses bundled Mozilla root certificates. When enabled, this flag loads
+    /// certificates from the platform's native certificate store instead.
+    ///
+    /// This is equivalent to `--system-certs`.
+    #[arg(global = true, long, value_parser = clap::builder::BoolishValueParser::new(), overrides_with_all = ["no_native_tls", "system_certs", "no_system_certs"], hide = true)]
+    pub native_tls: bool,
+
+    #[arg(global = true, long, overrides_with_all = ["native_tls", "system_certs", "no_system_certs"], hide = true)]
+    pub no_native_tls: bool,
+
+    /// Whether to load TLS certificates from the platform's native certificate store [env: UV_SYSTEM_CERTS=]
+    ///
+    /// By default, uv uses bundled Mozilla root certificates, which improves portability and
+    /// performance (especially on macOS).
     ///
     /// However, in some cases, you may want to use the platform's native certificate store,
     /// especially if you're relying on a corporate trust root (e.g., for a mandatory proxy) that's
     /// included in your system's certificate store.
-    #[arg(global = true, long, value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_native_tls"))]
-    pub native_tls: bool,
+    #[arg(global = true, long, value_parser = clap::builder::BoolishValueParser::new(), overrides_with_all = ["no_system_certs", "native_tls", "no_native_tls"])]
+    pub system_certs: bool,
 
-    #[arg(global = true, long, overrides_with("native_tls"), hide = true)]
-    pub no_native_tls: bool,
+    #[arg(global = true, long, overrides_with_all = ["system_certs", "native_tls", "no_native_tls"], hide = true)]
+    pub no_system_certs: bool,
 
     /// Disable network access [env: UV_OFFLINE=]
     ///
@@ -1182,10 +1195,11 @@ pub enum ProjectCommand {
         after_long_help = ""
     )]
     Format(FormatArgs),
-    /// Audit the project's lockfile for known vulnerabilities and unmaintained dependencies.
+    /// Audit the project's dependencies.
+    ///
+    /// Dependencies are audited for known vulnerabilities, as well
+    /// as 'adverse' statuses such as deprecation and quarantine.
     #[command(
-        // NOTE: Hidden while in development.
-        hide = true,
         after_help = "Use `uv help audit` for more details.",
         after_long_help = ""
     )]
@@ -1683,7 +1697,7 @@ pub struct PipCompileArgs {
 
     /// Specify a package to omit from the output resolution. Its dependencies will still be
     /// included in the resolution. Equivalent to pip-compile's `--unsafe-package` option.
-    #[arg(long, alias = "unsafe-package", value_hint = ValueHint::Other)]
+    #[arg(long, alias = "unsafe-package", value_delimiter = ',', value_hint = ValueHint::Other)]
     pub no_emit_package: Option<Vec<PackageName>>,
 
     /// Include `--index-url` and `--extra-index-url` entries in the generated output file.
@@ -4999,6 +5013,7 @@ pub struct ExportArgs {
         long,
         alias = "no-install-package",
         conflicts_with = "only_emit_package",
+        value_delimiter = ',',
         value_hint = ValueHint::Other,
     )]
     pub no_emit_package: Vec<PackageName>,
@@ -5009,6 +5024,7 @@ pub struct ExportArgs {
         alias = "only-install-package",
         conflicts_with = "no_emit_package",
         hide = true,
+        value_delimiter = ',',
         value_hint = ValueHint::Other,
     )]
     pub only_emit_package: Vec<PackageName>,
@@ -5264,6 +5280,24 @@ pub struct AuditArgs {
     /// `aarch64-apple-darwin`.
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
+
+    /// The service format to use for vulnerability lookups.
+    ///
+    /// Each service format has a default URL, which can be
+    /// changed with `--service-url`. The defaults are:
+    ///
+    /// * OSV: <https://api.osv.dev/>
+    #[arg(long, value_enum, default_value = "osv")]
+    pub service_format: VulnerabilityServiceFormat,
+
+    /// The URL to vulnerability service API endpoint.
+    ///
+    /// If not provided, the default URL for the selected service will be used.
+    ///
+    /// The service needs to use the OSV protocol, unless a different
+    /// format was requested by `--service-format`.
+    #[arg(long, value_hint = ValueHint::Url)]
+    pub service_url: Option<String>,
 }
 
 #[derive(Args)]

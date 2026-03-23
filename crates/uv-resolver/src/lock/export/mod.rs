@@ -84,6 +84,11 @@ impl<'lock> ExportableRequirements<'lock> {
                     name: root_name.clone(),
                 })?;
 
+            // Track the activated package in the list of known conflicts.
+            if let Some(conflicts) = conflicts.as_mut() {
+                conflicts.insert(ConflictItem::from(dist.id.name.clone()), MarkerTree::TRUE);
+            }
+
             if groups.prod() {
                 // Add the workspace package to the graph.
                 let index = *inverse

@@ -130,6 +130,8 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     ),
     // Trim end-of-line whitespaces, to allow removing them on save.
     (r"([^\s])[ \t]+(\r?\n)", "$1$2"),
+    // Filter SSL certificate loading debug messages (environment-dependent)
+    (r"DEBUG Loaded \d+ certificate\(s\) from [^\n]+\n", ""),
 ];
 
 /// Create a context for tests which simplifies shared behavior across tests.
@@ -1954,6 +1956,7 @@ impl TestContext {
             EnvVars::SSL_CERT_DIR,
             EnvVars::SSL_CERT_FILE,
             EnvVars::UV_NATIVE_TLS,
+            EnvVars::UV_SYSTEM_CERTS,
         ];
 
         for env_var in EnvVars::all_names()

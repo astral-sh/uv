@@ -142,10 +142,18 @@ pub(crate) async fn list(
     let installed =
         match kinds {
             PythonListKinds::Installed | PythonListKinds::Default => {
+                // While usually [`PythonPreference::OnlyManaged`] means we can skip searching the `PATH`,
+                // in `uv python list` we want to enumerate links to managed Python interpreters for inspection.
+                // Consequently, we widen the preference here and perform post-filtering.
+                let discovery_preference = if python_preference == PythonPreference::OnlyManaged {
+                    PythonPreference::Managed
+                } else {
+                    python_preference
+                };
                 Some(find_python_installations(
                 request.as_ref().unwrap_or(&PythonRequest::Any),
                 EnvironmentPreference::OnlySystem,
-                python_preference,
+                discovery_preference,
                 cache,
                 preview,
             )
@@ -159,7 +167,10 @@ pub(crate) async fn list(
             .collect::<Result<Vec<Result<PythonInstallation, PythonNotFound>>, DiscoveryError>>()?
             .into_iter()
             // Drop any "missing" installations
-            .filter_map(Result::ok))
+            .filter_map(Result::ok)
+            // Apply the `PythonPreference` to discovered interpreters, since we may have
+            // expanded it above
+            .filter(|installation| python_preference.allows_installation(installation)))
             }
             PythonListKinds::Downloads => None,
         };

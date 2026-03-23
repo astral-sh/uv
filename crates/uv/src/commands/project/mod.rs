@@ -33,7 +33,6 @@ use uv_python::{
     BrokenLink, EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads,
     PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, PythonSource,
     PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions, VersionRequest,
-    satisfies_python_preference,
 };
 use uv_requirements::upgrade::{LockedRequirements, read_lock_requirements};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
@@ -919,11 +918,10 @@ fn environment_is_usable(
         }
     }
 
-    if satisfies_python_preference(
+    if python_preference.allows_installation(&PythonInstallation::new(
         PythonSource::DiscoveredEnvironment,
-        environment.interpreter(),
-        python_preference,
-    ) {
+        environment.interpreter().clone(),
+    )) {
         trace!(
             "The virtual environment's Python interpreter meets the Python preference: `{}`",
             python_preference

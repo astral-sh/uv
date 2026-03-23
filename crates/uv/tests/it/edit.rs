@@ -12587,6 +12587,115 @@ fn remove_all_with_comments() -> Result<()> {
     Ok(())
 }
 
+/// Removing a dependency should preserve end-of-line comments on nearby lines.
+///
+/// See: <https://github.com/astral-sh/uv/issues/18555>
+#[test]
+fn remove_preserves_nearby_end_of_line_comments() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig>=2.0.0", # this comment is clearly essential
+            "typing-extensions>=4.0.0",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.remove().arg("typing-extensions"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig>=2.0.0", # this comment is clearly essential
+        ]
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+/// Removing multiple adjacent matching dependencies should preserve comment order.
+///
+/// See: <https://github.com/astral-sh/uv/issues/18555>
+#[test]
+fn remove_preserves_comment_order_for_multiple_adjacent_matches() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig>=2.0.0", # comment on iniconfig
+            "typing-extensions>=4.0.0 ; python_version < '3.11'", # comment on first typing-extensions
+            "typing-extensions>=4.0.0 ; python_version >= '3.11'",
+            "sniffio>=1.3.0",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.remove().arg("typing-extensions"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig>=2.0.0", # comment on iniconfig
+            # comment on first typing-extensions
+            "sniffio>=1.3.0",
+        ]
+        "#
+        );
+    });
+
+    Ok(())
+}
+
 /// If multiple indexes are provided on the CLI, the first-provided index should take precedence
 /// during resolution, and should appear first in the `pyproject.toml` file.
 ///
@@ -13734,7 +13843,7 @@ fn add_auth_policy_always_with_username_no_password() -> Result<()> {
 
     ----- stderr -----
     error: Failed to fetch: `https://pypi.org/simple/anyio/`
-      Caused by: Missing password for https://pypi.org/simple/anyio/
+      Caused by: Incomplete credentials for https://pypi.org/simple/anyio/
     "
     );
     Ok(())

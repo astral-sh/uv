@@ -818,7 +818,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 client.cached_client().get_serde_with_retry(
                     req,
                     &cache_entry,
-                    cache_control,
+                    cache_control.clone(),
                     download,
                 )
             })
@@ -2278,7 +2278,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .skip_cache_with_retry(
                         Self::request(url.clone(), client)?,
                         &cache_entry,
-                        cache_control,
+                        cache_control.clone(),
                         download,
                     )
                     .await
