@@ -589,7 +589,7 @@ impl RegistryClient {
         url: &DisplaySafeUrl,
         index: &IndexUrl,
         cache_entry: &CacheEntry,
-        cache_control: CacheControl<'_>,
+        cache_control: CacheControl,
     ) -> Result<OwnedArchive<SimpleDetailMetadata>, Error> {
         // In theory, we should be able to pass `MediaType::all()` to all registries, and as
         // unsupported media types should be ignored by the server. For now, we implement this
@@ -1175,7 +1175,7 @@ impl RegistryClient {
                 .get_serde_with_retry(
                     req,
                     &cache_entry,
-                    cache_control,
+                    cache_control.clone(),
                     read_metadata_range_request,
                 )
                 .await

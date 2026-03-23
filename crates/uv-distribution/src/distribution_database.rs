@@ -746,7 +746,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 client.cached_client().get_serde_with_retry(
                     req,
                     &http_entry,
-                    cache_control,
+                    cache_control.clone(),
                     download,
                 )
             })
@@ -953,7 +953,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 client.cached_client().get_serde_with_retry(
                     req,
                     &http_entry,
-                    cache_control,
+                    cache_control.clone(),
                     download,
                 )
             })

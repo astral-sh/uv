@@ -19254,6 +19254,53 @@ fn lock_unnamed_explicit_index() -> Result<()> {
     Ok(())
 }
 
+/// Error when an index cache-control override is not a valid HTTP header value.
+#[test]
+fn lock_invalid_index_cache_control() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [[tool.uv.index]]
+        name = "test"
+        url = "https://test.pypi.org/simple"
+        cache-control.api = """
+        max-age=600
+        """
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Failed to parse `pyproject.toml` during settings discovery:
+      TOML parse error at line 11, column 9
+         |
+      11 |         cache-control.api = \"\"\"
+         |         ^^^^^^^^^^^^^
+      `cache-control.api` must be a valid HTTP header value
+
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 11, column 9
+       |
+    11 |         cache-control.api = \"\"\"
+       |         ^^^^^^^^^^^^^
+    `cache-control.api` must be a valid HTTP header value
+    ");
+
+    Ok(())
+}
+
 #[tokio::test]
 async fn lock_named_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
