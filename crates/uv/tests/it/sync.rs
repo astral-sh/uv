@@ -14403,7 +14403,7 @@ fn sync_git_lfs() -> Result<()> {
         dependencies = ["test-lfs-repo"]
 
         [tool.uv.sources]
-        test-lfs-repo = { git = "https://github.com/astral-sh/test-lfs-repo.git", rev = "0fe88f7c2e2883521bf065c108d9ee8eb115674b", lfs = true }
+        test-lfs-repo = { git = "https://github.com/astral-sh/test-lfs-repo.git", rev = "261c828b8e05251f3a3e4f6b47b149d691c7efbb", lfs = true }
         "#,
     )?;
 
@@ -14416,7 +14416,7 @@ fn sync_git_lfs() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@0fe88f7c2e2883521bf065c108d9ee8eb115674b#lfs=true)
+     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true)
     ");
 
     // Verify that we can import the module and access LFS content
@@ -14446,7 +14446,7 @@ fn sync_git_lfs() -> Result<()> {
         [[package]]
         name = "test-lfs-repo"
         version = "0.1.0"
-        source = { git = "https://github.com/astral-sh/test-lfs-repo.git?lfs=true&rev=0fe88f7c2e2883521bf065c108d9ee8eb115674b#0fe88f7c2e2883521bf065c108d9ee8eb115674b" }
+        source = { git = "https://github.com/astral-sh/test-lfs-repo.git?lfs=true&rev=261c828b8e05251f3a3e4f6b47b149d691c7efbb#261c828b8e05251f3a3e4f6b47b149d691c7efbb" }
 
         [[package]]
         name = "test-project"
@@ -14457,7 +14457,7 @@ fn sync_git_lfs() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "test-lfs-repo", git = "https://github.com/astral-sh/test-lfs-repo.git?lfs=true&rev=0fe88f7c2e2883521bf065c108d9ee8eb115674b" }]
+        requires-dist = [{ name = "test-lfs-repo", git = "https://github.com/astral-sh/test-lfs-repo.git?lfs=true&rev=261c828b8e05251f3a3e4f6b47b149d691c7efbb" }]
         "#
         );
     });
@@ -14473,7 +14473,7 @@ fn sync_git_lfs() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@0fe88f7c2e2883521bf065c108d9ee8eb115674b#lfs=true)
+     ~ test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true)
     ");
 
     uv_snapshot!(context.filters(), context.python_command()
@@ -14496,7 +14496,7 @@ fn sync_git_lfs() -> Result<()> {
         dependencies = ["test-lfs-repo"]
 
         [tool.uv.sources]
-        test-lfs-repo = { git = "https://github.com/astral-sh/test-lfs-repo.git", rev = "0fe88f7c2e2883521bf065c108d9ee8eb115674b", lfs = false }
+        test-lfs-repo = { git = "https://github.com/astral-sh/test-lfs-repo.git", rev = "261c828b8e05251f3a3e4f6b47b149d691c7efbb", lfs = false }
         "#,
     )?;
 
@@ -14510,8 +14510,8 @@ fn sync_git_lfs() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@0fe88f7c2e2883521bf065c108d9ee8eb115674b#lfs=true)
-     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@0fe88f7c2e2883521bf065c108d9ee8eb115674b)
+     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true)
+     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb)
     ");
 
     // Verify that LFS content is missing (import should fail)
@@ -14543,7 +14543,7 @@ fn sync_git_lfs() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@0fe88f7c2e2883521bf065c108d9ee8eb115674b)
+     ~ test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb)
     ");
 
     uv_snapshot!(context.filters(), context.python_command()
@@ -14579,7 +14579,7 @@ fn sync_git_lfs() -> Result<()> {
         [[package]]
         name = "test-lfs-repo"
         version = "0.1.0"
-        source = { git = "https://github.com/astral-sh/test-lfs-repo.git?rev=0fe88f7c2e2883521bf065c108d9ee8eb115674b#0fe88f7c2e2883521bf065c108d9ee8eb115674b" }
+        source = { git = "https://github.com/astral-sh/test-lfs-repo.git?rev=261c828b8e05251f3a3e4f6b47b149d691c7efbb#261c828b8e05251f3a3e4f6b47b149d691c7efbb" }
 
         [[package]]
         name = "test-project"
@@ -14590,7 +14590,7 @@ fn sync_git_lfs() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "test-lfs-repo", git = "https://github.com/astral-sh/test-lfs-repo.git?rev=0fe88f7c2e2883521bf065c108d9ee8eb115674b" }]
+        requires-dist = [{ name = "test-lfs-repo", git = "https://github.com/astral-sh/test-lfs-repo.git?rev=261c828b8e05251f3a3e4f6b47b149d691c7efbb" }]
         "#
         );
     });
@@ -14605,7 +14605,7 @@ fn sync_git_lfs() -> Result<()> {
         dependencies = ["test-lfs-repo"]
 
         [tool.uv.sources]
-        test-lfs-repo = { git = "https://github.com/astral-sh/test-lfs-repo.git", rev = "0fe88f7c2e2883521bf065c108d9ee8eb115674b" }
+        test-lfs-repo = { git = "https://github.com/astral-sh/test-lfs-repo.git", rev = "261c828b8e05251f3a3e4f6b47b149d691c7efbb" }
         "#,
     )?;
 
@@ -14619,8 +14619,8 @@ fn sync_git_lfs() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@0fe88f7c2e2883521bf065c108d9ee8eb115674b)
-     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@0fe88f7c2e2883521bf065c108d9ee8eb115674b#lfs=true)
+     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb)
+     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true)
     ");
 
     // Verify that we can import the module when UV_GIT_LFS is set
@@ -14646,8 +14646,8 @@ fn sync_git_lfs() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@0fe88f7c2e2883521bf065c108d9ee8eb115674b#lfs=true)
-     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@0fe88f7c2e2883521bf065c108d9ee8eb115674b)
+     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true)
+     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb)
     ");
 
     uv_snapshot!(context.filters(), context.python_command()
@@ -14678,8 +14678,8 @@ fn sync_git_lfs() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@0fe88f7c2e2883521bf065c108d9ee8eb115674b)
-     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@0fe88f7c2e2883521bf065c108d9ee8eb115674b#lfs=true)
+     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb)
+     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true)
     ");
 
     uv_snapshot!(context.filters(), context.python_command()
@@ -14704,8 +14704,8 @@ fn sync_git_lfs() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@0fe88f7c2e2883521bf065c108d9ee8eb115674b#lfs=true)
-     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@0fe88f7c2e2883521bf065c108d9ee8eb115674b)
+     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true)
+     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb)
     ");
 
     uv_snapshot!(context.filters(), context.python_command()
@@ -14741,7 +14741,7 @@ fn sync_git_lfs() -> Result<()> {
         [[package]]
         name = "test-lfs-repo"
         version = "0.1.0"
-        source = { git = "https://github.com/astral-sh/test-lfs-repo.git?rev=0fe88f7c2e2883521bf065c108d9ee8eb115674b#0fe88f7c2e2883521bf065c108d9ee8eb115674b" }
+        source = { git = "https://github.com/astral-sh/test-lfs-repo.git?rev=261c828b8e05251f3a3e4f6b47b149d691c7efbb#261c828b8e05251f3a3e4f6b47b149d691c7efbb" }
 
         [[package]]
         name = "test-project"
@@ -14752,7 +14752,7 @@ fn sync_git_lfs() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "test-lfs-repo", git = "https://github.com/astral-sh/test-lfs-repo.git?rev=0fe88f7c2e2883521bf065c108d9ee8eb115674b" }]
+        requires-dist = [{ name = "test-lfs-repo", git = "https://github.com/astral-sh/test-lfs-repo.git?rev=261c828b8e05251f3a3e4f6b47b149d691c7efbb" }]
         "#
         );
     });
@@ -14768,8 +14768,8 @@ fn sync_git_lfs() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@0fe88f7c2e2883521bf065c108d9ee8eb115674b)
-     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@0fe88f7c2e2883521bf065c108d9ee8eb115674b#lfs=true)
+     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb)
+     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true)
     ");
 
     uv_snapshot!(context.filters(), context.python_command()
@@ -14799,7 +14799,7 @@ fn sync_git_lfs() -> Result<()> {
         [[package]]
         name = "test-lfs-repo"
         version = "0.1.0"
-        source = { git = "https://github.com/astral-sh/test-lfs-repo.git?lfs=true&rev=0fe88f7c2e2883521bf065c108d9ee8eb115674b#0fe88f7c2e2883521bf065c108d9ee8eb115674b" }
+        source = { git = "https://github.com/astral-sh/test-lfs-repo.git?lfs=true&rev=261c828b8e05251f3a3e4f6b47b149d691c7efbb#261c828b8e05251f3a3e4f6b47b149d691c7efbb" }
 
         [[package]]
         name = "test-project"
@@ -14810,7 +14810,7 @@ fn sync_git_lfs() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "test-lfs-repo", git = "https://github.com/astral-sh/test-lfs-repo.git?lfs=true&rev=0fe88f7c2e2883521bf065c108d9ee8eb115674b" }]
+        requires-dist = [{ name = "test-lfs-repo", git = "https://github.com/astral-sh/test-lfs-repo.git?lfs=true&rev=261c828b8e05251f3a3e4f6b47b149d691c7efbb" }]
         "#
         );
     });
