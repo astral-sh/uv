@@ -139,6 +139,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -350,6 +351,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -562,6 +564,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -806,6 +809,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -1206,6 +1210,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -1442,6 +1447,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -1475,6 +1481,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://test.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -1686,6 +1693,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://test.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -1721,6 +1729,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -1754,6 +1763,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://test.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -1989,6 +1999,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://download.pytorch.org/whl/torch_stable.html",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -2413,6 +2424,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://download.pytorch.org/whl",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -2446,6 +2458,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://test.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -2655,6 +2668,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://download.pytorch.org/whl",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -2688,6 +2702,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://test.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -4085,6 +4100,7 @@ fn resolve_both() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -4342,6 +4358,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -4678,6 +4695,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -5572,6 +5590,7 @@ fn index_priority() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://cli.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -5607,6 +5626,7 @@ fn index_priority() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://file.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -5818,6 +5838,7 @@ fn index_priority() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://cli.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -5853,6 +5874,7 @@ fn index_priority() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://file.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -6070,6 +6092,7 @@ fn index_priority() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://cli.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -6105,6 +6128,7 @@ fn index_priority() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://file.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -6317,6 +6341,7 @@ fn index_priority() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://cli.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -6352,6 +6377,7 @@ fn index_priority() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://file.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -6571,6 +6597,7 @@ fn index_priority() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://cli.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -6606,6 +6633,7 @@ fn index_priority() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://file.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -6818,6 +6846,7 @@ fn index_priority() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://cli.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -6853,6 +6882,7 @@ fn index_priority() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://file.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,

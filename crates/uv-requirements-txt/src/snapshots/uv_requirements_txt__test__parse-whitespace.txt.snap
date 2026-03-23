@@ -80,6 +80,7 @@ RequirementsTxt {
                                     given: Some(
                                         "git+https://github.com/pandas-dev/pandas.git",
                                     ),
+                                    expanded: false,
                                 },
                             },
                         ),
