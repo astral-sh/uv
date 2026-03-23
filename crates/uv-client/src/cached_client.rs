@@ -173,8 +173,8 @@ impl<E: Into<Self> + std::error::Error + 'static> From<CachedClientError<E>> for
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum CacheControl<'a> {
+#[derive(Debug, Clone)]
+pub enum CacheControl {
     /// Respect the `cache-control` header from the response.
     None,
     /// Apply `max-age=0, must-revalidate` to the request.
@@ -182,10 +182,10 @@ pub enum CacheControl<'a> {
     /// Allow the client to return stale responses.
     AllowStale,
     /// Override the cache control header with a custom value.
-    Override(&'a str),
+    Override(http::HeaderValue),
 }
 
-impl From<Freshness> for CacheControl<'_> {
+impl From<Freshness> for CacheControl {
     fn from(value: Freshness) -> Self {
         match value {
             Freshness::Fresh => Self::None,
@@ -239,7 +239,7 @@ impl CachedClient {
         &self,
         req: Request,
         cache_entry: &CacheEntry,
-        cache_control: CacheControl<'_>,
+        cache_control: CacheControl,
         response_callback: Callback,
     ) -> Result<Payload, CachedClientError<CallBackError>> {
         let payload = self
@@ -272,18 +272,21 @@ impl CachedClient {
         &self,
         req: Request,
         cache_entry: &CacheEntry,
-        cache_control: CacheControl<'_>,
+        cache_control: CacheControl,
         response_callback: Callback,
     ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
         let fresh_req = req.try_clone().expect("HTTP request must be cloneable");
         let start = Instant::now();
         let cached_response = if let Some(cached) = Self::read_cache(cache_entry).await {
-            self.send_cached(req, cache_control, cached)
+            self.send_cached(req, cache_control.clone(), cached)
                 .boxed_local()
                 .await?
         } else {
-            debug!("No cache entry for: {}", req.url());
-            let (response, cache_policy) = self.fresh_request(req, cache_control).await?;
+            debug!(
+                "No cache entry for: {}",
+                DisplaySafeUrl::from_url(req.url().clone())
+            );
+            let (response, cache_policy) = self.fresh_request(req, cache_control.clone()).await?;
             CachedResponse::ModifiedOrNew {
                 response,
                 cache_policy,
@@ -300,7 +303,7 @@ impl CachedClient {
                     self.resend_and_heal_cache(
                         fresh_req,
                         cache_entry,
-                        cache_control,
+                        cache_control.clone(),
                         response_callback,
                     )
                     .await
@@ -326,7 +329,7 @@ impl CachedClient {
                             self.resend_and_heal_cache(
                                 fresh_req,
                                 cache_entry,
-                                cache_control,
+                                cache_control.clone(),
                                 response_callback,
                             )
                             .await
@@ -343,7 +346,10 @@ impl CachedClient {
                 // If we got a modified response, but it's a 304, then a validator failed (e.g., the
                 // ETag didn't match). We need to make a fresh request.
                 if response.status() == http::StatusCode::NOT_MODIFIED {
-                    warn!("Server returned unusable 304 for: {}", fresh_req.url());
+                    warn!(
+                        "Server returned unusable 304 for: {}",
+                        DisplaySafeUrl::from_url(fresh_req.url().clone())
+                    );
                     self.resend_and_heal_cache(
                         fresh_req,
                         cache_entry,
@@ -374,7 +380,7 @@ impl CachedClient {
         &self,
         req: Request,
         cache_entry: &CacheEntry,
-        cache_control: CacheControl<'_>,
+        cache_control: CacheControl,
         response_callback: Callback,
     ) -> Result<Payload, CachedClientError<CallBackError>> {
         let start = Instant::now();
@@ -398,7 +404,7 @@ impl CachedClient {
         &self,
         req: Request,
         cache_entry: &CacheEntry,
-        cache_control: CacheControl<'_>,
+        cache_control: CacheControl,
         response_callback: Callback,
     ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
         let _ = fs_err::tokio::remove_file(&cache_entry.path()).await;
@@ -488,27 +494,25 @@ impl CachedClient {
     async fn send_cached(
         &self,
         mut req: Request,
-        cache_control: CacheControl<'_>,
+        cache_control: CacheControl,
         cached: DataWithCachePolicy,
     ) -> Result<CachedResponse, Error> {
         // Apply the cache control header, if necessary.
-        match cache_control {
-            CacheControl::None | CacheControl::AllowStale | CacheControl::Override(..) => {}
-            CacheControl::MustRevalidate => {
-                req.headers_mut().insert(
-                    http::header::CACHE_CONTROL,
-                    http::HeaderValue::from_static("no-cache"),
-                );
-            }
+        if matches!(&cache_control, CacheControl::MustRevalidate) {
+            req.headers_mut().insert(
+                http::header::CACHE_CONTROL,
+                http::HeaderValue::from_static("no-cache"),
+            );
         }
+        let url = DisplaySafeUrl::from_url(req.url().clone());
         Ok(match cached.cache_policy.before_request(&mut req) {
             BeforeRequest::Fresh => {
-                debug!("Found fresh response for: {}", req.url());
+                debug!("Found fresh response for: {url}");
                 CachedResponse::FreshCache(cached)
             }
             BeforeRequest::Stale(new_cache_policy_builder) => match cache_control {
                 CacheControl::None | CacheControl::MustRevalidate | CacheControl::Override(_) => {
-                    debug!("Found stale response for: {}", req.url());
+                    debug!("Found stale response for: {url}");
                     self.send_cached_handle_stale(
                         req,
                         cache_control,
@@ -518,16 +522,13 @@ impl CachedClient {
                     .await?
                 }
                 CacheControl::AllowStale => {
-                    debug!("Found stale (but allowed) response for: {}", req.url());
+                    debug!("Found stale (but allowed) response for: {url}");
                     CachedResponse::FreshCache(cached)
                 }
             },
             BeforeRequest::NoMatch => {
                 // This shouldn't happen; if it does, we'll override the cache.
-                warn!(
-                    "Cached response doesn't match current request for: {}",
-                    req.url()
-                );
+                warn!("Cached response doesn't match current request for: {url}",);
                 let (response, cache_policy) = self.fresh_request(req, cache_control).await?;
                 CachedResponse::ModifiedOrNew {
                     response,
@@ -540,7 +541,7 @@ impl CachedClient {
     async fn send_cached_handle_stale(
         &self,
         req: Request,
-        cache_control: CacheControl<'_>,
+        cache_control: CacheControl,
         cached: DataWithCachePolicy,
         new_cache_policy_builder: CachePolicyBuilder,
     ) -> Result<CachedResponse, Error> {
@@ -550,7 +551,7 @@ impl CachedClient {
         let mut response = self
             .0
             .execute(req)
-            .instrument(info_span!("revalidation_request", url = url.as_str()))
+            .instrument(info_span!("revalidation_request", url = %url))
             .await
             .map_err(|err| Error::from_reqwest_middleware(url.clone(), err, start))?;
         trace!(
@@ -571,12 +572,10 @@ impl CachedClient {
         }
 
         // If the user set a custom `Cache-Control` header, override it.
-        if let CacheControl::Override(header) = cache_control {
-            response.headers_mut().insert(
-                http::header::CACHE_CONTROL,
-                http::HeaderValue::from_str(header)
-                    .expect("Cache-Control header must be valid UTF-8"),
-            );
+        if let CacheControl::Override(header) = &cache_control {
+            response
+                .headers_mut()
+                .insert(http::header::CACHE_CONTROL, header.clone());
         }
 
         match cached
@@ -603,11 +602,11 @@ impl CachedClient {
         }
     }
 
-    #[instrument(skip_all, fields(url = req.url().as_str()))]
+    #[instrument(skip_all, fields(url = %DisplaySafeUrl::from_url(req.url().clone())))]
     async fn fresh_request(
         &self,
         req: Request,
-        cache_control: CacheControl<'_>,
+        cache_control: CacheControl,
     ) -> Result<(Response, Option<Box<CachePolicy>>), Error> {
         let url = DisplaySafeUrl::from_url(req.url().clone());
         debug!("Sending fresh {} request for: {}", req.method(), url);
@@ -625,12 +624,10 @@ impl CachedClient {
         );
 
         // If the user set a custom `Cache-Control` header, override it.
-        if let CacheControl::Override(header) = cache_control {
-            response.headers_mut().insert(
-                http::header::CACHE_CONTROL,
-                http::HeaderValue::from_str(header)
-                    .expect("Cache-Control header must be valid UTF-8"),
-            );
+        if let CacheControl::Override(header) = &cache_control {
+            response
+                .headers_mut()
+                .insert(http::header::CACHE_CONTROL, header.clone());
         }
 
         let retry_count = response
@@ -666,7 +663,7 @@ impl CachedClient {
         &self,
         req: Request,
         cache_entry: &CacheEntry,
-        cache_control: CacheControl<'_>,
+        cache_control: CacheControl,
         response_callback: Callback,
     ) -> Result<Payload, CachedClientError<CallBackError>> {
         let payload = self
@@ -690,14 +687,19 @@ impl CachedClient {
         &self,
         req: Request,
         cache_entry: &CacheEntry,
-        cache_control: CacheControl<'_>,
+        cache_control: CacheControl,
         response_callback: Callback,
     ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
         let mut retry_state = RetryState::start(self.uncached().retry_policy(), req.url().clone());
         loop {
             let fresh_req = req.try_clone().expect("HTTP request must be cloneable");
             let result = self
-                .get_cacheable(fresh_req, cache_entry, cache_control, &response_callback)
+                .get_cacheable(
+                    fresh_req,
+                    cache_entry,
+                    cache_control.clone(),
+                    &response_callback,
+                )
                 .await;
 
             match result {
@@ -724,14 +726,19 @@ impl CachedClient {
         &self,
         req: Request,
         cache_entry: &CacheEntry,
-        cache_control: CacheControl<'_>,
+        cache_control: CacheControl,
         response_callback: Callback,
     ) -> Result<Payload, CachedClientError<CallBackError>> {
         let mut retry_state = RetryState::start(self.uncached().retry_policy(), req.url().clone());
         loop {
             let fresh_req = req.try_clone().expect("HTTP request must be cloneable");
             let result = self
-                .skip_cache(fresh_req, cache_entry, cache_control, &response_callback)
+                .skip_cache(
+                    fresh_req,
+                    cache_entry,
+                    cache_control.clone(),
+                    &response_callback,
+                )
                 .await;
 
             match result {

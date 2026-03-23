@@ -13843,7 +13843,7 @@ fn add_auth_policy_always_with_username_no_password() -> Result<()> {
 
     ----- stderr -----
     error: Failed to fetch: `https://pypi.org/simple/anyio/`
-      Caused by: Missing password for https://pypi.org/simple/anyio/
+      Caused by: Incomplete credentials for https://pypi.org/simple/anyio/
     "
     );
     Ok(())

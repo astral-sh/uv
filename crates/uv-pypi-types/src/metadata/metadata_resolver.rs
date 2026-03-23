@@ -79,7 +79,7 @@ impl ResolutionMetadata {
             .collect::<Box<_>>();
         let dynamic = headers
             .get_all_values("Dynamic")
-            .any(|field| field == "Version");
+            .any(|field| field.eq_ignore_ascii_case("Version"));
 
         Ok(Self {
             name,
@@ -112,12 +112,15 @@ impl ResolutionMetadata {
         // If any of the fields we need are marked as dynamic, we can't use the `PKG-INFO` file.
         let mut dynamic = false;
         for field in headers.get_all_values("Dynamic") {
-            match field.as_str() {
-                "Requires-Python" => return Err(MetadataError::DynamicField("Requires-Python")),
-                "Requires-Dist" => return Err(MetadataError::DynamicField("Requires-Dist")),
-                "Provides-Extra" => return Err(MetadataError::DynamicField("Provides-Extra")),
-                "Version" => dynamic = true,
-                _ => (),
+            let field = field.as_str();
+            if field.eq_ignore_ascii_case("Requires-Python") {
+                return Err(MetadataError::DynamicField("Requires-Python"));
+            } else if field.eq_ignore_ascii_case("Requires-Dist") {
+                return Err(MetadataError::DynamicField("Requires-Dist"));
+            } else if field.eq_ignore_ascii_case("Provides-Extra") {
+                return Err(MetadataError::DynamicField("Provides-Extra"));
+            } else if field.eq_ignore_ascii_case("Version") {
+                dynamic = true;
             }
         }
 
@@ -333,6 +336,25 @@ mod tests {
         let s = "Metadata-Version: 2.3\nName: asdf\nVersion: 1.0\nDynamic: Requires-Dist";
         let meta = ResolutionMetadata::parse_pkg_info(s.as_bytes()).unwrap_err();
         assert!(matches!(meta, MetadataError::DynamicField("Requires-Dist")));
+
+        // Dynamic field values should be matched case-insensitively.
+        let s = "Metadata-Version: 2.3\nName: asdf\nVersion: 1.0\nDynamic: requires-dist";
+        let meta = ResolutionMetadata::parse_pkg_info(s.as_bytes()).unwrap_err();
+        assert!(matches!(meta, MetadataError::DynamicField("Requires-Dist")));
+
+        let s = "Metadata-Version: 2.3\nName: asdf\nVersion: 1.0\nDynamic: requires-python";
+        let meta = ResolutionMetadata::parse_pkg_info(s.as_bytes()).unwrap_err();
+        assert!(matches!(
+            meta,
+            MetadataError::DynamicField("Requires-Python")
+        ));
+
+        let s = "Metadata-Version: 2.3\nName: asdf\nVersion: 1.0\nDynamic: provides-extra";
+        let meta = ResolutionMetadata::parse_pkg_info(s.as_bytes()).unwrap_err();
+        assert!(matches!(
+            meta,
+            MetadataError::DynamicField("Provides-Extra")
+        ));
 
         let s = "Metadata-Version: 2.3\nName: asdf\nVersion: 1.0\nRequires-Dist: foo";
         let meta = ResolutionMetadata::parse_pkg_info(s.as_bytes()).unwrap();

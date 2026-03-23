@@ -36,7 +36,7 @@ jobs:
       - name: "Install mold"
         run: ./scripts/install-mold.sh
 
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
@@ -45,7 +45,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
-          version: "0.10.10"
+          version: "0.10.12"
 
       - name: "Install required Python versions"
         run: uv python install
@@ -85,7 +85,7 @@ jobs:
           sudo chown "$(id -u):$(id -g)" /minix
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@a37010ded18ff788be4440302bd6830b1ae50d8b # v2.68.25
+        uses: taiki-e/install-action@cbb1dcaa26e1459e2876c39f61c1e22a1258aac5 # v2.68.33
         with:
           tool: cargo-nextest
 
@@ -129,7 +129,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
@@ -144,13 +144,13 @@ jobs:
 
       - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
-          version: "0.10.10"
+          version: "0.10.12"
 
       - name: "Install required Python versions"
         run: uv python install
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@a37010ded18ff788be4440302bd6830b1ae50d8b # v2.68.25
+        uses: taiki-e/install-action@cbb1dcaa26e1459e2876c39f61c1e22a1258aac5 # v2.68.33
         with:
           tool: cargo-nextest
 
@@ -208,12 +208,12 @@ jobs:
 
       - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
-          version: "0.10.10"
+          version: "0.10.12"
 
       - name: "Install required Python versions"
         run: uv python install
 
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           workspaces: ${{ env.UV_WORKSPACE }}
           # Use the same cache entry across the partitions
@@ -228,7 +228,7 @@ jobs:
         run: New-Item -Path "C:\uv" -ItemType Directory -Force
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@a37010ded18ff788be4440302bd6830b1ae50d8b # v2.68.25
+        uses: taiki-e/install-action@cbb1dcaa26e1459e2876c39f61c1e22a1258aac5 # v2.68.33
         with:
           tool: cargo-nextest
 

@@ -11,6 +11,7 @@ use clap::error::ErrorKind;
 use clap::{Args, Parser, Subcommand};
 use clap::{ValueEnum, ValueHint};
 
+use uv_audit::service::VulnerabilityServiceFormat;
 use uv_auth::Service;
 use uv_cache::CacheArgs;
 use uv_configuration::{
@@ -5279,6 +5280,24 @@ pub struct AuditArgs {
     /// `aarch64-apple-darwin`.
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
+
+    /// The service format to use for vulnerability lookups.
+    ///
+    /// Each service format has a default URL, which can be
+    /// changed with `--service-url`. The defaults are:
+    ///
+    /// * OSV: <https://api.osv.dev/>
+    #[arg(long, value_enum, default_value = "osv")]
+    pub service_format: VulnerabilityServiceFormat,
+
+    /// The URL to vulnerability service API endpoint.
+    ///
+    /// If not provided, the default URL for the selected service will be used.
+    ///
+    /// The service needs to use the OSV protocol, unless a different
+    /// format was requested by `--service-format`.
+    #[arg(long, value_hint = ValueHint::Url)]
+    pub service_url: Option<String>,
 }
 
 #[derive(Args)]

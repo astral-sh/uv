@@ -22,6 +22,7 @@ uv-normalize = { workspace = true }
 uv-redacted = { workspace = true }
 uv-small-str = { workspace = true }
 
+clap = { workspace = true, optional = true }
 futures = { workspace = true }
 jiff = { workspace = true }
 reqwest-middleware = { workspace = true, features = ["json"] }
