@@ -334,7 +334,7 @@ pub(crate) async fn venv(
 
     // Update the venv link if applicable, and get a scripts path.
     let scripts_dir = if let Some(project) = &project {
-        let link_path = venv.update_venv_link(project.workspace().install_path(), true)?;
+        let link_path = venv.update_venv_link(project.workspace().install_path(), true);
         if venv.centralized()
             && let Ok(suffix) = venv.scripts().strip_prefix(&path)
         {

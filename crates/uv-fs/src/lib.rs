@@ -195,6 +195,50 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
     }
 }
 
+/// Like [`replace_symlink`], but on windows also handles the case where `dst` is a file or
+/// empty directory rather than a junction.
+#[cfg(unix)]
+pub fn replace_symlink_lenient(
+    src: impl AsRef<Path>,
+    dst: impl AsRef<Path>,
+) -> std::io::Result<()> {
+    replace_symlink(src, dst)
+}
+
+/// Like [`replace_symlink`], but on windows also handles the case where `dst` is a file or
+/// empty directory rather than a junction.
+#[cfg(windows)]
+pub fn replace_symlink_lenient(
+    src: impl AsRef<Path>,
+    dst: impl AsRef<Path>,
+) -> std::io::Result<()> {
+    use windows::Win32::Foundation::{ERROR_NOT_A_REPARSE_POINT, WIN32_ERROR};
+
+    // Try to remove an existing junction.
+    match junction::delete(dst.as_ref()) {
+        Ok(()) => fs_err::remove_dir(dst.as_ref())?,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        // `junction::delete` will produce this error when the path exists but is not a junction.
+        Err(err)
+            if err
+                .raw_os_error()
+                .map(|err| WIN32_ERROR(err.cast_unsigned()))
+                == Some(ERROR_NOT_A_REPARSE_POINT) =>
+        {
+            match fs_err::remove_dir(dst.as_ref()) {
+                Ok(()) => {}
+                Err(err) if err.kind() == std::io::ErrorKind::NotADirectory => {
+                    fs_err::remove_file(dst.as_ref())?;
+                }
+                Err(err) => return Err(err),
+            }
+        }
+        Err(err) => return Err(err),
+    }
+
+    create_junction(src.as_ref(), dst.as_ref())
+}
+
 /// Create a symlink at `dst` pointing to `src`.
 ///
 /// On Windows, this uses the `junction` crate to create a junction point.

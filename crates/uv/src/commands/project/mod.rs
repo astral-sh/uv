@@ -1455,7 +1455,7 @@ impl ProjectEnvironment {
             // If we found an existing, compatible environment, use it.
             ProjectInterpreter::Environment(environment) => {
                 if !dry_run.enabled() {
-                    environment.update_venv_link(workspace.install_path(), warn_on_link_errors)?;
+                    environment.update_venv_link(workspace.install_path(), warn_on_link_errors);
                 }
                 Ok(Self::Existing(environment))
             }
@@ -1589,7 +1589,7 @@ impl ProjectEnvironment {
                 )?
                 .with_centralized(centralized);
 
-                environment.update_venv_link(workspace.install_path(), warn_on_link_errors)?;
+                environment.update_venv_link(workspace.install_path(), warn_on_link_errors);
 
                 if replace {
                     Ok(Self::Replaced(environment))

@@ -1,7 +1,7 @@
 use std::borrow::Cow;
-use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::{fmt, io};
 
 use owo_colors::OwoColorize;
 use tracing::{debug, warn};
@@ -274,78 +274,74 @@ impl PythonEnvironment {
         self.0.centralized
     }
 
-    /// If this environment is centralized, create or update a `.venv` link at `install_path /
-    /// .venv` pointing to the environment root.
+    /// If this environment is centralized, create or update a `.venv` link at
+    /// `<install_path>/.venv` pointing to the environment root.
     ///
     /// Returns a path suitable for constructing sub-paths (e.g. the scripts directory):
     /// - The link path if a symlink/junction was created (traversable as a directory)
     /// - The real environment root otherwise (not centralized, path-file fallback, or failure),
     ///   since `.venv` is not traversable in those cases
     ///
-    /// When `warn` is `true`, emits user-facing warnings for link/file creation failures.
-    pub fn update_venv_link(&self, install_path: &Path, warn: bool) -> std::io::Result<PathBuf> {
+    /// When `warn` is `true`, emits user-facing warnings for any failures.
+    pub fn update_venv_link(&self, install_path: &Path, warn: bool) -> PathBuf {
         if !self.0.centralized {
-            return Ok(self.root().to_path_buf());
+            return self.root().to_path_buf();
         }
 
         let link_path = install_path.join(".venv");
         let target = self.root();
 
-        // Best effort removal of whatever is at `.venv`. If we get an error here, we'll get a
-        // similar but more accurately worded error when trying to create the replacement.
-        let _ = uv_fs::remove_symlink(&link_path);
-        let _ = fs_err::remove_file(&link_path);
-        let _ = fs_err::remove_dir(&link_path);
-
-        // Try symlink/junction.
-        let symlink_err = match uv_fs::create_symlink(target, &link_path) {
-            Ok(()) => return Ok(link_path),
-            Err(symlink_err) => symlink_err,
+        // Try a symlink/junction to start with
+        let symlink_err = match uv_fs::replace_symlink_lenient(target, &link_path) {
+            Ok(()) => return link_path,
+            // These errors are not recoverable with the alternative `link file` path.
+            Err(err)
+                if matches!(
+                    err.kind(),
+                    io::ErrorKind::DirectoryNotEmpty | io::ErrorKind::IsADirectory
+                ) =>
+            {
+                if warn {
+                    warn_user_once!("Failed to create symlink or path file: {err}");
+                } else {
+                    warn!("Failed to create venv symlink or junction: {err}");
+                }
+                return target.to_path_buf();
+            }
+            Err(err) => {
+                if !warn {
+                    warn!("Failed to create venv symlink or junction: {err}");
+                }
+                err
+            }
         };
-        if !warn {
-            warn!(
-                "Error linking `{}` to `{}`: {symlink_err}",
-                link_path.display(),
-                target.display()
-            );
-        }
 
-        // Fall back to writing a file containing the path.
-        let file_result = target
-            .to_str()
-            .ok_or_else(|| {
-                std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!(
-                        "Path `{}` cannot be represented as UTF-8",
-                        target.simplified_display()
-                    ),
-                )
-            })
-            .and_then(|s| fs_err::write(&link_path, s.as_bytes()));
-        match file_result {
+        // Fall back to writing a path file
+        let Some(target_str) = target.to_str() else {
+            if warn {
+                warn_user_once!("Failed to create symlink or path file: {symlink_err}");
+            } else {
+                warn!("Failed to convert venv target path to string");
+            }
+            return target.to_path_buf();
+        };
+        match uv_fs::write_atomic_sync(&link_path, target_str.as_bytes()) {
             Ok(()) => {
                 if warn {
                     warn_user_once!(
-                        "Failed to create symlink for `.venv` at `{}`, wrote a path file instead: {symlink_err}",
-                        link_path.simplified_display(),
+                        "Failed to create symlink, wrote a path file instead: {symlink_err}"
                     );
                 }
-                Ok(target.to_path_buf())
             }
-            Err(err) if err.kind() == std::io::ErrorKind::IsADirectory => Err(err),
             Err(file_err) => {
                 if warn {
-                    warn_user_once!(
-                        "Failed to create symlink or path file for `.venv` at `{}`: {symlink_err}",
-                        link_path.simplified_display(),
-                    );
+                    warn_user_once!("Failed to create symlink or path file: {symlink_err}",);
                 } else {
-                    warn!("Error writing `{}`: {file_err}", link_path.display());
+                    warn!("Failed to create a path file: {file_err}");
                 }
-                Ok(target.to_path_buf())
             }
         }
+        target.to_path_buf()
     }
 
     /// Returns the root (i.e., `prefix`) of the Python interpreter.

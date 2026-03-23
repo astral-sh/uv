@@ -16523,11 +16523,57 @@ fn sync_centralized_env_existing_venv_states() -> Result<()> {
 
     uv_fs::remove_symlink(venv.path())?;
 
-    // Case 3: .venv is an empty directory
+    // Case 3: .venv is an empty directory.
     fs_err::create_dir(venv.path())?;
     assert!(venv.path().is_dir());
     assert!(fs_err::read_dir(venv.path())?.next().is_none());
 
+    // On "Unix" there is no legitimate reason for this to happen, so it leads to a failure to
+    // create the `.venv` link which is only a warning.
+    #[cfg(unix)]
+    {
+        uv_snapshot!(context.filters(), context.sync()
+            .arg("--preview-features")
+            .arg("centralized-envs"), @"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        warning: Failed to create symlink or path file: failed to rename file from [TEMP_DIR]/[TMP]/: Is a directory (os error 21)
+        Resolved 1 package in [TIME]
+        Checked in [TIME]
+        ");
+        fs_err::remove_dir(venv.path())?;
+    }
+
+    // On Windows, empty directories can be left behind when copying junctions between drives. So
+    // this should succeed.
+    #[cfg(windows)]
+    {
+        uv_snapshot!(context.filters(), context.sync()
+            .arg("--preview-features")
+            .arg("centralized-envs"), @"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Checked in [TIME]
+        ");
+        uv_fs::remove_symlink(venv.path())?;
+    }
+
+    // Case 4: .venv is a non-empty directory without pyvenv.cfg
+    fs_err::create_dir(venv.path())?;
+    fs_err::write(venv.path().join("some-file.txt"), "not a venv")?;
+
+    // Non-empty directories can't be replaced - a warning is emitted.
+
+    // On "Unix" the warning concerns the symlink creation, because we don't attempt to remove
+    // pre-existing directories.
+    #[cfg(unix)]
     uv_snapshot!(context.filters(), context.sync()
         .arg("--preview-features")
         .arg("centralized-envs"), @"
@@ -16536,35 +16582,24 @@ fn sync_centralized_env_existing_venv_states() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: Failed to create symlink or path file: failed to rename file from [TEMP_DIR]/[TMP]/: Is a directory (os error 21)
     Resolved 1 package in [TIME]
     Checked in [TIME]
     ");
 
-    // Centralized mode should replace the empty directory.
-    let link_target = fs_err::read_link(venv.path())?;
-    insta::with_settings!({ filters => context.filters() }, {
-        insta::assert_snapshot!(
-            link_target.portable_display().to_string(),
-            @"[CACHE_DIR]/environments-v2/project-[HASH]"
-        );
-    });
-
-    uv_fs::remove_symlink(venv.path())?;
-
-    // Case 4: .venv is a non-empty directory without pyvenv.cfg
-    fs_err::create_dir(venv.path())?;
-    fs_err::write(venv.path().join("some-file.txt"), "not a venv")?;
-
-    // Centralized mode should NOT replace a non-empty non-venv directory.
+    // On Windows the warning concerns directory removal as part of the junction creation.
+    #[cfg(windows)]
     uv_snapshot!(context.filters(), context.sync()
         .arg("--preview-features")
         .arg("centralized-envs"), @"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: failed to create file `[VENV]/`: Is a directory (os error 21)
+    warning: Failed to create symlink or path file: failed to remove directory `[VENV]/`: The directory is not empty. (os error 145)
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
     ");
 
     Ok(())
