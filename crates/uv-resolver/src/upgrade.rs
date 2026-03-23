@@ -45,7 +45,31 @@ impl UpgradePackages {
             },
             (false, Some(packages)) => {
                 let mut combined = packages.clone();
-                combined.extend(resolve_group_packages(lock, upgrade));
+
+                if let Some(groups) = upgrade.groups() {
+                    // Check package-level dependency groups (the standard case for projects with
+                    // a `[project]` table).
+                    for package in lock.packages() {
+                        for (group_name, dependencies) in package.resolved_dependency_groups() {
+                            if groups.contains(group_name) {
+                                for dependency in dependencies {
+                                    combined.insert(dependency.package_name().clone());
+                                }
+                            }
+                        }
+                    }
+
+                    // Check manifest-level dependency groups, which cover projects without a
+                    // `[project]` table (e.g., virtual workspace roots or PEP 723 scripts).
+                    for (group_name, requirements) in lock.dependency_groups() {
+                        if groups.contains(group_name) {
+                            for requirement in requirements {
+                                combined.insert(requirement.name.clone());
+                            }
+                        }
+                    }
+                }
+
                 Self {
                     all: false,
                     packages: combined,
@@ -59,38 +83,4 @@ impl UpgradePackages {
     pub fn contains(&self, package_name: &PackageName) -> bool {
         self.all || self.packages.contains(package_name)
     }
-}
-
-/// Resolve the `--upgrade-group` group names to a set of package names by looking at the
-/// dependency groups defined on packages in the lockfile.
-fn resolve_group_packages(lock: &Lock, upgrade: &Upgrade) -> Vec<PackageName> {
-    let Some(groups) = upgrade.groups() else {
-        return Vec::new();
-    };
-
-    let mut packages = Vec::new();
-
-    // Check package-level dependency groups (the standard case for projects with a `[project]`
-    // table).
-    for package in lock.packages() {
-        for (group_name, dependencies) in package.resolved_dependency_groups() {
-            if groups.contains(group_name) {
-                for dependency in dependencies {
-                    packages.push(dependency.package_name().clone());
-                }
-            }
-        }
-    }
-
-    // Check manifest-level dependency groups, which cover projects without a `[project]` table
-    // (e.g., virtual workspace roots or PEP 723 scripts).
-    for (group_name, requirements) in lock.dependency_groups() {
-        if groups.contains(group_name) {
-            for requirement in requirements {
-                packages.push(requirement.name.clone());
-            }
-        }
-    }
-
-    packages
 }
