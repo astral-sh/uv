@@ -26,6 +26,9 @@ To use system certificates, pass the [`--system-certs`](../../reference/cli.md#u
 [`UV_SYSTEM_CERTS`](../../reference/environment.md#uv_system_certs) environment variable to `true`,
 or set [`system-certs = true`](../../reference/settings.md#system-certs) in `uv.toml`.
 
+To enable system certificates by default, enable the
+[`system-certs-default`](../preview.md#available-preview-features) preview feature.
+
 When using system certificates, certificate verification is performed by
 [`rustls-platform-verifier`](https://github.com/rustls/rustls-platform-verifier), which delegates to
 the operating system's certificate verifier.

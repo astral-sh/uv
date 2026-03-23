@@ -1827,7 +1827,8 @@
             "lock-without-metadata",
             "tar-codec",
             "index-by-name",
-            "artifact-hash-filtering"
+            "artifact-hash-filtering",
+            "system-certs-default"
           ]
         },
         {
