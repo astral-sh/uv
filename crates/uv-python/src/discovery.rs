@@ -740,10 +740,6 @@ fn find_all_minor(
 }
 
 /// Check whether an installation satisfies the standard post-query discovery filters.
-///
-/// This checks environment preference, version compatibility, and Python preference. It is
-/// shared by both [`python_installations`] (sequential) and [`find_all_python_installations`]
-/// (parallel) to ensure consistent filtering behavior.
 fn satisfies_discovery_filters(
     installation: &PythonInstallation,
     version: &VersionRequest,
@@ -774,7 +770,7 @@ fn satisfies_discovery_filters(
 
 /// In test mode, change the source to `Managed` if a version was marked as such via
 /// `TestContext::with_versions_as_managed`.
-fn fixup_managed_source_for_tests(installation: &mut PythonInstallation) {
+fn update_installation_source_for_tests(installation: &mut PythonInstallation) {
     if std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_PYTHON_MANAGED).is_ok()
         && installation.interpreter.is_managed()
     {
@@ -799,7 +795,7 @@ fn python_installations<'a>(
     preference: PythonPreference,
     cache: &'a Cache,
 ) -> impl Iterator<Item = Result<PythonInstallation, Error>> + 'a {
-    python_installations_from_executables(
+    iter_python_installations_from_executables(
         // Perform filtering on the discovered executables based on their source. This avoids
         // unnecessary interpreter queries, which are generally expensive. We'll filter again
         // with `satisfies_discovery_filters` after querying.
@@ -814,16 +810,13 @@ fn python_installations<'a>(
         satisfies_discovery_filters(installation, version, environments, preference)
     })
     .map_ok(|mut installation| {
-        fixup_managed_source_for_tests(&mut installation);
+        update_installation_source_for_tests(&mut installation);
         installation
     })
 }
 
 /// Query a single Python executable, returning a [`PythonInstallation`] on success.
-///
-/// This is the shared core used by both [`python_installations_from_executables`] (sequential)
-/// and [`python_installations_from_executables_parallel`] (concurrent).
-fn query_executable(
+fn python_installation_from_executable(
     source: PythonSource,
     path: PathBuf,
     cache: &Cache,
@@ -845,38 +838,31 @@ fn query_executable(
 }
 
 /// Lazily convert Python executables into installations.
-fn python_installations_from_executables<'a>(
+fn iter_python_installations_from_executables<'a>(
     executables: impl Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a,
     cache: &'a Cache,
 ) -> impl Iterator<Item = Result<PythonInstallation, Error>> + 'a {
     executables.map(move |result| match result {
-        Ok((source, path)) => query_executable(source, path, cache),
+        Ok((source, path)) => python_installation_from_executable(source, path, cache),
         Err(err) => Err(err),
     })
 }
 
-/// Collect Python executables and query them concurrently, returning results in the
-/// original discovery order.
-fn python_installations_from_executables_parallel(
-    executables: impl Iterator<Item = Result<(PythonSource, PathBuf), Error>>,
-    cache: &Cache,
-) -> Vec<Result<PythonInstallation, Error>> {
-    let items: Vec<Result<(PythonSource, PathBuf), Error>> = executables.collect();
-    items
-        .into_par_iter()
-        .map(|result| match result {
-            Ok((source, path)) => query_executable(source, path, cache),
-            Err(err) => Err(err),
-        })
-        .collect()
-}
-
-/// Collect queried Python installations, dropping non-critical discovery errors.
-fn collect_parallel_installations_from_executables(
+/// Collect queried Python installations from executables, dropping non-critical discovery
+/// errors.
+fn collect_python_installations_from_executables(
     executables: impl Iterator<Item = Result<(PythonSource, PathBuf), Error>>,
     cache: &Cache,
 ) -> Result<Vec<PythonInstallation>, Error> {
-    let results = python_installations_from_executables_parallel(executables, cache);
+    let items: Vec<Result<(PythonSource, PathBuf), Error>> = executables.collect();
+    let results: Vec<Result<PythonInstallation, Error>> = items
+        .into_par_iter()
+        .map(|result| match result {
+            Ok((source, path)) => python_installation_from_executable(source, path, cache),
+            Err(err) => Err(err),
+        })
+        .collect();
+
     let mut installations = Vec::with_capacity(results.len());
     for result in results {
         match result {
@@ -890,7 +876,7 @@ fn collect_parallel_installations_from_executables(
 
 /// Find Python installations that satisfy the standard discovery filters, querying
 /// interpreters concurrently.
-fn find_filtered_python_installations_parallel(
+fn find_matching_python_installations(
     version: &VersionRequest,
     implementation: Option<&ImplementationName>,
     platform: PlatformRequest,
@@ -905,12 +891,12 @@ fn find_filtered_python_installations_parallel(
             },
         );
 
-    let mut installations = collect_parallel_installations_from_executables(executables, cache)?;
+    let mut installations = collect_python_installations_from_executables(executables, cache)?;
     installations.retain(|installation| {
         satisfies_discovery_filters(installation, version, environments, preference)
     });
     for installation in &mut installations {
-        fixup_managed_source_for_tests(installation);
+        update_installation_source_for_tests(installation);
     }
     Ok(installations)
 }
@@ -1085,7 +1071,7 @@ impl Error {
 }
 
 /// Create a [`PythonInstallation`] from a Python interpreter path.
-fn python_installation_from_executable(
+fn python_installation_from_provided_executable(
     path: &PathBuf,
     cache: &Cache,
 ) -> Result<PythonInstallation, crate::interpreter::Error> {
@@ -1101,11 +1087,11 @@ fn python_installation_from_directory(
     cache: &Cache,
 ) -> Result<PythonInstallation, crate::interpreter::Error> {
     let executable = virtualenv_python_executable(path);
-    python_installation_from_executable(&executable, cache)
+    python_installation_from_provided_executable(&executable, cache)
 }
 
 /// Lazily iterate over all Python executable paths on the path with the given executable name.
-fn python_executables_with_executable_name(
+fn python_executables_with_name(
     name: &str,
 ) -> impl Iterator<Item = Result<(PythonSource, PathBuf), Error>> + '_ {
     which_all(name)
@@ -1114,11 +1100,11 @@ fn python_executables_with_executable_name(
 }
 
 /// Lazily iterate over all Python installations on the path with the given executable name.
-fn python_installations_with_executable_name<'a>(
+fn python_installations_with_name<'a>(
     name: &'a str,
     cache: &'a Cache,
 ) -> impl Iterator<Item = Result<PythonInstallation, Error>> + 'a {
-    python_installations_from_executables(python_executables_with_executable_name(name), cache)
+    iter_python_installations_from_executables(python_executables_with_name(name), cache)
 }
 
 /// Iterate over all Python installations that satisfy the given request.
@@ -1138,7 +1124,7 @@ pub fn find_python_installations<'a>(
         PythonRequest::File(path) => Box::new(iter::once({
             if preference.allows_source(PythonSource::ProvidedPath) {
                 debug!("Checking for Python interpreter at {request}");
-                match python_installation_from_executable(path, cache) {
+                match python_installation_from_provided_executable(path, cache) {
                     Ok(installation) => Ok(Ok(installation)),
                     Err(InterpreterError::NotFound(_) | InterpreterError::BrokenLink(_)) => {
                         Ok(Err(PythonNotFound {
@@ -1191,7 +1177,7 @@ pub fn find_python_installations<'a>(
             if preference.allows_source(PythonSource::SearchPath) {
                 debug!("Searching for Python interpreter with {request}");
                 Box::new(
-                    python_installations_with_executable_name(name, cache)
+                    python_installations_with_name(name, cache)
                         .filter_ok(move |installation| {
                             interpreter_satisfies_environment_preference(
                                 installation.source,
@@ -1337,7 +1323,7 @@ pub fn find_all_python_installations(
                 ));
             }
             debug!("Checking for Python interpreter at {request}");
-            match python_installation_from_executable(path, cache) {
+            match python_installation_from_provided_executable(path, cache) {
                 Ok(installation) => Ok(vec![installation]),
                 Err(InterpreterError::NotFound(_) | InterpreterError::BrokenLink(_)) => Ok(vec![]),
                 Err(err) => Err(Error::Query(
@@ -1375,8 +1361,8 @@ pub fn find_all_python_installations(
                 ));
             }
             debug!("Searching for Python interpreter with {request}");
-            let mut installations = collect_parallel_installations_from_executables(
-                python_executables_with_executable_name(name),
+            let mut installations = collect_python_installations_from_executables(
+                python_executables_with_name(name),
                 cache,
             )?;
             installations.retain(|installation| {
@@ -1390,7 +1376,7 @@ pub fn find_all_python_installations(
         }
         PythonRequest::Any => {
             debug!("Searching for any Python interpreter in {sources}");
-            find_filtered_python_installations_parallel(
+            find_matching_python_installations(
                 &VersionRequest::Any,
                 None,
                 PlatformRequest::default(),
@@ -1401,7 +1387,7 @@ pub fn find_all_python_installations(
         }
         PythonRequest::Default => {
             debug!("Searching for default Python interpreter in {sources}");
-            find_filtered_python_installations_parallel(
+            find_matching_python_installations(
                 &VersionRequest::Default,
                 None,
                 PlatformRequest::default(),
@@ -1415,7 +1401,7 @@ pub fn find_all_python_installations(
                 return Err(Error::InvalidVersionRequest(err));
             }
             debug!("Searching for {request} in {sources}");
-            find_filtered_python_installations_parallel(
+            find_matching_python_installations(
                 version,
                 None,
                 PlatformRequest::default(),
@@ -1426,7 +1412,7 @@ pub fn find_all_python_installations(
         }
         PythonRequest::Implementation(implementation) => {
             debug!("Searching for a {request} interpreter in {sources}");
-            let mut installations = find_filtered_python_installations_parallel(
+            let mut installations = find_matching_python_installations(
                 &VersionRequest::Default,
                 Some(implementation),
                 PlatformRequest::default(),
@@ -1442,7 +1428,7 @@ pub fn find_all_python_installations(
                 return Err(Error::InvalidVersionRequest(err));
             }
             debug!("Searching for {request} in {sources}");
-            let mut installations = find_filtered_python_installations_parallel(
+            let mut installations = find_matching_python_installations(
                 version,
                 Some(implementation),
                 PlatformRequest::default(),
@@ -1460,7 +1446,7 @@ pub fn find_all_python_installations(
                 }
             }
             debug!("Searching for {request} in {sources}");
-            let mut installations = find_filtered_python_installations_parallel(
+            let mut installations = find_matching_python_installations(
                 request.version().unwrap_or(&VersionRequest::Default),
                 request.implementation(),
                 request.platform(),
