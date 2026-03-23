@@ -219,10 +219,10 @@ impl VerbatimUrl {
             return false;
         };
 
-        if let Some((scheme, _)) = split_scheme(given) {
-            if let Some(parsed_scheme) = Scheme::parse(scheme) {
-                return parsed_scheme.is_file();
-            }
+        if let Some((scheme, _)) = split_scheme(given)
+            && let Some(parsed_scheme) = Scheme::parse(scheme)
+        {
+            return parsed_scheme.is_file();
         }
 
         Path::new(given.as_str()).is_absolute()
