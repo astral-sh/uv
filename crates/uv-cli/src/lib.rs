@@ -5274,8 +5274,7 @@ pub struct AuditArgs {
     /// Each service format has a default URL, which can be
     /// changed with `--service-url`. The defaults are:
     ///
-    /// * OSV: https://osv.dev/
-    /// …
+    /// * OSV: https://api.osv.dev/
     #[arg(long, value_enum, default_value = "osv")]
     pub service_format: VulnerabilityServiceFormat,
 
