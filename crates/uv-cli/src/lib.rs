@@ -5269,7 +5269,7 @@ pub struct AuditArgs {
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
 
-    /// The service to use for vulnerability lookups.
+    /// The service format to use for vulnerability lookups.
     #[arg(long, value_enum, default_value = "osv")]
     pub service_format: VulnerabilityServiceFormat,
 
