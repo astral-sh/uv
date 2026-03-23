@@ -6572,7 +6572,7 @@ fn run_target_workspace_discovery_preview_flag() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment `foo-[HASH]` in the centralized store
+    Creating virtual environment `foo-py3.12-[HASH]` in the centralized store
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -6599,7 +6599,7 @@ fn run_target_workspace_discovery_uv_preview_env() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment `foo-[HASH]` in the centralized store
+    Creating virtual environment `foo-py3.12-[HASH]` in the centralized store
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -6901,7 +6901,7 @@ fn run_centralized_env() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment `project-[HASH]` in the centralized store
+    Creating virtual environment `project-py3.12-[HASH]` in the centralized store
     Resolved 1 package in [TIME]
     Checked in [TIME]
     ");
@@ -6911,7 +6911,7 @@ fn run_centralized_env() -> Result<()> {
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_snapshot!(
             link_target.portable_display().to_string(),
-            @"[CACHE_DIR]/environments-v2/project-[HASH]"
+            @"[CACHE_DIR]/environments-v2/project-py3.12-[HASH]"
         );
     });
 

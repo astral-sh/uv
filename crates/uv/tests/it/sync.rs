@@ -15996,7 +15996,7 @@ fn sync_centralized_env() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment `project-[HASH]` in the centralized store
+    Creating virtual environment `project-py3.12-[HASH]` in the centralized store
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -16008,7 +16008,7 @@ fn sync_centralized_env() -> Result<()> {
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_snapshot!(
             link_target.portable_display().to_string(),
-            @"[CACHE_DIR]/environments-v2/project-[HASH]"
+            @"[CACHE_DIR]/environments-v2/project-py3.12-[HASH]"
         );
     });
 
@@ -16173,7 +16173,7 @@ fn sync_centralized_env_no_collision() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment `my-project-[HASH]` in the centralized store
+    Creating virtual environment `my-project-py3.12-[HASH]` in the centralized store
     Resolved 1 package in [TIME]
     Checked in [TIME]
     ");
@@ -16190,7 +16190,7 @@ fn sync_centralized_env_no_collision() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment `my-project-[HASH]` in the centralized store
+    Creating virtual environment `my-project-py3.12-[HASH]` in the centralized store
     Resolved 1 package in [TIME]
     Checked in [TIME]
     ");
@@ -16240,7 +16240,7 @@ fn sync_centralized_env_virtual_workspace() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment `temp-[HASH]` in the centralized store
+    Creating virtual environment `temp-py3.12-[HASH]` in the centralized store
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -16283,7 +16283,7 @@ fn sync_centralized_env_switch_python() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment `project-[HASH]` in the centralized store
+    Creating virtual environment `project-py3.12-[HASH]` in the centralized store
     Resolved 1 package in [TIME]
     Checked in [TIME]
     ");
@@ -16302,7 +16302,7 @@ fn sync_centralized_env_switch_python() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
-    Creating virtual environment `project-[HASH]` in the centralized store
+    Creating virtual environment `project-py3.11-[HASH]` in the centralized store
     Resolved 1 package in [TIME]
     Checked in [TIME]
     ");
@@ -16426,7 +16426,7 @@ fn sync_centralized_env_active_without_virtual_env() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment `project-[HASH]` in the centralized store
+    Creating virtual environment `project-py3.12-[HASH]` in the centralized store
     Resolved 1 package in [TIME]
     Checked in [TIME]
     ");
@@ -16435,7 +16435,7 @@ fn sync_centralized_env_active_without_virtual_env() -> Result<()> {
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_snapshot!(
             link_target.portable_display().to_string(),
-            @"[CACHE_DIR]/environments-v2/project-[HASH]"
+            @"[CACHE_DIR]/environments-v2/project-py3.12-[HASH]"
         );
     });
 
@@ -16475,7 +16475,7 @@ fn sync_centralized_env_existing_venv_states() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment `project-[HASH]` in the centralized store
+    Creating virtual environment `project-py3.12-[HASH]` in the centralized store
     Resolved 1 package in [TIME]
     Checked in [TIME]
     ");
@@ -16485,7 +16485,7 @@ fn sync_centralized_env_existing_venv_states() -> Result<()> {
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_snapshot!(
             link_target.portable_display().to_string(),
-            @"[CACHE_DIR]/environments-v2/project-[HASH]"
+            @"[CACHE_DIR]/environments-v2/project-py3.12-[HASH]"
         );
     });
 
@@ -16517,7 +16517,7 @@ fn sync_centralized_env_existing_venv_states() -> Result<()> {
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_snapshot!(
             link_target.portable_display().to_string(),
-            @"[CACHE_DIR]/environments-v2/project-[HASH]"
+            @"[CACHE_DIR]/environments-v2/project-py3.12-[HASH]"
         );
     });
 

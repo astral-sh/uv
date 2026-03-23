@@ -2019,12 +2019,13 @@ fn centralized_environment_root(
                 .and_then(|f| f.to_str())
                 .and_then(|name| cache_name(name, Some(100)))
         });
+    let python_version = interpreter.python_minor_version();
     let entry = if let Some(name) = name {
-        format!("{name}-{digest}")
+        format!("{name}-py{python_version}-{digest}")
     } else {
         // Can only occur if the project has no name (virtual workspace) and the
         // directory name doesn't contain any ascii alphanumeric characters.
-        digest
+        format!("py{python_version}-{digest}")
     };
     cache
         .shard(CacheBucket::Environments, entry)
