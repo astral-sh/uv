@@ -9,7 +9,7 @@ Released on 2026-03-23.
 
 ### Breaking changes
 
-This release includes changes to the networking stack used by uv. While we think that breakage will be rare, it is possible that these changes will result in the rejection of system certificates previously trusted by uv and we have marked the change as breaking out of an abundance of caution.
+This release includes changes to the networking stack used by uv. While we think that breakage will be rare, it is possible that these changes will result in the rejection of system certificates previously trusted by uv so we have marked the change as breaking out of an abundance of caution.
 
 The changes are largely driven by the upgrade of reqwest, which powers uv's HTTP clients, to [v0.13](https://seanmonstar.com/blog/reqwest-v013-rustls-default/) which included some breaking changes to TLS certificate verification.
 
@@ -19,7 +19,7 @@ The following changes are included:
 
     **This change should have no effect unless you are using the `native-tls` option to enable reading system certificates.**
 
-    `rustls-platform-verifier` delegates to the system for certificate validation (e.g., `Security.framework` on macOS) instead of eagerly loading certificates from the system and verifying them via `webpki`. The effects of this change will vary based on the operating system. In general, uv's certificate validation should  now be more consistent with browsers and other native applications. However, this is the most likely cause of breaking changes in this release. Some previously failing certificate chains may succeed, and some previously accepted certificate chains may fail.
+    `rustls-platform-verifier` delegates to the system for certificate validation (e.g., `Security.framework` on macOS) instead of eagerly loading certificates from the system and verifying them via `webpki`. The effects of this change will vary based on the operating system. In general, uv's certificate validation should now be more consistent with browsers and other native applications. However, this is the most likely cause of breaking changes in this release. Some previously failing certificate chains may succeed, and some previously accepted certificate chains may fail.
 
     The operating system's [CA constraints](https://support.apple.com/en-us/103255) will be taken into account and there's now [certificate revocation](https://en.wikipedia.org/wiki/Certificate_revocation) support via OCSP and CRLs.
 
