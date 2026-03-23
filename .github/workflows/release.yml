@@ -138,9 +138,11 @@ jobs:
           merge-multiple: true
       - name: Generate local dist manifest
         shell: bash
+        env:
+          TAG: ${{ needs.plan.outputs.tag-flag }}
         run: |
           temp_manifest=target/local-dist-manifest.json.tmp
-          dist manifest ${{ needs.plan.outputs.tag-flag }} --output-format=json --no-local-paths --artifacts=local > "$temp_manifest"
+          dist manifest "$TAG" --output-format=json --no-local-paths --artifacts=local > "$temp_manifest"
           python3 scripts/patch-dist-manifest-checksums.py --manifest "$temp_manifest" --artifacts-dir target/distrib
           mv "$temp_manifest" target/distrib/local-dist-manifest.json
       - name: Upload synthesized local dist manifest
