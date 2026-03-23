@@ -2565,6 +2565,132 @@ fn tool_run_python_from() {
 }
 
 #[test]
+fn tool_run_from_directory_uses_global_pin_when_within_requires_python_range() -> anyhow::Result<()>
+{
+    let context =
+        uv_test::test_context_with_versions!(&["3.13", "3.12", "3.11"]).with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let foo_dir = context.temp_dir.child("foo");
+    foo_dir.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.11,<3.13"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo.main:run"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#
+    })?;
+
+    let foo_module = foo_dir.child("src").child("foo");
+    foo_module.child("__init__.py").write_str("")?;
+    foo_module.child("main.py").write_str(indoc! { r#"
+        import sys
+
+        def run():
+            print(f"{sys.version_info.major}.{sys.version_info.minor}")
+        "#
+    })?;
+
+    context
+        .python_pin()
+        .arg("3.11")
+        .arg("--global")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg(foo_dir.as_os_str())
+        .arg("foo")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.11
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn tool_run_from_directory_ignores_global_pin_outside_requires_python_range() -> anyhow::Result<()>
+{
+    let context =
+        uv_test::test_context_with_versions!(&["3.13", "3.12", "3.11"]).with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let foo_dir = context.temp_dir.child("foo");
+    foo_dir.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.11,<3.13"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo.main:run"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#
+    })?;
+
+    let foo_module = foo_dir.child("src").child("foo");
+    foo_module.child("__init__.py").write_str("")?;
+    foo_module.child("main.py").write_str(indoc! { r#"
+        import sys
+
+        def run():
+            print(f"{sys.version_info.major}.{sys.version_info.minor}")
+        "#
+    })?;
+
+    context
+        .python_pin()
+        .arg("3.13")
+        .arg("--global")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg(foo_dir.as_os_str())
+        .arg("foo")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn run_with_env_file() -> anyhow::Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");

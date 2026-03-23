@@ -32,7 +32,7 @@ use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts};
 use uv_python::{
     BrokenLink, EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads,
     PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, PythonSource,
-    PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions, VersionRequest,
+    PythonVersionFile, VersionFileDiscoveryOptions,
 };
 use uv_requirements::upgrade::{LockedRequirements, read_lock_requirements};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
@@ -1225,13 +1225,7 @@ impl WorkspacePython {
             // (3) `requires-python` in `pyproject.toml`
             let request = requires_python
                 .as_ref()
-                .map(RequiresPython::specifiers)
-                .map(|specifiers| {
-                    PythonRequest::Version(VersionRequest::Range(
-                        specifiers.clone(),
-                        PythonVariant::Default,
-                    ))
-                });
+                .and_then(PythonRequest::from_requires_python);
             let source = PythonRequestSource::RequiresPython;
             (source, request)
         };
@@ -1325,22 +1319,14 @@ impl ScriptPython {
             )
         } else if let Some(specifiers) = script.metadata().requires_python.as_ref() {
             // (3) `requires-python` from script metadata
-            let request = PythonRequest::Version(VersionRequest::Range(
-                specifiers.clone(),
-                PythonVariant::Default,
-            ));
-            (PythonRequestSource::RequiresPython, Some(request))
+            let requires_python = RequiresPython::from_specifiers(specifiers);
+            let request = PythonRequest::from_requires_python(&requires_python);
+            (PythonRequestSource::RequiresPython, request)
         } else {
             // (4) `requires-python` from workspace `pyproject.toml`
             let request = workspace_requires_python
                 .as_ref()
-                .map(RequiresPython::specifiers)
-                .map(|specifiers| {
-                    PythonRequest::Version(VersionRequest::Range(
-                        specifiers.clone(),
-                        PythonVariant::Default,
-                    ))
-                });
+                .and_then(PythonRequest::from_requires_python);
             (PythonRequestSource::RequiresPython, request)
         };
 

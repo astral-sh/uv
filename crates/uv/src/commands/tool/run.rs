@@ -57,7 +57,9 @@ use crate::commands::project::{
     EnvironmentSpecification, PlatformState, ProjectError, resolve_names,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::tool::common::{matching_packages, refine_interpreter};
+use crate::commands::tool::common::{
+    infer_python_request_from_requirement, matching_packages, refine_interpreter,
+};
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, project::environment::CachedEnvironment};
 use crate::printer::Printer;
@@ -745,6 +747,17 @@ async fn get_or_create_environment(
 ) -> Result<(ToolRequirement, PythonEnvironment), ProjectError> {
     let reporter = PythonDownloadReporter::single(printer);
 
+    // Initialize any shared state.
+    let state = PlatformState::default();
+
+    let unresolved_target_requirement = match request {
+        ToolRequest::Package {
+            target: Target::Unspecified(requirement),
+            ..
+        } => Some(RequirementsSpecification::parse_package(requirement)?),
+        _ => None,
+    };
+
     // Determine explicit Python version requests
     let explicit_python_request = python.map(PythonRequest::parse);
     let tool_python_request = match request {
@@ -753,34 +766,58 @@ async fn get_or_create_environment(
     };
 
     // Resolve Python request with version file lookup when no explicit request
-    let python_request = match (explicit_python_request, tool_python_request) {
-        // e.g., `uvx --python 3.10 python3.12`
-        (Some(explicit), Some(tool_request)) if tool_request != PythonRequest::Default => {
-            // Conflict: both --python flag and versioned tool name
-            return Err(anyhow::anyhow!(
-                "Received multiple Python version requests: `{}` and `{}`",
-                explicit.to_canonical_string().cyan(),
-                tool_request.to_canonical_string().cyan()
-            )
-            .into());
-        }
-        // e.g, `uvx --python 3.10 ...`
-        (Some(explicit), _) => Some(explicit),
-        // e.g., `uvx python` or `uvx <tool>`
-        (None, Some(PythonRequest::Default) | None) => PythonVersionFile::discover(
-            &*CWD,
-            &VersionFileDiscoveryOptions::default()
-                .with_no_config(false)
-                .with_no_local(true),
-        )
-        .await?
-        .and_then(PythonVersionFile::into_version),
-        // e.g., `uvx python3.12`
-        (None, Some(tool_request)) => Some(tool_request),
-    };
+    let (mut python_request, inferred_python_request, from_version_file) =
+        match (explicit_python_request, tool_python_request) {
+            // e.g., `uvx --python 3.10 python3.12`
+            (Some(explicit), Some(tool_request)) if tool_request != PythonRequest::Default => {
+                // Conflict: both --python flag and versioned tool name
+                return Err(anyhow::anyhow!(
+                    "Received multiple Python version requests: `{}` and `{}`",
+                    explicit.to_canonical_string().cyan(),
+                    tool_request.to_canonical_string().cyan()
+                )
+                .into());
+            }
+            // e.g, `uvx --python 3.10 ...`
+            (Some(explicit), _) => (Some(explicit), None, false),
+            // e.g., `uvx python` or `uvx <tool>`
+            (None, Some(PythonRequest::Default) | None) => {
+                let version_file_request = PythonVersionFile::discover(
+                    &*CWD,
+                    &VersionFileDiscoveryOptions::default()
+                        .with_no_config(false)
+                        .with_no_local(true),
+                )
+                .await?
+                .and_then(PythonVersionFile::into_version);
+
+                let inferred_python_request = match unresolved_target_requirement.as_ref() {
+                    Some(requirement) => {
+                        infer_python_request_from_requirement(
+                            &requirement.requirement,
+                            lfs,
+                            state.git(),
+                            client_builder,
+                            cache,
+                        )
+                        .await
+                    }
+                    None => None,
+                };
+
+                let from_version_file = version_file_request.is_some();
+                (
+                    version_file_request.or_else(|| inferred_python_request.clone()),
+                    inferred_python_request,
+                    from_version_file,
+                )
+            }
+            // e.g., `uvx python3.12`
+            (None, Some(tool_request)) => (Some(tool_request), None, false),
+        };
 
     // Discover an interpreter.
-    let interpreter = PythonInstallation::find_or_download(
+    let mut interpreter = PythonInstallation::find_or_download(
         python_request.as_ref(),
         EnvironmentPreference::OnlySystem,
         python_preference,
@@ -796,8 +833,29 @@ async fn get_or_create_environment(
     .await?
     .into_interpreter();
 
-    // Initialize any shared state.
-    let state = PlatformState::default();
+    // If a `.python-version` pin exists but doesn't satisfy the source `requires-python`, fall
+    // back to the source requirement.
+    if from_version_file
+        && let Some(inferred_python_request) = inferred_python_request
+        && !inferred_python_request.satisfied(&interpreter, cache)
+    {
+        python_request = Some(inferred_python_request);
+        interpreter = PythonInstallation::find_or_download(
+            python_request.as_ref(),
+            EnvironmentPreference::OnlySystem,
+            python_preference,
+            python_downloads,
+            client_builder,
+            cache,
+            Some(&reporter),
+            install_mirrors.python_install_mirror.as_deref(),
+            install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.python_downloads_json_url.as_deref(),
+            preview,
+        )
+        .await?
+        .into_interpreter();
+    }
 
     let from = match request {
         ToolRequest::Python {
@@ -813,7 +871,11 @@ async fn get_or_create_environment(
             let (executable, requirement) = match target {
                 // Ex) `ruff>=0.6.0`
                 Target::Unspecified(requirement) => {
-                    let spec = RequirementsSpecification::parse_package(requirement)?;
+                    let spec = unresolved_target_requirement.clone().ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "Expected parsed requirement for unresolved target `{requirement}`"
+                        )
+                    })?;
 
                     // Extract the verbatim executable name, if possible.
                     let name = match &spec.requirement {
