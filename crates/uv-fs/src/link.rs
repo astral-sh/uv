@@ -222,11 +222,8 @@ impl<'a, F> LinkOptions<'a, F> {
     #[must_use]
     pub fn with_wants_preserved_inode_filter(self, f: fn(&Path) -> bool) -> Self {
         LinkOptions {
-            mode: self.mode,
-            needs_mutable_copy: self.needs_mutable_copy,
-            copy_locks: self.copy_locks,
-            on_existing_directory: self.on_existing_directory,
             wants_preserved_inode: Some(f),
+            ..self
         }
     }
 
