@@ -277,7 +277,9 @@ jobs:
     runs-on: ubuntu-latest
     # Only the main repository is a trusted publisher
     if: ${{ github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.fork != true && needs.plan.outputs.test-publish == 'true' }}
-    environment: uv-test-publish
+    environment:
+      name: uv-test-publish
+      deployment: false
     env:
       # No dbus in GitHub Actions
       PYTHON_KEYRING_BACKEND: keyrings.alt.file.PlaintextKeyring
