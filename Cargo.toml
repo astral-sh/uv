@@ -196,7 +196,7 @@ regex-automata = { version = "0.4.8", default-features = false, features = [
   "std",
   "syntax",
 ] }
-reqsign = { version = "0.18.1", features = [
+reqsign = { version = "0.20.0", features = [
   "aws",
   "google",
   "default-context",
