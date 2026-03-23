@@ -551,8 +551,10 @@ impl AuthMiddleware {
             return next.run(request, extensions).await;
         };
         let url = DisplaySafeUrl::from_url(request.url().clone());
-        if matches!(auth_policy, AuthPolicy::Always) && credentials.password().is_none() {
-            return Err(Error::Middleware(format_err!("Missing password for {url}")));
+        if matches!(auth_policy, AuthPolicy::Always) && !credentials.is_authenticated() {
+            return Err(Error::Middleware(format_err!(
+                "Incomplete credentials for {url}"
+            )));
         }
         let result = next.run(request, extensions).await;
 
@@ -582,9 +584,9 @@ impl AuthMiddleware {
     ) -> reqwest_middleware::Result<Response> {
         let credentials = Arc::new(credentials);
 
-        // If there's a password, send the request and cache
+        // If the request already contains complete authentication, send it and cache it.
         if credentials.is_authenticated() {
-            trace!("Request for {url} already contains username and password");
+            trace!("Request for {url} already contains complete authentication");
             return self
                 .complete_request(Some(credentials), request, extensions, next, auth_policy)
                 .await;
