@@ -282,7 +282,10 @@ impl CachedClient {
                 .boxed_local()
                 .await?
         } else {
-            debug!("No cache entry for: {}", req.url());
+            debug!(
+                "No cache entry for: {}",
+                DisplaySafeUrl::from_url(req.url().clone())
+            );
             let (response, cache_policy) = self.fresh_request(req, cache_control).await?;
             CachedResponse::ModifiedOrNew {
                 response,
@@ -343,7 +346,10 @@ impl CachedClient {
                 // If we got a modified response, but it's a 304, then a validator failed (e.g., the
                 // ETag didn't match). We need to make a fresh request.
                 if response.status() == http::StatusCode::NOT_MODIFIED {
-                    warn!("Server returned unusable 304 for: {}", fresh_req.url());
+                    warn!(
+                        "Server returned unusable 304 for: {}",
+                        DisplaySafeUrl::from_url(fresh_req.url().clone())
+                    );
                     self.resend_and_heal_cache(
                         fresh_req,
                         cache_entry,
@@ -501,14 +507,15 @@ impl CachedClient {
                 );
             }
         }
+        let url = DisplaySafeUrl::from_url(req.url().clone());
         Ok(match cached.cache_policy.before_request(&mut req) {
             BeforeRequest::Fresh => {
-                debug!("Found fresh response for: {}", req.url());
+                debug!("Found fresh response for: {url}");
                 CachedResponse::FreshCache(cached)
             }
             BeforeRequest::Stale(new_cache_policy_builder) => match cache_control {
                 CacheControl::None | CacheControl::MustRevalidate | CacheControl::Override(_) => {
-                    debug!("Found stale response for: {}", req.url());
+                    debug!("Found stale response for: {url}");
                     self.send_cached_handle_stale(
                         req,
                         cache_control,
@@ -518,16 +525,13 @@ impl CachedClient {
                     .await?
                 }
                 CacheControl::AllowStale => {
-                    debug!("Found stale (but allowed) response for: {}", req.url());
+                    debug!("Found stale (but allowed) response for: {url}");
                     CachedResponse::FreshCache(cached)
                 }
             },
             BeforeRequest::NoMatch => {
                 // This shouldn't happen; if it does, we'll override the cache.
-                warn!(
-                    "Cached response doesn't match current request for: {}",
-                    req.url()
-                );
+                warn!("Cached response doesn't match current request for: {url}",);
                 let (response, cache_policy) = self.fresh_request(req, cache_control).await?;
                 CachedResponse::ModifiedOrNew {
                     response,
@@ -550,7 +554,7 @@ impl CachedClient {
         let mut response = self
             .0
             .execute(req)
-            .instrument(info_span!("revalidation_request", url = url.as_str()))
+            .instrument(info_span!("revalidation_request", url = %url))
             .await
             .map_err(|err| Error::from_reqwest_middleware(url.clone(), err, start))?;
         trace!(
@@ -603,7 +607,7 @@ impl CachedClient {
         }
     }
 
-    #[instrument(skip_all, fields(url = req.url().as_str()))]
+    #[instrument(skip_all, fields(url = %DisplaySafeUrl::from_url(req.url().clone())))]
     async fn fresh_request(
         &self,
         req: Request,
