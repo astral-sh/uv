@@ -2201,6 +2201,7 @@ mod test {
                                         given: Some(
                                             "/foo/bar",
                                         ),
+                                        expanded: false,
                                     },
                                 },
                                 extras: [],
@@ -2463,6 +2464,7 @@ mod test {
                         given: Some(
                             "https://test.pypi.org/simple/",
                         ),
+                        expanded: false,
                     },
                 ),
                 extra_index_urls: [],
@@ -2549,6 +2551,7 @@ mod test {
                                         given: Some(
                                             "importlib_metadata-8.3.0-py3-none-any.whl",
                                         ),
+                                        expanded: false,
                                     },
                                 },
                                 extras: [],
@@ -2598,6 +2601,7 @@ mod test {
                                         given: Some(
                                             "importlib_metadata-8.2.0-py3-none-any.whl",
                                         ),
+                                        expanded: false,
                                     },
                                 },
                                 extras: [],
@@ -2647,6 +2651,7 @@ mod test {
                                         given: Some(
                                             "importlib_metadata-8.2.0-py3-none-any.whl",
                                         ),
+                                        expanded: false,
                                     },
                                 },
                                 extras: [
@@ -2700,6 +2705,7 @@ mod test {
                                         given: Some(
                                             "importlib_metadata-8.2.0+local-py3-none-any.whl",
                                         ),
+                                        expanded: false,
                                     },
                                 },
                                 extras: [],
@@ -2749,6 +2755,7 @@ mod test {
                                         given: Some(
                                             "importlib_metadata-8.2.0+local-py3-none-any.whl",
                                         ),
+                                        expanded: false,
                                     },
                                 },
                                 extras: [],
@@ -2798,6 +2805,7 @@ mod test {
                                         given: Some(
                                             "importlib_metadata-8.2.0+local-py3-none-any.whl",
                                         ),
+                                        expanded: false,
                                     },
                                 },
                                 extras: [
