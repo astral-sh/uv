@@ -8119,7 +8119,7 @@ fn preview_features() {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            system_certs: false,
+            system_certs: true,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -8165,6 +8165,7 @@ fn preview_features() {
                 Audit,
                 ProjectDirectoryMustExist,
                 IndexExcludeNewer,
+                SystemCertsDefault,
             ],
         },
         python_preference: Managed,
@@ -8391,7 +8392,7 @@ fn preview_features() {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            system_certs: false,
+            system_certs: true,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -8437,6 +8438,7 @@ fn preview_features() {
                 Audit,
                 ProjectDirectoryMustExist,
                 IndexExcludeNewer,
+                SystemCertsDefault,
             ],
         },
         python_preference: Managed,
@@ -9420,6 +9422,268 @@ fn system_certs_config_aliases() -> anyhow::Result<()> {
     );
 
     Ok(())
+}
+
+/// Verify that `--preview-features system-certs-default` enables system certificates by default,
+/// and that explicit CLI flags still override it.
+#[test]
+fn system_certs_default_preview_feature() {
+    let context = uv_test::test_context!("3.12");
+
+    // With the preview feature enabled, system_certs defaults to true.
+    uv_snapshot!(context.filters(), add_shared_args(context.version())
+        .arg("--show-settings")
+        .arg("--preview-features")
+        .arg("system-certs-default"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            offline: Disabled,
+            system_certs: true,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
+            allow_insecure_host: [],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
+            retries: 3,
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: [
+                SystemCertsDefault,
+            ],
+        },
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    VersionSettings {
+        value: None,
+        bump: [],
+        short: false,
+        output_format: Text,
+        dry_run: false,
+        lock_check: Disabled,
+        frozen: None,
+        active: None,
+        no_sync: false,
+        package: None,
+        python: None,
+        install_mirrors: PythonInstallMirrors {
+            python_install_mirror: None,
+            pypy_install_mirror: None,
+            python_downloads_json_url: None,
+        },
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: ResolverInstallerSettings {
+            resolver: ResolverSettings {
+                build_options: BuildOptions {
+                    no_binary: None,
+                    no_build: None,
+                },
+                config_setting: ConfigSettings(
+                    {},
+                ),
+                config_settings_package: PackageConfigSettings(
+                    {},
+                ),
+                dependency_metadata: DependencyMetadata(
+                    {},
+                ),
+                exclude_newer: ExcludeNewer {
+                    global: None,
+                    package: ExcludeNewerPackage(
+                        {},
+                    ),
+                },
+                fork_strategy: RequiresPython,
+                index_locations: IndexLocations {
+                    indexes: [],
+                    flat_index: [],
+                    no_index: false,
+                },
+                index_strategy: FirstIndex,
+                keyring_provider: Disabled,
+                link_mode: Clone,
+                build_isolation: Isolate,
+                extra_build_dependencies: ExtraBuildDependencies(
+                    {},
+                ),
+                extra_build_variables: ExtraBuildVariables(
+                    {},
+                ),
+                prerelease: IfNecessaryOrExplicit,
+                resolution: Highest,
+                sources: None,
+                torch_backend: None,
+                upgrade: Upgrade {
+                    strategy: None,
+                    constraints: {},
+                },
+            },
+            compile_bytecode: false,
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
+    "#
+    );
+
+    // Explicit `--no-system-certs` overrides the preview feature default.
+    uv_snapshot!(context.filters(), add_shared_args(context.version())
+        .arg("--show-settings")
+        .arg("--preview-features")
+        .arg("system-certs-default")
+        .arg("--no-system-certs"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            offline: Disabled,
+            system_certs: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
+            allow_insecure_host: [],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
+            retries: 3,
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: [
+                SystemCertsDefault,
+            ],
+        },
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    VersionSettings {
+        value: None,
+        bump: [],
+        short: false,
+        output_format: Text,
+        dry_run: false,
+        lock_check: Disabled,
+        frozen: None,
+        active: None,
+        no_sync: false,
+        package: None,
+        python: None,
+        install_mirrors: PythonInstallMirrors {
+            python_install_mirror: None,
+            pypy_install_mirror: None,
+            python_downloads_json_url: None,
+        },
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: ResolverInstallerSettings {
+            resolver: ResolverSettings {
+                build_options: BuildOptions {
+                    no_binary: None,
+                    no_build: None,
+                },
+                config_setting: ConfigSettings(
+                    {},
+                ),
+                config_settings_package: PackageConfigSettings(
+                    {},
+                ),
+                dependency_metadata: DependencyMetadata(
+                    {},
+                ),
+                exclude_newer: ExcludeNewer {
+                    global: None,
+                    package: ExcludeNewerPackage(
+                        {},
+                    ),
+                },
+                fork_strategy: RequiresPython,
+                index_locations: IndexLocations {
+                    indexes: [],
+                    flat_index: [],
+                    no_index: false,
+                },
+                index_strategy: FirstIndex,
+                keyring_provider: Disabled,
+                link_mode: Clone,
+                build_isolation: Isolate,
+                extra_build_dependencies: ExtraBuildDependencies(
+                    {},
+                ),
+                extra_build_variables: ExtraBuildVariables(
+                    {},
+                ),
+                prerelease: IfNecessaryOrExplicit,
+                resolution: Highest,
+                sources: None,
+                torch_backend: None,
+                upgrade: Upgrade {
+                    strategy: None,
+                    constraints: {},
+                },
+            },
+            compile_bytecode: false,
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
+    "#
+    );
 }
 
 /// Track the interactions between `upgrade` and `upgrade-package` across the `uv pip` CLI and a
