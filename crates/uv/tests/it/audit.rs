@@ -1,3 +1,4 @@
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use serde_json::json;
@@ -18,36 +19,11 @@ async fn audit_no_vulnerabilities() {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["requests==2.31.0"]
+        dependencies = ["iniconfig==2.0.0"]
     "#})
         .unwrap();
 
-    context
-        .temp_dir
-        .child("uv.lock")
-        .write_str(indoc! {r#"
-        version = 1
-        revision = 3
-        requires-python = ">=3.12"
-
-        [[package]]
-        name = "project"
-        version = "0.1.0"
-        source = { virtual = "." }
-        dependencies = [
-            { name = "requests" },
-        ]
-
-        [package.metadata]
-        requires-dist = [{ name = "requests", specifier = "==2.31.0" }]
-
-        [[package]]
-        name = "requests"
-        version = "2.31.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/9d/be/10918a2eac4ae9f02f6cfe6ef0b/requests-2.31.0.tar.gz", hash = "sha256:942c5a758f98d790eaed1a29cb6eefc7f0edf3fcb0fce8aea3fbd5951d bdf708" }
-    "#})
-        .unwrap();
+    context.lock().assert().success();
 
     let server = MockServer::start().await;
 
@@ -86,36 +62,11 @@ async fn audit_vulnerability_found() {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["requests==2.31.0"]
+        dependencies = ["iniconfig==2.0.0"]
     "#})
         .unwrap();
 
-    context
-        .temp_dir
-        .child("uv.lock")
-        .write_str(indoc! {r#"
-        version = 1
-        revision = 3
-        requires-python = ">=3.12"
-
-        [[package]]
-        name = "project"
-        version = "0.1.0"
-        source = { virtual = "." }
-        dependencies = [
-            { name = "requests" },
-        ]
-
-        [package.metadata]
-        requires-dist = [{ name = "requests", specifier = "==2.31.0" }]
-
-        [[package]]
-        name = "requests"
-        version = "2.31.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/9d/be/10918a2eac4ae9f02f6cfe6ef0b/requests-2.31.0.tar.gz", hash = "sha256:942c5a758f98d790eaed1a29cb6eefc7f0edf3fcb0fce8aea3fbd5951d bdf708" }
-    "#})
-        .unwrap();
+    context.lock().assert().success();
 
     let server = MockServer::start().await;
 
@@ -132,13 +83,13 @@ async fn audit_vulnerability_found() {
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "id": "PYSEC-2023-0001",
             "modified": "2026-01-01T00:00:00Z",
-            "summary": "A test vulnerability in requests",
+            "summary": "A test vulnerability in iniconfig",
             "affected": [{
                 "ranges": [{
                     "type": "ECOSYSTEM",
                     "events": [
                         {"introduced": "0"},
-                        {"fixed": "2.32.0"}
+                        {"fixed": "2.1.0"}
                     ]
                 }]
             }],
@@ -162,11 +113,11 @@ async fn audit_vulnerability_found() {
 
     Vulnerabilities:
 
-    requests 2.31.0 has 1 known vulnerability:
+    iniconfig 2.0.0 has 1 known vulnerability:
 
-    - PYSEC-2023-0001: A test vulnerability in requests
+    - PYSEC-2023-0001: A test vulnerability in iniconfig
 
-      Fixed in: 2.32.0
+      Fixed in: 2.1.0
 
       Advisory information: https://example.com/advisory/PYSEC-2023-0001
 
@@ -193,20 +144,7 @@ async fn audit_no_dependencies() {
     "#})
         .unwrap();
 
-    context
-        .temp_dir
-        .child("uv.lock")
-        .write_str(indoc! {r#"
-        version = 1
-        revision = 3
-        requires-python = ">=3.12"
-
-        [[package]]
-        name = "project"
-        version = "0.1.0"
-        source = { virtual = "." }
-    "#})
-        .unwrap();
+    context.lock().assert().success();
 
     let server = MockServer::start().await;
 
@@ -239,36 +177,11 @@ async fn audit_best_id_selection() {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["requests==2.31.0"]
+        dependencies = ["iniconfig==2.0.0"]
     "#})
         .unwrap();
 
-    context
-        .temp_dir
-        .child("uv.lock")
-        .write_str(indoc! {r#"
-        version = 1
-        revision = 3
-        requires-python = ">=3.12"
-
-        [[package]]
-        name = "project"
-        version = "0.1.0"
-        source = { virtual = "." }
-        dependencies = [
-            { name = "requests" },
-        ]
-
-        [package.metadata]
-        requires-dist = [{ name = "requests", specifier = "==2.31.0" }]
-
-        [[package]]
-        name = "requests"
-        version = "2.31.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/9d/be/10918a2eac4ae9f02f6cfe6ef0b/requests-2.31.0.tar.gz", hash = "sha256:942c5a758f98d790eaed1a29cb6eefc7f0edf3fcb0fce8aea3fbd5951d bdf708" }
-    "#})
-        .unwrap();
+    context.lock().assert().success();
 
     let server = MockServer::start().await;
 
@@ -305,7 +218,7 @@ async fn audit_best_id_selection() {
 
     Vulnerabilities:
 
-    requests 2.31.0 has 1 known vulnerability:
+    iniconfig 2.0.0 has 1 known vulnerability:
 
     - PYSEC-2023-0042: A vulnerability with many aliases
 
@@ -332,36 +245,11 @@ async fn audit_no_fix_versions() {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["requests==2.31.0"]
+        dependencies = ["iniconfig==2.0.0"]
     "#})
         .unwrap();
 
-    context
-        .temp_dir
-        .child("uv.lock")
-        .write_str(indoc! {r#"
-        version = 1
-        revision = 3
-        requires-python = ">=3.12"
-
-        [[package]]
-        name = "project"
-        version = "0.1.0"
-        source = { virtual = "." }
-        dependencies = [
-            { name = "requests" },
-        ]
-
-        [package.metadata]
-        requires-dist = [{ name = "requests", specifier = "==2.31.0" }]
-
-        [[package]]
-        name = "requests"
-        version = "2.31.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/9d/be/10918a2eac4ae9f02f6cfe6ef0b/requests-2.31.0.tar.gz", hash = "sha256:942c5a758f98d790eaed1a29cb6eefc7f0edf3fcb0fce8aea3fbd5951d bdf708" }
-    "#})
-        .unwrap();
+    context.lock().assert().success();
 
     let server = MockServer::start().await;
 
@@ -395,7 +283,7 @@ async fn audit_no_fix_versions() {
 
     Vulnerabilities:
 
-    requests 2.31.0 has 1 known vulnerability:
+    iniconfig 2.0.0 has 1 known vulnerability:
 
     - VULN-NO-FIX: A vulnerability with no fix available
 
@@ -422,36 +310,11 @@ async fn audit_multiple_vulnerabilities_same_package() {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["requests==2.31.0"]
+        dependencies = ["iniconfig==2.0.0"]
     "#})
         .unwrap();
 
-    context
-        .temp_dir
-        .child("uv.lock")
-        .write_str(indoc! {r#"
-        version = 1
-        revision = 3
-        requires-python = ">=3.12"
-
-        [[package]]
-        name = "project"
-        version = "0.1.0"
-        source = { virtual = "." }
-        dependencies = [
-            { name = "requests" },
-        ]
-
-        [package.metadata]
-        requires-dist = [{ name = "requests", specifier = "==2.31.0" }]
-
-        [[package]]
-        name = "requests"
-        version = "2.31.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/9d/be/10918a2eac4ae9f02f6cfe6ef0b/requests-2.31.0.tar.gz", hash = "sha256:942c5a758f98d790eaed1a29cb6eefc7f0edf3fcb0fce8aea3fbd5951d bdf708" }
-    "#})
-        .unwrap();
+    context.lock().assert().success();
 
     let server = MockServer::start().await;
 
@@ -474,7 +337,7 @@ async fn audit_multiple_vulnerabilities_same_package() {
                     "type": "ECOSYSTEM",
                     "events": [
                         {"introduced": "0"},
-                        {"fixed": "2.32.0"}
+                        {"fixed": "2.1.0"}
                     ]
                 }]
             }],
@@ -497,7 +360,7 @@ async fn audit_multiple_vulnerabilities_same_package() {
                     "type": "ECOSYSTEM",
                     "events": [
                         {"introduced": "2.0.0"},
-                        {"fixed": "2.31.1"}
+                        {"fixed": "2.0.1"}
                     ]
                 }]
             }],
@@ -521,17 +384,17 @@ async fn audit_multiple_vulnerabilities_same_package() {
 
     Vulnerabilities:
 
-    requests 2.31.0 has 2 known vulnerabilities:
+    iniconfig 2.0.0 has 2 known vulnerabilities:
 
     - VULN-A: First vulnerability
 
-      Fixed in: 2.32.0
+      Fixed in: 2.1.0
 
       Advisory information: https://example.com/advisory/VULN-A
 
     - VULN-B: Second vulnerability
 
-      Fixed in: 2.31.1
+      Fixed in: 2.0.1
 
       Advisory information: https://example.com/web/VULN-B
 
@@ -554,58 +417,17 @@ async fn audit_no_dev() {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["requests==2.31.0"]
+        dependencies = ["iniconfig==2.0.0"]
 
         [dependency-groups]
-        dev = ["flask==3.0.0"]
+        dev = ["typing-extensions==4.10.0"]
     "#})
         .unwrap();
 
-    context
-        .temp_dir
-        .child("uv.lock")
-        .write_str(indoc! {r#"
-        version = 1
-        revision = 3
-        requires-python = ">=3.12"
-
-        [[package]]
-        name = "project"
-        version = "0.1.0"
-        source = { virtual = "." }
-        dependencies = [
-            { name = "requests" },
-        ]
-
-        [package.dev-dependencies]
-        dev = [
-            { name = "flask" },
-        ]
-
-        [package.metadata]
-        requires-dist = [{ name = "requests", specifier = "==2.31.0" }]
-
-        [package.metadata.requires-dev]
-        dev = [{ name = "flask", specifier = "==3.0.0" }]
-
-        [[package]]
-        name = "requests"
-        version = "2.31.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/9d/be/10918a2eac4ae9f02f6cfe6ef0b/requests-2.31.0.tar.gz", hash = "sha256:942c5a758f98d790eaed1a29cb6eefc7f0edf3fcb0fce8aea3fbd5951d bdf708" }
-
-        [[package]]
-        name = "flask"
-        version = "3.0.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/d8/09/c1a7354d3925a3c6c228e02bc/flask-3.0.0.tar.gz", hash = "sha256:cfadcdb39eb12ae77f3a5d66e7e40de8cf4e0e38e3a52a81ae2530794783f86a" }
-    "#})
-        .unwrap();
+    context.lock().assert().success();
 
     let server = MockServer::start().await;
 
-    // With --no-dev, only "requests" should be audited (not "flask").
-    // The querybatch should only contain requests.
     Mock::given(method("POST"))
         .and(path("/v1/querybatch"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
@@ -614,6 +436,7 @@ async fn audit_no_dev() {
         .mount(&server)
         .await;
 
+    // With --no-dev, only "iniconfig" should be audited (not "typing-extensions").
     uv_snapshot!(context.filters(), context
         .audit()
         .arg("--frozen")
@@ -629,7 +452,7 @@ async fn audit_no_dev() {
     Found no known vulnerabilities and no adverse project statuses in 1 packages
     ");
 
-    // Without --no-dev, both "requests" and "flask" should be audited (2 packages).
+    // Without --no-dev, both packages should be audited.
     uv_snapshot!(context.filters(), context
         .audit()
         .arg("--frozen")

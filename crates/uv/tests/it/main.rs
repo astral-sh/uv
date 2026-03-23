@@ -3,7 +3,7 @@
 
 mod auth;
 
-#[cfg(feature = "test-python")]
+#[cfg(all(feature = "test-python", feature = "test-pypi"))]
 mod audit;
 
 mod branching_urls;
