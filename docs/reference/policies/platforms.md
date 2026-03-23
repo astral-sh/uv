@@ -38,6 +38,44 @@ vary in practice.
 
 Tier 3 platforms may not be built or tested, but uv will accept patches to fix bugs.
 
+## Linux versions
+
+On Linux, compatibility is determined by libc version.
+
+uv publishes both glibc-based and musl-based distributions.
+
+For glibc-based Linux distributions, uv publishes
+[manylinux-compatible](https://peps.python.org/pep-0600/) wheels and corresponding binaries. These
+artifacts depend on glibc being available on the host system. In a manylinux wheel tag, the version
+encodes the minimum supported glibc version for that wheel; for example, `manylinux_2_17_x86_64`
+requires glibc 2.17+.
+
+uv's official glibc-based wheels and binaries are published for the following targets:
+
+- `x86_64-unknown-linux-gnu` (`manylinux_2_17_x86_64`)
+- `aarch64-unknown-linux-gnu` (`manylinux_2_28_aarch64`)
+- `armv7-unknown-linux-gnueabihf` (`manylinux_2_17_armv7l`)
+- `i686-unknown-linux-gnu` (`manylinux_2_17_i686`)
+- `powerpc64le-unknown-linux-gnu` (`manylinux_2_17_ppc64le`)
+- `riscv64gc-unknown-linux-gnu` (`manylinux_2_31_riscv64`)
+- `s390x-unknown-linux-gnu` (`manylinux_2_17_s390x`)
+
+uv also publishes musl-based wheels and fully statically linked binaries for the following targets:
+
+- `x86_64-unknown-linux-musl` (`musllinux_1_1_x86_64`)
+- `aarch64-unknown-linux-musl` (`musllinux_1_1_aarch64`)
+- `armv7-unknown-linux-musleabihf` (`musllinux_1_1_armv7l`)
+- `i686-unknown-linux-musl` (`musllinux_1_1_i686`)
+- `riscv64gc-unknown-linux-musl` (`musllinux_1_1_riscv64`)
+- `arm-unknown-linux-musleabihf` (`linux_armv6l`)
+
+The wheels are published with [musllinux-compatible](https://peps.python.org/pep-0656/) tags.
+However, the embedded `uv` binaries are fully statically linked and do not require musl libc on the
+host system.
+
+The official [Docker images](../../guides/integration/docker.md) include these fully statically
+linked musl uv binaries for amd64 and arm64.
+
 ## Windows versions
 
 The minimum supported Windows versions are Windows 10 and Windows Server 2016, following
@@ -48,47 +86,3 @@ The minimum supported Windows versions are Windows 10 and Windows Server 2016, f
 uv supports macOS 13+ (Ventura).
 
 uv is known to work on macOS 12, but requires installation of a `realpath` executable.
-
-## Python support
-
-uv supports and is tested against the following Python versions:
-
-- 3.8
-- 3.9
-- 3.10
-- 3.11
-- 3.12
-- 3.13
-- 3.14
-
-uv has Tier 1 support for the following Python implementations:
-
-- CPython
-
-As with platforms, Tier 1 support can be thought of "guaranteed to work". uv supports managed
-installations of these implementations, and the builds are maintained by Astral.
-
-uv has Tier 2 support for:
-
-- PyPy
-- GraalPy
-
-uv is "expected to work" with these implementations. uv also supports managed installations of these
-Python implementations, but the builds are not maintained by Astral.
-
-uv has Tier 3 support for:
-
-- Pyston
-- Pyodide
-
-uv "should work" with these implementations, but stability may vary.
-
-## Minimum supported Rust version
-
-The minimum supported Rust version required to compile uv is listed in the `rust-version` key of the
-`[workspace.package]` section in `Cargo.toml`. It may change in any release (minor or patch). It
-will never be newer than N-2 Rust versions, where N is the latest stable version. For example, if
-the latest stable Rust version is 1.85, uv's minimum supported Rust version will be at most 1.83.
-
-This is only relevant to users who build uv from source. Installing uv from the Python package index
-usually installs a pre-built binary and does not require Rust compilation.

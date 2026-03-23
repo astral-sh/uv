@@ -20,10 +20,14 @@ pub mod upgrade;
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("{0} `{1}`")]
-    Dist(DistErrorKind, Box<Dist>, #[source] uv_distribution::Error),
+    Dist(
+        DistErrorKind,
+        Box<Dist>,
+        #[source] Box<uv_distribution::Error>,
+    ),
 
     #[error(transparent)]
-    Distribution(#[from] uv_distribution::Error),
+    Distribution(#[from] Box<uv_distribution::Error>),
 
     #[error(transparent)]
     DistributionTypes(#[from] uv_distribution_types::Error),
@@ -38,7 +42,11 @@ pub enum Error {
 impl Error {
     /// Create an [`Error`] from a distribution error.
     pub(crate) fn from_dist(dist: Dist, err: uv_distribution::Error) -> Self {
-        Self::Dist(DistErrorKind::from_dist(&dist, &err), Box::new(dist), err)
+        Self::Dist(
+            DistErrorKind::from_dist(&dist, &err),
+            Box::new(dist),
+            Box::new(err),
+        )
     }
 }
 

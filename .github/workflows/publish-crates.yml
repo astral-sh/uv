@@ -17,6 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: release
+      deployment: false
     permissions:
       contents: read
     steps:

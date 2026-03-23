@@ -235,10 +235,10 @@ jobs:
         platform:
           - target: x86_64-pc-windows-msvc
             arch: x64
-            runner: github-windows-2022-x86_64-8
+            runner: github-windows-2025-x86_64-8
           - target: i686-pc-windows-msvc
             arch: x86
-            runner: github-windows-2022-x86_64-8
+            runner: github-windows-2025-x86_64-8
           - target: aarch64-pc-windows-msvc
             arch: arm64
             runner: github-windows-11-aarch64-8
@@ -256,7 +256,14 @@ jobs:
       - name: "Install cargo extensions"
         shell: bash
         run: scripts/install-cargo-extensions.sh
-
+      - name: "Install NASM"
+        # NASM is required for x86/x86-64 Windows targets by aws-lc-sys.
+        # On aarch64-pc-windows-msvc, it uses clang-cl instead.
+        # See: https://aws.github.io/aws-lc-rs/requirements/windows.html#build-requirements
+        if: contains(matrix.platform.target, 'x86') || contains(matrix.platform.target, 'i686')
+        run: |
+          winget install NASM.NASM --accept-source-agreements --accept-package-agreements
+          echo "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append
       # uv
       - name: "Build wheels"
         uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
@@ -266,6 +273,8 @@ jobs:
           args: --release --locked --out dist --features self-update,windows-gui-bin --compatibility pypi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.cmd
+          # Disable prebuilt NASM objects so we always compile assembly from source.
+          AWS_LC_SYS_PREBUILT_NASM: "0"
       - name: "Test wheel"
         shell: bash
         run: |
@@ -351,25 +360,25 @@ jobs:
           manylinux: 2_17
           docker-options: -e CARGO
           args: --release --locked --out dist --features self-update --compatibility pypi
-          # See: https://github.com/sfackler/rust-openssl/issues/2036#issuecomment-1724324145
           before-script-linux: |
             # Install the 32-bit cross target on 64-bit (noop if we're already on 64-bit)
             rustup target add ${{ matrix.target }}
             # If we're running on rhel centos, install needed packages.
             if command -v yum &> /dev/null; then
-                yum update -y && yum install -y perl-core openssl openssl-devel pkgconfig libatomic
+                yum update -y && yum install -y pkgconfig libatomic
 
-                # If we're running on i686 we need to symlink libatomic
-                # in order to build openssl with -latomic flag.
-                if [[ ! -d "/usr/lib64" ]]; then
+                # Install cross build requirements
+                if [[ "${{ matrix.target }}" == "i686-unknown-linux-gnu" ]]; then
+                  yum install -y glibc-devel.i686 libstdc++-devel.i686 libatomic.i686
+                fi
+
+                # Symlink libatomic so the linker can find it with -latomic.
+                if [[ -f "/usr/lib/libatomic.so.1" && ! -f "/usr/lib/libatomic.so" ]]; then
                     ln -s /usr/lib/libatomic.so.1 /usr/lib/libatomic.so
-                else
-                    # Support cross-compiling from 64-bit to 32-bit
-                    yum install -y glibc-devel.i686 libstdc++-devel.i686
                 fi
             else
                 # If we're running on debian-based system.
-                apt update -y && apt-get install -y libssl-dev openssl pkg-config
+                apt update -y && apt-get install -y pkg-config
             fi
             # Install cargo extensions as a static musl binary so it runs in any container.
             scripts/install-cargo-extensions.sh
@@ -595,8 +604,12 @@ jobs:
           rust-toolchain: ${{ matrix.platform.toolchain || null }}
           before-script-linux: |
             scripts/install-cargo-extensions.sh
+            # Install the s390x cross target on x86_64
+            rustup target add ${{ matrix.platform.target }}
+            apt-get update && apt-get install -y gcc-s390x-linux-gnu binutils-s390x-linux-gnu
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
+
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         name: "Test wheel"
         with:
@@ -1186,7 +1199,7 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install uv"
-        uses: astral-sh/setup-uv@e06108dd0aef18192324c70427afc47652e63a82 # v7.5.0
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: wheels_*-*

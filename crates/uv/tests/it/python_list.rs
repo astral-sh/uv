@@ -221,23 +221,23 @@ fn python_list_unsupported_version() {
         .with_filtered_python_keys();
 
     // Request a low version
-    uv_snapshot!(context.filters(), context.python_list().arg("3.6"), @"
+    uv_snapshot!(context.filters(), context.python_list().arg("3.5"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Invalid version request: Python <3.7 is not supported but 3.6 was requested.
+    error: Invalid version request: Python <3.6 is not supported but 3.5 was requested.
     ");
 
     // Request a low version with a patch
-    uv_snapshot!(context.filters(), context.python_list().arg("3.6.9"), @"
+    uv_snapshot!(context.filters(), context.python_list().arg("3.5.9"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Invalid version request: Python <3.7 is not supported but 3.6.9 was requested.
+    error: Invalid version request: Python <3.6 is not supported but 3.5.9 was requested.
     ");
 
     // Request a really low version
@@ -247,7 +247,7 @@ fn python_list_unsupported_version() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Invalid version request: Python <3.7 is not supported but 2.6 was requested.
+    error: Invalid version request: Python <3.6 is not supported but 2.6 was requested.
     ");
 
     // Request a really low version with a patch
@@ -257,7 +257,7 @@ fn python_list_unsupported_version() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Invalid version request: Python <3.7 is not supported but 2.6.8 was requested.
+    error: Invalid version request: Python <3.6 is not supported but 2.6.8 was requested.
     ");
 
     // Request a future version
@@ -484,6 +484,68 @@ fn python_list_downloads_installed() {
     success: true
     exit_code: 0
     ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    // When `--managed-python` is used, managed installations should still be shown
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--managed-python").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.10.[LATEST]-[PLATFORM]    managed/cpython-3.10-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    pypy-3.10.16-[PLATFORM]       <download available>
+    graalpy-3.10.0-[PLATFORM]     <download available>
+
+    ----- stderr -----
+    ");
+}
+
+/// Test that symlinks installed by `python install` on the search path are correctly
+/// filtered by `--managed-python` and `--no-managed-python`.
+#[test]
+#[cfg(all(unix, feature = "test-python-managed"))]
+fn python_list_managed_symlinks() {
+    use assert_cmd::assert::OutputAssertExt;
+
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_python_install_bin()
+        .with_filtered_python_names()
+        .with_managed_python_dirs()
+        .with_filtered_latest_python_versions();
+
+    // Install a Python version; this creates a symlink in `bin_dir` (on the search path)
+    context.python_install().arg("3.10").assert().success();
+
+    // Include `bin_dir` in the test search path so the symlink is discoverable
+    let bin_dir = context.bin_dir.to_path_buf();
+
+    // With `--no-managed-python`, the symlink should be excluded since it points to a
+    // managed installation
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("3.10")
+        .arg("--only-installed")
+        .arg("--no-managed-python")
+        .env(EnvVars::UV_TEST_PYTHON_PATH, &bin_dir), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    // With `--managed-python`, both the managed installation and the symlink are shown
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("3.10")
+        .arg("--only-installed")
+        .arg("--managed-python")
+        .env(EnvVars::UV_TEST_PYTHON_PATH, &bin_dir), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.10.[LATEST]-[PLATFORM]    [BIN]/[PYTHON] -> managed/cpython-3.10-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    cpython-3.10.[LATEST]-[PLATFORM]    managed/cpython-3.10-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");

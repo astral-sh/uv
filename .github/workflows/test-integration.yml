@@ -95,6 +95,43 @@ jobs:
           echo "$CONDA_PREFIX"
           ./uv pip install anyio
 
+  integration-test-conda-macos-x86_64:
+    name: "conda on macos x86-64"
+    timeout-minutes: 10
+    runs-on: macos-15-intel # github-macos-15-x86_64-4
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: conda-incubator/setup-miniconda@fc2d68f6413eb2d87b895e92f8584b5b94a10167 # v3.3.0
+        with:
+          miniconda-version: latest
+          activate-environment: uv
+          python-version: "3.12"
+
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-macos-x86_64-${{ inputs.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: Conda info
+        shell: bash -el {0}
+        run: conda info
+
+      - name: "Install a package with macOS macOS 11.0 wheels"
+        shell: bash -el {0}
+        run: |
+          # greenlet has `macosx_11_0_universal2` wheels. Previously, conda interpreters on Intel
+          # macOS reported the incorrect platform tag `macosx_10_16` causing uv to consider the
+          # wheel incompatible. See https://github.com/astral-sh/uv/issues/14267
+          #
+          # Using `--only-binary` ensures this fails if the platform tags are wrong instead of
+          # falling back to a source build.
+          ./uv pip install --no-build 'greenlet==3.3.2'
+
   integration-test-deadsnakes-39-linux:
     name: "deadsnakes python3.9 on ubuntu"
     timeout-minutes: 15
@@ -141,6 +178,48 @@ jobs:
       - name: "Check install"
         run: |
           ./uv pip install -v anyio
+
+  integration-test-linux-armv7-on-aarch64:
+    name: "armv7 on aarch64 linux"
+    timeout-minutes: 20
+    runs-on: github-ubuntu-24.04-aarch64-4
+    env:
+      UV_PYTHON_INSTALL_DIR: ${{ github.workspace }}/.python
+
+    steps:
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-linux-armv7-gnueabihf-${{ inputs.sha }}
+
+      - name: "Install armhf runtime"
+        run: |
+          sudo dpkg --add-architecture armhf
+          sudo apt-get update
+          sudo apt-get install -y libc6:armhf libgcc-s1:armhf
+
+      - name: "Prepare binary"
+        run: |
+          chmod +x ./uv
+          chmod +x ./uvx
+
+      - name: "Install Python via uv"
+        run: |
+          ./uv python install -v 3.13.12
+
+      - name: "Verify hard-float variant selected"
+        run: |
+          python_path=$(./uv python find 3.13)
+          expected="$GITHUB_WORKSPACE/.python/cpython-3.13-linux-armv7-gnueabihf/bin/python3.13"
+          if [[ "$python_path" != "$expected" ]]; then
+            echo "Expected: $expected"
+            echo "Found:    $python_path"
+            exit 1
+          fi
+
+      - name: "Create a virtual environment"
+        run: |
+          ./uv venv -c -p 3.13.12 --managed-python --no-python-downloads
 
   integration-test-free-threaded-windows-x86_64:
     name: "free-threaded on windows"
@@ -674,7 +753,7 @@ jobs:
           docker run --rm \
             -v "$PWD/uv:/uv" \
             -v "$PWD/test/integration/termux.sh:/test-termux.sh" \
-            termux/termux-docker:x86_64 \
+            ghcr.io/astral-sh/termux-python:latest \
             /entrypoint.sh bash /test-termux.sh
 
   integration-test-github-actions:
@@ -828,7 +907,9 @@ jobs:
     timeout-minutes: 10
     runs-on: ubuntu-latest
     if: ${{ github.event.pull_request.head.repo.fork != true }}
-    environment: uv-test-registries
+    environment:
+      name: uv-test-registries
+      deployment: false
     env:
       PYTHON_VERSION: 3.12
     steps:

@@ -709,7 +709,7 @@ fn find_all_minor(
                     let minor = captures["minor"].parse().ok();
                     if let Some(minor) = minor {
                         // Optimization: Skip generally unsupported Python versions without querying.
-                        if minor < 7 {
+                        if minor < 6 {
                             return false;
                         }
                         // Optimization 2: Skip excluded Python (minor) versions without querying.
@@ -738,7 +738,7 @@ fn find_all_minor(
 /// the interpreter. The caller is responsible for ensuring it is applied otherwise.
 ///
 /// See [`python_executables`] for more information on discovery.
-fn python_interpreters<'a>(
+fn python_installations<'a>(
     version: &'a VersionRequest,
     implementation: Option<&'a ImplementationName>,
     platform: PlatformRequest,
@@ -746,8 +746,8 @@ fn python_interpreters<'a>(
     preference: PythonPreference,
     cache: &'a Cache,
     preview: Preview,
-) -> impl Iterator<Item = Result<(PythonSource, Interpreter), Error>> + 'a {
-    let interpreters = python_interpreters_from_executables(
+) -> impl Iterator<Item = Result<PythonInstallation, Error>> + 'a {
+    let installations = python_installations_from_executables(
         // Perform filtering on the discovered executables based on their source. This avoids
         // unnecessary interpreter queries, which are generally expensive. We'll filter again
         // with `interpreter_satisfies_environment_preference` after querying.
@@ -764,52 +764,57 @@ fn python_interpreters<'a>(
         }),
         cache,
     )
-    .filter_ok(move |(source, interpreter)| {
-        interpreter_satisfies_environment_preference(*source, interpreter, environments)
+    .filter_ok(move |installation| {
+        interpreter_satisfies_environment_preference(
+            installation.source,
+            &installation.interpreter,
+            environments,
+        )
     })
-    .filter_ok(move |(source, interpreter)| {
-        let request = version.clone().into_request_for_source(*source);
-        if request.matches_interpreter(interpreter) {
+    .filter_ok(move |installation| {
+        let request = version.clone().into_request_for_source(installation.source);
+        if request.matches_interpreter(&installation.interpreter) {
             true
         } else {
             debug!(
-                "Skipping interpreter at `{}` from {source}: does not satisfy request `{request}`",
-                interpreter.sys_executable().user_display()
+                "Skipping interpreter at `{}` from {}: does not satisfy request `{request}`",
+                installation.interpreter.sys_executable().user_display(),
+                installation.source,
             );
             false
         }
     })
-    .filter_ok(move |(source, interpreter)| {
-        satisfies_python_preference(*source, interpreter, preference)
-    });
+    .filter_ok(move |installation| preference.allows_installation(installation));
 
     if std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_PYTHON_MANAGED).is_ok() {
-        Either::Left(interpreters.map_ok(|(source, interpreter)| {
+        Either::Left(installations.map_ok(|mut installation| {
             // In test mode, change the source to `Managed` if a version was marked as such via
             // `TestContext::with_versions_as_managed`.
-            if interpreter.is_managed() {
-                (PythonSource::Managed, interpreter)
-            } else {
-                (source, interpreter)
+            if installation.interpreter.is_managed() {
+                installation.source = PythonSource::Managed;
             }
+            installation
         }))
     } else {
-        Either::Right(interpreters)
+        Either::Right(installations)
     }
 }
 
-/// Lazily convert Python executables into interpreters.
-fn python_interpreters_from_executables<'a>(
+/// Lazily convert Python executables into installations.
+fn python_installations_from_executables<'a>(
     executables: impl Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a,
     cache: &'a Cache,
-) -> impl Iterator<Item = Result<(PythonSource, Interpreter), Error>> + 'a {
+) -> impl Iterator<Item = Result<PythonInstallation, Error>> + 'a {
     executables.map(|result| match result {
         Ok((source, path)) => Interpreter::query(&path, cache)
-            .map(|interpreter| (source, interpreter))
-            .inspect(|(source, interpreter)| {
+            .map(|interpreter| PythonInstallation {
+                source,
+                interpreter,
+            })
+            .inspect(|installation| {
                 debug!(
                     "Found `{}` at `{}` ({source})",
-                    interpreter.key(),
+                    installation.key(),
                     path.display()
                 );
             })
@@ -923,95 +928,6 @@ fn source_satisfies_environment_preference(
     }
 }
 
-/// Returns true if a Python interpreter matches the [`PythonPreference`].
-pub fn satisfies_python_preference(
-    source: PythonSource,
-    interpreter: &Interpreter,
-    preference: PythonPreference,
-) -> bool {
-    // If the source is "explicit", we will not apply the Python preference, e.g., if the user has
-    // activated a virtual environment, we should always allow it. We may want to invalidate the
-    // environment in some cases, like in projects, but we can't distinguish between explicit
-    // requests for a different Python preference or a persistent preference in a configuration file
-    // which would result in overly aggressive invalidation.
-    let is_explicit = match source {
-        PythonSource::ProvidedPath
-        | PythonSource::ParentInterpreter
-        | PythonSource::ActiveEnvironment
-        | PythonSource::CondaPrefix => true,
-        PythonSource::Managed
-        | PythonSource::DiscoveredEnvironment
-        | PythonSource::SearchPath
-        | PythonSource::SearchPathFirst
-        | PythonSource::Registry
-        | PythonSource::MicrosoftStore
-        | PythonSource::BaseCondaPrefix => false,
-    };
-
-    match preference {
-        PythonPreference::OnlyManaged => {
-            // Perform a fast check using the source before querying the interpreter
-            if matches!(source, PythonSource::Managed) || interpreter.is_managed() {
-                true
-            } else {
-                if is_explicit {
-                    debug!(
-                        "Allowing unmanaged Python interpreter at `{}` (in conflict with the `python-preference`) since it is from source: {source}",
-                        interpreter.sys_executable().display()
-                    );
-                    true
-                } else {
-                    debug!(
-                        "Ignoring Python interpreter at `{}`: only managed interpreters allowed",
-                        interpreter.sys_executable().display()
-                    );
-                    false
-                }
-            }
-        }
-        // If not "only" a kind, any interpreter is okay
-        PythonPreference::Managed | PythonPreference::System => true,
-        PythonPreference::OnlySystem => {
-            if is_system_interpreter(source, interpreter) {
-                true
-            } else {
-                if is_explicit {
-                    debug!(
-                        "Allowing managed Python interpreter at `{}` (in conflict with the `python-preference`) since it is from source: {source}",
-                        interpreter.sys_executable().display()
-                    );
-                    true
-                } else {
-                    debug!(
-                        "Ignoring Python interpreter at `{}`: only system interpreters allowed",
-                        interpreter.sys_executable().display()
-                    );
-                    false
-                }
-            }
-        }
-    }
-}
-
-pub(crate) fn is_system_interpreter(source: PythonSource, interpreter: &Interpreter) -> bool {
-    match source {
-        // A managed interpreter is never a system interpreter
-        PythonSource::Managed => false,
-        // We can't be sure if this is a system interpreter without checking
-        PythonSource::ProvidedPath
-        | PythonSource::ParentInterpreter
-        | PythonSource::ActiveEnvironment
-        | PythonSource::CondaPrefix
-        | PythonSource::DiscoveredEnvironment
-        | PythonSource::SearchPath
-        | PythonSource::SearchPathFirst
-        | PythonSource::Registry
-        | PythonSource::BaseCondaPrefix => !interpreter.is_managed(),
-        // Managed interpreters should never be found in the store
-        PythonSource::MicrosoftStore => true,
-    }
-}
-
 /// Check if an encountered error is critical and should stop discovery.
 ///
 /// Returns false when an error could be due to a faulty Python installation and we should continue searching for a working one.
@@ -1097,12 +1013,12 @@ fn python_installation_from_directory(
     python_installation_from_executable(&executable, cache)
 }
 
-/// Lazily iterate over all Python interpreters on the path with the given executable name.
-fn python_interpreters_with_executable_name<'a>(
+/// Lazily iterate over all Python installations on the path with the given executable name.
+fn python_installations_with_executable_name<'a>(
     name: &'a str,
     cache: &'a Cache,
-) -> impl Iterator<Item = Result<(PythonSource, Interpreter), Error>> + 'a {
-    python_interpreters_from_executables(
+) -> impl Iterator<Item = Result<PythonInstallation, Error>> + 'a {
+    python_installations_from_executables(
         which_all(name)
             .into_iter()
             .flat_map(|inner| inner.map(|path| Ok((PythonSource::SearchPath, path)))),
@@ -1126,7 +1042,7 @@ pub fn find_python_installations<'a>(
 
     match request {
         PythonRequest::File(path) => Box::new(iter::once({
-            if preference.allows(PythonSource::ProvidedPath) {
+            if preference.allows_source(PythonSource::ProvidedPath) {
                 debug!("Checking for Python interpreter at {request}");
                 match python_installation_from_executable(path, cache) {
                     Ok(installation) => Ok(Ok(installation)),
@@ -1152,7 +1068,7 @@ pub fn find_python_installations<'a>(
             }
         })),
         PythonRequest::Directory(path) => Box::new(iter::once({
-            if preference.allows(PythonSource::ProvidedPath) {
+            if preference.allows_source(PythonSource::ProvidedPath) {
                 debug!("Checking for Python interpreter in {request}");
                 match python_installation_from_directory(path, cache) {
                     Ok(installation) => Ok(Ok(installation)),
@@ -1178,18 +1094,18 @@ pub fn find_python_installations<'a>(
             }
         })),
         PythonRequest::ExecutableName(name) => {
-            if preference.allows(PythonSource::SearchPath) {
+            if preference.allows_source(PythonSource::SearchPath) {
                 debug!("Searching for Python interpreter with {request}");
                 Box::new(
-                    python_interpreters_with_executable_name(name, cache)
-                        .filter_ok(move |(source, interpreter)| {
+                    python_installations_with_executable_name(name, cache)
+                        .filter_ok(move |installation| {
                             interpreter_satisfies_environment_preference(
-                                *source,
-                                interpreter,
+                                installation.source,
+                                &installation.interpreter,
                                 environments,
                             )
                         })
-                        .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple))),
+                        .map_ok(Ok),
                 )
             } else {
                 Box::new(iter::once(Err(Error::SourceNotAllowed(
@@ -1201,7 +1117,7 @@ pub fn find_python_installations<'a>(
         }
         PythonRequest::Any => Box::new({
             debug!("Searching for any Python interpreter in {sources}");
-            python_interpreters(
+            python_installations(
                 &VersionRequest::Any,
                 None,
                 PlatformRequest::default(),
@@ -1210,11 +1126,11 @@ pub fn find_python_installations<'a>(
                 cache,
                 preview,
             )
-            .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
+            .map_ok(Ok)
         }),
         PythonRequest::Default => Box::new({
             debug!("Searching for default Python interpreter in {sources}");
-            python_interpreters(
+            python_installations(
                 &VersionRequest::Default,
                 None,
                 PlatformRequest::default(),
@@ -1223,7 +1139,7 @@ pub fn find_python_installations<'a>(
                 cache,
                 preview,
             )
-            .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
+            .map_ok(Ok)
         }),
         PythonRequest::Version(version) => {
             if let Err(err) = version.check_supported() {
@@ -1231,7 +1147,7 @@ pub fn find_python_installations<'a>(
             }
             Box::new({
                 debug!("Searching for {request} in {sources}");
-                python_interpreters(
+                python_installations(
                     version,
                     None,
                     PlatformRequest::default(),
@@ -1240,12 +1156,12 @@ pub fn find_python_installations<'a>(
                     cache,
                     preview,
                 )
-                .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
+                .map_ok(Ok)
             })
         }
         PythonRequest::Implementation(implementation) => Box::new({
             debug!("Searching for a {request} interpreter in {sources}");
-            python_interpreters(
+            python_installations(
                 &VersionRequest::Default,
                 Some(implementation),
                 PlatformRequest::default(),
@@ -1254,8 +1170,8 @@ pub fn find_python_installations<'a>(
                 cache,
                 preview,
             )
-            .filter_ok(|(_source, interpreter)| implementation.matches_interpreter(interpreter))
-            .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
+            .filter_ok(|installation| implementation.matches_interpreter(&installation.interpreter))
+            .map_ok(Ok)
         }),
         PythonRequest::ImplementationVersion(implementation, version) => {
             if let Err(err) = version.check_supported() {
@@ -1263,7 +1179,7 @@ pub fn find_python_installations<'a>(
             }
             Box::new({
                 debug!("Searching for {request} in {sources}");
-                python_interpreters(
+                python_installations(
                     version,
                     Some(implementation),
                     PlatformRequest::default(),
@@ -1272,8 +1188,10 @@ pub fn find_python_installations<'a>(
                     cache,
                     preview,
                 )
-                .filter_ok(|(_source, interpreter)| implementation.matches_interpreter(interpreter))
-                .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
+                .filter_ok(|installation| {
+                    implementation.matches_interpreter(&installation.interpreter)
+                })
+                .map_ok(Ok)
             })
         }
         PythonRequest::Key(request) => {
@@ -1285,7 +1203,7 @@ pub fn find_python_installations<'a>(
 
             Box::new({
                 debug!("Searching for {request} in {sources}");
-                python_interpreters(
+                python_installations(
                     request.version().unwrap_or(&VersionRequest::Default),
                     request.implementation(),
                     request.platform(),
@@ -1294,10 +1212,10 @@ pub fn find_python_installations<'a>(
                     cache,
                     preview,
                 )
-                .filter_ok(move |(_source, interpreter)| {
-                    request.satisfied_by_interpreter(interpreter)
+                .filter_ok(move |installation| {
+                    request.satisfied_by_interpreter(&installation.interpreter)
                 })
-                .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
+                .map_ok(Ok)
             })
         }
     }
@@ -1391,9 +1309,7 @@ pub(crate) fn find_python_installation(
 
         // If it's a managed Python installation, and system interpreters are preferred, skip it
         // for now.
-        if matches!(preference, PythonPreference::System)
-            && !is_system_interpreter(installation.source, installation.interpreter())
-        {
+        if matches!(preference, PythonPreference::System) && installation.is_managed() {
             debug!(
                 "Skipping managed installation {}: system installation preferred",
                 installation.key()
@@ -2366,6 +2282,24 @@ impl PythonSource {
         }
     }
 
+    /// Whether this source is "explicit", e.g., it was directly provided by the user or is
+    /// an active virtual environment.
+    pub(crate) fn is_explicit(self) -> bool {
+        match self {
+            Self::ProvidedPath
+            | Self::ParentInterpreter
+            | Self::ActiveEnvironment
+            | Self::CondaPrefix => true,
+            Self::Managed
+            | Self::DiscoveredEnvironment
+            | Self::SearchPath
+            | Self::SearchPathFirst
+            | Self::Registry
+            | Self::MicrosoftStore
+            | Self::BaseCondaPrefix => false,
+        }
+    }
+
     /// Whether this source **could** be a system interpreter.
     pub(crate) fn is_maybe_system(self) -> bool {
         match self {
@@ -2384,7 +2318,7 @@ impl PythonSource {
 }
 
 impl PythonPreference {
-    fn allows(self, source: PythonSource) -> bool {
+    fn allows_source(self, source: PythonSource) -> bool {
         // If not dealing with a system interpreter source, we don't care about the preference
         if !matches!(
             source,
@@ -2409,6 +2343,69 @@ impl PythonPreference {
         match self {
             Self::OnlySystem => false,
             Self::Managed | Self::System | Self::OnlyManaged => true,
+        }
+    }
+
+    /// Returns `true` if the given interpreter is allowed by this preference.
+    ///
+    /// Unlike [`PythonPreference::allows_source`], which checks the [`PythonSource`], this checks
+    /// whether the interpreter's base prefix is in a managed location.
+    pub fn allows_interpreter(self, interpreter: &Interpreter) -> bool {
+        match self {
+            Self::OnlyManaged => interpreter.is_managed(),
+            Self::OnlySystem => !interpreter.is_managed(),
+            Self::Managed | Self::System => true,
+        }
+    }
+
+    /// Returns `true` if the given installation is allowed by this preference.
+    ///
+    /// Explicit sources (e.g., provided paths, active environments) are always allowed, even if
+    /// they conflict with the preference. We may want to invalidate the environment in some
+    /// cases, like in projects, but we can't distinguish between explicit requests for a
+    /// different Python preference or a persistent preference in a configuration file which
+    /// would result in overly aggressive invalidation.
+    pub fn allows_installation(self, installation: &PythonInstallation) -> bool {
+        let source = installation.source;
+        let interpreter = &installation.interpreter;
+
+        match self {
+            Self::OnlyManaged => {
+                if self.allows_interpreter(interpreter) {
+                    true
+                } else if source.is_explicit() {
+                    debug!(
+                        "Allowing unmanaged Python interpreter at `{}` (in conflict with the `python-preference`) since it is from source: {source}",
+                        interpreter.sys_executable().display()
+                    );
+                    true
+                } else {
+                    debug!(
+                        "Ignoring Python interpreter at `{}`: only managed interpreters allowed",
+                        interpreter.sys_executable().display()
+                    );
+                    false
+                }
+            }
+            // If not "only" a kind, any interpreter is okay
+            Self::Managed | Self::System => true,
+            Self::OnlySystem => {
+                if self.allows_interpreter(interpreter) {
+                    true
+                } else if source.is_explicit() {
+                    debug!(
+                        "Allowing managed Python interpreter at `{}` (in conflict with the `python-preference`) since it is from source: {source}",
+                        interpreter.sys_executable().display()
+                    );
+                    true
+                } else {
+                    debug!(
+                        "Ignoring Python interpreter at `{}`: only system interpreters allowed",
+                        interpreter.sys_executable().display()
+                    );
+                    false
+                }
+            }
         }
     }
 
@@ -2793,23 +2790,23 @@ impl VersionRequest {
                 }
             }
             Self::MajorMinor(major, minor, _) => {
-                if (*major, *minor) < (3, 7) {
+                if (*major, *minor) < (3, 6) {
                     return Err(format!(
-                        "Python <3.7 is not supported but {major}.{minor} was requested."
+                        "Python <3.6 is not supported but {major}.{minor} was requested."
                     ));
                 }
             }
             Self::MajorMinorPatch(major, minor, patch, _) => {
-                if (*major, *minor) < (3, 7) {
+                if (*major, *minor) < (3, 6) {
                     return Err(format!(
-                        "Python <3.7 is not supported but {major}.{minor}.{patch} was requested."
+                        "Python <3.6 is not supported but {major}.{minor}.{patch} was requested."
                     ));
                 }
             }
             Self::MajorMinorPrerelease(major, minor, prerelease, _) => {
-                if (*major, *minor) < (3, 7) {
+                if (*major, *minor) < (3, 6) {
                     return Err(format!(
-                        "Python <3.7 is not supported but {major}.{minor}{prerelease} was requested."
+                        "Python <3.6 is not supported but {major}.{minor}{prerelease} was requested."
                     ));
                 }
             }

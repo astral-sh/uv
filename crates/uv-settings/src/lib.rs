@@ -300,11 +300,13 @@ fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
 /// Validate that an [`Options`] contains no fields that `uv.toml` would mask
 ///
 /// This is essentially the inverse of [`validate_uv_toml`].
+#[allow(deprecated)]
 fn warn_uv_toml_masked_fields(options: &Options) {
     let Options {
         globals:
             GlobalOptions {
                 required_version,
+                system_certs,
                 native_tls,
                 offline,
                 no_cache,
@@ -391,6 +393,9 @@ fn warn_uv_toml_masked_fields(options: &Options) {
 
     if required_version.is_some() {
         masked_fields.push("required-version");
+    }
+    if system_certs.is_some() {
+        masked_fields.push("system-certs");
     }
     if native_tls.is_some() {
         masked_fields.push("native-tls");
@@ -652,6 +657,7 @@ pub struct EnvironmentOptions {
     pub managed_python: EnvFlag,
     pub no_managed_python: EnvFlag,
     pub native_tls: EnvFlag,
+    pub system_certs: EnvFlag,
     pub preview: EnvFlag,
     pub isolated: EnvFlag,
     pub no_progress: EnvFlag,
@@ -746,6 +752,7 @@ impl EnvironmentOptions {
             managed_python: EnvFlag::new(EnvVars::UV_MANAGED_PYTHON)?,
             no_managed_python: EnvFlag::new(EnvVars::UV_NO_MANAGED_PYTHON)?,
             native_tls: EnvFlag::new(EnvVars::UV_NATIVE_TLS)?,
+            system_certs: EnvFlag::new(EnvVars::UV_SYSTEM_CERTS)?,
             preview: EnvFlag::new(EnvVars::UV_PREVIEW)?,
             isolated: EnvFlag::new(EnvVars::UV_ISOLATED)?,
             no_progress: EnvFlag::new(EnvVars::UV_NO_PROGRESS)?,

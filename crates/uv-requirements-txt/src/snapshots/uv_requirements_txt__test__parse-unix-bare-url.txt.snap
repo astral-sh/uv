@@ -41,6 +41,7 @@ RequirementsTxt {
                             given: Some(
                                 "./test/packages/black_editable",
                             ),
+                            expanded: false,
                         },
                     },
                     extras: [],
@@ -91,6 +92,7 @@ RequirementsTxt {
                             given: Some(
                                 "./test/packages/black_editable",
                             ),
+                            expanded: false,
                         },
                     },
                     extras: [
@@ -145,6 +147,7 @@ RequirementsTxt {
                             given: Some(
                                 "file:///test/packages/black_editable",
                             ),
+                            expanded: false,
                         },
                     },
                     extras: [],
@@ -195,6 +198,7 @@ RequirementsTxt {
                             given: Some(
                                 "./test/packages/black editable",
                             ),
+                            expanded: false,
                         },
                     },
                     extras: [],
@@ -245,6 +249,7 @@ RequirementsTxt {
                             given: Some(
                                 "./test/packages/black editable",
                             ),
+                            expanded: false,
                         },
                     },
                     extras: [],
@@ -295,6 +300,7 @@ RequirementsTxt {
                             given: Some(
                                 "./test/packages/black editable",
                             ),
+                            expanded: false,
                         },
                     },
                     extras: [],

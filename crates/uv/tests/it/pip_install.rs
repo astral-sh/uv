@@ -234,7 +234,7 @@ fn invalid_pyproject_toml_option_unknown_field() -> Result<()> {
         |
       2 | unknown = "field"
         | ^^^^^^^
-      unknown field `unknown`, expected one of `required-version`, `native-tls`, [...]
+      unknown field `unknown`, expected one of `required-version`, `system-certs`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
 
     Resolved in [TIME]
     Checked in [TIME]
@@ -5935,6 +5935,153 @@ async fn install_package_basic_auth_from_netrc() -> Result<()> {
     );
 
     context.assert_command("import anyio").success();
+
+    Ok(())
+}
+
+/// Install a package from a known pyx URL by falling back to netrc when the pyx store is empty.
+#[tokio::test]
+async fn install_package_known_pyx_url_from_netrc_without_pyx_token() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+    let netrc = context.temp_dir.child(".netrc");
+    netrc.write_str(&format!(
+        "machine {} login public password heron",
+        proxy.host()
+    ))?;
+    let pyx_credentials_dir = context.temp_dir.child("pyx-credentials");
+    pyx_credentials_dir.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("anyio")
+        .arg("--index-url")
+        .arg(proxy.url("/basic-auth/simple"))
+        .env(EnvVars::NETRC, netrc.as_os_str())
+        .env(EnvVars::PYX_API_URL, proxy.uri())
+        .env(EnvVars::PYX_CREDENTIALS_DIR, pyx_credentials_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "
+    );
+
+    Ok(())
+}
+
+/// Install a package from a known pyx URL by falling back to netrc when the pyx lookup fails.
+#[tokio::test]
+async fn install_package_known_pyx_url_from_netrc_on_pyx_error() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+    let netrc = context.temp_dir.child(".netrc");
+    netrc.write_str(&format!(
+        "machine {} login public password heron",
+        proxy.host()
+    ))?;
+    let pyx_credentials_dir = context.temp_dir.child("pyx-credentials");
+    pyx_credentials_dir.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("anyio")
+        .arg("--index-url")
+        .arg(proxy.url("/basic-auth/simple"))
+        .env(EnvVars::NETRC, netrc.as_os_str())
+        .env(EnvVars::PYX_API_URL, proxy.uri())
+        .env(EnvVars::PYX_API_KEY, "invalid-api-key")
+        .env(EnvVars::PYX_CREDENTIALS_DIR, pyx_credentials_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "
+    );
+
+    Ok(())
+}
+
+/// Install a package from a known pyx URL using the pyx token even when netrc is available.
+#[tokio::test]
+async fn install_package_known_pyx_url_prefers_pyx_token_to_netrc() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+    let netrc = context.temp_dir.child(".netrc");
+    netrc.write_str(&format!(
+        // Pass in an incorrect password so the test fails if we use it.
+        "machine {} login public password incorrect",
+        proxy.host()
+    ))?;
+    let pyx_credentials_dir = context.temp_dir.child("pyx-credentials");
+    pyx_credentials_dir.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("anyio")
+        .arg("--index-url")
+        .arg(proxy.url("/bearer-auth/simple"))
+        .env(EnvVars::NETRC, netrc.as_os_str())
+        .env(EnvVars::PYX_API_URL, proxy.uri())
+        .env(EnvVars::PYX_AUTH_TOKEN, crate::pypi_proxy::pyx_test_token())
+        .env(EnvVars::PYX_CREDENTIALS_DIR, pyx_credentials_dir.as_os_str())
+        .arg("--strict"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "
+    );
+
+    Ok(())
+}
+
+/// A known pyx URL with no relevant fallback credentials should still show pyx-specific guidance.
+#[tokio::test]
+async fn install_package_known_pyx_url_failure_shows_pyx_guidance() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+    let netrc = context.temp_dir.child(".netrc");
+    netrc.write_str("machine example.com login public password heron")?;
+    let pyx_credentials_dir = context.temp_dir.child("pyx-credentials");
+    pyx_credentials_dir.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("anyio")
+        .arg("--index-url")
+        .arg(proxy.url("/bearer-auth/simple"))
+        .env(EnvVars::NETRC, netrc.as_os_str())
+        .env(EnvVars::PYX_API_URL, proxy.uri())
+        .env(EnvVars::PYX_API_KEY, "invalid-api-key")
+        .env(EnvVars::PYX_CREDENTIALS_DIR, pyx_credentials_dir.as_os_str())
+        .arg("--strict"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch: `http://[LOCALHOST]/bearer-auth/simple/anyio/`
+      Caused by: Run `uv auth login pyx.dev` to authenticate uv with pyx
+    "
+    );
 
     Ok(())
 }

@@ -16,7 +16,8 @@ use tracing::{debug, warn};
 use windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
 use uv_fs::{
-    LockedFile, LockedFileError, LockedFileMode, Simplified, replace_symlink, symlink_or_copy_file,
+    LockedFile, LockedFileError, LockedFileMode, Simplified, normalize_absolute_path,
+    replace_symlink, symlink_or_copy_file,
 };
 use uv_platform::{Error as PlatformError, Os};
 use uv_platform::{LibcDetectionError, Platform};
@@ -280,6 +281,16 @@ impl ManagedPythonInstallations {
     pub fn root(&self) -> &Path {
         &self.root
     }
+
+    pub(crate) fn absolute_root(&self) -> Result<PathBuf, Error> {
+        let root = if self.root.is_absolute() {
+            self.root.clone()
+        } else {
+            crate::current_dir()?.join(&self.root)
+        };
+
+        normalize_absolute_path(&root).map_err(|err| Error::AbsolutePath(self.root.clone(), err))
+    }
 }
 
 static EXTERNALLY_MANAGED: &str = "[externally-managed]
@@ -352,14 +363,14 @@ impl ManagedPythonInstallation {
     /// Returns `None` if the interpreter is not a managed installation.
     pub fn try_from_interpreter(interpreter: &Interpreter) -> Option<Self> {
         let managed_root = ManagedPythonInstallations::from_settings(None).ok()?;
+        let root = managed_root.absolute_root().ok()?;
 
         // Canonicalize both paths to handle Windows path format differences
         // (e.g., \\?\ prefix, different casing, junction vs actual path).
         // Fall back to the original path if canonicalization fails (e.g., target doesn't exist).
         let sys_base_prefix = dunce::canonicalize(interpreter.sys_base_prefix())
             .unwrap_or_else(|_| interpreter.sys_base_prefix().to_path_buf());
-        let root = dunce::canonicalize(managed_root.root())
-            .unwrap_or_else(|_| managed_root.root().to_path_buf());
+        let root = dunce::canonicalize(&root).unwrap_or(root);
 
         // Verify the interpreter's base prefix is within the managed root
         let suffix = sys_base_prefix.strip_prefix(&root).ok()?;
@@ -371,7 +382,7 @@ impl ManagedPythonInstallation {
         PythonInstallationKey::from_str(name).ok()?;
 
         // Construct the installation from the path within the managed root
-        let path = managed_root.root().join(name);
+        let path = root.join(name);
         Self::from_path(path).ok()
     }
 
@@ -1356,6 +1367,30 @@ mod tests {
                 let v3_10 = PythonVersion::from_str("3.10").unwrap();
                 let matched: Vec<_> = installations.find_version(&v3_10).unwrap().collect();
                 assert_eq!(matched.len(), 1);
+            },
+        );
+    }
+
+    #[test]
+    fn test_relative_install_dir_resolves_against_pwd() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let workdir = temp_dir.path().join("workdir");
+        fs::create_dir(&workdir).unwrap();
+
+        temp_env::with_vars(
+            [
+                (
+                    uv_static::EnvVars::UV_PYTHON_INSTALL_DIR,
+                    Some(std::ffi::OsStr::new(".python-installs")),
+                ),
+                (uv_static::EnvVars::PWD, Some(workdir.as_os_str())),
+            ],
+            || {
+                let installations = ManagedPythonInstallations::from_settings(None).unwrap();
+                assert_eq!(
+                    installations.absolute_root().unwrap(),
+                    workdir.join(".python-installs")
+                );
             },
         );
     }

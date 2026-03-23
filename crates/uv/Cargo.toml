@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.10.9"
+version = "0.10.12"
 description = "A Python package and project manager"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -193,7 +193,7 @@ test-git = ["uv-test?/git"]
 # Introduces a testing dependency on Git LFS.
 test-git-lfs = ["test-git"]
 # Introduces a testing dependency on PyPI.
-test-pypi = []
+test-pypi = ["uv-client/test-pypi"]
 # Introduces a testing dependency on R2.
 test-r2 = []
 # Introduces a testing dependency on a local Python installation.

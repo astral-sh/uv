@@ -1,6 +1,6 @@
 [package]
 name = "uv-platform"
-version = "0.0.29"
+version = "0.0.32"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -39,3 +39,4 @@ windows-version = { workspace = true }
 [dev-dependencies]
 insta = { workspace = true }
 indoc = { workspace = true }
+tempfile = { workspace = true }

@@ -50,7 +50,8 @@ use crate::manifest::Manifest;
 use crate::pins::FilePins;
 use crate::preferences::{PreferenceSource, Preferences};
 use crate::pubgrub::{
-    PubGrubDependency, PubGrubPackage, PubGrubPackageInner, PubGrubPriorities, PubGrubPython,
+    DependencySource, PubGrubDependency, PubGrubPackage, PubGrubPackageInner, PubGrubPriorities,
+    PubGrubPython,
 };
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolverOutput;
@@ -952,7 +953,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 package,
                 version: _,
                 parent: _,
-                url: _,
+                source: _,
             } = dependency;
             let url = package.name().and_then(|name| state.fork_urls.get(name));
             let index = package.name().and_then(|name| state.fork_indexes.get(name));
@@ -1193,12 +1194,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 BuiltDist::Path(dist) => &dist.filename,
             };
 
-            // If the wheel does _not_ cover a required platform, it's incompatible.
-            if env.marker_environment().is_none() && !self.options.required_environments.is_empty()
+            // If the wheel does _not_ cover an environment that requires artifact coverage, it's
+            // incompatible.
+            if env.marker_environment().is_none() && !self.options.artifact_environments.is_empty()
             {
                 let wheel_marker = implied_markers(filename);
-                // If the user explicitly marked a platform as required, ensure it has coverage.
-                for environment_marker in self.options.required_environments.iter().copied() {
+                // If the caller marked an environment as requiring artifact coverage, ensure it
+                // has coverage.
+                for environment_marker in self.options.artifact_environments.iter().copied() {
                     // If the platform is part of the current environment...
                     if env.included_by_marker(environment_marker)
                         && !find_environments(id, pubgrub).is_disjoint(environment_marker)
@@ -1455,8 +1458,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Ok(None);
         }
 
-        // If the user explicitly marked a platform as required, ensure it has coverage.
-        for marker in self.options.required_environments.iter().copied() {
+        // If the caller marked an environment as requiring artifact coverage, ensure it has
+        // coverage.
+        for marker in self.options.artifact_environments.iter().copied() {
             // If the platform is part of the current environment...
             if env.included_by_marker(marker) {
                 // But isn't supported by the distribution...
@@ -1810,17 +1814,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     return Ok(Dependencies::Unforkable(Vec::default()));
                 }
 
-                let (distribution_id, task) = if let Some(distribution_id) =
-                    pins.metadata_id(name, version)
+                // Look up the distribution ID from the pins (common case) or fork URLs.
+                let owned_id;
+                let distribution_id = if let Some((_, metadata_id)) =
+                    pins.dist_and_id(name, version)
                 {
-                    (
-                        distribution_id.clone(),
-                        pins.get(name, version)
-                            .map_or_else(|| format!("{name}=={version}"), ToString::to_string),
-                    )
+                    metadata_id
                 } else if let Some(url) = fork_urls.get(name) {
                     let dist = Dist::from_url(name.clone(), url.clone())?;
-                    (dist.distribution_id(), dist.to_string())
+                    owned_id = dist.distribution_id();
+                    &owned_id
                 } else {
                     debug_assert!(
                         false,
@@ -1845,8 +1848,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let response = self
                     .index
                     .distributions()
-                    .wait_blocking(&distribution_id)
-                    .ok_or_else(|| ResolveError::UnregisteredTask(task))?;
+                    .wait_blocking(distribution_id)
+                    .ok_or_else(|| ResolveError::UnregisteredTask(format!("{name}=={version}")))?;
 
                 let metadata = match &*response {
                     MetadataResponse::Found(archive) => &archive.metadata,
@@ -1948,7 +1951,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             }),
                             version: Range::singleton(version.clone()),
                             parent: None,
-                            url: None,
+                            source: DependencySource::Unspecified,
                         })
                         .collect(),
                 ));
@@ -1976,7 +1979,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     }),
                                     version: Range::singleton(version.clone()),
                                     parent: None,
-                                    url: None,
+                                    source: DependencySource::Unspecified,
                                 })
                         })
                         .collect(),
@@ -2002,7 +2005,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             }),
                             version: Range::singleton(version.clone()),
                             parent: None,
-                            url: None,
+                            source: DependencySource::Unspecified,
                         })
                         .collect(),
                 ));
@@ -2950,7 +2953,7 @@ impl ForkState {
                 package,
                 version,
                 parent: _,
-                url,
+                source,
             } = dependency;
 
             let mut has_url = false;
@@ -2959,9 +2962,13 @@ impl ForkState {
                 // requirement was a URL requirement. `Urls` applies canonicalization to this and
                 // override URLs to both URL and registry requirements, which we then check for
                 // conflicts using [`ForkUrl`].
-                for url in urls.get_url(&self.env, name, url.as_ref(), git)? {
+                for url in urls.get_url(&self.env, name, source.verbatim_url(), git)? {
                     self.fork_urls.insert(name, url, &self.env)?;
                     has_url = true;
+                }
+
+                if let Some(index) = source.explicit_index() {
+                    self.fork_indexes.insert(name, index, &self.env)?;
                 }
 
                 // If the package is pinned to an exact index, add it to the fork.
@@ -3043,7 +3050,7 @@ impl ForkState {
                 package,
                 version,
                 parent: _,
-                url: _,
+                source: _,
             } = dependency;
 
             let Some(base_package) = package.base_package() else {
@@ -3064,7 +3071,7 @@ impl ForkState {
                     package,
                     version,
                     parent: _,
-                    url: _,
+                    source: _,
                 } = dependency;
                 (package, version)
             }),
