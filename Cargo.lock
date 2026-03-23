@@ -40,8 +40,8 @@ version = "0.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e61320f0a8ca54a235b0e49307b16dcade6eecd441b1f8a8c7ca9204056cb17c"
 dependencies = [
- "astral-reqwest-middleware",
- "reqwest",
+ "astral-reqwest-middleware 0.4.2",
+ "reqwest 0.12.22",
  "secrecy",
  "serde",
  "serde_json",
@@ -114,7 +114,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -125,7 +125,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -263,7 +263,22 @@ dependencies = [
  "anyhow",
  "async-trait",
  "http",
- "reqwest",
+ "reqwest 0.12.22",
+ "serde",
+ "thiserror 2.0.18",
+ "tower-service",
+]
+
+[[package]]
+name = "astral-reqwest-middleware"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "98e1c6be25cfbf1bb4fea1a9da51bc05d3259a9062df4e53f54e5607895e33c9"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "http",
+ "reqwest 0.13.2",
  "serde",
  "thiserror 2.0.18",
  "tower-service",
@@ -276,13 +291,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "78ab210f6cdf8fd3254d47e5ee27ce60ed34a428ff71b4ae9477b1c84b49498c"
 dependencies = [
  "anyhow",
- "astral-reqwest-middleware",
+ "astral-reqwest-middleware 0.4.2",
  "async-trait",
  "futures",
  "getrandom 0.2.16",
  "http",
  "hyper",
- "reqwest",
+ "reqwest 0.12.22",
  "retry-policies",
  "thiserror 2.0.18",
  "tokio",
@@ -330,13 +345,13 @@ version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ddaca0fbbf0d91103cca7c7611790c65f6eff1d456f7fe6bf565d436dc9b8f3"
 dependencies = [
- "astral-reqwest-middleware",
+ "astral-reqwest-middleware 0.4.2",
  "bisection",
  "futures",
  "http-content-range",
  "itertools 0.13.0",
  "memmap2",
- "reqwest",
+ "reqwest 0.12.22",
  "thiserror 1.0.69",
  "tokio",
  "tokio-stream",
@@ -446,7 +461,7 @@ dependencies = [
  "lazy_static",
  "miette",
  "mime",
- "reqwest",
+ "reqwest 0.12.22",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -945,7 +960,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
 dependencies = [
  "lazy_static",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -1313,7 +1328,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1492,7 +1507,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2357,7 +2372,7 @@ checksum = "3640c1c38b8e4e43584d8df18be5fc6b0aa314ce6ebf51b53313d4306cca8e46"
 dependencies = [
  "hermit-abi",
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2427,7 +2442,7 @@ dependencies = [
  "portable-atomic",
  "portable-atomic-util",
  "serde_core",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2498,7 +2513,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8cfc352a66ba903c23239ef51e809508b6fc2b0f90e3476ac7a9ff47e863ae95"
 dependencies = [
  "scopeguard",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2769,7 +2784,7 @@ version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "536bfad37a309d62069485248eeaba1e8d9853aaf951caaeaed0585a95346f08"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2857,7 +2872,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3579,7 +3594,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -3918,7 +3933,7 @@ dependencies = [
  "http",
  "http-body-util",
  "reqsign-core",
- "reqwest",
+ "reqwest 0.12.22",
  "wasm-bindgen-futures",
 ]
 
@@ -3966,6 +3981,39 @@ dependencies = [
  "wasm-streams",
  "web-sys",
  "webpki-roots",
+]
+
+[[package]]
+name = "reqwest"
+version = "0.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab3f43e3283ab1488b624b44b0e988d0acea0b3214e694730a055cb6b2efa801"
+dependencies = [
+ "base64 0.22.1",
+ "bytes",
+ "futures-core",
+ "futures-util",
+ "http",
+ "http-body",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "js-sys",
+ "log",
+ "mime_guess",
+ "percent-encoding",
+ "pin-project-lite",
+ "serde",
+ "serde_json",
+ "sync_wrapper",
+ "tokio",
+ "tower",
+ "tower-http",
+ "tower-service",
+ "url",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]
@@ -4148,7 +4196,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4656,7 +4704,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a766e1110788c36f4fa1c2b71b387a7815aa65f88ce0229841826633d93723e"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4880,10 +4928,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.3",
+ "getrandom 0.4.1",
  "once_cell",
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5495,7 +5543,7 @@ checksum = "f2f6fb2847f6742cd76af783a2a2c49e9375d0a111c7bef6f71cd9e738c72d6e"
 dependencies = [
  "memoffset",
  "tempfile",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5714,7 +5762,7 @@ dependencies = [
  "petgraph",
  "predicates",
  "regex",
- "reqwest",
+ "reqwest 0.12.22",
  "rkyv",
  "rustc-hash",
  "self-replace",
@@ -5802,12 +5850,12 @@ dependencies = [
 name = "uv-audit"
 version = "0.0.32"
 dependencies = [
- "astral-reqwest-middleware",
+ "astral-reqwest-middleware 0.5.1",
  "clap",
  "futures",
  "insta",
  "jiff",
- "reqwest",
+ "reqwest 0.12.22",
  "rustc-hash",
  "serde",
  "serde_json",
@@ -5828,7 +5876,7 @@ version = "0.0.32"
 dependencies = [
  "anyhow",
  "arcstr",
- "astral-reqwest-middleware",
+ "astral-reqwest-middleware 0.5.1",
  "async-trait",
  "base64 0.22.1",
  "etcetera",
@@ -5839,7 +5887,7 @@ dependencies = [
  "jiff",
  "percent-encoding",
  "reqsign",
- "reqwest",
+ "reqwest 0.12.22",
  "rust-netrc",
  "rustc-hash",
  "schemars",
@@ -5896,12 +5944,12 @@ dependencies = [
 name = "uv-bin-install"
 version = "0.0.32"
 dependencies = [
- "astral-reqwest-middleware",
+ "astral-reqwest-middleware 0.5.1",
  "astral-reqwest-retry",
  "fs-err",
  "futures",
  "jiff",
- "reqwest",
+ "reqwest 0.12.22",
  "serde",
  "serde_json",
  "tempfile",
@@ -6105,7 +6153,7 @@ name = "uv-client"
 version = "0.0.32"
 dependencies = [
  "anyhow",
- "astral-reqwest-middleware",
+ "astral-reqwest-middleware 0.5.1",
  "astral-reqwest-retry",
  "astral-tl",
  "astral_async_http_range_reader",
@@ -6126,7 +6174,7 @@ dependencies = [
  "percent-encoding",
  "rcgen",
  "regex",
- "reqwest",
+ "reqwest 0.12.22",
  "rkyv",
  "rmp-serde",
  "rustc-hash",
@@ -6174,7 +6222,7 @@ dependencies = [
  "fs-err",
  "insta",
  "rayon",
- "reqwest",
+ "reqwest 0.12.22",
  "rustc-hash",
  "same-file",
  "schemars",
@@ -6219,7 +6267,7 @@ dependencies = [
  "owo-colors",
  "poloto",
  "pretty_assertions",
- "reqwest",
+ "reqwest 0.12.22",
  "resvg",
  "schemars",
  "serde",
@@ -6303,7 +6351,7 @@ name = "uv-distribution"
 version = "0.0.32"
 dependencies = [
  "anyhow",
- "astral-reqwest-middleware",
+ "astral-reqwest-middleware 0.5.1",
  "either",
  "fs-err",
  "futures",
@@ -6311,7 +6359,7 @@ dependencies = [
  "insta",
  "nanoid",
  "owo-colors",
- "reqwest",
+ "reqwest 0.12.22",
  "rmp-serde",
  "rustc-hash",
  "serde",
@@ -6418,7 +6466,7 @@ dependencies = [
  "md-5",
  "rayon",
  "regex",
- "reqwest",
+ "reqwest 0.12.22",
  "rustc-hash",
  "sha2",
  "tar",
@@ -6477,12 +6525,12 @@ name = "uv-git"
 version = "0.0.32"
 dependencies = [
  "anyhow",
- "astral-reqwest-middleware",
+ "astral-reqwest-middleware 0.5.1",
  "cargo-util",
  "dashmap",
  "fs-err",
  "owo-colors",
- "reqwest",
+ "reqwest 0.12.22",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -6789,7 +6837,7 @@ version = "0.0.32"
 dependencies = [
  "ambient-id",
  "anstream 1.0.0",
- "astral-reqwest-middleware",
+ "astral-reqwest-middleware 0.5.1",
  "astral-reqwest-retry",
  "astral-tokio-tar",
  "async-compression",
@@ -6800,7 +6848,7 @@ dependencies = [
  "glob",
  "insta",
  "itertools 0.14.0",
- "reqwest",
+ "reqwest 0.12.22",
  "rustc-hash",
  "serde",
  "serde_json",
@@ -6864,7 +6912,7 @@ version = "0.0.32"
 dependencies = [
  "anyhow",
  "assert_fs",
- "astral-reqwest-middleware",
+ "astral-reqwest-middleware 0.5.1",
  "astral-reqwest-retry",
  "clap",
  "configparser",
@@ -6879,7 +6927,7 @@ dependencies = [
  "owo-colors",
  "ref-cast",
  "regex",
- "reqwest",
+ "reqwest 0.12.22",
  "rmp-serde",
  "rustc-hash",
  "same-file",
@@ -6972,14 +7020,14 @@ version = "0.0.32"
 dependencies = [
  "anyhow",
  "assert_fs",
- "astral-reqwest-middleware",
+ "astral-reqwest-middleware 0.5.1",
  "fs-err",
  "indoc",
  "insta",
  "itertools 0.14.0",
  "memchr",
  "regex",
- "reqwest",
+ "reqwest 0.12.22",
  "rustc-hash",
  "tempfile",
  "test-case",
@@ -7184,7 +7232,7 @@ dependencies = [
  "itertools 0.14.0",
  "predicates",
  "regex",
- "reqwest",
+ "reqwest 0.12.22",
  "similar",
  "tempfile",
  "tokio",
@@ -7650,7 +7698,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
