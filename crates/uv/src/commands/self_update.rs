@@ -4,7 +4,7 @@ use std::str::FromStr;
 use anyhow::{Context, Result};
 use axoupdater::{AxoUpdater, AxoupdateError, ReleaseSource, ReleaseSourceType, UpdateRequest};
 use owo_colors::OwoColorize;
-use tracing::debug;
+use tracing::{debug, warn};
 use uv_bin_install::{Binary, find_matching_version};
 use uv_client::BaseClientBuilder;
 use uv_fs::Simplified;
@@ -112,15 +112,7 @@ pub(crate) async fn self_update(
 
         let retry_policy = client_builder.retry_policy();
         let client = client_builder.retries(0).build();
-        let constraints = if let Some(version) = version.as_deref() {
-            let pep440_version = Pep440Version::from_str(version)
-                .with_context(|| format!("Failed to parse version specifier `{version}`"))?;
-            Some(VersionSpecifiers::from(VersionSpecifier::equals_version(
-                pep440_version,
-            )))
-        } else {
-            None
-        };
+        let constraints = official_target_version_specifiers(version.as_deref())?;
 
         let resolved = find_matching_version(
             Binary::Uv,
@@ -217,6 +209,8 @@ pub(crate) async fn self_update(
     run_updater(updater, printer, token.is_some()).await
 }
 
+/// Returns `true` if the `source` is the official GitHub repository for uv, or
+/// if an installer base url override environment variable is set.
 fn is_official_public_uv_install(source: Option<&ReleaseSource>) -> bool {
     is_official_public_uv_install_with_overrides(
         source,
@@ -225,6 +219,8 @@ fn is_official_public_uv_install(source: Option<&ReleaseSource>) -> bool {
     )
 }
 
+/// Helper function for [`is_official_public_uv_install`] that allows for easier
+/// testing.
 fn is_official_public_uv_install_with_overrides(
     source: Option<&ReleaseSource>,
     has_github_base_url_override: bool,
@@ -243,6 +239,34 @@ fn is_official_public_uv_install_with_overrides(
             app_name,
         }) if owner == "astral-sh" && name == "uv" && app_name == "uv"
     )
+}
+
+/// Parse an explicit `uv self update` target version for the official public case.
+///
+/// To preserve legacy tag-based behavior, only exact `major.minor.patch` release versions are
+/// accepted. Inputs that normalize to a different version string, such as `0.10` or `v0.10.0`,
+/// are rejected instead of being silently rewritten.
+fn official_target_version_specifiers(
+    target_version: Option<&str>,
+) -> Result<Option<VersionSpecifiers>> {
+    let Some(target_version) = target_version else {
+        return Ok(None);
+    };
+
+    let pep440_version = Pep440Version::from_str(target_version)
+        .with_context(|| format!("Failed to parse version specifier `{target_version}`"))?;
+    if pep440_version.to_string() != target_version || pep440_version.release().len() < 3 {
+        warn!(
+            "Rejecting explicit self-update version specifier `{target_version}` after parsing it as `{pep440_version}`"
+        );
+        anyhow::bail!(
+            "Failed to parse version specifier `{target_version}`: explicit versions must include an exact major.minor.patch release"
+        );
+    }
+
+    Ok(Some(VersionSpecifiers::from(
+        VersionSpecifier::equals_version(pep440_version),
+    )))
 }
 
 fn is_update_needed(
@@ -381,6 +405,19 @@ mod tests {
             false,
             false,
         ));
+    }
+
+    #[test]
+    fn test_official_target_version_specifiers() {
+        assert_eq!(official_target_version_specifiers(None).unwrap(), None);
+        assert_eq!(
+            official_target_version_specifiers(Some("1.2.3")).unwrap(),
+            Some(VersionSpecifiers::from(VersionSpecifier::equals_version(
+                Pep440Version::new([1, 2, 3]),
+            )))
+        );
+        assert!(official_target_version_specifiers(Some("0.10")).is_err());
+        assert!(official_target_version_specifiers(Some("v1.2.3")).is_err());
     }
 
     #[test]
