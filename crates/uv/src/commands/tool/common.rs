@@ -6,19 +6,24 @@ use std::{
     ffi::OsString,
     fmt::Write,
     path::Path,
+    str::FromStr,
 };
 use tracing::{debug, warn};
-use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
-use uv_distribution_types::Requirement;
-use uv_distribution_types::{InstalledDist, Name};
+use uv_cache::{Cache, CacheBucket};
+use uv_client::{BaseClientBuilder, Connectivity};
+use uv_configuration::GitLfsSetting;
+use uv_distribution_types::{
+    InstalledDist, Name, Requirement, RequirementSource, RequiresPython, UnresolvedRequirement,
+};
 use uv_fs::Simplified;
 #[cfg(unix)]
 use uv_fs::replace_symlink;
+use uv_git::GitResolver;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_preview::Preview;
+use uv_pypi_types::{LenientVersionSpecifiers, PyProjectToml};
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVariant, VersionRequest,
@@ -70,6 +75,86 @@ pub(crate) fn remove_entrypoints(tool: &Tool) {
             );
         }
     }
+}
+
+/// Infer a Python request from a direct source requirement (`path` or `git`) by reading
+/// `requires-python` from `pyproject.toml`.
+pub(crate) async fn infer_python_request_from_requirement(
+    requirement: &UnresolvedRequirement,
+    lfs: GitLfsSetting,
+    git_resolver: &GitResolver,
+    client_builder: &BaseClientBuilder<'_>,
+    cache: &Cache,
+) -> Option<PythonRequest> {
+    let requirement = requirement
+        .clone()
+        .augment_requirement(None, None, None, lfs.into(), None);
+    let source = requirement.source();
+
+    let requires_python = match source.as_ref() {
+        RequirementSource::Directory { install_path, .. } => {
+            read_requires_python_from_pyproject(&install_path.join("pyproject.toml"))?
+        }
+        RequirementSource::Git {
+            git, subdirectory, ..
+        } => {
+            let client = client_builder.build();
+            let fetch = match git_resolver
+                .fetch(
+                    git,
+                    client.disable_ssl(git.repository()),
+                    client.connectivity() == Connectivity::Offline,
+                    cache.bucket(CacheBucket::Git),
+                    None,
+                )
+                .await
+            {
+                Ok(fetch) => fetch,
+                Err(err) => {
+                    debug!(
+                        "Failed to fetch git source while inferring Python request (`{requirement}`): {err}"
+                    );
+                    return None;
+                }
+            };
+
+            let source_path = if let Some(subdirectory) = subdirectory {
+                fetch.path().join(subdirectory)
+            } else {
+                fetch.path().to_path_buf()
+            };
+
+            read_requires_python_from_pyproject(&source_path.join("pyproject.toml"))?
+        }
+        _ => return None,
+    };
+
+    python_request_from_requires_python(&requires_python)
+}
+
+fn read_requires_python_from_pyproject(pyproject_path: &Path) -> Option<VersionSpecifiers> {
+    let content = fs_err::read_to_string(pyproject_path).ok()?;
+    let pyproject = PyProjectToml::from_toml(&content, pyproject_path.user_display()).ok()?;
+    let project = pyproject.project?;
+
+    if project
+        .dynamic
+        .as_ref()
+        .is_some_and(|dynamic| dynamic.iter().any(|field| field == "requires-python"))
+    {
+        return None;
+    }
+
+    let requires_python = project.requires_python?;
+    let requires_python = LenientVersionSpecifiers::from_str(&requires_python).ok()?;
+    Some(VersionSpecifiers::from(requires_python))
+}
+
+fn python_request_from_requires_python(
+    requires_python: &VersionSpecifiers,
+) -> Option<PythonRequest> {
+    let requires_python = RequiresPython::from_specifiers(requires_python);
+    PythonRequest::from_requires_python(&requires_python)
 }
 
 /// Given a no-solution error and the [`Interpreter`] that was used during the solve, attempt to
@@ -423,4 +508,65 @@ fn hint_executable_from_dependency(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use uv_pep440::{Version, VersionSpecifiers};
+
+    use super::{python_request_from_requires_python, read_requires_python_from_pyproject};
+
+    #[test]
+    fn infer_python_request_uses_full_specifier_range() {
+        let requires_python = VersionSpecifiers::from_str(">=3.11,<3.14").unwrap();
+
+        let request = python_request_from_requires_python(&requires_python).unwrap();
+        let uv_python::PythonRequest::Version(uv_python::VersionRequest::Range(specifiers, _)) =
+            request
+        else {
+            panic!("Expected version range request");
+        };
+
+        assert!(specifiers.contains(&Version::new([3, 11])));
+        assert!(specifiers.contains(&Version::new([3, 12])));
+        assert!(!specifiers.contains(&Version::new([3, 14])));
+    }
+
+    #[test]
+    fn infer_python_request_preserves_upper_bound_only_specifier() {
+        let requires_python = VersionSpecifiers::from_str("<3.12").unwrap();
+
+        let request = python_request_from_requires_python(&requires_python).unwrap();
+        let uv_python::PythonRequest::Version(uv_python::VersionRequest::Range(specifiers, _)) =
+            request
+        else {
+            panic!("Expected version range request");
+        };
+
+        assert!(specifiers.contains(&Version::new([3, 11])));
+        assert!(!specifiers.contains(&Version::new([3, 12])));
+    }
+
+    #[test]
+    fn read_requires_python_from_pyproject_file() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let pyproject_path = tempdir.path().join("pyproject.toml");
+        fs_err::write(
+            &pyproject_path,
+            r#"
+[project]
+name = "example"
+version = "0.1.0"
+requires-python = ">=3.11,<3.14"
+"#,
+        )
+        .unwrap();
+
+        let requires_python = read_requires_python_from_pyproject(&pyproject_path).unwrap();
+
+        assert!(requires_python.contains(&Version::new([3, 11])));
+        assert!(!requires_python.contains(&Version::new([3, 14])));
+    }
 }
