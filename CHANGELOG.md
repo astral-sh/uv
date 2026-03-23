@@ -3,6 +3,87 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.11.0
+
+Released on 2026-03-23.
+
+### Breaking changes
+
+This release includes changes to the networking stack used by uv. While we think that breakage will be rare, it is possible that these changes will result in the rejection of system certificates previously trusted by uv and we have marked the change as breaking out of an abundance of caution.
+
+The changes are largely driven by the upgrade of reqwest, which powers uv's HTTP clients, to [v0.13](https://seanmonstar.com/blog/reqwest-v013-rustls-default/) which included some breaking changes to TLS certificate verification.
+
+The following changes are included:
+
+- [`rustls-platform-verifier`](https://github.com/rustls/rustls-platform-verifier) is used instead of [`rustls-native-certs`](https://github.com/rustls/rustls-native-certs) and [`webpki`](https://github.com/rustls/webpki) for certificate verification
+
+    **This change should have no effect unless you are using the `native-tls` option to enable reading system certificates.**
+
+    `rustls-platform-verifier` delegates to the system for certificate validation (e.g., `Security.framework` on macOS) instead of eagerly loading certificates from the system and verifying them via `webpki`. The effects of this change will vary based on the operating system. In general, uv's certificate validation should  now be more consistent with browsers and other native applications. However, this is the most likely cause of breaking changes in this release. Some previously failing certificate chains may succeed, and some previously accepted certificate chains may fail.
+
+    The operating system's [CA constraints](https://support.apple.com/en-us/103255) will be taken into account and there's now [certificate revocation](https://en.wikipedia.org/wiki/Certificate_revocation) support via OCSP and CRLs.
+
+    This change should improve performance when using system certificate on macOS, as uv no longer needs to load all certificates from the keychain at startup.
+
+- [`aws-lc`](https://github.com/aws/aws-lc) is used instead of `ring` for a cryptography backend
+
+    There should not be breaking changes from this change. We expect this to expand support for certificate signature algorithms.
+
+- `--native-tls` is deprecated in favor of a new `--system-certs` flag
+
+    The `--native-tls` flag is still usable and has identical behavior to `--system-certs.`
+
+    This change was made to reduce confusion about the TLS implementation uv uses. uv always uses `rustls` not `native-tls`.
+
+- Building uv on x86-64 and i686 Windows requires NASM
+
+    NASM is required by `aws-lc`. If not found on the system, a prebuilt blob provided by `aws-lc-sys` will be used.
+
+    If you are not building uv from source, this change has no effect.
+
+    See the [CONTRIBUTING](https://github.com/astral-sh/uv/blob/b6854d77bfd0cb78157fecaf8b30126c6f16bc11/CONTRIBUTING.md#setup) guide for details.
+
+- Empty `SSL_CERT_FILE` values are ignored (for consistency with `SSL_CERT_DIR`)
+
+See [#18550](https://github.com/astral-sh/uv/pull/18550) for details.
+
+### Python
+
+- Enable framepointers for improved profiling on Linux x86-64 and aarch64
+
+See the [python-build-standalone release notes](https://github.com/astral-sh/python-build-standalone/releases/20260320) for details.
+
+### Enhancements
+
+- Treat 'Dynamic' values as case-insensitive ([#18669](https://github.com/astral-sh/uv/pull/18669))
+- Use a dedicated error for invalid cache control headers ([#18657](https://github.com/astral-sh/uv/pull/18657))
+- Enable checksum verification in the generated installer script ([#18625](https://github.com/astral-sh/uv/pull/18625))
+
+### Preview features
+
+- Add `--service-format` and `--service-url` to `uv audit` ([#18571](https://github.com/astral-sh/uv/pull/18571))
+
+### Performance
+
+- Avoid holding flat index lock across indexes ([#18659](https://github.com/astral-sh/uv/pull/18659))
+
+### Bug fixes
+
+- Find the linker on the file system when sniffing binaries fails ([#18457](https://github.com/astral-sh/uv/pull/18457))
+- Fix export of conflicting workspace members with dependencies ([#18666](https://github.com/astral-sh/uv/pull/18666))
+- Respect installed settings in `uv tool list --outdated` ([#18586](https://github.com/astral-sh/uv/pull/18586))
+- Treat paths originating as PEP 508 URLs which contain expanded variables as relative ([#18680](https://github.com/astral-sh/uv/pull/18680))
+- Fix `uv export` for workspace member packages with conflicts ([#18635](https://github.com/astral-sh/uv/pull/18635))
+- Continue to alternative authentication providers when the pyx store has no token ([#18425](https://github.com/astral-sh/uv/pull/18425))
+- Use redacted URLs for log messages in cached client ([#18599](https://github.com/astral-sh/uv/pull/18599))
+
+### Documentation
+
+- Add details on Linux versions to the platform policy ([#18574](https://github.com/astral-sh/uv/pull/18574))
+- Clarify `FLASH_ATTENTION_SKIP_CUDA_BUILD ` guidance for `flash-attn` installs ([#18473](https://github.com/astral-sh/uv/pull/18473))
+- Split the dependency bots page into two separate pages ([#18597](https://github.com/astral-sh/uv/pull/18597))
+- Split the alternative indexes page into separate pages ([#18607](https://github.com/astral-sh/uv/pull/18607))
+
 ## 0.10.12
 
 Released on 2026-03-19.
@@ -27,7 +108,6 @@ Released on 2026-03-19.
 - Preserve end-of-line comments on previous entries when removing dependencies ([#18557](https://github.com/astral-sh/uv/pull/18557))
 - Treat abi3 wheel Python version as a lower bound ([#18536](https://github.com/astral-sh/uv/pull/18536))
 - Detect hard-float support on aarch64 kernels running armv7 userspace ([#18530](https://github.com/astral-sh/uv/pull/18530))
-
 
 ### Documentation
 
@@ -327,86 +407,86 @@ There are no breaking changes to [`uv_build`](https://docs.astral.sh/uv/concepts
 ### Breaking changes
 
 - **Require `--clear` to remove existing virtual environments in `uv venv`** ([#17757](https://github.com/astral-sh/uv/pull/17757))
-  
+
   Previously, `uv venv` would prompt for confirmation before removing an existing virtual environment in interactive contexts, and remove it without confirmation in non-interactive contexts. Now, `uv venv` requires the `--clear` flag to remove an existing virtual environment. A warning for this change was added in [uv 0.8](https://github.com/astral-sh/uv/blob/main/changelogs/0.8.x.md#breaking-changes).
-  
+
   You can opt out of this behavior by passing the `--clear` flag or setting `UV_VENV_CLEAR=1`.
 - **Error if multiple indexes include `default = true`** ([#17011](https://github.com/astral-sh/uv/pull/17011))
-  
+
   Previously, uv would silently accept multiple indexes with `default = true` and use the first one. Now, uv will error if multiple indexes are marked as the default.
-  
+
   You cannot opt out of this behavior. Remove `default = true` from all but one index.
 - **Error when an `explicit` index is unnamed** ([#17777](https://github.com/astral-sh/uv/pull/17777))
-  
+
   Explicit indexes can only be used via the `[tool.uv.sources]` table, which requires referencing the index by name. Previously, uv would silently accept unnamed explicit indexes, which could never be referenced. Now, uv will error if an explicit index does not have a name.
-  
+
   You cannot opt out of this behavior. Add a `name` to the explicit index or remove the entry.
 - **Install alternative Python executables using their implementation name** ([#17756](https://github.com/astral-sh/uv/pull/17756), [#17760](https://github.com/astral-sh/uv/pull/17760))
-  
+
   Previously, `uv python install` would install PyPy, GraalPy, and Pyodide executables with names like `python3.10` into the bin directory. Now, these executables will be named using their implementation name, e.g., `pypy3.10`, `graalpy3.10`, and `pyodide3.12`, to avoid conflicting with CPython installations.
-  
+
   You cannot opt out of this behavior.
 - **Respect global Python version pins in `uv tool run` and `uv tool install`** ([#14112](https://github.com/astral-sh/uv/pull/14112))
-  
+
   Previously, `uv tool run` and `uv tool install` did not respect the global Python version pin (set via `uv python pin --global`). Now, these commands will use the global Python version when no explicit version is requested.
-  
+
   For `uv tool install`, if the tool is already installed, the Python version will not change unless `--reinstall` or `--python` is provided. If the tool was previously installed with an explicit `--python` flag, the global pin will not override it.
-  
+
   You can opt out of this behavior by providing an explicit `--python` flag.
 - **Remove Debian Bookworm, Alpine 3.21, and Python 3.8 Docker images** ([#17755](https://github.com/astral-sh/uv/pull/17755))
-  
+
   The Debian Bookworm and Alpine 3.21 images were replaced by Debian Trixie and Alpine 3.22 as defaults in [uv 0.9](https://github.com/astral-sh/uv/pull/15352). These older images are now removed. Python 3.8 images are also removed, as Python 3.8 is no longer supported in the Trixie or Alpine base images.
-  
+
   The following image tags are no longer published:
   - `uv:bookworm`, `uv:bookworm-slim`
   - `uv:alpine3.21`
   - `uv:python3.8-*`
-  
+
   Use `uv:debian` or `uv:trixie` instead of `uv:bookworm`, `uv:alpine` or `uv:alpine3.22` instead of `uv:alpine3.21`, and a newer Python version instead of `uv:python3.8-*`.
 - **Drop PPC64 (big endian) builds** ([#17626](https://github.com/astral-sh/uv/pull/17626))
-  
+
   uv no longer provides pre-built binaries for PPC64 (big endian). This platform appears to be largely unused and is only supported on a single manylinux version. PPC64LE (little endian) builds are unaffected.
-  
+
   Building uv from source is still supported for this platform.
 - **Skip generating `activate.csh` for relocatable virtual environments** ([#17759](https://github.com/astral-sh/uv/pull/17759))
-  
+
   Previously, `uv venv --relocatable` would generate an `activate.csh` script that contained hardcoded paths, making it incompatible with relocation. Now, the `activate.csh` script is not generated for relocatable virtual environments.
-  
+
   You cannot opt out of this behavior.
 - **Require username when multiple credentials match a URL** ([#16983](https://github.com/astral-sh/uv/pull/16983))
-  
+
   When using `uv auth login` to store credentials, you can register multiple username and password combinations for the same host. Previously, when uv needed to authenticate and multiple credentials matched the URL (e.g., when retrieving a token with `uv auth token`), uv would pick the first match. Now, uv will error instead.
-  
+
   You cannot opt out of this behavior. Include the username in the request, e.g., `uv auth token --username foo example.com`.
 - **Avoid invalidating the lockfile versions after an `exclude-newer` change** ([#17721](https://github.com/astral-sh/uv/pull/17721))
-  
+
   Previously, changing the `exclude-newer` setting would cause package versions to be upgraded, ignoring the lockfile entirely. Now, uv will only change package versions if they are no longer within the `exclude-newer` range.
-  
+
   You can restore the previous behavior by using `--upgrade` or `--upgrade-package` to opt-in to package version changes.
 - **Upgrade `uv format` to Ruff 0.15.0** ([#17838](https://github.com/astral-sh/uv/pull/17838))
-  
+
   `uv format` now uses [Ruff 0.15.0](https://github.com/astral-sh/ruff/releases/tag/0.15.0), which uses the [2026 style guide](https://astral.sh/blog/ruff-v0.15.0#the-ruff-2026-style-guide). See the blog post for details.
-  
+
   The formatting of code is likely to change. You can opt out of this behavior by requesting an older Ruff version, e.g., `uv format --version 0.14.14`.
 - **Update uv crate test features to use `test-` as a prefix** ([#17860](https://github.com/astral-sh/uv/pull/17860))
-  
+
   This change only affects redistributors of uv. The Cargo features used to gate test dependencies, e.g., `pypi`, have been renamed with a `test-` prefix for clarity, e.g., `test-pypi`.
 
 ### Stabilizations
 
 - **`uv python upgrade` and `uv python install --upgrade`** ([#17766](https://github.com/astral-sh/uv/pull/17766))
-  
+
   When installing Python versions, an [intermediary directory](https://docs.astral.sh/uv/concepts/python-versions/#minor-version-directories) without the patch version attached will be created, and virtual environments will be transparently upgraded to new patch versions.
-  
+
   See the [Python version documentation](https://docs.astral.sh/uv/concepts/python-versions/#upgrading-python-versions) for more details.
 - **`uv add --bounds` and the `add-bounds` configuration option** ([#17660](https://github.com/astral-sh/uv/pull/17660))
-  
+
   This does not come with any behavior changes. You will no longer see an experimental warning when using `uv add --bounds` or `add-bounds` in configuration.
 - **`uv workspace list` and `uv workspace dir`** ([#17768](https://github.com/astral-sh/uv/pull/17768))
-  
+
   This does not come with any behavior changes. You will no longer see an experimental warning when using these commands.
 - **`extra-build-dependencies`** ([#17767](https://github.com/astral-sh/uv/pull/17767))
-  
+
   This does not come with any behavior changes. You will no longer see an experimental warning when using `extra-build-dependencies` in configuration.
 
 ### Enhancements
