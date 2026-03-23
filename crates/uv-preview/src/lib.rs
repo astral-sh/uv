@@ -462,6 +462,8 @@ pub enum PreviewFeature {
     BuildDependencyHashes,
     /// Enables experimental support for [wheel variants](https://peps.python.org/pep-0825/).
     WheelVariants,
+    /// Enables [system certificates](../concepts/authentication/certificates.md) by default.
+    SystemCertsDefault,
 }
 
 impl Display for PreviewFeature {
