@@ -7731,6 +7731,97 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
     Ok(())
 }
 
+/// File URL dependencies with environment variable references (e.g.,
+/// `file:///${PROJECT_ROOT}/a`) should produce relative paths in the lockfile,
+/// since the user is parameterizing the path for portability.
+///
+/// See: <https://github.com/astral-sh/uv/pull/18176#issuecomment-4098666195>
+#[test]
+fn lock_file_url_with_env_var() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "a"
+        version = "0.1.0"
+        requires-python = ">=3.11,<3.13"
+        dependencies = ["b @ file:///${PROJECT_ROOT}/b"]
+    "#})?;
+    context.temp_dir.child("a/__init__.py").touch()?;
+    context
+        .temp_dir
+        .child("b/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "b"
+        version = "0.1.0"
+        dependencies = []
+        requires-python = ">=3.11,<3.13"
+        license = {text = "MIT"}
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+    "#})?;
+    context.temp_dir.child("b/b/__init__.py").touch()?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.11, <3.13"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "a"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "b" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "b", directory = "b" }]
+
+        [[package]]
+        name = "b"
+        version = "0.1.0"
+        source = { directory = "b" }
+        "#
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Check relative and absolute path handling in constraint-dependencies.
 ///
 /// When a user provides an absolute path in `constraint-dependencies`, it should be preserved

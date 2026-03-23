@@ -221,7 +221,10 @@ impl VerbatimUrl {
 
         if let Some((scheme, _)) = split_scheme(given) {
             if let Some(parsed_scheme) = Scheme::parse(scheme) {
-                return parsed_scheme.is_file();
+                // File URLs that contain environment variable references (e.g.,
+                // `file:///${PROJECT_ROOT}/a`) are not treated as absolute, since
+                // the user is parameterizing the path for portability.
+                return parsed_scheme.is_file() && !given.contains("${");
             }
         }
 
