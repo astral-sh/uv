@@ -907,7 +907,9 @@ jobs:
     timeout-minutes: 10
     runs-on: ubuntu-latest
     if: ${{ github.event.pull_request.head.repo.fork != true }}
-    environment: uv-test-registries
+    environment:
+      name: uv-test-registries
+      deployment: false
     env:
       PYTHON_VERSION: 3.12
     steps:

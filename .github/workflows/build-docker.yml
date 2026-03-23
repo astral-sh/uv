@@ -137,6 +137,7 @@ jobs:
       attestations: write # for GHCR attestations
     environment:
       name: ${{ needs.docker-plan.outputs.push-version == 'true' && 'release' || (needs.docker-plan.outputs.push == 'true' && 'release-test' || '') }}
+      deployment: false
     outputs:
       image-tags: ${{ steps.meta.outputs.tags }}
       image-annotations: ${{ steps.meta.outputs.annotations }}
@@ -228,6 +229,7 @@ jobs:
     timeout-minutes: 5
     environment:
       name: ${{ needs.docker-plan.outputs.push-version == 'true' && 'release' || (needs.docker-plan.outputs.push == 'true' && 'release-test' || '') }}
+      deployment: false
     needs:
       - docker-plan
       - docker-publish-base
@@ -403,6 +405,7 @@ jobs:
       attestations: write # for GHCR attestations
     environment:
       name: ${{ needs.docker-plan.outputs.push-version == 'true' && 'release' || (needs.docker-plan.outputs.push == 'true' && 'release-test' || '') }}
+      deployment: false
     needs:
       - docker-plan
       - docker-publish-base
