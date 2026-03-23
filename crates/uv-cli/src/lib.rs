@@ -544,7 +544,32 @@ pub enum Commands {
     /// Clear the cache, removing all entries or those linked to specific packages.
     #[command(hide = true)]
     Clean(CleanArgs),
-    /// Generate shell completion
+    /// Generate shell completion scripts for the specified shell.
+    ///
+    /// Completion scripts enable tab-completion of uv commands, options, and arguments
+    /// in your terminal. The supported shells are: `bash`, `elvish`, `fish`, `nushell`,
+    /// `powershell`, and `zsh`.
+    ///
+    /// The script should be evaluated by your shell on startup. The exact mechanism
+    /// varies by shell; refer to your shell's documentation for details.
+    ///
+    /// For example, for Bash, add to `~/.bashrc`:
+    ///
+    /// ```sh
+    /// eval "$(uv generate-shell-completion bash)"
+    /// ```
+    ///
+    /// For Zsh, add to `~/.zshrc`:
+    ///
+    /// ```sh
+    /// eval "$(uv generate-shell-completion zsh)"
+    /// ```
+    ///
+    /// For Fish, add to `~/.config/fish/config.fish`:
+    ///
+    /// ```fish
+    /// uv generate-shell-completion fish | source
+    /// ```
     #[command(alias = "--generate-shell-completion", hide = true)]
     GenerateShellCompletion(GenerateShellCompletionArgs),
     /// Display documentation for a command.
