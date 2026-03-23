@@ -6717,6 +6717,7 @@ dependencies = [
  "serde",
  "serde_json",
  "smallvec",
+ "temp-env",
  "thiserror 2.0.18",
  "tracing",
  "tracing-test",

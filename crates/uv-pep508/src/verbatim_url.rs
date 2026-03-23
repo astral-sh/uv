@@ -791,4 +791,77 @@ mod tests {
             @"ambiguous user/pass authority in URL (not percent-encoded?): https:***@domain/a/b/c"
         );
     }
+
+    #[test]
+    fn env_vars() {
+        temp_env::with_vars(
+            [
+                ("FOO", None),
+                ("BAR", Some("bar")),
+                ("BAZ", Some("baz")),
+                ("Not-Valid", Some("Not-Valid")),
+                ("TEST_1", Some("Test 1")),
+                ("PROJECT_ROOT", None),
+            ],
+            || {
+                // Basic
+                assert_eq!(expand_env_vars(""), Cow::Borrowed(""));
+                assert_eq!(expand_env_vars("test"), Cow::Borrowed("test"));
+                assert_eq!(expand_env_vars("$"), Cow::Borrowed("$"));
+
+                // Invalid
+                assert_eq!(expand_env_vars("$FOO"), Cow::Borrowed("$FOO"));
+                assert_eq!(expand_env_vars("$BAR"), Cow::Borrowed("$BAR"));
+                assert_eq!(expand_env_vars("${BAR"), Cow::Borrowed("${BAR"));
+                assert_eq!(expand_env_vars("$BAR}"), Cow::Borrowed("$BAR}"));
+                assert_eq!(expand_env_vars("${ BAR }"), Cow::Borrowed("${ BAR }"));
+                assert_eq!(
+                    expand_env_vars("${Not-Valid}"),
+                    Cow::Borrowed("${Not-Valid}")
+                );
+                assert_eq!(expand_env_vars("${}"), Cow::Borrowed("${}"));
+
+                // Missing
+                assert_eq!(expand_env_vars("${FOO}"), "${FOO}");
+
+                // Case sensitive
+                assert_eq!(expand_env_vars("${bar}"), "${bar}");
+
+                // One variable referenced
+                assert_eq!(expand_env_vars("${BAR}"), "bar");
+                assert_eq!(expand_env_vars("foo ${BAR}"), "foo bar");
+                assert_eq!(expand_env_vars("foo ${BAR} baz"), "foo bar baz");
+                assert_eq!(expand_env_vars("foo ${BAR} baz ${BAR}"), "foo bar baz bar");
+
+                // Two variables referenced
+                assert_eq!(expand_env_vars("${FOO} ${BAR} ${BAZ}"), "${FOO} bar baz");
+                assert_eq!(expand_env_vars("<${BAR}-${BAZ}>"), "<bar-baz>");
+                assert_eq!(
+                    expand_env_vars("${FOO}${BAR}${BAZ}${FOO}${BAR}${BAZ}"),
+                    "${FOO}barbaz${FOO}barbaz"
+                );
+
+                // Weird
+                assert_eq!(expand_env_vars("${${TEST_1}}"), "${Test 1}");
+
+                // PROJECT_ROOT
+                let cwd = std::env::current_dir().unwrap();
+                let cwd = cwd.to_string_lossy();
+
+                assert_eq!(
+                    expand_env_vars("${PROJECT_ROOT}/file"),
+                    format!("{cwd}/file")
+                );
+                assert_eq!(
+                    expand_env_vars("$PROJECT_ROOT/file.txt"),
+                    Cow::Borrowed("$PROJECT_ROOT/file.txt")
+                );
+
+                assert_eq!(
+                    expand_env_vars("${FOO} ${BAR} ${PROJECT_ROOT} ${BAZ}"),
+                    format!("${{FOO}} bar {cwd} baz")
+                );
+            },
+        );
+    }
 }
