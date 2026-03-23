@@ -1,6 +1,6 @@
 [package]
 name = "uv-pep508"
-version = "0.0.32"
+version = "0.0.33"
 description = "This is an internal component crate of uv"
 include = ["/src", "Changelog.md", "License-Apache", "License-BSD", "Readme.md", "pyproject.toml"]
 license = "Apache-2.0 OR BSD-2-Clause"
@@ -34,6 +34,7 @@ rustc-hash = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive", "rc"] }
 smallvec = { workspace = true }
+temp-env = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true, optional = true }
 unicode-width = { workspace = true }

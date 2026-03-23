@@ -113,12 +113,51 @@ jobs:
       "id-token": "write"
       "packages": "write"
 
+  synthesize-local-dist-manifest:
+    needs:
+      - plan
+      - custom-build-release-binaries
+    if: ${{ needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload' || inputs.tag == 'dry-run' }}
+    runs-on: "depot-ubuntu-latest-4"
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - name: Install cached dist
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: cargo-dist-cache
+          path: ~/.cargo/bin/
+      - run: chmod +x ~/.cargo/bin/dist
+      - name: Fetch local artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: artifacts-*
+          path: target/distrib/
+          merge-multiple: true
+      - name: Generate local dist manifest
+        shell: bash
+        env:
+          TAG: ${{ needs.plan.outputs.tag-flag }}
+        run: |
+          temp_manifest=target/local-dist-manifest.json.tmp
+          dist manifest "$TAG" --output-format=json --no-local-paths --artifacts=local > "$temp_manifest"
+          python3 scripts/patch-dist-manifest-checksums.py --manifest "$temp_manifest" --artifacts-dir target/distrib
+          mv "$temp_manifest" target/distrib/local-dist-manifest.json
+      - name: Upload synthesized local dist manifest
+        uses: actions/upload-artifact@6027e3dd177782cd8ab9af838c04fd81a07f1d47
+        with:
+          name: artifacts-build-local-manifest
+          path: target/distrib/local-dist-manifest.json
+
   # Build and package all the platform-agnostic(ish) things
   build-global-artifacts:
     needs:
       - plan
       - custom-build-release-binaries
       - custom-build-docker
+      - synthesize-local-dist-manifest
     runs-on: "depot-ubuntu-latest-4"
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

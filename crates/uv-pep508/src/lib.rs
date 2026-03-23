@@ -1084,7 +1084,6 @@ impl<T: Pep508Url + Display, D: rkyv::rancor::Fallible + ?Sized>
 mod tests {
     //! Half of these tests are copied from <https://github.com/pypa/packaging/pull/624>
 
-    use std::env;
     use std::str::FromStr;
 
     use insta::assert_snapshot;
@@ -1822,7 +1821,7 @@ mod tests {
             "foo @ file:foo-3.0.0-py3-none-any.whl",
             "foo @ ./foo-3.0.0-py3-none-any.whl",
         ];
-        let cwd = env::current_dir().unwrap();
+        let cwd = std::env::current_dir().unwrap();
 
         for requirement in requirements {
             assert_eq!(

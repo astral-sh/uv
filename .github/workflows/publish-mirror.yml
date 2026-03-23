@@ -17,6 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: release
+      deployment: false
     env:
       VERSION: ${{ fromJson(inputs.plan).announcement_tag }}
     steps:

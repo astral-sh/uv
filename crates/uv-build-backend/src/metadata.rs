@@ -29,7 +29,7 @@ pub(crate) const DEFAULT_EXCLUDES: &[&str] = &["__pycache__", "*.pyc", "*.pyo"];
 
 /// No breaking changes were introduced to the uv build backend since these releases, so we can use
 /// the fast path for them too.
-const COMPATIBLE_VERSIONS: &[&str] = &["0.9.30"];
+const COMPATIBLE_VERSIONS: &[&str] = &["0.9.30", "0.10.12"];
 
 #[derive(Debug, Error)]
 pub enum ValidationError {

@@ -1,6 +1,6 @@
 [package]
 name = "uv-audit"
-version = "0.0.32"
+version = "0.0.33"
 description = "This is an internal component crate of uv"
 edition.workspace = true
 rust-version.workspace = true
@@ -22,6 +22,7 @@ uv-normalize = { workspace = true }
 uv-redacted = { workspace = true }
 uv-small-str = { workspace = true }
 
+clap = { workspace = true, optional = true }
 futures = { workspace = true }
 jiff = { workspace = true }
 reqwest-middleware = { workspace = true, features = ["json"] }
@@ -33,8 +34,7 @@ tracing = { workspace = true }
 [dev-dependencies]
 insta = { workspace = true }
 reqwest = { workspace = true, default-features = false, features = [
-  "rustls-tls",
-  "rustls-tls-native-roots",
+  "rustls",
 ] }
 serde_json = { workspace = true }
 tokio = { workspace = true }

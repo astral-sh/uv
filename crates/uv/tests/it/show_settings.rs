@@ -61,7 +61,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -139,6 +139,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -272,7 +273,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -350,6 +351,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -484,7 +486,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -562,6 +564,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -728,7 +731,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -806,6 +809,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -941,7 +945,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -1128,7 +1132,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -1206,6 +1210,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -1364,7 +1369,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -1442,6 +1447,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -1475,6 +1481,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://test.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -1608,7 +1615,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -1686,6 +1693,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://test.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -1721,6 +1729,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -1754,6 +1763,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://test.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -1910,7 +1920,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -1989,6 +1999,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://download.pytorch.org/whl/torch_stable.html",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -2143,7 +2154,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -2335,7 +2346,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -2413,6 +2424,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://download.pytorch.org/whl",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -2446,6 +2458,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://test.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -2577,7 +2590,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -2655,6 +2668,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://download.pytorch.org/whl",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -2688,6 +2702,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://test.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -2842,7 +2857,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -3024,7 +3039,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -3206,7 +3221,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -3390,7 +3405,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -3593,7 +3608,7 @@ fn resolve_tool() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -3791,7 +3806,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -4007,7 +4022,7 @@ fn resolve_both() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -4085,6 +4100,7 @@ fn resolve_both() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -4264,7 +4280,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -4342,6 +4358,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -4600,7 +4617,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -4678,6 +4695,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -4821,7 +4839,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
       |
     1 | [project]
       |  ^^^^^^^
-    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
+    unknown field `project`, expected one of `required-version`, `system-certs`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
     "
     );
 
@@ -4909,7 +4927,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -5094,7 +5112,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -5287,7 +5305,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -5494,7 +5512,7 @@ fn index_priority() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -5572,6 +5590,7 @@ fn index_priority() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://cli.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -5607,6 +5626,7 @@ fn index_priority() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://file.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -5740,7 +5760,7 @@ fn index_priority() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -5818,6 +5838,7 @@ fn index_priority() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://cli.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -5853,6 +5874,7 @@ fn index_priority() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://file.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -5992,7 +6014,7 @@ fn index_priority() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -6070,6 +6092,7 @@ fn index_priority() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://cli.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -6105,6 +6128,7 @@ fn index_priority() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://file.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -6239,7 +6263,7 @@ fn index_priority() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -6317,6 +6341,7 @@ fn index_priority() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://cli.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -6352,6 +6377,7 @@ fn index_priority() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://file.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -6493,7 +6519,7 @@ fn index_priority() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -6571,6 +6597,7 @@ fn index_priority() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://cli.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -6606,6 +6633,7 @@ fn index_priority() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://file.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -6740,7 +6768,7 @@ fn index_priority() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -6818,6 +6846,7 @@ fn index_priority() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://cli.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -6853,6 +6882,7 @@ fn index_priority() -> anyhow::Result<()> {
                                 given: Some(
                                     "https://file.pypi.org/simple",
                                 ),
+                                expanded: false,
                             },
                         ),
                         explicit: false,
@@ -7000,7 +7030,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -7175,7 +7205,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -7348,7 +7378,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -7523,7 +7553,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -7696,7 +7726,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -7870,7 +7900,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -8059,7 +8089,7 @@ fn preview_features() {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -8209,7 +8239,7 @@ fn preview_features() {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -8330,7 +8360,7 @@ fn preview_features() {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -8480,7 +8510,7 @@ fn preview_features() {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -8604,7 +8634,7 @@ fn preview_features() {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -8730,7 +8760,7 @@ fn preview_features() {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -8840,6 +8870,526 @@ fn preview_features() {
     );
 }
 
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn system_certs_cli_aliases_override_env() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), add_shared_args(context.version())
+        .arg("--show-settings")
+        .arg("--no-native-tls")
+        .env(EnvVars::UV_SYSTEM_CERTS, "1"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            offline: Disabled,
+            system_certs: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
+            allow_insecure_host: [],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
+            retries: 3,
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: [],
+        },
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    VersionSettings {
+        value: None,
+        bump: [],
+        short: false,
+        output_format: Text,
+        dry_run: false,
+        lock_check: Disabled,
+        frozen: None,
+        active: None,
+        no_sync: false,
+        package: None,
+        python: None,
+        install_mirrors: PythonInstallMirrors {
+            python_install_mirror: None,
+            pypy_install_mirror: None,
+            python_downloads_json_url: None,
+        },
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: ResolverInstallerSettings {
+            resolver: ResolverSettings {
+                build_options: BuildOptions {
+                    no_binary: None,
+                    no_build: None,
+                },
+                config_setting: ConfigSettings(
+                    {},
+                ),
+                config_settings_package: PackageConfigSettings(
+                    {},
+                ),
+                dependency_metadata: DependencyMetadata(
+                    {},
+                ),
+                exclude_newer: ExcludeNewer {
+                    global: None,
+                    package: ExcludeNewerPackage(
+                        {},
+                    ),
+                },
+                fork_strategy: RequiresPython,
+                index_locations: IndexLocations {
+                    indexes: [],
+                    flat_index: [],
+                    no_index: false,
+                },
+                index_strategy: FirstIndex,
+                keyring_provider: Disabled,
+                link_mode: Clone,
+                build_isolation: Isolate,
+                extra_build_dependencies: ExtraBuildDependencies(
+                    {},
+                ),
+                extra_build_variables: ExtraBuildVariables(
+                    {},
+                ),
+                prerelease: IfNecessaryOrExplicit,
+                resolution: Highest,
+                sources: None,
+                torch_backend: None,
+                upgrade: Upgrade {
+                    strategy: None,
+                    constraints: {},
+                },
+            },
+            compile_bytecode: false,
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
+    "#
+    );
+
+    uv_snapshot!(context.filters(), add_shared_args(context.version())
+        .arg("--show-settings")
+        .arg("--no-system-certs")
+        .env(EnvVars::UV_NATIVE_TLS, "1"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            offline: Disabled,
+            system_certs: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
+            allow_insecure_host: [],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
+            retries: 3,
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: [],
+        },
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    VersionSettings {
+        value: None,
+        bump: [],
+        short: false,
+        output_format: Text,
+        dry_run: false,
+        lock_check: Disabled,
+        frozen: None,
+        active: None,
+        no_sync: false,
+        package: None,
+        python: None,
+        install_mirrors: PythonInstallMirrors {
+            python_install_mirror: None,
+            pypy_install_mirror: None,
+            python_downloads_json_url: None,
+        },
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: ResolverInstallerSettings {
+            resolver: ResolverSettings {
+                build_options: BuildOptions {
+                    no_binary: None,
+                    no_build: None,
+                },
+                config_setting: ConfigSettings(
+                    {},
+                ),
+                config_settings_package: PackageConfigSettings(
+                    {},
+                ),
+                dependency_metadata: DependencyMetadata(
+                    {},
+                ),
+                exclude_newer: ExcludeNewer {
+                    global: None,
+                    package: ExcludeNewerPackage(
+                        {},
+                    ),
+                },
+                fork_strategy: RequiresPython,
+                index_locations: IndexLocations {
+                    indexes: [],
+                    flat_index: [],
+                    no_index: false,
+                },
+                index_strategy: FirstIndex,
+                keyring_provider: Disabled,
+                link_mode: Clone,
+                build_isolation: Isolate,
+                extra_build_dependencies: ExtraBuildDependencies(
+                    {},
+                ),
+                extra_build_variables: ExtraBuildVariables(
+                    {},
+                ),
+                prerelease: IfNecessaryOrExplicit,
+                resolution: Highest,
+                sources: None,
+                torch_backend: None,
+                upgrade: Upgrade {
+                    strategy: None,
+                    constraints: {},
+                },
+            },
+            compile_bytecode: false,
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
+    "#
+    );
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn system_certs_config_aliases() -> anyhow::Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let config = context.temp_dir.child("uv.toml");
+    config.write_str("system-certs = true\n")?;
+
+    uv_snapshot!(context.filters(), add_shared_args(context.version())
+        .arg("--show-settings"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            offline: Disabled,
+            system_certs: true,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
+            allow_insecure_host: [],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
+            retries: 3,
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: [],
+        },
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    VersionSettings {
+        value: None,
+        bump: [],
+        short: false,
+        output_format: Text,
+        dry_run: false,
+        lock_check: Disabled,
+        frozen: None,
+        active: None,
+        no_sync: false,
+        package: None,
+        python: None,
+        install_mirrors: PythonInstallMirrors {
+            python_install_mirror: None,
+            pypy_install_mirror: None,
+            python_downloads_json_url: None,
+        },
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: ResolverInstallerSettings {
+            resolver: ResolverSettings {
+                build_options: BuildOptions {
+                    no_binary: None,
+                    no_build: None,
+                },
+                config_setting: ConfigSettings(
+                    {},
+                ),
+                config_settings_package: PackageConfigSettings(
+                    {},
+                ),
+                dependency_metadata: DependencyMetadata(
+                    {},
+                ),
+                exclude_newer: ExcludeNewer {
+                    global: None,
+                    package: ExcludeNewerPackage(
+                        {},
+                    ),
+                },
+                fork_strategy: RequiresPython,
+                index_locations: IndexLocations {
+                    indexes: [],
+                    flat_index: [],
+                    no_index: false,
+                },
+                index_strategy: FirstIndex,
+                keyring_provider: Disabled,
+                link_mode: Clone,
+                build_isolation: Isolate,
+                extra_build_dependencies: ExtraBuildDependencies(
+                    {},
+                ),
+                extra_build_variables: ExtraBuildVariables(
+                    {},
+                ),
+                prerelease: IfNecessaryOrExplicit,
+                resolution: Highest,
+                sources: None,
+                torch_backend: None,
+                upgrade: Upgrade {
+                    strategy: None,
+                    constraints: {},
+                },
+            },
+            compile_bytecode: false,
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
+    "#
+    );
+
+    config.write_str(indoc::indoc! {r"
+        system-certs = false
+        native-tls = true
+    "})?;
+
+    uv_snapshot!(context.filters(), add_shared_args(context.version())
+        .arg("--show-settings"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            offline: Disabled,
+            system_certs: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
+            allow_insecure_host: [],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
+            retries: 3,
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: [],
+        },
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    VersionSettings {
+        value: None,
+        bump: [],
+        short: false,
+        output_format: Text,
+        dry_run: false,
+        lock_check: Disabled,
+        frozen: None,
+        active: None,
+        no_sync: false,
+        package: None,
+        python: None,
+        install_mirrors: PythonInstallMirrors {
+            python_install_mirror: None,
+            pypy_install_mirror: None,
+            python_downloads_json_url: None,
+        },
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: ResolverInstallerSettings {
+            resolver: ResolverSettings {
+                build_options: BuildOptions {
+                    no_binary: None,
+                    no_build: None,
+                },
+                config_setting: ConfigSettings(
+                    {},
+                ),
+                config_settings_package: PackageConfigSettings(
+                    {},
+                ),
+                dependency_metadata: DependencyMetadata(
+                    {},
+                ),
+                exclude_newer: ExcludeNewer {
+                    global: None,
+                    package: ExcludeNewerPackage(
+                        {},
+                    ),
+                },
+                fork_strategy: RequiresPython,
+                index_locations: IndexLocations {
+                    indexes: [],
+                    flat_index: [],
+                    no_index: false,
+                },
+                index_strategy: FirstIndex,
+                keyring_provider: Disabled,
+                link_mode: Clone,
+                build_isolation: Isolate,
+                extra_build_dependencies: ExtraBuildDependencies(
+                    {},
+                ),
+                extra_build_variables: ExtraBuildVariables(
+                    {},
+                ),
+                prerelease: IfNecessaryOrExplicit,
+                resolution: Highest,
+                sources: None,
+                torch_backend: None,
+                upgrade: Upgrade {
+                    strategy: None,
+                    constraints: {},
+                },
+            },
+            compile_bytecode: false,
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
+    "#
+    );
+
+    Ok(())
+}
+
 /// Track the interactions between `upgrade` and `upgrade-package` across the `uv pip` CLI and a
 /// configuration file.
 #[test]
@@ -8872,7 +9422,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -9061,7 +9611,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -9244,7 +9794,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -9425,7 +9975,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -9606,7 +10156,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -9788,7 +10338,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -9995,7 +10545,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -10127,7 +10677,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -10253,7 +10803,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -10377,7 +10927,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -10497,7 +11047,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -10618,7 +11168,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -10763,7 +11313,7 @@ fn build_isolation_override() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
@@ -10941,7 +11491,7 @@ fn build_isolation_override() -> anyhow::Result<()> {
         network_settings: NetworkSettings {
             connectivity: Online,
             offline: Disabled,
-            native_tls: false,
+            system_certs: false,
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,

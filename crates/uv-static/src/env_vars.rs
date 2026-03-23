@@ -108,9 +108,16 @@ impl EnvVars {
     pub const UV_BREAK_SYSTEM_PACKAGES: &'static str = "UV_BREAK_SYSTEM_PACKAGES";
 
     /// Equivalent to the `--native-tls` command-line argument. If set to `true`, uv will
-    /// use the system's trust store instead of the bundled `webpki-roots` crate.
+    /// load TLS certificates from the platform's native certificate store instead of the
+    /// bundled Mozilla root certificates.
     #[attr_added_in("0.1.19")]
     pub const UV_NATIVE_TLS: &'static str = "UV_NATIVE_TLS";
+
+    /// Equivalent to the `--system-certs` command-line argument. If set to `true`, uv will
+    /// load TLS certificates from the platform's native certificate store instead of the
+    /// bundled Mozilla root certificates.
+    #[attr_added_in("0.11.0")]
+    pub const UV_SYSTEM_CERTS: &'static str = "UV_SYSTEM_CERTS";
 
     /// Equivalent to the `--index-strategy` command-line argument.
     ///
@@ -647,17 +654,31 @@ impl EnvVars {
     #[attr_added_in("0.2.16")]
     pub const XDG_BIN_HOME: &'static str = "XDG_BIN_HOME";
 
-    /// Custom certificate bundle file path for SSL connections.
+    /// Path to a CA certificate bundle file for TLS connections.
     ///
-    /// Takes precedence over `UV_NATIVE_TLS` when set.
+    /// Requires a PEM-encoded certificate file (e.g., `certs.pem`, `ca-bundle.crt`). DER-encoded
+    /// files are not supported.
+    ///
+    /// When set, this overrides the default certificate source (bundled Mozilla roots or system
+    /// certificates). Only the certificates in this file will be trusted.
     #[attr_added_in("0.1.14")]
     pub const SSL_CERT_FILE: &'static str = "SSL_CERT_FILE";
 
-    /// Custom path for certificate bundles for SSL connections.
-    /// Multiple entries are supported separated using a platform-specific
-    /// delimiter (`:` on Unix, `;` on Windows).
+    /// Path to a directory containing PEM-encoded CA certificate files for TLS connections.
     ///
-    /// Takes precedence over `UV_NATIVE_TLS` when set.
+    /// Multiple entries are supported, separated using a platform-specific delimiter (`:` on Unix,
+    /// `;` on Windows).
+    ///
+    /// Certificates are usually stored with `.pem`, `.crt`, or `.cer` extensions, but uv will
+    /// attempt to read a certificate from any regular file in the provided `SSL_CERT_DIR`.
+    ///
+    /// Files that cannot be parsed as PEM certificates are ignored. uv resolves symlinks and
+    /// ignores dangling symlinks.
+    ///
+    /// Only PEM-encoded files are supported, i.e., DER-encoded files are not supported.
+    ///
+    /// When set, this overrides the default certificate source (bundled Mozilla roots or system
+    /// certificates). Only the certificates in this directory will be trusted.
     #[attr_added_in("0.9.10")]
     pub const SSL_CERT_DIR: &'static str = "SSL_CERT_DIR";
 

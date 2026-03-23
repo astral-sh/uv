@@ -137,6 +137,7 @@ jobs:
       attestations: write # for GHCR attestations
     environment:
       name: ${{ needs.docker-plan.outputs.push-version == 'true' && 'release' || (needs.docker-plan.outputs.push == 'true' && 'release-test' || '') }}
+      deployment: false
     outputs:
       image-tags: ${{ steps.meta.outputs.tags }}
       image-annotations: ${{ steps.meta.outputs.annotations }}
@@ -228,6 +229,7 @@ jobs:
     timeout-minutes: 5
     environment:
       name: ${{ needs.docker-plan.outputs.push-version == 'true' && 'release' || (needs.docker-plan.outputs.push == 'true' && 'release-test' || '') }}
+      deployment: false
     needs:
       - docker-plan
       - docker-publish-base
@@ -267,7 +269,7 @@ jobs:
           set -euo pipefail
 
           # Extract the image and tags from the matrix variable
-          IFS=',' read -r BASE_IMAGE BASE_TAGS <<< "${{ matrix.image-mapping }}"
+          IFS=',' read -r BASE_IMAGE BASE_TAGS <<< "${IMAGE_MAPPING}"
 
           # Generate Dockerfile content
           cat <<EOF > Dockerfile
@@ -308,6 +310,7 @@ jobs:
           # Use the tag from the base image we just pushed; fall back to `latest` on dry-runs
           # since the base image isn't pushed to the registry.
           UV_BASE_TAG: ${{ needs.docker-plan.outputs.push == 'true' && needs.docker-publish-base.outputs.image-version || 'latest' }}
+          IMAGE_MAPPING: ${{ matrix.image-mapping }}
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
@@ -402,6 +405,7 @@ jobs:
       attestations: write # for GHCR attestations
     environment:
       name: ${{ needs.docker-plan.outputs.push-version == 'true' && 'release' || (needs.docker-plan.outputs.push == 'true' && 'release-test' || '') }}
+      deployment: false
     needs:
       - docker-plan
       - docker-publish-base

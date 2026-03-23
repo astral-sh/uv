@@ -7731,6 +7731,119 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
     Ok(())
 }
 
+/// Check PEP 508 URL handling when they contain variables
+#[test]
+fn lock_pep508_urls_with_vars() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&indoc! {r#"
+        [project]
+        name = "a"
+        version = "0.1.0"
+        requires-python = ">=3.11,<3.13"
+        dependencies = ["b @ file://${PWD}/b", "c @ file:///${PROJECT_ROOT}/c"]
+        "#,
+    })?;
+    context.temp_dir.child("src/a/__init__.py").touch()?;
+    context
+        .temp_dir
+        .child("b/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "b"
+        version = "0.1.0"
+        dependencies = []
+        requires-python = ">=3.11,<3.13"
+        license = {text = "MIT"}
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+    "#})?;
+    context.temp_dir.child("src/b/__init__.py").touch()?;
+    context
+        .temp_dir
+        .child("c/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "c"
+        version = "0.1.0"
+        dependencies = []
+        requires-python = ">=3.11,<3.13"
+        license = {text = "MIT"}
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    context.temp_dir.child("src/c/__init__.py").touch()?;
+
+    uv_snapshot!(context.filters(), context.lock().env("PWD", context.temp_dir.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.11, <3.13"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "a"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "b" },
+            { name = "c" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "b", directory = "b" },
+            { name = "c", directory = "c" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "0.1.0"
+        source = { directory = "b" }
+
+        [[package]]
+        name = "c"
+        version = "0.1.0"
+        source = { directory = "c" }
+        "#
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().env("PWD", context.temp_dir.path()).arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Check relative and absolute path handling in constraint-dependencies.
 ///
 /// When a user provides an absolute path in `constraint-dependencies`, it should be preserved
@@ -19154,7 +19267,7 @@ fn lock_explicit_default_index() -> Result<()> {
     DEBUG No workspace root found, using project root
     DEBUG Resolving despite existing lockfile due to mismatched requirements for: `project==0.1.0`
       Requested: {Requirement { name: PackageName("anyio"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([]), index: None, conflict: None }, origin: None }}
-      Existing: {Requirement { name: PackageName("iniconfig"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([VersionSpecifier { operator: Equal, version: "2.0.0" }]), index: Some(IndexMetadata { url: Url(VerbatimUrl { url: DisplaySafeUrl { scheme: "https", cannot_be_a_base: false, username: "", password: None, host: Some(Domain("test.pypi.org")), port: None, path: "/simple", query: None, fragment: None }, given: None }), format: Simple }), conflict: None }, origin: None }}
+      Existing: {Requirement { name: PackageName("iniconfig"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([VersionSpecifier { operator: Equal, version: "2.0.0" }]), index: Some(IndexMetadata { url: Url(VerbatimUrl { url: DisplaySafeUrl { scheme: "https", cannot_be_a_base: false, username: "", password: None, host: Some(Domain("test.pypi.org")), port: None, path: "/simple", query: None, fragment: None }, given: None, expanded: false }), format: Simple }), conflict: None }, origin: None }}
     DEBUG Solving with installed Python version: 3.12.[X]
     DEBUG Solving with target Python version: >=3.12
     DEBUG Solving with exclude-newer: global: 2024-03-25T00:00:00Z
@@ -19249,6 +19362,53 @@ fn lock_unnamed_explicit_index() -> Result<()> {
     8 |         [[tool.uv.index]]
       |         ^^^^^^^^^^^^^^^^^
     An index with `explicit = true` requires a `name`: https://test.pypi.org/simple
+    ");
+
+    Ok(())
+}
+
+/// Error when an index cache-control override is not a valid HTTP header value.
+#[test]
+fn lock_invalid_index_cache_control() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [[tool.uv.index]]
+        name = "test"
+        url = "https://test.pypi.org/simple"
+        cache-control.api = """
+        max-age=600
+        """
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Failed to parse `pyproject.toml` during settings discovery:
+      TOML parse error at line 11, column 9
+         |
+      11 |         cache-control.api = \"\"\"
+         |         ^^^^^^^^^^^^^
+      `cache-control.api` must be a valid HTTP header value
+
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 11, column 9
+       |
+    11 |         cache-control.api = \"\"\"
+       |         ^^^^^^^^^^^^^
+    `cache-control.api` must be a valid HTTP header value
     ");
 
     Ok(())

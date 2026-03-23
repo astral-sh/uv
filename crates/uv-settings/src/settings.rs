@@ -236,13 +236,24 @@ pub struct GlobalOptions {
     pub required_version: Option<RequiredVersion>,
     /// Whether to load TLS certificates from the platform's native certificate store.
     ///
-    /// By default, uv loads certificates from the bundled `webpki-roots` crate. The
-    /// `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv
-    /// improves portability and performance (especially on macOS).
+    /// By default, uv uses bundled Mozilla root certificates. When enabled, this loads
+    /// certificates from the platform's native certificate store instead.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        uv_toml_only = true,
+        example = r#"
+            system-certs = true
+        "#
+    )]
+    pub system_certs: Option<bool>,
+    /// Whether to load TLS certificates from the platform's native certificate store.
     ///
-    /// However, in some cases, you may want to use the platform's native certificate store,
-    /// especially if you're relying on a corporate trust root (e.g., for a mandatory proxy) that's
-    /// included in your system's certificate store.
+    /// By default, uv uses bundled Mozilla root certificates. When enabled, this loads
+    /// certificates from the platform's native certificate store instead.
+    ///
+    /// (Deprecated: use `system-certs` instead.)
+    #[deprecated(note = "use `system-certs` instead")]
     #[option(
         default = "false",
         value_type = "bool",
@@ -2187,6 +2198,7 @@ pub struct OptionsWire {
     // #[serde(flatten)]
     // globals: GlobalOptions
     required_version: Option<RequiredVersion>,
+    system_certs: Option<bool>,
     native_tls: Option<bool>,
     offline: Option<bool>,
     no_cache: Option<bool>,
@@ -2283,9 +2295,11 @@ pub struct OptionsWire {
 }
 
 impl From<OptionsWire> for Options {
+    #[allow(deprecated)]
     fn from(value: OptionsWire) -> Self {
         let OptionsWire {
             required_version,
+            system_certs,
             native_tls,
             offline,
             no_cache,
@@ -2362,6 +2376,7 @@ impl From<OptionsWire> for Options {
         Self {
             globals: GlobalOptions {
                 required_version,
+                system_certs,
                 native_tls,
                 offline,
                 no_cache,
