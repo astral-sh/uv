@@ -1065,6 +1065,73 @@ fn tool_run_git() {
     ");
 }
 
+/// Test that running a tool from Git uses statically available `requires-python` metadata before
+/// selecting a global Python pin.
+#[test]
+#[cfg(feature = "test-git")]
+fn tool_run_git_infers_static_requires_python() {
+    let context = uv_test::test_context_with_versions!(&["3.12", "3.11"]).with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    context
+        .python_pin()
+        .arg("3.11")
+        .arg("--global")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static")
+        .arg("static-requires-python-tool")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + static-requires-python-tool==0.1.0 (from git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static)
+    ");
+}
+
+/// Test that running a tool from Git does not infer dynamic `requires-python` metadata.
+#[test]
+#[cfg(feature = "test-git")]
+fn tool_run_git_does_not_infer_dynamic_requires_python() {
+    let context = uv_test::test_context_with_versions!(&["3.12", "3.11"]).with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    context
+        .python_pin()
+        .arg("3.11")
+        .arg("--global")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=dynamic")
+        .arg("dynamic-requires-python-tool")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving tool dependencies:
+      ╰─▶ Because the current Python version (3.11.[X]) does not satisfy Python>=3.12,<3.13 and dynamic-requires-python-tool==0.1.0 depends on Python>=3.12,<3.13, we can conclude that dynamic-requires-python-tool==0.1.0 cannot be used.
+          And because only dynamic-requires-python-tool==0.1.0 is available and you require dynamic-requires-python-tool, we can conclude that your requirements are unsatisfiable.
+    ");
+}
+
 /// Test running a tool with a Git LFS enabled requirement.
 #[test]
 #[cfg(feature = "test-git-lfs")]
@@ -2619,6 +2686,148 @@ fn tool_run_python_from() {
 
     ----- stderr -----
     Resolved in [TIME]
+    ");
+}
+
+#[test]
+fn tool_run_from_directory_uses_global_pin_when_within_requires_python_range() {
+    let context =
+        uv_test::test_context_with_versions!(&["3.13", "3.12", "3.11"]).with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let foo_dir = context.temp_dir.child("foo");
+    foo_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.11,<3.13"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo.main:run"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#
+        })
+        .unwrap();
+    foo_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()
+        .unwrap();
+    foo_dir
+        .child("src")
+        .child("foo")
+        .child("main.py")
+        .write_str(indoc! {r#"
+        import sys
+
+        def run():
+            print(f"{sys.version_info.major}.{sys.version_info.minor}")
+        "#
+        })
+        .unwrap();
+
+    context
+        .python_pin()
+        .arg("3.11")
+        .arg("--global")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg(foo_dir.as_os_str())
+        .arg("foo")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.11
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+    ");
+}
+
+#[test]
+fn tool_run_from_directory_ignores_global_pin_outside_requires_python_range() {
+    let context =
+        uv_test::test_context_with_versions!(&["3.13", "3.12", "3.11"]).with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let foo_dir = context.temp_dir.child("foo");
+    foo_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.11,<3.13"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo.main:run"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#
+        })
+        .unwrap();
+    foo_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()
+        .unwrap();
+    foo_dir
+        .child("src")
+        .child("foo")
+        .child("main.py")
+        .write_str(indoc! {r#"
+        import sys
+
+        def run():
+            print(f"{sys.version_info.major}.{sys.version_info.minor}")
+        "#
+        })
+        .unwrap();
+
+    context
+        .python_pin()
+        .arg("3.13")
+        .arg("--global")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg(foo_dir.as_os_str())
+        .arg("foo")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
     ");
 }
 

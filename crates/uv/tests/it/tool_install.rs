@@ -1,9 +1,13 @@
 #[cfg(any(feature = "test-git", feature = "test-git-lfs"))]
 use std::collections::BTreeSet;
+#[cfg(feature = "test-git")]
+use std::ffi::OsString;
 use std::process::Command;
 
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
+#[cfg(feature = "test-git")]
+use assert_fs::fixture::ChildPath;
 use assert_fs::{
     assert::PathAssert,
     fixture::{FileTouch, FileWriteStr, PathChild, PathCreateDir},
@@ -15,6 +19,32 @@ use uv_fs::copy_dir_all;
 use uv_static::EnvVars;
 
 use uv_test::uv_snapshot;
+
+#[cfg(feature = "test-git")]
+fn tool_install_git_path(bin_dir: &ChildPath) -> OsString {
+    let mut paths = BTreeSet::new();
+    paths.insert(bin_dir.to_path_buf());
+    paths.insert(
+        which::which("git")
+            .expect("Failed to find `git` executable.")
+            .parent()
+            .expect("Failed to find `git` executable directory.")
+            .to_path_buf(),
+    );
+
+    // Git Submodule in macOS seems to rely on `sed`.
+    if cfg!(target_os = "macos") {
+        paths.insert(
+            which::which("sed")
+                .expect("Failed to find `sed` executable.")
+                .parent()
+                .expect("Failed to find `sed` executable directory.")
+                .to_path_buf(),
+        );
+    }
+
+    std::env::join_paths(paths).unwrap()
+}
 
 #[test]
 fn tool_install() {
@@ -215,6 +245,168 @@ fn tool_install_relative_exclude_newer_receipt_preserves_span() {
         exclude-newer-span = "P3W"
         "#);
     });
+}
+
+#[test]
+fn tool_install_from_directory_ignores_global_pin_outside_requires_python_range() {
+    let context = uv_test::test_context_with_versions!(&["3.13", "3.12", "3.11"])
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let foo_dir = context.temp_dir.child("foo");
+    foo_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.11,<3.13"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo.main:run"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#
+        })
+        .unwrap();
+    foo_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()
+        .unwrap();
+    foo_dir
+        .child("src")
+        .child("foo")
+        .child("main.py")
+        .write_str(indoc! {r#"
+        import sys
+
+        def run():
+            print(f"{sys.version_info.major}.{sys.version_info.minor}")
+        "#
+        })
+        .unwrap();
+
+    context
+        .python_pin()
+        .arg("3.13")
+        .arg("--global")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg(foo_dir.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+    Installed 1 executable: foo
+    ");
+
+    uv_snapshot!(context.filters(), Command::new("foo")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn tool_install_from_directory_uses_global_pin_within_requires_python_range() {
+    let context = uv_test::test_context_with_versions!(&["3.13", "3.12", "3.11"])
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let foo_dir = context.temp_dir.child("foo");
+    foo_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.11,<3.13"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo.main:run"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#
+        })
+        .unwrap();
+    foo_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()
+        .unwrap();
+    foo_dir
+        .child("src")
+        .child("foo")
+        .child("main.py")
+        .write_str(indoc! {r#"
+        import sys
+
+        def run():
+            print(f"{sys.version_info.major}.{sys.version_info.minor}")
+        "#
+        })
+        .unwrap();
+
+    context
+        .python_pin()
+        .arg("3.11")
+        .arg("--global")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg(foo_dir.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+    Installed 1 executable: foo
+    ");
+
+    uv_snapshot!(context.filters(), Command::new("foo")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.11
+
+    ----- stderr -----
+    ");
 }
 
 #[test]
@@ -2932,26 +3124,7 @@ fn tool_install_git() {
     let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
-    let mut paths = BTreeSet::new();
-
-    // Avoid removing `git` from PATH
-    let git_path = which::which("git")
-        .expect("Failed to find `git` executable.")
-        .parent()
-        .expect("Failed to find `git` executable directory.")
-        .to_path_buf();
-    paths.insert(bin_dir.to_path_buf());
-    paths.insert(git_path);
-    // Git Submodule in macos seems to rely on `sed`.
-    if cfg!(target_os = "macos") {
-        let sed_path = which::which("sed")
-            .expect("Failed to find `sed` executable.")
-            .parent()
-            .expect("Failed to find `sed` executable directory.")
-            .to_path_buf();
-        paths.insert(sed_path);
-    }
-    let path = std::env::join_paths(paths).unwrap();
+    let path = tool_install_git_path(&bin_dir);
 
     // Unnamed Git Install
     uv_snapshot!(context.filters(), context.tool_install()
@@ -3018,6 +3191,87 @@ fn tool_install_git() {
 
     let executable = bin_dir.child(format!("black{}", std::env::consts::EXE_SUFFIX));
     assert!(executable.exists());
+}
+
+/// Test that installing a tool from Git uses statically available `requires-python` metadata
+/// before selecting a global Python pin.
+#[test]
+#[cfg(feature = "test-git")]
+fn tool_install_git_infers_static_requires_python() {
+    let context = uv_test::test_context_with_versions!(&["3.12", "3.11"])
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let path = tool_install_git_path(&bin_dir);
+
+    context
+        .python_pin()
+        .arg("3.11")
+        .arg("--global")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, path.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + static-requires-python-tool==0.1.0 (from git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static)
+    Installed 1 executable: static-requires-python-tool
+    ");
+
+    uv_snapshot!(context.filters(), Command::new("static-requires-python-tool")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12
+
+    ----- stderr -----
+    ");
+}
+
+/// Test that installing a tool from Git does not infer dynamic `requires-python` metadata.
+#[test]
+#[cfg(feature = "test-git")]
+fn tool_install_git_does_not_infer_dynamic_requires_python() {
+    let context = uv_test::test_context_with_versions!(&["3.12", "3.11"])
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let path = tool_install_git_path(&bin_dir);
+
+    context
+        .python_pin()
+        .arg("3.11")
+        .arg("--global")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=dynamic")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, path.as_os_str()), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because the current Python version (3.11.[X]) does not satisfy Python>=3.12,<3.13 and dynamic-requires-python-tool==0.1.0 depends on Python>=3.12,<3.13, we can conclude that dynamic-requires-python-tool==0.1.0 cannot be used.
+          And because only dynamic-requires-python-tool==0.1.0 is available and you require dynamic-requires-python-tool, we can conclude that your requirements are unsatisfiable.
+    ");
 }
 
 /// Test installing a tool with a Git LFS enabled requirement.

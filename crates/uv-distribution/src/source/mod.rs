@@ -25,19 +25,20 @@ use uv_auth::CredentialsCache;
 use uv_cache::{Cache, CacheBucket, CacheEntry, CacheShard, Removal, WheelCache};
 use uv_cache_info::CacheInfo;
 use uv_client::{
-    CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
+    BaseClientBuilder, CacheControl, CachedClientError, Connectivity, DataWithCachePolicy,
+    RegistryClient,
 };
 use uv_configuration::{BuildKind, BuildOutput, NoSources};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
     BuildInfo, BuildVariables, BuildableSource, ConfigSettings, DirectorySourceUrl,
     ExtraBuildRequirement, GitDirectorySourceUrl, GitPathSourceUrl, HashPolicy, Hashed, IndexUrl,
-    PathSourceUrl, SourceDist, SourceUrl,
+    PathSourceUrl, RequirementSource, RequiresPython, SourceDist, SourceUrl,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::{Simplified, rename_with_retry, write_atomic};
-use uv_git::{Fetch, GIT_LFS, GitError};
-use uv_git_types::{GitHubRepository, GitOid};
+use uv_git::{Fetch, GIT_LFS, GitError, GitResolver};
+use uv_git_types::{GitHubRepository, GitOid, GitUrl};
 use uv_metadata::read_archive_metadata;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, release_specifiers_to_ranges};
@@ -56,6 +57,163 @@ use crate::{Reporter, RequiresDist};
 
 mod built_wheel_metadata;
 mod revision;
+
+/// Access distribution metadata without requiring a build interpreter.
+///
+/// This is intended for metadata operations that occur before selecting an interpreter, such as
+/// choosing a tool Python from `requires-python`.
+pub struct StaticMetadataDatabase<'a, 'client> {
+    client_builder: &'a BaseClientBuilder<'client>,
+    git: &'a GitResolver,
+    cache: &'a Cache,
+}
+
+/// A direct source tree materialized on disk for static metadata inspection.
+#[derive(Debug)]
+struct MaterializedSourceTree(Box<Path>);
+
+impl MaterializedSourceTree {
+    /// Return the on-disk path for this source tree.
+    fn path(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl<'a, 'client> StaticMetadataDatabase<'a, 'client> {
+    /// Create a [`StaticMetadataDatabase`] for an invocation.
+    pub fn new(
+        client_builder: &'a BaseClientBuilder<'client>,
+        git: &'a GitResolver,
+        cache: &'a Cache,
+    ) -> Self {
+        Self {
+            client_builder,
+            git,
+            cache,
+        }
+    }
+
+    /// Materialize a direct source tree, if the requirement identifies one.
+    ///
+    /// Directory requirements are already materialized. Git source trees are fetched into the
+    /// Git cache and returned at the requested subdirectory.
+    async fn materialize_source_tree(
+        &self,
+        source: &RequirementSource,
+    ) -> Result<Option<MaterializedSourceTree>, Error> {
+        match source {
+            RequirementSource::Directory { install_path, .. } => Ok(Some(MaterializedSourceTree(
+                install_path.to_path_buf().into_boxed_path(),
+            ))),
+            RequirementSource::GitDirectory {
+                git,
+                subdirectory,
+                url,
+            } => {
+                let client = self.client_builder.build()?;
+                let fetch = fetch_git_source_tree(
+                    self.git,
+                    git,
+                    url.to_url(),
+                    subdirectory.as_deref(),
+                    client.disable_ssl(git.url()),
+                    client.connectivity(),
+                    self.cache,
+                    None,
+                )
+                .await?;
+
+                if let Some(subdirectory) = subdirectory {
+                    let source_tree = fetch.path().join(subdirectory);
+                    Ok(Some(MaterializedSourceTree(source_tree.into_boxed_path())))
+                } else {
+                    Ok(Some(MaterializedSourceTree(
+                        fetch.path().to_path_buf().into_boxed_path(),
+                    )))
+                }
+            }
+            _ => Ok(None),
+        }
+    }
+
+    /// Read static [`RequiresPython`] from an already materialized source tree.
+    async fn source_tree_requires_python(
+        &self,
+        source_tree: &MaterializedSourceTree,
+    ) -> Result<Option<RequiresPython>, Error> {
+        let pyproject_toml = match read_pyproject_toml(source_tree.path(), None).await {
+            Ok(pyproject_toml) => pyproject_toml,
+            Err(Error::MissingPyprojectToml) => return Ok(None),
+            Err(err) => return Err(err),
+        };
+
+        match pyproject_toml.requires_python() {
+            Ok(Some(requires_python)) => {
+                Ok(Some(RequiresPython::from_specifiers(&requires_python)))
+            }
+            Ok(None) | Err(uv_pypi_types::MetadataError::FieldNotFound("project")) => Ok(None),
+            Err(uv_pypi_types::MetadataError::DynamicField("requires-python")) => {
+                debug!("Ignoring dynamic `requires-python` in source tree");
+                Ok(None)
+            }
+            Err(err) => Err(Error::PyprojectToml(err)),
+        }
+    }
+
+    /// Read static [`RequiresPython`] from a direct source-tree requirement.
+    pub async fn requires_python(
+        &self,
+        source: &RequirementSource,
+    ) -> Result<Option<RequiresPython>, Error> {
+        let Some(source_tree) = self.materialize_source_tree(source).await? else {
+            return Ok(None);
+        };
+        self.source_tree_requires_python(&source_tree).await
+    }
+}
+
+/// Fetch and validate a Git source tree.
+async fn fetch_git_source_tree(
+    git_resolver: &GitResolver,
+    git: &GitUrl,
+    url: DisplaySafeUrl,
+    subdirectory: Option<&Path>,
+    disable_ssl: bool,
+    connectivity: Connectivity,
+    cache: &Cache,
+    reporter: Option<Arc<dyn uv_git::Reporter>>,
+) -> Result<Fetch, Error> {
+    let fetch = git_resolver
+        .fetch(
+            git,
+            disable_ssl,
+            connectivity == Connectivity::Offline,
+            cache.bucket(CacheBucket::Git),
+            reporter,
+        )
+        .await?;
+
+    if let Some(subdirectory) = subdirectory
+        && !fetch.path().join(subdirectory).is_dir()
+    {
+        return Err(Error::MissingSubdirectory(url, subdirectory.to_path_buf()));
+    }
+
+    if git.lfs().enabled() && !fetch.lfs_ready() {
+        if GIT_LFS.is_err() {
+            return Err(Error::MissingSourceDistGitLfsArtifacts(
+                url,
+                GitError::GitLfsNotFound,
+            ));
+        }
+        return Err(Error::MissingSourceDistGitLfsArtifacts(
+            url,
+            GitError::GitLfsNotConfigured,
+        ));
+    }
+
+    Ok(fetch)
+}
 
 /// Fetch and build a source distribution from a remote source, or from a local cache.
 pub(crate) struct SourceDistributionBuilder<'a, T: BuildContext> {
@@ -1936,44 +2094,19 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Err(Error::HashesNotSupportedGit(source.to_string()));
         }
 
-        // Fetch the Git repository.
-        let fetch = self
-            .build_context
-            .git()
-            .fetch(
-                resource.git,
-                client.unmanaged.disable_ssl(resource.git.url()),
-                client.unmanaged.connectivity() == Connectivity::Offline,
-                self.build_context.cache().bucket(CacheBucket::Git),
-                self.reporter
-                    .clone()
-                    .map(|reporter| reporter.into_git_reporter()),
-            )
-            .await?;
-
-        // Validate that the subdirectory exists.
-        if let Some(subdirectory) = resource.subdirectory {
-            if !fetch.path().join(subdirectory).is_dir() {
-                return Err(Error::MissingSubdirectory(
-                    resource.url.to_url(),
-                    subdirectory.to_path_buf(),
-                ));
-            }
-        }
-
-        // Validate that LFS artifacts were fully initialized
-        if resource.git.lfs().enabled() && !fetch.lfs_ready() {
-            if GIT_LFS.is_err() {
-                return Err(Error::MissingSourceDistGitLfsArtifacts(
-                    resource.url.to_url(),
-                    GitError::GitLfsNotFound,
-                ));
-            }
-            return Err(Error::MissingSourceDistGitLfsArtifacts(
-                resource.url.to_url(),
-                GitError::GitLfsNotConfigured,
-            ));
-        }
+        let fetch = fetch_git_source_tree(
+            self.build_context.git(),
+            resource.git,
+            resource.url.to_url(),
+            resource.subdirectory,
+            client.unmanaged.disable_ssl(resource.git.url()),
+            client.unmanaged.connectivity(),
+            self.build_context.cache(),
+            self.reporter
+                .clone()
+                .map(|reporter| reporter.into_git_reporter()),
+        )
+        .await?;
 
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
         let cache_shard = self.build_context.cache().shard(
@@ -2151,44 +2284,19 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             }
         }
 
-        // Fetch the Git repository.
-        let fetch = self
-            .build_context
-            .git()
-            .fetch(
-                resource.git,
-                client.unmanaged.disable_ssl(resource.git.url()),
-                client.unmanaged.connectivity() == Connectivity::Offline,
-                self.build_context.cache().bucket(CacheBucket::Git),
-                self.reporter
-                    .clone()
-                    .map(|reporter| reporter.into_git_reporter()),
-            )
-            .await?;
-
-        // Validate that the subdirectory exists.
-        if let Some(subdirectory) = resource.subdirectory {
-            if !fetch.path().join(subdirectory).is_dir() {
-                return Err(Error::MissingSubdirectory(
-                    resource.url.to_url(),
-                    subdirectory.to_path_buf(),
-                ));
-            }
-        }
-
-        // Validate that LFS artifacts were fully initialized
-        if resource.git.lfs().enabled() && !fetch.lfs_ready() {
-            if GIT_LFS.is_err() {
-                return Err(Error::MissingSourceDistGitLfsArtifacts(
-                    resource.url.to_url(),
-                    GitError::GitLfsNotFound,
-                ));
-            }
-            return Err(Error::MissingSourceDistGitLfsArtifacts(
-                resource.url.to_url(),
-                GitError::GitLfsNotConfigured,
-            ));
-        }
+        let fetch = fetch_git_source_tree(
+            self.build_context.git(),
+            resource.git,
+            resource.url.to_url(),
+            resource.subdirectory,
+            client.unmanaged.disable_ssl(resource.git.url()),
+            client.unmanaged.connectivity(),
+            self.build_context.cache(),
+            self.reporter
+                .clone()
+                .map(|reporter| reporter.into_git_reporter()),
+        )
+        .await?;
 
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
         let cache_shard = self.build_context.cache().shard(
