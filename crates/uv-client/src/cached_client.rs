@@ -607,7 +607,7 @@ impl CachedClient {
         }
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip_all, fields(url = %DisplaySafeUrl::from_url(req.url().clone())))]
     async fn fresh_request(
         &self,
         req: Request,
