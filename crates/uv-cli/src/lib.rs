@@ -5270,6 +5270,12 @@ pub struct AuditArgs {
     pub python_platform: Option<TargetTriple>,
 
     /// The service format to use for vulnerability lookups.
+    ///
+    /// This composes with `--service-url` to determine how `uv audt` interacts
+    /// with vulnerability services. Every format has a default service, however
+    /// users can also pass `--service-url` to use a different service with
+    /// the same format, e.g. using OSV's API shape with an internally-hosted
+    /// database.
     #[arg(long, value_enum, default_value = "osv")]
     pub service_format: VulnerabilityServiceFormat,
 
