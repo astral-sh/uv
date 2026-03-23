@@ -5803,6 +5803,7 @@ name = "uv-audit"
 version = "0.0.32"
 dependencies = [
  "astral-reqwest-middleware",
+ "clap",
  "futures",
  "insta",
  "jiff",
@@ -6078,6 +6079,7 @@ dependencies = [
  "insta",
  "serde",
  "url",
+ "uv-audit",
  "uv-auth",
  "uv-cache",
  "uv-configuration",
