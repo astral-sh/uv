@@ -7731,9 +7731,9 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
     Ok(())
 }
 
-/// File URL dependencies with environment variable references (e.g.,
+/// File URL dependencies with `${PROJECT_ROOT}` (e.g.,
 /// `file:///${PROJECT_ROOT}/a`) should produce relative paths in the lockfile,
-/// since the user is parameterizing the path for portability.
+/// since the path is relative to the project root.
 ///
 /// See: <https://github.com/astral-sh/uv/pull/18176#issuecomment-4098666195>
 #[test]
