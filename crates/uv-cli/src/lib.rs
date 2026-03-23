@@ -5271,17 +5271,20 @@ pub struct AuditArgs {
 
     /// The service format to use for vulnerability lookups.
     ///
-    /// This composes with `--service-url` to determine how `uv audit` interacts
-    /// with vulnerability services. Every format has a default service, however
-    /// users can also pass `--service-url` to use a different service with
-    /// the same format, e.g. using OSV's API shape with an internally-hosted
-    /// database.
+    /// Each service format has a default URL, which can be
+    /// changed with `--service-url`. The defaults are:
+    ///
+    /// * OSV: https://osv.dev/
+    /// …
     #[arg(long, value_enum, default_value = "osv")]
     pub service_format: VulnerabilityServiceFormat,
 
-    /// The URL to use for the vulnerability service API.
+    /// The URL to vulnerability service API endpoint.
     ///
     /// If not provided, the default URL for the selected service will be used.
+    ///
+    /// The service needs to use the OSV protocol, unless a different
+    /// format was requested by `--service-format`.
     #[arg(long, value_hint = ValueHint::Url)]
     pub service_url: Option<String>,
 }
