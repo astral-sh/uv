@@ -19,7 +19,7 @@ use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 
 use anyhow::Result;
 use tracing::trace;
-use uv_audit::service::{VulnerabilityService, osv};
+use uv_audit::service::{VulnerabilityServiceFormat, osv};
 use uv_audit::types::{Dependency, Finding};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
@@ -51,7 +51,7 @@ pub(crate) async fn audit(
     cache: Cache,
     printer: Printer,
     preview: Preview,
-    service: VulnerabilityService,
+    service: VulnerabilityServiceFormat,
     service_url: Option<String>,
 ) -> Result<ExitStatus> {
     // Check if the audit feature is in preview
@@ -224,7 +224,7 @@ pub(crate) async fn audit(
     let base_client = client_builder.build();
     let all_findings = {
         match service {
-            VulnerabilityService::Osv => {
+            VulnerabilityServiceFormat::Osv => {
                 let osv_url = service_url
                     .as_deref()
                     .unwrap_or(osv::API_BASE)

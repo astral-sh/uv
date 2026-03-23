@@ -11,7 +11,7 @@ use clap::error::ErrorKind;
 use clap::{Args, Parser, Subcommand};
 use clap::{ValueEnum, ValueHint};
 
-use uv_audit::service::VulnerabilityService;
+use uv_audit::service::VulnerabilityServiceFormat;
 use uv_auth::Service;
 use uv_cache::CacheArgs;
 use uv_configuration::{
@@ -5271,7 +5271,7 @@ pub struct AuditArgs {
 
     /// The service to use for vulnerability lookups.
     #[arg(long, value_enum, default_value = "osv")]
-    pub service: VulnerabilityService,
+    pub service_format: VulnerabilityServiceFormat,
 
     /// The URL to use for the vulnerability service API.
     ///
