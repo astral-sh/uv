@@ -1409,7 +1409,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             ResolvedDistRef::InstallableRegistrySourceDist { sdist, .. } => sdist
                 .filename()
                 .unwrap_or(Cow::Borrowed("unknown filename")),
-            ResolvedDistRef::InstallableRegistryBuiltDist { wheel, .. } => wheel
+            ResolvedDistRef::InstallableRegistryBuiltDist {
+                wheel_index,
+                prioritized,
+            } => prioritized
+                .wheel_by_index(wheel_index)
                 .filename()
                 .unwrap_or(Cow::Borrowed("unknown filename")),
             ResolvedDistRef::Installed { .. } => Cow::Borrowed("installed"),
@@ -1615,7 +1619,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 ResolvedDistRef::InstallableRegistrySourceDist { sdist, .. } => sdist
                     .filename()
                     .unwrap_or(Cow::Borrowed("unknown filename")),
-                ResolvedDistRef::InstallableRegistryBuiltDist { wheel, .. } => wheel
+                ResolvedDistRef::InstallableRegistryBuiltDist {
+                    wheel_index,
+                    prioritized,
+                } => prioritized
+                    .wheel_by_index(wheel_index)
                     .filename()
                     .unwrap_or(Cow::Borrowed("unknown filename")),
                 ResolvedDistRef::Installed { .. } => Cow::Borrowed("installed"),
@@ -2682,9 +2690,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     | CompatibleDist::IncompatibleWheel { sdist, .. } => {
                         sdist.file.requires_python.as_ref()
                     }
-                    CompatibleDist::CompatibleWheel { wheel, .. } => {
-                        wheel.file.requires_python.as_ref()
-                    }
+                    CompatibleDist::CompatibleWheel {
+                        wheel_index,
+                        prioritized,
+                        ..
+                    } => prioritized
+                        .wheel_by_index(*wheel_index)
+                        .file
+                        .requires_python
+                        .as_ref(),
                 };
                 if let Some(requires_python) = requires_python.as_ref() {
                     if !python_requirement.target().is_contained_by(requires_python) {
@@ -3609,10 +3623,8 @@ impl<'a> From<ResolvedDistRef<'a>> for Request {
                 Self::Dist(Dist::Source(SourceDist::Registry(source)))
             }
             ResolvedDistRef::InstallableRegistryBuiltDist {
-                wheel: _,
                 wheel_index,
                 prioritized,
-                ..
             } => {
                 // This is okay because we're only here if the prioritized dist
                 // has at least one wheel, so this always succeeds.

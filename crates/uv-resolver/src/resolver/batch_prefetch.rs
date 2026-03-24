@@ -361,9 +361,18 @@ fn satisfies_python(dist: &CompatibleDist, python_requirement: &PythonRequiremen
                 }
             }
         }
-        CompatibleDist::CompatibleWheel { wheel, .. } => {
+        CompatibleDist::CompatibleWheel {
+            wheel_index,
+            prioritized,
+            ..
+        } => {
             // Wheels must meet the _target_ Python version.
-            if let Some(requires_python) = wheel.file.requires_python.as_ref() {
+            if let Some(requires_python) = prioritized
+                .wheel_by_index(*wheel_index)
+                .file
+                .requires_python
+                .as_ref()
+            {
                 if !python_requirement.target().is_contained_by(requires_python) {
                     return false;
                 }

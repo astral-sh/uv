@@ -867,22 +867,13 @@ impl Name for CompatibleDist<'_> {
     fn name(&self) -> &PackageName {
         match self {
             Self::InstalledDist(dist) => dist.name(),
-            Self::SourceDist {
-                sdist,
-                prioritized: _,
-            } => sdist.name(),
+            Self::SourceDist { sdist, .. } => sdist.name(),
             Self::CompatibleWheel {
-                wheel,
-                priority: _,
-                prioritized: _,
+                wheel_index,
+                prioritized,
                 ..
-            } => wheel.name(),
-            Self::IncompatibleWheel {
-                sdist,
-                wheel: _,
-                prioritized: _,
-                ..
-            } => sdist.name(),
+            } => prioritized.wheel_by_index(*wheel_index).name(),
+            Self::IncompatibleWheel { sdist, .. } => sdist.name(),
         }
     }
 }

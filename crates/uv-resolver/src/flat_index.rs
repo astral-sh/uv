@@ -9,12 +9,12 @@ use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
     File, HashComparison, HashPolicy, IncompatibleSource, IncompatibleWheel, IndexUrl,
-    PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility,
-    WheelCompatibility,
+    PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, RequiresPython,
+    SourceDistCompatibility, WheelCompatibility,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_platform_tags::{TagCompatibility, Tags};
+use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
 use uv_pypi_types::HashDigest;
 use uv_types::HashStrategy;
 
@@ -35,6 +35,7 @@ impl FlatIndex {
     pub fn from_entries(
         entries: FlatIndexEntries,
         tags: Option<&Tags>,
+        requires_python: Option<&RequiresPython>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
     ) -> Self {
@@ -46,6 +47,7 @@ impl FlatIndex {
                 entry.file,
                 entry.filename,
                 tags,
+                requires_python,
                 hasher,
                 build_options,
                 entry.index,
@@ -81,6 +83,7 @@ impl FlatDistributions {
     pub fn from_entries(
         entries: Vec<FlatIndexEntry>,
         tags: Option<&Tags>,
+        requires_python: Option<&RequiresPython>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
     ) -> Self {
@@ -90,6 +93,7 @@ impl FlatDistributions {
                 entry.file,
                 entry.filename,
                 tags,
+                requires_python,
                 hasher,
                 build_options,
                 entry.index,
@@ -114,12 +118,11 @@ impl FlatDistributions {
         file: File,
         filename: DistFilename,
         tags: Option<&Tags>,
+        requires_python: Option<&RequiresPython>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
         index: IndexUrl,
     ) {
-        // No `requires-python` here: for source distributions, we don't have that information;
-        // for wheels, we read it lazily only when selected.
         match filename {
             DistFilename::WheelFilename(filename) => {
                 let version = filename.version.clone();
@@ -128,6 +131,7 @@ impl FlatDistributions {
                     &filename,
                     file.hashes.as_slice(),
                     tags,
+                    requires_python,
                     hasher,
                     build_options,
                 );
@@ -205,6 +209,7 @@ impl FlatDistributions {
         filename: &WheelFilename,
         hashes: &[HashDigest],
         tags: Option<&Tags>,
+        requires_python: Option<&RequiresPython>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
     ) -> WheelCompatibility {
@@ -214,14 +219,24 @@ impl FlatDistributions {
         }
 
         // Determine a compatibility for the wheel based on tags.
-        let priority = match tags {
-            Some(tags) => match filename.compatibility(tags) {
+        let priority = if let Some(tags) = tags {
+            match filename.compatibility(tags) {
                 TagCompatibility::Incompatible(tag) => {
                     return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag));
                 }
                 TagCompatibility::Compatible(priority) => Some(priority),
-            },
-            None => None,
+            }
+        } else {
+            // Check if the wheel is compatible with the `requires-python` (i.e., the
+            // Python ABI tag is not less than the `requires-python` minimum version).
+            if let Some(requires_python) = requires_python {
+                if !requires_python.matches_wheel_tag(filename) {
+                    return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(
+                        IncompatibleTag::AbiPythonVersion,
+                    ));
+                }
+            }
+            None
         };
 
         // Check if hashes line up.

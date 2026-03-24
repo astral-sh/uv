@@ -51,7 +51,7 @@ fn transformers() -> Result<()> {
     if !cfg!(target_os = "linux") && std::env::var_os(EnvVars::CI).is_some() {
         return Ok(());
     }
-    lock_ecosystem_package("3.12", "transformers")
+    lock_ecosystem_package("3.11", "transformers")
 }
 
 // Source: https://github.com/konstin/warehouse/blob/baae127d90417104c8dee3fdd3855e2ba17aa428/pyproject.toml

@@ -193,6 +193,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                         MetadataFormat::Flat(metadata) => VersionMap::from_flat_metadata(
                             metadata,
                             self.tags.as_ref(),
+                            &self.requires_python,
                             &self.hasher,
                             self.build_options,
                         ),

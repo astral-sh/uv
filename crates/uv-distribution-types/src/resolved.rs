@@ -9,7 +9,7 @@ use uv_pypi_types::Yanked;
 use crate::{
     BuiltDist, Dist, DistributionId, DistributionMetadata, Identifier, IndexUrl, InstalledDist,
     Name, PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, ResourceId, SourceDist,
-    VersionOrUrlRef,
+    VersionOrUrlRef, WheelIndex,
 };
 
 /// A distribution that can be used for resolution and installation.
@@ -40,9 +40,7 @@ pub enum ResolvedDistRef<'a> {
     },
     InstallableRegistryBuiltDist {
         /// The selected wheel index in the prioritized distribution.
-        wheel_index: usize,
-        /// The wheel that should be used.
-        wheel: &'a RegistryBuiltWheel,
+        wheel_index: WheelIndex,
         /// The prioritized distribution that the wheel came from.
         prioritized: &'a PrioritizedDist,
     },
@@ -104,7 +102,7 @@ impl ResolvedDist {
     }
 }
 
-impl ResolvedDistRef<'_> {
+impl<'a> ResolvedDistRef<'a> {
     pub fn to_owned(&self) -> ResolvedDist {
         match self {
             Self::InstallableRegistrySourceDist { sdist, prioritized } => {
@@ -122,11 +120,10 @@ impl ResolvedDistRef<'_> {
                 }
             }
             Self::InstallableRegistryBuiltDist {
-                wheel,
                 wheel_index,
                 prioritized,
-                ..
             } => {
+                let wheel = prioritized.wheel_by_index(*wheel_index);
                 // This is okay because we're only here if the prioritized dist
                 // has at least one wheel, so this always succeeds.
                 let built = prioritized
@@ -147,8 +144,22 @@ impl ResolvedDistRef<'_> {
     pub fn index(&self) -> Option<&IndexUrl> {
         match self {
             Self::InstallableRegistrySourceDist { sdist, .. } => Some(&sdist.index),
-            Self::InstallableRegistryBuiltDist { wheel, .. } => Some(&wheel.index),
+            Self::InstallableRegistryBuiltDist {
+                wheel_index,
+                prioritized,
+            } => Some(&prioritized.wheel_by_index(*wheel_index).index),
             Self::Installed { .. } => None,
+        }
+    }
+
+    /// Returns the wheel, if this is a built distribution.
+    pub fn wheel(&self) -> Option<&'a RegistryBuiltWheel> {
+        match self {
+            Self::InstallableRegistryBuiltDist {
+                wheel_index,
+                prioritized,
+            } => Some(prioritized.wheel_by_index(*wheel_index)),
+            _ => None,
         }
     }
 }
@@ -157,7 +168,10 @@ impl Display for ResolvedDistRef<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::InstallableRegistrySourceDist { sdist, .. } => Display::fmt(sdist, f),
-            Self::InstallableRegistryBuiltDist { wheel, .. } => Display::fmt(wheel, f),
+            Self::InstallableRegistryBuiltDist {
+                wheel_index,
+                prioritized,
+            } => Display::fmt(prioritized.wheel_by_index(*wheel_index), f),
             Self::Installed { dist } => Display::fmt(dist, f),
         }
     }
@@ -167,7 +181,10 @@ impl Name for ResolvedDistRef<'_> {
     fn name(&self) -> &PackageName {
         match self {
             Self::InstallableRegistrySourceDist { sdist, .. } => sdist.name(),
-            Self::InstallableRegistryBuiltDist { wheel, .. } => wheel.name(),
+            Self::InstallableRegistryBuiltDist {
+                wheel_index,
+                prioritized,
+            } => prioritized.wheel_by_index(*wheel_index).name(),
             Self::Installed { dist } => dist.name(),
         }
     }
@@ -178,7 +195,10 @@ impl DistributionMetadata for ResolvedDistRef<'_> {
         match self {
             Self::Installed { dist } => VersionOrUrlRef::Version(dist.version()),
             Self::InstallableRegistrySourceDist { sdist, .. } => sdist.version_or_url(),
-            Self::InstallableRegistryBuiltDist { wheel, .. } => wheel.version_or_url(),
+            Self::InstallableRegistryBuiltDist {
+                wheel_index,
+                prioritized,
+            } => prioritized.wheel_by_index(*wheel_index).version_or_url(),
         }
     }
 }
@@ -188,7 +208,10 @@ impl Identifier for ResolvedDistRef<'_> {
         match self {
             Self::Installed { dist } => dist.distribution_id(),
             Self::InstallableRegistrySourceDist { sdist, .. } => sdist.distribution_id(),
-            Self::InstallableRegistryBuiltDist { wheel, .. } => wheel.distribution_id(),
+            Self::InstallableRegistryBuiltDist {
+                wheel_index,
+                prioritized,
+            } => prioritized.wheel_by_index(*wheel_index).distribution_id(),
         }
     }
 
@@ -196,7 +219,10 @@ impl Identifier for ResolvedDistRef<'_> {
         match self {
             Self::Installed { dist } => dist.resource_id(),
             Self::InstallableRegistrySourceDist { sdist, .. } => sdist.resource_id(),
-            Self::InstallableRegistryBuiltDist { wheel, .. } => wheel.resource_id(),
+            Self::InstallableRegistryBuiltDist {
+                wheel_index,
+                prioritized,
+            } => prioritized.wheel_by_index(*wheel_index).resource_id(),
         }
     }
 }
