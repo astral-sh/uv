@@ -2552,7 +2552,7 @@ fn install_git_private_https_pat_not_authorized() {
       × Failed to download and build `uv-private-pypackage @ git+https://git:****@github.com/astral-test/uv-private-pypackage`
       ├─▶ Git operation failed
       ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/8401f5508e3e612d
-      ╰─▶ process didn't exit successfully: `git fetch --force --update-head-ok 'https://git:***@github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
+      ╰─▶ process didn't exit successfully: `git fetch --force --update-head-ok '--filter=tree:0' 'https://git:***@github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
           --- stderr
           remote: Invalid username or token. Password authentication is not supported for Git operations.
           fatal: Authentication failed for 'https://github.com/astral-test/uv-private-pypackage/'
@@ -2633,9 +2633,9 @@ fn install_git_private_https_interactive() {
 
     let package = "uv-private-pypackage@ git+https://github.com/astral-test/uv-private-pypackage";
 
-    // The path to a git binary may be arbitrary, filter and replace
-    // The trailing space is load bearing, as to not match on false positives
-    let filters: Vec<_> = [("\\/([[:alnum:]]*\\/)*git ", "/usr/bin/git ")]
+    // The path to a git binary may be arbitrary, filter and replace.
+    // The trailing space is load bearing, as to not match on false positives.
+    let filters: Vec<_> = [("\\/([^[:space:]]*\\/)*git ", "/usr/bin/git ")]
         .into_iter()
         .chain(context.filters())
         .collect();
@@ -2650,7 +2650,7 @@ fn install_git_private_https_interactive() {
       × Failed to download and build `uv-private-pypackage @ git+https://github.com/astral-test/uv-private-pypackage`
       ├─▶ Git operation failed
       ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/8401f5508e3e612d
-      ╰─▶ process didn't exit successfully: `/usr/bin/git fetch --force --update-head-ok 'https://github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
+      ╰─▶ process didn't exit successfully: `/usr/bin/git fetch --force --update-head-ok '--filter=tree:0' 'https://github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
           --- stderr
           fatal: could not read Username for 'https://github.com': terminal prompts disabled
     ");

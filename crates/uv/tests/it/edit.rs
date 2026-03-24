@@ -681,14 +681,13 @@ fn add_git_lfs() -> Result<()> {
     let git_checkouts = git_cache.child("checkouts");
     let git_db = git_cache.child("db");
     let repo_url = RepositoryUrl::parse("https://github.com/astral-sh/test-lfs-repo")?;
-    let lfs_db_bucket_objects = git_db
-        .child(cache_digest(&repo_url))
-        .child(".git")
-        .child("lfs");
-    let ok_checkout_file = git_checkouts
+    let db_root = git_db.child(cache_digest(&repo_url));
+    let db_config = db_root.child(".git").child("config");
+    let checkout_root = git_checkouts
         .child(cache_digest(&repo_url.with_lfs(Some(true))))
-        .child("261c828")
-        .child(".ok");
+        .child("261c828");
+    let lfs_checkout_objects = checkout_root.child(".git").child("lfs");
+    let ok_checkout_file = checkout_root.child(".ok");
 
     uv_snapshot!(context.filters(), context.add()
         .arg("--no-cache")
@@ -838,11 +837,24 @@ fn add_git_lfs() -> Result<()> {
     ----- stderr -----
     ");
 
-    // Now let's delete some of the LFS entries from our db...
-    fs_err::remove_file(&ok_checkout_file)?;
-    fs_err::remove_dir_all(&lfs_db_bucket_objects)?;
+    // Simulate a shared Git database created by an older uv version that did not
+    // record promisor metadata for partial clones.
+    let db_config_contents = fs_err::read_to_string(&db_config)?;
+    let db_config_contents = db_config_contents
+        .lines()
+        .filter(|line| {
+            !line.contains("promisor = true") && !line.contains("partialclonefilter = tree:0")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    fs_err::write(&db_config, format!("{db_config_contents}\n"))?;
 
-    // Test LFS recovery from an incomplete db and non-fresh checkout
+    // Now let's delete some of the LFS entries from our checkout...
+    fs_err::remove_file(&ok_checkout_file)?;
+    fs_err::remove_dir_all(&lfs_checkout_objects)?;
+
+    // Test LFS recovery from an incomplete checkout and non-fresh checkout.
+    // This also exercises the legacy shared database fallback above.
     uv_snapshot!(context.filters(), context.add()
         .arg("git+https://github.com/astral-sh/test-lfs-repo")
         .arg("--rev").arg("261c828b8e05251f3a3e4f6b47b149d691c7efbb")
@@ -871,9 +883,9 @@ fn add_git_lfs() -> Result<()> {
     ----- stderr -----
     ");
 
-    // Verify our db and checkout recovered
+    // Verify our checkout recovered
     assert!(ok_checkout_file.exists());
-    assert!(lfs_db_bucket_objects.exists());
+    assert!(lfs_checkout_objects.exists());
 
     // Exercise the sdist cache
     uv_snapshot!(context.filters(), context.add()
