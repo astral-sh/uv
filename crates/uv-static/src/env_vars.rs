@@ -789,7 +789,7 @@ impl EnvVars {
     pub const KSH_VERSION: &'static str = "KSH_VERSION";
 
     /// Used to detect PowerShell usage (set by PowerShell on all platforms).
-    #[attr_added_in("next version")]
+    #[attr_added_in("0.10.0")]
     pub const PS_MODULE_PATH: &'static str = "PSModulePath";
 
     /// Used with `--python-platform macos` and related variants to set the
@@ -1260,7 +1260,7 @@ impl EnvVars {
 
     /// Equivalent to the `--directory` command-line argument. `UV_WORKING_DIRECTORY` (added in
     /// v0.9.1) is also supported for backwards compatibility.
-    #[attr_added_in("next version")]
+    #[attr_added_in("0.9.14")]
     pub const UV_WORKING_DIR: &'static str = "UV_WORKING_DIR";
 
     /// Equivalent to the `--directory` command-line argument.
