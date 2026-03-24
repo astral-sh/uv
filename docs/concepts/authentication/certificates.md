@@ -30,6 +30,12 @@ When using system certificates, certificate verification is performed by
 [`rustls-platform-verifier`](https://github.com/rustls/rustls-platform-verifier), which delegates to
 the operating system's certificate verifier.
 
+On Linux, the platform verifier discovers CA bundles from the filesystem (via `rustls-native-certs`
+/ `openssl-probe`). In minimal environments where the system CA bundle is absent (e.g., scratch
+containers), uv automatically merges the bundled Mozilla root certificates alongside the platform
+verifier to ensure basic connectivity. On macOS and Windows, the platform's built-in trust store is
+always available, so no additional roots are merged.
+
 ## Custom certificates
 
 To use custom CA certificates, set the

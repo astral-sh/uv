@@ -67,6 +67,8 @@ The following preview features are available:
 - `native-auth`: Enables storage of credentials in a
   [system-native location](../concepts/authentication/http.md#the-uv-credentials-store).
 - `workspace-metadata`: Allows using `uv workspace metadata`.
+- `system-certs-default`: Enables [system certificates](../concepts/authentication/certificates.md)
+  by default.
 - `workspace-dir`: Allows using `uv workspace dir`.
 - `workspace-list`: Allows using `uv workspace list`.
 
