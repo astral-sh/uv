@@ -100,8 +100,7 @@ it will be ignored.
 uv can also install into arbitrary, even non-virtual environments, with the `--python` option. For
 example, `uv pip install --python /path/to/python` will install into the environment linked to the
 `/path/to/python` interpreter regardless of whether or not it is a virtual environment. The
-`--python` option also accepts a path to the root directory of a virtual environment or the Python
-executable itself.
+`--python` option also accepts a path to the root directory of a virtual environment.
 
 For convenience, `uv pip install --system` will install into the system Python environment. Using
 `--system` is roughly equivalent to `uv pip install --python $(which python)`, but note that
