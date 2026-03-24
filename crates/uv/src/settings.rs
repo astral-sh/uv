@@ -287,6 +287,30 @@ impl NetworkSettings {
             Connectivity::Online
         };
 
+        if args.native_tls {
+            warn_user_once!(
+                "The `--native-tls` flag is deprecated and will be removed in a future release. Use `--system-certs` instead."
+            );
+        }
+        if args.no_native_tls {
+            warn_user_once!(
+                "The `--no-native-tls` flag is deprecated and will be removed in a future release. Use `--no-system-certs` instead."
+            );
+        }
+        if environment.native_tls.value.is_some() {
+            warn_user_once!(
+                "The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead."
+            );
+        }
+        if workspace
+            .and_then(|workspace| workspace.globals.native_tls)
+            .is_some()
+        {
+            warn_user_once!(
+                "The `native-tls` setting is deprecated and will be removed in a future release. Use `system-certs` instead."
+            );
+        }
+
         // Resolve whether to use system certificates.
         //
         // `--native-tls` is a legacy alias for `--system-certs` — it enables system certificates
