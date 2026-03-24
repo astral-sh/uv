@@ -1,12 +1,14 @@
 use core::fmt;
 use std::borrow::Cow;
 use std::cmp::{Ordering, Reverse};
+use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::io::{self, Write};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::sync::{Mutex, OnceLock};
 
 use fs_err as fs;
 use itertools::Itertools;
@@ -36,6 +38,8 @@ use crate::python_version::PythonVersion;
 use crate::{
     PythonInstallationMinorVersionKey, PythonRequest, PythonVariant, macos_dylib, sysconfig,
 };
+
+static FIND_ALL_CACHE: OnceLock<Mutex<HashMap<PathBuf, Vec<PathBuf>>>> = OnceLock::new();
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -201,25 +205,35 @@ impl ManagedPythonInstallations {
     pub fn find_all(
         &self,
     ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + use<>, Error> {
-        let dirs = match fs_err::read_dir(&self.root) {
-            Ok(installation_dirs) => {
-                // Collect sorted directory paths; `read_dir` is not stable across platforms
-                let directories: Vec<_> = installation_dirs
-                    .filter_map(|read_dir| match read_dir {
-                        Ok(entry) => match entry.file_type() {
-                            Ok(file_type) => file_type.is_dir().then_some(Ok(entry.path())),
+        let find_all_dirs_cache = FIND_ALL_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+        let mut find_all_dirs_cache = find_all_dirs_cache.lock().unwrap();
+
+        let dirs = if let Some(cached) = find_all_dirs_cache.get(&self.root) {
+            // Skip the `read_dir` call on subsequent invocations in-process
+            cached.clone()
+        } else {
+            let dirs = match fs_err::read_dir(&self.root) {
+                Ok(installation_dirs) => {
+                    // Collect sorted directory paths; `read_dir` is not stable across platforms
+                    let directories: Vec<_> = installation_dirs
+                        .filter_map(|read_dir| match read_dir {
+                            Ok(entry) => match entry.file_type() {
+                                Ok(file_type) => file_type.is_dir().then_some(Ok(entry.path())),
+                                Err(err) => Some(Err(err)),
+                            },
                             Err(err) => Some(Err(err)),
-                        },
-                        Err(err) => Some(Err(err)),
-                    })
-                    .collect::<Result<_, io::Error>>()
-                    .map_err(Error::ReadError)?;
-                directories
-            }
-            Err(err) if err.kind() == io::ErrorKind::NotFound => vec![],
-            Err(err) => {
-                return Err(Error::ReadError(err));
-            }
+                        })
+                        .collect::<Result<_, io::Error>>()
+                        .map_err(Error::ReadError)?;
+                    directories
+                }
+                Err(err) if err.kind() == io::ErrorKind::NotFound => vec![],
+                Err(err) => {
+                    return Err(Error::ReadError(err));
+                }
+            };
+            find_all_dirs_cache.insert(self.root.clone(), dirs.clone());
+            dirs
         };
         let scratch = self.scratch();
         Ok(dirs
