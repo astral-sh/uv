@@ -56,4 +56,5 @@ insta = { workspace = true }
 tempfile = { workspace = true }
 test-log = { workspace = true }
 tokio = { workspace = true }
+uv-preview = { workspace = true, features = ["testing"] }
 wiremock = { workspace = true }
