@@ -549,6 +549,8 @@ impl<'a> BaseClientBuilder<'a> {
             // CA bundles from the filesystem — these may be absent in minimal environments
             // (e.g., scratch containers). Merge the bundled Mozilla roots as a fallback so
             // that basic connectivity works even without a system CA bundle.
+            //
+            // See: https://github.com/rustls/rustls-platform-verifier/blob/f60951917d1e8069e0c22cae1125294b3f653423/README.md#L39-L41
             if cfg!(target_os = "linux") {
                 client_builder.tls_certs_merge(Certificates::webpki_roots().to_reqwest_certs())
             } else {
