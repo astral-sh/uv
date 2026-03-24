@@ -16,3 +16,4 @@
 - PREFER top-level imports over local imports or fully qualified names
 - AVOID shortening variable names, e.g., use `version` instead of `ver`, and `requires_python`
   instead of `rp`
+- PREFER [`TypeName`] references when writing Rust doc comments
