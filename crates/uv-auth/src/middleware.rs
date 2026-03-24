@@ -8,7 +8,7 @@ use reqwest_middleware::{ClientWithMiddleware, Error, Middleware, Next};
 use tokio::sync::Mutex;
 use tracing::{debug, trace, warn};
 
-use uv_preview::{Preview, PreviewFeature};
+use uv_preview::PreviewFeature;
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 use uv_warnings::owo_colors::OwoColorize;
@@ -172,7 +172,6 @@ pub struct AuthMiddleware {
     s3_credential_state: Mutex<S3CredentialState>,
     /// Cached GCS credentials to avoid running the credential helper multiple times.
     gcs_credential_state: Mutex<GcsCredentialState>,
-    preview: Preview,
 }
 
 impl Default for AuthMiddleware {
@@ -196,7 +195,6 @@ impl AuthMiddleware {
             pyx_token_state: Mutex::new(TokenState::Uninitialized),
             s3_credential_state: Mutex::new(S3CredentialState::Uninitialized),
             gcs_credential_state: Mutex::new(GcsCredentialState::Uninitialized),
-            preview: Preview::default(),
         }
     }
 
@@ -230,13 +228,6 @@ impl AuthMiddleware {
     #[must_use]
     pub fn with_keyring(mut self, keyring: Option<KeyringProvider>) -> Self {
         self.keyring = keyring;
-        self
-    }
-
-    /// Configure the [`Preview`] features to use.
-    #[must_use]
-    pub fn with_preview(mut self, preview: Preview) -> Self {
-        self.preview = preview;
         self
     }
 
@@ -706,7 +697,7 @@ impl AuthMiddleware {
             return Some(credentials);
         }
 
-        if S3EndpointProvider::is_s3_endpoint(url, self.preview) {
+        if S3EndpointProvider::is_s3_endpoint(url) {
             let mut s3_state = self.s3_credential_state.lock().await;
 
             // If the S3 credential state is uninitialized, initialize it.
@@ -728,7 +719,7 @@ impl AuthMiddleware {
             }
         }
 
-        if GcsEndpointProvider::is_gcs_endpoint(url, self.preview) {
+        if GcsEndpointProvider::is_gcs_endpoint(url) {
             let mut gcs_state = self.gcs_credential_state.lock().await;
 
             // If the GCS credential state is uninitialized, initialize it.
@@ -820,7 +811,7 @@ impl AuthMiddleware {
             debug!("Found credentials in plaintext store for {url}");
             Some(credentials)
         } else if let Some(credentials) = {
-            if self.preview.is_enabled(PreviewFeature::NativeAuth) {
+            if uv_preview::is_enabled(PreviewFeature::NativeAuth) {
                 let native_store = KeyringProvider::native();
                 let username = credentials.and_then(|credentials| credentials.username());
                 let display_username = if let Some(username) = username {
