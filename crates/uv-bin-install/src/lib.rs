@@ -857,66 +857,34 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::io::{Read, Write};
-    use std::net::TcpListener;
-    use std::sync::Arc;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::mpsc::{self, Sender};
-    use std::thread::JoinHandle;
-    use std::time::Duration;
+    use std::io::Write;
     use uv_client::{BaseClientBuilder, fetch_with_url_fallback, retryable_on_request_failure};
     use uv_redacted::DisplaySafeUrl;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
 
-    fn spawn_http_server(
-        response: String,
-    ) -> (DisplaySafeUrl, Arc<AtomicUsize>, Sender<()>, JoinHandle<()>) {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        listener.set_nonblocking(true).unwrap();
-        let addr = listener.local_addr().unwrap();
-        let requests = Arc::new(AtomicUsize::new(0));
-        let requests_clone = Arc::clone(&requests);
-        let (shutdown_tx, shutdown_rx) = mpsc::channel();
-        let handle = std::thread::spawn(move || {
-            loop {
-                if shutdown_rx.try_recv().is_ok() {
-                    return;
-                }
+    async fn spawn_manifest_server(response: ResponseTemplate) -> (DisplaySafeUrl, MockServer) {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/uv.ndjson"))
+            .respond_with(response)
+            .mount(&server)
+            .await;
 
-                match listener.accept() {
-                    Ok((mut stream, _)) => {
-                        requests_clone.fetch_add(1, Ordering::SeqCst);
-                        // Drain the request; we don't inspect it in these tests.
-                        let mut buf = [0u8; 4096];
-                        let _ = stream.read(&mut buf);
-                        stream.write_all(response.as_bytes()).unwrap();
-                        return;
-                    }
-                    Err(err) if err.kind() == io::ErrorKind::WouldBlock => {
-                        std::thread::sleep(Duration::from_millis(10));
-                    }
-                    Err(err) => panic!("failed to accept connection: {err}"),
-                }
-            }
-        });
         (
-            DisplaySafeUrl::parse(&format!("http://{addr}/uv.ndjson")).unwrap(),
-            requests,
-            shutdown_tx,
-            handle,
+            DisplaySafeUrl::parse(&format!("{}/uv.ndjson", server.uri())).unwrap(),
+            server,
         )
     }
 
-    fn manifest_response(body: &str) -> String {
-        format!(
-            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: application/x-ndjson\r\n\r\n{body}",
-            body.len()
-        )
+    fn manifest_response(body: &str) -> ResponseTemplate {
+        ResponseTemplate::new(200).set_body_raw(body.to_owned(), "application/x-ndjson")
     }
 
-    fn not_found_response() -> String {
-        "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n".to_string()
+    fn not_found_response() -> ResponseTemplate {
+        ResponseTemplate::new(404)
     }
 
     fn uv_manifest_line(version: &str, platform: &str) -> String {
@@ -976,66 +944,53 @@ mod tests {
     async fn test_manifest_falls_back_on_404() {
         let platform = Platform::from_env().unwrap();
         let platform_name = platform.as_cargo_dist_triple();
-        let (mirror_url, mirror_requests, mirror_shutdown, mirror_handle) =
-            spawn_http_server(not_found_response());
-        let (canonical_url, canonical_requests, canonical_shutdown, canonical_handle) =
-            spawn_http_server(manifest_response(&uv_manifest_line(
-                "1.2.3",
-                &platform_name,
-            )));
+        let (mirror_url, mirror_server) = spawn_manifest_server(not_found_response()).await;
+        let (canonical_url, canonical_server) = spawn_manifest_server(manifest_response(
+            &uv_manifest_line("1.2.3", &platform_name),
+        ))
+        .await;
 
         let resolved = resolve_version_from_manifest_urls(&[mirror_url, canonical_url], None)
             .await
             .expect("404 from mirror should fall back to canonical manifest");
 
-        let _ = mirror_shutdown.send(());
-        let _ = canonical_shutdown.send(());
-        mirror_handle.join().unwrap();
-        canonical_handle.join().unwrap();
-
         assert_eq!(resolved.version, Version::new([1, 2, 3]));
-        assert_eq!(mirror_requests.load(Ordering::SeqCst), 1);
-        assert_eq!(canonical_requests.load(Ordering::SeqCst), 1);
+        assert_eq!(mirror_server.received_requests().await.unwrap().len(), 1);
+        assert_eq!(canonical_server.received_requests().await.unwrap().len(), 1);
     }
 
     #[tokio::test]
     async fn test_manifest_falls_back_on_parse_error() {
         let platform = Platform::from_env().unwrap();
         let platform_name = platform.as_cargo_dist_triple();
-        let (mirror_url, mirror_requests, mirror_shutdown, mirror_handle) =
-            spawn_http_server(manifest_response("{not json}\n"));
-        let (canonical_url, canonical_requests, canonical_shutdown, canonical_handle) =
-            spawn_http_server(manifest_response(&uv_manifest_line(
-                "1.2.3",
-                &platform_name,
-            )));
+        let (mirror_url, mirror_server) =
+            spawn_manifest_server(manifest_response("{not json}\n")).await;
+        let (canonical_url, canonical_server) = spawn_manifest_server(manifest_response(
+            &uv_manifest_line("1.2.3", &platform_name),
+        ))
+        .await;
 
         let resolved = resolve_version_from_manifest_urls(&[mirror_url, canonical_url], None)
             .await
             .expect("parse failure from mirror should fall back to canonical manifest");
 
-        let _ = mirror_shutdown.send(());
-        let _ = canonical_shutdown.send(());
-        mirror_handle.join().unwrap();
-        canonical_handle.join().unwrap();
-
         assert_eq!(resolved.version, Version::new([1, 2, 3]));
-        assert_eq!(mirror_requests.load(Ordering::SeqCst), 1);
-        assert_eq!(canonical_requests.load(Ordering::SeqCst), 1);
+        assert_eq!(mirror_server.received_requests().await.unwrap().len(), 1);
+        assert_eq!(canonical_server.received_requests().await.unwrap().len(), 1);
     }
 
     #[tokio::test]
     async fn test_manifest_no_matching_version_does_not_fallback() {
         let platform = Platform::from_env().unwrap();
         let platform_name = platform.as_cargo_dist_triple();
-        let (mirror_url, mirror_requests, mirror_shutdown, mirror_handle) = spawn_http_server(
-            manifest_response(&uv_manifest_line("1.2.3", &platform_name)),
-        );
-        let (canonical_url, canonical_requests, canonical_shutdown, canonical_handle) =
-            spawn_http_server(manifest_response(&uv_manifest_line(
-                "9.9.9",
-                &platform_name,
-            )));
+        let (mirror_url, mirror_server) = spawn_manifest_server(manifest_response(
+            &uv_manifest_line("1.2.3", &platform_name),
+        ))
+        .await;
+        let (canonical_url, canonical_server) = spawn_manifest_server(manifest_response(
+            &uv_manifest_line("9.9.9", &platform_name),
+        ))
+        .await;
         let constraints =
             VersionSpecifiers::from(VersionSpecifier::equals_version(Version::new([9, 9, 9])));
 
@@ -1044,14 +999,9 @@ mod tests {
                 .await
                 .expect_err("no matching version should not fall back to canonical manifest");
 
-        let _ = mirror_shutdown.send(());
-        let _ = canonical_shutdown.send(());
-        mirror_handle.join().unwrap();
-        canonical_handle.join().unwrap();
-
         assert!(matches!(err, Error::NoMatchingVersion { .. }));
-        assert_eq!(mirror_requests.load(Ordering::SeqCst), 1);
-        assert_eq!(canonical_requests.load(Ordering::SeqCst), 0);
+        assert_eq!(mirror_server.received_requests().await.unwrap().len(), 1);
+        assert_eq!(canonical_server.received_requests().await.unwrap().len(), 0);
     }
 
     /// Verify that `should_try_next_url` returns `true` even for streaming errors
@@ -1063,7 +1013,7 @@ mod tests {
     async fn test_non_retryable_stream_error_triggers_url_fallback() {
         use futures::TryStreamExt;
 
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
 
         std::thread::spawn(move || {
