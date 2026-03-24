@@ -9427,6 +9427,10 @@ fn system_certs_config_aliases() -> anyhow::Result<()> {
 /// Verify that `--preview-features system-certs-default` enables system certificates by default,
 /// and that explicit CLI flags still override it.
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
 fn system_certs_default_preview_feature() {
     let context = uv_test::test_context!("3.12");
 
