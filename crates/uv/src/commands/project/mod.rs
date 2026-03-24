@@ -1217,14 +1217,8 @@ impl WorkspacePython {
         } else {
             // (3) `requires-python` in `pyproject.toml`
             let request = requires_python
-                .as_ref()
-                .map(RequiresPython::specifiers)
-                .map(|specifiers| {
-                    PythonRequest::Version(VersionRequest::Range(
-                        specifiers.clone(),
-                        PythonVariant::Default,
-                    ))
-                });
+                .clone()
+                .and_then(PythonRequest::from_requires_python);
             let source = PythonRequestSource::RequiresPython;
             (source, request)
         };
@@ -1318,7 +1312,7 @@ impl ScriptPython {
             )
         } else if let Some(specifiers) = script.metadata().requires_python.as_ref() {
             // (3) `requires-python` from script metadata
-            let request = PythonRequest::Version(VersionRequest::Range(
+            let request = PythonRequest::Version(VersionRequest::from_specifiers(
                 specifiers.clone(),
                 PythonVariant::Default,
             ));
@@ -1326,14 +1320,8 @@ impl ScriptPython {
         } else {
             // (4) `requires-python` from workspace `pyproject.toml`
             let request = workspace_requires_python
-                .as_ref()
-                .map(RequiresPython::specifiers)
-                .map(|specifiers| {
-                    PythonRequest::Version(VersionRequest::Range(
-                        specifiers.clone(),
-                        PythonVariant::Default,
-                    ))
-                });
+                .clone()
+                .and_then(PythonRequest::from_requires_python);
             (PythonRequestSource::RequiresPython, request)
         };
 
