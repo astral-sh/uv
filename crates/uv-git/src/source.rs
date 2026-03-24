@@ -14,7 +14,7 @@ use uv_git_types::{GitOid, GitReference, GitUrl};
 use uv_redacted::DisplaySafeUrl;
 
 use crate::GIT_STORE;
-use crate::git::{GitDatabase, GitRemote};
+use crate::git::GitRemote;
 
 /// A remote Git source that can be checked out locally.
 pub struct GitSource {
@@ -62,7 +62,7 @@ impl GitSource {
 
     /// Fetch the underlying Git repository at the given revision.
     #[instrument(skip(self), fields(repository = %self.git.repository(), rev = ?self.git.precise()))]
-    pub fn fetch(self) -> Result<Fetch> {
+    pub async fn fetch(self) -> Result<Fetch> {
         let lfs_requested = self.git.lfs().enabled();
 
         // Compute the canonical URL for the repository.
@@ -79,25 +79,26 @@ impl GitSource {
             Cow::Borrowed(self.git.repository())
         };
 
-        // Fetch the commit, if we don't already have it. Wrapping this section in a closure makes
-        // it easier to short-circuit this in the cases where we do have the commit.
-        let (db, actual_rev, maybe_task) = || -> Result<(GitDatabase, GitOid, Option<usize>)> {
-            let git_remote = GitRemote::new(&remote);
-            let maybe_db = git_remote.db_at(&db_path).ok();
+        // Fetch the commit, if we don't already have it.
+        let git_remote = GitRemote::new(&remote);
+        let maybe_db = git_remote.db_at(&db_path).await.ok();
 
+        let (db, actual_rev, maybe_task) = 'fetch: {
             // If we have a locked revision, and we have a pre-existing database which has that
             // revision, then no update needs to happen.
             // When requested, we also check if LFS artifacts have been fetched and validated.
             if let (Some(rev), Some(db)) = (self.git.precise(), &maybe_db) {
-                if db.contains(rev) && (!lfs_requested || db.contains_lfs_artifacts(rev)) {
+                if db.contains(rev).await
+                    && (!lfs_requested || db.contains_lfs_artifacts(rev).await)
+                {
                     debug!("Using existing Git source `{}`", self.git.repository());
-                    return Ok((
+                    break 'fetch (
                         maybe_db
                             .unwrap()
                             .with_lfs_ready(lfs_requested.then_some(true)),
                         rev,
                         None,
-                    ));
+                    );
                 }
             }
 
@@ -108,16 +109,18 @@ impl GitSource {
             if let Some(db) = &maybe_db {
                 if let GitReference::BranchOrTagOrCommit(maybe_commit) = self.git.reference() {
                     if let Ok(oid) = maybe_commit.parse::<GitOid>() {
-                        if db.contains(oid) && (!lfs_requested || db.contains_lfs_artifacts(oid)) {
+                        if db.contains(oid).await
+                            && (!lfs_requested || db.contains_lfs_artifacts(oid).await)
+                        {
                             // This reference is an exact commit. Treat it like it's locked.
                             debug!("Using existing Git source `{}`", self.git.repository());
-                            return Ok((
+                            break 'fetch (
                                 maybe_db
                                     .unwrap()
                                     .with_lfs_ready(lfs_requested.then_some(true)),
                                 oid,
                                 None,
-                            ));
+                            );
                         }
                     }
                 }
@@ -133,22 +136,24 @@ impl GitSource {
                 reporter.on_checkout_start(git_remote.url(), self.git.reference().as_rev())
             });
 
-            let (db, actual_rev) = git_remote.checkout(
-                &db_path,
-                maybe_db,
-                self.git.reference(),
-                self.git.precise(),
-                self.disable_ssl,
-                self.offline,
-                lfs_requested,
-            )?;
+            let (db, actual_rev) = git_remote
+                .checkout(
+                    &db_path,
+                    maybe_db,
+                    self.git.reference(),
+                    self.git.precise(),
+                    self.disable_ssl,
+                    self.offline,
+                    lfs_requested,
+                )
+                .await?;
 
-            Ok((db, actual_rev, task))
-        }()?;
+            (db, actual_rev, task)
+        };
 
         // Don’t use the full hash, in order to contribute less to reaching the
         // path length limit on Windows.
-        let short_id = db.to_short_id(actual_rev)?;
+        let short_id = db.to_short_id(actual_rev).await?;
 
         // Compute the canonical URL for the repository checkout.
         let canonical = canonical.with_lfs(Some(lfs_requested));
@@ -168,7 +173,7 @@ impl GitSource {
         // Check out `actual_rev` from the database to a scoped location on the
         // filesystem. This will use hard links and such to ideally make the
         // checkout operation here pretty fast.
-        let checkout = db.copy_to(actual_rev, &checkout_path)?;
+        let checkout = db.copy_to(actual_rev, &checkout_path).await?;
 
         // Report the checkout operation to the reporter.
         if let Some(task) = maybe_task {
