@@ -265,6 +265,37 @@ impl ExcludeNewerValue {
     pub fn new(timestamp: Timestamp, span: Option<ExcludeNewerSpan>) -> Self {
         Self { timestamp, span }
     }
+
+    /// If this value was derived from a relative span, recompute the timestamp relative to `now`.
+    ///
+    /// Returns `self` unchanged if there is no span (i.e., the timestamp is absolute).
+    #[must_use]
+    pub fn recompute(self) -> Self {
+        let Some(span) = self.span else {
+            return self;
+        };
+
+        let now = if let Ok(test_time) = std::env::var("UV_TEST_CURRENT_TIMESTAMP") {
+            test_time
+                .parse::<Timestamp>()
+                .expect("UV_TEST_CURRENT_TIMESTAMP must be a valid RFC 3339 timestamp")
+                .to_zoned(TimeZone::UTC)
+        } else {
+            Timestamp::now().to_zoned(TimeZone::UTC)
+        };
+
+        let Ok(cutoff) = now.checked_sub(span.0.abs()) else {
+            return Self {
+                timestamp: self.timestamp,
+                span: Some(span),
+            };
+        };
+
+        Self {
+            timestamp: cutoff.into(),
+            span: Some(span),
+        }
+    }
 }
 
 impl From<Timestamp> for ExcludeNewerValue {
@@ -441,6 +472,17 @@ pub enum PackageExcludeNewer {
     Disabled,
     /// Enable exclude-newer with this cutoff for this package.
     Enabled(Box<ExcludeNewerValue>),
+}
+
+impl PackageExcludeNewer {
+    /// Recompute the relative span timestamp relative to the current time, if applicable.
+    #[must_use]
+    pub fn recompute(self) -> Self {
+        match self {
+            Self::Disabled => Self::Disabled,
+            Self::Enabled(value) => Self::Enabled(Box::new((*value).recompute())),
+        }
+    }
 }
 
 #[cfg(feature = "schemars")]
@@ -665,6 +707,17 @@ impl ExcludeNewerPackage {
         self.0.is_empty()
     }
 
+    /// Recompute all relative span timestamps relative to the current time.
+    #[must_use]
+    pub fn recompute(self) -> Self {
+        Self(
+            self.0
+                .into_iter()
+                .map(|(name, setting)| (name, setting.recompute()))
+                .collect(),
+        )
+    }
+
     pub fn compare(&self, other: &Self) -> Option<ExcludeNewerPackageChange> {
         for (package, setting) in self {
             match (setting, other.get(package)) {
@@ -772,6 +825,17 @@ impl ExcludeNewer {
     /// Returns true if this has any configuration (global or per-package).
     pub fn is_empty(&self) -> bool {
         self.global.is_none() && self.package.is_empty()
+    }
+
+    /// Recompute all relative span timestamps relative to the current time.
+    ///
+    /// For values with an absolute timestamp (no span), the timestamp is unchanged.
+    #[must_use]
+    pub fn recompute(self) -> Self {
+        Self {
+            global: self.global.map(ExcludeNewerValue::recompute),
+            package: self.package.recompute(),
+        }
     }
 
     pub fn compare(&self, other: &Self) -> Option<ExcludeNewerChange> {
