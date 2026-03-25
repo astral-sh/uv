@@ -16,7 +16,10 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_configuration::{Concurrency, Constraints, GitLfsSetting, TargetTriple};
+use uv_configuration::{
+    BuildOptions, Concurrency, Constraints, DependencyGroupsWithDefaults,
+    ExtrasSpecificationWithDefaults, GitLfsSetting, InstallOptions, TargetTriple,
+};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::InstalledDist;
 use uv_distribution_types::{
@@ -29,7 +32,7 @@ use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_python::PythonVersionFile;
 use uv_python::VersionFileDiscoveryOptions;
 use uv_python::{
@@ -37,6 +40,7 @@ use uv_python::{
     PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
+use uv_resolver::Installable;
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_shell::runnable::WindowsRunnable;
 use uv_static::EnvVars;
@@ -54,11 +58,12 @@ use crate::commands::pip::loggers::{
 };
 use crate::commands::pip::operations;
 use crate::commands::project::{
-    EnvironmentSpecification, PlatformState, ProjectError, resolve_names,
+    EnvironmentSpecification, PlatformState, ProjectError, resolve_names, sync_environment,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::{
-    infer_python_request_from_requirement, matching_packages, refine_interpreter,
+    ToolInstallTarget, infer_python_request_from_requirement, matching_packages, read_tool_lock,
+    refine_interpreter, resolve_tool_source_path,
 };
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, project::environment::CachedEnvironment};
@@ -108,6 +113,7 @@ pub(crate) async fn run(
     overrides: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
     show_resolution: bool,
+    locked: bool,
     lfs: GitLfsSetting,
     python: Option<String>,
     python_platform: Option<TargetTriple>,
@@ -137,6 +143,17 @@ pub(crate) async fn run(
     if settings.resolver.torch_backend.is_some() {
         warn_user_once!(
             "The `--torch-backend` option is experimental and may change without warning."
+        );
+    }
+
+    if locked {
+        if !preview.is_enabled(PreviewFeature::LockedTool) {
+            bail!(
+                "`--locked` for tool commands is a preview feature; use `--preview` or set `UV_PREVIEW=1` to enable it"
+            );
+        }
+        warn_user_once!(
+            "The `--locked` option for tool commands is experimental and may change without warning."
         );
     }
 
@@ -295,6 +312,7 @@ pub(crate) async fn run(
         overrides,
         build_constraints,
         show_resolution,
+        locked,
         python.as_deref(),
         python_platform,
         install_mirrors,
@@ -721,6 +739,7 @@ impl std::fmt::Display for ToolRequirement {
 ///
 /// If the target tool is already installed in a compatible environment, returns that
 /// [`PythonEnvironment`]. Otherwise, gets or creates a [`CachedEnvironment`].
+#[expect(clippy::fn_params_excessive_bools)]
 async fn get_or_create_environment(
     request: &ToolRequest<'_>,
     with: &[RequirementsSource],
@@ -728,6 +747,7 @@ async fn get_or_create_environment(
     overrides: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
     show_resolution: bool,
+    locked: bool,
     python: Option<&str>,
     python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
@@ -1191,6 +1211,84 @@ async fn get_or_create_environment(
 
     // TODO(zanieb): When implementing project-level tools, discover the project and check if it has the tool.
     // TODO(zanieb): Determine if we should layer on top of the project environment if it is present.
+
+    // If `--locked` was requested, resolve from the tool's lockfile instead of re-resolving.
+    if locked {
+        if let ToolRequirement::Package { requirement, .. } = &from {
+            let source_path = resolve_tool_source_path(
+                requirement,
+                state.git(),
+                client_builder,
+                cache,
+            )
+            .await
+            .ok_or_else(|| {
+                ProjectError::Anyhow(anyhow::anyhow!(
+                    "`--locked` requires a tool from a source tree (e.g., a Git repository or local directory), but `{}` is not a source tree",
+                    requirement.name.cyan()
+                ))
+            })?;
+
+            let lock = read_tool_lock(&source_path)?.ok_or_else(|| {
+                ProjectError::Anyhow(anyhow::anyhow!(
+                    "`--locked` requires a `uv.lock` file in the tool's source tree at `{}`, but none was found",
+                    source_path.display()
+                ))
+            })?;
+
+            // Determine the markers and tags for the resolution.
+            let markers = pip::resolution_markers(None, python_platform.as_ref(), &interpreter);
+            let tags = pip::resolution_tags(None, python_platform.as_ref(), &interpreter)?;
+
+            // Create a resolution from the lockfile.
+            let target = ToolInstallTarget::new(&source_path, &lock, &requirement.name);
+            let resolution = target.to_resolution(
+                &markers,
+                &tags,
+                &ExtrasSpecificationWithDefaults::none(),
+                &DependencyGroupsWithDefaults::none(),
+                &BuildOptions::default(),
+                &InstallOptions::default(),
+            )?;
+
+            // Create an environment to sync the locked resolution into.
+            // We use `keep()` to prevent the temp directory from being cleaned up,
+            // since the spawned tool process needs access to the environment.
+            let temp_dir = cache.venv_dir()?;
+            let env_path = temp_dir.keep();
+            let venv = uv_virtualenv::create_venv(
+                &env_path,
+                interpreter,
+                uv_virtualenv::Prompt::None,
+                false,
+                uv_virtualenv::OnExisting::Remove(
+                    uv_virtualenv::RemovalReason::TemporaryEnvironment,
+                ),
+                true,
+                false,
+                false,
+            )?;
+
+            let environment = sync_environment(
+                venv,
+                &resolution,
+                operations::Modifications::Exact,
+                build_constraints,
+                settings.into(),
+                client_builder,
+                &state,
+                Box::new(DefaultInstallLogger),
+                installer_metadata,
+                concurrency,
+                cache,
+                printer,
+                preview,
+            )
+            .await?;
+
+            return Ok((from, environment));
+        }
+    }
 
     let result = CachedEnvironment::from_spec(
         spec.clone(),

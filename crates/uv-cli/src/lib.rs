@@ -5607,6 +5607,16 @@ pub struct ToolRunArgs {
     #[arg(long, value_enum, env = EnvVars::UV_TORCH_BACKEND)]
     pub torch_backend: Option<TorchMode>,
 
+    /// Use the lockfile from the tool's source (e.g., `uv.lock`) for reproducible resolution.
+    ///
+    /// When provided and the tool is from a source tree (e.g., a Git repository or local
+    /// directory), uv will use the `uv.lock` file in the source tree to resolve the tool's
+    /// dependencies, rather than re-resolving from the `pyproject.toml`.
+    ///
+    /// This option is in preview and may change in any future release.
+    #[arg(long)]
+    pub locked: bool,
+
     #[arg(long, hide = true)]
     pub generate_shell_completion: Option<clap_complete_command::Shell>,
 }
@@ -5799,6 +5809,16 @@ pub struct ToolInstallArgs {
     /// This option is in preview and may change in any future release.
     #[arg(long, value_enum, env = EnvVars::UV_TORCH_BACKEND)]
     pub torch_backend: Option<TorchMode>,
+
+    /// Use the lockfile from the tool's source (e.g., `uv.lock`) for reproducible resolution.
+    ///
+    /// When provided and the tool is from a source tree (e.g., a Git repository or local
+    /// directory), uv will use the `uv.lock` file in the source tree to resolve the tool's
+    /// dependencies, rather than re-resolving from the `pyproject.toml`.
+    ///
+    /// This option is in preview and may change in any future release.
+    #[arg(long)]
+    pub locked: bool,
 }
 
 #[derive(Args)]

@@ -1,14 +1,14 @@
+use std::collections::{BTreeSet, Bound};
+use std::ffi::OsString;
+use std::fmt::Write;
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
+
 use anyhow::{Context, bail};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use std::{
-    collections::{BTreeSet, Bound},
-    ffi::OsString,
-    fmt::Write,
-    path::Path,
-    str::FromStr,
-};
 use tracing::{debug, warn};
+
 use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::GitLfsSetting;
@@ -28,6 +28,7 @@ use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVariant, VersionRequest,
 };
+use uv_resolver::{Installable, Lock, LockVersion, VERSION};
 use uv_settings::{PythonInstallMirrors, ToolOptions};
 use uv_shell::Shell;
 use uv_tool::{InstalledTools, Tool, ToolEntrypoint, entrypoint_paths};
@@ -508,6 +509,136 @@ fn hint_executable_from_dependency(
     }
 
     Ok(())
+}
+
+/// A target for installing a tool from its lockfile.
+///
+/// Implements [`Installable`] to convert the tool's `uv.lock` into a [`Resolution`].
+pub(crate) struct ToolInstallTarget<'lock> {
+    /// The path to the tool's source tree (workspace root).
+    install_path: &'lock Path,
+    /// The parsed lockfile.
+    lock: &'lock Lock,
+    /// The name of the tool package (the root).
+    name: &'lock PackageName,
+}
+
+impl<'lock> ToolInstallTarget<'lock> {
+    pub(crate) fn new(
+        install_path: &'lock Path,
+        lock: &'lock Lock,
+        name: &'lock PackageName,
+    ) -> Self {
+        Self {
+            install_path,
+            lock,
+            name,
+        }
+    }
+}
+
+impl<'lock> Installable<'lock> for ToolInstallTarget<'lock> {
+    fn install_path(&self) -> &'lock Path {
+        self.install_path
+    }
+
+    fn lock(&self) -> &'lock Lock {
+        self.lock
+    }
+
+    fn roots(&self) -> impl Iterator<Item = &PackageName> {
+        std::iter::once(self.name)
+    }
+
+    fn project_name(&self) -> Option<&PackageName> {
+        Some(self.name)
+    }
+}
+
+/// Read a `uv.lock` file from a tool's source tree.
+///
+/// Returns `Ok(Some((lock, path)))` if a valid lockfile exists, `Ok(None)` if no lockfile exists,
+/// or an error if the lockfile is malformed or incompatible.
+pub(crate) fn read_tool_lock(source_root: &Path) -> Result<Option<Lock>, ProjectError> {
+    let lock_path = source_root.join("uv.lock");
+    let encoded = match fs_err::read_to_string(&lock_path) {
+        Ok(encoded) => encoded,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => return Err(err.into()),
+    };
+    match toml::from_str::<Lock>(&encoded) {
+        Ok(lock) => {
+            if lock.version() != VERSION {
+                return Err(ProjectError::UnsupportedLockVersion(
+                    VERSION,
+                    lock.version(),
+                ));
+            }
+            Ok(Some(lock))
+        }
+        Err(err) => {
+            // If we failed to parse the lockfile, determine whether it's a supported version.
+            if let Ok(lock) = toml::from_str::<LockVersion>(&encoded) {
+                if lock.version() != VERSION {
+                    return Err(ProjectError::UnparsableLockVersion(
+                        VERSION,
+                        lock.version(),
+                        err,
+                    ));
+                }
+            }
+            Err(ProjectError::UvLockParse(err))
+        }
+    }
+}
+
+/// Resolve the source tree path for a tool requirement.
+///
+/// For `Directory` sources, returns the `install_path` directly.
+/// For `Git` sources, fetches the repository and returns the checkout path.
+/// Returns `None` for other source types (e.g., registry).
+pub(crate) async fn resolve_tool_source_path(
+    requirement: &Requirement,
+    git_resolver: &GitResolver,
+    client_builder: &BaseClientBuilder<'_>,
+    cache: &Cache,
+) -> Option<PathBuf> {
+    match &requirement.source {
+        RequirementSource::Directory { install_path, .. } => Some(install_path.to_path_buf()),
+        RequirementSource::Git {
+            git, subdirectory, ..
+        } => {
+            let client = client_builder.build();
+            let fetch = match git_resolver
+                .fetch(
+                    git,
+                    client.disable_ssl(git.repository()),
+                    client.connectivity() == Connectivity::Offline,
+                    cache.bucket(CacheBucket::Git),
+                    None,
+                )
+                .await
+            {
+                Ok(fetch) => fetch,
+                Err(err) => {
+                    debug!(
+                        "Failed to fetch git source for locked tool (`{}`): {err}",
+                        requirement.name
+                    );
+                    return None;
+                }
+            };
+
+            let source_path = if let Some(subdirectory) = subdirectory {
+                fetch.path().join(subdirectory)
+            } else {
+                fetch.path().to_path_buf()
+            };
+
+            Some(source_path)
+        }
+        _ => None,
+    }
 }
 
 #[cfg(test)]

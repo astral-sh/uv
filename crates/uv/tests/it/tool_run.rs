@@ -3776,3 +3776,123 @@ async fn tool_run_latest_keyring_auth() {
     Installed 1 executable: app
     ");
 }
+
+/// Test `--locked` requires the preview feature.
+#[test]
+fn tool_run_locked_requires_preview() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let foo_dir = context.temp_dir.child("foo");
+    foo_dir.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo.main:run"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#
+    })?;
+
+    let foo_module = foo_dir.child("src").child("foo");
+    foo_module.child("__init__.py").write_str("")?;
+    foo_module.child("main.py").write_str(indoc! { r#"
+        def run():
+            print("hello")
+        "#
+    })?;
+
+    // Attempting `--locked` without preview should fail.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg(foo_dir.as_os_str())
+        .arg("--locked")
+        .arg("foo")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `--locked` for tool commands is a preview feature; use `--preview` or set `UV_PREVIEW=1` to enable it
+    ");
+
+    Ok(())
+}
+
+/// Test `--locked` runs from a local directory with a lockfile.
+#[test]
+fn tool_run_locked_from_directory() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let foo_dir = context.temp_dir.child("foo");
+    foo_dir.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [project.scripts]
+        foo = "foo.main:run"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#
+    })?;
+
+    let foo_module = foo_dir.child("src").child("foo");
+    foo_module.child("__init__.py").write_str("")?;
+    foo_module.child("main.py").write_str(indoc! { r#"
+        def run():
+            print("hello")
+        "#
+    })?;
+
+    // Lock the project first.
+    context
+        .lock()
+        .current_dir(foo_dir.path())
+        .assert()
+        .success();
+
+    // Run with `--locked --preview`.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg(foo_dir.as_os_str())
+        .arg("--locked")
+        .arg("--preview")
+        .arg("foo")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    hello
+
+    ----- stderr -----
+    warning: The `--locked` option for tool commands is experimental and may change without warning.
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}

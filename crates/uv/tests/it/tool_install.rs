@@ -5022,3 +5022,217 @@ fn tool_install_removed_python() {
     Installed 2 executables: black, blackd
     ");
 }
+
+/// Test `--locked` requires the preview feature.
+#[test]
+fn tool_install_locked_requires_preview() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let foo_dir = context.temp_dir.child("foo");
+    foo_dir.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo.main:run"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#
+    })?;
+
+    let foo_module = foo_dir.child("src").child("foo");
+    foo_module.child("__init__.py").write_str("")?;
+    foo_module.child("main.py").write_str(indoc! { r#"
+        def run():
+            print("hello")
+        "#
+    })?;
+
+    // Attempting `--locked` without preview should fail.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg(foo_dir.as_os_str())
+        .arg("--locked")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `--locked` for tool commands is a preview feature; use `--preview` or set `UV_PREVIEW=1` to enable it
+    ");
+
+    Ok(())
+}
+
+/// Test `--locked` errors when there is no `uv.lock`.
+#[test]
+fn tool_install_locked_missing_lockfile() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let foo_dir = context.temp_dir.child("foo");
+    foo_dir.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo.main:run"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#
+    })?;
+
+    let foo_module = foo_dir.child("src").child("foo");
+    foo_module.child("__init__.py").write_str("")?;
+    foo_module.child("main.py").write_str(indoc! { r#"
+        def run():
+            print("hello")
+        "#
+    })?;
+
+    // Attempting `--locked` with `--preview` but no lockfile should fail.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg(foo_dir.as_os_str())
+        .arg("--locked")
+        .arg("--preview")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `--locked` option for tool commands is experimental and may change without warning.
+    error: `--locked` requires a `uv.lock` file in the tool's source tree at `[TEMP_DIR]/foo`, but none was found
+    ");
+
+    Ok(())
+}
+
+/// Test `--locked` errors for registry packages.
+#[test]
+fn tool_install_locked_registry_package() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Attempting `--locked` with a registry package should fail.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--locked")
+        .arg("--preview")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `--locked` option for tool commands is experimental and may change without warning.
+    error: `--locked` requires a tool from a source tree (e.g., a Git repository or local directory), but `black` is not a source tree
+    ");
+
+    Ok(())
+}
+
+/// Test `--locked` installs from a local directory with a lockfile.
+#[test]
+fn tool_install_locked_from_directory() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let foo_dir = context.temp_dir.child("foo");
+    foo_dir.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [project.scripts]
+        foo = "foo.main:run"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#
+    })?;
+
+    let foo_module = foo_dir.child("src").child("foo");
+    foo_module.child("__init__.py").write_str("")?;
+    foo_module.child("main.py").write_str(indoc! { r#"
+        def run():
+            print("hello")
+        "#
+    })?;
+
+    // Lock the project first.
+    context
+        .lock()
+        .current_dir(foo_dir.path())
+        .assert()
+        .success();
+
+    // Verify the lockfile exists.
+    foo_dir.child("uv.lock").assert(predicate::path::exists());
+
+    // Install with `--locked --preview`.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg(foo_dir.as_os_str())
+        .arg("--locked")
+        .arg("--preview")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `--locked` option for tool commands is experimental and may change without warning.
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+     + iniconfig==2.0.0
+    Installed 1 executable: foo
+    ");
+
+    // Verify the executable works.
+    uv_snapshot!(context.filters(), Command::new("foo")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    hello
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
