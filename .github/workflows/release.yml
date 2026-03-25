@@ -286,6 +286,9 @@ jobs:
     # "host" however must run to completion, no skipping allowed!
     if: ${{ always() && needs.host.result == 'success' && (needs.custom-publish-pypi.result == 'skipped' || needs.custom-publish-pypi.result == 'success') && (needs.custom-publish-crates.result == 'skipped' || needs.custom-publish-crates.result == 'success') }}
     runs-on: "depot-ubuntu-latest-4"
+    environment:
+      name: release
+      deployment: false
     permissions:
       "attestations": "write"
       "contents": "write"
