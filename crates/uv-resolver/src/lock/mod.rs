@@ -854,7 +854,7 @@ impl Lock {
         let mut queue: VecDeque<(&Package, Option<&ExtraName>)> = VecDeque::new();
         let mut seen: FxHashSet<(&PackageId, Option<&ExtraName>)> = FxHashSet::default();
 
-        // Seed from workspace members. Always queue with `None` so the we can traverse
+        // Seed from workspace members. Always queue with `None` so that we can traverse
         // their dependency groups; only queue extras when prod mode is active.
         for package in self
             .packages
