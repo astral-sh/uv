@@ -657,15 +657,12 @@ pub(crate) async fn add(
     // they point to existing non-empty directories when using path URLs.
     let mut valid_indexes = Vec::with_capacity(indexes.len());
     for index in indexes {
-        if let IndexUrl::Path(url) = &index.url {
-            let path = url
-                .to_file_path()
-                .map_err(|()| anyhow::anyhow!("Invalid file path in index URL: {url}"))?;
-            if !path.is_dir() {
-                bail!("Directory not found for index: {url}");
+        if let IndexUrl::Path(index_path) = &index.url {
+            if !index_path.path.is_dir() {
+                bail!("Directory not found for index: {}", index_path.url);
             }
-            if fs_err::read_dir(&path)?.next().is_none() {
-                warn_user_once!("Index directory `{url}` is empty, skipping");
+            if fs_err::read_dir(&*index_path.path)?.next().is_none() {
+                warn_user_once!("Index directory `{}` is empty, skipping", index_path.url);
                 continue;
             }
         }

@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::io;
 use std::path::{Component, Path, PathBuf};
 use std::sync::LazyLock;
 
@@ -324,7 +325,7 @@ pub fn try_relative_to_if(
     path: impl AsRef<Path>,
     base: impl AsRef<Path>,
     should_relativize: bool,
-) -> Result<PathBuf, std::io::Error> {
+) -> io::Result<PathBuf> {
     if should_relativize {
         relative_to(&path, &base).or_else(|_| std::path::absolute(path.as_ref()))
     } else {

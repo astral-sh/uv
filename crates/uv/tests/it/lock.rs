@@ -7736,7 +7736,7 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
 ///
 /// See: <https://github.com/astral-sh/uv/issues/15055>
 ///
-/// TODO(tk): Currently not working as intended.
+/// TODO(tk): Also add a test for absolute
 #[test]
 fn lock_relative_index_in_requires_dist() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -7837,7 +7837,7 @@ fn lock_relative_index_in_requires_dist() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "tqdm", marker = "sys_platform != 'linux'", index = "https://pypi.org/simple" },
-            { name = "tqdm", marker = "sys_platform == 'linux'", index = "file://[TEMP_DIR]/workspace/flat-index" },
+            { name = "tqdm", marker = "sys_platform == 'linux'", index = "flat-index" },
         ]
 
         [[package]]
