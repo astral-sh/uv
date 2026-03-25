@@ -82,8 +82,8 @@ pub(crate) async fn audit(
 
     // Determine the extras to include.
     let default_extras = match &target {
-        LockTarget::Workspace(_) => DefaultExtras::default(),
-        LockTarget::Script(_) => DefaultExtras::default(),
+        LockTarget::Workspace(_) => DefaultExtras::All,
+        LockTarget::Script(_) => DefaultExtras::All,
     };
     let extras = extras.with_defaults(default_extras);
 
