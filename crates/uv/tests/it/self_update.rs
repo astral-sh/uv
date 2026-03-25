@@ -6,7 +6,6 @@ use axoupdater::{
     ReleaseSourceType,
     test::helpers::{RuntestArgs, perform_runtest},
 };
-use regex::escape;
 use serde_json::json;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -156,10 +155,7 @@ async fn setup_mock_update(
 
 #[tokio::test]
 async fn test_self_update_uses_legacy_path_with_ghe_override() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((
-        escape(&format!("v{}", env!("CARGO_PKG_VERSION"))),
-        "v[CURRENT_VERSION]",
-    ));
+    let context = uv_test::test_context!("3.12").with_filtered_current_version();
 
     let target_version = "9.9.9";
     let (receipt_dir, server) = setup_mock_update(&context, target_version).await?;
@@ -183,10 +179,7 @@ async fn test_self_update_uses_legacy_path_with_ghe_override() -> Result<()> {
 
 #[tokio::test]
 async fn self_update_dry_run_quiet() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((
-        escape(&format!("v{}", env!("CARGO_PKG_VERSION"))),
-        "v[CURRENT_VERSION]",
-    ));
+    let context = uv_test::test_context!("3.12").with_filtered_current_version();
 
     let target_version = "9.9.9";
     let (receipt_dir, server) = setup_mock_update(&context, target_version).await?;
@@ -237,10 +230,7 @@ async fn self_update_dry_run_extra_quiet() -> Result<()> {
 
 #[tokio::test]
 async fn self_update_noop_dry_run() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((
-        escape(&format!("v{}", env!("CARGO_PKG_VERSION"))),
-        "v[CURRENT_VERSION]",
-    ));
+    let context = uv_test::test_context!("3.12").with_filtered_current_version();
 
     let target_version = env!("CARGO_PKG_VERSION");
     let (receipt_dir, server) = setup_mock_update(&context, target_version).await?;
@@ -264,10 +254,7 @@ async fn self_update_noop_dry_run() -> Result<()> {
 
 #[tokio::test]
 async fn self_update_noop_dry_run_quiet() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((
-        escape(&format!("v{}", env!("CARGO_PKG_VERSION"))),
-        "v[CURRENT_VERSION]",
-    ));
+    let context = uv_test::test_context!("3.12").with_filtered_current_version();
 
     let target_version = env!("CARGO_PKG_VERSION");
     let (receipt_dir, server) = setup_mock_update(&context, target_version).await?;

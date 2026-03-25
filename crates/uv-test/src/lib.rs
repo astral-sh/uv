@@ -582,6 +582,16 @@ impl TestContext {
         self
     }
 
+    /// Add a (not context aware) filter for the current uv version `v<major>.<minor>.<patch>`
+    #[must_use]
+    pub fn with_filtered_current_version(mut self) -> Self {
+        self.filters.push((
+            regex::escape(&format!("v{}", env!("CARGO_PKG_VERSION"))),
+            "v[CURRENT_VERSION]".to_string(),
+        ));
+        self
+    }
+
     /// Adds filters for non-deterministic `CycloneDX` data
     #[must_use]
     pub fn with_cyclonedx_filters(mut self) -> Self {
