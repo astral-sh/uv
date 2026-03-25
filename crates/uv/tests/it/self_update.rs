@@ -1,4 +1,4 @@
-use std::process::Command;
+use std::{path::PathBuf, process::Command};
 
 use anyhow::Result;
 use assert_fs::prelude::*;
@@ -13,7 +13,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_static::EnvVars;
 
-use uv_test::{get_bin, uv_snapshot};
+use uv_test::{TestContext, get_bin, uv_snapshot};
 
 #[test]
 fn check_self_update() {
@@ -50,7 +50,7 @@ fn check_self_update() {
 }
 
 #[test]
-fn test_self_update_offline_error() {
+fn self_update_offline_error() {
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.self_update().arg("--offline"),
@@ -65,7 +65,7 @@ fn test_self_update_offline_error() {
 }
 
 #[test]
-fn test_self_update_offline_quiet() {
+fn self_update_offline_quiet() {
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.self_update().arg("--offline").arg("--quiet"),
@@ -80,7 +80,7 @@ fn test_self_update_offline_quiet() {
 }
 
 #[test]
-fn test_self_update_offline_extra_quiet() {
+fn self_update_offline_extra_quiet() {
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.self_update().arg("--offline").arg("--quiet").arg("--quiet"),
@@ -93,13 +93,12 @@ fn test_self_update_offline_extra_quiet() {
     ");
 }
 
-#[tokio::test]
-async fn test_self_update_uses_legacy_path_with_ghe_override() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((
-        escape(&format!("v{}", env!("CARGO_PKG_VERSION"))),
-        "v[CURRENT_VERSION]",
-    ));
-
+/// Set up a fake receipt and a mock update metadata endpoint to allow
+/// simulating an update with `--dry-run`.
+async fn setup_mock_update(
+    context: &TestContext,
+    target_version: &str,
+) -> Result<(PathBuf, MockServer)> {
     let receipt_dir = context.temp_dir.child("receipt");
     receipt_dir.create_dir_all()?;
 
@@ -129,7 +128,6 @@ async fn test_self_update_uses_legacy_path_with_ghe_override() -> Result<()> {
         }))?)?;
 
     let server = MockServer::start().await;
-    let target_version = "9.9.9";
     let installer_name = if cfg!(windows) {
         "uv-installer.ps1"
     } else {
@@ -152,6 +150,19 @@ async fn test_self_update_uses_legacy_path_with_ghe_override() -> Result<()> {
         })))
         .mount(&server)
         .await;
+
+    Ok((receipt_dir.to_path_buf(), server))
+}
+
+#[tokio::test]
+async fn test_self_update_uses_legacy_path_with_ghe_override() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filter((
+        escape(&format!("v{}", env!("CARGO_PKG_VERSION"))),
+        "v[CURRENT_VERSION]",
+    ));
+
+    let target_version = "9.9.9";
+    let (receipt_dir, server) = setup_mock_update(&context, target_version).await?;
 
     uv_snapshot!(context.filters(), context.self_update()
         .arg(target_version)
@@ -177,58 +188,8 @@ async fn test_self_update_dry_run_quiet() -> Result<()> {
         "v[CURRENT_VERSION]",
     ));
 
-    let receipt_dir = context.temp_dir.child("receipt");
-    receipt_dir.create_dir_all()?;
-
-    let install_prefix = std::path::absolute(
-        get_bin!()
-            .parent()
-            .expect("uv binary should have a parent directory"),
-    )?;
-    receipt_dir
-        .child("uv-receipt.json")
-        .write_str(&serde_json::to_string_pretty(&json!({
-            "install_prefix": install_prefix,
-            "binaries": ["uv"],
-            "cdylibs": [],
-            "source": {
-                "release_type": "github",
-                "owner": "astral-sh",
-                "name": "uv",
-                "app_name": "uv",
-            },
-            "version": env!("CARGO_PKG_VERSION"),
-            "provider": {
-                "source": "cargo-dist",
-                "version": "0.31.0",
-            },
-            "modify_path": true,
-        }))?)?;
-
-    let server = MockServer::start().await;
     let target_version = "9.9.9";
-    let installer_name = if cfg!(windows) {
-        "uv-installer.ps1"
-    } else {
-        "uv-installer.sh"
-    };
-    Mock::given(method("GET"))
-        .and(path(format!(
-            "/api/v3/repos/astral-sh/uv/releases/tags/{target_version}"
-        )))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "tag_name": target_version,
-            "name": target_version,
-            "url": format!("{}/repos/astral-sh/uv/releases/tags/{target_version}", server.uri()),
-            "assets": [{
-                "url": format!("{}/assets/{installer_name}", server.uri()),
-                "browser_download_url": format!("{}/downloads/{installer_name}", server.uri()),
-                "name": installer_name,
-            }],
-            "prerelease": false,
-        })))
-        .mount(&server)
-        .await;
+    let (receipt_dir, server) = setup_mock_update(&context, target_version).await?;
 
     uv_snapshot!(context.filters(), context.self_update()
         .arg(target_version)
@@ -254,55 +215,8 @@ async fn test_self_update_dry_run_extra_quiet() -> Result<()> {
     let receipt_dir = context.temp_dir.child("receipt");
     receipt_dir.create_dir_all()?;
 
-    let install_prefix = std::path::absolute(
-        get_bin!()
-            .parent()
-            .expect("uv binary should have a parent directory"),
-    )?;
-    receipt_dir
-        .child("uv-receipt.json")
-        .write_str(&serde_json::to_string_pretty(&json!({
-            "install_prefix": install_prefix,
-            "binaries": ["uv"],
-            "cdylibs": [],
-            "source": {
-                "release_type": "github",
-                "owner": "astral-sh",
-                "name": "uv",
-                "app_name": "uv",
-            },
-            "version": env!("CARGO_PKG_VERSION"),
-            "provider": {
-                "source": "cargo-dist",
-                "version": "0.31.0",
-            },
-            "modify_path": true,
-        }))?)?;
-
-    let server = MockServer::start().await;
     let target_version = "9.9.9";
-    let installer_name = if cfg!(windows) {
-        "uv-installer.ps1"
-    } else {
-        "uv-installer.sh"
-    };
-    Mock::given(method("GET"))
-        .and(path(format!(
-            "/api/v3/repos/astral-sh/uv/releases/tags/{target_version}"
-        )))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "tag_name": target_version,
-            "name": target_version,
-            "url": format!("{}/repos/astral-sh/uv/releases/tags/{target_version}", server.uri()),
-            "assets": [{
-                "url": format!("{}/assets/{installer_name}", server.uri()),
-                "browser_download_url": format!("{}/downloads/{installer_name}", server.uri()),
-                "name": installer_name,
-            }],
-            "prerelease": false,
-        })))
-        .mount(&server)
-        .await;
+    let (receipt_dir, server) = setup_mock_update(&context, target_version).await?;
 
     uv_snapshot!(context.self_update()
         .arg(target_version)
