@@ -182,7 +182,7 @@ async fn test_self_update_uses_legacy_path_with_ghe_override() -> Result<()> {
 }
 
 #[tokio::test]
-async fn test_self_update_dry_run_quiet() -> Result<()> {
+async fn self_update_dry_run_quiet() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filter((
         escape(&format!("v{}", env!("CARGO_PKG_VERSION"))),
         "v[CURRENT_VERSION]",
@@ -209,7 +209,7 @@ async fn test_self_update_dry_run_quiet() -> Result<()> {
 }
 
 #[tokio::test]
-async fn test_self_update_dry_run_extra_quiet() -> Result<()> {
+async fn self_update_dry_run_extra_quiet() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let receipt_dir = context.temp_dir.child("receipt");
@@ -225,6 +225,59 @@ async fn test_self_update_dry_run_extra_quiet() -> Result<()> {
         .arg("--quiet")
         .env("AXOUPDATER_CONFIG_PATH", receipt_dir.as_os_str())
         .env(EnvVars::UV_INSTALLER_GHE_BASE_URL, server.uri()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn self_update_noop_dry_run() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filter((
+        escape(&format!("v{}", env!("CARGO_PKG_VERSION"))),
+        "v[CURRENT_VERSION]",
+    ));
+
+    let target_version = env!("CARGO_PKG_VERSION");
+    let (receipt_dir, server) = setup_mock_update(&context, target_version).await?;
+
+    uv_snapshot!(context.filters(), context.self_update()
+        .arg(target_version)
+        .arg("--dry-run")
+        .env("AXOUPDATER_CONFIG_PATH", receipt_dir.as_os_str())
+        .env(EnvVars::UV_INSTALLER_GHE_BASE_URL, server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    info: Checking for updates...
+    You're on the latest version of uv (v[CURRENT_VERSION])
+    ");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn self_update_noop_dry_run_quiet() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filter((
+        escape(&format!("v{}", env!("CARGO_PKG_VERSION"))),
+        "v[CURRENT_VERSION]",
+    ));
+
+    let target_version = env!("CARGO_PKG_VERSION");
+    let (receipt_dir, server) = setup_mock_update(&context, target_version).await?;
+
+    uv_snapshot!(context.filters(), context.self_update()
+        .arg(target_version)
+        .arg("--dry-run")
+        .arg("--quiet")
+        .env("AXOUPDATER_CONFIG_PATH", receipt_dir.as_os_str())
+        .env(EnvVars::UV_INSTALLER_GHE_BASE_URL, server.uri()), @"
     success: true
     exit_code: 0
     ----- stdout -----
