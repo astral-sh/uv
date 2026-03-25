@@ -28,18 +28,18 @@ const LAUNCHER_AARCH64_CONSOLE: &[u8] =
 
 // https://learn.microsoft.com/en-us/windows/win32/menurc/resource-types
 #[cfg(windows)]
-const RT_RCDATA: u16 = 10;
+const RT_RCDATA: u32 = 10;
 
-// Resource IDs matching uv-trampoline
+// Resource names matching uv-trampoline
 #[cfg(windows)]
-const RESOURCE_TRAMPOLINE_KIND: windows::core::PCWSTR = windows::core::w!("UV_TRAMPOLINE_KIND");
+const RESOURCE_TRAMPOLINE_KIND: &str = "UV_TRAMPOLINE_KIND";
 #[cfg(windows)]
-const RESOURCE_PYTHON_PATH: windows::core::PCWSTR = windows::core::w!("UV_PYTHON_PATH");
+const RESOURCE_PYTHON_PATH: &str = "UV_PYTHON_PATH";
 // Note: This does not need to be looked up as a resource, as we rely on `zipimport`
 // to do the loading work. Still, keeping the content under a resource means that it
 // sits nicely under the PE format.
 #[cfg(windows)]
-const RESOURCE_SCRIPT_DATA: windows::core::PCWSTR = windows::core::w!("UV_SCRIPT_DATA");
+const RESOURCE_SCRIPT_DATA: &str = "UV_SCRIPT_DATA";
 
 #[derive(Debug)]
 pub struct Launcher {
@@ -64,61 +64,35 @@ impl Launcher {
     /// Returns `Err` if the file looks like a trampoline executable but is formatted incorrectly.
     #[cfg(windows)]
     pub fn try_from_path(path: &Path) -> Result<Option<Self>, Error> {
-        use std::os::windows::ffi::OsStrExt;
-        use windows::Win32::System::LibraryLoader::LOAD_LIBRARY_AS_DATAFILE;
-        use windows::Win32::System::LibraryLoader::LoadLibraryExW;
-
-        let path_str = path
-            .as_os_str()
-            .encode_wide()
-            .chain(std::iter::once(0))
-            .collect::<Vec<_>>();
-
-        // SAFETY: winapi call; null-terminated strings
-        #[allow(unsafe_code)]
-        let Some(module) = (unsafe {
-            LoadLibraryExW(
-                windows::core::PCWSTR(path_str.as_ptr()),
-                None,
-                LOAD_LIBRARY_AS_DATAFILE,
-            )
-            .ok()
-        }) else {
+        let data = fs_err::read(path)?;
+        let Ok(image) = editpe::Image::parse(data) else {
             return Ok(None);
         };
 
-        let result = (|| {
-            let Some(kind_data) = read_resource(module, RESOURCE_TRAMPOLINE_KIND) else {
-                return Ok(None);
-            };
-            let Some(kind) = LauncherKind::from_resource_value(kind_data[0]) else {
-                return Err(Error::UnprocessableMetadata);
-            };
-
-            let Some(path_data) = read_resource(module, RESOURCE_PYTHON_PATH) else {
-                return Ok(None);
-            };
-            let python_path = PathBuf::from(
-                String::from_utf8(path_data).map_err(|err| Error::InvalidPath(err.utf8_error()))?,
-            );
-
-            let script_data = read_resource(module, RESOURCE_SCRIPT_DATA);
-
-            Ok(Some(Self {
-                kind,
-                python_path,
-                script_data,
-            }))
-        })();
-
-        // SAFETY: winapi call; handle is known to be valid.
-        #[allow(unsafe_code)]
-        unsafe {
-            windows::Win32::Foundation::FreeLibrary(module)
-                .map_err(|err| Error::Io(io::Error::from_raw_os_error(err.code().0)))?;
+        let Some(kind_data) = read_resource_from_image(&image, RESOURCE_TRAMPOLINE_KIND) else {
+            return Ok(None);
+        };
+        let Some(&kind_value) = kind_data.first() else {
+            return Err(Error::UnprocessableMetadata);
+        };
+        let Some(kind) = LauncherKind::from_resource_value(kind_value) else {
+            return Err(Error::UnprocessableMetadata);
         };
 
-        result
+        let Some(path_data) = read_resource_from_image(&image, RESOURCE_PYTHON_PATH) else {
+            return Ok(None);
+        };
+        let python_path = PathBuf::from(
+            String::from_utf8(path_data).map_err(|err| Error::InvalidPath(err.utf8_error()))?,
+        );
+
+        let script_data = read_resource_from_image(&image, RESOURCE_SCRIPT_DATA);
+
+        Ok(Some(Self {
+            kind,
+            python_path,
+            script_data,
+        }))
     }
 
     /// Write this trampoline launcher to a file.
@@ -138,37 +112,21 @@ impl Launcher {
 
         let python_path = self.python_path.simplified_display().to_string();
 
-        // Create temporary file for the base launcher
-        let temp_dir = tempfile::TempDir::new()?;
-        let temp_file = temp_dir
-            .path()
-            .join(format!("uv-trampoline-{}.exe", std::process::id()));
+        let launcher_bin = get_launcher_bin(is_gui)?;
 
-        // Write the launcher binary
-        fs_err::write(&temp_file, get_launcher_bin(is_gui)?)?;
-
-        // Write resources
-        let resources = &[
-            (
-                RESOURCE_TRAMPOLINE_KIND,
-                &[self.kind.to_resource_value()][..],
-            ),
+        let kind_value = [self.kind.to_resource_value()];
+        let mut resources: Vec<(&str, &[u8])> = vec![
+            (RESOURCE_TRAMPOLINE_KIND, &kind_value),
             (RESOURCE_PYTHON_PATH, python_path.as_bytes()),
         ];
-        if let Some(script_data) = self.script_data {
-            let mut all_resources = resources.to_vec();
-            all_resources.push((RESOURCE_SCRIPT_DATA, &script_data));
-            write_resources(&temp_file, &all_resources)?;
-        } else {
-            write_resources(&temp_file, resources)?;
+        let script_data;
+        if let Some(data) = self.script_data {
+            script_data = data;
+            resources.push((RESOURCE_SCRIPT_DATA, &script_data));
         }
 
-        // Read back the complete file
-        let launcher = fs_err::read(&temp_file)?;
-        fs_err::remove_file(&temp_file)?;
-
-        // Then write it to the handle
-        file.write_all(&launcher)?;
+        let output = write_resources(launcher_bin, &resources)?;
+        file.write_all(&output)?;
 
         Ok(())
     }
@@ -194,8 +152,8 @@ pub enum LauncherKind {
     Python,
 }
 
+#[cfg(windows)]
 impl LauncherKind {
-    #[cfg(windows)]
     fn to_resource_value(self) -> u8 {
         match self {
             Self::Script => 1,
@@ -203,7 +161,6 @@ impl LauncherKind {
         }
     }
 
-    #[cfg(windows)]
     fn from_resource_value(value: u8) -> Option<Self> {
         match value {
             1 => Some(Self::Script),
@@ -230,6 +187,10 @@ pub enum Error {
     UnprocessableMetadata,
     #[error("Resources over 2^32 bytes are not supported")]
     ResourceTooLarge,
+    #[error("Failed to parse Windows PE image")]
+    PeRead(#[from] editpe::ImageReadError),
+    #[error("Failed to update Windows PE resources")]
+    PeWrite(#[from] editpe::ImageWriteError),
 }
 
 #[allow(clippy::unnecessary_wraps, unused_variables)]
@@ -267,30 +228,101 @@ fn get_launcher_bin(gui: bool) -> Result<&'static [u8], Error> {
     })
 }
 
-/// Helper to write Windows PE resources
-#[cfg(windows)]
-fn write_resources(path: &Path, resources: &[(windows::core::PCWSTR, &[u8])]) -> Result<(), Error> {
-    // SAFETY: winapi calls; null-terminated strings
+/// Write PE resources into a launcher binary using the `editpe` crate.
+///
+/// This directly manipulates the PE resource section without using Windows API calls
+/// like `BeginUpdateResource`/`UpdateResource`/`EndUpdateResource`, which are unavailable
+/// on minimal Windows environments such as Nano Server.
+#[cfg(all(windows, not(target_arch = "x86")))]
+fn write_resources(launcher_data: &[u8], resources: &[(&str, &[u8])]) -> Result<Vec<u8>, Error> {
+    use editpe::{
+        Image, ResourceData, ResourceDirectory, ResourceEntry, ResourceEntryName, ResourceTable,
+    };
+
+    let mut image = Image::parse(launcher_data.to_vec())?;
+
+    let mut resource_directory = image
+        .resource_directory()
+        .cloned()
+        .unwrap_or_else(ResourceDirectory::default);
+    let root = resource_directory.root_mut();
+
+    // Get or create the RT_RCDATA type entry.
+    let rcdata_name = ResourceEntryName::ID(RT_RCDATA);
+    if root.get(rcdata_name.clone()).is_none() {
+        root.insert(
+            rcdata_name.clone(),
+            ResourceEntry::Table(ResourceTable::default()),
+        );
+    }
+    let rcdata_table = root
+        .get_mut(rcdata_name)
+        .and_then(ResourceEntry::as_table_mut)
+        .expect("RT_RCDATA entry was just inserted");
+
+    for (name, data) in resources {
+        let entry_name = ResourceEntryName::from_string(name);
+
+        // Create language table with neutral language (0).
+        let mut language_table = ResourceTable::default();
+        let mut resource_data = ResourceData::default();
+        resource_data.set_data(data.to_vec());
+        language_table.insert(ResourceEntryName::ID(0), ResourceEntry::Data(resource_data));
+
+        rcdata_table.insert(entry_name, ResourceEntry::Table(language_table));
+    }
+
+    image.set_resource_directory(resource_directory)?;
+
+    Ok(image.data().to_vec())
+}
+
+/// Write PE resources into a launcher binary using the Win32 resource APIs.
+///
+/// The `editpe` crate currently produces invalid PE32 output for the 32-bit trampolines,
+/// so keep the previous update path for i686 while using `editpe` for the Nano Server
+/// supported targets.
+#[cfg(all(windows, target_arch = "x86"))]
+fn write_resources(launcher_data: &[u8], resources: &[(&str, &[u8])]) -> Result<Vec<u8>, Error> {
+    let temp_dir = tempfile::TempDir::new()?;
+    let temp_file = temp_dir.path().join("uv-trampoline.exe");
+
+    fs_err::write(&temp_file, launcher_data)?;
+    write_resources_with_winapi(&temp_file, resources)?;
+
+    Ok(fs_err::read(&temp_file)?)
+}
+
+#[cfg(all(windows, target_arch = "x86"))]
+fn write_resources_with_winapi(path: &Path, resources: &[(&str, &[u8])]) -> Result<(), Error> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::Win32::System::LibraryLoader::{
+        BeginUpdateResourceW, EndUpdateResourceW, UpdateResourceW,
+    };
+
+    let path_wide = path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+
+    // SAFETY: `path_wide` and each `name_wide` are null-terminated UTF-16 strings, and the
+    // resource buffers live for the duration of each Win32 call.
     #[allow(unsafe_code)]
     unsafe {
-        use std::os::windows::ffi::OsStrExt;
-        use windows::Win32::System::LibraryLoader::{
-            BeginUpdateResourceW, EndUpdateResourceW, UpdateResourceW,
-        };
-
-        let path_str = path
-            .as_os_str()
-            .encode_wide()
-            .chain(std::iter::once(0))
-            .collect::<Vec<_>>();
-        let handle = BeginUpdateResourceW(windows::core::PCWSTR(path_str.as_ptr()), false)
+        let handle = BeginUpdateResourceW(windows::core::PCWSTR(path_wide.as_ptr()), false)
             .map_err(|err| Error::Io(io::Error::from_raw_os_error(err.code().0)))?;
 
         for (name, data) in resources {
+            let name_wide = name
+                .encode_utf16()
+                .chain(std::iter::once(0))
+                .collect::<Vec<_>>();
+
             UpdateResourceW(
                 handle,
-                windows::core::PCWSTR(RT_RCDATA as *const _),
-                *name,
+                windows::core::PCWSTR(RT_RCDATA as usize as *const u16),
+                windows::core::PCWSTR(name_wide.as_ptr()),
                 0,
                 Some(data.as_ptr().cast()),
                 u32::try_from(data.len()).map_err(|_| Error::ResourceTooLarge)?,
@@ -305,42 +337,29 @@ fn write_resources(path: &Path, resources: &[(windows::core::PCWSTR, &[u8])]) ->
     Ok(())
 }
 
-/// Safely reads a resource from a PE file
+/// Read a named resource from a parsed PE [`Image`].
+///
+/// Navigates the PE resource directory tree: `RT_RCDATA` → `name` → first language entry.
 #[cfg(windows)]
-fn read_resource(
-    handle: windows::Win32::Foundation::HMODULE,
-    name: windows::core::PCWSTR,
-) -> Option<Vec<u8>> {
-    // SAFETY: winapi calls; null-terminated strings; all pointers are checked.
-    #[allow(unsafe_code)]
-    unsafe {
-        use windows::Win32::System::LibraryLoader::{
-            FindResourceW, LoadResource, LockResource, SizeofResource,
-        };
-        // Find the resource
-        let resource = FindResourceW(
-            Some(handle),
-            name,
-            windows::core::PCWSTR(RT_RCDATA as *const _),
-        );
-        if resource.is_invalid() {
-            return None;
-        }
+fn read_resource_from_image(image: &editpe::Image<'_>, name: &str) -> Option<Vec<u8>> {
+    use editpe::ResourceEntryName;
 
-        // Get resource size and data
-        let size = SizeofResource(Some(handle), resource);
-        if size == 0 {
-            return None;
-        }
-        let data = LoadResource(Some(handle), resource).ok()?;
-        let ptr = LockResource(data) as *const u8;
-        if ptr.is_null() {
-            return None;
-        }
+    let resource_directory = image.resource_directory()?;
+    let root = resource_directory.root();
 
-        // Copy the resource data into a Vec
-        Some(std::slice::from_raw_parts(ptr, size as usize).to_vec())
-    }
+    let rcdata_entry = root.get(ResourceEntryName::ID(RT_RCDATA))?;
+    let rcdata_table = rcdata_entry.as_table()?;
+
+    let name_entry = rcdata_table.get(ResourceEntryName::from_string(name))?;
+    let language_table = name_entry.as_table()?;
+
+    // Get the first language entry (typically ID(0) for neutral).
+    let entries = language_table.entries();
+    let first_language = entries.first()?;
+    let language_entry = language_table.get(*first_language)?;
+    let data = language_entry.as_data()?;
+
+    Some(data.data().to_vec())
 }
 
 /// Construct a Windows script launcher.
@@ -396,33 +415,16 @@ pub fn windows_script_launcher(
     let python = python_executable.as_ref();
     let python_path = python.simplified_display().to_string();
 
-    // Start with base launcher binary
-    // Create temporary file for the launcher
-    let temp_dir = tempfile::TempDir::new()?;
-    let temp_file = temp_dir
-        .path()
-        .join(format!("uv-trampoline-{}.exe", std::process::id()));
-    fs_err::write(&temp_file, launcher_bin)?;
-
-    // Write resources
-    let resources = &[
+    let resources: &[(&str, &[u8])] = &[
         (
             RESOURCE_TRAMPOLINE_KIND,
-            &[LauncherKind::Script.to_resource_value()][..],
+            &[LauncherKind::Script.to_resource_value()],
         ),
         (RESOURCE_PYTHON_PATH, python_path.as_bytes()),
         (RESOURCE_SCRIPT_DATA, &payload),
     ];
-    write_resources(&temp_file, resources)?;
 
-    // Read back the complete file
-    // TODO(zanieb): It's weird that we write/read from a temporary file here because in the main
-    // usage at `write_script_entrypoints` we do the same thing again. We should refactor these
-    // to avoid repeated work.
-    let launcher = fs_err::read(&temp_file)?;
-    fs_err::remove_file(temp_file)?;
-
-    Ok(launcher)
+    write_resources(launcher_bin, resources)
 }
 
 /// Construct a Windows Python launcher.
@@ -454,28 +456,15 @@ pub fn windows_python_launcher(
     let python = python_executable.as_ref();
     let python_path = python.simplified_display().to_string();
 
-    // Create temporary file for the launcher
-    let temp_dir = tempfile::TempDir::new()?;
-    let temp_file = temp_dir
-        .path()
-        .join(format!("uv-trampoline-{}.exe", std::process::id()));
-    fs_err::write(&temp_file, launcher_bin)?;
-
-    // Write resources
-    let resources = &[
+    let resources: &[(&str, &[u8])] = &[
         (
             RESOURCE_TRAMPOLINE_KIND,
-            &[LauncherKind::Python.to_resource_value()][..],
+            &[LauncherKind::Python.to_resource_value()],
         ),
         (RESOURCE_PYTHON_PATH, python_path.as_bytes()),
     ];
-    write_resources(&temp_file, resources)?;
 
-    // Read back the complete file
-    let launcher = fs_err::read(&temp_file)?;
-    fs_err::remove_file(temp_file)?;
-
-    Ok(launcher)
+    write_resources(launcher_bin, resources)
 }
 
 #[cfg(all(test, windows))]
@@ -655,6 +644,29 @@ if __name__ == "__main__":
             .success();
 
         println!("Signed binary: {}", bin_path.as_ref().display());
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "x86"))]
+    fn empty_kind_resource_is_rejected() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+        let launcher_path = temp_dir.child("launcher.console.exe");
+
+        let launcher = super::write_resources(
+            super::get_launcher_bin(false)?,
+            &[
+                (super::RESOURCE_TRAMPOLINE_KIND, &[]),
+                (super::RESOURCE_PYTHON_PATH, b"C:/Python312/python.exe"),
+            ],
+        )?;
+
+        File::create(launcher_path.path())?.write_all(&launcher)?;
+
+        let error = Launcher::try_from_path(launcher_path.path())
+            .expect_err("Empty launcher kind resources should be rejected");
+        assert!(matches!(error, super::Error::UnprocessableMetadata));
+
+        Ok(())
     }
 
     #[test]
