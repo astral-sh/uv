@@ -1197,8 +1197,12 @@ pub enum ProjectCommand {
     Format(FormatArgs),
     /// Audit the project's dependencies.
     ///
-    /// Dependencies are audited for known vulnerabilities, as well
-    /// as 'adverse' statuses such as deprecation and quarantine.
+    /// Dependencies are audited for known vulnerabilities, as well as 'adverse' statuses such as
+    /// deprecation and quarantine.
+    ///
+    /// By default, all extras and groups within the project are audited. To exclude extras
+    /// and/or groups from the audit, use the `--no-extra`, `--no-group`, and related
+    /// options.
     #[command(
         after_help = "Use `uv help audit` for more details.",
         after_long_help = ""
