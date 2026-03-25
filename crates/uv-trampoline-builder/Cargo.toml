@@ -26,15 +26,18 @@ name = "normalize-pe-timestamps"
 [dependencies]
 uv-fs = { workspace = true }
 
-anyhow = {workspace = true }
-fs-err = {workspace = true }
+anyhow = { workspace = true }
+editpe = { workspace = true }
+fs-err = { workspace = true }
 goblin = { workspace = true }
-tempfile = { workspace = true }
 thiserror = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 async_zip = { workspace = true }
 futures-lite = { workspace = true }
+
+[target.'cfg(all(target_os = "windows", target_arch = "x86"))'.dependencies]
+tempfile = { workspace = true }
 windows = { workspace = true }
 
 [dev-dependencies]
@@ -43,6 +46,7 @@ assert_fs = { workspace = true }
 anyhow = { workspace = true }
 fs-err = { workspace = true }
 rcgen = { workspace = true }
+tempfile = { workspace = true }
 which = { workspace = true }
 
 [lib]

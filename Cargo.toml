@@ -138,6 +138,7 @@ data-encoding = { version = "2.6.0" }
 diskus = { version = "0.9.0", default-features = false }
 dotenvy = { version = "0.15.7" }
 dunce = { version = "1.0.5" }
+editpe = { version = "0.2.3", default-features = false, features = ["std"] }
 either = { version = "1.13.0" }
 encoding_rs_io = { version = "0.1.7" }
 embed-manifest = { version = "1.5.0" }
