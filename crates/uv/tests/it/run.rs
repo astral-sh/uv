@@ -6474,10 +6474,7 @@ fn run_only_group_and_extra_conflict() -> Result<()> {
     Ok(())
 }
 
-/// Test that `--preview-features target-workspace-discovery` discovers the workspace
-/// from the target's directory rather than the current working directory.
-#[test]
-fn run_target_workspace_discovery() -> Result<()> {
+fn setup_target_workspace_discovery_context() -> Result<TestContext> {
     let context = uv_test::test_context!("3.12");
 
     // Create a workspace in a subdirectory.
@@ -6511,6 +6508,15 @@ fn run_target_workspace_discovery() -> Result<()> {
         "
     })?;
 
+    Ok(context)
+}
+
+/// Test that `--preview-features target-workspace-discovery` discovers the workspace
+/// from the target's directory rather than the current working directory.
+#[test]
+fn run_target_workspace_discovery() -> Result<()> {
+    let context = setup_target_workspace_discovery_context()?;
+
     // Without the preview feature, running from the parent directory fails to find the workspace,
     // so the dependency is not installed.
     uv_snapshot!(context.filters(), context.run().arg("project/script.py").env_remove(EnvVars::VIRTUAL_ENV), @r#"
@@ -6532,6 +6538,60 @@ fn run_target_workspace_discovery() -> Result<()> {
 
     // With the preview feature, the workspace is discovered from the target's directory.
     uv_snapshot!(context.filters(), context.run().arg("--preview-features").arg("target-workspace-discovery").arg("project/script.py").env_remove(EnvVars::VIRTUAL_ENV), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    success
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: project/.venv
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/project)
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
+/// Test that `--preview` enables target workspace discovery.
+#[test]
+fn run_target_workspace_discovery_preview_flag() -> Result<()> {
+    let context = setup_target_workspace_discovery_context()?;
+
+    context.temp_dir.child("uv.toml").write_str("bad")?;
+    context.temp_dir.child("pyproject.toml").write_str("bad")?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--preview").arg("project/script.py").env_remove(EnvVars::VIRTUAL_ENV), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    success
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: project/.venv
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/project)
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
+/// Test that `UV_PREVIEW=1` enables target workspace discovery.
+#[test]
+fn run_target_workspace_discovery_uv_preview_env() -> Result<()> {
+    let context = setup_target_workspace_discovery_context()?;
+
+    context.temp_dir.child("uv.toml").write_str("bad")?;
+    context.temp_dir.child("pyproject.toml").write_str("bad")?;
+
+    uv_snapshot!(context.filters(), context.run().env("UV_PREVIEW", "1").arg("project/script.py").env_remove(EnvVars::VIRTUAL_ENV), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6573,6 +6633,31 @@ fn run_target_workspace_discovery_bare_script() -> Result<()> {
     success
 
     ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// `--project` should still take precedence over target workspace discovery.
+#[test]
+fn run_project_precedes_target_workspace_discovery() -> Result<()> {
+    let context = setup_target_workspace_discovery_context()?;
+    let missing_project = context.temp_dir.child("missing-project");
+
+    uv_snapshot!(context.filters(), context.run()
+        .env("UV_PREVIEW", "1")
+        .arg("--preview-features")
+        .arg("target-workspace-discovery")
+        .arg("--project")
+        .arg(missing_project.path())
+        .arg("project/script.py")
+        .env_remove(EnvVars::VIRTUAL_ENV), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Project directory `missing-project` does not exist
     ");
 
     Ok(())

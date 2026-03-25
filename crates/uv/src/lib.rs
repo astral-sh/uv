@@ -102,22 +102,21 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         None
     };
 
+    // Load environment variables not handled by Clap.
+    let environment = EnvironmentOptions::new()?;
+
+    // Resolve preview flags before config discovery for decisions that affect the discovery root.
+    let early_preview = Preview::from_args(
+        settings::resolve_preview(&cli.top_level.global_args, None, &environment),
+        cli.top_level.global_args.no_preview,
+        &cli.top_level.global_args.preview_features,
+    );
+
     // Determine the project directory.
     //
     // If `--project` points to a `pyproject.toml` file, resolve to its parent directory,
     // since downstream code (e.g., `FilesystemOptions::find`) expects a directory.
-    let project_dir = if let Some(run_command) = &run_command
-        && cli
-            .top_level
-            .global_args
-            .preview_features
-            .contains(&PreviewFeature::TargetWorkspaceDiscovery)
-        && let Some(dir) = run_command.script_dir()
-    {
-        // When running a target with the preview flag enabled, discover the workspace starting
-        // from the target's directory rather than the current working directory.
-        Cow::Owned(std::path::absolute(dir)?)
-    } else if let Some(project) = &cli.top_level.global_args.project {
+    let project_dir = if let Some(project) = &cli.top_level.global_args.project {
         let path = uv_fs::normalize_path_buf(std::path::absolute(project)?);
         if let Some(name) = path.file_name()
             && name == "pyproject.toml"
@@ -128,12 +127,16 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         } else {
             Cow::Owned(path)
         }
+    } else if let Some(run_command) = &run_command
+        && early_preview.is_enabled(PreviewFeature::TargetWorkspaceDiscovery)
+        && let Some(dir) = run_command.script_dir()
+    {
+        // When running a target with the preview flag enabled, discover the workspace starting
+        // from the target's directory rather than the current working directory.
+        Cow::Owned(std::path::absolute(dir)?)
     } else {
         Cow::Borrowed(&*CWD)
     };
-
-    // Load environment variables not handled by Clap
-    let environment = EnvironmentOptions::new()?;
 
     // Validate that the project directory exists if explicitly provided via --project, except for
     // `uv init`, which creates the project directory (separate deprecation).
@@ -144,16 +147,8 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
 
     if !skip_project_validation {
         if let Some(project_path) = cli.top_level.global_args.project.as_ref() {
-            // Resolve the preview flags until this becomes stabilized. We do
-            // not pass a workspace configuration as this would require reading
-            // from the project directory which might not exist.
-            let preview = Preview::from_args(
-                settings::resolve_preview(&cli.top_level.global_args, None, &environment),
-                cli.top_level.global_args.no_preview,
-                &cli.top_level.global_args.preview_features,
-            );
             if !project_dir.exists() {
-                if preview.is_enabled(PreviewFeature::ProjectDirectoryMustExist) {
+                if early_preview.is_enabled(PreviewFeature::ProjectDirectoryMustExist) {
                     bail!(
                         "Project directory `{}` does not exist",
                         project_path.user_display()
@@ -168,7 +163,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             } else if !project_dir.is_dir() {
                 // `--project path/to/pyproject.toml` is resolved to its parent above,
                 // so this only triggers for other file types (see #18508).
-                if preview.is_enabled(PreviewFeature::ProjectDirectoryMustExist) {
+                if early_preview.is_enabled(PreviewFeature::ProjectDirectoryMustExist) {
                     bail!(
                         "Project path `{}` is not a directory",
                         project_path.user_display()
