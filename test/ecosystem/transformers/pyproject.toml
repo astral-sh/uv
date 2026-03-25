@@ -5,7 +5,7 @@ author = "The Hugging Face team (past and future) with the help of all our contr
 author_email = "transformers@huggingface.co"
 description = "State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow"
 keywords = ["NLP", "vision", "speech", "deep", "learning", "transformer", "pytorch", "tensorflow", "jax", "BERT", "GPT-2", "Wav2Vec2", "ViT"]
-requires-python = ">=3.9.0,<3.12"
+requires-python = ">=3.9.0"
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
@@ -308,6 +308,9 @@ dev = [
     "unidic_lite>=1.0.7",
     "urllib3<2.0.0"
 ]
+
+[tool.uv]
+environments = "python_version < '3.12'"
 
 [build-system]
 requires = ["hatchling"]
