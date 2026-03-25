@@ -756,6 +756,27 @@ jobs:
             ghcr.io/astral-sh/termux-python:latest \
             /entrypoint.sh bash /test-termux.sh
 
+  integration-test-windows-nanoserver:
+    name: "windows nanoserver"
+    timeout-minutes: 15
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-windows-x86_64-${{ inputs.sha }}
+
+      - name: "Run uv on Windows NanoServer"
+        run: |
+          docker run --rm `
+            -v "${{ github.workspace }}:C:\uv" `
+            mcr.microsoft.com/powershell:lts-nanoserver-ltsc2022 `
+            pwsh -ExecutionPolicy Bypass -File C:\uv\test\integration\windows-nanoserver.ps1
+
   integration-test-github-actions:
     name: "github actions"
     timeout-minutes: 10
