@@ -16,7 +16,10 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_configuration::{Concurrency, Constraints, GitLfsSetting, TargetTriple};
+use uv_configuration::{
+    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, EditableMode,
+    ExtrasSpecification, GitLfsSetting, InstallOptions, TargetTriple,
+};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::InstalledDist;
 use uv_distribution_types::{
@@ -24,16 +27,18 @@ use uv_distribution_types::{
     RequirementSource, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
-use uv_normalize::PackageName;
+use uv_normalize::{DefaultExtras, PackageName};
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
+use uv_settings::{
+    MalwareCheckSettings, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions,
+};
 use uv_shell::WindowsRunnable;
 use uv_static::EnvVars;
 use uv_tool::{InstalledTools, entrypoint_paths};
@@ -49,11 +54,14 @@ use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
 use crate::commands::pip::operations;
+use crate::commands::project::sync::do_sync;
 use crate::commands::project::{
-    EnvironmentSpecification, PlatformState, ProjectError, resolve_names,
+    EnvironmentSpecification, InstallTarget, PlatformState, ProjectError, resolve_names,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::tool::common::{ToolPython, matching_packages, refine_interpreter};
+use crate::commands::tool::common::{
+    ToolPython, locked_tool_project, matching_packages, refine_interpreter,
+};
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, project::environment::CachedEnvironment, read_env_files};
 use crate::printer::Printer;
@@ -102,6 +110,7 @@ pub(crate) async fn run(
     overrides: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
     show_resolution: bool,
+    locked: bool,
     lfs: GitLfsSetting,
     python: Option<String>,
     python_platform: Option<TargetTriple>,
@@ -132,6 +141,26 @@ pub(crate) async fn run(
         warn_user_once!(
             "The `--torch-backend` option is experimental and may change without warning."
         );
+    }
+
+    if locked {
+        if !preview.is_enabled(PreviewFeature::LockedTool) {
+            bail!(
+                "`--locked` for tool commands is a preview feature; use `--preview` or set `UV_PREVIEW=1` to enable it"
+            );
+        }
+        warn_user_once!(
+            "The `--locked` option for tool commands is experimental and may change without warning."
+        );
+        if !with.is_empty()
+            || !constraints.is_empty()
+            || !overrides.is_empty()
+            || !build_constraints.is_empty()
+        {
+            bail!(
+                "`--locked` cannot be used with additional requirements or constraints (`--with`, `--constraint`, `--override`, or `--build-constraint`), since they are not represented in the tool lockfile"
+            );
+        }
     }
 
     let env_file_environment = if no_env_file {
@@ -229,6 +258,11 @@ pub(crate) async fn run(
     }
 
     let request = ToolRequest::parse(target, from.as_deref())?;
+    if locked && matches!(&request, ToolRequest::Python { .. }) {
+        bail!(
+            "`--locked` requires a tool source tree with a `uv.lock` file and cannot be used when running Python directly"
+        );
+    }
 
     // If the user passed, e.g., `ruff@latest`, refresh the cache.
     let cache = if request.is_latest() {
@@ -245,6 +279,7 @@ pub(crate) async fn run(
         overrides,
         build_constraints,
         show_resolution,
+        locked,
         python.as_deref(),
         python_platform,
         install_mirrors,
@@ -307,6 +342,10 @@ pub(crate) async fn run(
             let err = miette::Report::msg(format!("{err}"))
                 .context("Failed to resolve `--with` requirement");
             eprint!("{err:?}");
+            return Ok(ExitStatus::Failure);
+        }
+        Err(err @ ProjectError::LockMismatch(..)) => {
+            writeln!(printer.stderr(), "{}", err.to_string().bold())?;
             return Ok(ExitStatus::Failure);
         }
         Err(err) => return Err(err.into()),
@@ -672,6 +711,7 @@ impl std::fmt::Display for ToolRequirement {
 ///
 /// If the target tool is already installed in a compatible environment, returns that
 /// [`PythonEnvironment`]. Otherwise, gets or creates a [`CachedEnvironment`].
+#[expect(clippy::fn_params_excessive_bools)]
 async fn get_or_create_environment(
     request: &ToolRequest<'_>,
     with: &[RequirementsSource],
@@ -679,6 +719,7 @@ async fn get_or_create_environment(
     overrides: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
     show_resolution: bool,
+    locked: bool,
     python: Option<&str>,
     python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
@@ -708,7 +749,6 @@ async fn get_or_create_environment(
         } => Some(RequirementsSpecification::parse_package(requirement)?),
         _ => None,
     };
-
     // Determine explicit Python version requests
     let explicit_python_request = python.map(PythonRequest::parse);
     let tool_python_request = match request {
@@ -1004,7 +1044,7 @@ async fn get_or_create_environment(
     .await?;
 
     // Check if the tool is already installed in a compatible environment.
-    if !isolated && !request.is_latest() {
+    if !locked && !isolated && !request.is_latest() {
         let installed_tools = InstalledTools::from_settings()?.init()?;
         let _lock = installed_tools.lock().await?;
 
@@ -1101,6 +1141,81 @@ async fn get_or_create_environment(
 
     // TODO(zanieb): When implementing project-level tools, discover the project and check if it has the tool.
     // TODO(zanieb): Determine if we should layer on top of the project environment if it is present.
+
+    // If `--locked` was requested, validate and install from the tool's lockfile.
+    if locked {
+        if let ToolRequirement::Package { requirement, .. } = &from {
+            let (project, lock) = locked_tool_project(
+                requirement,
+                &interpreter,
+                &settings.resolver,
+                &state,
+                client_builder,
+                concurrency,
+                cache,
+                workspace_cache,
+                printer,
+                preview,
+            )
+            .await?;
+            let target = InstallTarget::Project {
+                workspace: project.workspace(),
+                name: &requirement.name,
+                lock: &lock,
+            };
+            let extras = ExtrasSpecification::from_extra(requirement.extras.to_vec())
+                .with_defaults(DefaultExtras::default());
+            let groups = DependencyGroupsWithDefaults::none();
+
+            // Create an environment to sync the locked resolution into.
+            // We use `keep()` to prevent the temp directory from being cleaned up,
+            // since the spawned tool process needs access to the environment.
+            let temp_dir = cache.venv_dir()?;
+            let env_path = temp_dir.keep();
+            let venv = uv_virtualenv::create_venv(
+                &env_path,
+                interpreter,
+                uv_virtualenv::Prompt::None,
+                false,
+                uv_virtualenv::OnExisting::Remove(
+                    uv_virtualenv::RemovalReason::TemporaryEnvironment,
+                ),
+                true,
+                false,
+                false,
+            )?;
+
+            let malware_settings = MalwareCheckSettings {
+                enabled: false,
+                malware_check_url: None,
+            };
+            do_sync(
+                target,
+                &venv,
+                &extras,
+                &groups,
+                Some(EditableMode::NonEditable),
+                InstallOptions::default(),
+                operations::Modifications::Exact,
+                python_platform.as_ref(),
+                settings.into(),
+                client_builder,
+                &state,
+                Box::new(DefaultInstallLogger),
+                installer_metadata,
+                concurrency,
+                cache,
+                workspace_cache,
+                DryRun::Disabled,
+                printer,
+                preview,
+                &malware_settings,
+            )
+            .await?;
+
+            return Ok((from, venv));
+        }
+    }
 
     let result = CachedEnvironment::from_spec(
         spec.clone(),

@@ -70,11 +70,11 @@ pub struct StaticMetadataDatabase<'a, 'client> {
 
 /// A direct source tree materialized on disk for static metadata inspection.
 #[derive(Debug)]
-struct MaterializedSourceTree(Box<Path>);
+pub struct MaterializedSourceTree(Box<Path>);
 
 impl MaterializedSourceTree {
     /// Return the on-disk path for this source tree.
-    fn path(&self) -> &Path {
+    pub fn path(&self) -> &Path {
         &self.0
     }
 }
@@ -97,7 +97,7 @@ impl<'a, 'client> StaticMetadataDatabase<'a, 'client> {
     ///
     /// Directory requirements are already materialized. Git source trees are fetched into the
     /// Git cache and returned at the requested subdirectory.
-    async fn materialize_source_tree(
+    pub async fn materialize_source_tree(
         &self,
         source: &RequirementSource,
     ) -> Result<Option<MaterializedSourceTree>, Error> {

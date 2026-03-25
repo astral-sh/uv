@@ -3973,3 +3973,268 @@ async fn tool_run_latest_keyring_auth() {
     Installed 1 executable: app
     ");
 }
+
+/// Test `--locked` requires the preview feature.
+#[test]
+fn tool_run_locked_requires_preview() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let foo_dir = context.temp_dir.child("foo");
+    foo_dir.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo.main:run"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#
+    })?;
+
+    let foo_module = foo_dir.child("src").child("foo");
+    foo_module.child("__init__.py").write_str("")?;
+    foo_module.child("main.py").write_str(indoc! { r#"
+        def run():
+            print("hello")
+        "#
+    })?;
+
+    // Attempting `--locked` without preview should fail.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg(foo_dir.as_os_str())
+        .arg("--locked")
+        .arg("foo")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `--locked` for tool commands is a preview feature; use `--preview` or set `UV_PREVIEW=1` to enable it
+    ");
+
+    Ok(())
+}
+
+/// Test `--locked` rejects a direct Python invocation, which has no tool lockfile.
+#[test]
+fn tool_run_locked_python() {
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--locked")
+        .arg("--preview")
+        .arg("python"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `--locked` option for tool commands is experimental and may change without warning.
+    error: `--locked` requires a tool source tree with a `uv.lock` file and cannot be used when running Python directly
+    ");
+}
+
+/// Test `--locked` runs from a local directory with a lockfile.
+#[test]
+fn tool_run_locked_from_directory() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let foo_dir = context.temp_dir.child("foo");
+    foo_dir.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [project.scripts]
+        foo = "foo.main:run"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#
+    })?;
+
+    let foo_module = foo_dir.child("src").child("foo");
+    foo_module.child("__init__.py").write_str("")?;
+    foo_module.child("main.py").write_str(indoc! { r#"
+        def run():
+            print("hello")
+        "#
+    })?;
+
+    // Lock the project first.
+    context
+        .lock()
+        .current_dir(foo_dir.path())
+        .assert()
+        .success();
+
+    // Run with `--locked --preview`.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg(foo_dir.as_os_str())
+        .arg("--locked")
+        .arg("--preview")
+        .arg("foo")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    hello
+
+    ----- stderr -----
+    warning: The `--locked` option for tool commands is experimental and may change without warning.
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
+/// Test `--locked` errors when a source tree has no lockfile.
+#[test]
+fn tool_run_locked_missing_lockfile() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
+    let foo_dir = context.temp_dir.child("foo");
+
+    foo_dir.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo.main:run"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg(foo_dir.as_os_str())
+        .arg("--locked")
+        .arg("--preview")
+        .arg("foo"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `--locked` option for tool commands is experimental and may change without warning.
+    error: Unable to find lockfile at `uv.lock`, but `--locked` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    ");
+
+    Ok(())
+}
+
+/// Test `--locked` rejects an out-of-date source-tree lockfile.
+#[test]
+fn tool_run_locked_rejects_outdated_lockfile() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
+    let foo_dir = context.temp_dir.child("foo");
+
+    foo_dir.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [project.scripts]
+        foo = "foo.main:run"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#
+    })?;
+    context
+        .lock()
+        .current_dir(foo_dir.path())
+        .assert()
+        .success();
+
+    foo_dir.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo.main:run"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg(foo_dir.as_os_str())
+        .arg("--locked")
+        .arg("--preview")
+        .arg("foo"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `--locked` option for tool commands is experimental and may change without warning.
+    Resolved [N] packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
+/// Test `--locked` rejects dependencies that cannot be represented by the lockfile.
+#[test]
+fn tool_run_locked_rejects_with() {
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("foo")
+        .arg("--locked")
+        .arg("--preview")
+        .arg("--with")
+        .arg("iniconfig")
+        .arg("foo"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `--locked` option for tool commands is experimental and may change without warning.
+    error: `--locked` cannot be used with additional requirements or constraints (`--with`, `--constraint`, `--override`, or `--build-constraint`), since they are not represented in the tool lockfile
+    ");
+}
