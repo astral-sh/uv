@@ -1,4 +1,4 @@
-use std::process::Command;
+use std::{path::PathBuf, process::Command};
 
 use anyhow::Result;
 use assert_fs::prelude::*;
@@ -6,14 +6,13 @@ use axoupdater::{
     ReleaseSourceType,
     test::helpers::{RuntestArgs, perform_runtest},
 };
-use regex::escape;
 use serde_json::json;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_static::EnvVars;
 
-use uv_test::{get_bin, uv_snapshot};
+use uv_test::{TestContext, get_bin, uv_snapshot};
 
 #[test]
 fn check_self_update() {
@@ -50,7 +49,7 @@ fn check_self_update() {
 }
 
 #[test]
-fn test_self_update_offline_error() {
+fn self_update_offline_error() {
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.self_update().arg("--offline"),
@@ -64,13 +63,41 @@ fn test_self_update_offline_error() {
     ");
 }
 
-#[tokio::test]
-async fn test_self_update_uses_legacy_path_with_ghe_override() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((
-        escape(&format!("v{}", env!("CARGO_PKG_VERSION"))),
-        "v[CURRENT_VERSION]",
-    ));
+#[test]
+fn self_update_offline_quiet() {
+    let context = uv_test::test_context!("3.12");
 
+    uv_snapshot!(context.self_update().arg("--offline").arg("--quiet"),
+    @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Self-update is not possible because network connectivity is disabled (i.e., with `--offline`)
+    ");
+}
+
+#[test]
+fn self_update_offline_extra_quiet() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.self_update().arg("--offline").arg("--quiet").arg("--quiet"),
+    @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+}
+
+/// Set up a fake receipt and a mock update metadata endpoint to allow
+/// simulating an update with `--dry-run`.
+async fn setup_mock_update(
+    context: &TestContext,
+    target_version: &str,
+) -> Result<(PathBuf, MockServer)> {
     let receipt_dir = context.temp_dir.child("receipt");
     receipt_dir.create_dir_all()?;
 
@@ -100,7 +127,6 @@ async fn test_self_update_uses_legacy_path_with_ghe_override() -> Result<()> {
         }))?)?;
 
     let server = MockServer::start().await;
-    let target_version = "9.9.9";
     let installer_name = if cfg!(windows) {
         "uv-installer.ps1"
     } else {
@@ -124,6 +150,16 @@ async fn test_self_update_uses_legacy_path_with_ghe_override() -> Result<()> {
         .mount(&server)
         .await;
 
+    Ok((receipt_dir.to_path_buf(), server))
+}
+
+#[tokio::test]
+async fn test_self_update_uses_legacy_path_with_ghe_override() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_current_version();
+
+    let target_version = "9.9.9";
+    let (receipt_dir, server) = setup_mock_update(&context, target_version).await?;
+
     uv_snapshot!(context.filters(), context.self_update()
         .arg(target_version)
         .arg("--dry-run")
@@ -136,6 +172,104 @@ async fn test_self_update_uses_legacy_path_with_ghe_override() -> Result<()> {
     ----- stderr -----
     info: Checking for updates...
     Would update uv from v[CURRENT_VERSION] to v9.9.9
+    ");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn self_update_dry_run_quiet() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_current_version();
+
+    let target_version = "9.9.9";
+    let (receipt_dir, server) = setup_mock_update(&context, target_version).await?;
+
+    uv_snapshot!(context.filters(), context.self_update()
+        .arg(target_version)
+        .arg("--dry-run")
+        .arg("--quiet")
+        .env("AXOUPDATER_CONFIG_PATH", receipt_dir.as_os_str())
+        .env(EnvVars::UV_INSTALLER_GHE_BASE_URL, server.uri()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Would update uv from v[CURRENT_VERSION] to v9.9.9
+    ");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn self_update_dry_run_extra_quiet() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let receipt_dir = context.temp_dir.child("receipt");
+    receipt_dir.create_dir_all()?;
+
+    let target_version = "9.9.9";
+    let (receipt_dir, server) = setup_mock_update(&context, target_version).await?;
+
+    uv_snapshot!(context.self_update()
+        .arg(target_version)
+        .arg("--dry-run")
+        .arg("--quiet")
+        .arg("--quiet")
+        .env("AXOUPDATER_CONFIG_PATH", receipt_dir.as_os_str())
+        .env(EnvVars::UV_INSTALLER_GHE_BASE_URL, server.uri()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn self_update_noop_dry_run() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_current_version();
+
+    let target_version = env!("CARGO_PKG_VERSION");
+    let (receipt_dir, server) = setup_mock_update(&context, target_version).await?;
+
+    uv_snapshot!(context.filters(), context.self_update()
+        .arg(target_version)
+        .arg("--dry-run")
+        .env("AXOUPDATER_CONFIG_PATH", receipt_dir.as_os_str())
+        .env(EnvVars::UV_INSTALLER_GHE_BASE_URL, server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    info: Checking for updates...
+    You're on the latest version of uv (v[CURRENT_VERSION])
+    ");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn self_update_noop_dry_run_quiet() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_current_version();
+
+    let target_version = env!("CARGO_PKG_VERSION");
+    let (receipt_dir, server) = setup_mock_update(&context, target_version).await?;
+
+    uv_snapshot!(context.filters(), context.self_update()
+        .arg(target_version)
+        .arg("--dry-run")
+        .arg("--quiet")
+        .env("AXOUPDATER_CONFIG_PATH", receipt_dir.as_os_str())
+        .env(EnvVars::UV_INSTALLER_GHE_BASE_URL, server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
     ");
 
     Ok(())
