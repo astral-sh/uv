@@ -27,6 +27,9 @@ uv lock
 echo "Generating JSON schema..."
 cargo dev generate-json-schema
 
+echo "Checking crates.io publish setup..."
+uv run "$project_root/scripts/setup-crates-io-publish.py" --quiet
+
 echo "Creating release branch..."
 git checkout -b "release/$(uv version --short)"
 git commit -am "Bump version to $(uv version --short)"
