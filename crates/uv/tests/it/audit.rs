@@ -46,7 +46,7 @@ async fn audit_no_vulnerabilities() {
     ----- stdout -----
 
     ----- stderr -----
-    Found no known vulnerabilities and no adverse project statuses in 1 packages
+    Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
 }
 
@@ -124,7 +124,7 @@ async fn audit_vulnerability_found() {
 
 
     ----- stderr -----
-    Found 1 known vulnerability and no adverse project statuses in 1 packages
+    Found 1 known vulnerability and no adverse project statuses in 1 package
     ");
 }
 
@@ -229,7 +229,7 @@ async fn audit_best_id_selection() {
 
 
     ----- stderr -----
-    Found 1 known vulnerability and no adverse project statuses in 1 packages
+    Found 1 known vulnerability and no adverse project statuses in 1 package
     ");
 }
 
@@ -294,7 +294,7 @@ async fn audit_no_fix_versions() {
 
 
     ----- stderr -----
-    Found 1 known vulnerability and no adverse project statuses in 1 packages
+    Found 1 known vulnerability and no adverse project statuses in 1 package
     ");
 }
 
@@ -401,7 +401,7 @@ async fn audit_multiple_vulnerabilities_same_package() {
 
 
     ----- stderr -----
-    Found 2 known vulnerabilities and no adverse project statuses in 1 packages
+    Found 2 known vulnerabilities and no adverse project statuses in 1 package
     ");
 }
 
@@ -449,7 +449,7 @@ async fn audit_no_dev() {
     ----- stdout -----
 
     ----- stderr -----
-    Found no known vulnerabilities and no adverse project statuses in 1 packages
+    Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
 
     // Without --no-dev, both packages should be audited.
@@ -457,6 +457,169 @@ async fn audit_no_dev() {
         .audit()
         .arg("--frozen")
         .arg("--preview")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Found no known vulnerabilities and no adverse project statuses in 2 packages
+    ");
+}
+
+/// Extras are included in the audit by default, and can be excluded.
+#[tokio::test]
+async fn audit_extras() {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [project.optional-dependencies]
+        web = ["typing-extensions==4.10.0"]
+    "#})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    // By default, extras are included: both iniconfig and typing-extensions are audited.
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--frozen")
+        .arg("--preview")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Found no known vulnerabilities and no adverse project statuses in 2 packages
+    ");
+
+    // With --no-extra web, only iniconfig should be audited.
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--frozen")
+        .arg("--preview")
+        .arg("--no-extra")
+        .arg("web")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Found no known vulnerabilities and no adverse project statuses in 1 package
+    ");
+}
+
+/// Non-default dependency groups are included when explicitly requested.
+#[tokio::test]
+async fn audit_dependency_groups() {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [dependency-groups]
+        dev = ["typing-extensions==4.10.0"]
+        lint = ["sniffio==1.3.1"]
+
+    "#})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    // Default: all groups are included (iniconfig + typing-extensions + sniffio = 3).
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--frozen")
+        .arg("--preview")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Found no known vulnerabilities and no adverse project statuses in 3 packages
+    ");
+
+    // --no-dev: excludes the dev group (iniconfig + sniffio = 2).
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--frozen")
+        .arg("--preview")
+        .arg("--no-dev")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Found no known vulnerabilities and no adverse project statuses in 2 packages
+    ");
+
+    // --no-group lint: excludes the lint group (iniconfig + typing-extensions = 2).
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--frozen")
+        .arg("--preview")
+        .arg("--no-group")
+        .arg("lint")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Found no known vulnerabilities and no adverse project statuses in 2 packages
+    ");
+
+    // --only-group lint: prod deps + only the "lint" group (iniconfig + sniffio = 2).
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--frozen")
+        .arg("--preview")
+        .arg("--only-group")
+        .arg("lint")
         .arg("--service-url")
         .arg(server.uri()), @"
     success: true

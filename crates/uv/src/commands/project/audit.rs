@@ -260,7 +260,16 @@ impl AuditResults {
         writeln!(
             self.printer.stderr(),
             "Found {vuln_banner} and {status_banner} in {packages}",
-            packages = format!("{npackages} packages", npackages = self.n_packages).bold()
+            packages = format!(
+                "{npackages} {label}",
+                npackages = self.n_packages,
+                label = if self.n_packages == 1 {
+                    "package"
+                } else {
+                    "packages"
+                }
+            )
+            .bold()
         )?;
 
         let has_findings = !vulns.is_empty() || !statuses.is_empty();
