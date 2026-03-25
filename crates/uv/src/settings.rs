@@ -16,10 +16,10 @@ use uv_cli::{
     AddArgs, AuditArgs, AuthLoginArgs, AuthLogoutArgs, AuthTokenArgs, ColorChoice, ExternalCommand,
     GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs,
     PipInstallArgs, PipListArgs, PipShowArgs, PipSyncArgs, PipTreeArgs, PipUninstallArgs,
-    PythonFindArgs, PythonInstallArgs, PythonListArgs, PythonListFormat, PythonPinArgs,
-    PythonUninstallArgs, PythonUpgradeArgs, RemoveArgs, RunArgs, SyncArgs, SyncFormat, ToolDirArgs,
-    ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, VenvArgs, VersionArgs,
-    VersionBumpSpec, VersionFormat,
+    PythonFindArgs, PythonInstallArgs, PythonInstallFormat, PythonListArgs, PythonListFormat,
+    PythonPinArgs, PythonUninstallArgs, PythonUpgradeArgs, RemoveArgs, RunArgs, SyncArgs,
+    SyncFormat, ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs,
+    TreeArgs, VenvArgs, VersionArgs, VersionBumpSpec, VersionFormat,
 };
 use uv_cli::{
     AuthorFrom, BuildArgs, ExportArgs, FormatArgs, PublishArgs, PythonDirArgs,
@@ -1304,6 +1304,7 @@ pub(crate) struct PythonInstallSettings {
     pub(crate) python_downloads_json_url: Option<String>,
     pub(crate) default: bool,
     pub(crate) compile_bytecode: bool,
+    pub(crate) output_format: PythonInstallFormat,
 }
 
 impl PythonInstallSettings {
@@ -1343,6 +1344,7 @@ impl PythonInstallSettings {
             python_downloads_json_url: _,
             default,
             compile_bytecode,
+            output_format,
         } = args;
 
         Self {
@@ -1368,6 +1370,7 @@ impl PythonInstallSettings {
                 "compile-bytecode",
             )
             .unwrap_or_default(),
+            output_format,
         }
     }
 }

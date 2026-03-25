@@ -594,6 +594,15 @@ fn help_subsubcommand() {
               
               [env: UV_COMPILE_BYTECODE=]
 
+          --output-format <OUTPUT_FORMAT>
+              Select the output format
+
+              Possible values:
+              - text: Display the result in a human-readable format
+              - json: Display the result in JSON format
+              
+              [default: text]
+
     Cache options:
       -n, --no-cache
               Avoid reading from or writing to the cache, instead using a temporary directory for the
@@ -847,6 +856,8 @@ fn help_flag_subsubcommand() {
           --compile-bytecode
               Compile Python's standard library to bytecode after installation [env:
               UV_COMPILE_BYTECODE=]
+          --output-format <OUTPUT_FORMAT>
+              Select the output format [default: text] [possible values: text, json]
 
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary

@@ -30,8 +30,8 @@ use uv_cli::SelfUpdateArgs;
 use uv_cli::{
     AuthCommand, AuthHelperCommand, AuthNamespace, BuildBackendCommand, CacheCommand,
     CacheNamespace, Cli, Commands, PipCommand, PipNamespace, ProjectCommand, PythonCommand,
-    PythonNamespace, SelfCommand, SelfNamespace, ToolCommand, ToolNamespace, TopLevelArgs,
-    WorkspaceCommand, WorkspaceNamespace, compat::CompatArgs,
+    PythonInstallFormat, PythonNamespace, SelfCommand, SelfNamespace, ToolCommand, ToolNamespace,
+    TopLevelArgs, WorkspaceCommand, WorkspaceNamespace, compat::CompatArgs,
 };
 use uv_client::BaseClientBuilder;
 use uv_configuration::min_stack_size;
@@ -1743,6 +1743,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 globals.python_downloads,
                 cli.top_level.no_config,
                 args.compile_bytecode,
+                args.output_format,
                 &globals.concurrency,
                 &cache,
                 globals.preview,
@@ -1778,6 +1779,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 globals.python_downloads,
                 cli.top_level.no_config,
                 args.compile_bytecode,
+                PythonInstallFormat::default(),
                 &globals.concurrency,
                 &cache,
                 globals.preview,
