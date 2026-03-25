@@ -45,13 +45,13 @@ use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl};
 use uv_python::PythonRequest;
 use uv_requirements::{GroupsSpecification, RequirementsSource};
 use uv_requirements_txt::RequirementsTxtRequirement;
-use uv_scripts::{Pep723Error, Pep723Item, Pep723Metadata, Pep723Script};
+use uv_scripts::{Pep723Error, Pep723Item, Pep723Script};
 use uv_settings::{Combine, EnvironmentOptions, FilesystemOptions, Options};
 use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
-use crate::commands::{ExitStatus, RunCommand, ScriptPath, ToolRunCommand};
+use crate::commands::{ExitStatus, ParsedRunCommand, RunCommand, ScriptPath, ToolRunCommand};
 use crate::printer::Printer;
 use crate::settings::{
     CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
@@ -88,7 +88,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     }
 
     // Parse the external command, if necessary.
-    let run_command = if let Commands::Project(command) = &*cli.command
+    let parsed_run_command = if let Commands::Project(command) = &*cli.command
         && let ProjectCommand::Run(uv_cli::RunArgs {
             command: Some(ref command),
             module,
@@ -97,7 +97,9 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             ..
         }) = **command
     {
-        Some(RunCommand::from_args(command, module, script, gui_script)?)
+        Some(ParsedRunCommand::from_args(
+            command, module, script, gui_script,
+        )?)
     } else {
         None
     };
@@ -127,7 +129,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         } else {
             Cow::Owned(path)
         }
-    } else if let Some(run_command) = &run_command
+    } else if let Some(run_command) = &parsed_run_command
         && early_preview.is_enabled(PreviewFeature::TargetWorkspaceDiscovery)
         && let Some(dir) = run_command.script_dir()
     {
@@ -254,56 +256,24 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         project.combine(user).combine(system)
     };
 
-    let mut downloaded_script = None;
     // If the target is a remote script, download it.
     // If the target is a PEP 723 script, parse it.
-    let script = if let Commands::Project(command) = &*cli.command {
+    let (run_script, run_command) = if let Some(parsed_run_command) = parsed_run_command {
+        let (script, run_command) = parsed_run_command
+            .resolve(
+                &cli.top_level.global_args,
+                filesystem.as_ref(),
+                &environment,
+            )
+            .await?;
+        (script, Some(run_command))
+    } else {
+        (None, None)
+    };
+    let script = if let Some(run_script) = run_script {
+        Some(run_script)
+    } else if let Commands::Project(command) = &*cli.command {
         match &**command {
-            ProjectCommand::Run(uv_cli::RunArgs { .. }) => match run_command.as_ref() {
-                Some(
-                    RunCommand::PythonScript(script, _) | RunCommand::PythonGuiScript(script, _),
-                ) => match Pep723Script::read(&script).await {
-                    Ok(Some(script)) => Some(Pep723Item::Script(script)),
-                    Ok(None) => None,
-                    Err(Pep723Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => None,
-                    Err(err) => return Err(err.into()),
-                },
-                Some(RunCommand::PythonRemote(url, _)) => {
-                    let settings = GlobalSettings::resolve(
-                        &cli.top_level.global_args,
-                        filesystem.as_ref(),
-                        &environment,
-                    );
-                    let client_builder = BaseClientBuilder::new(
-                        settings.network_settings.connectivity,
-                        settings.network_settings.system_certs,
-                        settings.network_settings.allow_insecure_host,
-                        settings.preview,
-                        settings.network_settings.read_timeout,
-                        settings.network_settings.connect_timeout,
-                        settings.network_settings.retries,
-                    )
-                    .http_proxy(settings.network_settings.http_proxy)
-                    .https_proxy(settings.network_settings.https_proxy)
-                    .no_proxy(settings.network_settings.no_proxy);
-
-                    downloaded_script =
-                        Some(RunCommand::download_remote_script(url, &client_builder).await?);
-
-                    match Pep723Metadata::read(downloaded_script.as_ref().unwrap()).await {
-                        Ok(Some(metadata)) => Some(Pep723Item::Remote(metadata, url.clone())),
-                        Ok(None) => None,
-                        Err(Pep723Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
-                            None
-                        }
-                        Err(err) => return Err(err.into()),
-                    }
-                }
-                Some(
-                    RunCommand::PythonStdin(contents, _) | RunCommand::PythonGuiStdin(contents, _),
-                ) => Pep723Metadata::parse(contents)?.map(Pep723Item::Stdin),
-                _ => None,
-            },
             // For `uv add --script` and `uv lock --script`, we'll create a PEP 723 tag if it
             // doesn't already exist.
             ProjectCommand::Add(uv_cli::AddArgs {
@@ -313,7 +283,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             | ProjectCommand::Lock(uv_cli::LockArgs {
                 script: Some(script),
                 ..
-            }) => match Pep723Script::read(&script).await {
+            }) => match Pep723Script::read(script).await {
                 Ok(Some(script)) => Some(Pep723Item::Script(script)),
                 Ok(None) => None,
                 Err(err) => return Err(err.into()),
@@ -334,7 +304,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             | ProjectCommand::Export(uv_cli::ExportArgs {
                 script: Some(script),
                 ..
-            }) => match Pep723Script::read(&script).await {
+            }) => match Pep723Script::read(script).await {
                 Ok(Some(script)) => Some(Pep723Item::Script(script)),
                 Ok(None) => {
                     bail!(
@@ -1345,7 +1315,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 project,
                 &project_dir,
                 run_command,
-                downloaded_script.as_ref(),
                 script,
                 globals,
                 cli.top_level.no_config,
@@ -2017,7 +1986,6 @@ async fn run_project(
     project_command: Box<ProjectCommand>,
     project_dir: &Path,
     command: Option<RunCommand>,
-    downloaded_script: Option<&tempfile::NamedTempFile>,
     script: Option<Pep723Item>,
     globals: GlobalSettings,
     // TODO(zanieb): Determine a better story for passing `no_config` in here
@@ -2138,7 +2106,6 @@ async fn run_project(
                 project_dir,
                 script,
                 command,
-                downloaded_script,
                 requirements,
                 args.show_resolution || globals.verbose > 0,
                 args.lock_check,
