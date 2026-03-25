@@ -41,7 +41,7 @@ USER_AGENT = "uv-crates-io-publish-setup (github.com/astral-sh/uv)"
 
 REPOSITORY_OWNER = "astral-sh"
 REPOSITORY_NAME = "uv"
-WORKFLOW_FILENAME = "publish-crates.yml"
+WORKFLOW_FILENAME = "release.yml"
 ENVIRONMENT = "release"
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
