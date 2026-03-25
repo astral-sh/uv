@@ -327,8 +327,6 @@ impl AuditResults {
                         )?;
                     }
                 }
-
-                writeln!(self.printer.stdout_important())?;
             }
         }
 

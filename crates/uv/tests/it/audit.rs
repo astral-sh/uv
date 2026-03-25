@@ -122,7 +122,6 @@ async fn audit_vulnerability_found() {
       Advisory information: https://example.com/advisory/PYSEC-2023-0001
 
 
-
     ----- stderr -----
     Found 1 known vulnerability and no adverse project statuses in 1 package
     ");
@@ -227,7 +226,6 @@ async fn audit_best_id_selection() {
       Advisory information: https://osv.dev/vulnerability/OSV-2023-0001
 
 
-
     ----- stderr -----
     Found 1 known vulnerability and no adverse project statuses in 1 package
     ");
@@ -290,7 +288,6 @@ async fn audit_no_fix_versions() {
       No fix versions available
 
       Advisory information: https://osv.dev/vulnerability/VULN-NO-FIX
-
 
 
     ----- stderr -----
@@ -397,7 +394,6 @@ async fn audit_multiple_vulnerabilities_same_package() {
       Fixed in: 2.0.1
 
       Advisory information: https://example.com/web/VULN-B
-
 
 
     ----- stderr -----
