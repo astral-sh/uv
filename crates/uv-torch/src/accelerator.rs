@@ -295,6 +295,8 @@ pub enum AmdGpuArchitecture {
     Gfx1100,
     Gfx1101,
     Gfx1102,
+    Gfx1150,
+    Gfx1151,
     Gfx1200,
     Gfx1201,
 }
@@ -314,6 +316,8 @@ impl FromStr for AmdGpuArchitecture {
             "gfx1100" => Ok(Self::Gfx1100),
             "gfx1101" => Ok(Self::Gfx1101),
             "gfx1102" => Ok(Self::Gfx1102),
+            "gfx1150" => Ok(Self::Gfx1150),
+            "gfx1151" => Ok(Self::Gfx1151),
             "gfx1200" => Ok(Self::Gfx1200),
             "gfx1201" => Ok(Self::Gfx1201),
             _ => Err(AcceleratorError::UnknownAmdGpuArchitecture(s.to_string())),
@@ -334,6 +338,8 @@ impl std::fmt::Display for AmdGpuArchitecture {
             Self::Gfx1100 => write!(f, "gfx1100"),
             Self::Gfx1101 => write!(f, "gfx1101"),
             Self::Gfx1102 => write!(f, "gfx1102"),
+            Self::Gfx1150 => write!(f, "gfx1150"),
+            Self::Gfx1151 => write!(f, "gfx1151"),
             Self::Gfx1200 => write!(f, "gfx1200"),
             Self::Gfx1201 => write!(f, "gfx1201"),
         }
