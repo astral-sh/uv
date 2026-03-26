@@ -857,6 +857,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
     use std::io::Write;
     use uv_client::{BaseClientBuilder, fetch_with_url_fallback, retryable_on_request_failure};
     use uv_redacted::DisplaySafeUrl;
@@ -889,8 +890,21 @@ mod tests {
 
     fn uv_manifest_line(version: &str, platform: &str) -> String {
         let extension = if cfg!(windows) { "zip" } else { "tar.gz" };
+        let url = format!(
+            "https://github.com/astral-sh/uv/releases/download/{version}/uv-{platform}.{extension}"
+        );
+
         format!(
-            "{{\"version\":\"{version}\",\"date\":\"2025-01-01T00:00:00Z\",\"artifacts\":[{{\"platform\":\"{platform}\",\"url\":\"https://github.com/astral-sh/uv/releases/download/{version}/uv-{platform}.{extension}\",\"archive_format\":\"{extension}\"}}]}}\n"
+            "{}\n",
+            json!({
+                "version": version,
+                "date": "2025-01-01T00:00:00Z",
+                "artifacts": [{
+                    "platform": platform,
+                    "url": url,
+                    "archive_format": extension,
+                }],
+            })
         )
     }
 
