@@ -291,6 +291,21 @@ impl PythonEnvironment {
         let link_path = install_path.join(".venv");
         let target = self.root();
 
+        // Delete any pre-existing environment in the link path as centralised environments are
+        // currently only supported for workspaces.
+        if link_path.read_link().is_err() && uv_fs::is_virtualenv_base(&link_path) {
+            let canonicalized = link_path.canonicalize();
+            let path = canonicalized.as_deref().unwrap_or_else(|_| &link_path);
+            if let Err(err) = uv_fs::remove_virtualenv(path) {
+                if warn {
+                    warn_user_once!("Failed to remove existing local virtual environment: {err}");
+                } else {
+                    warn!("Failed to remove virtualenv: {err}");
+                }
+                return target.to_path_buf();
+            }
+        }
+
         // Try a symlink/junction to start with
         let symlink_err = match uv_fs::replace_symlink_lenient(target, &link_path) {
             Ok(()) => return link_path,

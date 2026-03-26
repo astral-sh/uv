@@ -16031,8 +16031,9 @@ fn sync_centralized_env() -> Result<()> {
     Ok(())
 }
 
-/// Test that `uv sync --preview-features centralized-envs` respects an existing
-/// real `.venv` directory and does not create a centralized environment.
+/// Test that `uv sync --preview-features centralized-envs` creates and uses a centralised
+/// environment despite an existing real `.venv` directory. And that it clobbers it to create the
+/// link.
 #[test]
 fn sync_centralized_env_existing_local_venv() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -16065,7 +16066,7 @@ fn sync_centralized_env_existing_local_venv() -> Result<()> {
     assert!(context.temp_dir.child(".venv").is_dir());
     assert!(fs_err::read_link(context.temp_dir.child(".venv").path()).is_err());
 
-    // Now sync with the centralized flag. It should use the existing `.venv`.
+    // Now sync with the centralized flag. It should create a new centralised environment.
     uv_snapshot!(context.filters(), context.sync()
         .arg("--preview-features")
         .arg("centralized-envs"), @"
@@ -16074,13 +16075,15 @@ fn sync_centralized_env_existing_local_venv() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment `project-py3.12-[HASH]` in the centralized store
     Resolved 2 packages in [TIME]
-    Checked 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
     ");
 
-    // `.venv` should still be a real directory, not a symlink/junction.
-    assert!(context.temp_dir.child(".venv").is_dir());
-    assert!(fs_err::read_link(context.temp_dir.child(".venv").path()).is_err());
+    // `.venv` should now be a symlink/junction.
+    assert!(fs_err::read_link(context.temp_dir.child(".venv").path()).is_ok());
 
     Ok(())
 }

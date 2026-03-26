@@ -832,17 +832,11 @@ impl Workspace {
         }
 
         fn from_cache(
-            default: &Path,
             workspace: &Workspace,
             interp_or_req: InterpreterOrRequest<'_>,
             cache: &Cache,
         ) -> Option<ProjectEnvironmentPath> {
             if !uv_preview::is_enabled(PreviewFeature::CentralizedEnvs) {
-                return None;
-            }
-
-            // Check if the default path is already a normal directory containing a venv.
-            if uv_fs::is_virtualenv_base(default) && fs_err::read_link(default).is_err() {
                 return None;
             }
 
@@ -904,7 +898,7 @@ impl Workspace {
         }
 
         if project_env.is_default()
-            && let Some(project_env) = from_cache(&project_env, self, interp_or_req, cache)
+            && let Some(project_env) = from_cache(self, interp_or_req, cache)
         {
             project_env
         } else {
