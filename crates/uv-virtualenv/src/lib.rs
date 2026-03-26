@@ -19,18 +19,12 @@ pub enum Error {
     NotFound(String),
     #[error(transparent)]
     Python(#[from] uv_python::managed::Error),
-    #[error("{}", if *centralized {
-        format!("A {name} already exists in the centralized environment store. Use `--clear` to replace it")
-    } else {
-        format!("A {name} already exists at `{}`. Use `--clear` to replace it", path.display())
-    })]
+    #[error("A {name} already exists at `{}`. Use `--clear` to replace it", path.display())]
     Exists {
         /// The type of environment (e.g., "virtual environment").
         name: &'static str,
         /// The path to the existing environment.
         path: PathBuf,
-        /// Whether the environment is in the centralized environment store.
-        centralized: bool,
     },
 }
 
@@ -68,7 +62,6 @@ pub fn create_venv(
     relocatable: bool,
     seed: bool,
     upgradeable: bool,
-    centralized: bool,
 ) -> Result<PythonEnvironment, Error> {
     // Create the virtualenv at the given location.
     let virtualenv = virtualenv::create(
@@ -80,7 +73,6 @@ pub fn create_venv(
         relocatable,
         seed,
         upgradeable,
-        centralized,
     )?;
 
     // Create the corresponding `PythonEnvironment`.

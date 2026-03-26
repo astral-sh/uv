@@ -2007,8 +2007,8 @@ fn create_venv_centralized() {
     });
 }
 
-/// Test that `uv venv --preview-features centralized-envs` gives the same
-/// "already exists" error when the centralized environment already exists.
+/// Test that `uv venv --preview-features centralized-envs` does not complain when a centralized
+/// environment already exists.
 #[test]
 fn create_venv_centralized_already_exists() {
     let context = uv_test::test_context_with_versions!(&["3.12"]);
@@ -2048,25 +2048,24 @@ fn create_venv_centralized_already_exists() {
         .arg("3.12")
         .arg("--preview-features")
         .arg("centralized-envs"), @"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment `project-py3.12-[HASH]` in the centralized store
-    error: Failed to create virtual environment
-      Caused by: A virtual environment already exists in the centralized environment store. Use `--clear` to replace it
+    Activate with: source .venv/[BIN]/activate
     "
     );
 
-    // Running with `--clear` should succeed.
+    // Running with `--no-clear` should make no difference.
     uv_snapshot!(context.filters(), context.venv()
         .arg("--python")
         .arg("3.12")
         .arg("--preview-features")
         .arg("centralized-envs")
-        .arg("--clear"), @"
+        .arg("--no-clear"), @"
     success: true
     exit_code: 0
     ----- stdout -----

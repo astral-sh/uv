@@ -220,11 +220,14 @@ pub(crate) async fn venv(
         interpreter,
         prompt,
         system_site_packages,
-        on_existing,
+        if centralized {
+            uv_virtualenv::OnExisting::Remove(uv_virtualenv::RemovalReason::ManagedEnvironment)
+        } else {
+            on_existing
+        },
         relocatable,
         seed,
         upgradeable,
-        centralized,
     )
     .map_err(VenvError::Creation)?
     .with_centralized(centralized);

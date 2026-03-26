@@ -58,7 +58,6 @@ pub(crate) fn create(
     relocatable: bool,
     seed: bool,
     upgradeable: bool,
-    centralized: bool,
 ) -> Result<VirtualEnvironment, Error> {
     // Determine the base Python executable; that is, the Python executable that should be
     // considered the "base" for the virtual environment.
@@ -124,20 +123,12 @@ pub(crate) fn create(
             // when `--no-clear` is used do we want to suggest `--clear`?
             let err = Err(Error::Io(io::Error::new(
                 io::ErrorKind::AlreadyExists,
-                if centralized {
-                    format!(
-                        "A {name} already exists in the centralized environment store\n\n{}{} {hint}",
-                        "hint".bold().cyan(),
-                        ":".bold(),
-                    )
-                } else {
-                    format!(
-                        "A {name} already exists at: {}\n\n{}{} {hint}",
-                        location.user_display(),
-                        "hint".bold().cyan(),
-                        ":".bold(),
-                    )
-                },
+                format!(
+                    "A {name} already exists at: {}\n\n{}{} {hint}",
+                    location.user_display(),
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                ),
             )));
             match on_existing {
                 OnExisting::Allow => {
@@ -158,7 +149,7 @@ pub(crate) fn create(
                 // If not a virtual environment, fail without prompting.
                 OnExisting::Prompt if !is_virtualenv => return err,
                 OnExisting::Prompt => {
-                    match confirm_clear(location, name, centralized)? {
+                    match confirm_clear(location, name)? {
                         Some(true) => {
                             debug!("Removing existing {name} due to confirmation");
                             // Before removing the virtual environment, we need to canonicalize the
@@ -176,7 +167,6 @@ pub(crate) fn create(
                             return Err(Error::Exists {
                                 name,
                                 path: location.to_path_buf(),
-                                centralized,
                             });
                         }
                     }
@@ -187,11 +177,7 @@ pub(crate) fn create(
             // It's not a file or a directory
             return Err(Error::Io(io::Error::new(
                 io::ErrorKind::AlreadyExists,
-                if centralized {
-                    "Object already exists in the centralized environment store".to_string()
-                } else {
-                    format!("Object already exists at `{}`", location.user_display())
-                },
+                format!("Object already exists at `{}`", location.user_display()),
             )));
         }
         Err(err) if err.kind() == io::ErrorKind::NotFound => {
@@ -604,23 +590,13 @@ pub(crate) fn create(
 /// Prompt a confirmation that the virtual environment should be cleared.
 ///
 /// If not a TTY, returns `None`.
-fn confirm_clear(
-    location: &Path,
-    name: &'static str,
-    centralized: bool,
-) -> Result<Option<bool>, io::Error> {
+fn confirm_clear(location: &Path, name: &'static str) -> Result<Option<bool>, io::Error> {
     let term = Term::stderr();
     if term.is_term() {
-        let prompt = if centralized {
-            format!(
-                "A {name} already exists in the centralized environment store. Do you want to replace it?"
-            )
-        } else {
-            format!(
-                "A {name} already exists at `{}`. Do you want to replace it?",
-                location.user_display(),
-            )
-        };
+        let prompt = format!(
+            "A {name} already exists at `{}`. Do you want to replace it?",
+            location.user_display(),
+        );
         let hint = format!(
             "Use the `{}` flag or set `{}` to skip this prompt",
             "--clear".green(),

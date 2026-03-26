@@ -221,7 +221,6 @@ impl CachedEnvironment {
             true,
             false,
             false,
-            false,
         )?;
 
         sync_environment(

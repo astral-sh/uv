@@ -375,7 +375,6 @@ impl SourceBuild {
                 false,
                 false,
                 false,
-                false,
             )?
         };
 
