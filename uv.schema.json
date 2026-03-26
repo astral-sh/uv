@@ -2405,7 +2405,7 @@
           "const": "cu80"
         },
         {
-          "description": "Use the PyTorch index for ROCm 7.1.",
+          "description": "Use the PyTorch index for ROCm 7.2.",
           "type": "string",
           "const": "rocm7.2"
         },
