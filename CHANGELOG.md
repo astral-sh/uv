@@ -3,6 +3,25 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.11.2
+
+Released on 2026-03-26.
+
+### Enhancements
+
+- Add a dedicated Windows PE editing error ([#18710](https://github.com/astral-sh/uv/pull/18710))
+- Make `uv self update` fetch the manifest from the mirror first ([#18679](https://github.com/astral-sh/uv/pull/18679))
+- Use uv reqwest client for self update ([#17982](https://github.com/astral-sh/uv/pull/17982))
+- Show `uv self update` success and failure messages with `--quiet` ([#18645](https://github.com/astral-sh/uv/pull/18645))
+
+### Preview features
+
+- Evaluate extras and groups when determining auditable packages ([#18511](https://github.com/astral-sh/uv/pull/18511))
+
+### Bug fixes
+
+- Skip redundant project configuration parsing for `uv run` ([#17890](https://github.com/astral-sh/uv/pull/17890))
+
 ## 0.11.1
 
 Released on 2026-03-24.

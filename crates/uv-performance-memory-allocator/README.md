@@ -5,9 +5,9 @@
 This crate is an internal component of [uv](https://crates.io/crates/uv). The Rust API exposed here
 is unstable and will have frequent breaking changes.
 
-This version (0.0.34) is a component of [uv 0.11.1](https://crates.io/crates/uv/0.11.1). The source
+This version (0.0.35) is a component of [uv 0.11.2](https://crates.io/crates/uv/0.11.2). The source
 can be found
-[here](https://github.com/astral-sh/uv/blob/0.11.1/crates/uv-performance-memory-allocator).
+[here](https://github.com/astral-sh/uv/blob/0.11.2/crates/uv-performance-memory-allocator).
 
 See uv's
 [crate versioning policy](https://docs.astral.sh/uv/reference/policies/versioning/#crate-versioning)
