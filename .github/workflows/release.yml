@@ -47,6 +47,10 @@ on:
         default: dry-run
         type: string
 
+env:
+  CARGO_DIST_VERSION: "0.31.0"
+  CARGO_DIST_CHECKSUM: "cd355dab0b4c02fb59038fef87655550021d07f45f1d82f947a34ef98560abb8"
+
 jobs:
   # Run 'dist plan' (or host) to determine what tasks we need to do
   plan:
@@ -64,10 +68,12 @@ jobs:
           persist-credentials: false
           submodules: recursive
       - name: Install dist
-        # we specify bash to get pipefail; it guards against the `curl` command
-        # failing. otherwise `sh` won't catch that `curl` returned non-0
         shell: bash
-        run: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.31.0/cargo-dist-installer.sh | sh"
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf "https://github.com/axodotdev/cargo-dist/releases/download/v${CARGO_DIST_VERSION}/cargo-dist-x86_64-unknown-linux-gnu.tar.xz" -o /tmp/cargo-dist.tar.xz
+          echo "${CARGO_DIST_CHECKSUM}  /tmp/cargo-dist.tar.xz" | sha256sum -c -
+          tar -xf /tmp/cargo-dist.tar.xz -C /tmp
+          install /tmp/cargo-dist-x86_64-unknown-linux-gnu/dist ~/.cargo/bin/
       - name: Cache dist
         uses: actions/upload-artifact@6027e3dd177782cd8ab9af838c04fd81a07f1d47
         with:
