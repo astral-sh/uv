@@ -16,6 +16,8 @@ permissions: {}
 jobs:
   publish-versions:
     runs-on: ubuntu-latest
+    environment:
+      name: release
     env:
       VERSION: ${{ fromJson(inputs.plan).announcement_tag }}
     steps:
