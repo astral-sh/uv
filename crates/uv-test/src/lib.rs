@@ -1100,7 +1100,7 @@ impl TestContext {
         ));
         // Filter archive IDs.
         filters.push((
-            r"archive-v(\d+)[\\/](?:[0-9a-f]{64}|[A-Za-z0-9_-]{43})".to_string(),
+            r"archive-v(\d+)[\\/][0-9a-f]{30}".to_string(),
             "archive-v$1/[HASH]".to_string(),
         ));
 
