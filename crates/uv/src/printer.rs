@@ -53,6 +53,7 @@ impl Printer {
     }
 
     /// Return the [`Stderr`] for this printer.
+    #[allow(dead_code)] // Only used with the optional self-update feature.
     pub(crate) fn stderr_important(self) -> Stderr {
         match self {
             Self::Silent => Stderr::Disabled,
