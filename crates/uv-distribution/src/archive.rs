@@ -1,7 +1,7 @@
 use uv_cache::{ArchiveId, ArchiveVersion, LATEST};
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::Hashed;
-use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests};
+use uv_pypi_types::{HashDigest, HashDigests};
 
 /// An archive (unzipped wheel) that exists in the local cache.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -17,16 +17,11 @@ pub struct Archive {
 }
 
 impl Archive {
-    /// Create a new [`Archive`] with the given hashes.
+    /// Create a new [`Archive`] with the given blake3 digest and hashes.
     ///
-    /// The archive ID is derived from the SHA256 hash in the hashes.
-    pub(crate) fn new(hashes: HashDigests, filename: WheelFilename) -> Self {
-        // Extract the SHA256 hash to use as the archive ID
-        let sha256 = hashes
-            .iter()
-            .find(|digest| digest.algorithm == HashAlgorithm::Sha256)
-            .expect("SHA256 hash must be present");
-        let id = ArchiveId::from(sha256.clone());
+    /// The archive ID is derived from the blake3 hash of the wheel's contents.
+    pub(crate) fn new(blake3_digest: &str, hashes: HashDigests, filename: WheelFilename) -> Self {
+        let id = ArchiveId::from_blake3(blake3_digest);
         Self {
             id,
             hashes,

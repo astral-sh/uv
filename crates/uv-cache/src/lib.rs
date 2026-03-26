@@ -12,7 +12,7 @@ use tracing::{debug, trace, warn};
 use uv_cache_info::Timestamp;
 use uv_fs::{LockedFile, LockedFileError, LockedFileMode, Simplified, cachedir, directories};
 use uv_normalize::PackageName;
-use uv_pypi_types::{HashDigest, ResolutionMetadata};
+use uv_pypi_types::ResolutionMetadata;
 
 pub use crate::by_timestamp::CachedByTimestamp;
 #[cfg(feature = "clap")]
@@ -384,10 +384,10 @@ impl Cache {
         &self,
         temp_dir: impl AsRef<Path>,
         path: impl AsRef<Path>,
-        hash: HashDigest,
+        blake3_digest: &str,
     ) -> io::Result<ArchiveId> {
         // Move the temporary directory into the directory store.
-        let id = ArchiveId::from(hash);
+        let id = ArchiveId::from_blake3(blake3_digest);
         let archive_entry = self.bucket(CacheBucket::Archive).join(id.as_ref());
         if let Some(parent) = archive_entry.parent() {
             fs_err::create_dir_all(parent)?;
@@ -1503,18 +1503,12 @@ impl Refresh {
 mod tests {
     use crate::ArchiveId;
     use std::str::FromStr;
-    use uv_pypi_types::{HashAlgorithm, HashDigest};
-    use uv_small_str::SmallString;
 
     use super::Link;
 
     #[test]
     fn test_link_round_trip() {
-        let digest = HashDigest {
-            algorithm: HashAlgorithm::Sha256,
-            digest: SmallString::from("a".repeat(64)),
-        };
-        let id = ArchiveId::from(digest);
+        let id = ArchiveId::from_blake3(&"a".repeat(64));
         let link = Link::new(id);
         let s = link.to_string();
         let parsed = Link::from_str(&s).unwrap();

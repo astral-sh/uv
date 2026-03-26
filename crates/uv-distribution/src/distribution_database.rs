@@ -25,7 +25,7 @@ use uv_distribution_types::{
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
 use uv_platform_tags::Tags;
-use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, PyProjectToml};
+use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml};
 use uv_redacted::DisplaySafeUrl;
 use uv_types::{BuildContext, BuildStack};
 use uv_warnings::warn_user_once;
@@ -695,23 +695,18 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     },
                 }
 
-                // If necessary, exhaust the reader to compute the hash.
-                if !hashes.is_none() {
-                    hasher.finish().await.map_err(Error::HashExhaustion)?;
-                }
+                // Exhaust the reader to compute the hash.
+                hasher.finish().await.map_err(Error::HashExhaustion)?;
+
+                // Extract the blake3 hash for content-addressing.
+                let blake3_digest = hasher.blake3_digest();
 
                 let hash_digests: HashDigests = hashers.into_iter().map(HashDigest::from).collect();
-
-                // Extract the SHA256 hash for content-addressing
-                let sha256 = hash_digests
-                    .iter()
-                    .find(|digest| digest.algorithm == HashAlgorithm::Sha256)
-                    .expect("SHA256 hash must be present");
 
                 // Persist the temporary directory to the directory store.
                 self.build_context
                     .cache()
-                    .persist(temp_dir.keep(), wheel_entry.path(), sha256.clone())
+                    .persist(temp_dir.keep(), wheel_entry.path(), blake3_digest.as_str())
                     .await
                     .map_err(Error::CacheRead)?;
 
@@ -719,7 +714,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     reporter.on_download_complete(dist.name(), progress);
                 }
 
-                Ok(Archive::new(hash_digests, filename.clone()))
+                Ok(Archive::new(
+                    blake3_digest.as_str(),
+                    hash_digests,
+                    filename.clone(),
+                ))
             }
             .instrument(info_span!("wheel", wheel = %dist))
         };
@@ -889,18 +888,15 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 // Exhaust the reader to compute the hash.
                 hasher.finish().await.map_err(Error::HashExhaustion)?;
 
-                let hash_digests: HashDigests = hashers.into_iter().map(HashDigest::from).collect();
+                // Extract the blake3 hash for content-addressing.
+                let blake3_digest = hasher.blake3_digest();
 
-                // Extract the SHA256 hash for content-addressing
-                let sha256 = hash_digests
-                    .iter()
-                    .find(|digest| digest.algorithm == HashAlgorithm::Sha256)
-                    .expect("SHA256 hash must be present");
+                let hash_digests: HashDigests = hashers.into_iter().map(HashDigest::from).collect();
 
                 // Persist the temporary directory to the directory store.
                 self.build_context
                     .cache()
-                    .persist(temp_dir.keep(), wheel_entry.path(), sha256.clone())
+                    .persist(temp_dir.keep(), wheel_entry.path(), blake3_digest.as_str())
                     .await
                     .map_err(Error::CacheRead)?;
 
@@ -908,7 +904,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     reporter.on_download_complete(dist.name(), progress);
                 }
 
-                Ok(Archive::new(hash_digests, filename.clone()))
+                Ok(Archive::new(
+                    blake3_digest.as_str(),
+                    hash_digests,
+                    filename.clone(),
+                ))
             }
             .instrument(info_span!("wheel", wheel = %dist))
         };
@@ -1057,23 +1057,20 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             // Exhaust the reader to compute the hash.
             hasher.finish().await.map_err(Error::HashExhaustion)?;
 
-            let hash_digests: HashDigests = hashers.into_iter().map(HashDigest::from).collect();
+            // Extract the blake3 hash for content-addressing.
+            let blake3_digest = hasher.blake3_digest();
 
-            // Extract the SHA256 hash for content-addressing
-            let sha256 = hash_digests
-                .iter()
-                .find(|digest| digest.algorithm == HashAlgorithm::Sha256)
-                .expect("SHA256 hash must be present");
+            let hash_digests: HashDigests = hashers.into_iter().map(HashDigest::from).collect();
 
             // Persist the temporary directory to the directory store.
             self.build_context
                 .cache()
-                .persist(temp_dir.keep(), wheel_entry.path(), sha256.clone())
+                .persist(temp_dir.keep(), wheel_entry.path(), blake3_digest.as_str())
                 .await
                 .map_err(Error::CacheWrite)?;
 
             // Create an archive.
-            let archive = Archive::new(hash_digests, filename.clone());
+            let archive = Archive::new(blake3_digest.as_str(), hash_digests, filename.clone());
 
             // Write the archive pointer to the cache.
             let pointer = LocalArchivePointer {
@@ -1098,36 +1095,28 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     }
 
     /// Unzip a wheel into the cache, returning the path to the unzipped directory.
+    ///
+    /// Uses synchronous parallel extraction with rayon and blake3 multi-threaded hashing, since
+    /// the wheel is already on disk (locally built).
     async fn unzip_wheel(&self, path: &Path, target: &Path) -> Result<ArchiveId, Error> {
-        // Open the wheel file for hashing
-        let file = fs_err::tokio::File::open(path)
-            .await
-            .map_err(Error::CacheWrite)?;
-
-        // Create a temporary directory for unzipping
+        // Create a temporary directory for unzipping.
         let temp_dir =
             tempfile::tempdir_in(self.build_context.cache().root()).map_err(Error::CacheWrite)?;
 
-        // Create a hasher to content-address the wheel.
-        let mut hashers = vec![Hasher::from(HashAlgorithm::Sha256)];
-        let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
-
-        // Unzip the wheel while computing the hash
-        uv_extract::stream::unzip(path.display(), &mut hasher, temp_dir.path())
-            .await
-            .map_err(|err| Error::Extract(path.to_string_lossy().into_owned(), err))?;
-
-        // Exhaust the reader to complete the hash computation
-        hasher.finish().await.map_err(Error::HashExhaustion)?;
-
-        // Extract the digest.
-        let sha256 = HashDigest::from(hashers.into_iter().next().expect("SHA256 hasher"));
+        // Unzip the wheel in parallel and compute the blake3 hash using mmap.
+        let path = path.to_path_buf();
+        let temp_path = temp_dir.path().to_path_buf();
+        let blake3_digest =
+            tokio::task::spawn_blocking(move || uv_extract::sync::unzip(&path, &temp_path))
+                .await
+                .map_err(|err| Error::Extract(String::new(), uv_extract::Error::Io(err.into())))?
+                .map_err(|err| Error::Extract(String::new(), err))?;
 
         // Persist the temporary directory to the directory store.
         let id = self
             .build_context
             .cache()
-            .persist(temp_dir.keep(), target, sha256.clone())
+            .persist(temp_dir.keep(), target, blake3_digest.as_str())
             .await
             .map_err(Error::CacheWrite)?;
 

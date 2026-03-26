@@ -69,6 +69,7 @@ uv-workspace = { workspace = true, features = ["clap"] }
 
 anstream = { workspace = true }
 anyhow = { workspace = true }
+blake3 = { workspace = true }
 axoupdater = { workspace = true, features = [
     "github_releases",
     "tokio",

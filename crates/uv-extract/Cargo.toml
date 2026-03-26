@@ -16,6 +16,7 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-configuration = { workspace = true }
 uv-distribution-filename = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-static = { workspace = true }
@@ -25,9 +26,12 @@ astral-tokio-tar = { workspace = true }
 async-compression = { workspace = true, features = ["bzip2", "gzip", "zstd", "xz"] }
 async_zip = { workspace = true }
 blake2 = { workspace = true }
+blake3 = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 md-5 = { workspace = true }
+memmap2 = { workspace = true }
+rayon = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
 rustc-hash = { workspace = true }
@@ -38,6 +42,7 @@ tokio = { workspace = true }
 tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
 xz2 = { workspace = true }
+zip = { workspace = true }
 zstd = { workspace = true }
 
 [features]
