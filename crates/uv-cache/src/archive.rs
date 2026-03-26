@@ -82,9 +82,11 @@ impl FromStr for ArchiveVersion {
 pub struct ArchiveId(SmallString);
 
 impl ArchiveId {
-    /// Create a new [`ArchiveId`] from a blake3 hex digest.
+    /// Create a new [`ArchiveId`] from a blake3 hex digest, truncated to 30 characters.
+    ///
+    /// 30 hex characters encode 120 bits, giving a birthday-bound collision resistance of ~2^60.
     pub fn from_blake3(digest: &str) -> Self {
-        Self(SmallString::from(digest))
+        Self(SmallString::from(&digest[..30]))
     }
 }
 
