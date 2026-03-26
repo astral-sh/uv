@@ -446,16 +446,15 @@ fn init_library() -> Result<()> {
     Ok(())
 }
 
-/// Test the uv build backend with using `uv init --package --preview`. To be merged with the regular
-/// init lib test once the uv build backend becomes the stable default.
+/// Test that the uv build backend is used with `uv init --package`.
 #[test]
-fn init_package_preview() -> Result<()> {
+fn init_package() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
 
-    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--package").arg("--preview"), @"
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--package"), @"
     success: true
     exit_code: 0
     ----- stdout -----
