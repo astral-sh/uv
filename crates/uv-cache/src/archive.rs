@@ -7,9 +7,53 @@ use uv_small_str::SmallString;
 /// The latest version of the archive bucket.
 pub static LATEST: ArchiveVersion = ArchiveVersion::V0;
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
+#[repr(u8)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum ArchiveVersion {
     V0 = 0,
+}
+
+impl From<ArchiveVersion> for u8 {
+    fn from(version: ArchiveVersion) -> Self {
+        match version {
+            ArchiveVersion::V0 => 0,
+        }
+    }
+}
+
+impl TryFrom<u8> for ArchiveVersion {
+    type Error = u8;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Self::V0),
+            _ => Err(value),
+        }
+    }
+}
+
+impl serde::Serialize for ArchiveVersion {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_u8((*self).into())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for ArchiveVersion {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = <u8 as serde::Deserialize>::deserialize(deserializer)?;
+        Self::try_from(value).map_err(|value| {
+            serde::de::Error::invalid_value(
+                serde::de::Unexpected::Unsigned(u64::from(value)),
+                &"a valid archive version",
+            )
+        })
+    }
 }
 
 impl std::fmt::Display for ArchiveVersion {

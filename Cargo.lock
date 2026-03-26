@@ -553,6 +553,7 @@ dependencies = [
  "cfg-if",
  "constant_time_eq",
  "cpufeatures",
+ "memmap2",
  "rayon-core",
 ]
 
@@ -6481,7 +6482,6 @@ dependencies = [
  "fs-err",
  "futures",
  "md-5",
- "memmap2",
  "rayon",
  "regex",
  "reqwest",

@@ -11,6 +11,7 @@ use tokio::sync::Semaphore;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{Instrument, info_span, instrument, warn};
 use url::Url;
+use walkdir::WalkDir;
 
 use uv_cache::{ArchiveId, CacheBucket, CacheEntry, LATEST, WheelCache};
 use uv_cache_info::{CacheInfo, Timestamp};
@@ -1110,14 +1111,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 build: None,
             })
         } else {
-            // Otherwise, unzip the wheel and compute hashes (always including SHA256).
+            // Otherwise, unzip the wheel and compute the requested hashes.
             let file = fs_err::tokio::File::open(path)
                 .await
                 .map_err(Error::CacheRead)?;
             let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
                 .map_err(Error::CacheWrite)?;
 
-            // Create a hasher for each hash algorithm (always includes SHA256).
+            // Create a hasher for each requested hash algorithm.
             let algorithms = hashes.algorithms();
             let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
             let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
@@ -1181,34 +1182,44 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     }
 
     /// Unzip a wheel into the cache, returning the path to the unzipped directory.
+    ///
+    /// Uses synchronous parallel extraction with rayon and blake3 multi-threaded hashing, since
+    /// the wheel is already on disk (locally built).
     async fn unzip_wheel(
         &self,
         path: &Path,
         target: &Path,
         dist: DistRef<'_>,
     ) -> Result<ArchiveId, Error> {
-        // Open the wheel file for hashing.
-        let file = fs_err::tokio::File::open(path)
-            .await
-            .map_err(Error::CacheWrite)?;
-        // Create a temporary directory for unzipping.
-        let temp_dir =
-            tempfile::tempdir_in(self.build_context.cache().root()).map_err(Error::CacheWrite)?;
+        // Unzip the wheel in parallel and compute the blake3 hash using mmap.
+        let path = path.to_path_buf();
+        let cache_root = self.build_context.cache().root().to_path_buf();
+        let (temp_dir, blake3_digest) = tokio::task::spawn_blocking(move || {
+            let temp_dir = tempfile::tempdir_in(&cache_root)?;
+            let blake3_digest = uv_extract::sync::unzip(&path, temp_dir.path());
+            Ok::<_, io::Error>((temp_dir, blake3_digest))
+        })
+        .await
+        .map_err(|err| Error::Extract(String::new(), uv_extract::Error::Io(err.into())))?
+        .map_err(Error::CacheWrite)?;
+        let blake3_digest = blake3_digest.map_err(|err| Error::Extract(String::new(), err))?;
 
-        // Create a hasher to content-address the wheel.
-        let mut hashers = Vec::new();
-        let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
+        // Reconstruct the unpacked file listing for RECORD validation after sync extraction.
+        let mut files = Vec::new();
+        for entry in WalkDir::new(temp_dir.path()) {
+            let entry = entry.map_err(Error::CacheWalk)?;
+            if !entry.file_type().is_file() {
+                continue;
+            }
 
-        // Unzip the wheel while computing the hash.
-        let files = uv_extract::stream::unzip(path.display(), &mut hasher, temp_dir.path())
-            .await
-            .map_err(|err| Error::Extract(path.to_string_lossy().into_owned(), err))?;
-
-        // Exhaust the reader to complete the hash computation.
-        hasher.finish().await.map_err(Error::HashExhaustion)?;
-
-        // Extract the blake3 digest for content-addressing.
-        let blake3_digest = hasher.blake3_digest();
+            let relative = entry
+                .path()
+                .strip_prefix(temp_dir.path())
+                .expect("walkdir starts with root")
+                .to_path_buf();
+            let size = entry.metadata().map_err(Error::CacheRead)?.len();
+            files.push((relative, size));
+        }
 
         // Before we make the wheel accessible by persisting it, ensure that the RECORD is valid.
         validate_and_heal_record(temp_dir.path(), files.iter(), dist)

@@ -9932,6 +9932,7 @@ fn sync_all_extras() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
      + packaging==24.0
@@ -10230,6 +10231,7 @@ fn sync_all_groups() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
      + packaging==24.0
@@ -10615,7 +10617,7 @@ fn sync_stale_egg_info() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Prepared 2 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + member==0.1.dev5+gfea1041 (from git+https://github.com/astral-sh/uv-stale-egg-info-test.git@fea10416b9c479ac88fb217e14e40249b63bfbee#subdirectory=member)
      + root==0.1.dev5+gfea1041 (from git+https://github.com/astral-sh/uv-stale-egg-info-test.git@fea10416b9c479ac88fb217e14e40249b63bfbee)

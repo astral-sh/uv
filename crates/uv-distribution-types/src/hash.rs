@@ -40,15 +40,12 @@ impl HashPolicy<'_> {
     }
 
     /// Return the algorithms used in the hash policy.
-    ///
-    /// SHA256 is always included to support content-addressed archive IDs.
     pub fn algorithms(&self) -> Vec<HashAlgorithm> {
         match self {
-            Self::None => vec![HashAlgorithm::Sha256],
+            Self::None => vec![],
             Self::Generate(_) => vec![HashAlgorithm::Sha256],
             Self::Any(hashes) | Self::All(hashes) => {
                 let mut algorithms = hashes.iter().map(HashDigest::algorithm).collect::<Vec<_>>();
-                algorithms.push(HashAlgorithm::Sha256);
                 algorithms.sort();
                 algorithms.dedup();
                 algorithms
@@ -193,11 +190,28 @@ mod tests {
     }
 
     #[test]
-    fn algorithms_always_include_sha256() {
-        assert_eq!(HashPolicy::None.algorithms(), vec![HashAlgorithm::Sha256]);
+    fn algorithms_include_only_required_hashes() {
+        let sha256 = HashDigest::from_str(
+            "sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+        )
+        .unwrap();
+        let sha512 = HashDigest::from_str(
+            "sha512:f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2",
+        )
+        .unwrap();
+
+        assert_eq!(HashPolicy::None.algorithms(), vec![]);
         assert_eq!(
             HashPolicy::Generate(crate::HashGeneration::Url).algorithms(),
             vec![HashAlgorithm::Sha256]
+        );
+        assert_eq!(
+            HashPolicy::Any(&[sha512.clone(), sha512.clone()]).algorithms(),
+            vec![HashAlgorithm::Sha512]
+        );
+        assert_eq!(
+            HashPolicy::All(&[sha512, sha256]).algorithms(),
+            vec![HashAlgorithm::Sha256, HashAlgorithm::Sha512]
         );
     }
 }
