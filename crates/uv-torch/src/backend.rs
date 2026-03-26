@@ -113,7 +113,7 @@ pub enum TorchMode {
     Cu90,
     /// Use the PyTorch index for CUDA 8.0.
     Cu80,
-    /// Use the PyTorch index for ROCm 7.1.
+    /// Use the PyTorch index for ROCm 7.2.
     #[serde(rename = "rocm7.2")]
     #[cfg_attr(feature = "clap", clap(name = "rocm7.2"))]
     Rocm72,
