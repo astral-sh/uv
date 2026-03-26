@@ -2,7 +2,7 @@ use std::path::Path;
 
 use tracing::debug;
 
-use uv_cache::{Cache, CacheBucket, LATEST};
+use uv_cache::{Cache, CacheBucket};
 use uv_cache_info::CacheInfo;
 use uv_cache_key::{cache_digest, hash_digest};
 use uv_client::BaseClientBuilder;
@@ -10,10 +10,8 @@ use uv_configuration::{Concurrency, Constraints, TargetTriple};
 use uv_distribution_types::{
     BuiltDist, Dist, Identifier, Node, Resolution, ResolvedDist, SourceDist,
 };
-use uv_extract::hash::Hasher;
 use uv_fs::PythonExt;
 use uv_preview::Preview;
-use uv_pypi_types::{HashAlgorithm, HashDigest};
 use uv_python::{Interpreter, PythonEnvironment, canonicalize_executable};
 use uv_types::SourceTreeEditablePolicy;
 use uv_workspace::WorkspaceCache;
@@ -248,12 +246,12 @@ impl CachedEnvironment {
         .await?;
 
         // Now that the environment is complete, sync it to its content-addressed location.
-        let mut hasher = Hasher::from(HashAlgorithm::Sha256);
+        let mut hasher = blake3::Hasher::new();
         hasher.update(interpreter_hash.as_bytes());
         hasher.update(resolution_hash.as_bytes());
-        let sha256 = HashDigest::from(hasher);
+        let blake3_digest = hasher.finalize().to_hex();
         let id = cache
-            .persist(temp_dir.keep(), cache_entry.path(), sha256)
+            .persist(temp_dir.keep(), cache_entry.path(), blake3_digest.as_str())
             .await?;
         let root = cache.archive(&id);
 

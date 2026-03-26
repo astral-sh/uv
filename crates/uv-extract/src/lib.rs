@@ -9,6 +9,8 @@ use uv_static::EnvVars;
 mod error;
 pub mod hash;
 pub mod stream;
+pub mod sync;
+mod vendor;
 
 static CONTROL_CHARACTERS_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\p{C}").unwrap());
 static REPLACEMENT_CHARACTER: &str = "\u{FFFD}";
@@ -52,6 +54,20 @@ impl From<async_zip::Compression> for CompressionMethod {
             async_zip::Compression::Bz => Self::Deprecated("bzip2"),
             async_zip::Compression::Lzma => Self::Deprecated("lzma"),
             async_zip::Compression::Xz => Self::Deprecated("xz"),
+            _ => Self::Deprecated("unknown"),
+        }
+    }
+}
+
+impl From<zip::CompressionMethod> for CompressionMethod {
+    fn from(value: zip::CompressionMethod) -> Self {
+        match value {
+            zip::CompressionMethod::Stored => Self::Stored,
+            zip::CompressionMethod::Deflated => Self::Deflated,
+            zip::CompressionMethod::Zstd => Self::Zstd,
+            zip::CompressionMethod::Bzip2 => Self::Deprecated("bzip2"),
+            zip::CompressionMethod::Lzma => Self::Deprecated("lzma"),
+            zip::CompressionMethod::Xz => Self::Deprecated("xz"),
             _ => Self::Deprecated("unknown"),
         }
     }

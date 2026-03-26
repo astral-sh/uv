@@ -6,6 +6,8 @@ pub enum Error {
     Io(#[source] std::io::Error),
     #[error("Invalid zip file structure")]
     AsyncZip(#[from] async_zip::error::ZipError),
+    #[error("Invalid zip archive")]
+    Zip(#[from] zip::result::ZipError),
     #[error("Invalid tar file")]
     Tar(#[from] tokio_tar::TarError),
     #[error(
@@ -111,6 +113,11 @@ impl Error {
             Ok(zip_err) => return Self::AsyncZip(zip_err),
             Err(err) => err,
         };
+        let err = match err.downcast::<zip::result::ZipError>() {
+            Ok(zip_err) => return Self::Zip(zip_err),
+            Err(err) => err,
+        };
+
         Self::Io(err)
     }
 

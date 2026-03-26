@@ -2,7 +2,6 @@ use std::convert::Infallible;
 use std::path::Path;
 use std::str::FromStr;
 
-use uv_pypi_types::{HashAlgorithm, HashDigest};
 use uv_small_str::SmallString;
 
 /// The latest version of the archive bucket.
@@ -34,10 +33,16 @@ impl FromStr for ArchiveVersion {
 
 /// A unique identifier for an archive (unzipped wheel) in the cache.
 ///
-/// Note: this remains a newtype around a [`SmallString`] for compatibility with existing cache
-/// links and serialized metadata.
+/// Derived from the blake3 hash of the wheel's contents and stored as a [`SmallString`].
 #[derive(Debug, Clone, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct ArchiveId(SmallString);
+
+impl ArchiveId {
+    /// Create a new [`ArchiveId`] from a blake3 hex digest.
+    pub fn from_blake3(digest: &str) -> Self {
+        Self(SmallString::from(digest))
+    }
+}
 
 impl AsRef<Path> for ArchiveId {
     fn as_ref(&self) -> &Path {
@@ -56,16 +61,5 @@ impl FromStr for ArchiveId {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(Self(SmallString::from(s)))
-    }
-}
-
-impl From<HashDigest> for ArchiveId {
-    fn from(value: HashDigest) -> Self {
-        assert_eq!(
-            value.algorithm,
-            HashAlgorithm::Sha256,
-            "Archive IDs must be created from SHA256 digests"
-        );
-        Self(value.digest)
     }
 }
