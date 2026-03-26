@@ -609,7 +609,7 @@ async fn audit_dependency_groups() {
     Found no known vulnerabilities and no adverse project statuses in 2 packages
     ");
 
-    // --only-group lint: prod deps + only the "lint" group (iniconfig + sniffio = 2).
+    // --only-group lint: only the "lint" group, project deps omitted (sniffio = 1).
     uv_snapshot!(context.filters(), context
         .audit()
         .arg("--frozen")
@@ -623,6 +623,6 @@ async fn audit_dependency_groups() {
     ----- stdout -----
 
     ----- stderr -----
-    Found no known vulnerabilities and no adverse project statuses in 2 packages
+    Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
 }
