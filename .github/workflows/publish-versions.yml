@@ -27,7 +27,9 @@ jobs:
         run: echo "BRANCH_NAME=update-versions-$VERSION-$(date +%s)" >> $GITHUB_ENV
 
       - name: "Clone versions repo"
-        run: git clone https://${{ secrets.ASTRAL_VERSIONS_PAT }}@github.com/astral-sh/versions.git astral-versions
+        run: git clone https://${ASTRAL_VERSIONS_PAT}@github.com/astral-sh/versions.git astral-versions
+        env:
+          ASTRAL_VERSIONS_PAT: ${{ secrets.ASTRAL_VERSIONS_PAT }}
 
       - name: "Install uv"
         uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0

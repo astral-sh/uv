@@ -941,13 +941,15 @@ jobs:
         run: |
           UV_TEST_AWS_TOKEN=$(aws codeartifact get-authorization-token \
             --domain tests \
-            --domain-owner ${{ secrets.AWS_ACCOUNT_ID }} \
+            --domain-owner ${AWS_ACCOUNT_ID} \
             --region us-east-1 \
             --query authorizationToken \
             --output text)
           echo "::add-mask::$UV_TEST_AWS_TOKEN"
           echo "UV_TEST_AWS_TOKEN=$UV_TEST_AWS_TOKEN" >> $GITHUB_ENV
 
+        env:
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
       - name: "Authenticate with GCP"
         id: "auth"
         uses: "google-github-actions/auth@fc2174804b84f912b1f6d334e9463f484f1c552d"
