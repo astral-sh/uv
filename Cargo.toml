@@ -118,7 +118,7 @@ backon = { version = "1.3.0" }
 base64 = { version = "0.22.1" }
 bitflags = { version = "2.6.0" }
 blake2 = { version = "0.10.6" }
-blake3 = { version = "1.8.3", features = ["rayon"] }
+blake3 = { version = "1.8.3", features = ["rayon", "mmap"] }
 boxcar = { version = "0.2.5" }
 bytecheck = { version = "0.8.0" }
 cargo-util = { version = "0.2.14" }
@@ -173,7 +173,6 @@ junction = { version = "1.4.2" }
 mailparse = { version = "0.16.0" }
 md-5 = { version = "0.10.6" }
 memchr = { version = "2.7.4" }
-memmap2 = { version = "0.9.10" }
 miette = { version = "7.2.0", features = ["fancy-no-backtrace"] }
 nanoid = { version = "0.4.0" }
 nix = { version = "0.31.2", features = ["resource", "signal"] }

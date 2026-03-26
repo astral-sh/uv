@@ -1028,14 +1028,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 build: None,
             })
         } else {
-            // Otherwise, unzip the wheel and compute hashes (always including SHA256).
+            // Otherwise, unzip the wheel and compute the requested hashes.
             let file = fs_err::tokio::File::open(path)
                 .await
                 .map_err(Error::CacheRead)?;
             let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
                 .map_err(Error::CacheWrite)?;
 
-            // Create a hasher for each hash algorithm (always includes SHA256).
+            // Create a hasher for each requested hash algorithm.
             let algorithms = hashes.algorithms();
             let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
             let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
@@ -1099,18 +1099,18 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     /// Uses synchronous parallel extraction with rayon and blake3 multi-threaded hashing, since
     /// the wheel is already on disk (locally built).
     async fn unzip_wheel(&self, path: &Path, target: &Path) -> Result<ArchiveId, Error> {
-        // Create a temporary directory for unzipping.
-        let temp_dir =
-            tempfile::tempdir_in(self.build_context.cache().root()).map_err(Error::CacheWrite)?;
-
         // Unzip the wheel in parallel and compute the blake3 hash using mmap.
         let path = path.to_path_buf();
-        let temp_path = temp_dir.path().to_path_buf();
-        let blake3_digest =
-            tokio::task::spawn_blocking(move || uv_extract::sync::unzip(&path, &temp_path))
-                .await
-                .map_err(|err| Error::Extract(String::new(), uv_extract::Error::Io(err.into())))?
-                .map_err(|err| Error::Extract(String::new(), err))?;
+        let cache_root = self.build_context.cache().root().to_path_buf();
+        let (temp_dir, blake3_digest) = tokio::task::spawn_blocking(move || {
+            let temp_dir = tempfile::tempdir_in(&cache_root)?;
+            let blake3_digest = uv_extract::sync::unzip(&path, temp_dir.path());
+            Ok::<_, io::Error>((temp_dir, blake3_digest))
+        })
+        .await
+        .map_err(|err| Error::Extract(String::new(), uv_extract::Error::Io(err.into())))?
+        .map_err(Error::CacheWrite)?;
+        let blake3_digest = blake3_digest.map_err(|err| Error::Extract(String::new(), err))?;
 
         // Persist the temporary directory to the directory store.
         let id = self

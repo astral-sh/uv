@@ -4,10 +4,10 @@ use std::{ffi::OsString, path::PathBuf};
 pub enum Error {
     #[error("I/O operation failed during extraction")]
     Io(#[source] std::io::Error),
+    #[error("Invalid zip file")]
+    Zip(#[from] zip::result::ZipError),
     #[error("Invalid zip file structure")]
     AsyncZip(#[from] async_zip::error::ZipError),
-    #[error("Invalid zip archive")]
-    Zip(#[from] zip::result::ZipError),
     #[error("Invalid tar file")]
     Tar(#[from] tokio_tar::TarError),
     #[error(
