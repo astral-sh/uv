@@ -113,12 +113,11 @@ impl Binary {
                     .unwrap(),
                 DisplaySafeUrl::parse(&format!("{VERSIONS_MANIFEST_URL}/{name}.ndjson")).unwrap(),
             ],
-            Self::Uv => {
-                vec![
-                    DisplaySafeUrl::parse(&format!("{VERSIONS_MANIFEST_URL}/{name}.ndjson"))
-                        .unwrap(),
-                ]
-            }
+            Self::Uv => vec![
+                DisplaySafeUrl::parse(&format!("{VERSIONS_MANIFEST_MIRROR}/{name}.ndjson"))
+                    .unwrap(),
+                DisplaySafeUrl::parse(&format!("{VERSIONS_MANIFEST_URL}/{name}.ndjson")).unwrap(),
+            ],
         }
     }
 
@@ -393,11 +392,13 @@ impl RetriableError for Error {
 
     /// Returns `true` if trying an alternative URL makes sense after this error.
     ///
-    /// All errors arising from downloading (including streaming during extraction)
-    /// qualify.
+    /// Download and streaming failures qualify, as do malformed manifest responses.
     fn should_try_next_url(&self) -> bool {
         match self {
-            Self::Download { .. } | Self::ManifestFetch { .. } => true,
+            Self::Download { .. }
+            | Self::ManifestFetch { .. }
+            | Self::ManifestParse(..)
+            | Self::ManifestUtf8(..) => true,
             Self::Stream { .. } => true,
             Self::RetriedError { err, .. } => err.should_try_next_url(),
             err => {
@@ -856,12 +857,79 @@ where
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
     use std::io::Write;
-    use std::net::TcpListener;
-    use uv_client::{BaseClientBuilder, retryable_on_request_failure};
+    use uv_client::{BaseClientBuilder, fetch_with_url_fallback, retryable_on_request_failure};
     use uv_redacted::DisplaySafeUrl;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
+
+    async fn spawn_manifest_server(response: ResponseTemplate) -> (DisplaySafeUrl, MockServer) {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/uv.ndjson"))
+            .respond_with(response)
+            .mount(&server)
+            .await;
+
+        (
+            DisplaySafeUrl::parse(&format!("{}/uv.ndjson", server.uri())).unwrap(),
+            server,
+        )
+    }
+
+    fn manifest_response(body: &str) -> ResponseTemplate {
+        ResponseTemplate::new(200).set_body_raw(body.to_owned(), "application/x-ndjson")
+    }
+
+    fn not_found_response() -> ResponseTemplate {
+        ResponseTemplate::new(404)
+    }
+
+    fn uv_manifest_line(version: &str, platform: &str) -> String {
+        let extension = if cfg!(windows) { "zip" } else { "tar.gz" };
+        let url = format!(
+            "https://github.com/astral-sh/uv/releases/download/{version}/uv-{platform}.{extension}"
+        );
+
+        format!(
+            "{}\n",
+            json!({
+                "version": version,
+                "date": "2025-01-01T00:00:00Z",
+                "artifacts": [{
+                    "platform": platform,
+                    "url": url,
+                    "archive_format": extension,
+                }],
+            })
+        )
+    }
+
+    async fn resolve_version_from_manifest_urls(
+        urls: &[DisplaySafeUrl],
+        constraints: Option<&VersionSpecifiers>,
+    ) -> Result<ResolvedVersion, Error> {
+        let platform = Platform::from_env().unwrap();
+        let platform_name = platform.as_cargo_dist_triple();
+        let client_builder = BaseClientBuilder::default().retries(0);
+        let retry_policy = client_builder.retry_policy();
+        let client = client_builder.build();
+
+        fetch_with_url_fallback(urls, retry_policy, "manifest for `uv`", |url| {
+            fetch_and_find_matching_version(
+                Binary::Uv,
+                constraints,
+                None,
+                &platform_name,
+                url,
+                &client,
+            )
+        })
+        .await
+    }
 
     #[test]
     fn test_uv_download_urls() {
@@ -886,6 +954,70 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn test_manifest_falls_back_on_404() {
+        let platform = Platform::from_env().unwrap();
+        let platform_name = platform.as_cargo_dist_triple();
+        let (mirror_url, mirror_server) = spawn_manifest_server(not_found_response()).await;
+        let (canonical_url, canonical_server) = spawn_manifest_server(manifest_response(
+            &uv_manifest_line("1.2.3", &platform_name),
+        ))
+        .await;
+
+        let resolved = resolve_version_from_manifest_urls(&[mirror_url, canonical_url], None)
+            .await
+            .expect("404 from mirror should fall back to canonical manifest");
+
+        assert_eq!(resolved.version, Version::new([1, 2, 3]));
+        assert_eq!(mirror_server.received_requests().await.unwrap().len(), 1);
+        assert_eq!(canonical_server.received_requests().await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_manifest_falls_back_on_parse_error() {
+        let platform = Platform::from_env().unwrap();
+        let platform_name = platform.as_cargo_dist_triple();
+        let (mirror_url, mirror_server) =
+            spawn_manifest_server(manifest_response("{not json}\n")).await;
+        let (canonical_url, canonical_server) = spawn_manifest_server(manifest_response(
+            &uv_manifest_line("1.2.3", &platform_name),
+        ))
+        .await;
+
+        let resolved = resolve_version_from_manifest_urls(&[mirror_url, canonical_url], None)
+            .await
+            .expect("parse failure from mirror should fall back to canonical manifest");
+
+        assert_eq!(resolved.version, Version::new([1, 2, 3]));
+        assert_eq!(mirror_server.received_requests().await.unwrap().len(), 1);
+        assert_eq!(canonical_server.received_requests().await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_manifest_no_matching_version_does_not_fallback() {
+        let platform = Platform::from_env().unwrap();
+        let platform_name = platform.as_cargo_dist_triple();
+        let (mirror_url, mirror_server) = spawn_manifest_server(manifest_response(
+            &uv_manifest_line("1.2.3", &platform_name),
+        ))
+        .await;
+        let (canonical_url, canonical_server) = spawn_manifest_server(manifest_response(
+            &uv_manifest_line("9.9.9", &platform_name),
+        ))
+        .await;
+        let constraints =
+            VersionSpecifiers::from(VersionSpecifier::equals_version(Version::new([9, 9, 9])));
+
+        let err =
+            resolve_version_from_manifest_urls(&[mirror_url, canonical_url], Some(&constraints))
+                .await
+                .expect_err("no matching version should not fall back to canonical manifest");
+
+        assert!(matches!(err, Error::NoMatchingVersion { .. }));
+        assert_eq!(mirror_server.received_requests().await.unwrap().len(), 1);
+        assert_eq!(canonical_server.received_requests().await.unwrap().len(), 0);
+    }
+
     /// Verify that `should_try_next_url` returns `true` even for streaming errors
     /// that `retryable_on_request_failure` does not recognise as transient.
     ///
@@ -895,7 +1027,7 @@ mod tests {
     async fn test_non_retryable_stream_error_triggers_url_fallback() {
         use futures::TryStreamExt;
 
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
 
         std::thread::spawn(move || {

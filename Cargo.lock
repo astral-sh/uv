@@ -6040,6 +6040,7 @@ dependencies = [
  "uv-pep440",
  "uv-platform",
  "uv-redacted",
+ "wiremock",
 ]
 
 [[package]]

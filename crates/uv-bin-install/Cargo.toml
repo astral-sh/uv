@@ -37,3 +37,6 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 url = { workspace = true }
+
+[dev-dependencies]
+wiremock = { workspace = true }
