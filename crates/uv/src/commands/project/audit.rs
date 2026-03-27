@@ -82,8 +82,8 @@ pub(crate) async fn audit(
 
     // Determine the extras to include.
     let default_extras = match &target {
-        LockTarget::Workspace(_) => DefaultExtras::default(),
-        LockTarget::Script(_) => DefaultExtras::default(),
+        LockTarget::Workspace(_) => DefaultExtras::All,
+        LockTarget::Script(_) => DefaultExtras::All,
     };
     let extras = extras.with_defaults(default_extras);
 
@@ -206,7 +206,7 @@ pub(crate) async fn audit(
                     .parse()
                     .expect("invalid OSV service URL");
                 let client = base_client.for_host(&osv_url).raw_client().clone();
-                let service = osv::Osv::new(client, None, concurrency);
+                let service = osv::Osv::new(client, Some(osv_url), concurrency);
                 trace!("Auditing {n} dependencies against OSV", n = auditable.len());
                 service.query_batch(&dependencies).await?
             }
@@ -260,7 +260,16 @@ impl AuditResults {
         writeln!(
             self.printer.stderr(),
             "Found {vuln_banner} and {status_banner} in {packages}",
-            packages = format!("{npackages} packages", npackages = self.n_packages).bold()
+            packages = format!(
+                "{npackages} {label}",
+                npackages = self.n_packages,
+                label = if self.n_packages == 1 {
+                    "package"
+                } else {
+                    "packages"
+                }
+            )
+            .bold()
         )?;
 
         let has_findings = !vulns.is_empty() || !statuses.is_empty();
@@ -318,8 +327,6 @@ impl AuditResults {
                         )?;
                     }
                 }
-
-                writeln!(self.printer.stdout_important())?;
             }
         }
 
