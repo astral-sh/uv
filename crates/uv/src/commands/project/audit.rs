@@ -218,35 +218,25 @@ pub(crate) async fn audit(
     reporter.on_audit_complete();
 
     // Filter out ignored vulnerabilities.
-    let all_findings = if ignore.is_empty() && ignore_until_fixed.is_empty() {
-        all_findings
-    } else {
-        all_findings
-            .into_iter()
-            .filter(|finding| match finding {
-                Finding::Vulnerability(vulnerability) => {
-                    let dominated_by_ignore = vulnerability
-                        .ids()
-                        .any(|id| ignore.iter().any(|ignored| ignored == id.as_str()));
-                    if dominated_by_ignore {
-                        return false;
-                    }
-
-                    let dominated_by_ignore_until_fixed = vulnerability.ids().any(|id| {
-                        ignore_until_fixed
-                            .iter()
-                            .any(|ignored| ignored == id.as_str())
-                    });
-                    if dominated_by_ignore_until_fixed && vulnerability.fix_versions.is_empty() {
-                        return false;
-                    }
-
-                    true
+    let all_findings: Vec<_> = all_findings
+        .into_iter()
+        .filter(|finding| match finding {
+            Finding::Vulnerability(vulnerability) => {
+                if ignore.iter().any(|id| vulnerability.matches(id)) {
+                    return false;
                 }
-                Finding::ProjectStatus(_) => true,
-            })
-            .collect()
-    };
+                if vulnerability.fix_versions.is_empty()
+                    && ignore_until_fixed
+                        .iter()
+                        .any(|id| vulnerability.matches(id))
+                {
+                    return false;
+                }
+                true
+            }
+            Finding::ProjectStatus(_) => true,
+        })
+        .collect();
 
     let display = AuditResults {
         printer,
