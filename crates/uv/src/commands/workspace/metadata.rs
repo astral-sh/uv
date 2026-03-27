@@ -115,7 +115,7 @@ pub(crate) async fn metadata(
             Ok(ExitStatus::Failure)
         }
         Err(ProjectError::Operation(err)) => {
-            diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
+            diagnostics::OperationDiagnostic::with_system_certs(client_builder.system_certs())
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }

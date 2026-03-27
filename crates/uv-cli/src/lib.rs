@@ -7900,29 +7900,18 @@ pub enum WorkspaceCommand {
 }
 #[derive(Args)]
 pub struct MetadataArgs {
-    /// Check if the lockfile is up-to-date.
-    ///
-    /// Asserts that the `uv.lock` would remain unchanged after a resolution. If the lockfile is
-    /// missing or needs to be updated, uv will exit with an error.
-    ///
-    /// Equivalent to `--locked`.
-    #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["check_exists", "upgrade"], overrides_with = "check")]
-    pub check: bool,
-
     /// Check if the lockfile is up-to-date [env: UV_LOCKED=]
     ///
     /// Asserts that the `uv.lock` would remain unchanged after a resolution. If the lockfile is
     /// missing or needs to be updated, uv will exit with an error.
     ///
     /// Equivalent to `--check`.
-    #[arg(long, conflicts_with_all = ["check_exists", "upgrade"], hide = true)]
+    #[arg(long, conflicts_with_all = ["frozen", "upgrade"])]
     pub locked: bool,
 
     /// Assert that a `uv.lock` exists without checking if it is up-to-date [env: UV_FROZEN=]
-    ///
-    /// Equivalent to `--frozen`.
-    #[arg(long, alias = "frozen", conflicts_with_all = ["check", "locked"])]
-    pub check_exists: bool,
+    #[arg(long, conflicts_with_all = ["locked"])]
+    pub frozen: bool,
 
     /// Perform a dry run, without writing the lockfile.
     ///
@@ -7930,8 +7919,7 @@ pub struct MetadataArgs {
     /// changes, but will not write the lockfile to disk.
     #[arg(
         long,
-        conflicts_with = "check_exists",
-        conflicts_with = "check",
+        conflicts_with = "frozen",
         conflicts_with = "locked"
     )]
     pub dry_run: bool,

@@ -50,10 +50,10 @@ where
     }
 }
 
-/// The full `uv workspace metadata` json object
+/// The full `uv workspace metadata` JSON object
 #[derive(Debug, serde::Serialize)]
 pub struct Metadata {
-    /// Format info
+    /// Format information
     schema: SchemaReport,
     /// Absolute path to the workspace root
     ///
@@ -68,12 +68,12 @@ pub struct Metadata {
     conflicts: MetadataConflicts,
     /// An index of which nodes are workspace members
     ///
-    /// These entries are often what users should use as the entry-points into the `resolve` graph.
+    /// These entries are often what you should use as the entry-points into the `resolve` graph.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     members: Vec<MetadataWorkspaceMember>,
     /// The dependency graph
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
-    resolve: BTreeMap<MetadataNodeIdFlat, MetadataNode>,
+    resolution: BTreeMap<MetadataNodeIdFlat, MetadataNode>,
 }
 
 /// The schema version for the metadata report.
@@ -91,7 +91,8 @@ struct SchemaReport {
     /// The version of the schema.
     version: SchemaVersion,
 }
-/// Info for looking up workspace members, most info is stored in the node behind `id`
+
+/// Info for looking up workspace members, most information is stored in the node behind `id`
 #[derive(Debug, serde::Serialize)]
 struct MetadataWorkspaceMember {
     /// Package name
@@ -106,10 +107,10 @@ struct MetadataWorkspaceMember {
 ///
 /// There are 4 kinds of nodes:
 ///
-/// * packages: `mypackage==1.0.0 @ registry+https://pypi.org/simple`
-/// * extras:   `mypackage[myextra]==1.0.0 @ registry+https://pypi.org/simple`
-/// * groups:   `mypackage:mygroup==1.0.0 @ registry+https://pypi.org/simple`
-/// * build:    `mypackage(build)==1.0.0 @ registry+https://pypi.org/simple`
+/// * packages: `mypackage==1.0.0@registry+https://pypi.org/simple`
+/// * extras:   `mypackage[myextra]==1.0.0@registry+https://pypi.org/simple`
+/// * groups:   `mypackage:mygroup==1.0.0@registry+https://pypi.org/simple`
+/// * build:    `mypackage(build)==1.0.0@registry+https://pypi.org/simple`
 ///
 /// -----------
 ///
@@ -269,8 +270,8 @@ impl MetadataNodeId {
 impl Display for MetadataNodeId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.version {
-            Some(version) => write!(f, "{}{}=={version} @ {}", self.name, self.kind, self.source),
-            None => write!(f, "{}{} @ {}", self.name, self.kind, self.source),
+            Some(version) => write!(f, "{}{}=={version}@{}", self.name, self.kind, self.source),
+            None => write!(f, "{}{}@{}", self.name, self.kind, self.source),
         }
     }
 }
@@ -796,7 +797,7 @@ impl Metadata {
                 members.push(member);
             }
 
-            // Record sdist/wheel info
+            // Record sdist/wheel information
             if let Some(sdist) = &lock_package.sdist {
                 meta_package.sdist = Some(MetadataSourceDist::from_sdist(&workspace_root, sdist));
             }
@@ -820,7 +821,7 @@ impl Metadata {
             workspace_root,
             requires_python: lock.requires_python.clone(),
             members,
-            resolve,
+            resolution: resolve,
         })
     }
 

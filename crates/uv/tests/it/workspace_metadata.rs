@@ -31,11 +31,11 @@ fn workspace_metadata_simple() {
         {
           "name": "foo",
           "path": "[TEMP_DIR]/foo",
-          "id": "foo==0.1.0 @ virtual+[TEMP_DIR]/foo/"
+          "id": "foo==0.1.0@virtual+[TEMP_DIR]/foo/"
         }
       ],
-      "resolve": {
-        "foo==0.1.0 @ virtual+[TEMP_DIR]/foo/": {
+      "resolution": {
+        "foo==0.1.0@virtual+[TEMP_DIR]/foo/": {
           "name": "foo",
           "version": "0.1.0",
           "source": {
@@ -85,21 +85,21 @@ fn workspace_metadata_root_workspace() -> Result<()> {
         {
           "name": "albatross",
           "path": "[TEMP_DIR]/workspace",
-          "id": "albatross==0.1.0 @ editable+[TEMP_DIR]/workspace/"
+          "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace/"
         },
         {
           "name": "bird-feeder",
           "path": "[TEMP_DIR]/workspace/packages/bird-feeder",
-          "id": "bird-feeder==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/bird-feeder"
+          "id": "bird-feeder==1.0.0@editable+[TEMP_DIR]/workspace/packages/bird-feeder"
         },
         {
           "name": "seeds",
           "path": "[TEMP_DIR]/workspace/packages/seeds",
-          "id": "seeds==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/seeds"
+          "id": "seeds==1.0.0@editable+[TEMP_DIR]/workspace/packages/seeds"
         }
       ],
-      "resolve": {
-        "albatross==0.1.0 @ editable+[TEMP_DIR]/workspace/": {
+      "resolution": {
+        "albatross==0.1.0@editable+[TEMP_DIR]/workspace/": {
           "name": "albatross",
           "version": "0.1.0",
           "source": {
@@ -108,14 +108,14 @@ fn workspace_metadata_root_workspace() -> Result<()> {
           "kind": "package",
           "dependencies": [
             {
-              "id": "bird-feeder==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/bird-feeder"
+              "id": "bird-feeder==1.0.0@editable+[TEMP_DIR]/workspace/packages/bird-feeder"
             },
             {
-              "id": "iniconfig==2.0.0 @ registry+https://pypi.org/simple"
+              "id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
             }
           ]
         },
-        "bird-feeder==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/bird-feeder": {
+        "bird-feeder==1.0.0@editable+[TEMP_DIR]/workspace/packages/bird-feeder": {
           "name": "bird-feeder",
           "version": "1.0.0",
           "source": {
@@ -124,14 +124,14 @@ fn workspace_metadata_root_workspace() -> Result<()> {
           "kind": "package",
           "dependencies": [
             {
-              "id": "iniconfig==2.0.0 @ registry+https://pypi.org/simple"
+              "id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
             },
             {
-              "id": "seeds==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/seeds"
+              "id": "seeds==1.0.0@editable+[TEMP_DIR]/workspace/packages/seeds"
             }
           ]
         },
-        "idna==3.6 @ registry+https://pypi.org/simple": {
+        "idna==3.6@registry+https://pypi.org/simple": {
           "name": "idna",
           "version": "3.6",
           "source": {
@@ -161,7 +161,7 @@ fn workspace_metadata_root_workspace() -> Result<()> {
             }
           ]
         },
-        "iniconfig==2.0.0 @ registry+https://pypi.org/simple": {
+        "iniconfig==2.0.0@registry+https://pypi.org/simple": {
           "name": "iniconfig",
           "version": "2.0.0",
           "source": {
@@ -191,7 +191,7 @@ fn workspace_metadata_root_workspace() -> Result<()> {
             }
           ]
         },
-        "seeds==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/seeds": {
+        "seeds==1.0.0@editable+[TEMP_DIR]/workspace/packages/seeds": {
           "name": "seeds",
           "version": "1.0.0",
           "source": {
@@ -200,7 +200,7 @@ fn workspace_metadata_root_workspace() -> Result<()> {
           "kind": "package",
           "dependencies": [
             {
-              "id": "idna==3.6 @ registry+https://pypi.org/simple"
+              "id": "idna==3.6@registry+https://pypi.org/simple"
             }
           ]
         }
@@ -247,21 +247,21 @@ fn workspace_metadata_virtual_workspace() -> Result<()> {
         {
           "name": "albatross",
           "path": "[TEMP_DIR]/workspace/packages/albatross",
-          "id": "albatross==0.1.0 @ editable+[TEMP_DIR]/workspace/packages/albatross"
+          "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace/packages/albatross"
         },
         {
           "name": "bird-feeder",
           "path": "[TEMP_DIR]/workspace/packages/bird-feeder",
-          "id": "bird-feeder==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/bird-feeder"
+          "id": "bird-feeder==1.0.0@editable+[TEMP_DIR]/workspace/packages/bird-feeder"
         },
         {
           "name": "seeds",
           "path": "[TEMP_DIR]/workspace/packages/seeds",
-          "id": "seeds==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/seeds"
+          "id": "seeds==1.0.0@editable+[TEMP_DIR]/workspace/packages/seeds"
         }
       ],
-      "resolve": {
-        "albatross==0.1.0 @ editable+[TEMP_DIR]/workspace/packages/albatross": {
+      "resolution": {
+        "albatross==0.1.0@editable+[TEMP_DIR]/workspace/packages/albatross": {
           "name": "albatross",
           "version": "0.1.0",
           "source": {
@@ -270,14 +270,14 @@ fn workspace_metadata_virtual_workspace() -> Result<()> {
           "kind": "package",
           "dependencies": [
             {
-              "id": "bird-feeder==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/bird-feeder"
+              "id": "bird-feeder==1.0.0@editable+[TEMP_DIR]/workspace/packages/bird-feeder"
             },
             {
-              "id": "iniconfig==2.0.0 @ registry+https://pypi.org/simple"
+              "id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
             }
           ]
         },
-        "anyio==4.3.0 @ registry+https://pypi.org/simple": {
+        "anyio==4.3.0@registry+https://pypi.org/simple": {
           "name": "anyio",
           "version": "4.3.0",
           "source": {
@@ -288,10 +288,10 @@ fn workspace_metadata_virtual_workspace() -> Result<()> {
           "kind": "package",
           "dependencies": [
             {
-              "id": "idna==3.6 @ registry+https://pypi.org/simple"
+              "id": "idna==3.6@registry+https://pypi.org/simple"
             },
             {
-              "id": "sniffio==1.3.1 @ registry+https://pypi.org/simple"
+              "id": "sniffio==1.3.1@registry+https://pypi.org/simple"
             }
           ],
           "sdist": {
@@ -314,7 +314,7 @@ fn workspace_metadata_virtual_workspace() -> Result<()> {
             }
           ]
         },
-        "bird-feeder==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/bird-feeder": {
+        "bird-feeder==1.0.0@editable+[TEMP_DIR]/workspace/packages/bird-feeder": {
           "name": "bird-feeder",
           "version": "1.0.0",
           "source": {
@@ -323,14 +323,14 @@ fn workspace_metadata_virtual_workspace() -> Result<()> {
           "kind": "package",
           "dependencies": [
             {
-              "id": "anyio==4.3.0 @ registry+https://pypi.org/simple"
+              "id": "anyio==4.3.0@registry+https://pypi.org/simple"
             },
             {
-              "id": "seeds==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/seeds"
+              "id": "seeds==1.0.0@editable+[TEMP_DIR]/workspace/packages/seeds"
             }
           ]
         },
-        "idna==3.6 @ registry+https://pypi.org/simple": {
+        "idna==3.6@registry+https://pypi.org/simple": {
           "name": "idna",
           "version": "3.6",
           "source": {
@@ -360,7 +360,7 @@ fn workspace_metadata_virtual_workspace() -> Result<()> {
             }
           ]
         },
-        "iniconfig==2.0.0 @ registry+https://pypi.org/simple": {
+        "iniconfig==2.0.0@registry+https://pypi.org/simple": {
           "name": "iniconfig",
           "version": "2.0.0",
           "source": {
@@ -390,7 +390,7 @@ fn workspace_metadata_virtual_workspace() -> Result<()> {
             }
           ]
         },
-        "seeds==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/seeds": {
+        "seeds==1.0.0@editable+[TEMP_DIR]/workspace/packages/seeds": {
           "name": "seeds",
           "version": "1.0.0",
           "source": {
@@ -399,11 +399,11 @@ fn workspace_metadata_virtual_workspace() -> Result<()> {
           "kind": "package",
           "dependencies": [
             {
-              "id": "idna==3.6 @ registry+https://pypi.org/simple"
+              "id": "idna==3.6@registry+https://pypi.org/simple"
             }
           ]
         },
-        "sniffio==1.3.1 @ registry+https://pypi.org/simple": {
+        "sniffio==1.3.1@registry+https://pypi.org/simple": {
           "name": "sniffio",
           "version": "1.3.1",
           "source": {
@@ -478,21 +478,21 @@ fn workspace_metadata_from_member() -> Result<()> {
         {
           "name": "albatross",
           "path": "[TEMP_DIR]/workspace",
-          "id": "albatross==0.1.0 @ editable+[TEMP_DIR]/workspace/"
+          "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace/"
         },
         {
           "name": "bird-feeder",
           "path": "[TEMP_DIR]/workspace/packages/bird-feeder",
-          "id": "bird-feeder==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/bird-feeder"
+          "id": "bird-feeder==1.0.0@editable+[TEMP_DIR]/workspace/packages/bird-feeder"
         },
         {
           "name": "seeds",
           "path": "[TEMP_DIR]/workspace/packages/seeds",
-          "id": "seeds==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/seeds"
+          "id": "seeds==1.0.0@editable+[TEMP_DIR]/workspace/packages/seeds"
         }
       ],
-      "resolve": {
-        "albatross==0.1.0 @ editable+[TEMP_DIR]/workspace/": {
+      "resolution": {
+        "albatross==0.1.0@editable+[TEMP_DIR]/workspace/": {
           "name": "albatross",
           "version": "0.1.0",
           "source": {
@@ -501,14 +501,14 @@ fn workspace_metadata_from_member() -> Result<()> {
           "kind": "package",
           "dependencies": [
             {
-              "id": "bird-feeder==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/bird-feeder"
+              "id": "bird-feeder==1.0.0@editable+[TEMP_DIR]/workspace/packages/bird-feeder"
             },
             {
-              "id": "iniconfig==2.0.0 @ registry+https://pypi.org/simple"
+              "id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
             }
           ]
         },
-        "bird-feeder==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/bird-feeder": {
+        "bird-feeder==1.0.0@editable+[TEMP_DIR]/workspace/packages/bird-feeder": {
           "name": "bird-feeder",
           "version": "1.0.0",
           "source": {
@@ -517,14 +517,14 @@ fn workspace_metadata_from_member() -> Result<()> {
           "kind": "package",
           "dependencies": [
             {
-              "id": "iniconfig==2.0.0 @ registry+https://pypi.org/simple"
+              "id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
             },
             {
-              "id": "seeds==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/seeds"
+              "id": "seeds==1.0.0@editable+[TEMP_DIR]/workspace/packages/seeds"
             }
           ]
         },
-        "idna==3.6 @ registry+https://pypi.org/simple": {
+        "idna==3.6@registry+https://pypi.org/simple": {
           "name": "idna",
           "version": "3.6",
           "source": {
@@ -554,7 +554,7 @@ fn workspace_metadata_from_member() -> Result<()> {
             }
           ]
         },
-        "iniconfig==2.0.0 @ registry+https://pypi.org/simple": {
+        "iniconfig==2.0.0@registry+https://pypi.org/simple": {
           "name": "iniconfig",
           "version": "2.0.0",
           "source": {
@@ -584,7 +584,7 @@ fn workspace_metadata_from_member() -> Result<()> {
             }
           ]
         },
-        "seeds==1.0.0 @ editable+[TEMP_DIR]/workspace/packages/seeds": {
+        "seeds==1.0.0@editable+[TEMP_DIR]/workspace/packages/seeds": {
           "name": "seeds",
           "version": "1.0.0",
           "source": {
@@ -593,7 +593,7 @@ fn workspace_metadata_from_member() -> Result<()> {
           "kind": "package",
           "dependencies": [
             {
-              "id": "idna==3.6 @ registry+https://pypi.org/simple"
+              "id": "idna==3.6@registry+https://pypi.org/simple"
             }
           ]
         }
@@ -652,21 +652,21 @@ fn workspace_metadata_multiple_members() {
         {
           "name": "pkg-a",
           "path": "[TEMP_DIR]/pkg-a",
-          "id": "pkg-a==0.1.0 @ virtual+[TEMP_DIR]/pkg-a/"
+          "id": "pkg-a==0.1.0@virtual+[TEMP_DIR]/pkg-a/"
         },
         {
           "name": "pkg-b",
           "path": "[TEMP_DIR]/pkg-a/pkg-b",
-          "id": "pkg-b==0.1.0 @ virtual+[TEMP_DIR]/pkg-a/pkg-b"
+          "id": "pkg-b==0.1.0@virtual+[TEMP_DIR]/pkg-a/pkg-b"
         },
         {
           "name": "pkg-c",
           "path": "[TEMP_DIR]/pkg-a/pkg-c",
-          "id": "pkg-c==0.1.0 @ virtual+[TEMP_DIR]/pkg-a/pkg-c"
+          "id": "pkg-c==0.1.0@virtual+[TEMP_DIR]/pkg-a/pkg-c"
         }
       ],
-      "resolve": {
-        "pkg-a==0.1.0 @ virtual+[TEMP_DIR]/pkg-a/": {
+      "resolution": {
+        "pkg-a==0.1.0@virtual+[TEMP_DIR]/pkg-a/": {
           "name": "pkg-a",
           "version": "0.1.0",
           "source": {
@@ -675,7 +675,7 @@ fn workspace_metadata_multiple_members() {
           "kind": "package",
           "dependencies": []
         },
-        "pkg-b==0.1.0 @ virtual+[TEMP_DIR]/pkg-a/pkg-b": {
+        "pkg-b==0.1.0@virtual+[TEMP_DIR]/pkg-a/pkg-b": {
           "name": "pkg-b",
           "version": "0.1.0",
           "source": {
@@ -684,7 +684,7 @@ fn workspace_metadata_multiple_members() {
           "kind": "package",
           "dependencies": []
         },
-        "pkg-c==0.1.0 @ virtual+[TEMP_DIR]/pkg-a/pkg-c": {
+        "pkg-c==0.1.0@virtual+[TEMP_DIR]/pkg-a/pkg-c": {
           "name": "pkg-c",
           "version": "0.1.0",
           "source": {
@@ -730,11 +730,11 @@ fn workspace_metadata_single_project() {
         {
           "name": "my-project",
           "path": "[TEMP_DIR]/my-project",
-          "id": "my-project==0.1.0 @ virtual+[TEMP_DIR]/my-project/"
+          "id": "my-project==0.1.0@virtual+[TEMP_DIR]/my-project/"
         }
       ],
-      "resolve": {
-        "my-project==0.1.0 @ virtual+[TEMP_DIR]/my-project/": {
+      "resolution": {
+        "my-project==0.1.0@virtual+[TEMP_DIR]/my-project/": {
           "name": "my-project",
           "version": "0.1.0",
           "source": {
@@ -784,11 +784,11 @@ fn workspace_metadata_with_excluded() -> Result<()> {
         {
           "name": "albatross",
           "path": "[TEMP_DIR]/workspace",
-          "id": "albatross==0.1.0 @ editable+[TEMP_DIR]/workspace/"
+          "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace/"
         }
       ],
-      "resolve": {
-        "albatross==0.1.0 @ editable+[TEMP_DIR]/workspace/": {
+      "resolution": {
+        "albatross==0.1.0@editable+[TEMP_DIR]/workspace/": {
           "name": "albatross",
           "version": "0.1.0",
           "source": {
@@ -797,11 +797,11 @@ fn workspace_metadata_with_excluded() -> Result<()> {
           "kind": "package",
           "dependencies": [
             {
-              "id": "iniconfig==2.0.0 @ registry+https://pypi.org/simple"
+              "id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
             }
           ]
         },
-        "iniconfig==2.0.0 @ registry+https://pypi.org/simple": {
+        "iniconfig==2.0.0@registry+https://pypi.org/simple": {
           "name": "iniconfig",
           "version": "2.0.0",
           "source": {
@@ -889,11 +889,11 @@ fn workspace_metadata_with_packse() -> Result<()> {
         {
           "name": "packse",
           "path": "[TEMP_DIR]/workspace",
-          "id": "packse==0.0.0 @ editable+[TEMP_DIR]/workspace/"
+          "id": "packse==0.0.0@editable+[TEMP_DIR]/workspace/"
         }
       ],
-      "resolve": {
-        "anyio==4.3.0 @ registry+https://pypi.org/simple": {
+      "resolution": {
+        "anyio==4.3.0@registry+https://pypi.org/simple": {
           "name": "anyio",
           "version": "4.3.0",
           "source": {
@@ -904,10 +904,10 @@ fn workspace_metadata_with_packse() -> Result<()> {
           "kind": "package",
           "dependencies": [
             {
-              "id": "idna==3.6 @ registry+https://pypi.org/simple"
+              "id": "idna==3.6@registry+https://pypi.org/simple"
             },
             {
-              "id": "sniffio==1.3.1 @ registry+https://pypi.org/simple"
+              "id": "sniffio==1.3.1@registry+https://pypi.org/simple"
             }
           ],
           "sdist": {
@@ -930,7 +930,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "certifi==2024.2.2 @ registry+https://pypi.org/simple": {
+        "certifi==2024.2.2@registry+https://pypi.org/simple": {
           "name": "certifi",
           "version": "2024.2.2",
           "source": {
@@ -960,7 +960,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "cffi==1.16.0 @ registry+https://pypi.org/simple": {
+        "cffi==1.16.0@registry+https://pypi.org/simple": {
           "name": "cffi",
           "version": "1.16.0",
           "source": {
@@ -971,7 +971,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
           "kind": "package",
           "dependencies": [
             {
-              "id": "pycparser==2.21 @ registry+https://pypi.org/simple"
+              "id": "pycparser==2.21@registry+https://pypi.org/simple"
             }
           ],
           "sdist": {
@@ -1039,7 +1039,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "charset-normalizer==3.3.2 @ registry+https://pypi.org/simple": {
+        "charset-normalizer==3.3.2@registry+https://pypi.org/simple": {
           "name": "charset-normalizer",
           "version": "3.3.2",
           "source": {
@@ -1204,7 +1204,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "chevron-blue==0.2.1 @ registry+https://pypi.org/simple": {
+        "chevron-blue==0.2.1@registry+https://pypi.org/simple": {
           "name": "chevron-blue",
           "version": "0.2.1",
           "source": {
@@ -1234,7 +1234,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "colorama==0.4.6 @ registry+https://pypi.org/simple": {
+        "colorama==0.4.6@registry+https://pypi.org/simple": {
           "name": "colorama",
           "version": "0.4.6",
           "source": {
@@ -1264,7 +1264,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "cryptography==42.0.5 @ registry+https://pypi.org/simple": {
+        "cryptography==42.0.5@registry+https://pypi.org/simple": {
           "name": "cryptography",
           "version": "42.0.5",
           "source": {
@@ -1275,7 +1275,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
           "kind": "package",
           "dependencies": [
             {
-              "id": "cffi==1.16.0 @ registry+https://pypi.org/simple",
+              "id": "cffi==1.16.0@registry+https://pypi.org/simple",
               "marker": "platform_python_implementation != 'PyPy'"
             }
           ],
@@ -1434,7 +1434,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "docutils==0.20.1 @ registry+https://pypi.org/simple": {
+        "docutils==0.20.1@registry+https://pypi.org/simple": {
           "name": "docutils",
           "version": "0.20.1",
           "source": {
@@ -1464,7 +1464,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "hatchling==1.22.4 @ registry+https://pypi.org/simple": {
+        "hatchling==1.22.4@registry+https://pypi.org/simple": {
           "name": "hatchling",
           "version": "1.22.4",
           "source": {
@@ -1475,16 +1475,16 @@ fn workspace_metadata_with_packse() -> Result<()> {
           "kind": "package",
           "dependencies": [
             {
-              "id": "packaging==24.0 @ registry+https://pypi.org/simple"
+              "id": "packaging==24.0@registry+https://pypi.org/simple"
             },
             {
-              "id": "pathspec==0.12.1 @ registry+https://pypi.org/simple"
+              "id": "pathspec==0.12.1@registry+https://pypi.org/simple"
             },
             {
-              "id": "pluggy==1.4.0 @ registry+https://pypi.org/simple"
+              "id": "pluggy==1.4.0@registry+https://pypi.org/simple"
             },
             {
-              "id": "trove-classifiers==2024.3.3 @ registry+https://pypi.org/simple"
+              "id": "trove-classifiers==2024.3.3@registry+https://pypi.org/simple"
             }
           ],
           "sdist": {
@@ -1507,7 +1507,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "idna==3.6 @ registry+https://pypi.org/simple": {
+        "idna==3.6@registry+https://pypi.org/simple": {
           "name": "idna",
           "version": "3.6",
           "source": {
@@ -1537,7 +1537,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "importlib-metadata==7.1.0 @ registry+https://pypi.org/simple": {
+        "importlib-metadata==7.1.0@registry+https://pypi.org/simple": {
           "name": "importlib-metadata",
           "version": "7.1.0",
           "source": {
@@ -1548,7 +1548,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
           "kind": "package",
           "dependencies": [
             {
-              "id": "zipp==3.18.1 @ registry+https://pypi.org/simple"
+              "id": "zipp==3.18.1@registry+https://pypi.org/simple"
             }
           ],
           "sdist": {
@@ -1571,7 +1571,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "iniconfig==2.0.0 @ registry+https://pypi.org/simple": {
+        "iniconfig==2.0.0@registry+https://pypi.org/simple": {
           "name": "iniconfig",
           "version": "2.0.0",
           "source": {
@@ -1601,7 +1601,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "jaraco-classes==3.3.1 @ registry+https://pypi.org/simple": {
+        "jaraco-classes==3.3.1@registry+https://pypi.org/simple": {
           "name": "jaraco-classes",
           "version": "3.3.1",
           "source": {
@@ -1612,7 +1612,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
           "kind": "package",
           "dependencies": [
             {
-              "id": "more-itertools==10.2.0 @ registry+https://pypi.org/simple"
+              "id": "more-itertools==10.2.0@registry+https://pypi.org/simple"
             }
           ],
           "sdist": {
@@ -1635,7 +1635,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "jaraco-context==4.3.0 @ registry+https://pypi.org/simple": {
+        "jaraco-context==4.3.0@registry+https://pypi.org/simple": {
           "name": "jaraco-context",
           "version": "4.3.0",
           "source": {
@@ -1665,7 +1665,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "jaraco-functools==4.0.0 @ registry+https://pypi.org/simple": {
+        "jaraco-functools==4.0.0@registry+https://pypi.org/simple": {
           "name": "jaraco-functools",
           "version": "4.0.0",
           "source": {
@@ -1676,7 +1676,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
           "kind": "package",
           "dependencies": [
             {
-              "id": "more-itertools==10.2.0 @ registry+https://pypi.org/simple"
+              "id": "more-itertools==10.2.0@registry+https://pypi.org/simple"
             }
           ],
           "sdist": {
@@ -1699,7 +1699,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "jeepney==0.8.0 @ registry+https://pypi.org/simple": {
+        "jeepney==0.8.0@registry+https://pypi.org/simple": {
           "name": "jeepney",
           "version": "0.8.0",
           "source": {
@@ -1729,7 +1729,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "keyring==25.0.0 @ registry+https://pypi.org/simple": {
+        "keyring==25.0.0@registry+https://pypi.org/simple": {
           "name": "keyring",
           "version": "25.0.0",
           "source": {
@@ -1740,24 +1740,24 @@ fn workspace_metadata_with_packse() -> Result<()> {
           "kind": "package",
           "dependencies": [
             {
-              "id": "jaraco-classes==3.3.1 @ registry+https://pypi.org/simple"
+              "id": "jaraco-classes==3.3.1@registry+https://pypi.org/simple"
             },
             {
-              "id": "jaraco-context==4.3.0 @ registry+https://pypi.org/simple"
+              "id": "jaraco-context==4.3.0@registry+https://pypi.org/simple"
             },
             {
-              "id": "jaraco-functools==4.0.0 @ registry+https://pypi.org/simple"
+              "id": "jaraco-functools==4.0.0@registry+https://pypi.org/simple"
             },
             {
-              "id": "jeepney==0.8.0 @ registry+https://pypi.org/simple",
+              "id": "jeepney==0.8.0@registry+https://pypi.org/simple",
               "marker": "sys_platform == 'linux'"
             },
             {
-              "id": "pywin32-ctypes==0.2.2 @ registry+https://pypi.org/simple",
+              "id": "pywin32-ctypes==0.2.2@registry+https://pypi.org/simple",
               "marker": "sys_platform == 'win32'"
             },
             {
-              "id": "secretstorage==3.3.3 @ registry+https://pypi.org/simple",
+              "id": "secretstorage==3.3.3@registry+https://pypi.org/simple",
               "marker": "sys_platform == 'linux'"
             }
           ],
@@ -1781,7 +1781,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "markdown-it-py==3.0.0 @ registry+https://pypi.org/simple": {
+        "markdown-it-py==3.0.0@registry+https://pypi.org/simple": {
           "name": "markdown-it-py",
           "version": "3.0.0",
           "source": {
@@ -1792,7 +1792,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
           "kind": "package",
           "dependencies": [
             {
-              "id": "mdurl==0.1.2 @ registry+https://pypi.org/simple"
+              "id": "mdurl==0.1.2@registry+https://pypi.org/simple"
             }
           ],
           "sdist": {
@@ -1815,7 +1815,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "mdurl==0.1.2 @ registry+https://pypi.org/simple": {
+        "mdurl==0.1.2@registry+https://pypi.org/simple": {
           "name": "mdurl",
           "version": "0.1.2",
           "source": {
@@ -1845,7 +1845,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "more-itertools==10.2.0 @ registry+https://pypi.org/simple": {
+        "more-itertools==10.2.0@registry+https://pypi.org/simple": {
           "name": "more-itertools",
           "version": "10.2.0",
           "source": {
@@ -1875,7 +1875,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "msgspec==0.18.6 @ registry+https://pypi.org/simple": {
+        "msgspec==0.18.6@registry+https://pypi.org/simple": {
           "name": "msgspec",
           "version": "0.18.6",
           "source": {
@@ -1959,7 +1959,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "nh3==0.2.15 @ registry+https://pypi.org/simple": {
+        "nh3==0.2.15@registry+https://pypi.org/simple": {
           "name": "nh3",
           "version": "0.2.15",
           "source": {
@@ -2115,7 +2115,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "packaging==24.0 @ registry+https://pypi.org/simple": {
+        "packaging==24.0@registry+https://pypi.org/simple": {
           "name": "packaging",
           "version": "24.0",
           "source": {
@@ -2145,7 +2145,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "packse:dev==0.0.0 @ editable+[TEMP_DIR]/workspace/": {
+        "packse:dev==0.0.0@editable+[TEMP_DIR]/workspace/": {
           "name": "packse",
           "version": "0.0.0",
           "source": {
@@ -2156,17 +2156,17 @@ fn workspace_metadata_with_packse() -> Result<()> {
           },
           "dependencies": [
             {
-              "id": "psutil==5.9.8 @ registry+https://pypi.org/simple"
+              "id": "psutil==5.9.8@registry+https://pypi.org/simple"
             },
             {
-              "id": "pytest==8.1.1 @ registry+https://pypi.org/simple"
+              "id": "pytest==8.1.1@registry+https://pypi.org/simple"
             },
             {
-              "id": "syrupy==4.6.1 @ registry+https://pypi.org/simple"
+              "id": "syrupy==4.6.1@registry+https://pypi.org/simple"
             }
           ]
         },
-        "packse==0.0.0 @ editable+[TEMP_DIR]/workspace/": {
+        "packse==0.0.0@editable+[TEMP_DIR]/workspace/": {
           "name": "packse",
           "version": "0.0.0",
           "source": {
@@ -2175,42 +2175,42 @@ fn workspace_metadata_with_packse() -> Result<()> {
           "kind": "package",
           "dependencies": [
             {
-              "id": "chevron-blue==0.2.1 @ registry+https://pypi.org/simple"
+              "id": "chevron-blue==0.2.1@registry+https://pypi.org/simple"
             },
             {
-              "id": "hatchling==1.22.4 @ registry+https://pypi.org/simple"
+              "id": "hatchling==1.22.4@registry+https://pypi.org/simple"
             },
             {
-              "id": "msgspec==0.18.6 @ registry+https://pypi.org/simple"
+              "id": "msgspec==0.18.6@registry+https://pypi.org/simple"
             },
             {
-              "id": "pyyaml==6.0.1 @ registry+https://pypi.org/simple"
+              "id": "pyyaml==6.0.1@registry+https://pypi.org/simple"
             },
             {
-              "id": "setuptools==69.2.0 @ registry+https://pypi.org/simple"
+              "id": "setuptools==69.2.0@registry+https://pypi.org/simple"
             },
             {
-              "id": "twine==5.0.0 @ registry+https://pypi.org/simple"
+              "id": "twine==5.0.0@registry+https://pypi.org/simple"
             }
           ],
           "optional_dependencies": [
             {
               "name": "index",
-              "id": "packse[index]==0.0.0 @ editable+[TEMP_DIR]/workspace/"
+              "id": "packse[index]==0.0.0@editable+[TEMP_DIR]/workspace/"
             },
             {
               "name": "serve",
-              "id": "packse[serve]==0.0.0 @ editable+[TEMP_DIR]/workspace/"
+              "id": "packse[serve]==0.0.0@editable+[TEMP_DIR]/workspace/"
             }
           ],
           "dependency_groups": [
             {
               "name": "dev",
-              "id": "packse:dev==0.0.0 @ editable+[TEMP_DIR]/workspace/"
+              "id": "packse:dev==0.0.0@editable+[TEMP_DIR]/workspace/"
             }
           ]
         },
-        "packse[index]==0.0.0 @ editable+[TEMP_DIR]/workspace/": {
+        "packse[index]==0.0.0@editable+[TEMP_DIR]/workspace/": {
           "name": "packse",
           "version": "0.0.0",
           "source": {
@@ -2221,14 +2221,14 @@ fn workspace_metadata_with_packse() -> Result<()> {
           },
           "dependencies": [
             {
-              "id": "packse==0.0.0 @ editable+[TEMP_DIR]/workspace/"
+              "id": "packse==0.0.0@editable+[TEMP_DIR]/workspace/"
             },
             {
-              "id": "pypiserver==2.0.1 @ registry+https://pypi.org/simple"
+              "id": "pypiserver==2.0.1@registry+https://pypi.org/simple"
             }
           ]
         },
-        "packse[serve]==0.0.0 @ editable+[TEMP_DIR]/workspace/": {
+        "packse[serve]==0.0.0@editable+[TEMP_DIR]/workspace/": {
           "name": "packse",
           "version": "0.0.0",
           "source": {
@@ -2239,17 +2239,17 @@ fn workspace_metadata_with_packse() -> Result<()> {
           },
           "dependencies": [
             {
-              "id": "packse==0.0.0 @ editable+[TEMP_DIR]/workspace/"
+              "id": "packse==0.0.0@editable+[TEMP_DIR]/workspace/"
             },
             {
-              "id": "pypiserver==2.0.1 @ registry+https://pypi.org/simple"
+              "id": "pypiserver==2.0.1@registry+https://pypi.org/simple"
             },
             {
-              "id": "watchfiles==0.21.0 @ registry+https://pypi.org/simple"
+              "id": "watchfiles==0.21.0@registry+https://pypi.org/simple"
             }
           ]
         },
-        "pathspec==0.12.1 @ registry+https://pypi.org/simple": {
+        "pathspec==0.12.1@registry+https://pypi.org/simple": {
           "name": "pathspec",
           "version": "0.12.1",
           "source": {
@@ -2279,7 +2279,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "pip==24.0 @ registry+https://pypi.org/simple": {
+        "pip==24.0@registry+https://pypi.org/simple": {
           "name": "pip",
           "version": "24.0",
           "source": {
@@ -2309,7 +2309,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "pkginfo==1.10.0 @ registry+https://pypi.org/simple": {
+        "pkginfo==1.10.0@registry+https://pypi.org/simple": {
           "name": "pkginfo",
           "version": "1.10.0",
           "source": {
@@ -2339,7 +2339,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "pluggy==1.4.0 @ registry+https://pypi.org/simple": {
+        "pluggy==1.4.0@registry+https://pypi.org/simple": {
           "name": "pluggy",
           "version": "1.4.0",
           "source": {
@@ -2369,7 +2369,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "psutil==5.9.8 @ registry+https://pypi.org/simple": {
+        "psutil==5.9.8@registry+https://pypi.org/simple": {
           "name": "psutil",
           "version": "5.9.8",
           "source": {
@@ -2444,7 +2444,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "pycparser==2.21 @ registry+https://pypi.org/simple": {
+        "pycparser==2.21@registry+https://pypi.org/simple": {
           "name": "pycparser",
           "version": "2.21",
           "source": {
@@ -2474,7 +2474,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "pygments==2.17.2 @ registry+https://pypi.org/simple": {
+        "pygments==2.17.2@registry+https://pypi.org/simple": {
           "name": "pygments",
           "version": "2.17.2",
           "source": {
@@ -2504,7 +2504,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "pypiserver==2.0.1 @ registry+https://pypi.org/simple": {
+        "pypiserver==2.0.1@registry+https://pypi.org/simple": {
           "name": "pypiserver",
           "version": "2.0.1",
           "source": {
@@ -2515,7 +2515,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
           "kind": "package",
           "dependencies": [
             {
-              "id": "pip==24.0 @ registry+https://pypi.org/simple"
+              "id": "pip==24.0@registry+https://pypi.org/simple"
             }
           ],
           "sdist": {
@@ -2538,7 +2538,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "pytest==8.1.1 @ registry+https://pypi.org/simple": {
+        "pytest==8.1.1@registry+https://pypi.org/simple": {
           "name": "pytest",
           "version": "8.1.1",
           "source": {
@@ -2549,17 +2549,17 @@ fn workspace_metadata_with_packse() -> Result<()> {
           "kind": "package",
           "dependencies": [
             {
-              "id": "colorama==0.4.6 @ registry+https://pypi.org/simple",
+              "id": "colorama==0.4.6@registry+https://pypi.org/simple",
               "marker": "sys_platform == 'win32'"
             },
             {
-              "id": "iniconfig==2.0.0 @ registry+https://pypi.org/simple"
+              "id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
             },
             {
-              "id": "packaging==24.0 @ registry+https://pypi.org/simple"
+              "id": "packaging==24.0@registry+https://pypi.org/simple"
             },
             {
-              "id": "pluggy==1.4.0 @ registry+https://pypi.org/simple"
+              "id": "pluggy==1.4.0@registry+https://pypi.org/simple"
             }
           ],
           "sdist": {
@@ -2582,7 +2582,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "pywin32-ctypes==0.2.2 @ registry+https://pypi.org/simple": {
+        "pywin32-ctypes==0.2.2@registry+https://pypi.org/simple": {
           "name": "pywin32-ctypes",
           "version": "0.2.2",
           "source": {
@@ -2612,7 +2612,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "pyyaml==6.0.1 @ registry+https://pypi.org/simple": {
+        "pyyaml==6.0.1@registry+https://pypi.org/simple": {
           "name": "pyyaml",
           "version": "6.0.1",
           "source": {
@@ -2696,7 +2696,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "readme-renderer==43.0 @ registry+https://pypi.org/simple": {
+        "readme-renderer==43.0@registry+https://pypi.org/simple": {
           "name": "readme-renderer",
           "version": "43.0",
           "source": {
@@ -2707,13 +2707,13 @@ fn workspace_metadata_with_packse() -> Result<()> {
           "kind": "package",
           "dependencies": [
             {
-              "id": "docutils==0.20.1 @ registry+https://pypi.org/simple"
+              "id": "docutils==0.20.1@registry+https://pypi.org/simple"
             },
             {
-              "id": "nh3==0.2.15 @ registry+https://pypi.org/simple"
+              "id": "nh3==0.2.15@registry+https://pypi.org/simple"
             },
             {
-              "id": "pygments==2.17.2 @ registry+https://pypi.org/simple"
+              "id": "pygments==2.17.2@registry+https://pypi.org/simple"
             }
           ],
           "sdist": {
@@ -2736,7 +2736,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "requests-toolbelt==1.0.0 @ registry+https://pypi.org/simple": {
+        "requests-toolbelt==1.0.0@registry+https://pypi.org/simple": {
           "name": "requests-toolbelt",
           "version": "1.0.0",
           "source": {
@@ -2747,7 +2747,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
           "kind": "package",
           "dependencies": [
             {
-              "id": "requests==2.31.0 @ registry+https://pypi.org/simple"
+              "id": "requests==2.31.0@registry+https://pypi.org/simple"
             }
           ],
           "sdist": {
@@ -2770,7 +2770,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "requests==2.31.0 @ registry+https://pypi.org/simple": {
+        "requests==2.31.0@registry+https://pypi.org/simple": {
           "name": "requests",
           "version": "2.31.0",
           "source": {
@@ -2781,16 +2781,16 @@ fn workspace_metadata_with_packse() -> Result<()> {
           "kind": "package",
           "dependencies": [
             {
-              "id": "certifi==2024.2.2 @ registry+https://pypi.org/simple"
+              "id": "certifi==2024.2.2@registry+https://pypi.org/simple"
             },
             {
-              "id": "charset-normalizer==3.3.2 @ registry+https://pypi.org/simple"
+              "id": "charset-normalizer==3.3.2@registry+https://pypi.org/simple"
             },
             {
-              "id": "idna==3.6 @ registry+https://pypi.org/simple"
+              "id": "idna==3.6@registry+https://pypi.org/simple"
             },
             {
-              "id": "urllib3==2.2.1 @ registry+https://pypi.org/simple"
+              "id": "urllib3==2.2.1@registry+https://pypi.org/simple"
             }
           ],
           "sdist": {
@@ -2813,7 +2813,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "rfc3986==2.0.0 @ registry+https://pypi.org/simple": {
+        "rfc3986==2.0.0@registry+https://pypi.org/simple": {
           "name": "rfc3986",
           "version": "2.0.0",
           "source": {
@@ -2843,7 +2843,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "rich==13.7.1 @ registry+https://pypi.org/simple": {
+        "rich==13.7.1@registry+https://pypi.org/simple": {
           "name": "rich",
           "version": "13.7.1",
           "source": {
@@ -2854,10 +2854,10 @@ fn workspace_metadata_with_packse() -> Result<()> {
           "kind": "package",
           "dependencies": [
             {
-              "id": "markdown-it-py==3.0.0 @ registry+https://pypi.org/simple"
+              "id": "markdown-it-py==3.0.0@registry+https://pypi.org/simple"
             },
             {
-              "id": "pygments==2.17.2 @ registry+https://pypi.org/simple"
+              "id": "pygments==2.17.2@registry+https://pypi.org/simple"
             }
           ],
           "sdist": {
@@ -2880,7 +2880,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "secretstorage==3.3.3 @ registry+https://pypi.org/simple": {
+        "secretstorage==3.3.3@registry+https://pypi.org/simple": {
           "name": "secretstorage",
           "version": "3.3.3",
           "source": {
@@ -2891,10 +2891,10 @@ fn workspace_metadata_with_packse() -> Result<()> {
           "kind": "package",
           "dependencies": [
             {
-              "id": "cryptography==42.0.5 @ registry+https://pypi.org/simple"
+              "id": "cryptography==42.0.5@registry+https://pypi.org/simple"
             },
             {
-              "id": "jeepney==0.8.0 @ registry+https://pypi.org/simple"
+              "id": "jeepney==0.8.0@registry+https://pypi.org/simple"
             }
           ],
           "sdist": {
@@ -2917,7 +2917,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "setuptools==69.2.0 @ registry+https://pypi.org/simple": {
+        "setuptools==69.2.0@registry+https://pypi.org/simple": {
           "name": "setuptools",
           "version": "69.2.0",
           "source": {
@@ -2947,7 +2947,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "sniffio==1.3.1 @ registry+https://pypi.org/simple": {
+        "sniffio==1.3.1@registry+https://pypi.org/simple": {
           "name": "sniffio",
           "version": "1.3.1",
           "source": {
@@ -2977,7 +2977,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "syrupy==4.6.1 @ registry+https://pypi.org/simple": {
+        "syrupy==4.6.1@registry+https://pypi.org/simple": {
           "name": "syrupy",
           "version": "4.6.1",
           "source": {
@@ -2988,7 +2988,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
           "kind": "package",
           "dependencies": [
             {
-              "id": "pytest==8.1.1 @ registry+https://pypi.org/simple"
+              "id": "pytest==8.1.1@registry+https://pypi.org/simple"
             }
           ],
           "sdist": {
@@ -3011,7 +3011,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "trove-classifiers==2024.3.3 @ registry+https://pypi.org/simple": {
+        "trove-classifiers==2024.3.3@registry+https://pypi.org/simple": {
           "name": "trove-classifiers",
           "version": "2024.3.3",
           "source": {
@@ -3041,7 +3041,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "twine==5.0.0 @ registry+https://pypi.org/simple": {
+        "twine==5.0.0@registry+https://pypi.org/simple": {
           "name": "twine",
           "version": "5.0.0",
           "source": {
@@ -3052,31 +3052,31 @@ fn workspace_metadata_with_packse() -> Result<()> {
           "kind": "package",
           "dependencies": [
             {
-              "id": "importlib-metadata==7.1.0 @ registry+https://pypi.org/simple"
+              "id": "importlib-metadata==7.1.0@registry+https://pypi.org/simple"
             },
             {
-              "id": "keyring==25.0.0 @ registry+https://pypi.org/simple"
+              "id": "keyring==25.0.0@registry+https://pypi.org/simple"
             },
             {
-              "id": "pkginfo==1.10.0 @ registry+https://pypi.org/simple"
+              "id": "pkginfo==1.10.0@registry+https://pypi.org/simple"
             },
             {
-              "id": "readme-renderer==43.0 @ registry+https://pypi.org/simple"
+              "id": "readme-renderer==43.0@registry+https://pypi.org/simple"
             },
             {
-              "id": "requests==2.31.0 @ registry+https://pypi.org/simple"
+              "id": "requests==2.31.0@registry+https://pypi.org/simple"
             },
             {
-              "id": "requests-toolbelt==1.0.0 @ registry+https://pypi.org/simple"
+              "id": "requests-toolbelt==1.0.0@registry+https://pypi.org/simple"
             },
             {
-              "id": "rfc3986==2.0.0 @ registry+https://pypi.org/simple"
+              "id": "rfc3986==2.0.0@registry+https://pypi.org/simple"
             },
             {
-              "id": "rich==13.7.1 @ registry+https://pypi.org/simple"
+              "id": "rich==13.7.1@registry+https://pypi.org/simple"
             },
             {
-              "id": "urllib3==2.2.1 @ registry+https://pypi.org/simple"
+              "id": "urllib3==2.2.1@registry+https://pypi.org/simple"
             }
           ],
           "sdist": {
@@ -3099,7 +3099,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "urllib3==2.2.1 @ registry+https://pypi.org/simple": {
+        "urllib3==2.2.1@registry+https://pypi.org/simple": {
           "name": "urllib3",
           "version": "2.2.1",
           "source": {
@@ -3129,7 +3129,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "watchfiles==0.21.0 @ registry+https://pypi.org/simple": {
+        "watchfiles==0.21.0@registry+https://pypi.org/simple": {
           "name": "watchfiles",
           "version": "0.21.0",
           "source": {
@@ -3140,7 +3140,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
           "kind": "package",
           "dependencies": [
             {
-              "id": "anyio==4.3.0 @ registry+https://pypi.org/simple"
+              "id": "anyio==4.3.0@registry+https://pypi.org/simple"
             }
           ],
           "sdist": {
@@ -3271,7 +3271,7 @@ fn workspace_metadata_with_packse() -> Result<()> {
             }
           ]
         },
-        "zipp==3.18.1 @ registry+https://pypi.org/simple": {
+        "zipp==3.18.1@registry+https://pypi.org/simple": {
           "name": "zipp",
           "version": "3.18.1",
           "source": {

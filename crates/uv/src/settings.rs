@@ -1816,9 +1816,8 @@ impl MetadataSettings {
         environment: EnvironmentOptions,
     ) -> Self {
         let MetadataArgs {
-            check,
             locked,
-            check_exists,
+            frozen,
             dry_run,
             resolver,
             build,
@@ -1833,19 +1832,13 @@ impl MetadataSettings {
 
         // Resolve flags from CLI and environment variables.
         let locked = resolve_flag(locked, "locked", environment.locked);
-        let frozen = resolve_flag(check_exists, "frozen", environment.frozen);
+        let frozen = resolve_flag(frozen, "frozen", environment.frozen);
 
         // Check for conflicts between locked and frozen.
         check_conflicts(locked, frozen);
 
-        let lock_check = if check {
-            LockCheck::Enabled(LockCheckSource::Check)
-        } else {
-            resolve_lock_check(locked)
-        };
-
         Self {
-            lock_check,
+            lock_check: resolve_lock_check(locked),
             frozen: resolve_frozen(frozen),
             dry_run: DryRun::from_args(dry_run),
             python: python.and_then(Maybe::into_option),

@@ -1,10 +1,10 @@
-# Workspace Metadata
+# Workspace metadata
 
-`uv workspace metadata` exports the information uv has about your workspace as json so other tools
+`uv workspace metadata` exports the information uv has about your workspace as JSON so other tools
 can use it. In particular, if you want access to the information in a `uv.lock`, you should prefer
 this command's output, as `uv.lock` is not a stable format we guarantee anything about.
 
-The primary structure is the "resolve" field which contains the dependency graph with exact package
+The primary structure is the "resolution" field which contains the dependency graph with exact package
 versions that a `uv.lock` encodes.
 
 The edges of the graph are the `dependencies` every node defines. These are the things that must
@@ -37,7 +37,7 @@ If you want to install the dependency group `mypackage:mygroup` then find the no
 `"kind": { "group": "mygroup" }` for `mypackage` (this node will _not_ depend on `mypackage`, as
 dependency groups are just lists of things you might want when working on the package itself).
 
-## Handling Multiple Versions Of A Package
+## Handling multiple versions of a package
 
 Two versions of a package cannot be installed into a python environment, but the dependency graph
 may still include multiple versions of a package. This can happen for two different reasons.
@@ -67,8 +67,8 @@ queries into the dependency graph rooted in operations on workspace members, as 
 natural entry-points to the graph that uv wants to work on, and can give coherent responses for:
 "install `member1` and `member2[extra]`".
 
-Another way to put this is that when possible _you should avoid iterating over the `resolve` object
-to find a node_. Only access `resolve` like a map using ids that were provided by another part of
+Another way to put this is that when possible _you should avoid iterating over the `resolution` object
+to find a node_. Only access `resolution` like a map using ids that were provided by another part of
 the metadata. The only ids this initially gives you access to are the ones listed in the `members`
 array, which lists all the workspace members. From there you may find the ids of that package's
 dependencies, extras, and dependency groups and recursively discover other packages.
@@ -84,9 +84,9 @@ So if you wanted to analyze say, installing the `dev` dependency group of the wo
 
 ```python
 member = find_by_name(metadata.members, "mypackage")
-member_node = metadata.resolve[member.id]
+member_node = metadata.resolution[member.id]
 group = find_by_name(member_node.dependency_groups, "dev")
-group_node = metadata.resolve[group.id]
+group_node = metadata.resolution[group.id]
 visit(metadata, [group_node])
 ```
 
@@ -97,7 +97,7 @@ something like:
 to_analyze = []
 for member_name in ["package1", "package2"]:
   member = find_by_name(metadata.members, member_name)
-  member_node = metadata.resolve[member.id]
+  member_node = metadata.resolution[member.id]
   to_analyze.append(member_node)
 visit(metadata, to_analyze)
 ```
@@ -120,7 +120,7 @@ def visit(metadata: UvMetadata, to_analyze: list[Node]):
       # Only follow edges if they satisfy the desired platform's markers
       if dependency.marker and not satisfies(platform, dependency.marker):
         continue
-      to_analyze.append(metadata.resolve[dependency.id])
+      to_analyze.append(metadata.resolution[dependency.id])
 
     # Analyze any package node we encounter
     if node.kind == "package":
@@ -129,7 +129,7 @@ def visit(metadata: UvMetadata, to_analyze: list[Node]):
 
 ## Schema
 
-A full json schema for the format can be found [here](FIXME_ADD_URL).
+A full JSON schema for the format can be found [here](FIXME_ADD_URL).
 
 Here is a more human-readable annotated example:
 
@@ -153,8 +153,8 @@ Here is a more human-readable annotated example:
       "name": "mypackage",
       // The directory that contains its pyproject.toml
       "path": "/workspace/packages/mypackage",
-      // The id of this package's info in the `resolve` map below
-      "id": "mypackage==0.1.0 @ editable+/workspace/packages/mypackage"
+      // The id of this package's info in the `resolution` map below
+      "id": "mypackage==0.1.0@editable+/workspace/packages/mypackage"
     },
 	],
   // A list-of-sets of workspace items that are mutually-exclusive to install,
@@ -174,12 +174,12 @@ Here is a more human-readable annotated example:
           {
             "package": "mypackage",
             "kind": { "extra": "myextra" }
-            "id": "mypackage[myextra]==0.1.0 @ editable+/workspace/packages/mypackage",
+            "id": "mypackage[myextra]==0.1.0@editable+/workspace/packages/mypackage",
           }
           {
             "package": "mypackage",
             "kind": { "group": "mygroup" }
-            "id": "mypackage:mygroup==0.1.0 @ editable+/workspace/packages/mypackage",
+            "id": "mypackage:mygroup==0.1.0@editable+/workspace/packages/mypackage",
           }
         ]
       }
@@ -204,10 +204,10 @@ Here is a more human-readable annotated example:
   //
   // The ids used here are human-readable but should be handled as opaque (the nodes contain
   // the same information in a more convenient form).
-  "resolve": {
+  "resolution": {
 
     // This node is a workspace member
-    "mypackage==0.1.0 @ editable+/workspace/packages/mypackage": {
+    "mypackage==0.1.0@editable+/workspace/packages/mypackage": {
       // The name of the package
       "name": "mypackage",
       // The version of the package (this may be missing, as source trees do not need versions)
@@ -217,13 +217,13 @@ Here is a more human-readable annotated example:
       "source": {
         "editable": "/workspace/packages/mypackage"
       },
-      // The kind of the node, in this case "package" (see the docs on `resolve` above for details)
+      // The kind of the node, in this case "package" (see the docs on `resolution` above for details)
       "kind": "package",
       // The dependencies that must be installed to also install this node into an environment
       "dependencies": [
         {
           // The id of the node to lookup for details
-          "id": "iniconfig==2.0.0 @ registry+https://pypi.org/simple"
+          "id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
           "marker": "marker": "sys_platform == 'linux'"
         }
       ],
@@ -231,20 +231,20 @@ Here is a more human-readable annotated example:
       "optional_dependencies": [
         {
           "name": "myextra",
-          "id": "mypackage[myextra]==0.1.0 @ editable+/workspace/packages/mypackage"
+          "id": "mypackage[myextra]==0.1.0@editable+/workspace/packages/mypackage"
         }
       ],
       // The dependency groups this package defines
       "dependency_groups": [
         {
           "name": "mygroup",
-          "id": "mypackage:mygroup==0.1.0 @ editable+/workspace/packages/mypackage"
+          "id": "mypackage:mygroup==0.1.0@editable+/workspace/packages/mypackage"
         }
       ]
     },
 
     // This node is an extra on a workspace member
-    "mypackage[myextra]==0.1.0 @ editable+/workspace/packages/mypackage": {
+    "mypackage[myextra]==0.1.0@editable+/workspace/packages/mypackage": {
       // These fields will match the package node above
       "name": "mypackage",
       "version": "0.1.0",
@@ -255,16 +255,16 @@ Here is a more human-readable annotated example:
       "kind": { "extra": "myextra" },
       "dependencies": [
         {
-          "id": "mypackage==0.1.0 @ editable+/workspace/packages/mypackage"
+          "id": "mypackage==0.1.0@editable+/workspace/packages/mypackage"
         }
         {
-          "id": "anyio==2.0.0 @ registry+https://pypi.org/simple"
+          "id": "anyio==2.0.0@registry+https://pypi.org/simple"
         }
       ]
     },
 
     // This node is a dependency-group on a workspace member
-    "mypackage:mygroup==0.1.0 @ editable+/workspace/packages/mypackage": {
+    "mypackage:mygroup==0.1.0@editable+/workspace/packages/mypackage": {
       // These fields will match the package node above
       "name": "mypackage",
       "version": "0.1.0",
@@ -275,13 +275,13 @@ Here is a more human-readable annotated example:
       "kind": { "extra": "myextra" },
       "dependencies": [
         {
-          "id": "anyio==1.0.0 @ registry+https://pypi.org/simple"
+          "id": "anyio==1.0.0@registry+https://pypi.org/simple"
         }
       ]
     },
 
     // This node is a package on pypi
-    "iniconfig==2.0.0 @ registry+https://pypi.org/simple": {
+    "iniconfig==2.0.0@registry+https://pypi.org/simple": {
       "name": "iniconfig",
       "version": "2.0.0",
       // registry sources look like this
@@ -319,8 +319,8 @@ Here is a more human-readable annotated example:
     }
 
     // ...and so on
-    "anyio==1.0.0 @ registry+https://pypi.org/simple": { ... }
-    "anyio==2.0.0 @ registry+https://pypi.org/simple": { ... }
+    "anyio==1.0.0@registry+https://pypi.org/simple": { ... }
+    "anyio==2.0.0@registry+https://pypi.org/simple": { ... }
   }
 }
 ```
