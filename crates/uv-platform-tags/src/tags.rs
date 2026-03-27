@@ -390,6 +390,10 @@ impl Tags {
         self.python_version
     }
 
+    pub fn is_freethreaded(&self) -> bool {
+        self.is_freethreaded
+    }
+
     pub fn is_cross(&self) -> bool {
         self.is_cross
     }
