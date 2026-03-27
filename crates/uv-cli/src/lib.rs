@@ -7904,8 +7904,6 @@ pub struct MetadataArgs {
     ///
     /// Asserts that the `uv.lock` would remain unchanged after a resolution. If the lockfile is
     /// missing or needs to be updated, uv will exit with an error.
-    ///
-    /// Equivalent to `--check`.
     #[arg(long, conflicts_with_all = ["frozen", "upgrade"])]
     pub locked: bool,
 
