@@ -144,7 +144,7 @@ impl VersionMap {
         let mut local = false;
         let mut map = BTreeMap::new();
 
-        for (version, prioritized_dist) in FlatDistributions::from_entries(
+        for (version, prioritized_dist) in FlatDistributions::from_entries_with_requires_python(
             flat_metadata,
             tags,
             tags.is_none().then_some(requires_python),

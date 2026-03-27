@@ -585,10 +585,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 .partial_solution
                                 .unchanging_term_for_package(next_id),
                             &state.python_requirement,
-                            self.tags
-                                .as_ref()
-                                .is_none()
-                                .then_some(state.python_requirement.target()),
                             &self.selector,
                             &state.env,
                         )?;
@@ -1224,7 +1220,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
 
             // If the wheel's Python tag doesn't match the target Python, it's incompatible.
-            if !python_requirement.target().matches_wheel_tag(filename) {
+            if !python_requirement.target().matches_wheel_minimum(filename) {
                 return Ok(Some(ResolverVersion::Unavailable(
                     filename.version.clone(),
                     UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
@@ -1409,11 +1405,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             ResolvedDistRef::InstallableRegistrySourceDist { sdist, .. } => sdist
                 .filename()
                 .unwrap_or(Cow::Borrowed("unknown filename")),
-            ResolvedDistRef::InstallableRegistryBuiltDist {
-                wheel_index,
-                prioritized,
-            } => prioritized
-                .wheel_by_index(wheel_index)
+            ResolvedDistRef::InstallableRegistryBuiltDist { wheel, .. } => wheel
                 .filename()
                 .unwrap_or(Cow::Borrowed("unknown filename")),
             ResolvedDistRef::Installed { .. } => Cow::Borrowed("installed"),
@@ -1524,6 +1516,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         if matches!(self.options.fork_strategy, ForkStrategy::RequiresPython) {
             if let Some(requires_python) = dist
                 .prioritized()
+                .filter(|prioritized| prioritized.source_dist().is_none())
                 .and_then(PrioritizedDist::wheel_requires_python)
                 .filter(|requires_python| python_requirement.raises(requires_python.range()))
             {
@@ -1619,11 +1612,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 ResolvedDistRef::InstallableRegistrySourceDist { sdist, .. } => sdist
                     .filename()
                     .unwrap_or(Cow::Borrowed("unknown filename")),
-                ResolvedDistRef::InstallableRegistryBuiltDist {
-                    wheel_index,
-                    prioritized,
-                } => prioritized
-                    .wheel_by_index(wheel_index)
+                ResolvedDistRef::InstallableRegistryBuiltDist { wheel, .. } => wheel
                     .filename()
                     .unwrap_or(Cow::Borrowed("unknown filename")),
                 ResolvedDistRef::Installed { .. } => Cow::Borrowed("installed"),
@@ -2690,15 +2679,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     | CompatibleDist::IncompatibleWheel { sdist, .. } => {
                         sdist.file.requires_python.as_ref()
                     }
-                    CompatibleDist::CompatibleWheel {
-                        wheel_index,
-                        prioritized,
-                        ..
-                    } => prioritized
-                        .wheel_by_index(*wheel_index)
-                        .file
-                        .requires_python
-                        .as_ref(),
+                    CompatibleDist::CompatibleWheel { wheel, .. } => {
+                        wheel.file.requires_python.as_ref()
+                    }
                 };
                 if let Some(requires_python) = requires_python.as_ref() {
                     if !python_requirement.target().is_contained_by(requires_python) {
@@ -3623,13 +3606,12 @@ impl<'a> From<ResolvedDistRef<'a>> for Request {
                 Self::Dist(Dist::Source(SourceDist::Registry(source)))
             }
             ResolvedDistRef::InstallableRegistryBuiltDist {
-                wheel_index,
-                prioritized,
+                wheel, prioritized, ..
             } => {
                 // This is okay because we're only here if the prioritized dist
                 // has at least one wheel, so this always succeeds.
                 let built = prioritized
-                    .built_dist_for_index(wheel_index)
+                    .built_dist_for(wheel)
                     .expect("selected wheel should be preserved");
                 Self::Dist(Dist::Built(BuiltDist::Registry(built)))
             }

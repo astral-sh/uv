@@ -257,7 +257,7 @@ impl CandidateSelector {
         reinstall: bool,
         env: &ResolverEnvironment,
         tags: Option<&Tags>,
-        requires_python: Option<&RequiresPython>,
+        requires_python: Option<&'a RequiresPython>,
     ) -> Option<Candidate<'a>> {
         for (version, source) in preferences {
             // Respect the version range for this requirement.
@@ -673,8 +673,9 @@ impl CandidateDist<'_> {
             } => Some(prioritized),
         }
     }
+}
 
-    /// Build a candidate distribution view from a prioritized distribution for a Python requirement.
+impl CandidateDist<'_> {
     fn from_prioritized<'a>(
         value: &'a PrioritizedDist,
         requires_python: Option<&RequiresPython>,

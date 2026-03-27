@@ -495,7 +495,7 @@ pub(crate) async fn pip_compile(
         let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(
+        FlatIndex::from_entries_with_requires_python(
             entries,
             tags.as_deref(),
             tags.is_none().then(|| python_requirement.target()),

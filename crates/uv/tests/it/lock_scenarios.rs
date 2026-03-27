@@ -5473,7 +5473,7 @@ fn requires_python_subset() -> Result<()> {
 /// ```
 #[test]
 fn specific_architecture() -> Result<()> {
-    let context = uv_test::test_context!("3.13");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -5488,7 +5488,7 @@ fn specific_architecture() -> Result<()> {
         dependencies = [
           '''specific-architecture-a''',
         ]
-        requires-python = ">=3.13"
+        requires-python = ">=3.12"
         "###,
     )?;
 
@@ -5513,7 +5513,7 @@ fn specific_architecture() -> Result<()> {
             lock, @r#"
         version = 1
         revision = 3
-        requires-python = ">=3.13"
+        requires-python = ">=3.12"
 
         [[package]]
         name = "project"

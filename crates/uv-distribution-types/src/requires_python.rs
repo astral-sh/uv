@@ -502,6 +502,26 @@ impl RequiresPython {
             }
         })
     }
+
+    /// Returns `false` if the wheel's tags state it can't be used for the minimum Python version
+    /// permitted by this `Requires-Python`.
+    pub fn matches_wheel_minimum(&self, wheel: &WheelFilename) -> bool {
+        let version = match self.range.lower().as_ref() {
+            Bound::Included(version) | Bound::Excluded(version) => {
+                version.only_release().without_trailing_zeros()
+            }
+            Bound::Unbounded => return true,
+        };
+
+        Self {
+            specifiers: VersionSpecifiers::from(VersionSpecifier::equals_version(version.clone())),
+            range: RequiresPythonRange(
+                LowerBound::new(Bound::Included(version.clone())),
+                UpperBound::new(Bound::Included(version)),
+            ),
+        }
+        .matches_wheel_tag(wheel)
+    }
 }
 
 impl std::fmt::Display for RequiresPython {
@@ -708,6 +728,29 @@ mod tests {
                 "{wheel_name}"
             );
         }
+    }
+
+    #[test]
+    fn requires_python_minimum() {
+        let requires_python =
+            RequiresPython::from_specifiers(&VersionSpecifiers::from_str(">=3.8").unwrap());
+
+        assert!(requires_python.matches_wheel_minimum(
+            &WheelFilename::from_str("pywin32-311-cp38-cp38-win_amd64.whl").unwrap()
+        ));
+        assert!(requires_python.matches_wheel_minimum(
+            &WheelFilename::from_str("bcrypt-4.1.3-cp37-abi3-macosx_10_12_universal2.whl").unwrap()
+        ));
+        assert!(requires_python.matches_wheel_minimum(
+            &WheelFilename::from_str("iniconfig-2.0.0-py3-none-any.whl").unwrap()
+        ));
+
+        assert!(!requires_python.matches_wheel_minimum(
+            &WheelFilename::from_str("pywin32-311-cp39-cp39-win_amd64.whl").unwrap()
+        ));
+        assert!(!requires_python.matches_wheel_minimum(
+            &WheelFilename::from_str("pywin32-311-cp310-cp310-win_amd64.whl").unwrap()
+        ));
     }
 
     #[test]

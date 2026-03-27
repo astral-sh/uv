@@ -2135,7 +2135,7 @@ pub(crate) async fn resolve_environment(
         let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, Some(&tags), None, &hasher, build_options)
+        FlatIndex::from_entries(entries, Some(&tags), &hasher, build_options)
     };
 
     // Lower the extra build dependencies, if any.
@@ -2274,7 +2274,7 @@ pub(crate) async fn sync_environment(
         let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, Some(tags), None, &hasher, build_options)
+        FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 
     // Lower the extra build dependencies, if any.
@@ -2535,7 +2535,7 @@ pub(crate) async fn update_environment(
         let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, Some(&tags), None, &hasher, build_options)
+        FlatIndex::from_entries(entries, Some(&tags), &hasher, build_options)
     };
 
     // Create a build dispatch.

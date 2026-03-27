@@ -309,9 +309,6 @@ dev = [
     "urllib3<2.0.0"
 ]
 
-[tool.uv]
-environments = "python_version < '3.12'"
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

@@ -35,6 +35,18 @@ impl FlatIndex {
     pub fn from_entries(
         entries: FlatIndexEntries,
         tags: Option<&Tags>,
+        hasher: &HashStrategy,
+        build_options: &BuildOptions,
+    ) -> Self {
+        Self::from_entries_with_requires_python(entries, tags, None, hasher, build_options)
+    }
+
+    /// Collect all files from a `--find-links` target into a [`FlatIndex`], optionally filtering
+    /// wheels by the initial `requires-python`.
+    #[instrument(skip_all)]
+    pub fn from_entries_with_requires_python(
+        entries: FlatIndexEntries,
+        tags: Option<&Tags>,
         requires_python: Option<&RequiresPython>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
@@ -81,6 +93,18 @@ impl FlatDistributions {
     /// Collect all files from a `--find-links` target into a [`FlatIndex`].
     #[instrument(skip_all)]
     pub fn from_entries(
+        entries: Vec<FlatIndexEntry>,
+        tags: Option<&Tags>,
+        hasher: &HashStrategy,
+        build_options: &BuildOptions,
+    ) -> Self {
+        Self::from_entries_with_requires_python(entries, tags, None, hasher, build_options)
+    }
+
+    /// Collect all files from a `--find-links` target into a [`FlatIndex`], optionally filtering
+    /// wheels by the initial `requires-python`.
+    #[instrument(skip_all)]
+    pub fn from_entries_with_requires_python(
         entries: Vec<FlatIndexEntry>,
         tags: Option<&Tags>,
         requires_python: Option<&RequiresPython>,
