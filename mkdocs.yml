@@ -263,6 +263,7 @@ nav:
       - Internals:
           - reference/internals/index.md
           - Resolver: reference/internals/resolver.md
+          - Workspace Metadata: reference/internals/metadata.md
       - Benchmarks: reference/benchmarks.md
       - Policies:
           - reference/policies/index.md
