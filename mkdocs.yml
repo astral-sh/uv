@@ -263,6 +263,7 @@ nav:
       - Internals:
           - reference/internals/index.md
           - Resolver: reference/internals/resolver.md
+      - Dependency specifiers: reference/dependency-specifiers.md
       - Benchmarks: reference/benchmarks.md
       - Policies:
           - reference/policies/index.md
