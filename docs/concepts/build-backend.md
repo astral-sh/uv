@@ -205,7 +205,8 @@ By default, uv excludes `__pycache__`, `*.pyc`, and `*.pyo`.
 
 When building a source distribution, the following files and directories are included:
 
-- The `pyproject.toml`
+- The `pyproject.toml`; `pyproject.toml` is reformatted for backwards compatibility, and the
+  original file is preserved as `pyproject.toml.orig`.
 - The [module](#modules) under
   [`tool.uv.build-backend.module-root`](../reference/settings.md#build-backend_module-root).
 - The files referenced by `project.license-files` and `project.readme`.
