@@ -110,7 +110,7 @@ def visit(metadata: UvMetadata, to_analyze: list[Node]):
   while len(to_analyze) > 0:
     node = to_analyze.pop()
 
-    # Handle cycles by avoiding revisting nodes
+    # Handle cycles by avoiding revisiting nodes
     if node.id in visited:
       continue
     visited.add(node.id)
