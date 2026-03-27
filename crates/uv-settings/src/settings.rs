@@ -2555,7 +2555,7 @@ pub struct AuditOptions {
         default = "[]",
         value_type = "list[str]",
         example = r#"
-            ignore = ["PYSEC-2023-0001", "GHSA-xxxx-yyyy-zzzz"]
+            ignore = ["PYSEC-aaaa-bbbb", "GHSA-xxxx-yyyy-zzzz"]
         "#
     )]
     pub ignore: Option<Vec<String>>,
@@ -2569,7 +2569,7 @@ pub struct AuditOptions {
         default = "[]",
         value_type = "list[str]",
         example = r#"
-            ignore-until-fixed = ["PYSEC-2023-0002"]
+            ignore-until-fixed = ["PYSEC-aaaa-bbbb"]
         "#
     )]
     pub ignore_until_fixed: Option<Vec<String>>,
