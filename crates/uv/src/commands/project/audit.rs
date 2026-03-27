@@ -20,7 +20,7 @@ use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 use anyhow::Result;
 use tracing::trace;
 use uv_audit::service::{VulnerabilityServiceFormat, osv};
-use uv_audit::types::{Dependency, Finding};
+use uv_audit::types::{Dependency, Finding, VulnerabilityID};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, DependencyGroups, ExtrasSpecification, TargetTriple};
@@ -53,8 +53,8 @@ pub(crate) async fn audit(
     preview: Preview,
     service: VulnerabilityServiceFormat,
     service_url: Option<String>,
-    ignore: Vec<String>,
-    ignore_until_fixed: Vec<String>,
+    ignore: Vec<VulnerabilityID>,
+    ignore_until_fixed: Vec<VulnerabilityID>,
 ) -> Result<ExitStatus> {
     // Check if the audit feature is in preview
     if !preview.is_enabled(PreviewFeature::Audit) {

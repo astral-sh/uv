@@ -41,7 +41,7 @@ pub struct VulnerabilityID(SmallString);
 
 impl VulnerabilityID {
     /// Create a new vulnerability ID from a string.
-    pub(crate) fn new(id: impl Into<SmallString>) -> Self {
+    pub fn new(id: impl Into<SmallString>) -> Self {
         Self(id.into())
     }
 
@@ -125,9 +125,9 @@ impl Vulnerability {
         std::iter::once(&self.id).chain(self.aliases.iter())
     }
 
-    /// Returns `true` if any of this vulnerability's identifiers (primary ID or aliases) match the given ID string.
-    pub fn matches(&self, id: &str) -> bool {
-        self.ids().any(|own_id| own_id.as_str() == id)
+    /// Returns `true` if any of this vulnerability's identifiers (primary ID or aliases) match the given ID.
+    pub fn matches(&self, id: &VulnerabilityID) -> bool {
+        self.ids().any(|own_id| own_id == id)
     }
 
     /// Pick the subjectively "best" identifier for this vulnerability.

@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use rustc_hash::FxHashSet;
 use uv_audit::service::VulnerabilityServiceFormat;
+use uv_audit::types::VulnerabilityID;
 
 use crate::commands::{PythonUpgrade, PythonUpgradeSource};
 use uv_auth::Service;
@@ -2550,8 +2551,8 @@ pub(crate) struct AuditSettings {
     pub(crate) settings: ResolverSettings,
     pub(crate) service_format: VulnerabilityServiceFormat,
     pub(crate) service_url: Option<String>,
-    pub(crate) ignore: Vec<String>,
-    pub(crate) ignore_until_fixed: Vec<String>,
+    pub(crate) ignore: Vec<VulnerabilityID>,
+    pub(crate) ignore_until_fixed: Vec<VulnerabilityID>,
 }
 
 impl AuditSettings {
@@ -2632,24 +2633,16 @@ impl AuditSettings {
             service_url,
             ignore: {
                 let config_ignore = filesystem_audit.ignore.unwrap_or_default();
-                if ignore.is_empty() {
-                    config_ignore
-                } else {
-                    let mut merged = ignore;
-                    merged.extend(config_ignore);
-                    merged
-                }
+                let mut merged = ignore;
+                merged.extend(config_ignore);
+                merged.into_iter().map(VulnerabilityID::new).collect()
             },
             ignore_until_fixed: {
                 let config_ignore_until_fixed =
                     filesystem_audit.ignore_until_fixed.unwrap_or_default();
-                if ignore_until_fixed.is_empty() {
-                    config_ignore_until_fixed
-                } else {
-                    let mut merged = ignore_until_fixed;
-                    merged.extend(config_ignore_until_fixed);
-                    merged
-                }
+                let mut merged = ignore_until_fixed;
+                merged.extend(config_ignore_until_fixed);
+                merged.into_iter().map(VulnerabilityID::new).collect()
             },
         }
     }
