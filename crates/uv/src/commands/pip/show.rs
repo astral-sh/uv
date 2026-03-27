@@ -8,7 +8,7 @@ use rustc_hash::FxHashMap;
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_distribution_types::{Diagnostic, Name};
+use uv_distribution_types::{DependencyMetadata, Diagnostic, Name};
 use uv_fs::Simplified;
 use uv_install_wheel::read_record_file;
 use uv_installer::SitePackages;
@@ -26,6 +26,7 @@ use crate::printer::Printer;
 pub(crate) fn pip_show(
     mut packages: Vec<PackageName>,
     strict: bool,
+    dependency_metadata: &DependencyMetadata,
     python: Option<&str>,
     system: bool,
     target: Option<Target>,
@@ -227,7 +228,7 @@ pub(crate) fn pip_show(
 
     // Validate that the environment is consistent.
     if strict {
-        for diagnostic in site_packages.diagnostics(&markers, tags)? {
+        for diagnostic in site_packages.diagnostics(&markers, tags, dependency_metadata)? {
             writeln!(
                 printer.stderr(),
                 "{}{} {}",

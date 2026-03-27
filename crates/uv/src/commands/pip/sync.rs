@@ -579,7 +579,14 @@ pub(crate) async fn pip_sync(
 
     // Notify the user of any environment diagnostics.
     if strict && !dry_run.enabled() {
-        operations::diagnose_environment(&resolution, &environment, &marker_env, &tags, printer)?;
+        operations::diagnose_environment(
+            &resolution,
+            &environment,
+            &marker_env,
+            &tags,
+            &dependency_metadata,
+            printer,
+        )?;
     }
 
     Ok(ExitStatus::Success)

@@ -14,7 +14,9 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType};
-use uv_distribution_types::{Diagnostic, IndexCapabilities, IndexLocations, Name, RequiresPython};
+use uv_distribution_types::{
+    DependencyMetadata, Diagnostic, IndexCapabilities, IndexLocations, Name, RequiresPython,
+};
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version, VersionSpecifier, VersionSpecifiers};
@@ -48,6 +50,7 @@ pub(crate) async fn pip_tree(
     concurrency: Concurrency,
     strict: bool,
     exclude_newer: ExcludeNewer,
+    dependency_metadata: &DependencyMetadata,
     python: Option<&str>,
     system: bool,
     cache: &Cache,
@@ -175,7 +178,7 @@ pub(crate) async fn pip_tree(
 
     // Validate that the environment is consistent.
     if strict {
-        for diagnostic in site_packages.diagnostics(&markers, tags)? {
+        for diagnostic in site_packages.diagnostics(&markers, tags, dependency_metadata)? {
             writeln!(
                 printer.stderr(),
                 "{}{} {}",
