@@ -50,7 +50,8 @@ pub(crate) async fn metadata(
     }
 
     let virtual_project =
-        VirtualProject::discover(project_dir, &DiscoveryOptions::default(), workspace_cache).await?;
+        VirtualProject::discover(project_dir, &DiscoveryOptions::default(), workspace_cache)
+            .await?;
     let target = LockTarget::Workspace(virtual_project.workspace());
 
     // Determine the lock mode.
