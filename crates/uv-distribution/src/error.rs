@@ -79,12 +79,11 @@ pub enum Error {
     },
     /// This shouldn't happen, it's a bug in the build backend.
     #[error(
-        "The built wheel `{}` is not compatible with the current Python {}.{} on {} {}",
+        "The built wheel `{}` is not compatible with the current Python {}.{} on {}",
         filename,
         python_version.0,
         python_version.1,
-        python_platform.os(),
-        python_platform.arch(),
+        python_platform.pretty(),
     )]
     BuiltWheelIncompatibleHostPlatform {
         filename: WheelFilename,
@@ -94,12 +93,11 @@ pub enum Error {
     /// This may happen when trying to cross-install native dependencies without their build backend
     /// being aware that the target is a cross-install.
     #[error(
-        "The built wheel `{}` is not compatible with the target Python {}.{} on {} {}. Consider using `--no-build` to disable building wheels.",
+        "The built wheel `{}` is not compatible with the target Python {}.{} on {}. Consider using `--no-build` to disable building wheels.",
         filename,
         python_version.0,
         python_version.1,
-        python_platform.os(),
-        python_platform.arch(),
+        python_platform.pretty(),
     )]
     BuiltWheelIncompatibleTargetPlatform {
         filename: WheelFilename,
@@ -266,5 +264,56 @@ impl Error {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Error;
+    use std::str::FromStr;
+    use uv_distribution_filename::WheelFilename;
+    use uv_platform_tags::{Arch, Os, Platform};
+
+    #[test]
+    fn built_wheel_error_formats_platform() {
+        let err = Error::BuiltWheelIncompatibleHostPlatform {
+            filename: WheelFilename::from_str(
+                "cryptography-47.0.0.dev1-cp315-abi3t-macosx_11_0_arm64.whl",
+            )
+            .unwrap(),
+            python_platform: Platform::new(
+                Os::Macos {
+                    major: 11,
+                    minor: 0,
+                },
+                Arch::Aarch64,
+            ),
+            python_version: (3, 15),
+        };
+
+        assert_eq!(
+            err.to_string(),
+            "The built wheel `cryptography-47.0.0.dev1-cp315-abi3t-macosx_11_0_arm64.whl` is not compatible with the current Python 3.15 on macOS aarch64"
+        );
+    }
+
+    #[test]
+    fn built_wheel_error_formats_target_python() {
+        let err = Error::BuiltWheelIncompatibleTargetPlatform {
+            filename: WheelFilename::from_str("py313-0.1.0-py313-none-any.whl").unwrap(),
+            python_platform: Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 28,
+                },
+                Arch::X86_64,
+            ),
+            python_version: (3, 12),
+        };
+
+        assert_eq!(
+            err.to_string(),
+            "The built wheel `py313-0.1.0-py313-none-any.whl` is not compatible with the target Python 3.12 on Linux x86_64. Consider using `--no-build` to disable building wheels."
+        );
     }
 }
