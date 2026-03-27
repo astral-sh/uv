@@ -807,6 +807,7 @@ mod tests {
             TagsOptions {
                 manylinux_compatible: true,
                 gil_disabled: true,
+                debug_enabled: false,
                 is_cross: false,
             },
         )
@@ -841,6 +842,7 @@ mod tests {
             TagsOptions {
                 manylinux_compatible: true,
                 gil_disabled: true,
+                debug_enabled: false,
                 is_cross: false,
             },
         )
@@ -875,6 +877,7 @@ mod tests {
             TagsOptions {
                 manylinux_compatible: true,
                 gil_disabled: false,
+                debug_enabled: false,
                 is_cross: false,
             },
         )

@@ -256,6 +256,7 @@ impl Interpreter {
                 TagsOptions {
                     manylinux_compatible: self.manylinux_compatible,
                     gil_disabled: self.gil_disabled,
+                    debug_enabled: self.debug_enabled,
                     is_cross: false,
                 },
             )?;

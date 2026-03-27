@@ -23,12 +23,15 @@ pub enum TagsError {
     InvalidPriority(usize, #[source] std::num::TryFromIntError),
     #[error("Only CPython can be freethreading, not: {0}")]
     GilIsACPythonProblem(String),
+    #[error("Only CPython can be debug-enabled, not: {0}")]
+    DebugIsACPythonProblem(String),
 }
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct TagsOptions {
     pub manylinux_compatible: bool,
     pub gil_disabled: bool,
+    pub debug_enabled: bool,
     pub is_cross: bool,
 }
 
@@ -154,6 +157,14 @@ impl Tags {
             }
             variant.insert(CPythonAbiVariants::Freethreading);
         }
+        if options.debug_enabled {
+            if implementation_name != "cpython" {
+                return Err(TagsError::DebugIsACPythonProblem(
+                    implementation_name.to_string(),
+                ));
+            }
+            variant.insert(CPythonAbiVariants::Debug);
+        }
         // Sufficiently correct assumption, pre-3.8 Pythons were generally built with pymalloc.
         // https://docs.python.org/dev/whatsnew/3.8.html#build-and-c-api-changes
         // > the m flag for pymalloc became useless (builds with and without pymalloc are ABI
@@ -182,6 +193,28 @@ impl Tags {
                 implementation.abi_tag(python_version, implementation_version),
                 platform_tag.clone(),
             ));
+        }
+        // 1a. For CPython 3.8+, debug and release builds are ABI-compatible, so a debug
+        // interpreter also accepts non-debug wheels (matching pip's packaging library behavior).
+        // See: <https://github.com/python/cpython/issues/80646>
+        if python_version >= (3, 8) {
+            if let Implementation::CPython { variant } = implementation {
+                if variant.contains(CPythonAbiVariants::Debug) {
+                    let mut alt_variant = variant;
+                    alt_variant.remove(CPythonAbiVariants::Debug);
+                    let alt_abi = AbiTag::CPython {
+                        variant: alt_variant,
+                        python_version,
+                    };
+                    for platform_tag in &platform_tags {
+                        tags.push((
+                            implementation.language_tag(python_version),
+                            alt_abi,
+                            platform_tag.clone(),
+                        ));
+                    }
+                }
+            }
         }
         // 2. abi3/abi3t and no abi (e.g. executable binary)
         if let Implementation::CPython { variant } = implementation {
@@ -2715,9 +2748,11 @@ mod tests {
             (3, 15),
             "cpython",
             (3, 15),
-            false,
-            true,
-            false,
+            TagsOptions {
+                manylinux_compatible: false,
+                gil_disabled: true,
+                ..TagsOptions::default()
+            },
         )
         .unwrap();
 
@@ -2776,6 +2811,39 @@ mod tests {
         py31-none-any
         py30-none-any
         "
+        );
+    }
+
+    #[test]
+    fn test_system_tags_debug_cpython() {
+        let tags = Tags::from_env(
+            &Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 28,
+                },
+                Arch::X86_64,
+            ),
+            (3, 14),
+            "cpython",
+            (3, 14),
+            TagsOptions {
+                manylinux_compatible: true,
+                debug_enabled: true,
+                ..TagsOptions::default()
+            },
+        )
+        .unwrap();
+
+        let rendered = tags.to_string();
+        // Debug CPython 3.8+ uses cp314d as the primary ABI tag, but also includes the
+        // non-debug cp314 tag since debug and release are ABI-compatible since CPython 3.8.
+        let mut lines = rendered.lines();
+        assert_eq!(lines.next(), Some("cp314-cp314d-manylinux_2_28_x86_64"));
+        // The non-debug cp314 tag follows immediately after the debug platform tags.
+        assert!(
+            rendered.contains("cp314-cp314-manylinux_2_28_x86_64"),
+            "expected non-debug tag in: {rendered}"
         );
     }
 }

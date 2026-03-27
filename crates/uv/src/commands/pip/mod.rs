@@ -69,6 +69,7 @@ pub(crate) fn resolution_tags<'env>(
         TagsOptions {
             manylinux_compatible,
             gil_disabled: interpreter.gil_disabled(),
+            debug_enabled: interpreter.debug_enabled(),
             is_cross: true,
         },
     )?;

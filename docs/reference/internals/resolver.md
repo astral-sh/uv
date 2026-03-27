@@ -124,10 +124,12 @@ tags. Wheel tags can encode the Python version, Python implementation, operating
 architecture. For example, `torch-2.4.0-cp312-cp312-manylinux2014_aarch64.whl` is only compatible
 with CPython 3.12 on arm64 Linux with `glibc>=2.17` (per the `manylinux2014` policy), while
 `tqdm-4.66.4-py3-none-any.whl` works with all Python 3 versions and interpreters on any operating
-system and architecture. Most projects have a universally compatible source distribution that can be
-used when attempted to install a package that has no compatible wheel, but some packages, such as
-`torch`, don't publish a source distribution. In this case an installation on, e.g., Python 3.13, an
-uncommon operating system, or architecture, will fail and complain that there is no matching wheel.
+system and architecture. Since CPython 3.8, debug and release builds share the same ABI, so a debug
+CPython interpreter accepts both debug (`cp314d`) and non-debug (`cp314`) wheels. Most projects have
+a universally compatible source distribution that can be used when attempted to install a package
+that has no compatible wheel, but some packages, such as `torch`, don't publish a source
+distribution. In this case an installation on, e.g., Python 3.13, an uncommon operating system, or
+architecture, will fail and complain that there is no matching wheel.
 
 ## Marker and wheel tag filtering
 
