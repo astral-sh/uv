@@ -4,8 +4,8 @@
 can use it. In particular, if you want access to the information in a `uv.lock`, you should prefer
 this command's output, as `uv.lock` is not a stable format we guarantee anything about.
 
-The primary structure is the "resolution" field which contains the dependency graph with exact package
-versions that a `uv.lock` encodes.
+The primary structure is the "resolution" field which contains the dependency graph with exact
+package versions that a `uv.lock` encodes.
 
 The edges of the graph are the `dependencies` every node defines. These are the things that must
 also be installed for it to be installed (and their `dependencies` recursively, keeping in mind that
@@ -67,11 +67,11 @@ queries into the dependency graph rooted in operations on workspace members, as 
 natural entry-points to the graph that uv wants to work on, and can give coherent responses for:
 "install `member1` and `member2[extra]`".
 
-Another way to put this is that when possible _you should avoid iterating over the `resolution` object
-to find a node_. Only access `resolution` like a map using ids that were provided by another part of
-the metadata. The only ids this initially gives you access to are the ones listed in the `members`
-array, which lists all the workspace members. From there you may find the ids of that package's
-dependencies, extras, and dependency groups and recursively discover other packages.
+Another way to put this is that when possible _you should avoid iterating over the `resolution`
+object to find a node_. Only access `resolution` like a map using ids that were provided by another
+part of the metadata. The only ids this initially gives you access to are the ones listed in the
+`members` array, which lists all the workspace members. From there you may find the ids of that
+package's dependencies, extras, and dependency groups and recursively discover other packages.
 
 So rather than trying to find a node for anyio in the dependency graph directly, you should decide
 what workspace member(s) you're interested in analyzing as if they were going to be installed. While
@@ -129,9 +129,9 @@ def visit(metadata: UvMetadata, to_analyze: list[Node]):
 
 ## Schema
 
-A full JSON schema for the format can be found [here](FIXME_ADD_URL).
+A full JSON schema for the format will be provided when the format is finalized.
 
-Here is a more human-readable annotated example:
+Here is a human-readable annotated example:
 
 ```js
 {
