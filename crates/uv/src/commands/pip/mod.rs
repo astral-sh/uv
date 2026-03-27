@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use uv_configuration::TargetTriple;
-use uv_platform_tags::{Tags, TagsError};
+use uv_platform_tags::{Tags, TagsError, TagsOptions};
 use uv_pypi_types::ResolverMarkerEnvironment;
 use uv_python::{Interpreter, PythonVersion};
 
@@ -66,9 +66,11 @@ pub(crate) fn resolution_tags<'env>(
         version_tuple,
         interpreter.implementation_name(),
         interpreter.implementation_tuple(),
-        manylinux_compatible,
-        interpreter.gil_disabled(),
-        true,
+        TagsOptions {
+            manylinux_compatible,
+            gil_disabled: interpreter.gil_disabled(),
+            is_cross: true,
+        },
     )?;
     Ok(Cow::Owned(tags))
 }

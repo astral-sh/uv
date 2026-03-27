@@ -25,6 +25,13 @@ pub enum TagsError {
     GilIsACPythonProblem(String),
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct TagsOptions {
+    pub manylinux_compatible: bool,
+    pub gil_disabled: bool,
+    pub is_cross: bool,
+}
+
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd, Copy, Clone)]
 pub enum IncompatibleTag {
     /// The tag is invalid and cannot be used.
@@ -136,12 +143,10 @@ impl Tags {
         python_version: (u8, u8),
         implementation_name: &str,
         implementation_version: (u8, u8),
-        manylinux_compatible: bool,
-        gil_disabled: bool,
-        is_cross: bool,
+        options: TagsOptions,
     ) -> Result<Self, TagsError> {
         let mut variant = CPythonAbiVariants::default();
-        if gil_disabled {
+        if options.gil_disabled {
             if implementation_name != "cpython" {
                 return Err(TagsError::GilIsACPythonProblem(
                     implementation_name.to_string(),
@@ -162,7 +167,7 @@ impl Tags {
         // Determine the compatible tags for the current platform.
         let platform_tags = {
             let mut platform_tags = compatible_tags(platform)?;
-            if matches!(platform.os(), Os::Manylinux { .. }) && !manylinux_compatible {
+            if matches!(platform.os(), Os::Manylinux { .. }) && !options.manylinux_compatible {
                 platform_tags.retain(|tag| !tag.is_manylinux());
             }
             platform_tags
@@ -270,8 +275,8 @@ impl Tags {
             tags,
             platform.clone(),
             python_version,
-            is_cross,
-            gil_disabled,
+            options.is_cross,
+            options.gil_disabled,
         ))
     }
 
@@ -1546,9 +1551,7 @@ mod tests {
             (3, 9),
             "cpython",
             (3, 9),
-            false,
-            false,
-            false,
+            TagsOptions::default(),
         )
         .unwrap();
         assert_snapshot!(
@@ -1610,9 +1613,10 @@ mod tests {
             (3, 9),
             "cpython",
             (3, 9),
-            true,
-            false,
-            false,
+            TagsOptions {
+                manylinux_compatible: true,
+                ..TagsOptions::default()
+            },
         )
         .unwrap();
         assert_snapshot!(
@@ -2235,9 +2239,7 @@ mod tests {
             (3, 9),
             "cpython",
             (3, 9),
-            false,
-            false,
-            false,
+            TagsOptions::default(),
         )
         .unwrap();
         assert_snapshot!(
