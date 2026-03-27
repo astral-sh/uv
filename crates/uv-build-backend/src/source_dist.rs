@@ -226,6 +226,37 @@ fn write_source_dist(
         metadata_email.as_bytes(),
     )?;
 
+    // Build tools need to parse `pyproject.toml` in source distributions to extract the
+    // `[build-system]` table, and if any other part of the file contains too new TOML syntax, they
+    // fail to build. This generally doesn't trigger backtracking, so the user is left if a failure
+    // when any (transitive) dependency in their dependency tree has started using a single instance
+    // of TOML 1.1. Most package managers, including pip, are implemented in Python and use stdlib's
+    // tomllib, which only support TOML 1.0 up to including Python 3.14.
+    //
+    // To work around this, we do a best-effort rewrite of `pyproject.toml` to TOML 1.0. We also
+    // add the original `pyproject.toml` as `pyproject.toml.orig` for reference.
+    let pyproject_path = source_tree.join("pyproject.toml");
+    let pyproject_contents = fs_err::read_to_string(&pyproject_path)?;
+    let pyproject_value: toml::Value = toml::from_str(&pyproject_contents)
+        .map_err(|err| Error::Toml(pyproject_path.clone(), err))?;
+    // See https://github.com/toml-rs/toml/issues/1088 for `to_string_pretty`.
+    let pyproject_rewritten =
+        toml::to_string_pretty(&pyproject_value).map_err(Error::TomlSerialize)?;
+    writer.write_bytes(
+        &Path::new(&top_level)
+            .join("pyproject.toml")
+            .portable_display()
+            .to_string(),
+        pyproject_rewritten.as_bytes(),
+    )?;
+    writer.write_file(
+        &Path::new(&top_level)
+            .join("pyproject.toml.orig")
+            .portable_display()
+            .to_string(),
+        &pyproject_path,
+    )?;
+
     let (include_matcher, exclude_matcher) =
         source_dist_matcher(source_tree, &pyproject_toml, settings, show_warnings)?;
 
@@ -269,6 +300,15 @@ fn write_source_dist(
 
         if !include_matcher.match_path(relative) || exclude_matcher.is_match(relative) {
             trace!("Excluding from sdist: {}", relative.user_display());
+            continue;
+        }
+
+        // `pyproject.toml` is handled separately.
+        if relative == "pyproject.toml" {
+            continue;
+        }
+        if relative == "pyproject.toml.orig" {
+            debug!("Ignoring existing `pyproject.toml.orig`");
             continue;
         }
 

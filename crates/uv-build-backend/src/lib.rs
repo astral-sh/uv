@@ -36,6 +36,8 @@ pub enum Error {
     Persist(PathBuf, #[source] io::Error),
     #[error("Invalid metadata format in: {}", _0.user_display())]
     Toml(PathBuf, #[source] toml::de::Error),
+    #[error("Failed to serialize pyproject.toml")]
+    TomlSerialize(#[source] toml::ser::Error),
     #[error("Invalid project metadata")]
     Validation(#[from] ValidationError),
     #[error("Invalid module name: {0}")]
@@ -681,17 +683,18 @@ mod tests {
         // Check that the source dist is reproducible across platforms.
         assert_snapshot!(
             format!("{:x}", sha2::Sha256::digest(fs_err::read(&source_dist_path).unwrap())),
-            @"8bed1f7a8059064bcbeedb61a867cca7f63a474306011d0114280de631ac705e"
+            @"1d9ce1ce63195fbee07314c0b595ba9e063670da8d10c252c351b21e94e3f508"
         );
         // Check both the files we report and the actual files
         assert_snapshot!(format_file_list(build.source_dist_list_files, src.path()), @"
         built_by_uv-0.1.0/PKG-INFO (generated)
+        built_by_uv-0.1.0/pyproject.toml (generated)
+        built_by_uv-0.1.0/pyproject.toml.orig (pyproject.toml)
         built_by_uv-0.1.0/LICENSE-APACHE (LICENSE-APACHE)
         built_by_uv-0.1.0/LICENSE-MIT (LICENSE-MIT)
         built_by_uv-0.1.0/README.md (README.md)
         built_by_uv-0.1.0/assets/data.csv (assets/data.csv)
         built_by_uv-0.1.0/header/built_by_uv.h (header/built_by_uv.h)
-        built_by_uv-0.1.0/pyproject.toml (pyproject.toml)
         built_by_uv-0.1.0/scripts/whoami.sh (scripts/whoami.sh)
         built_by_uv-0.1.0/src/built_by_uv/__init__.py (src/built_by_uv/__init__.py)
         built_by_uv-0.1.0/src/built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
@@ -712,6 +715,7 @@ mod tests {
         built_by_uv-0.1.0/header
         built_by_uv-0.1.0/header/built_by_uv.h
         built_by_uv-0.1.0/pyproject.toml
+        built_by_uv-0.1.0/pyproject.toml.orig
         built_by_uv-0.1.0/scripts
         built_by_uv-0.1.0/scripts/whoami.sh
         built_by_uv-0.1.0/src
@@ -984,6 +988,7 @@ mod tests {
         two_step_build-1.0.0/
         two_step_build-1.0.0/PKG-INFO
         two_step_build-1.0.0/pyproject.toml
+        two_step_build-1.0.0/pyproject.toml.orig
         two_step_build-1.0.0/two_step_build
         two_step_build-1.0.0/two_step_build/__init__.py
         ");
@@ -1388,6 +1393,7 @@ mod tests {
         simple_namespace_part-1.0.0/
         simple_namespace_part-1.0.0/PKG-INFO
         simple_namespace_part-1.0.0/pyproject.toml
+        simple_namespace_part-1.0.0/pyproject.toml.orig
         simple_namespace_part-1.0.0/src
         simple_namespace_part-1.0.0/src/simple_namespace
         simple_namespace_part-1.0.0/src/simple_namespace/part
@@ -1647,6 +1653,7 @@ mod tests {
         simple_namespace_part-1.0.0/
         simple_namespace_part-1.0.0/PKG-INFO
         simple_namespace_part-1.0.0/pyproject.toml
+        simple_namespace_part-1.0.0/pyproject.toml.orig
         simple_namespace_part-1.0.0/src
         simple_namespace_part-1.0.0/src/foo
         simple_namespace_part-1.0.0/src/foo/__init__.py
@@ -1761,6 +1768,7 @@ mod tests {
         duplicate-1.0.0/
         duplicate-1.0.0/PKG-INFO
         duplicate-1.0.0/pyproject.toml
+        duplicate-1.0.0/pyproject.toml.orig
         duplicate-1.0.0/src
         duplicate-1.0.0/src/bar
         duplicate-1.0.0/src/bar/baz
@@ -1821,5 +1829,147 @@ mod tests {
         metadata_json_preview/
         metadata_json_preview/__init__.py
         ");
+    }
+
+    /// Test that nested `pyproject.toml` files in subdirectories are preserved in the sdist and
+    /// not accidentally skipped by the root-level TOML rewriting logic.
+    #[test]
+    fn nested_pyproject_toml_preserved() {
+        let tmp_dir = TempDir::new().unwrap();
+
+        fs_err::write(
+            tmp_dir.path().join("pyproject.toml"),
+            indoc! {r#"
+                [project]
+                name = "nested-pyproject"
+                version = "1.0.0"
+
+                [build-system]
+                requires = ["uv_build>=0.5.15,<0.6.0"]
+                build-backend = "uv_build"
+
+                [tool.uv.build-backend]
+                source-include = ["subproject/**"]
+            "#},
+        )
+        .unwrap();
+
+        let nested_pyproject = tmp_dir.path().join("src").join("nested_pyproject");
+        fs_err::create_dir_all(&nested_pyproject).unwrap();
+        File::create(nested_pyproject.join("__init__.py")).unwrap();
+
+        // Create a nested pyproject.toml in a subdirectory
+        fs_err::write(
+            nested_pyproject.join("pyproject.toml"),
+            indoc! {r#"
+                [project]
+                name = "subproject"
+                version = "0.1.0"
+            "#},
+        )
+        .unwrap();
+
+        let dist = TempDir::new().unwrap();
+        let source_dist_filename =
+            build_source_dist(tmp_dir.path(), dist.path(), MOCK_UV_VERSION, false).unwrap();
+        let source_dist_path = dist.path().join(source_dist_filename.to_string());
+        let contents = sdist_contents(&source_dist_path);
+
+        // The nested pyproject.toml should be present
+        assert!(
+            contents
+                .iter()
+                .any(|f| f.contains("nested_pyproject/pyproject.toml")),
+        );
+    }
+
+    /// Test that TOML 1.1 features in pyproject.toml are rewritten to TOML 1.0 for backward
+    /// compatibility with older tools. The original file is preserved as pyproject.toml.orig.
+    #[test]
+    fn toml_1_1_backward_compatibility() {
+        let src = TempDir::new().unwrap();
+
+        // A `pyproject.toml` with a TOML 1.1 feature, trailing commas in inline tables.
+        let pyproject_toml = indoc! {r#"
+            [project]
+            name = "toml11-project"
+            version = "0.1.0"
+            description = "A test package using TOML 1.1 features"
+            requires-python = ">=3.12"
+            # TOML 1.1 feature: Trailing comma in inline table
+            authors = [
+                { name = "Ferris", email = "ferris@example.com", },
+                { name = "Platypus", email = "platypus@example.com", },
+            ]
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6.0"]
+            build-backend = "uv_build"
+        "#};
+
+        fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
+        fs_err::create_dir_all(src.path().join("src").join("toml11_project")).unwrap();
+        File::create(
+            src.path()
+                .join("src")
+                .join("toml11_project")
+                .join("__init__.py"),
+        )
+        .unwrap();
+
+        let dist = TempDir::new().unwrap();
+        let build = build(src.path(), dist.path(), &[]).unwrap();
+
+        // Check that both `pyproject.toml` and `pyproject.toml.orig` are in the sdist.
+        assert_snapshot!(build.source_dist_contents.join("\n"), @"
+        toml11_project-0.1.0/
+        toml11_project-0.1.0/PKG-INFO
+        toml11_project-0.1.0/pyproject.toml
+        toml11_project-0.1.0/pyproject.toml.orig
+        toml11_project-0.1.0/src
+        toml11_project-0.1.0/src/toml11_project
+        toml11_project-0.1.0/src/toml11_project/__init__.py
+        ");
+
+        // Extract the sdist to verify the contents of both files.
+        let source_dist_path = dist.path().join(build.source_dist_filename.to_string());
+        let sdist_reader = BufReader::new(File::open(&source_dist_path).unwrap());
+        let mut source_dist = tar::Archive::new(GzDecoder::new(sdist_reader));
+
+        let mut pyproject_toml_content = String::new();
+        let mut pyproject_toml_orig_content = String::new();
+        for entry in source_dist.entries().unwrap() {
+            let mut entry = entry.unwrap();
+            let path = entry.path().unwrap().to_string_lossy().to_string();
+
+            if path.ends_with("pyproject.toml") && !path.eq_ignore_ascii_case(".orig") {
+                entry.read_to_string(&mut pyproject_toml_content).unwrap();
+            } else if path.ends_with("pyproject.toml.orig") {
+                entry
+                    .read_to_string(&mut pyproject_toml_orig_content)
+                    .unwrap();
+            }
+        }
+
+        assert_eq!(pyproject_toml_orig_content, pyproject_toml);
+        assert_snapshot!(pyproject_toml_content, @r#"
+        [project]
+        name = "toml11-project"
+        version = "0.1.0"
+        description = "A test package using TOML 1.1 features"
+        requires-python = ">=3.12"
+
+        [[project.authors]]
+        name = "Ferris"
+        email = "ferris@example.com"
+
+        [[project.authors]]
+        name = "Platypus"
+        email = "platypus@example.com"
+
+        [build-system]
+        requires = ["uv_build>=0.5.15,<0.6.0"]
+        build-backend = "uv_build"
+        "#);
     }
 }
