@@ -12,7 +12,7 @@ use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_resolver::{Lock, Metadata};
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
+use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::project::lock::{LockMode, LockOperation};
@@ -49,9 +49,9 @@ pub(crate) async fn metadata(
         );
     }
 
-    let workspace =
-        Workspace::discover(project_dir, &DiscoveryOptions::default(), workspace_cache).await?;
-    let target = LockTarget::Workspace(&workspace);
+    let virtual_project =
+        VirtualProject::discover(project_dir, &DiscoveryOptions::default(), workspace_cache).await?;
+    let target = LockTarget::Workspace(virtual_project.workspace());
 
     // Determine the lock mode.
     let interpreter;
@@ -59,7 +59,7 @@ pub(crate) async fn metadata(
         LockMode::Frozen(frozen_source.into())
     } else {
         interpreter = ProjectInterpreter::discover(
-            &workspace,
+            virtual_project.workspace(),
             project_dir,
             // Don't enable any groups' requires-python for interpreter discovery
             &DependencyGroupsWithDefaults::none(),
@@ -109,7 +109,7 @@ pub(crate) async fn metadata(
     )
     .await
     {
-        Ok(lock) => print_lock_as_metadata(&workspace, &lock.into_lock(), printer),
+        Ok(lock) => print_lock_as_metadata(virtual_project.workspace(), &lock.into_lock(), printer),
         Err(err @ ProjectError::LockMismatch(..)) => {
             writeln!(printer.stderr(), "{}", err.to_string().bold())?;
             Ok(ExitStatus::Failure)

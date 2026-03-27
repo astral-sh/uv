@@ -844,6 +844,78 @@ fn workspace_metadata_with_excluded() -> Result<()> {
     Ok(())
 }
 
+/// Test metadata with excluded packages.
+#[test]
+fn workspace_metadata_group_only() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let workspace = context.temp_dir.child("workspace");
+
+    copy_dir_ignore(
+        context
+            .workspace_root
+            .join("test/workspaces/albatross-groups-only"),
+        &workspace,
+    )?;
+
+    uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "workspace_root": "[TEMP_DIR]/workspace",
+      "requires_python": ">=3.12",
+      "conflicts": {
+        "sets": []
+      },
+      "resolution": {
+        "iniconfig==2.0.0@registry+https://pypi.org/simple": {
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "source": {
+            "registry": {
+              "url": "https://pypi.org/simple"
+            }
+          },
+          "kind": "package",
+          "dependencies": [],
+          "sdist": {
+            "url": "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz",
+            "hashes": {
+              "sha256": "2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3"
+            },
+            "size": 4646,
+            "upload_time": "2023-01-07T11:08:11.254Z"
+          },
+          "wheels": [
+            {
+              "url": "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl",
+              "hashes": {
+                "sha256": "b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374"
+              },
+              "size": 5892,
+              "upload_time": "2023-01-07T11:08:09.864Z",
+              "filename": "iniconfig-2.0.0-py3-none-any.whl"
+            }
+          ]
+        }
+      }
+    }
+
+    ----- stderr -----
+    warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 1 package in [TIME]
+    "#
+    );
+
+    Ok(())
+}
+
+
 /// Test metadata error when not in a project.
 #[test]
 fn workspace_metadata_no_project() {
