@@ -269,7 +269,7 @@ pub(crate) async fn lock(
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(super) enum LockMode<'env> {
+pub(crate) enum LockMode<'env> {
     /// Write the lockfile to disk.
     Write(&'env Interpreter),
     /// Perform a resolution, but don't write the lockfile to disk.
@@ -281,7 +281,7 @@ pub(super) enum LockMode<'env> {
 }
 
 /// A lock operation.
-pub(super) struct LockOperation<'env> {
+pub(crate) struct LockOperation<'env> {
     mode: LockMode<'env>,
     constraints: Vec<NameRequirementSpecification>,
     refresh: Option<&'env Refresh>,
@@ -298,7 +298,7 @@ pub(super) struct LockOperation<'env> {
 
 impl<'env> LockOperation<'env> {
     /// Initialize a [`LockOperation`].
-    pub(super) fn new(
+    pub(crate) fn new(
         mode: LockMode<'env>,
         settings: &'env ResolverSettings,
         client_builder: &'env BaseClientBuilder<'env>,
@@ -328,7 +328,7 @@ impl<'env> LockOperation<'env> {
 
     /// Set the external constraints for the [`LockOperation`].
     #[must_use]
-    pub(super) fn with_constraints(
+    pub(crate) fn with_constraints(
         mut self,
         constraints: Vec<NameRequirementSpecification>,
     ) -> Self {
@@ -338,13 +338,13 @@ impl<'env> LockOperation<'env> {
 
     /// Set the refresh strategy for the [`LockOperation`].
     #[must_use]
-    pub(super) fn with_refresh(mut self, refresh: &'env Refresh) -> Self {
+    pub(crate) fn with_refresh(mut self, refresh: &'env Refresh) -> Self {
         self.refresh = Some(refresh);
         self
     }
 
     /// Perform a [`LockOperation`].
-    pub(super) async fn execute(self, target: LockTarget<'_>) -> Result<LockResult, ProjectError> {
+    pub(crate) async fn execute(self, target: LockTarget<'_>) -> Result<LockResult, ProjectError> {
         match self.mode {
             LockMode::Frozen(source) => {
                 // Read the existing lockfile, but don't attempt to lock the project.

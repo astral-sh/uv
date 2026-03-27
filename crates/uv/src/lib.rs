@@ -1932,8 +1932,43 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             .await
         }
         Commands::Workspace(WorkspaceNamespace { command }) => match command {
-            WorkspaceCommand::Metadata(_args) => {
-                commands::metadata(&project_dir, globals.preview, &workspace_cache, printer).await
+            WorkspaceCommand::Metadata(args) => {
+                // Resolve the settings from the command-line arguments and workspace configuration.
+                let args = settings::MetadataSettings::resolve(args, filesystem, environment);
+                show_settings!(args);
+
+                // Check for conflicts between offline and refresh.
+                globals
+                    .network_settings
+                    .check_refresh_conflict(&args.refresh);
+
+                // Initialize the cache.
+                let cache = cache.init().await?.with_refresh(
+                    args.refresh
+                        .clone()
+                        .combine(Refresh::from(args.settings.upgrade.clone())),
+                );
+
+                Box::pin(commands::metadata(
+                    &project_dir,
+                    args.lock_check,
+                    args.frozen,
+                    args.dry_run,
+                    args.refresh,
+                    args.python,
+                    args.install_mirrors,
+                    args.settings,
+                    client_builder.subcommand(vec!["workspace metadata".to_owned()]),
+                    globals.python_preference,
+                    globals.python_downloads,
+                    globals.concurrency,
+                    cli.top_level.no_config,
+                    &cache,
+                    &workspace_cache,
+                    printer,
+                    globals.preview,
+                ))
+                .await
             }
             WorkspaceCommand::Dir(args) => {
                 commands::dir(args.package, &project_dir, &workspace_cache, printer).await
