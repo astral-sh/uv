@@ -120,12 +120,16 @@ impl Vulnerability {
         }
     }
 
+    /// Return an iterator over all identifiers for this vulnerability, including the primary ID and all aliases.
+    pub fn ids(&self) -> impl Iterator<Item = &VulnerabilityID> {
+        std::iter::once(&self.id).chain(self.aliases.iter())
+    }
+
     /// Pick the subjectively "best" identifier for this vulnerability.
     /// For our purposes we prefer PYSEC IDs, then GHSA, then CVE, then whatever
     /// primary ID the vulnerability came with.
     pub fn best_id(&self) -> &VulnerabilityID {
-        std::iter::once(&self.id)
-            .chain(self.aliases.iter())
+        self.ids()
             .find(|id| {
                 id.as_str().starts_with("PYSEC-")
                     || id.as_str().starts_with("GHSA-")

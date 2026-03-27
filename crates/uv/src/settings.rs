@@ -2550,6 +2550,8 @@ pub(crate) struct AuditSettings {
     pub(crate) settings: ResolverSettings,
     pub(crate) service_format: VulnerabilityServiceFormat,
     pub(crate) service_url: Option<String>,
+    pub(crate) ignore: Vec<String>,
+    pub(crate) ignore_until_fixed: Vec<String>,
 }
 
 impl AuditSettings {
@@ -2573,6 +2575,8 @@ impl AuditSettings {
             frozen,
             build,
             resolver,
+            ignore,
+            ignore_until_fixed,
             service_format,
             service_url,
         } = args;
@@ -2580,6 +2584,11 @@ impl AuditSettings {
         let filesystem_install_mirrors = filesystem
             .clone()
             .map(|fs| fs.install_mirrors.clone())
+            .unwrap_or_default();
+
+        let filesystem_audit = filesystem
+            .as_ref()
+            .and_then(|fs| fs.audit.clone())
             .unwrap_or_default();
 
         let no_dev = no_dev || environment.no_dev.value == Some(true);
@@ -2621,6 +2630,27 @@ impl AuditSettings {
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
             service_format,
             service_url,
+            ignore: {
+                let config_ignore = filesystem_audit.ignore.unwrap_or_default();
+                if ignore.is_empty() {
+                    config_ignore
+                } else {
+                    let mut merged = ignore;
+                    merged.extend(config_ignore);
+                    merged
+                }
+            },
+            ignore_until_fixed: {
+                let config_ignore_until_fixed =
+                    filesystem_audit.ignore_until_fixed.unwrap_or_default();
+                if ignore_until_fixed.is_empty() {
+                    config_ignore_until_fixed
+                } else {
+                    let mut merged = ignore_until_fixed;
+                    merged.extend(config_ignore_until_fixed);
+                    merged
+                }
+            },
         }
     }
 }

@@ -2663,6 +2663,8 @@ async fn run_project(
                 globals.preview,
                 args.service_format,
                 args.service_url,
+                args.ignore,
+                args.ignore_until_fixed,
             ))
             .await
         }

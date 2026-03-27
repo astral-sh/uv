@@ -53,6 +53,8 @@ pub(crate) async fn audit(
     preview: Preview,
     service: VulnerabilityServiceFormat,
     service_url: Option<String>,
+    ignore: Vec<String>,
+    ignore_until_fixed: Vec<String>,
 ) -> Result<ExitStatus> {
     // Check if the audit feature is in preview
     if !preview.is_enabled(PreviewFeature::Audit) {
@@ -214,6 +216,37 @@ pub(crate) async fn audit(
     };
 
     reporter.on_audit_complete();
+
+    // Filter out ignored vulnerabilities.
+    let all_findings = if ignore.is_empty() && ignore_until_fixed.is_empty() {
+        all_findings
+    } else {
+        all_findings
+            .into_iter()
+            .filter(|finding| match finding {
+                Finding::Vulnerability(vulnerability) => {
+                    let dominated_by_ignore = vulnerability
+                        .ids()
+                        .any(|id| ignore.iter().any(|ignored| ignored == id.as_str()));
+                    if dominated_by_ignore {
+                        return false;
+                    }
+
+                    let dominated_by_ignore_until_fixed = vulnerability.ids().any(|id| {
+                        ignore_until_fixed
+                            .iter()
+                            .any(|ignored| ignored == id.as_str())
+                    });
+                    if dominated_by_ignore_until_fixed && vulnerability.fix_versions.is_empty() {
+                        return false;
+                    }
+
+                    true
+                }
+                Finding::ProjectStatus(_) => true,
+            })
+            .collect()
+    };
 
     let display = AuditResults {
         printer,
