@@ -1148,6 +1148,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &cache,
                 printer,
                 globals.preview,
+                &args.settings.dependency_metadata,
             )
         }
         Commands::Pip(PipNamespace {

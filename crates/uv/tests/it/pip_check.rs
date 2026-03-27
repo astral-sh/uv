@@ -114,6 +114,81 @@ fn check_incompatible_packages() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn check_dependency_metadata_override() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("requests==2.31.0")?;
+
+    uv_snapshot!(context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + requests==2.31.0
+     + urllib3==2.2.1
+    "
+    );
+
+    uv_snapshot!(context
+        .pip_uninstall()
+        .arg("idna"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - idna==3.6
+    "
+    );
+
+    uv_snapshot!(context.pip_check(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Checked 4 packages in [TIME]
+    Found 1 incompatibility
+    The package `requests` requires `idna>=2.5,<4`, but it's not installed
+    "
+    );
+
+    context.temp_dir.child("uv.toml").write_str(
+        r#"
+        dependency-metadata = [
+          { name = "requests", version = "2.31.0", requires-dist = [] },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.pip_check().arg("--config-file").arg("uv.toml"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Checked 4 packages in [TIME]
+    All installed packages are compatible
+    "
+    );
+
+    Ok(())
+}
+
 // requests 2.31.0 requires idna (<4,>=2.5) and urllib3<3,>=1.21.1
 // this test force-installs idna 2.4 and urllib3 1.20 to trigger a failure
 // with multiple incompatible packages.

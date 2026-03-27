@@ -8,9 +8,9 @@ use fs_err as fs;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use uv_distribution_types::{
-    ConfigSettings, Diagnostic, ExtraBuildRequires, ExtraBuildVariables, InstalledDist,
-    InstalledDistKind, Name, NameRequirementSpecification, PackageConfigSettings, Requirement,
-    UnresolvedRequirement, UnresolvedRequirementSpecification,
+    ConfigSettings, DependencyMetadata, Diagnostic, ExtraBuildRequires, ExtraBuildVariables,
+    InstalledDist, InstalledDistKind, Name, NameRequirementSpecification, PackageConfigSettings,
+    Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -197,6 +197,26 @@ impl SitePackages {
         markers: &ResolverMarkerEnvironment,
         tags: &Tags,
     ) -> Result<Vec<SitePackagesDiagnostic>> {
+        self.diagnostics_inner(markers, tags, None)
+    }
+
+    /// Validate the installed packages in the virtual environment, using dependency metadata
+    /// overrides when available.
+    pub fn diagnostics_with_dependency_metadata(
+        &self,
+        markers: &ResolverMarkerEnvironment,
+        tags: &Tags,
+        dependency_metadata: &DependencyMetadata,
+    ) -> Result<Vec<SitePackagesDiagnostic>> {
+        self.diagnostics_inner(markers, tags, Some(dependency_metadata))
+    }
+
+    fn diagnostics_inner(
+        &self,
+        markers: &ResolverMarkerEnvironment,
+        tags: &Tags,
+        dependency_metadata: Option<&DependencyMetadata>,
+    ) -> Result<Vec<SitePackagesDiagnostic>> {
         let mut diagnostics = Vec::new();
 
         for (package, indexes) in &self.by_name {
@@ -225,12 +245,19 @@ impl SitePackages {
                 };
 
                 // Determine the dependencies for the given package.
-                let Ok(metadata) = distribution.read_metadata() else {
-                    diagnostics.push(SitePackagesDiagnostic::MetadataUnavailable {
-                        package: package.clone(),
-                        path: distribution.install_path().to_owned(),
-                    });
-                    continue;
+                let metadata = if let Some(metadata) = dependency_metadata.and_then(|metadata| {
+                    metadata.get(distribution.name(), Some(distribution.version()))
+                }) {
+                    metadata
+                } else {
+                    let Ok(metadata) = distribution.read_metadata() else {
+                        diagnostics.push(SitePackagesDiagnostic::MetadataUnavailable {
+                            package: package.clone(),
+                            path: distribution.install_path().to_owned(),
+                        });
+                        continue;
+                    };
+                    metadata.clone()
                 };
 
                 // Verify that the package is compatible with the current Python version.
