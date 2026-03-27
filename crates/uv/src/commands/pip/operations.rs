@@ -19,7 +19,7 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, SourcedDependencyGroups};
 use uv_distribution_types::{
-    CachedDist, Diagnostic, Dist, InstalledDist, InstalledVersion, LocalDist,
+    CachedDist, DependencyMetadata, Diagnostic, Dist, InstalledDist, InstalledVersion, LocalDist,
     NameRequirementSpecification, Requirement, ResolutionDiagnostic, UnresolvedRequirement,
     UnresolvedRequirementSpecification, VersionOrUrlRef,
 };
@@ -1067,10 +1067,11 @@ pub(crate) fn diagnose_environment(
     venv: &PythonEnvironment,
     markers: &ResolverMarkerEnvironment,
     tags: &Tags,
+    dependency_metadata: &DependencyMetadata,
     printer: Printer,
 ) -> Result<(), Error> {
     let site_packages = SitePackages::from_environment(venv)?;
-    for diagnostic in site_packages.diagnostics(markers, tags)? {
+    for diagnostic in site_packages.diagnostics(markers, tags, dependency_metadata)? {
         // Only surface diagnostics that are "relevant" to the current resolution.
         if resolution
             .distributions()

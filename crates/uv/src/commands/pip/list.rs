@@ -17,7 +17,8 @@ use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
-    Diagnostic, IndexCapabilities, IndexLocations, InstalledDist, Name, RequiresPython,
+    DependencyMetadata, Diagnostic, IndexCapabilities, IndexLocations, InstalledDist, Name,
+    RequiresPython,
 };
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
@@ -48,6 +49,7 @@ pub(crate) async fn pip_list(
     concurrency: Concurrency,
     strict: bool,
     exclude_newer: ExcludeNewer,
+    dependency_metadata: &DependencyMetadata,
     python: Option<&str>,
     system: bool,
     target: Option<Target>,
@@ -294,7 +296,7 @@ pub(crate) async fn pip_list(
         let markers = environment.interpreter().resolver_marker_environment();
         let tags = environment.interpreter().tags()?;
 
-        for diagnostic in site_packages.diagnostics(&markers, tags)? {
+        for diagnostic in site_packages.diagnostics(&markers, tags, dependency_metadata)? {
             writeln!(
                 printer.stderr(),
                 "{}{} {}",
