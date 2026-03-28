@@ -63,6 +63,14 @@
       description: "Weekly update of artifact-related GitHub Actions dependencies",
     },
     {
+      // `github-tags` fails to resolve new digests for this action, but its
+      // GitHub releases use the same `v*` tags and are sufficient for updates.
+      // See: https://github.com/astral-sh/uv/issues/15276
+      matchManagers: ["github-actions"],
+      matchPackageNames: ["pypa/gh-action-pypi-publish"],
+      overrideDatasource: "github-releases",
+    },
+    {
       // This package rule disables updates for GitHub runners:
       // we'd only pin them to a specific version
       // if there was a deliberate reason to do so
