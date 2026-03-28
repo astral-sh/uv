@@ -3,6 +3,8 @@ use std::sync::{Arc, LazyLock};
 
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
+use serde::Serialize;
+use uv_cli::SyncFormat;
 use version_ranges::Ranges;
 
 use uv_distribution_types::{
@@ -38,6 +40,8 @@ pub(crate) struct OperationDiagnostic {
     pub(crate) system_certs: bool,
     /// The context to display to the user upon resolution failure.
     pub(crate) context: Option<&'static str>,
+    // The output format to use for error messages.
+    pub(crate) output_format: SyncFormat,
 }
 
 impl OperationDiagnostic {
@@ -64,6 +68,15 @@ impl OperationDiagnostic {
     pub(crate) fn with_context(self, context: &'static str) -> Self {
         Self {
             context: Some(context),
+            ..self
+        }
+    }
+
+    /// Set the output format to use for error messages.
+    #[must_use]
+    pub(crate) fn with_output_format(self, output_format: SyncFormat) -> Self {
+        Self {
+            output_format,
             ..self
         }
     }
@@ -137,7 +150,23 @@ impl OperationDiagnostic {
                 None
             }
             pip::operations::Error::OutdatedEnvironment => {
-                anstream::eprintln!("{}", err);
+                match self.output_format {
+                    SyncFormat::Json => {
+                        #[derive(Serialize)]
+                        struct OutdatedEnvironmentError {
+                            error: String,
+                            message: String,
+                        }
+                        let error = OutdatedEnvironmentError {
+                            error: "OutdatedEnvironment".to_string(),
+                            message: err.to_string(),
+                        };
+                        anstream::eprintln!("{}", serde_json::to_string(&error).unwrap());
+                    }
+                    SyncFormat::Text => {
+                        anstream::eprintln!("{}", err);
+                    }
+                }
                 None
             }
             err => Some(err),

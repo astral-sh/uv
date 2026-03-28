@@ -303,11 +303,11 @@ pub(crate) async fn sync(
                     }
                     return Ok(ExitStatus::Success);
                 }
-                // TODO(zanieb): We should respect `--output-format json` for the error case
                 Err(ProjectError::Operation(err)) => {
                     return diagnostics::OperationDiagnostic::with_system_certs(
                         client_builder.system_certs(),
                     )
+                    .with_output_format(output_format)
                     .report(err)
                     .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
@@ -357,6 +357,7 @@ pub(crate) async fn sync(
             return diagnostics::OperationDiagnostic::with_system_certs(
                 client_builder.system_certs(),
             )
+            .with_output_format(output_format)
             .report(err)
             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
@@ -435,6 +436,7 @@ pub(crate) async fn sync(
             return diagnostics::OperationDiagnostic::with_system_certs(
                 client_builder.system_certs(),
             )
+            .with_output_format(output_format)
             .report(err)
             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
