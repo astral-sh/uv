@@ -11,14 +11,13 @@ license = { workspace = true }
 
 [lib]
 doctest = false
+test = false
 
 [lints]
 workspace = true
 
 [dependencies]
 bitflags = { workspace = true }
-
-[dev-dependencies]
 
 [features]
 default = []

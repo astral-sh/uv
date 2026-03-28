@@ -11,6 +11,7 @@ license = { workspace = true }
 
 [lib]
 doctest = false
+test = false
 
 [lints]
 workspace = true
@@ -49,8 +50,6 @@ url = { workspace = true }
 
 [package.metadata.cargo-shear]
 ignored = ["uv-options-metadata", "clap"]
-
-[dev-dependencies]
 
 [features]
 tracing-durations-export = []

@@ -11,8 +11,7 @@ license = { workspace = true }
 
 [lib]
 doctest = false
-
-[dependencies]
+test = false
 
 [target.'cfg(all(target_os = "windows"))'.dependencies]
 mimalloc = { version = "0.1.43" }

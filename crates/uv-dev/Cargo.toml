@@ -64,6 +64,7 @@ walkdir = { workspace = true }
 
 [lib]
 name = "uv_dev"
+doctest = false
 
 [[bin]]
 name = "uv-dev"
