@@ -227,3 +227,6 @@ dist = true
 [[bin]]
 name = "uvw"
 required-features = ["windows-gui-bin"]
+
+[lib]
+doctest = false

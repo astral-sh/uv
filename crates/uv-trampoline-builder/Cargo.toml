@@ -38,3 +38,6 @@ anyhow = { workspace = true }
 fs-err = { workspace = true }
 rcgen = { workspace = true }
 which = { workspace = true }
+
+[lib]
+doctest = false

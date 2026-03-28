@@ -154,7 +154,7 @@ jobs:
         uses: taiki-e/install-action@cbb1dcaa26e1459e2876c39f61c1e22a1258aac5 # v2.68.33
         with:
           tool: cargo-shear
-      - run: cargo shear
+      - run: cargo shear --deny-warnings
 
   typos:
     runs-on: ubuntu-slim

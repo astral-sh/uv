@@ -16,6 +16,7 @@ workspace = true
 [lib]
 doctest = false
 bench = false
+test = false
 
 [[bench]]
 name = "uv"
