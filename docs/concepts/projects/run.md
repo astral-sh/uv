@@ -10,7 +10,9 @@ $ uv run python -c "import example"
 ```
 
 When using `run`, uv will ensure that the project environment is up-to-date before running the given
-command.
+command. See the [locking and syncing](./sync.md) documentation for details on how uv manages the
+project environment, including how to control locking behavior with `--locked`, `--frozen`, and
+`--no-sync`.
 
 The given command can be provided by the project environment or exist outside of it, e.g.:
 
