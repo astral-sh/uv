@@ -165,7 +165,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     }
 
     fn read_canonical_http_revision(
-        &self,
         lock_shard: &CacheShard,
         hashes: HashPolicy<'_>,
     ) -> Result<Option<Revision>, Error> {
@@ -606,9 +605,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Acquire the concurrency permit and advisory lock.
         let _permit = self.acquire_concurrency_permit().await;
         let _lock = lock_shard.lock().await.map_err(Error::CacheLock)?;
-        let revision = self
-            .read_canonical_http_revision(lock_shard, hashes)?
-            .unwrap_or(revision);
+        let revision = Self::read_canonical_http_revision(lock_shard, hashes)?.unwrap_or(revision);
         let cache_shard = lock_shard.shard(revision.id());
         let source_dist_entry = cache_shard.entry(SOURCE);
         let revision = if source_dist_entry.path().is_dir() {
@@ -782,9 +779,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Acquire the concurrency permit and advisory lock.
         let _permit = self.acquire_concurrency_permit().await;
         let _lock = lock_shard.lock().await.map_err(Error::CacheLock)?;
-        let revision = self
-            .read_canonical_http_revision(lock_shard, hashes)?
-            .unwrap_or(revision);
+        let revision = Self::read_canonical_http_revision(lock_shard, hashes)?.unwrap_or(revision);
         let cache_shard = lock_shard.shard(revision.id());
         let source_dist_entry = cache_shard.entry(SOURCE);
         let revision = if source_dist_entry.path().is_dir() {
@@ -1582,7 +1577,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 return Ok(ArchiveMetadata::from(
                     Metadata::from_workspace(
                         metadata,
-                        resource.install_path.as_ref(),
+                        resource.install_path,
                         None,
                         self.build_context.locations(),
                         self.build_context.sources().clone(),
@@ -1625,7 +1620,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Ok(ArchiveMetadata::from(
                 Metadata::from_workspace(
                     metadata,
-                    resource.install_path.as_ref(),
+                    resource.install_path,
                     None,
                     self.build_context.locations(),
                     self.build_context.sources().clone(),
@@ -1769,7 +1764,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // Determine the last-modified time of the source distribution.
-        let cache_info = CacheInfo::from_directory(&resource.install_path)?;
+        let cache_info = CacheInfo::from_directory(resource.install_path)?;
         Ok(Self::read_matching_local_revision_pointer(
             source,
             &entry,
