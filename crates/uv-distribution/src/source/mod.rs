@@ -164,6 +164,17 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         Ok(pointer)
     }
 
+    fn read_canonical_http_revision(
+        &self,
+        lock_shard: &CacheShard,
+        hashes: HashPolicy<'_>,
+    ) -> Result<Option<Revision>, Error> {
+        let entry = lock_shard.entry(HTTP_REVISION);
+        Ok(HttpRevisionPointer::read_from(&entry)?
+            .map(HttpRevisionPointer::into_revision)
+            .filter(|revision| revision.has_digests(hashes)))
+    }
+
     /// Download and build a [`SourceDist`].
     pub(crate) async fn download_and_build(
         &self,
@@ -595,6 +606,38 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Acquire the concurrency permit and advisory lock.
         let _permit = self.acquire_concurrency_permit().await;
         let _lock = lock_shard.lock().await.map_err(Error::CacheLock)?;
+        let revision = self
+            .read_canonical_http_revision(lock_shard, hashes)?
+            .unwrap_or(revision);
+        let cache_shard = lock_shard.shard(revision.id());
+        let source_dist_entry = cache_shard.entry(SOURCE);
+        let revision = if source_dist_entry.path().is_dir() {
+            revision
+        } else {
+            self.heal_url_revision(
+                source,
+                ext,
+                url,
+                index,
+                &source_dist_entry,
+                revision,
+                hashes,
+                client,
+            )
+            .await?
+        };
+        if let Some(subdirectory) = subdirectory {
+            if !source_dist_entry.path().join(subdirectory).is_dir() {
+                return Err(Error::MissingSubdirectory(
+                    url.clone(),
+                    subdirectory.to_path_buf(),
+                ));
+            }
+        }
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
 
         // Re-check the cache under lock to avoid duplicate builds across concurrent tasks.
         if let Some(file) = BuiltWheelFile::find_in_cache(tags, &cache_shard)
@@ -739,6 +782,35 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Acquire the concurrency permit and advisory lock.
         let _permit = self.acquire_concurrency_permit().await;
         let _lock = lock_shard.lock().await.map_err(Error::CacheLock)?;
+        let revision = self
+            .read_canonical_http_revision(lock_shard, hashes)?
+            .unwrap_or(revision);
+        let cache_shard = lock_shard.shard(revision.id());
+        let source_dist_entry = cache_shard.entry(SOURCE);
+        let revision = if source_dist_entry.path().is_dir() {
+            revision
+        } else {
+            self.heal_url_revision(
+                source,
+                ext,
+                url,
+                index,
+                &source_dist_entry,
+                revision,
+                hashes,
+                client,
+            )
+            .await?
+        };
+        if let Some(subdirectory) = subdirectory {
+            if !source_dist_entry.path().join(subdirectory).is_dir() {
+                return Err(Error::MissingSubdirectory(
+                    url.clone(),
+                    subdirectory.to_path_buf(),
+                ));
+            }
+        }
+        let metadata_entry = cache_shard.entry(METADATA);
 
         // Re-check the cache under lock to avoid duplicate builds across concurrent tasks.
         if let Some(metadata) = self
