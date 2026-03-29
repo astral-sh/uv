@@ -550,6 +550,11 @@ which instructs uv to install the project in non-editable mode. `--no-editable` 
 deployment use-cases, such as building a Docker container, in which the project should be included
 in the deployed environment without a dependency on the originating source code.
 
+By default, uv only rebuilds editable installs when `pyproject.toml`, `setup.py`, or `setup.cfg`
+changes. To control when uv rebuilds a local dependency based on dynamic metadata (e.g., Git commit
+hash or version derived from a file), see
+[Dynamic metadata](../../concepts/cache.md#dynamic-metadata) in the cache documentation.
+
 ## Conflicting dependencies
 
 uv resolves all project dependencies together, including optional dependencies ("extras") and
