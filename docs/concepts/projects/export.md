@@ -15,8 +15,8 @@ For more details on lockfiles and how they're created, see the [project layout](
 
 By default, `uv export` includes the same [default groups](./dependencies.md#default-groups) as
 `uv run` and `uv sync` — typically the `dev` group. Use `--no-dev` to exclude development
-dependencies, or `--group`, `--only-group`, `--all-groups`, and `--no-group` to control which
-groups are included:
+dependencies, or `--group`, `--only-group`, `--all-groups`, and `--no-group` to control which groups
+are included:
 
 ```console
 $ uv export --format requirements.txt --no-dev
