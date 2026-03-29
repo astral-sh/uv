@@ -1149,6 +1149,15 @@ impl InterpreterInfo {
 
         let canonical = canonicalize_executable(&absolute).map_err(handle_io_error)?;
 
+        // For virtual environment executables, include the `include-system-site-packages` state
+        // in the cache key. This is critical because `site.getsitepackages()` returns different
+        // results based on this setting, and we cache those results.
+        //
+        // If the executable is a virtual environment interpreter, parse `pyvenv.cfg` to get
+        // the `include-system-site-packages` value. If the file doesn't exist or can't be parsed,
+        // we treat it as not a venv and don't include this in the cache key.
+        let venv_system_site_packages = venv_include_system_site_packages(&absolute);
+
         let cache_entry = cache.entry(
             CacheBucket::Interpreter,
             // Shard interpreter metadata by host architecture, operating system, and version, to
@@ -1169,7 +1178,14 @@ impl InterpreterInfo {
             // absolute path refers to different interpreters with matching ctimes, e.g., if you
             // have a `.venv/bin/python` pointing to both Python 3.12 and Python 3.13 that were
             // modified at the same time.
-            format!("{}.msgpack", cache_digest(&(&absolute, &canonical))),
+            //
+            // For virtual environments, we also include the `include-system-site-packages` state
+            // in the cache key, because `site.getsitepackages()` returns different results based
+            // on this setting (see issue #18510).
+            format!(
+                "{}.msgpack",
+                cache_digest(&(&absolute, &canonical, &venv_system_site_packages))
+            ),
         );
 
         // We check the timestamp of the canonicalized executable to check if an underlying
@@ -1325,6 +1341,32 @@ fn python_home(interpreter: &Path) -> Option<PathBuf> {
     let venv_root = interpreter.parent()?.parent()?;
     let pyvenv_cfg = PyVenvConfiguration::parse(venv_root.join("pyvenv.cfg")).ok()?;
     pyvenv_cfg.home
+}
+
+/// Get the `include-system-site-packages` value from `pyvenv.cfg`, if the executable is
+/// a virtual environment interpreter.
+///
+/// Returns `Some(true)` if the virtual environment includes system site packages,
+/// `Some(false)` if it doesn't, or `None` if the executable is not from a virtual environment
+/// or `pyvenv.cfg` could not be parsed.
+///
+/// This is used in the interpreter cache key to prevent cache pollution when a virtual
+/// environment's `include-system-site-packages` setting changes (see issue #18510).
+fn venv_include_system_site_packages(executable: &Path) -> Option<bool> {
+    // Try to find the venv root from the executable path.
+    // On Unix: `.venv/bin/python` -> `.venv/pyvenv.cfg`
+    // On Windows: `.venv/Scripts/python.exe` -> `.venv/pyvenv.cfg`
+    let venv_root = executable.parent()?.parent()?;
+    let pyvenv_cfg_path = venv_root.join("pyvenv.cfg");
+
+    // If `pyvenv.cfg` doesn't exist, this is not a virtual environment.
+    if !pyvenv_cfg_path.exists() {
+        return None;
+    }
+
+    // Parse `pyvenv.cfg` to get the `include-system-site-packages` value.
+    let pyvenv_cfg = PyVenvConfiguration::parse(pyvenv_cfg_path).ok()?;
+    Some(pyvenv_cfg.include_system_site_packages())
 }
 
 #[cfg(unix)]
