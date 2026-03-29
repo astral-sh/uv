@@ -695,20 +695,15 @@ fn add_git_lfs() -> Result<()> {
         .arg("test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo")
         .arg("--rev").arg("261c828b8e05251f3a3e4f6b47b149d691c7efbb")
         .arg("--lfs"), @"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-      × Failed to download and build `test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true`
-      ├─▶ Git operation failed
-      ╰─▶ process didn't exit successfully: `/run/current-system/sw/bin/git reset --hard 261c828b8e05251f3a3e4f6b47b149d691c7efbb` (exit status: 128)
-          --- stderr
-          git-lfs filter-process: line 1: git-lfs: command not found
-          fatal: the remote end hung up unexpectedly
-
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true)
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
