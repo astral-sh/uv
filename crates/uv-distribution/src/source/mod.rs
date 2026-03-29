@@ -145,6 +145,25 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
     }
 
+    async fn commit_canonical_local_revision_pointer(
+        &self,
+        lock_shard: &CacheShard,
+        pointer: LocalRevisionPointer,
+        hashes: HashPolicy<'_>,
+    ) -> Result<LocalRevisionPointer, Error> {
+        let entry = lock_shard.entry(LOCAL_REVISION);
+        if let Some(canonical) = LocalRevisionPointer::read_from(&entry)? {
+            if *canonical.cache_info() == *pointer.cache_info()
+                && canonical.revision().has_digests(hashes)
+            {
+                return Ok(canonical);
+            }
+        }
+
+        pointer.write_to(&entry).await?;
+        Ok(pointer)
+    }
+
     /// Download and build a [`SourceDist`].
     pub(crate) async fn download_and_build(
         &self,
@@ -927,12 +946,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         hashes: HashPolicy<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         // Fetch the revision for the source distribution.
-        let LocalRevisionPointer {
-            cache_info,
-            revision,
-        } = self
+        let provisional = self
             .archive_revision(source, resource, cache_shard, hashes)
             .await?;
+        let cache_info = provisional.cache_info().clone();
+        let revision = provisional.revision().clone();
 
         // Before running the build, check that the hashes match.
         if !revision.satisfies(hashes) {
@@ -981,10 +999,32 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             self.heal_archive_revision(source, resource, &source_entry, revision, hashes)
                 .await?
         };
+        let provisional = LocalRevisionPointer {
+            cache_info,
+            revision,
+        };
 
         // Acquire the concurrency permit and advisory lock.
         let _permit = self.acquire_concurrency_permit().await;
         let _lock = lock_shard.lock().await.map_err(Error::CacheLock)?;
+
+        let canonical = self
+            .commit_canonical_local_revision_pointer(lock_shard, provisional, hashes)
+            .await?;
+        let cache_info = canonical.cache_info().clone();
+        let revision = canonical.revision().clone();
+        let cache_shard = lock_shard.shard(revision.id());
+        let source_entry = cache_shard.entry(SOURCE);
+        let revision = if source_entry.path().is_dir() {
+            revision
+        } else {
+            self.heal_archive_revision(source, resource, &source_entry, revision, hashes)
+                .await?
+        };
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
 
         // Re-check the cache under lock to avoid duplicate builds across concurrent tasks.
         if let Some(file) = BuiltWheelFile::find_in_cache(tags, &cache_shard)
@@ -1049,9 +1089,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         // Fetch the revision for the source distribution.
-        let LocalRevisionPointer { revision, .. } = self
+        let provisional = self
             .archive_revision(source, resource, cache_shard, hashes)
             .await?;
+        let cache_info = provisional.cache_info().clone();
+        let revision = provisional.revision().clone();
 
         // Before running the build, check that the hashes match.
         if !revision.satisfies(hashes) {
@@ -1100,10 +1142,28 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             self.heal_archive_revision(source, resource, &source_entry, revision, hashes)
                 .await?
         };
+        let provisional = LocalRevisionPointer {
+            cache_info,
+            revision,
+        };
 
         // Acquire the concurrency permit and advisory lock.
         let _permit = self.acquire_concurrency_permit().await;
         let _lock = lock_shard.lock().await.map_err(Error::CacheLock)?;
+
+        let canonical = self
+            .commit_canonical_local_revision_pointer(lock_shard, provisional, hashes)
+            .await?;
+        let revision = canonical.into_revision();
+        let cache_shard = lock_shard.shard(revision.id());
+        let source_entry = cache_shard.entry(SOURCE);
+        let revision = if source_entry.path().is_dir() {
+            revision
+        } else {
+            self.heal_archive_revision(source, resource, &source_entry, revision, hashes)
+                .await?
+        };
+        let metadata_entry = cache_shard.entry(METADATA);
 
         // Re-check the cache under lock to avoid duplicate builds across concurrent tasks.
         if let Some(metadata) = self
@@ -1243,14 +1303,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Include the hashes and cache info in the revision.
         let revision = revision.with_hashes(HashDigests::from(hashes));
 
-        // Persist the revision.
-        let pointer = LocalRevisionPointer {
+        Ok(LocalRevisionPointer {
             cache_info,
             revision,
-        };
-        pointer.write_to(&revision_entry).await?;
-
-        Ok(pointer)
+        })
     }
 
     /// Build a source distribution from a local source tree (i.e., directory), either editable or
