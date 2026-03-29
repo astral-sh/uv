@@ -11,6 +11,19 @@ uv can export a lockfile to different formats for integration with other tools a
 For more details on lockfiles and how they're created, see the [project layout](./layout.md) and
 [locking and syncing](./sync.md) documentation.
 
+## Dependency groups
+
+By default, `uv export` includes the same [default groups](./dependencies.md#default-groups) as
+`uv run` and `uv sync` — typically the `dev` group. Use `--no-dev` to exclude development
+dependencies, or `--group`, `--only-group`, `--all-groups`, and `--no-group` to control which
+groups are included:
+
+```console
+$ uv export --format requirements.txt --no-dev
+$ uv export --format requirements.txt --group lint
+$ uv export --format requirements.txt --all-groups
+```
+
 ## Overview of export formats
 
 uv supports three export formats:
