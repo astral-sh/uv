@@ -225,7 +225,7 @@ pub(crate) async fn publish(
                 &group.file,
                 &group.filename,
                 &download_concurrency,
-                Arc::clone(&reporter),
+                reporter.clone(),
             )
             .await
             {
@@ -271,7 +271,7 @@ pub(crate) async fn publish(
 
         // Collect the metadata for the file.
         let form_metadata =
-            match FormMetadata::read_from_file(&group.file, &group.filename, Arc::clone(&reporter))
+            match FormMetadata::read_from_file(&group.file, &group.filename, reporter.clone())
                 .await
                 .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))
             {
@@ -340,8 +340,7 @@ pub(crate) async fn publish(
                 &s3_client,
                 retry_policy,
                 &credentials,
-                // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
-                Arc::clone(&reporter),
+                reporter.clone(),
             )
             .await?
         } else {
@@ -375,8 +374,7 @@ pub(crate) async fn publish(
                             &credentials,
                             check_url_client.as_ref(),
                             &download_concurrency,
-                            // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
-                            Arc::clone(&reporter),
+                            reporter.clone(),
                         )
                         .await? // Filename and/or URL are already attached, if applicable.
                     }
