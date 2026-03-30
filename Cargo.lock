@@ -591,12 +591,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "borrow-or-share"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc0b364ead1874514c8c2855ab558056ebfeb775653e7ae45ff72f28f8f3166c"
-
-[[package]]
 name = "boxcar"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1203,12 +1197,10 @@ dependencies = [
 [[package]]
 name = "cyclonedx-bom"
 version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3132b69ba8c13808bd2fa5748ac5b9816eb4f4e1f0bff6b7f9254a5940dcdeef"
+source = "git+https://github.com/woodruffw-bot/cyclonedx-rust-cargo?branch=claude%2Foptional-dependencies-update-BzL5o#e02eb2e857cca1da192976196ac8d8fc901409fd"
 dependencies = [
  "base64",
  "cyclonedx-bom-macros",
- "fluent-uri",
  "indexmap",
  "once_cell",
  "ordered-float",
@@ -1227,8 +1219,7 @@ dependencies = [
 [[package]]
 name = "cyclonedx-bom-macros"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c50341f21df64b412b4f917e34b7aa786c092d64f3f905f478cb76950c7e980c"
+source = "git+https://github.com/woodruffw-bot/cyclonedx-rust-cargo?branch=claude%2Foptional-dependencies-update-BzL5o#e02eb2e857cca1da192976196ac8d8fc901409fd"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1639,17 +1630,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b09cf3155332e944990140d967ff5eceb70df778b34f77d8075db46e4704e6d8"
 dependencies = [
  "num-traits",
-]
-
-[[package]]
-name = "fluent-uri"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc74ac4d8359ae70623506d512209619e5cf8f347124910440dbc221714b328e"
-dependencies = [
- "borrow-or-share",
- "ref-cast",
- "serde",
 ]
 
 [[package]]
