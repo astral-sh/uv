@@ -140,7 +140,7 @@ impl AbiTag {
         match self {
             Self::None => None,
             Self::Abi3 => None,
-            Self::Abi3T => Some("stable ABI for free-threaded builds".to_string()),
+            Self::Abi3T => Some("stable ABI for free-threaded CPython".to_string()),
             Self::CPython {
                 variant,
                 python_version,
@@ -484,7 +484,7 @@ mod tests {
         assert!(AbiTag::Abi3T.is_stable_abi());
         assert_eq!(
             AbiTag::Abi3T.pretty(),
-            Some("stable ABI for free-threaded builds".to_string())
+            Some("stable ABI for free-threaded CPython".to_string())
         );
     }
 
