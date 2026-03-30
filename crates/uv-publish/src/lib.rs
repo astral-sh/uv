@@ -160,6 +160,9 @@ pub trait Reporter: Send + Sync + 'static {
     fn on_upload_start(&self, name: &str, size: Option<u64>) -> usize;
     fn on_upload_progress(&self, id: usize, inc: u64);
     fn on_upload_complete(&self, id: usize);
+    fn on_hash_start(&self, name: &DistFilename, size: Option<u64>) -> usize;
+    fn on_hash_progress(&self, id: usize, inc: u64);
+    fn on_hash_complete(&self, id: usize);
 }
 
 /// Context for using a fresh registry client for check URL requests.
@@ -622,6 +625,7 @@ pub async fn upload(
                             &group.file,
                             &group.filename,
                             download_concurrency,
+                            reporter.clone(),
                         )
                         .await?
                         {
@@ -941,6 +945,7 @@ pub async fn check_url(
     file: &Path,
     filename: &DistFilename,
     download_concurrency: &Semaphore,
+    reporter: Arc<impl Reporter>,
 ) -> Result<bool, PublishError> {
     let CheckUrlClient {
         index_url,
@@ -1016,14 +1021,16 @@ pub async fn check_url(
     if let Some(remote_hash) = archived_file.hashes.first() {
         // We accept the risk for TOCTOU errors here, since we already read the file once before the
         // streaming upload to compute the hash for the form metadata.
-        let local_hash = &hash_file(file, vec![Hasher::from(remote_hash.algorithm)])
-            .await
-            .map_err(|err| {
-                PublishError::PublishPrepare(
-                    file.to_path_buf(),
-                    Box::new(PublishPrepareError::Io(err)),
-                )
-            })?[0];
+        let local_hash = &hash_file(
+            file,
+            filename,
+            vec![Hasher::from(remote_hash.algorithm)],
+            reporter,
+        )
+        .await
+        .map_err(|err| {
+            PublishError::PublishPrepare(file.to_path_buf(), Box::new(PublishPrepareError::Io(err)))
+        })?[0];
         if local_hash.digest == remote_hash.digest {
             debug!(
                 "Found {filename} in the registry with matching hash {}",
@@ -1046,12 +1053,30 @@ pub async fn check_url(
 /// Calculate the requested hashes of a file.
 async fn hash_file(
     path: impl AsRef<Path>,
+    filename: &DistFilename,
     hashers: Vec<Hasher>,
+    reporter: Arc<impl Reporter>,
 ) -> Result<Vec<HashDigest>, io::Error> {
-    debug!("Hashing {}", path.as_ref().display());
-    let file = BufReader::new(File::open(path.as_ref()).await?);
+    let path = path.as_ref();
+    debug!("Hashing {}", path.user_display());
+
+    let file = File::open(path).await?;
+    let file_size = file.metadata().await?.len();
+    let idx = reporter.on_hash_start(filename, Some(file_size));
+
+    let reader = BufReader::new(file);
     let mut hashers = hashers;
-    HashReader::new(file, &mut hashers).finish().await?;
+    let reporter_clone = reporter.clone();
+    let mut reader = HashReader::new(
+        ProgressReader::new(reader, move |read| {
+            reporter_clone.on_hash_progress(idx, read as u64);
+        }),
+        &mut hashers,
+    );
+
+    let result = reader.finish().await;
+    reporter.on_hash_complete(idx);
+    result?;
 
     Ok(hashers
         .into_iter()
@@ -1131,13 +1156,16 @@ impl FormMetadata {
     pub async fn read_from_file(
         file: &Path,
         filename: &DistFilename,
+        reporter: Arc<impl Reporter>,
     ) -> Result<Self, PublishPrepareError> {
         let hashes = hash_file(
             file,
+            filename,
             vec![
                 Hasher::from(HashAlgorithm::Sha256),
                 Hasher::from(HashAlgorithm::Blake2b),
             ],
+            reporter,
         )
         .await?;
 
@@ -1505,6 +1533,11 @@ mod tests {
         }
         fn on_upload_progress(&self, _id: usize, _inc: u64) {}
         fn on_upload_complete(&self, _id: usize) {}
+        fn on_hash_start(&self, _name: &DistFilename, _size: Option<u64>) -> usize {
+            0
+        }
+        fn on_hash_progress(&self, _id: usize, _inc: u64) {}
+        fn on_hash_complete(&self, _id: usize) {}
     }
 
     async fn mock_server_upload(mock_server: &MockServer) -> Result<bool, PublishError> {
@@ -1519,9 +1552,10 @@ mod tests {
             attestations: vec![],
         };
 
-        let form_metadata = FormMetadata::read_from_file(&group.file, &group.filename)
-            .await
-            .unwrap();
+        let form_metadata =
+            FormMetadata::read_from_file(&group.file, &group.filename, Arc::new(DummyReporter))
+                .await
+                .unwrap();
 
         let client = BaseClientBuilder::default()
             .redirect(RedirectPolicy::NoRedirect)
@@ -1840,9 +1874,10 @@ mod tests {
             }
         };
 
-        let form_metadata = FormMetadata::read_from_file(&group.file, &group.filename)
-            .await
-            .unwrap();
+        let form_metadata =
+            FormMetadata::read_from_file(&group.file, &group.filename, Arc::new(DummyReporter))
+                .await
+                .unwrap();
 
         let formatted_metadata = form_metadata
             .iter()
@@ -1962,9 +1997,10 @@ mod tests {
             }
         };
 
-        let form_metadata = FormMetadata::read_from_file(&group.file, &group.filename)
-            .await
-            .unwrap();
+        let form_metadata =
+            FormMetadata::read_from_file(&group.file, &group.filename, Arc::new(DummyReporter))
+                .await
+                .unwrap();
 
         let formatted_metadata = form_metadata
             .iter()

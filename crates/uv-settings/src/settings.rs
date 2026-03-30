@@ -63,6 +63,9 @@ pub struct Options {
     pub add: AddOptions,
 
     #[option_group]
+    pub audit: Option<AuditOptions>,
+
+    #[option_group]
     pub pip: Option<PipOptions>,
 
     /// The keys to consider when caching builds for the project.
@@ -2269,6 +2272,7 @@ pub struct OptionsWire {
     // add: AddOptions
     add_bounds: Option<AddBoundsKind>,
 
+    audit: Option<AuditOptions>,
     pip: Option<PipOptions>,
     cache_keys: Option<Vec<CacheKey>>,
 
@@ -2351,6 +2355,7 @@ impl From<OptionsWire> for Options {
             no_binary,
             no_binary_package,
             torch_backend,
+            audit,
             pip,
             cache_keys,
             override_dependencies,
@@ -2452,6 +2457,7 @@ impl From<OptionsWire> for Options {
                 check_url,
             },
             add: AddOptions { add_bounds: bounds },
+            audit,
             workspace,
             sources,
             dev_dependencies,
@@ -2539,4 +2545,36 @@ pub struct AddOptions {
         possible_values = true
     )]
     pub add_bounds: Option<AddBoundsKind>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, CombineOptions, OptionsMetadata)]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct AuditOptions {
+    /// A list of vulnerability IDs to ignore during auditing.
+    ///
+    /// Vulnerabilities matching any of the provided IDs (including aliases) will be excluded from
+    /// the audit results.
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            ignore = ["PYSEC-2022-43017", "GHSA-5239-wwwm-4pmq"]
+        "#
+    )]
+    pub ignore: Option<Vec<String>>,
+
+    /// A list of vulnerability IDs to ignore during auditing, but only while no fix is available.
+    ///
+    /// Vulnerabilities matching any of the provided IDs (including aliases) will be excluded from
+    /// the audit results as long as they have no known fix versions. Once a fix version becomes
+    /// available, the vulnerability will be reported again.
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            ignore-until-fixed = ["PYSEC-2022-43017"]
+        "#
+    )]
+    pub ignore_until_fixed: Option<Vec<String>>,
 }

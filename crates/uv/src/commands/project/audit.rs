@@ -20,7 +20,7 @@ use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 use anyhow::Result;
 use tracing::trace;
 use uv_audit::service::{VulnerabilityServiceFormat, osv};
-use uv_audit::types::{Dependency, Finding};
+use uv_audit::types::{Dependency, Finding, VulnerabilityID};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, DependencyGroups, ExtrasSpecification, TargetTriple};
@@ -53,6 +53,8 @@ pub(crate) async fn audit(
     preview: Preview,
     service: VulnerabilityServiceFormat,
     service_url: Option<String>,
+    ignore: Vec<VulnerabilityID>,
+    ignore_until_fixed: Vec<VulnerabilityID>,
 ) -> Result<ExitStatus> {
     // Check if the audit feature is in preview
     if !preview.is_enabled(PreviewFeature::Audit) {
@@ -214,6 +216,27 @@ pub(crate) async fn audit(
     };
 
     reporter.on_audit_complete();
+
+    // Filter out ignored vulnerabilities.
+    let all_findings: Vec<_> = all_findings
+        .into_iter()
+        .filter(|finding| match finding {
+            Finding::Vulnerability(vulnerability) => {
+                if ignore.iter().any(|id| vulnerability.matches(id)) {
+                    return false;
+                }
+                if vulnerability.fix_versions.is_empty()
+                    && ignore_until_fixed
+                        .iter()
+                        .any(|id| vulnerability.matches(id))
+                {
+                    return false;
+                }
+                true
+            }
+            Finding::ProjectStatus(_) => true,
+        })
+        .collect();
 
     let display = AuditResults {
         printer,

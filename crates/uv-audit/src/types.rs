@@ -41,7 +41,7 @@ pub struct VulnerabilityID(SmallString);
 
 impl VulnerabilityID {
     /// Create a new vulnerability ID from a string.
-    pub(crate) fn new(id: impl Into<SmallString>) -> Self {
+    pub fn new(id: impl Into<SmallString>) -> Self {
         Self(id.into())
     }
 
@@ -120,12 +120,21 @@ impl Vulnerability {
         }
     }
 
+    /// Return an iterator over all identifiers for this vulnerability, including the primary ID and all aliases.
+    fn ids(&self) -> impl Iterator<Item = &VulnerabilityID> {
+        std::iter::once(&self.id).chain(self.aliases.iter())
+    }
+
+    /// Returns `true` if any of this vulnerability's identifiers (primary ID or aliases) match the given ID.
+    pub fn matches(&self, id: &VulnerabilityID) -> bool {
+        self.ids().any(|own_id| own_id == id)
+    }
+
     /// Pick the subjectively "best" identifier for this vulnerability.
     /// For our purposes we prefer PYSEC IDs, then GHSA, then CVE, then whatever
     /// primary ID the vulnerability came with.
     pub fn best_id(&self) -> &VulnerabilityID {
-        std::iter::once(&self.id)
-            .chain(self.aliases.iter())
+        self.ids()
             .find(|id| {
                 id.as_str().starts_with("PYSEC-")
                     || id.as_str().starts_with("GHSA-")

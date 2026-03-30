@@ -22,6 +22,16 @@
         "$ref": "#/definitions/TrustedHost"
       }
     },
+    "audit": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/AuditOptions"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "build-backend": {
       "description": "Configuration for the uv build backend.\n\nNote that those settings only apply when using the `uv_build` backend, other build backends\n(such as hatchling) have their own configuration.",
       "anyOf": [
@@ -611,6 +621,25 @@
           "const": "split"
         }
       ]
+    },
+    "AuditOptions": {
+      "type": "object",
+      "properties": {
+        "ignore": {
+          "description": "A list of vulnerability IDs to ignore during auditing.\n\nVulnerabilities matching any of the provided IDs (including aliases) will be excluded from\nthe audit results.",
+          "type": ["array", "null"],
+          "items": {
+            "type": "string"
+          }
+        },
+        "ignore-until-fixed": {
+          "description": "A list of vulnerability IDs to ignore during auditing, but only while no fix is available.\n\nVulnerabilities matching any of the provided IDs (including aliases) will be excluded from\nthe audit results as long as they have no known fix versions. Once a fix version becomes\navailable, the vulnerability will be reported again.",
+          "type": ["array", "null"],
+          "items": {
+            "type": "string"
+          }
+        }
+      }
     },
     "AuthPolicy": {
       "description": "When to use authentication.",

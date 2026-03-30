@@ -217,12 +217,15 @@ pub(crate) async fn publish(
             );
         }
 
+        let reporter = Arc::new(PublishReporter::single(printer));
+
         if let Some(check_url_client) = &check_url_client {
             match uv_publish::check_url(
                 check_url_client,
                 &group.file,
                 &group.filename,
                 &download_concurrency,
+                reporter.clone(),
             )
             .await
             {
@@ -260,27 +263,36 @@ pub(crate) async fn publish(
             writeln!(
                 printer.stderr(),
                 "{} {} {}",
-                "Uploading".bold().green(),
+                "Hashing".bold().green(),
                 group.filename,
                 format!("({bytes:.1}{unit})").dimmed()
             )?;
         }
 
         // Collect the metadata for the file.
-        let form_metadata = match FormMetadata::read_from_file(&group.file, &group.filename)
-            .await
-            .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))
-        {
-            Ok(metadata) => metadata,
-            Err(err) => {
-                if dry_run {
-                    write_error_chain(&err, printer.stderr(), "error", AnsiColors::Red)?;
-                    error_count += 1;
-                    continue;
+        let form_metadata =
+            match FormMetadata::read_from_file(&group.file, &group.filename, reporter.clone())
+                .await
+                .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))
+            {
+                Ok(metadata) => metadata,
+                Err(err) => {
+                    if dry_run {
+                        write_error_chain(&err, printer.stderr(), "error", AnsiColors::Red)?;
+                        error_count += 1;
+                        continue;
+                    }
+                    return Err(err.into());
                 }
-                return Err(err.into());
-            }
-        };
+            };
+
+        writeln!(
+            printer.stderr(),
+            "{} {} {}",
+            "Uploading".bold().green(),
+            group.filename,
+            format!("({bytes:.1}{unit})").dimmed()
+        )?;
 
         let uploaded = if direct {
             if dry_run {
@@ -320,7 +332,6 @@ pub(crate) async fn publish(
             }
 
             debug!("Using two-phase upload (direct mode)");
-            let reporter = PublishReporter::single(printer);
             upload_two_phase(
                 &group,
                 &form_metadata,
@@ -329,8 +340,7 @@ pub(crate) async fn publish(
                 &s3_client,
                 retry_policy,
                 &credentials,
-                // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
-                Arc::new(reporter),
+                reporter.clone(),
             )
             .await?
         } else {
@@ -355,7 +365,6 @@ pub(crate) async fn publish(
                     if !should_upload {
                         false
                     } else {
-                        let reporter = PublishReporter::single(printer);
                         upload(
                             &group,
                             &form_metadata,
@@ -365,8 +374,7 @@ pub(crate) async fn publish(
                             &credentials,
                             check_url_client.as_ref(),
                             &download_concurrency,
-                            // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
-                            Arc::new(reporter),
+                            reporter.clone(),
                         )
                         .await? // Filename and/or URL are already attached, if applicable.
                     }

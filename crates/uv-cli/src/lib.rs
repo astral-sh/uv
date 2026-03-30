@@ -5230,6 +5230,25 @@ pub struct AuditArgs {
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
 
+    /// Ignore a vulnerability by ID.
+    ///
+    /// Vulnerabilities matching any of the provided IDs (including aliases) will be excluded from
+    /// the audit results.
+    ///
+    /// May be provided multiple times.
+    #[arg(long)]
+    pub ignore: Vec<String>,
+
+    /// Ignore a vulnerability by ID, but only while no fix is available.
+    ///
+    /// Vulnerabilities matching any of the provided IDs (including aliases) will be excluded from
+    /// the audit results as long as they have no known fix versions. Once a fix version becomes
+    /// available, the vulnerability will be reported again.
+    ///
+    /// May be provided multiple times.
+    #[arg(long)]
+    pub ignore_until_fixed: Vec<String>,
+
     /// The service format to use for vulnerability lookups.
     ///
     /// Each service format has a default URL, which can be
