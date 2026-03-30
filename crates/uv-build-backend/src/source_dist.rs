@@ -100,7 +100,7 @@ fn source_dist_matcher(
                 let potential_dir = source_tree.join(pattern);
                 if potential_dir.is_dir() {
                     warn_user_once!(
-                        "`source-include` pattern `{pattern}` matches directory `{pattern}` but not its contents. Use `{pattern}/**` to include all files in the directory."
+                        "`source-include` matches directory `{pattern}` but not its contents. Use `{pattern}/**` to include all files in the directory."
                     );
                 }
             }

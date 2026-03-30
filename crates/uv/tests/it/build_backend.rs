@@ -1649,7 +1649,7 @@ fn source_include_bare_directory_warning() -> Result<()> {
 
     ----- stderr -----
     Building source distribution (uv build backend)...
-    warning: `source-include` pattern `tests` matches directory `tests` but not its contents. Use `tests/**` to include all files in the directory.
+    warning: `source-include` matches directory `tests` but not its contents. Use `tests/**` to include all files in the directory.
     Building wheel from source distribution (uv build backend)...
     Successfully built dist/foo-1.0.0.tar.gz
     Successfully built dist/foo-1.0.0-py3-none-any.whl
