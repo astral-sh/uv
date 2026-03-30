@@ -925,7 +925,7 @@ pub struct ResolverInstallerSchema {
         default = "None",
         value_type = "dict",
         example = r#"
-            exclude-newer-package = { tqdm = "2022-04-04T00:00:00Z", private-pkg = false }
+            exclude-newer-package = { tqdm = "2022-04-04T00:00:00Z", markupsafe = false }
         "#
     )]
     pub exclude_newer_package: Option<ExcludeNewerPackage>,
@@ -1721,7 +1721,7 @@ pub struct PipOptions {
         default = "None",
         value_type = "dict",
         example = r#"
-            exclude-newer-package = { tqdm = "2022-04-04T00:00:00Z", private-pkg = false }
+            exclude-newer-package = { tqdm = "2022-04-04T00:00:00Z", markupsafe = false }
         "#
     )]
     pub exclude_newer_package: Option<ExcludeNewerPackage>,

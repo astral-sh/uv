@@ -196,7 +196,7 @@
       ]
     },
     "exclude-newer-package": {
-      "description": "Limit candidate packages for specific packages to those that were uploaded prior to the\ngiven date.\n\nAccepts a dictionary format of `PACKAGE = \"DATE\"` pairs, where `DATE` is an RFC 3339\ntimestamp (e.g., `2006-12-02T02:07:43Z`), a \"friendly\" duration (e.g., `24 hours`, `1 week`,\n`30 days`), or a ISO 8601 duration (e.g., `PT24H`, `P7D`, `P30D`).\n\nDurations do not respect semantics of the local time zone and are always resolved to a fixed\nnumber of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).\nCalendar units such as months and years are not allowed.",
+      "description": "Limit candidate packages for specific packages to those that were uploaded prior to the\ngiven date.\n\nAccepts a dictionary format of `PACKAGE = \"DATE\"` pairs, where `DATE` is an RFC 3339\ntimestamp (e.g., `2006-12-02T02:07:43Z`), a \"friendly\" duration (e.g., `24 hours`, `1 week`,\n`30 days`), or a ISO 8601 duration (e.g., `PT24H`, `P7D`, `P30D`).\n\nDurations do not respect semantics of the local time zone and are always resolved to a fixed\nnumber of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).\nCalendar units such as months and years are not allowed.\n\nSet a package to `false` to exempt it from the global [`exclude-newer`](#exclude-newer)\nconstraint entirely.",
       "anyOf": [
         {
           "$ref": "#/definitions/ExcludeNewerPackage"
@@ -1266,7 +1266,7 @@
           ]
         },
         "exclude-newer-package": {
-          "description": "Limit candidate packages for specific packages to those that were uploaded prior to the given date.\n\nAccepts package-date pairs in a dictionary format.",
+          "description": "Limit candidate packages for specific packages to those that were uploaded prior to the given date.\n\nAccepts package-date pairs in a dictionary format. Set a package to `false` to exempt it\nfrom the global [`exclude-newer`](#exclude-newer) constraint entirely.",
           "anyOf": [
             {
               "$ref": "#/definitions/ExcludeNewerPackage"
