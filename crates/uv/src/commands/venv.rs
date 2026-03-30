@@ -31,9 +31,7 @@ use uv_shell::{Shell, shlex_posix, shlex_windows};
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
 use uv_virtualenv::OnExisting;
 use uv_warnings::warn_user;
-use uv_workspace::{
-    DiscoveryOptions, InterpreterOrRequest, VirtualProject, WorkspaceCache, WorkspaceError,
-};
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
 
 use crate::commands::ExitStatus;
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
@@ -162,11 +160,9 @@ pub(crate) async fn venv(
     // avoids a breaking change when adding project environment support to `uv venv`.
     let (path, centralized) = if let Some(project) = project.as_ref() {
         if path.is_none() && project.workspace().install_path() == project_dir {
-            let env_path = project.workspace().venv(
-                Some(false),
-                InterpreterOrRequest::Interpreter(&interpreter),
-                cache,
-            );
+            let env_path = project
+                .workspace()
+                .venv(Some(false), Some(&interpreter), cache);
             let centralized = env_path.is_centralized();
             (env_path.into_path_buf(), centralized)
         } else {

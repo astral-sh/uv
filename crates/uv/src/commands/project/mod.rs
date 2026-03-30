@@ -47,7 +47,7 @@ use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::pyproject::{ExtraBuildDependency, PyProjectToml};
-use uv_workspace::{InterpreterOrRequest, RequiresPythonSources, Workspace, WorkspaceCache};
+use uv_workspace::{RequiresPythonSources, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::{Changelog, Modifications};
@@ -934,6 +934,153 @@ fn environment_is_usable(
     Ok(())
 }
 
+/// Return the passed in environment if it is usable, or if `--no-sync` is passed. Warnfor the
+/// `--no-sync` override.
+fn warn_for_incompatible_environment(
+    venv: PythonEnvironment,
+    python_request: Option<&PythonRequest>,
+    python_preference: PythonPreference,
+    requires_python: Option<&RequiresPython>,
+    keep_incompatible: bool,
+    cache: &Cache,
+) -> Option<PythonEnvironment> {
+    match environment_is_usable(
+        &venv,
+        EnvironmentKind::Project,
+        python_request,
+        python_preference,
+        requires_python,
+        cache,
+    ) {
+        Ok(()) => Some(venv),
+        Err(err) if keep_incompatible => {
+            warn_user!(
+                "Using incompatible environment (`{}`) due to `--no-sync` ({err})",
+                venv.root().user_display().cyan(),
+            );
+            Some(venv)
+        }
+        Err(err) => {
+            debug!("{err}");
+            None
+        }
+    }
+}
+
+/// Attempt to find an existing environment in the centralized store
+fn discover_centralized_environment(
+    workspace: &Workspace,
+    interpreter: &Interpreter,
+    python_request: Option<&PythonRequest>,
+    python_preference: PythonPreference,
+    requires_python: Option<&RequiresPython>,
+    keep_incompatible: bool,
+    active: Option<bool>,
+    cache: &Cache,
+) -> Option<PythonEnvironment> {
+    // We got a path to an environment, but we don't know if it's from our store or
+    // something that accidentally worked, so we use the python interpreter to get the
+    // authoritative path to the centralized location.
+    let env_path = workspace.venv(active, Some(interpreter), cache);
+
+    // This should always be true.
+    if !env_path.is_centralized() {
+        debug!(
+            "Resolving interpreter to environment path resulted in a non-centralized path: {env_path:?}"
+        );
+        return None;
+    }
+
+    match PythonEnvironment::from_root(env_path.path(), cache) {
+        Ok(venv) => warn_for_incompatible_environment(
+            venv.with_centralized(true),
+            python_request,
+            python_preference,
+            requires_python,
+            keep_incompatible,
+            cache,
+        ),
+        Err(err) => {
+            debug!("{err}");
+            None
+        }
+    }
+}
+
+// Attempt to discover an existing regular environment at the specified path
+fn discover_environment(
+    env_path: &Path,
+    python_request: Option<&PythonRequest>,
+    python_preference: PythonPreference,
+    requires_python: Option<&RequiresPython>,
+    keep_incompatible: bool,
+    cache: &Cache,
+) -> Result<Option<PythonEnvironment>, ProjectError> {
+    match PythonEnvironment::from_root(env_path, cache) {
+        Ok(venv) => {
+            return Ok(warn_for_incompatible_environment(
+                venv,
+                python_request,
+                python_preference,
+                requires_python,
+                keep_incompatible,
+                cache,
+            ));
+        }
+        Err(uv_python::Error::MissingEnvironment(_)) => {}
+        Err(uv_python::Error::InvalidEnvironment(inner)) => {
+            // If there's an invalid environment with existing content, we error instead of
+            // deleting it later on
+            match inner.kind {
+                InvalidEnvironmentKind::NotDirectory => {
+                    return Err(ProjectError::InvalidProjectEnvironmentDir(
+                        env_path.to_path_buf(),
+                        inner.kind.to_string(),
+                    ));
+                }
+                InvalidEnvironmentKind::MissingExecutable(_) => {
+                    // If it's not an empty directory
+                    if fs_err::read_dir(env_path).is_ok_and(|mut dir| dir.next().is_some()) {
+                        // ... and there's no `pyvenv.cfg`
+                        if !env_path.join("pyvenv.cfg").try_exists().unwrap_or_default() {
+                            // ... then it's not a valid Python environment
+                            return Err(ProjectError::InvalidProjectEnvironmentDir(
+                                    env_path.to_path_buf(),
+                                    "it is not a valid Python environment (no Python executable was found)"
+                                    .to_string(),
+                            ));
+                        }
+                    }
+                }
+                // If the environment is an empty directory, it's fine to use
+                InvalidEnvironmentKind::Empty => {}
+            }
+        }
+        Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(_))) => {}
+        Err(uv_python::Error::Query(uv_python::InterpreterError::BrokenLink(BrokenLink {
+            path,
+            unix,
+            venv: _,
+        }))) => {
+            if unix {
+                let target_path = fs_err::read_link(&path)?;
+                warn_user!(
+                    "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
+                    path.user_display().cyan(),
+                    target_path.user_display().cyan(),
+                );
+            } else {
+                warn_user!(
+                    "Ignoring existing virtual environment linked to non-existent Python interpreter: {}",
+                    path.user_display().cyan(),
+                );
+            }
+        }
+        Err(err) => return Err(err.into()),
+    }
+    Ok(None)
+}
+
 /// An interpreter suitable for the project.
 #[derive(Debug)]
 #[expect(clippy::large_enum_variant)]
@@ -976,92 +1123,34 @@ impl ProjectInterpreter {
         )
         .await?;
 
-        let env_path = workspace.venv(
-            active,
-            InterpreterOrRequest::Request {
-                request: python_request.as_ref().unwrap_or(&PythonRequest::Default),
-                preference: python_preference,
-            },
-            cache,
-        );
-        let is_centralized = env_path.is_centralized();
-        let root = env_path.into_path_buf();
+        let env_path = workspace.venv(active, None, cache);
 
-        match PythonEnvironment::from_root(&root, cache) {
-            Ok(venv) => {
-                let venv = venv.with_centralized(is_centralized);
-                match environment_is_usable(
-                    &venv,
-                    EnvironmentKind::Project,
+        if env_path.is_centralized() {
+            if let Ok(candidate_venv) = PythonEnvironment::from_root(env_path.path(), cache) {
+                if let Some(venv) = discover_centralized_environment(
+                    workspace,
+                    candidate_venv.interpreter(),
                     python_request.as_ref(),
                     python_preference,
                     requires_python.as_ref(),
+                    keep_incompatible,
+                    active,
                     cache,
                 ) {
-                    Ok(()) => return Ok(Self::Environment(venv)),
-                    Err(err) if keep_incompatible => {
-                        warn_user!(
-                            "Using incompatible environment (`{}`) due to `--no-sync` ({err})",
-                            root.user_display().cyan(),
-                        );
-                        return Ok(Self::Environment(venv));
-                    }
-                    Err(err) => {
-                        debug!("{err}");
-                    }
+                    return Ok(Self::Environment(venv));
                 }
             }
-            Err(uv_python::Error::MissingEnvironment(_)) => {}
-            Err(uv_python::Error::InvalidEnvironment(inner)) => {
-                // If there's an invalid environment with existing content, we error instead of
-                // deleting it later on
-                match inner.kind {
-                    InvalidEnvironmentKind::NotDirectory => {
-                        return Err(ProjectError::InvalidProjectEnvironmentDir(
-                            root,
-                            inner.kind.to_string(),
-                        ));
-                    }
-                    InvalidEnvironmentKind::MissingExecutable(_) => {
-                        // If it's not an empty directory
-                        if fs_err::read_dir(&root).is_ok_and(|mut dir| dir.next().is_some()) {
-                            // ... and there's no `pyvenv.cfg`
-                            if !root.join("pyvenv.cfg").try_exists().unwrap_or_default() {
-                                // ... then it's not a valid Python environment
-                                return Err(ProjectError::InvalidProjectEnvironmentDir(
-                                    root,
-                                    "it is not a valid Python environment (no Python executable was found)"
-                                        .to_string(),
-                                ));
-                            }
-                        }
-                        // Otherwise, we'll delete it
-                    }
-                    // If the environment is an empty directory, it's fine to use
-                    InvalidEnvironmentKind::Empty => {}
-                }
+        } else {
+            if let Some(venv) = discover_environment(
+                env_path.path(),
+                python_request.as_ref(),
+                python_preference,
+                requires_python.as_ref(),
+                keep_incompatible,
+                cache,
+            )? {
+                return Ok(Self::Environment(venv));
             }
-            Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(_))) => {}
-            Err(uv_python::Error::Query(uv_python::InterpreterError::BrokenLink(BrokenLink {
-                path,
-                unix,
-                venv: _,
-            }))) => {
-                if unix {
-                    let target_path = fs_err::read_link(&path)?;
-                    warn_user!(
-                        "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
-                        path.user_display().cyan(),
-                        target_path.user_display().cyan(),
-                    );
-                } else {
-                    warn_user!(
-                        "Ignoring existing virtual environment linked to non-existent Python interpreter: {}",
-                        path.user_display().cyan(),
-                    );
-                }
-            }
-            Err(err) => return Err(err.into()),
         }
 
         let reporter = PythonDownloadReporter::single(printer);
@@ -1081,6 +1170,21 @@ impl ProjectInterpreter {
             preview,
         )
         .await?;
+
+        if env_path.is_centralized() {
+            if let Some(venv) = discover_centralized_environment(
+                workspace,
+                python.interpreter(),
+                python_request.as_ref(),
+                python_preference,
+                requires_python.as_ref(),
+                keep_incompatible,
+                active,
+                cache,
+            ) {
+                return Ok(Self::Environment(venv));
+            }
+        }
 
         let managed = python.source().is_managed();
         let implementation = python.implementation();
@@ -1461,11 +1565,7 @@ impl ProjectEnvironment {
 
             // Otherwise, create a virtual environment with the discovered interpreter.
             ProjectInterpreter::Interpreter(interpreter) => {
-                let env_path = workspace.venv(
-                    active,
-                    InterpreterOrRequest::Interpreter(&interpreter),
-                    cache,
-                );
+                let env_path = workspace.venv(active, Some(&interpreter), cache);
                 let centralized = env_path.is_centralized();
                 let root = env_path.into_path_buf();
 

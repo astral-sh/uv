@@ -1,6 +1,5 @@
 //! Resolve the current [`ProjectWorkspace`] or [`Workspace`].
 
-use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -22,9 +21,7 @@ use uv_pep508::{MarkerTree, VerbatimUrl};
 
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
-use uv_python::{
-    EnvironmentPreference, Interpreter, PythonInstallation, PythonPreference, PythonRequest,
-};
+use uv_python::Interpreter;
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 
@@ -32,16 +29,6 @@ use crate::dependency_groups::{DependencyGroupError, FlatDependencyGroup, FlatDe
 use crate::pyproject::{
     Project, PyProjectToml, PyprojectTomlError, Source, Sources, ToolUvSources, ToolUvWorkspace,
 };
-
-/// A concrete interpreter or a python version request
-#[derive(Debug, Clone, Copy)]
-pub enum InterpreterOrRequest<'a> {
-    Interpreter(&'a Interpreter),
-    Request {
-        request: &'a PythonRequest,
-        preference: PythonPreference,
-    },
-}
 
 /// The resolved path to a workspace's virtual environment.
 ///
@@ -786,10 +773,16 @@ impl Workspace {
     /// If `active` is `true`, the `VIRTUAL_ENV` variable will be preferred. If it is `false`, any
     /// warnings about mismatch between the active environment and the project environment will be
     /// silenced.
+    ///
+    /// If the `centralized-envs` preview feature is enabled, instead of the default path, this
+    /// function will return the `Centralized` variant containing:
+    ///
+    /// * If `interpreter` is passed, a path to the corresponding centralized location.
+    /// * Otherwise, the path to the `.venv` link (or the path contained, if it's a file).
     pub fn venv(
         &self,
         active: Option<bool>,
-        interp_or_req: InterpreterOrRequest<'_>,
+        interpreter: Option<&Interpreter>,
         cache: &Cache,
     ) -> ProjectEnvironmentPath {
         /// Resolve the `UV_PROJECT_ENVIRONMENT` value, if any.
@@ -833,33 +826,29 @@ impl Workspace {
 
         fn from_cache(
             workspace: &Workspace,
-            interp_or_req: InterpreterOrRequest<'_>,
+            interpreter: Option<&Interpreter>,
+            default: &Path,
             cache: &Cache,
         ) -> Option<ProjectEnvironmentPath> {
             if !uv_preview::is_enabled(PreviewFeature::CentralizedEnvs) {
                 return None;
             }
 
-            let interpreter = match interp_or_req {
-                InterpreterOrRequest::Interpreter(interpreter) => Some(Cow::Borrowed(interpreter)),
-                InterpreterOrRequest::Request {
-                    request,
-                    preference,
-                } => PythonInstallation::find(
-                    request,
-                    EnvironmentPreference::OnlySystem,
-                    preference,
-                    None,
-                    cache,
-                    uv_preview::get(),
-                )
-                .map(PythonInstallation::into_interpreter)
-                .map(Cow::Owned)
-                .ok(),
-            }?;
-            Some(ProjectEnvironmentPath::Centralized(
-                centralized_environment_root(workspace, cache, &interpreter),
-            ))
+            if let Some(interpreter) = interpreter {
+                return Some(ProjectEnvironmentPath::Centralized(
+                    centralized_environment_root(workspace, cache, interpreter),
+                ));
+            }
+
+            // The local `.venv` can be a path file. So we must explicitly handle it.
+            if let Ok(contents) = fs_err::read_to_string(default) {
+                let target = PathBuf::from(contents);
+                return Some(ProjectEnvironmentPath::Centralized(target));
+            }
+
+            // Either points at a symlink, junction, or something unusable. It's the caller's
+            // responsibility to verify it is valid.
+            Some(ProjectEnvironmentPath::Centralized(default.to_path_buf()))
         }
 
         // Determine the default value.
@@ -898,7 +887,7 @@ impl Workspace {
         }
 
         if project_env.is_default()
-            && let Some(project_env) = from_cache(self, interp_or_req, cache)
+            && let Some(project_env) = from_cache(self, interpreter, &project_env, cache)
         {
             project_env
         } else {
