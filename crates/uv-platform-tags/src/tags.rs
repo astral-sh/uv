@@ -178,12 +178,19 @@ impl Tags {
                 platform_tag.clone(),
             ));
         }
-        // 2. abi3 and no abi (e.g. executable binary)
+        // 2. abi3/abi3t and no abi (e.g. executable binary)
         if let Implementation::CPython { variant } = implementation {
             // For some reason 3.2 is the minimum python for the cp abi
             for minor in (2..=python_version.1).rev() {
-                // No abi3 for free-threading python
-                if !variant.contains(CPythonAbiVariants::Freethreading) {
+                if variant.contains(CPythonAbiVariants::Freethreading) {
+                    for platform_tag in &platform_tags {
+                        tags.push((
+                            implementation.language_tag((python_version.0, minor)),
+                            AbiTag::Abi3T,
+                            platform_tag.clone(),
+                        ));
+                    }
+                } else {
                     for platform_tag in &platform_tags {
                         tags.push((
                             implementation.language_tag((python_version.0, minor)),
@@ -315,10 +322,12 @@ impl Tags {
         wheel_platform_tags: &[PlatformTag],
     ) -> TagCompatibility {
         // On free-threaded Python, check if any wheel ABI tag is compatible.
-        // Only `none` (pure Python) and free-threaded CPython ABIs (e.g., `cp313t`) are compatible.
+        // Only `none` (pure Python), `abi3t`, and free-threaded CPython ABIs
+        // (e.g., `cp313t`) are compatible.
         if self.is_freethreaded {
             let has_compatible_abi = wheel_abi_tags.iter().any(|abi| match abi {
                 AbiTag::None => true,
+                AbiTag::Abi3T => true,
                 AbiTag::CPython { variant, .. } => {
                     variant.contains(CPythonAbiVariants::Freethreading)
                 }
@@ -2678,6 +2687,83 @@ mod tests {
         cp39-none-any
         py39-none-any
         py3-none-any
+        py38-none-any
+        py37-none-any
+        py36-none-any
+        py35-none-any
+        py34-none-any
+        py33-none-any
+        py32-none-any
+        py31-none-any
+        py30-none-any
+        "
+        );
+    }
+
+    #[test]
+    fn test_system_tags_freethreaded_include_abi3t() {
+        let tags = Tags::from_env(
+            &Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 28,
+                },
+                Arch::X86_64,
+            ),
+            (3, 15),
+            "cpython",
+            (3, 15),
+            false,
+            true,
+            false,
+        )
+        .unwrap();
+
+        assert_snapshot!(
+            tags,
+            @"
+        cp315-cp315t-linux_x86_64
+        cp315-abi3t-linux_x86_64
+        cp315-none-linux_x86_64
+        cp314-abi3t-linux_x86_64
+        cp313-abi3t-linux_x86_64
+        cp312-abi3t-linux_x86_64
+        cp311-abi3t-linux_x86_64
+        cp310-abi3t-linux_x86_64
+        cp39-abi3t-linux_x86_64
+        cp38-abi3t-linux_x86_64
+        cp37-abi3t-linux_x86_64
+        cp36-abi3t-linux_x86_64
+        cp35-abi3t-linux_x86_64
+        cp34-abi3t-linux_x86_64
+        cp33-abi3t-linux_x86_64
+        cp32-abi3t-linux_x86_64
+        py315-none-linux_x86_64
+        py3-none-linux_x86_64
+        py314-none-linux_x86_64
+        py313-none-linux_x86_64
+        py312-none-linux_x86_64
+        py311-none-linux_x86_64
+        py310-none-linux_x86_64
+        py39-none-linux_x86_64
+        py38-none-linux_x86_64
+        py37-none-linux_x86_64
+        py36-none-linux_x86_64
+        py35-none-linux_x86_64
+        py34-none-linux_x86_64
+        py33-none-linux_x86_64
+        py32-none-linux_x86_64
+        py31-none-linux_x86_64
+        py30-none-linux_x86_64
+        cp315-none-any
+        py315-none-any
+        py3-none-any
+        py314-none-any
+        py313-none-any
+        py312-none-any
+        py311-none-any
+        py310-none-any
+        py39-none-any
         py38-none-any
         py37-none-any
         py36-none-any
