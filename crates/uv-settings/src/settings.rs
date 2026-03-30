@@ -918,11 +918,14 @@ pub struct ResolverInstallerSchema {
     /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
     /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
     /// Calendar units such as months and years are not allowed.
+    ///
+    /// Set a package to `false` to exempt it from the global [`exclude-newer`](#exclude-newer)
+    /// constraint entirely.
     #[option(
         default = "None",
         value_type = "dict",
         example = r#"
-            exclude-newer-package = { tqdm = "2022-04-04T00:00:00Z" }
+            exclude-newer-package = { tqdm = "2022-04-04T00:00:00Z", markupsafe = false }
         "#
     )]
     pub exclude_newer_package: Option<ExcludeNewerPackage>,
@@ -1712,12 +1715,13 @@ pub struct PipOptions {
     pub exclude_newer: Option<ExcludeNewerValue>,
     /// Limit candidate packages for specific packages to those that were uploaded prior to the given date.
     ///
-    /// Accepts package-date pairs in a dictionary format.
+    /// Accepts package-date pairs in a dictionary format. Set a package to `false` to exempt it
+    /// from the global [`exclude-newer`](#exclude-newer) constraint entirely.
     #[option(
         default = "None",
         value_type = "dict",
         example = r#"
-            exclude-newer-package = { tqdm = "2022-04-04T00:00:00Z" }
+            exclude-newer-package = { tqdm = "2022-04-04T00:00:00Z", markupsafe = false }
         "#
     )]
     pub exclude_newer_package: Option<ExcludeNewerPackage>,
