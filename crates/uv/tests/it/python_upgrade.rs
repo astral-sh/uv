@@ -838,3 +838,45 @@ fn python_upgrade_build_version() {
     Python 3.12 is already on the latest supported patch release
     ");
 }
+
+#[test]
+fn python_upgrade_with_uninstall() {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_python_download_cache()
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_filtered_latest_python_versions();
+
+    // Install an earlier patch version
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12.6"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.6 in [TIME]
+     + cpython-3.12.6-[PLATFORM] (python3.12)
+    ");
+
+    // Upgrade with --uninstall should upgrade to latest and remove old patch
+    uv_snapshot!(context.filters(), context.python_upgrade().arg("3.12").arg("--uninstall"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.[LATEST] in [TIME]
+     + cpython-3.12.[LATEST]-[PLATFORM] (python3.12)
+      - Python 3.12.6 from [TEMP_DIR]/managed/cpython-3.12.6-[PLATFORM]
+    ");
+
+    // Verify old version directory is gone
+    let managed_dir = context.temp_dir.join("managed");
+    let old_exists = walkdir::WalkDir::new(&managed_dir)
+        .max_depth(1)
+        .into_iter()
+        .filter_map(std::result::Result::ok)
+        .any(|entry| entry.file_name().to_string_lossy().contains("3.12.6"));
+    assert!(!old_exists, "Old version 3.12.6 should be deleted");
+}

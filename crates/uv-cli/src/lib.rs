@@ -6506,6 +6506,12 @@ pub struct PythonUpgradeArgs {
     #[arg(long, short)]
     pub reinstall: bool,
 
+    /// Uninstall old patch versions in the same minor version group after upgrade.
+    ///
+    /// Only applies to successfully upgraded versions. Failures to delete are warnings.
+    #[arg(long)]
+    pub uninstall: bool,
+
     /// URL pointing to JSON of custom Python installations.
     #[arg(long, value_hint = ValueHint::Other)]
     pub python_downloads_json_url: Option<String>,

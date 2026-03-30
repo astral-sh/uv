@@ -1751,6 +1751,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &globals.concurrency,
                 &cache,
                 globals.preview,
+                false,
                 printer,
             )
             .await
@@ -1786,6 +1787,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &globals.concurrency,
                 &cache,
                 globals.preview,
+                args.uninstall,
                 printer,
             )
             .await
