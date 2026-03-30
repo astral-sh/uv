@@ -178,23 +178,23 @@ extra:
 nav:
   - Introduction: index.md
   - Getting started:
-      - getting-started/index.md
+      - Getting started: getting-started/index.md
       - Installation: getting-started/installation.md
       - First steps: getting-started/first-steps.md
       - Features: getting-started/features.md
       - Getting help: getting-started/help.md
   - Guides:
-      - guides/index.md
+      - Guides overview: guides/index.md
       - Installing Python: guides/install-python.md
       - Running scripts: guides/scripts.md
       - Using tools: guides/tools.md
       - Working on projects: guides/projects.md
       - Publishing packages: guides/package.md
       - Migration:
-          - guides/migration/index.md
+          - Migration guides: guides/migration/index.md
           - From pip to a uv project: guides/migration/pip-to-project.md
       - Integrations:
-          - guides/integration/index.md
+          - Integration guides: guides/integration/index.md
           - Docker: guides/integration/docker.md
           - Jupyter: guides/integration/jupyter.md
           - marimo: guides/integration/marimo.md
@@ -212,9 +212,9 @@ nav:
           - AWS Lambda: guides/integration/aws-lambda.md
           - Coiled: guides/integration/coiled.md
   - Concepts:
-      - concepts/index.md
+      - Concepts overview: concepts/index.md
       - Projects:
-          - concepts/projects/index.md
+          - Projects: concepts/projects/index.md
           - Structure and files: concepts/projects/layout.md
           - Creating projects: concepts/projects/init.md
           - Managing dependencies: concepts/projects/dependencies.md
@@ -231,7 +231,7 @@ nav:
       - Resolution: concepts/resolution.md
       - Build backend: concepts/build-backend.md
       - Authentication:
-          - concepts/authentication/index.md
+          - Authentication: concepts/authentication/index.md
           - The auth CLI: concepts/authentication/cli.md
           - HTTP credentials: concepts/authentication/http.md
           - Git credentials: concepts/authentication/git.md
@@ -242,7 +242,7 @@ nav:
       # Note:  The `pip` section was moved to the `concepts/` section but the
       # top-level directory structure was retained to ease the transition.
       - The pip interface:
-          - pip/index.md
+          - The pip interface: pip/index.md
           - Using environments: pip/environments.md
           - Managing packages: pip/packages.md
           - Inspecting environments: pip/inspection.md
@@ -250,23 +250,23 @@ nav:
           - Locking environments: pip/compile.md
           - Compatibility with pip: pip/compatibility.md
   - Reference:
-      - reference/index.md
+      - Reference: reference/index.md
       - Commands: reference/cli.md
       - Settings: reference/settings.md
       - Environment variables: reference/environment.md
       - Storage: reference/storage.md
       - Installer options: reference/installer.md
       - Troubleshooting:
-          - reference/troubleshooting/index.md
+          - Troubleshooting: reference/troubleshooting/index.md
           - Build failures: reference/troubleshooting/build-failures.md
           - Reproducible examples: reference/troubleshooting/reproducible-examples.md
       - Internals:
-          - reference/internals/index.md
+          - Internals: reference/internals/index.md
           - Resolver: reference/internals/resolver.md
           - Workspace Metadata: reference/internals/metadata.md
       - Benchmarks: reference/benchmarks.md
       - Policies:
-          - reference/policies/index.md
+          - Policies: reference/policies/index.md
           - Versioning: reference/policies/versioning.md
           - Platform support: reference/policies/platforms.md
           - Python support: reference/policies/python.md
