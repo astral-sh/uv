@@ -26,7 +26,7 @@ use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::Conflicts;
 use uv_python::{
     EnvironmentPreference, Prefix, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVersion, Target,
+    PythonPreference, PythonRequest, PythonVersion, Root, Target,
 };
 use uv_requirements::{GroupsSpecification, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
@@ -85,6 +85,7 @@ pub(crate) async fn pip_sync(
     break_system_packages: bool,
     target: Option<Target>,
     prefix: Option<Prefix>,
+    root: Option<Root>,
     sources: NoSources,
     python_preference: PythonPreference,
     concurrency: Concurrency,
@@ -159,7 +160,7 @@ pub(crate) async fn pip_sync(
     }
 
     // Detect the current Python interpreter.
-    let environment = if target.is_some() || prefix.is_some() {
+    let environment = if target.is_some() || prefix.is_some() || root.is_some() {
         let python_request = python.as_deref().map(PythonRequest::parse);
         let reporter = PythonDownloadReporter::single(printer);
 
@@ -194,7 +195,7 @@ pub(crate) async fn pip_sync(
         environment
     };
 
-    // Apply any `--target` or `--prefix` directories.
+    // Apply any `--target`, `--prefix` or `--root` directories.
     let environment = if let Some(target) = target {
         debug!(
             "Using `--target` directory at {}",
@@ -207,6 +208,9 @@ pub(crate) async fn pip_sync(
             prefix.root().user_display()
         );
         environment.with_prefix(prefix)?
+    } else if let Some(root) = root {
+        debug!("Using `--root` directory at {}", root.root().user_display());
+        environment.with_root(root)?
     } else {
         environment
     };

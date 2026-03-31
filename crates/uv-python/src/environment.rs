@@ -13,6 +13,7 @@ use uv_preview::Preview;
 
 use crate::discovery::find_python_installation;
 use crate::installation::PythonInstallation;
+use crate::root::Root;
 use crate::virtualenv::{PyVenvConfiguration, virtualenv_python_executable};
 use crate::{
     EnvironmentPreference, Error, Interpreter, Prefix, PythonNotFound, PythonPreference,
@@ -253,6 +254,15 @@ impl PythonEnvironment {
         let inner = Arc::unwrap_or_clone(self.0);
         Ok(Self(Arc::new(PythonEnvironmentShared {
             interpreter: inner.interpreter.with_prefix(prefix)?,
+            ..inner
+        })))
+    }
+
+    /// Create a [`PythonEnvironment`] from an existing [`Interpreter`] and `--root` directory.
+    pub fn with_root(self, root: Root) -> std::io::Result<Self> {
+        let inner = Arc::unwrap_or_clone(self.0);
+        Ok(Self(Arc::new(PythonEnvironmentShared {
+            interpreter: inner.interpreter.with_root(root)?,
             ..inner
         })))
     }

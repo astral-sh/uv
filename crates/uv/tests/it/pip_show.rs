@@ -638,3 +638,56 @@ fn show_prefix() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn show_root() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter(("Location: .*", "Location: [FILTERED]"));
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+
+    let root = context.temp_dir.child("root");
+
+    // Install packages to a root directory.
+    context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--root")
+        .arg(root.path())
+        .assert()
+        .success();
+
+    // Show package in the root directory.
+    uv_snapshot!(context.filters(), context.pip_show()
+        .arg("markupsafe")
+        .arg("--root")
+        .arg(root.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Name: markupsafe
+    Version: 2.1.3
+    Location: [FILTERED]
+    Requires:
+    Required-by:
+
+    ----- stderr -----
+    "
+    );
+
+    // Without --root, the package should not be found.
+    uv_snapshot!(context.pip_show().arg("markupsafe"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Package(s) not found for: markupsafe
+    "
+    );
+
+    Ok(())
+}

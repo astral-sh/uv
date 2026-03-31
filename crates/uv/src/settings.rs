@@ -47,7 +47,7 @@ use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep508::{MarkerTree, RequirementOrigin};
 use uv_preview::Preview;
 use uv_pypi_types::SupportedEnvironments;
-use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
+use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Root, Target};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{
     AnnotationStyle, DependencyMode, ExcludeNewer, ExcludeNewerPackage, ForkStrategy,
@@ -2898,6 +2898,7 @@ impl PipSyncSettings {
             no_break_system_packages,
             target,
             prefix,
+            root,
             allow_empty_requirements,
             no_allow_empty_requirements,
             no_build,
@@ -2936,6 +2937,7 @@ impl PipSyncSettings {
                     ),
                     target,
                     prefix,
+                    root,
                     require_hashes: flag(require_hashes, no_require_hashes, "require-hashes"),
                     verify_hashes: flag(verify_hashes, no_verify_hashes, "verify-hashes"),
                     no_build: flag(no_build, build, "build"),
@@ -3016,6 +3018,7 @@ impl PipInstallSettings {
             no_break_system_packages,
             target,
             prefix,
+            root,
             no_build,
             build,
             no_binary,
@@ -3124,6 +3127,7 @@ impl PipInstallSettings {
                     ),
                     target,
                     prefix,
+                    root,
                     no_build: flag(no_build, build, "build"),
                     no_binary,
                     only_binary,
@@ -3173,6 +3177,7 @@ impl PipUninstallSettings {
             no_break_system_packages,
             target,
             prefix,
+            root,
             dry_run,
             compat_args: _,
         } = args;
@@ -3192,6 +3197,7 @@ impl PipUninstallSettings {
                     ),
                     target,
                     prefix,
+                    root,
                     keyring_provider,
                     ..PipOptions::default()
                 },
@@ -3229,6 +3235,7 @@ impl PipFreezeSettings {
             no_system,
             target,
             prefix,
+            root,
             compat_args: _,
         } = args;
 
@@ -3243,6 +3250,7 @@ impl PipFreezeSettings {
                     strict: flag(strict, no_strict, "strict"),
                     target,
                     prefix,
+                    root,
                     ..PipOptions::default()
                 },
                 filesystem,
@@ -3284,6 +3292,7 @@ impl PipListSettings {
             no_system,
             target,
             prefix,
+            root,
             compat_args: _,
         } = args;
 
@@ -3299,6 +3308,7 @@ impl PipListSettings {
                     strict: flag(strict, no_strict, "strict"),
                     target,
                     prefix,
+                    root,
                     ..PipOptions::from(fetch)
                 },
                 filesystem,
@@ -3333,6 +3343,7 @@ impl PipShowSettings {
             no_system,
             target,
             prefix,
+            root,
             compat_args: _,
         } = args;
 
@@ -3346,6 +3357,7 @@ impl PipShowSettings {
                     strict: flag(strict, no_strict, "strict"),
                     target,
                     prefix,
+                    root,
                     ..PipOptions::default()
                 },
                 filesystem,
@@ -3856,6 +3868,7 @@ pub(crate) struct PipSettings {
     pub(crate) break_system_packages: bool,
     pub(crate) target: Option<Target>,
     pub(crate) prefix: Option<Prefix>,
+    pub(crate) root: Option<Root>,
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) torch_backend: Option<TorchMode>,
@@ -3920,6 +3933,7 @@ impl PipSettings {
             break_system_packages,
             target,
             prefix,
+            root,
             index,
             index_url,
             extra_index_url,
@@ -4205,6 +4219,7 @@ impl PipSettings {
                 .unwrap_or_default(),
             target: args.target.combine(target).map(Target::from),
             prefix: args.prefix.combine(prefix).map(Prefix::from),
+            root: args.root.combine(root).map(Root::from),
             compile_bytecode: args
                 .compile_bytecode
                 .combine(compile_bytecode)

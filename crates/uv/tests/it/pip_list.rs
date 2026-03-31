@@ -887,3 +887,52 @@ fn list_prefix() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn list_root() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
+
+    let root = context.temp_dir.child("root");
+
+    // Install packages to a root directory.
+    context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--root")
+        .arg(root.path())
+        .assert()
+        .success();
+
+    // List packages in the root directory.
+    uv_snapshot!(context.filters(), context.pip_list()
+        .arg("--root")
+        .arg(root.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Package    Version
+    ---------- -------
+    markupsafe 2.1.3
+    tomli      2.0.1
+
+    ----- stderr -----
+    "
+    );
+
+    // Without --root, the packages should not be visible.
+    uv_snapshot!(context.pip_list(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "
+    );
+
+    Ok(())
+}

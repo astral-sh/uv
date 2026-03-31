@@ -1946,7 +1946,7 @@ pub struct PipSyncArgs {
     /// environment and only searches for a Python interpreter to use for package resolution.
     /// If a suitable Python interpreter cannot be found, uv will install one.
     /// To disable this, add `--no-python-downloads`.
-    #[arg(short = 't', long, conflicts_with = "prefix", value_hint = ValueHint::DirPath)]
+    #[arg(short = 't', long, conflicts_with_all = ["prefix", "root"], value_hint = ValueHint::DirPath)]
     pub target: Option<PathBuf>,
 
     /// Install packages into `lib`, `bin`, and other top-level folders under the specified
@@ -1961,8 +1961,17 @@ pub struct PipSyncArgs {
     /// environment and only searches for a Python interpreter to use for package resolution.
     /// If a suitable Python interpreter cannot be found, uv will install one.
     /// To disable this, add `--no-python-downloads`.
-    #[arg(long, conflicts_with = "target", value_hint = ValueHint::DirPath)]
+    #[arg(long, conflicts_with_all = ["target", "root"], value_hint = ValueHint::DirPath)]
     pub prefix: Option<PathBuf>,
+
+    /// Install everything relative to this alternate root directory.
+    ///
+    /// Unlike other install operations, this command does not require discovery of an existing Python
+    /// environment and only searches for a Python interpreter to use for package resolution.
+    /// If a suitable Python interpreter cannot be found, uv will install one.
+    /// To disable this, add `--no-python-downloads`.
+    #[arg(long, conflicts_with_all = ["target", "prefix"], value_hint = ValueHint::DirPath)]
+    pub root: Option<PathBuf>,
 
     /// Don't build source distributions.
     ///
@@ -2323,7 +2332,7 @@ pub struct PipInstallArgs {
     /// environment and only searches for a Python interpreter to use for package resolution.
     /// If a suitable Python interpreter cannot be found, uv will install one.
     /// To disable this, add `--no-python-downloads`.
-    #[arg(short = 't', long, conflicts_with = "prefix", value_hint = ValueHint::DirPath)]
+    #[arg(short = 't', long, conflicts_with_all = ["prefix", "root"], value_hint = ValueHint::DirPath)]
     pub target: Option<PathBuf>,
 
     /// Install packages into `lib`, `bin`, and other top-level folders under the specified
@@ -2338,8 +2347,17 @@ pub struct PipInstallArgs {
     /// environment and only searches for a Python interpreter to use for package resolution.
     /// If a suitable Python interpreter cannot be found, uv will install one.
     /// To disable this, add `--no-python-downloads`.
-    #[arg(long, conflicts_with = "target", value_hint = ValueHint::DirPath)]
+    #[arg(long, conflicts_with_all = ["target", "root"], value_hint = ValueHint::DirPath)]
     pub prefix: Option<PathBuf>,
+
+    /// Install everything relative to this alternate root directory.
+    ///
+    /// Unlike other install operations, this command does not require discovery of an existing Python
+    /// environment and only searches for a Python interpreter to use for package resolution.
+    /// If a suitable Python interpreter cannot be found, uv will install one.
+    /// To disable this, add `--no-python-downloads`.
+    #[arg(long, conflicts_with_all = ["target", "prefix"], value_hint = ValueHint::DirPath)]
+    pub root: Option<PathBuf>,
 
     /// Don't build source distributions.
     ///
@@ -2539,12 +2557,16 @@ pub struct PipUninstallArgs {
     pub no_break_system_packages: bool,
 
     /// Uninstall packages from the specified `--target` directory.
-    #[arg(short = 't', long, conflicts_with = "prefix", value_hint = ValueHint::DirPath)]
+    #[arg(short = 't', long, conflicts_with_all = ["prefix", "root"], value_hint = ValueHint::DirPath)]
     pub target: Option<PathBuf>,
 
     /// Uninstall packages from the specified `--prefix` directory.
-    #[arg(long, conflicts_with = "target", value_hint = ValueHint::DirPath)]
+    #[arg(long, conflicts_with_all = ["target", "root"], value_hint = ValueHint::DirPath)]
     pub prefix: Option<PathBuf>,
+
+    /// Uninstall packages from the specified `--root` directory.
+    #[arg(long, conflicts_with_all = ["target", "prefix"], value_hint = ValueHint::DirPath)]
+    pub root: Option<PathBuf>,
 
     /// Perform a dry run, i.e., don't actually uninstall anything but print the resulting plan.
     #[arg(long)]
@@ -2610,12 +2632,16 @@ pub struct PipFreezeArgs {
     pub no_system: bool,
 
     /// List packages from the specified `--target` directory.
-    #[arg(short = 't', long, conflicts_with_all = ["prefix", "paths"], value_hint = ValueHint::DirPath)]
+    #[arg(short = 't', long, conflicts_with_all = ["prefix", "root", "paths"], value_hint = ValueHint::DirPath)]
     pub target: Option<PathBuf>,
 
     /// List packages from the specified `--prefix` directory.
-    #[arg(long, conflicts_with_all = ["target", "paths"], value_hint = ValueHint::DirPath)]
+    #[arg(long, conflicts_with_all = ["target", "root", "paths"], value_hint = ValueHint::DirPath)]
     pub prefix: Option<PathBuf>,
+
+    /// List packages from the specified `--root` directory.
+    #[arg(long, conflicts_with_all = ["target", "prefix"], value_hint = ValueHint::DirPath)]
+    pub root: Option<PathBuf>,
 
     #[command(flatten)]
     pub compat_args: compat::PipGlobalCompatArgs,
@@ -2694,12 +2720,16 @@ pub struct PipListArgs {
     pub no_system: bool,
 
     /// List packages from the specified `--target` directory.
-    #[arg(short = 't', long, conflicts_with = "prefix", value_hint = ValueHint::DirPath)]
+    #[arg(short = 't', long, conflicts_with_all = ["prefix", "root"], value_hint = ValueHint::DirPath)]
     pub target: Option<PathBuf>,
 
     /// List packages from the specified `--prefix` directory.
-    #[arg(long, conflicts_with = "target", value_hint = ValueHint::DirPath)]
+    #[arg(long, conflicts_with_all = ["target", "root"], value_hint = ValueHint::DirPath)]
     pub prefix: Option<PathBuf>,
+
+    /// List packages from the specified `--root` directory.
+    #[arg(long, conflicts_with_all = ["target", "prefix"], value_hint = ValueHint::DirPath)]
+    pub root: Option<PathBuf>,
 
     #[command(flatten)]
     pub compat_args: compat::PipListCompatArgs,
@@ -2820,12 +2850,16 @@ pub struct PipShowArgs {
     pub no_system: bool,
 
     /// Show a package from the specified `--target` directory.
-    #[arg(short = 't', long, conflicts_with = "prefix", value_hint = ValueHint::DirPath)]
+    #[arg(short = 't', long, conflicts_with_all = ["prefix", "root"], value_hint = ValueHint::DirPath)]
     pub target: Option<PathBuf>,
 
     /// Show a package from the specified `--prefix` directory.
-    #[arg(long, conflicts_with = "target", value_hint = ValueHint::DirPath)]
+    #[arg(long, conflicts_with_all = ["target", "root"], value_hint = ValueHint::DirPath)]
     pub prefix: Option<PathBuf>,
+
+    /// Show a package from the specified `--root` directory.
+    #[arg(long, conflicts_with_all = ["target", "prefix"], value_hint = ValueHint::DirPath)]
+    pub root: Option<PathBuf>,
 
     #[command(flatten)]
     pub compat_args: compat::PipGlobalCompatArgs,

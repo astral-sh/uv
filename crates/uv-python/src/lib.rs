@@ -22,6 +22,7 @@ pub use crate::interpreter::{
 pub use crate::pointer_size::PointerSize;
 pub use crate::prefix::Prefix;
 pub use crate::python_version::{BuildVersionError, PythonVersion};
+pub use crate::root::Root;
 pub use crate::target::Target;
 pub use crate::version_files::{
     DiscoveryOptions as VersionFileDiscoveryOptions, FilePreference as VersionFilePreference,
@@ -42,6 +43,7 @@ mod microsoft_store;
 mod pointer_size;
 mod prefix;
 mod python_version;
+mod root;
 mod sysconfig;
 mod target;
 mod version_files;

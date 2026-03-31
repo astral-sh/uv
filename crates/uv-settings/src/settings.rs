@@ -1239,6 +1239,15 @@ pub struct PipOptions {
         "#
     )]
     pub prefix: Option<PathBuf>,
+    /// Install everything relative to this alternate root directory.
+    #[option(
+        default = "None",
+        value_type = "str",
+        example = r#"
+            root = "./root"
+        "#
+    )]
+    pub root: Option<PathBuf>,
     #[serde(skip)]
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub index: Option<Vec<Index>>,

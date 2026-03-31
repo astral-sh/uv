@@ -16,7 +16,7 @@ use uv_preview::Preview;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::PythonRequest;
 use uv_python::{EnvironmentPreference, PythonPreference};
-use uv_python::{Prefix, PythonEnvironment, Target};
+use uv_python::{Prefix, PythonEnvironment, Root, Target};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 
 use crate::commands::pip::operations::report_target_environment;
@@ -31,6 +31,7 @@ pub(crate) async fn pip_uninstall(
     break_system_packages: bool,
     target: Option<Target>,
     prefix: Option<Prefix>,
+    root: Option<Root>,
     cache: Cache,
     keyring_provider: KeyringProviderType,
     client_builder: &BaseClientBuilder<'_>,
@@ -59,7 +60,7 @@ pub(crate) async fn pip_uninstall(
 
     report_target_environment(&environment, &cache, printer)?;
 
-    // Apply any `--target` or `--prefix` directories.
+    // Apply any `--target`, `--prefix` or `--root` directories.
     let environment = if let Some(target) = target {
         debug!(
             "Using `--target` directory at {}",
@@ -72,6 +73,9 @@ pub(crate) async fn pip_uninstall(
             prefix.root().user_display()
         );
         environment.with_prefix(prefix)?
+    } else if let Some(root) = root {
+        debug!("Using `--root` directory at {}", root.root().user_display());
+        environment.with_root(root)?
     } else {
         environment
     };

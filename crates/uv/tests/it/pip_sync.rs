@@ -7,6 +7,7 @@ use assert_fs::prelude::*;
 use fs_err as fs;
 use indoc::indoc;
 use predicates::Predicate;
+use std::path::{Component, PathBuf};
 use url::Url;
 
 use uv_fs::{Simplified, copy_dir_all};
@@ -5587,6 +5588,89 @@ fn prefix() -> Result<()> {
         .arg("requirements.in")
         .arg("--prefix")
         .arg(prefix.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - iniconfig==2.0.0
+     + iniconfig==1.1.1
+    ");
+
+    Ok(())
+}
+
+/// Sync to a `--root` directory.
+#[test]
+fn root() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
+
+    // Install `iniconfig` to the target directory.
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("iniconfig==2.0.0")?;
+
+    let root = context.temp_dir.child("root");
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.in")
+        .arg("--root")
+        .arg(root.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    // Ensure that we can't import the package.
+    context.assert_command("import iniconfig").failure();
+
+    let mut venv_path = PathBuf::from(root.path());
+    venv_path.extend(
+        context
+            .venv
+            .path()
+            .components()
+            .filter_map(|component| match component {
+                Component::Prefix(_) | Component::RootDir => None,
+                other => Some(other),
+            }),
+    );
+
+    // Ensure that we can import the package by augmenting the `PYTHONPATH`.
+    context
+        .python_command()
+        .arg("-c")
+        .arg("import iniconfig")
+        .env(
+            EnvVars::PYTHONPATH,
+            site_packages_path(&venv_path, "python3.12"),
+        )
+        .current_dir(&context.temp_dir)
+        .assert()
+        .success();
+
+    // Upgrade it.
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("iniconfig==1.1.1")?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.in")
+        .arg("--root")
+        .arg(root.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----

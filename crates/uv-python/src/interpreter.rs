@@ -36,6 +36,7 @@ use crate::{
     VersionRequest, VirtualEnvironment,
 };
 
+use crate::root::Root;
 #[cfg(windows)]
 use windows::Win32::Foundation::{APPMODEL_ERROR_NO_PACKAGE, ERROR_CANT_ACCESS_FILE, WIN32_ERROR};
 
@@ -60,6 +61,7 @@ pub struct Interpreter {
     tags: OnceLock<Tags>,
     target: Option<Target>,
     prefix: Option<Prefix>,
+    root: Option<Root>,
     pointer_size: PointerSize,
     gil_disabled: bool,
     real_executable: PathBuf,
@@ -98,6 +100,7 @@ impl Interpreter {
             tags: OnceLock::new(),
             target: None,
             prefix: None,
+            root: None,
             real_executable: executable.as_ref().to_path_buf(),
         })
     }
@@ -131,6 +134,15 @@ impl Interpreter {
         prefix.init(self.virtualenv())?;
         Ok(Self {
             prefix: Some(prefix),
+            ..self
+        })
+    }
+
+    /// Return a new [`Interpreter`] to install into the given `--root` directory.
+    pub fn with_root(self, root: Root) -> io::Result<Self> {
+        root.init(&self)?;
+        Ok(Self {
+            root: Some(root),
             ..self
         })
     }
@@ -280,6 +292,11 @@ impl Interpreter {
         self.prefix.is_some()
     }
 
+    /// Returns `true` if the environment is a `--root` environment.
+    pub fn is_root(&self) -> bool {
+        self.root.is_some()
+    }
+
     /// Returns `true` if this interpreter is managed by uv.
     ///
     /// Returns `false` if we cannot determine the path of the uv managed Python interpreters.
@@ -337,7 +354,7 @@ impl Interpreter {
         }
 
         // If we're installing into a target or prefix directory, it's never externally managed.
-        if self.is_target() || self.is_prefix() {
+        if self.is_target() || self.is_prefix() || self.is_root() {
             return None;
         }
 
@@ -555,6 +572,11 @@ impl Interpreter {
         self.prefix.as_ref()
     }
 
+    /// Return the `--root` directory for this interpreter, if any.
+    pub fn root(&self) -> Option<&Root> {
+        self.root.as_ref()
+    }
+
     /// Returns `true` if an [`Interpreter`] may be a `python-build-standalone` interpreter.
     ///
     /// This method may return false positives, but it should not return false negatives. In other
@@ -586,6 +608,8 @@ impl Interpreter {
                 target.scheme()
             } else if let Some(prefix) = self.prefix.as_ref() {
                 prefix.scheme(&self.virtualenv)
+            } else if let Some(root) = self.root.as_ref() {
+                root.scheme(self)
             } else {
                 Scheme {
                     purelib: self.purelib().to_path_buf(),
@@ -625,7 +649,9 @@ impl Interpreter {
             .prefix()
             .map(|prefix| prefix.site_packages(self.virtualenv()));
 
-        let interpreter = if target.is_none() && prefix.is_none() {
+        let root = self.root().map(|root| root.site_packages(self));
+
+        let interpreter = if target.is_none() && prefix.is_none() && root.is_none() {
             let purelib = self.purelib();
             let platlib = self.platlib();
             Some(std::iter::once(purelib).chain(
@@ -644,6 +670,7 @@ impl Interpreter {
             .flatten()
             .map(Cow::Borrowed)
             .chain(prefix.into_iter().flatten().map(Cow::Owned))
+            .chain(root.into_iter().flatten().map(Cow::Owned))
             .chain(interpreter.into_iter().flatten().map(Cow::Borrowed))
     }
 
@@ -685,11 +712,19 @@ impl Interpreter {
             )
             .await
         } else if let Some(prefix) = self.prefix() {
-            // Likewise, if we're installing into a `--prefix`, use a prefix-specific lockfile.
+            // If we're installing into a `--prefix`, use a prefix-specific lockfile.
             LockedFile::acquire(
                 prefix.root().join(".lock"),
                 LockedFileMode::Exclusive,
                 prefix.root().user_display(),
+            )
+            .await
+        } else if let Some(root) = self.root() {
+            // If we're installing into a `--root`, use a root-specific lockfile.
+            LockedFile::acquire(
+                root.root().join(".lock"),
+                LockedFileMode::Exclusive,
+                root.root().user_display(),
             )
             .await
         } else if self.is_virtualenv() {

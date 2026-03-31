@@ -25,8 +25,8 @@ use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_preview::Preview;
-use uv_python::PythonRequest;
 use uv_python::{EnvironmentPreference, Prefix, PythonEnvironment, PythonPreference, Target};
+use uv_python::{PythonRequest, Root};
 use uv_resolver::{ExcludeNewer, PrereleaseMode};
 
 use crate::commands::ExitStatus;
@@ -54,6 +54,7 @@ pub(crate) async fn pip_list(
     system: bool,
     target: Option<Target>,
     prefix: Option<Prefix>,
+    root: Option<Root>,
     cache: &Cache,
     printer: Printer,
     preview: Preview,
@@ -72,7 +73,7 @@ pub(crate) async fn pip_list(
         preview,
     )?;
 
-    // Apply any `--target` or `--prefix` directories.
+    // Apply any `--target`, `--prefix` or `--root` directories.
     let environment = if let Some(target) = target {
         debug!(
             "Using `--target` directory at {}",
@@ -85,6 +86,9 @@ pub(crate) async fn pip_list(
             prefix.root().user_display()
         );
         environment.with_prefix(prefix)?
+    } else if let Some(root) = root {
+        debug!("Using `--root` directory at {}", root.root().user_display());
+        environment.with_root(root)?
     } else {
         environment
     };

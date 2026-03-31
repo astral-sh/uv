@@ -13,8 +13,8 @@ use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_preview::Preview;
-use uv_python::PythonPreference;
 use uv_python::{EnvironmentPreference, Prefix, PythonEnvironment, PythonRequest, Target};
+use uv_python::{PythonPreference, Root};
 
 use crate::commands::ExitStatus;
 use crate::commands::pip::operations::report_target_environment;
@@ -30,6 +30,7 @@ pub(crate) fn pip_freeze(
     system: bool,
     target: Option<Target>,
     prefix: Option<Prefix>,
+    root: Option<Root>,
     paths: Option<Vec<PathBuf>>,
     cache: &Cache,
     printer: Printer,
@@ -44,7 +45,7 @@ pub(crate) fn pip_freeze(
         preview,
     )?;
 
-    // Apply any `--target` or `--prefix` directories.
+    // Apply any `--target`, `--prefix` or `--root` directories.
     let environment = if let Some(target) = target {
         debug!(
             "Using `--target` directory at {}",
@@ -57,6 +58,9 @@ pub(crate) fn pip_freeze(
             prefix.root().user_display()
         );
         environment.with_prefix(prefix)?
+    } else if let Some(root) = root {
+        debug!("Using `--root` directory at {}", root.root().user_display());
+        environment.with_root(root)?
     } else {
         environment
     };
