@@ -20,10 +20,15 @@ production = []
 [lints]
 workspace = true
 
+[[bin]]
+name = "normalize-pe-timestamps"
+
 [dependencies]
 uv-fs = { workspace = true }
 
-fs-err = { workspace = true }
+anyhow = {workspace = true }
+fs-err = {workspace = true }
+goblin = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 zip = { workspace = true }

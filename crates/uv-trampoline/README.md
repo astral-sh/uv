@@ -5,6 +5,14 @@ This is a fork of
 
 ## Building
 
+The trampolines checked into the repo use a reproducible dockerfile for auditing.
+
+```shell
+scripts/build-trampolines.sh
+```
+
+The other build options exist for local development.
+
 ### Cross-compiling from Linux
 
 Install [cargo xwin](https://github.com/rust-cross/cargo-xwin). Use your package manager to install

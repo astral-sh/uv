@@ -25,6 +25,25 @@ jobs:
       - name: "Check windows crate versions match"
         run: uv run --no-project scripts/check-trampoline-version-consistency.py
 
+  # Verify committed trampolines match a reproducible Docker build
+  windows-trampoline-reproducible:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    name: "check reproducible build"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: "Set up Docker Buildx"
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+
+      - name: "Build trampolines in Docker"
+        run: scripts/build-trampolines.sh --cache-from type=gha --cache-to type=gha
+
+      - name: "Check committed trampolines match build"
+        run: git diff --exit-code crates/uv-trampoline-builder/trampolines/
+
   # Separate jobs for the nightly crate
   windows-trampoline-check:
     timeout-minutes: 15
