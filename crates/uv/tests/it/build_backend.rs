@@ -1618,8 +1618,61 @@ fn source_include_trailing_slash() -> Result<()> {
 }
 
 #[test]
-fn source_include_bare_directory_warning() -> Result<()> {
+fn source_include_single_file() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let sdist_dir = TempDir::new()?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+
+        [tool.uv.build-backend]
+        source-include = ["data/build-script.py"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    context.temp_dir.child("src/foo/__init__.py").touch()?;
+    context
+        .temp_dir
+        .child("data/build-script.py")
+        .write_str("print('hello')")?;
+
+    uv_snapshot!(context
+        .build_backend()
+        .arg("build-sdist")
+        .arg(sdist_dir.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    foo-1.0.0.tar.gz
+
+    ----- stderr -----
+    ");
+
+    // Verify the sdist contains the single file.
+    let sdist_reader = BufReader::new(File::open(sdist_dir.path().join("foo-1.0.0.tar.gz"))?);
+    let paths: Vec<String> = tar::Archive::new(GzDecoder::new(sdist_reader))
+        .entries()?
+        .filter_map(|entry| Some(entry.ok()?.path().ok()?.to_string_lossy().into_owned()))
+        .collect();
+    assert!(
+        paths.iter().any(|p| p.contains("data/build-script.py")),
+        "Expected data/build-script.py in sdist, found: {paths:?}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn source_include_bare_directory() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let sdist_dir = TempDir::new()?;
 
     context
         .temp_dir
@@ -1642,18 +1695,28 @@ fn source_include_bare_directory_warning() -> Result<()> {
         .child("tests/test_example.py")
         .write_str("def test_example(): pass")?;
 
-    uv_snapshot!(context.filters(), context.build(), @"
+    uv_snapshot!(context
+        .build_backend()
+        .arg("build-sdist")
+        .arg(sdist_dir.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
+    foo-1.0.0.tar.gz
 
     ----- stderr -----
-    Building source distribution (uv build backend)...
-    warning: `source-include` matches directory `tests` but not its contents. Use `tests/**` to include all files in the directory.
-    Building wheel from source distribution (uv build backend)...
-    Successfully built dist/foo-1.0.0.tar.gz
-    Successfully built dist/foo-1.0.0-py3-none-any.whl
     ");
+
+    // Verify the sdist contains the test file.
+    let sdist_reader = BufReader::new(File::open(sdist_dir.path().join("foo-1.0.0.tar.gz"))?);
+    let paths: Vec<String> = tar::Archive::new(GzDecoder::new(sdist_reader))
+        .entries()?
+        .filter_map(|entry| Some(entry.ok()?.path().ok()?.to_string_lossy().into_owned()))
+        .collect();
+    assert!(
+        paths.iter().any(|p| p.contains("tests/test_example.py")),
+        "Expected tests/test_example.py in sdist, found: {paths:?}"
+    );
 
     Ok(())
 }

@@ -75,37 +75,27 @@ fn source_dist_matcher(
 ) -> Result<(GlobDirFilter, GlobSet), Error> {
     // File and directories to include in the source directory
     let mut include_globs = Vec::new();
-    // A trailing slash unambiguously indicates a directory; include its contents recursively.
+    // If a pattern ends with a trailing slash, or is a literal path that matches an existing
+    // directory, expand it to include the directory's contents recursively.
     let mut includes: Vec<String> = settings
         .source_include
         .into_iter()
         .map(|pattern| {
             if let Some(prefix) = pattern.strip_suffix('/') {
+                // A trailing slash unambiguously indicates a directory.
                 format!("{prefix}/**")
+            } else if !pattern.contains('*') && !pattern.contains('?') && !pattern.contains('[') {
+                // A literal path (no glob metacharacters) that matches an existing directory.
+                if source_tree.join(&pattern).is_dir() {
+                    format!("{pattern}/**")
+                } else {
+                    pattern
+                }
             } else {
                 pattern
             }
         })
         .collect();
-
-    // Warn if a pattern without glob metacharacters matches an existing directory but not its
-    // contents.
-    if show_warnings {
-        for pattern in &includes {
-            if !pattern.contains('*')
-                && !pattern.contains('?')
-                && !pattern.contains('[')
-                && !pattern.contains('/')
-            {
-                let potential_dir = source_tree.join(pattern);
-                if potential_dir.is_dir() {
-                    warn_user_once!(
-                        "`source-include` matches directory `{pattern}` but not its contents. Use `{pattern}/**` to include all files in the directory."
-                    );
-                }
-            }
-        }
-    }
 
     // pyproject.toml is always included.
     includes.push(globset::escape("pyproject.toml"));
