@@ -238,6 +238,29 @@ pub fn default_credential_builder() -> Box<CredentialBuilder> {
     credential::nop_credential_builder()
 }
 
+/// Search for a credential by service name only (without knowing the account/username).
+///
+/// Uses platform-specific search APIs to find a matching credential, returning
+/// the first match as an `(account, password)` pair.
+///
+/// Returns `Ok(None)` if no matching credential is found or the platform does not
+/// support username-less search.
+#[cfg_attr(
+    not(all(target_os = "macos", feature = "apple-native")),
+    expect(clippy::unused_async, reason = "async is used on macOS")
+)]
+pub async fn find_credential_by_service(service: &str) -> Result<Option<(String, String)>> {
+    #[cfg(all(target_os = "macos", feature = "apple-native"))]
+    {
+        macos::find_credential_by_service(service).await
+    }
+    #[cfg(not(all(target_os = "macos", feature = "apple-native")))]
+    {
+        let _ = service;
+        Ok(None)
+    }
+}
+
 fn build_default_credential(target: Option<&str>, service: &str, user: &str) -> Result<Entry> {
     static DEFAULT: std::sync::LazyLock<Box<CredentialBuilder>> =
         std::sync::LazyLock::new(default_credential_builder);
