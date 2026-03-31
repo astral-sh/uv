@@ -747,12 +747,29 @@ impl ExcludeNewer {
         Self { global, package }
     }
 
+    /// The default exclude-newer span applied when no explicit value is configured.
+    ///
+    /// Packages published within this duration are excluded by default to mitigate
+    /// supply chain attacks targeting recently-published packages.
+    pub const DEFAULT_EXCLUDE_NEWER_SPAN: &'static str = "3 days";
+
     /// Create from CLI arguments.
+    ///
+    /// If no global exclude-newer value is provided, defaults to [`DEFAULT_EXCLUDE_NEWER_SPAN`]
+    /// (3 days) to protect against supply chain attacks on recently-published packages.
+    /// Users can override this by explicitly setting `--exclude-newer` or `UV_EXCLUDE_NEWER`.
     pub fn from_args(
         global: Option<ExcludeNewerValue>,
         package: Vec<ExcludeNewerPackageEntry>,
     ) -> Self {
         let package: ExcludeNewerPackage = package.into_iter().collect();
+
+        // Default to 3 days if no explicit value is provided, to mitigate supply chain attacks.
+        let global = global.or_else(|| {
+            Self::DEFAULT_EXCLUDE_NEWER_SPAN
+                .parse::<ExcludeNewerValue>()
+                .ok()
+        });
 
         Self { global, package }
     }

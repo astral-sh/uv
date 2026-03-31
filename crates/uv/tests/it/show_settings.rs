@@ -16,6 +16,9 @@ fn add_shared_args(mut command: Command) -> Command {
         .env(EnvVars::UV_CONCURRENT_BUILDS, "16")
         .env(EnvVars::UV_CONCURRENT_INSTALLS, "8")
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        // Fix the current time so the default `exclude-newer = "3 days"` produces a
+        // deterministic timestamp in snapshot tests.
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2026-02-15T00:00:00Z")
         .env_remove(EnvVars::UV_PYTHON_DOWNLOADS);
 
     if cfg!(unix) {

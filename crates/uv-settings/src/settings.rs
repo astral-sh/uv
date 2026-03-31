@@ -900,8 +900,12 @@ pub struct ResolverInstallerSchema {
     /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
     /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
     /// Calendar units such as months and years are not allowed.
+    ///
+    /// Defaults to `"3 days"` to protect against supply chain attacks targeting recently-published
+    /// packages. Set to an explicit timestamp to pin to a fixed date, or pass `--exclude-newer`
+    /// with a far-future date to effectively disable the default.
     #[option(
-        default = "None",
+        default = r#""3 days""#,
         value_type = "str",
         example = r#"
             exclude-newer = "2006-12-02T02:07:43Z"
@@ -1705,8 +1709,11 @@ pub struct PipOptions {
     /// Accepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,
     /// `2006-12-02T02:07:43Z`). A full timestamp is required to ensure that the resolver will
     /// behave consistently across timezones.
+    ///
+    /// Defaults to `"3 days"` to protect against supply chain attacks targeting recently-published
+    /// packages.
     #[option(
-        default = "None",
+        default = r#""3 days""#,
         value_type = "str",
         example = r#"
             exclude-newer = "2006-12-02T02:07:43Z"

@@ -3240,6 +3240,8 @@ pub struct VenvArgs {
     /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
     /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
     /// Calendar units such as months and years are not allowed.
+    ///
+    /// Defaults to `3 days` to protect against supply chain attacks on recently-published packages.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER)]
     pub exclude_newer: Option<ExcludeNewerValue>,
 
