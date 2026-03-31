@@ -108,6 +108,8 @@ pub enum AbiTag {
     None,
     /// Ex) `abi3`
     Abi3,
+    /// Ex) `abi3t`
+    Abi3T,
     /// Ex) `cp39m`, `cp310t`
     CPython {
         python_version: (u8, u8),
@@ -128,11 +130,17 @@ pub enum AbiTag {
 }
 
 impl AbiTag {
+    /// Return `true` if this is one of the stable ABI tags.
+    pub fn is_stable_abi(self) -> bool {
+        matches!(self, Self::Abi3 | Self::Abi3T)
+    }
+
     /// Return a pretty string representation of the ABI tag.
     pub fn pretty(self) -> Option<String> {
         match self {
             Self::None => None,
             Self::Abi3 => None,
+            Self::Abi3T => Some("stable ABI for free-threaded CPython".to_string()),
             Self::CPython {
                 variant,
                 python_version,
@@ -178,6 +186,7 @@ impl std::fmt::Display for AbiTag {
         match self {
             Self::None => write!(f, "none"),
             Self::Abi3 => write!(f, "abi3"),
+            Self::Abi3T => write!(f, "abi3t"),
             Self::CPython {
                 variant,
                 python_version: (major, minor),
@@ -289,6 +298,8 @@ impl FromStr for AbiTag {
             Ok(Self::None)
         } else if s == "abi3" {
             Ok(Self::Abi3)
+        } else if s == "abi3t" {
+            Ok(Self::Abi3T)
         } else if let Some(cp) = s.strip_prefix("cp") {
             // Ex) `cp39m`, `cp310t`
             let version_end = cp.find(|c: char| !c.is_ascii_digit()).unwrap_or(cp.len());
@@ -463,6 +474,18 @@ mod tests {
     fn abi3() {
         assert_eq!(AbiTag::from_str("abi3"), Ok(AbiTag::Abi3));
         assert_eq!(AbiTag::Abi3.to_string(), "abi3");
+        assert!(AbiTag::Abi3.is_stable_abi());
+    }
+
+    #[test]
+    fn abi3t() {
+        assert_eq!(AbiTag::from_str("abi3t"), Ok(AbiTag::Abi3T));
+        assert_eq!(AbiTag::Abi3T.to_string(), "abi3t");
+        assert!(AbiTag::Abi3T.is_stable_abi());
+        assert_eq!(
+            AbiTag::Abi3T.pretty(),
+            Some("stable ABI for free-threaded CPython".to_string())
+        );
     }
 
     #[test]

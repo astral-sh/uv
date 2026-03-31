@@ -12,6 +12,9 @@ license = { workspace = true }
 [lints]
 workspace = true
 
+[lib]
+doctest = false
+
 [dependencies]
 uv-cache-key = { workspace = true }
 uv-normalize = { workspace = true }

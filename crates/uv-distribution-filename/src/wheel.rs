@@ -486,4 +486,19 @@ mod tests {
         let parsed = WheelFilename::from_str(filename).unwrap();
         assert_eq!(filename, parsed.to_string());
     }
+
+    #[test]
+    fn abi3t_tags() {
+        let filename =
+            WheelFilename::from_str("foo-1.2.3-cp315-abi3t-manylinux_2_17_x86_64.whl").unwrap();
+        assert_eq!(filename.abi_tags(), &[AbiTag::Abi3T]);
+    }
+
+    #[test]
+    fn compressed_abi3_abi3t_tags() {
+        let filename =
+            WheelFilename::from_str("foo-1.2.3-cp315-abi3.abi3t-manylinux_2_17_x86_64.whl")
+                .unwrap();
+        assert_eq!(filename.abi_tags(), &[AbiTag::Abi3, AbiTag::Abi3T]);
+    }
 }
