@@ -139,7 +139,7 @@ fn clean_package_pypi() -> Result<()> {
     // Assert that the `.rkyv` file is created for `iniconfig`.
     let rkyv = context
         .cache_dir
-        .child("simple-v20")
+        .child("simple-v21")
         .child("pypi")
         .child("iniconfig.rkyv");
     assert!(
@@ -213,7 +213,7 @@ fn clean_package_index() -> Result<()> {
     // Assert that the `.rkyv` file is created for `iniconfig`.
     let rkyv = context
         .cache_dir
-        .child("simple-v20")
+        .child("simple-v21")
         .child("index")
         .child("e8208120cae3ba69")
         .child("iniconfig.rkyv");
