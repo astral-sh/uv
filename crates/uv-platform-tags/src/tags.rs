@@ -51,6 +51,10 @@ pub enum IncompatibleTag {
     Platform,
 }
 
+/// Whether a wheel is compatible or incompatible with a set of tags, and which priority it has
+/// compared to other wheels.
+///
+/// A higher tag compatibility means higher priority.
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
 pub enum TagCompatibility {
     Incompatible(IncompatibleTag),
@@ -194,26 +198,24 @@ impl Tags {
                 platform_tag.clone(),
             ));
         }
-        // 1a. For CPython 3.8+, debug and release builds are ABI-compatible, so a debug
-        // interpreter also accepts non-debug wheels (matching pip's packaging library behavior).
-        // See: <https://github.com/python/cpython/issues/80646>
-        if python_version >= (3, 8) {
-            if let Implementation::CPython { variant } = implementation {
-                if variant.contains(CPythonAbiVariants::Debug) {
-                    let mut alt_variant = variant;
-                    alt_variant.remove(CPythonAbiVariants::Debug);
-                    let alt_abi = AbiTag::CPython {
-                        variant: alt_variant,
-                        python_version,
-                    };
-                    for platform_tag in &platform_tags {
-                        tags.push((
-                            implementation.language_tag(python_version),
-                            alt_abi,
-                            platform_tag.clone(),
-                        ));
-                    }
-                }
+        // 1a. For CPython 3.8+, debug builds are ABI-compatible with release builds, so a debug
+        // interpreter also accept non-debug wheels.
+        if python_version >= (3, 8)
+            && let Implementation::CPython { variant } = implementation
+            && variant.contains(CPythonAbiVariants::Debug)
+        {
+            let mut non_debug_variant = variant;
+            non_debug_variant.remove(CPythonAbiVariants::Debug);
+            let debug_abi = AbiTag::CPython {
+                variant: non_debug_variant,
+                python_version,
+            };
+            for platform_tag in &platform_tags {
+                tags.push((
+                    implementation.language_tag(python_version),
+                    debug_abi,
+                    platform_tag.clone(),
+                ));
             }
         }
         // 2. abi3/abi3t and no abi (e.g. executable binary)
@@ -2816,34 +2818,49 @@ mod tests {
 
     #[test]
     fn test_system_tags_debug_cpython() {
-        let tags = Tags::from_env(
-            &Platform::new(
-                Os::Manylinux {
-                    major: 2,
-                    minor: 28,
+        fn debug_compatibilities(debug_enabled: bool) -> (TagCompatibility, TagCompatibility) {
+            let tags = Tags::from_env(
+                &Platform::new(
+                    Os::Manylinux {
+                        major: 2,
+                        minor: 28,
+                    },
+                    Arch::X86_64,
+                ),
+                (3, 14),
+                "cpython",
+                (3, 14),
+                TagsOptions {
+                    manylinux_compatible: true,
+                    debug_enabled,
+                    ..TagsOptions::default()
                 },
-                Arch::X86_64,
-            ),
-            (3, 14),
-            "cpython",
-            (3, 14),
-            TagsOptions {
-                manylinux_compatible: true,
-                debug_enabled: true,
-                ..TagsOptions::default()
-            },
-        )
-        .unwrap();
+            )
+            .unwrap();
 
-        let rendered = tags.to_string();
-        // Debug CPython 3.8+ uses cp314d as the primary ABI tag, but also includes the
-        // non-debug cp314 tag since debug and release are ABI-compatible since CPython 3.8.
-        let mut lines = rendered.lines();
-        assert_eq!(lines.next(), Some("cp314-cp314d-manylinux_2_28_x86_64"));
-        // The non-debug cp314 tag follows immediately after the debug platform tags.
-        assert!(
-            rendered.contains("cp314-cp314-manylinux_2_28_x86_64"),
-            "expected non-debug tag in: {rendered}"
-        );
+            let debug_compatibility = tags.compatibility(
+                &[LanguageTag::from_str("cp314").unwrap()],
+                &[AbiTag::from_str("cp314d").unwrap()],
+                &[PlatformTag::from_str("manylinux_2_28_x86_64").unwrap()],
+            );
+            let non_debug_compatibility = tags.compatibility(
+                &[LanguageTag::from_str("cp314").unwrap()],
+                &[AbiTag::from_str("cp314").unwrap()],
+                &[PlatformTag::from_str("manylinux_2_28_x86_64").unwrap()],
+            );
+            (debug_compatibility, non_debug_compatibility)
+        }
+
+        // A regular CPython build is not compatible with debug wheels.
+        let (debug_compatibility, non_debug_compatibility) = debug_compatibilities(false);
+        assert!(!debug_compatibility.is_compatible());
+        assert!(non_debug_compatibility.is_compatible());
+
+        // A debug CPython build is compatible with debug and non-debug wheels, preferring debug
+        // wheels.
+        let (debug_compatibility, non_debug_compatibility) = debug_compatibilities(true);
+        assert!(debug_compatibility.is_compatible());
+        assert!(non_debug_compatibility.is_compatible());
+        assert!(debug_compatibility > non_debug_compatibility);
     }
 }
