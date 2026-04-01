@@ -3526,6 +3526,150 @@ fn uninstall_last_patch() {
     );
 }
 
+/// After uninstalling the last patch for a minor version, the minor version link
+/// (symlink on Unix, junction on Windows) should be removed.
+///
+/// Regression test for <https://github.com/astral-sh/uv/issues/18793>.
+#[test]
+fn uninstall_last_patch_removes_minor_version_link() {
+    use uv_python::managed::platform_key_from_env;
+
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_python_download_cache()
+        .with_filtered_python_install_bin();
+
+    let managed_dir = context.temp_dir.child("managed");
+    let platform_key = platform_key_from_env().unwrap();
+
+    let minor_version_link = managed_dir.child(format!("cpython-3.12-{platform_key}"));
+    let patch_dir = managed_dir.child(format!("cpython-3.12.8-{platform_key}"));
+
+    // Install a single patch version
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12.8"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.8 in [TIME]
+     + cpython-3.12.8-[PLATFORM] (python3.12)
+    ");
+
+    // The patch directory and the minor version link should both exist
+    patch_dir.assert(predicate::path::exists());
+    minor_version_link.assert(predicate::path::exists());
+
+    // Uninstall the only patch version for this minor
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("3.12.8"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Searching for Python versions matching: Python 3.12.8
+    Uninstalled Python 3.12.8 in [TIME]
+     - cpython-3.12.8-[PLATFORM] (python3.12)
+    ");
+
+    // Both the patch directory and the minor version link should be removed
+    patch_dir.assert(predicate::path::missing());
+    minor_version_link.assert(predicate::path::missing());
+}
+
+/// After uninstalling the highest patch but with other patches remaining,
+/// the minor version link should be updated (not removed).
+#[test]
+fn uninstall_highest_patch_updates_minor_version_link() {
+    use uv_python::managed::platform_key_from_env;
+
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_python_download_cache()
+        .with_filtered_python_install_bin();
+
+    let managed_dir = context.temp_dir.child("managed");
+    let platform_key = platform_key_from_env().unwrap();
+
+    let minor_version_link = managed_dir.child(format!("cpython-3.12-{platform_key}"));
+    let patch_dir_8 = managed_dir.child(format!("cpython-3.12.8-{platform_key}"));
+    let patch_dir_9 = managed_dir.child(format!("cpython-3.12.9-{platform_key}"));
+
+    // Install two patch versions
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12.9").arg("3.12.8"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed 2 versions in [TIME]
+     + cpython-3.12.8-[PLATFORM]
+     + cpython-3.12.9-[PLATFORM] (python3.12)
+    ");
+
+    // All directories should exist
+    patch_dir_8.assert(predicate::path::exists());
+    patch_dir_9.assert(predicate::path::exists());
+    minor_version_link.assert(predicate::path::exists());
+
+    // The minor version link should resolve to the highest patch (3.12.9)
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        insta::assert_snapshot!(
+            canonicalize_link_path(&minor_version_link), @"[TEMP_DIR]/managed/cpython-3.12.9-[PLATFORM]"
+        );
+    });
+
+    // Uninstall the highest patch version
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("3.12.9"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Searching for Python versions matching: Python 3.12.9
+    Uninstalled Python 3.12.9 in [TIME]
+     - cpython-3.12.9-[PLATFORM] (python3.12)
+    ");
+
+    // The highest patch dir should be removed
+    patch_dir_9.assert(predicate::path::missing());
+
+    // The lower patch dir should still exist
+    patch_dir_8.assert(predicate::path::exists());
+
+    // The minor version link should still exist, now pointing to the remaining patch
+    minor_version_link.assert(predicate::path::exists());
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        insta::assert_snapshot!(
+            canonicalize_link_path(&minor_version_link), @"[TEMP_DIR]/managed/cpython-3.12.8-[PLATFORM]"
+        );
+    });
+
+    // Uninstall the last remaining patch
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("3.12.8"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Searching for Python versions matching: Python 3.12.8
+    Uninstalled Python 3.12.8 in [TIME]
+     - cpython-3.12.8-[PLATFORM]
+    ");
+
+    // Now everything should be gone, including the minor version link
+    patch_dir_8.assert(predicate::path::missing());
+    minor_version_link.assert(predicate::path::missing());
+}
+
 #[cfg(unix)] // Pyodide cannot be used on Windows
 #[test]
 fn python_install_pyodide() {
