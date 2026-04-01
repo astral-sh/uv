@@ -305,4 +305,97 @@ mod tests {
             ]
         );
     }
+
+    /// Test that `**/dir` and `**/dir/` patterns match directories at any depth and include
+    /// their contents.
+    #[test]
+    fn globstar_directory() {
+        let files = [
+            "a/target/file1.txt",
+            "a/target/nested/file2.txt",
+            "b/c/target/file3.txt",
+        ];
+
+        let dir = tempdir().unwrap();
+        for file in files {
+            let path = dir.path().join(file);
+            fs_err::create_dir_all(path.parent().unwrap()).unwrap();
+            fs_err::File::create(path).unwrap();
+        }
+
+        // `**/target` — matches `target` directories at any depth and includes their contents.
+        let patterns = [PortableGlobParser::Uv.parse("**/target").unwrap()];
+        let matcher = GlobDirFilter::from_globs(&patterns).unwrap();
+
+        let walkdir_root = dir.path();
+        let mut matches: Vec<_> = WalkDir::new(walkdir_root)
+            .sort_by_file_name()
+            .into_iter()
+            .filter_entry(|entry| {
+                let relative = entry
+                    .path()
+                    .strip_prefix(walkdir_root)
+                    .expect("walkdir starts with root");
+                matcher.match_directory(relative)
+            })
+            .filter_map(|entry| {
+                let entry = entry.as_ref().unwrap();
+                let relative = entry
+                    .path()
+                    .strip_prefix(walkdir_root)
+                    .expect("walkdir starts with root");
+                if matcher.match_path(relative) {
+                    Some(relative.to_str().unwrap().replace(MAIN_SEPARATOR, "/"))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        matches.sort();
+        assert_eq!(
+            matches,
+            [
+                "",
+                "a",
+                "a/target",
+                "a/target/file1.txt",
+                "a/target/nested",
+                "a/target/nested/file2.txt",
+                "b",
+                "b/c",
+                "b/c/target",
+                "b/c/target/file3.txt",
+            ]
+        );
+
+        // `**/target/` with trailing slash — should behave identically after normalization.
+        let patterns = [PortableGlobParser::Uv.parse("**/target/").unwrap()];
+        let matcher_slash = GlobDirFilter::from_globs(&patterns).unwrap();
+
+        let mut matches_slash: Vec<_> = WalkDir::new(walkdir_root)
+            .sort_by_file_name()
+            .into_iter()
+            .filter_entry(|entry| {
+                let relative = entry
+                    .path()
+                    .strip_prefix(walkdir_root)
+                    .expect("walkdir starts with root");
+                matcher_slash.match_directory(relative)
+            })
+            .filter_map(|entry| {
+                let entry = entry.as_ref().unwrap();
+                let relative = entry
+                    .path()
+                    .strip_prefix(walkdir_root)
+                    .expect("walkdir starts with root");
+                if matcher_slash.match_path(relative) {
+                    Some(relative.to_str().unwrap().replace(MAIN_SEPARATOR, "/"))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        matches_slash.sort();
+        assert_eq!(matches, matches_slash);
+    }
 }
