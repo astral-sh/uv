@@ -595,7 +595,7 @@ pub(crate) async fn pip_compile(
     )
     .await
     {
-        Ok(resolution) => resolution,
+        Ok((resolution, _)) => resolution,
         Err(err) => {
             return diagnostics::OperationDiagnostic::with_system_certs(
                 client_builder.system_certs(),

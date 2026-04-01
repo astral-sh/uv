@@ -33,6 +33,9 @@ pub enum Error {
     DistributionTypes(#[from] uv_distribution_types::Error),
 
     #[error(transparent)]
+    HashStrategy(#[from] uv_types::HashStrategyError),
+
+    #[error(transparent)]
     WheelFilename(#[from] uv_distribution_filename::WheelFilenameError),
 
     #[error(transparent)]

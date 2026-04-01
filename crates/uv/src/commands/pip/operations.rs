@@ -132,7 +132,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     options: Options,
     logger: Box<dyn ResolveLogger>,
     printer: Printer,
-) -> Result<ResolverOutput, Error> {
+) -> Result<(ResolverOutput, HashStrategy), Error> {
     let start = std::time::Instant::now();
 
     // Resolve the requirements from the provided sources.
@@ -265,6 +265,11 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         requirements
     };
 
+    // Incorporate hashes from requirements discovered while resolving source trees and groups.
+    let mut hasher = hasher
+        .clone()
+        .augment_with_requirements(requirements.iter())?;
+
     // Resolve the overrides from the provided sources.
     let overrides = {
         // Partition the overrides into named and unnamed requirements.
@@ -284,7 +289,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         if !unnamed.is_empty() {
             overrides.extend(
                 NamedRequirementsResolver::new(
-                    hasher,
+                    &hasher,
                     index,
                     DistributionDatabase::new(
                         client,
@@ -315,11 +320,11 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     // Determine any lookahead requirements.
     let lookaheads = match options.dependency_mode {
         DependencyMode::Transitive => {
-            LookaheadResolver::new(
+            let (lookaheads, updated_hasher) = LookaheadResolver::new(
                 &requirements,
                 &constraints,
                 &overrides,
-                hasher,
+                &hasher,
                 index,
                 DistributionDatabase::new(
                     client,
@@ -329,7 +334,9 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             )
             .with_reporter(Arc::new(ResolverReporter::from(printer)))
             .resolve(&resolver_env)
-            .await?
+            .await?;
+            hasher = updated_hasher;
+            lookaheads
         }
         DependencyMode::Direct => Vec::new(),
     };
@@ -370,7 +377,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             tags,
             flat_index,
             index,
-            hasher,
+            &hasher,
             build_dispatch,
             installed_packages,
             DistributionDatabase::new(
@@ -386,7 +393,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
 
     logger.on_complete(resolution.len(), start, printer)?;
 
-    Ok(resolution)
+    Ok((resolution, hasher))
 }
 
 #[derive(Debug, Clone, Copy)]
