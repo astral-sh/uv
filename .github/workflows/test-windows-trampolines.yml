@@ -27,10 +27,6 @@ jobs:
 
   # Verify committed trampolines match a reproducible Docker build
   windows-trampoline-reproducible:
-    # uv version bumps (e.g., https://github.com/astral-sh/uv/pull/18805) cause the reproducible
-    # check to fail and these are not regenerated as a part of the release process so we temporarily
-    # disable this job
-    if: false
     timeout-minutes: 30
     runs-on: ubuntu-latest
     name: "check reproducible build"
