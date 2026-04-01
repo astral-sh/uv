@@ -358,7 +358,10 @@ pub(crate) fn move_folder_recorded(
             .and_then(|n| n.to_str())
             .is_some_and(|n| n.starts_with("._"))
         {
-            debug!("Skipping macOS AppleDouble file: {}", src.simplified_display());
+            debug!(
+                "Skipping macOS AppleDouble file: {}",
+                src.simplified_display()
+            );
             continue;
         }
 
@@ -641,7 +644,10 @@ pub(crate) fn install_data(
 
                     // Skip macOS AppleDouble resource fork files (`._*`).
                     if name.starts_with("._") {
-                        debug!("Skipping macOS AppleDouble file: {}", file.path().simplified_display());
+                        debug!(
+                            "Skipping macOS AppleDouble file: {}",
+                            file.path().simplified_display()
+                        );
                         continue;
                     }
 
@@ -974,8 +980,7 @@ mod test {
 
     use super::{
         Error, RecordEntry, Script, WheelFile, format_shebang, get_script_executable,
-        move_folder_recorded, parse_email_message_file, read_record_file,
-        write_installer_metadata,
+        move_folder_recorded, parse_email_message_file, read_record_file, write_installer_metadata,
     };
 
     #[test]
@@ -1304,26 +1309,21 @@ mod test {
 
         // Create a macOS AppleDouble sidecar file.
         let apple_double = src_dir.child("._real_file.txt");
-        apple_double.write_binary(&[0x00, 0x05, 0x16, 0x07]).unwrap();
+        apple_double
+            .write_binary(&[0x00, 0x05, 0x16, 0x07])
+            .unwrap();
 
         let dest_dir = temp_dir.child("dest");
 
         // Build a RECORD with only the legitimate file.
-        let relative_record_path = Path::new("pkg.data")
-            .join("data")
-            .join("real_file.txt");
+        let relative_record_path = Path::new("pkg.data").join("data").join("real_file.txt");
         let mut record = vec![RecordEntry {
             path: relative_record_path.to_string_lossy().to_string(),
             hash: None,
             size: None,
         }];
 
-        move_folder_recorded(
-            &src_dir,
-            &dest_dir,
-            site_packages.path(),
-            &mut record,
-        )?;
+        move_folder_recorded(&src_dir, &dest_dir, site_packages.path(), &mut record)?;
 
         // The legitimate file should have been moved.
         assert!(dest_dir.child("real_file.txt").exists());
