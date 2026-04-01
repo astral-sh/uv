@@ -124,7 +124,7 @@ mod resolver {
     use uv_install_wheel::LinkMode;
     use uv_pep440::Version;
     use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
-    use uv_platform_tags::{Arch, Os, Platform, Tags};
+    use uv_platform_tags::{Arch, Os, Platform, Tags, TagsOptions};
     use uv_preview::Preview;
     use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
     use uv_python::Interpreter;
@@ -160,7 +160,14 @@ mod resolver {
     );
 
     static TAGS: LazyLock<Tags> = LazyLock::new(|| {
-        Tags::from_env(&PLATFORM, (3, 11), "cpython", (3, 11), false, false, false).unwrap()
+        Tags::from_env(
+            &PLATFORM,
+            (3, 11),
+            "cpython",
+            (3, 11),
+            TagsOptions::default(),
+        )
+        .unwrap()
     });
 
     pub(crate) async fn resolve(

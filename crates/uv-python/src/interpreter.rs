@@ -25,7 +25,7 @@ use uv_install_wheel::Layout;
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, StringVersion};
 use uv_platform::{Arch, Libc, Os};
-use uv_platform_tags::{Platform, Tags, TagsError};
+use uv_platform_tags::{Platform, Tags, TagsError, TagsOptions};
 use uv_pypi_types::{ResolverMarkerEnvironment, Scheme};
 
 use crate::implementation::LenientImplementationName;
@@ -253,9 +253,12 @@ impl Interpreter {
                 self.python_tuple(),
                 self.implementation_name(),
                 self.implementation_tuple(),
-                self.manylinux_compatible,
-                self.gil_disabled,
-                false,
+                TagsOptions {
+                    manylinux_compatible: self.manylinux_compatible,
+                    gil_disabled: self.gil_disabled,
+                    debug_enabled: self.debug_enabled,
+                    is_cross: false,
+                },
             )?;
             self.tags.set(tags).expect("tags should not be set");
         }
