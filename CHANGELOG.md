@@ -3,6 +3,38 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.11.3
+
+Released on 2026-04-01.
+
+### Enhancements
+
+- Add progress bar for hashing phase in uv publish ([#18752](https://github.com/astral-sh/uv/pull/18752))
+- Add support for ROCm 7.2 ([#18730](https://github.com/astral-sh/uv/pull/18730))
+- Emit abi3t tags for every abi3 version ([#18777](https://github.com/astral-sh/uv/pull/18777))
+- Expand `uv workspace metadata` with dependency information from the lock ([#18356](https://github.com/astral-sh/uv/pull/18356))
+- Implement support for PEP 803 ([#18767](https://github.com/astral-sh/uv/pull/18767))
+- Pretty-print platform in built wheel errors ([#18738](https://github.com/astral-sh/uv/pull/18738))
+- Publish installers to `/installers/uv/latest` on the mirror ([#18725](https://github.com/astral-sh/uv/pull/18725))
+- Show free-threaded Python in built-wheel errors ([#18740](https://github.com/astral-sh/uv/pull/18740))
+
+### Preview features
+
+- Add `--ignore` and `--ignore-until-fixed` to `uv audit` ([#18737](https://github.com/astral-sh/uv/pull/18737))
+
+### Bug fixes
+
+- Bump simple API cache ([#18797](https://github.com/astral-sh/uv/pull/18797))
+- Don't drop `blake2b` hashes ([#18794](https://github.com/astral-sh/uv/pull/18794))
+- Handle broken range request implementations ([#18780](https://github.com/astral-sh/uv/pull/18780))
+- Remove `powerpc64-unknown-linux-gnu` from release build targets ([#18800](https://github.com/astral-sh/uv/pull/18800))
+- Respect dependency metadata overrides in `uv pip check` ([#18742](https://github.com/astral-sh/uv/pull/18742))
+- Support debug CPython ABI tags in environment compatibility ([#18739](https://github.com/astral-sh/uv/pull/18739))
+
+### Documentation
+
+- Document `false` opt-out for `exclude-newer-package` ([#18768](https://github.com/astral-sh/uv/pull/18768), [#18803](https://github.com/astral-sh/uv/pull/18803))
+
 ## 0.11.2
 
 Released on 2026-03-26.
