@@ -13,8 +13,13 @@ OUTPUT_DIR="$REPO_ROOT/crates/uv-trampoline-builder/trampolines"
 # Read the nightly toolchain from rust-toolchain.toml
 TOOLCHAIN="$(grep '^channel' "$TRAMPOLINE_DIR/rust-toolchain.toml" | sed 's/.*"\(.*\)"/\1/')"
 
+# Pin to linux/amd64 so the container always matches the x86_64-unknown-linux-gnu
+# toolchain hardcoded in the Dockerfile, regardless of the host architecture.
+PLATFORM="linux/amd64"
+
 # Build the pinned toolchain image.
 docker buildx build -t uv-trampoline-builder --load \
+    --platform "$PLATFORM" \
     -f "$TRAMPOLINE_DIR/Dockerfile" "$TRAMPOLINE_DIR" \
     "$@"
 
@@ -22,6 +27,7 @@ docker buildx build -t uv-trampoline-builder --load \
 # The working directory must be the trampoline crate so cargo picks up
 # .cargo/config.toml (which enables build-std).
 docker run --rm \
+    --platform "$PLATFORM" \
     -v "$REPO_ROOT:/workspace:ro" \
     -v "$OUTPUT_DIR:/output" \
     -w /workspace/crates/uv-trampoline \
