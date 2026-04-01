@@ -724,6 +724,11 @@ exclude-newer-package = { setuptools = "2006-12-02T02:07:43Z" }
 The same flag also accepts `<package>=false` to opt a package out of the `--exclude-newer`
 restriction, e.g., to allow resolving packages from an index that does not publish upload times.
 
+```pyproject.toml
+[tool.uv]
+exclude-newer-package = { setuptools = false }
+```
+
 Package-specific values will take precedence over global values.
 
 ## Dependency cooldowns
