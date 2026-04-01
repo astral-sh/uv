@@ -319,30 +319,31 @@ impl Error {
             // The server doesn't support range requests, but we only discovered this while
             // unzipping due to erroneous server behavior.
             ErrorKind::Zip(_, ZipError::UpstreamReadError(err)) => {
-                if let Some(inner) = err.get_ref() {
-                    if let Some(inner) = inner.downcast_ref::<AsyncHttpRangeReaderError>() {
-                        match inner {
-                            AsyncHttpRangeReaderError::HttpRangeRequestUnsupported
-                            | AsyncHttpRangeReaderError::ContentLengthMissing
-                            | AsyncHttpRangeReaderError::ContentRangeMissing => {
-                                return true;
-                            }
-                            AsyncHttpRangeReaderError::RangeMismatch { .. }
-                            | AsyncHttpRangeReaderError::ResponseTooShort { .. }
-                            | AsyncHttpRangeReaderError::ResponseTooLong { .. } => {
-                                let url = if let Some(index) = index {
-                                    index.url()
-                                } else {
-                                    url
-                                };
-                                warn_user_once!(
-                                    "Invalid range request response from server that declares HTTP \
-                                    range request support, falling back to streaming: {url}"
-                                );
-                                return true;
-                            }
-                            _ => {}
+                if let Some(inner) = err.get_ref()
+                    && let Some(range_reader_error) =
+                        inner.downcast_ref::<AsyncHttpRangeReaderError>()
+                {
+                    match range_reader_error {
+                        AsyncHttpRangeReaderError::HttpRangeRequestUnsupported
+                        | AsyncHttpRangeReaderError::ContentLengthMissing
+                        | AsyncHttpRangeReaderError::ContentRangeMissing => {
+                            return true;
                         }
+                        AsyncHttpRangeReaderError::RangeMismatch { .. }
+                        | AsyncHttpRangeReaderError::ResponseTooShort { .. }
+                        | AsyncHttpRangeReaderError::ResponseTooLong { .. } => {
+                            let url = if let Some(index) = index {
+                                index.url()
+                            } else {
+                                url
+                            };
+                            warn!(
+                                "Invalid range request response from server that declares HTTP \
+                                range request support, falling back to streaming: {url}"
+                            );
+                            return true;
+                        }
+                        _ => {}
                     }
                 }
             }
