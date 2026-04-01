@@ -348,6 +348,20 @@ pub(crate) fn move_folder_recorded(
     for entry in WalkDir::new(src_dir) {
         let entry = entry?;
         let src = entry.path();
+
+        // Skip macOS AppleDouble resource fork files (`._*`). These are binary
+        // metadata sidecar files created by macOS on non-native filesystems
+        // (exFAT, FAT32, SMB) and are sometimes baked into wheels built on
+        // macOS without `COPYFILE_DISABLE=1`. They are never valid package content.
+        if src
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| n.starts_with("._"))
+        {
+            debug!("Skipping macOS AppleDouble file: {}", src.simplified_display());
+            continue;
+        }
+
         // This is the base path for moving to the actual target for the data
         // e.g. for data it's without <..>.data/data/
         let relative_to_data = src
@@ -623,9 +637,16 @@ pub(crate) fn install_data(
                 for file in fs::read_dir(path)? {
                     let file = file?;
 
+                    let name = file.file_name().to_string_lossy().to_string();
+
+                    // Skip macOS AppleDouble resource fork files (`._*`).
+                    if name.starts_with("._") {
+                        debug!("Skipping macOS AppleDouble file: {}", file.path().simplified_display());
+                        continue;
+                    }
+
                     // Couldn't find any docs for this, took it directly from
                     // https://github.com/pypa/pip/blob/b5457dfee47dd9e9f6ec45159d9d410ba44e5ea1/src/pip/_internal/operations/install/wheel.py#L565-L583
-                    let name = file.file_name().to_string_lossy().to_string();
                     let match_name = name
                         .strip_suffix(".exe")
                         .or_else(|| name.strip_suffix("-script.py"))
@@ -953,7 +974,8 @@ mod test {
 
     use super::{
         Error, RecordEntry, Script, WheelFile, format_shebang, get_script_executable,
-        parse_email_message_file, read_record_file, write_installer_metadata,
+        move_folder_recorded, parse_email_message_file, read_record_file,
+        write_installer_metadata,
     };
 
     #[test]
@@ -1265,5 +1287,50 @@ mod test {
             .map(|entry| entry.path)
             .collect::<Vec<String>>();
         assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn test_move_folder_recorded_skips_apple_double_files() -> Result<(), Error> {
+        let temp_dir = assert_fs::TempDir::new().unwrap();
+
+        // Set up a source directory within a fake site-packages layout.
+        let site_packages = temp_dir.child("site-packages");
+        let src_dir = site_packages.child("pkg.data").child("data");
+        src_dir.create_dir_all().unwrap();
+
+        // Create a legitimate file.
+        let legitimate = src_dir.child("real_file.txt");
+        legitimate.write_str("hello").unwrap();
+
+        // Create a macOS AppleDouble sidecar file.
+        let apple_double = src_dir.child("._real_file.txt");
+        apple_double.write_binary(&[0x00, 0x05, 0x16, 0x07]).unwrap();
+
+        let dest_dir = temp_dir.child("dest");
+
+        // Build a RECORD with only the legitimate file.
+        let relative_record_path = Path::new("pkg.data")
+            .join("data")
+            .join("real_file.txt");
+        let mut record = vec![RecordEntry {
+            path: relative_record_path.to_string_lossy().to_string(),
+            hash: None,
+            size: None,
+        }];
+
+        move_folder_recorded(
+            &src_dir,
+            &dest_dir,
+            site_packages.path(),
+            &mut record,
+        )?;
+
+        // The legitimate file should have been moved.
+        assert!(dest_dir.child("real_file.txt").exists());
+
+        // The AppleDouble file should NOT have been copied to dest.
+        assert!(!dest_dir.child("._real_file.txt").exists());
+
+        Ok(())
     }
 }
