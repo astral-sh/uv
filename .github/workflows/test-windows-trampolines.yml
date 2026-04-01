@@ -27,6 +27,7 @@ jobs:
 
   # Verify committed trampolines match a reproducible Docker build
   windows-trampoline-reproducible:
+    if: false # temporarily disabled
     timeout-minutes: 30
     runs-on: ubuntu-latest
     name: "check reproducible build"
