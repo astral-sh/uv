@@ -75,22 +75,7 @@ fn source_dist_matcher(
 ) -> Result<(GlobDirFilter, GlobSet), Error> {
     // File and directories to include in the source directory
     let mut include_globs = Vec::new();
-    let mut includes: Vec<String> = settings
-        .source_include
-        .into_iter()
-        .map(|pattern| {
-            // If the pattern is a directory, include all files in that directory.
-            if source_tree.join(&pattern).is_dir() {
-                if pattern.ends_with('/') {
-                    format!("{pattern}**", pattern = globset::escape(&pattern))
-                } else {
-                    format!("{pattern}/**", pattern = globset::escape(&pattern))
-                }
-            } else {
-                pattern
-            }
-        })
-        .collect();
+    let mut includes: Vec<String> = settings.source_include;
 
     // pyproject.toml is always included.
     includes.push(globset::escape("pyproject.toml"));
