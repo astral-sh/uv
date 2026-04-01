@@ -16,7 +16,6 @@ use uv_distribution_filename::{WheelFilename, WheelFilenameError};
 use uv_distribution_types::IndexUrl;
 use uv_normalize::PackageName;
 use uv_redacted::DisplaySafeUrl;
-use uv_warnings::warn_user_once;
 
 /// RFC 9457 Problem Details for HTTP APIs
 ///
@@ -278,7 +277,7 @@ impl Error {
                 } else {
                     url
                 };
-                warn_user_once!(
+                warn!(
                     "Invalid range request response from server that declares HTTP range request \
                     support, falling back to streaming: {url}"
                 );
