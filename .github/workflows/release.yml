@@ -52,6 +52,16 @@ env:
   CARGO_DIST_CHECKSUM: "cd355dab0b4c02fb59038fef87655550021d07f45f1d82f947a34ef98560abb8"
 
 jobs:
+  release-gate:
+    name: release-gate
+    if: ${{ inputs.tag != 'dry-run' }}
+    runs-on: ubuntu-latest
+    environment:
+      name: release-gate
+      deployment: false
+    steps:
+      - run: echo "Release approved"
+
   # Run 'dist plan' (or host) to determine what tasks we need to do
   plan:
     runs-on: "depot-ubuntu-latest-4"
@@ -108,7 +118,8 @@ jobs:
   custom-build-docker:
     needs:
       - plan
-    if: ${{ needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload' || inputs.tag == 'dry-run' }}
+      - release-gate
+    if: ${{ always() && needs.plan.result == 'success' && (needs.release-gate.result == 'success' || needs.release-gate.result == 'skipped') && (needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload' || inputs.tag == 'dry-run') }}
     uses: ./.github/workflows/build-docker.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
@@ -256,6 +267,7 @@ jobs:
     needs:
       - plan
       - host
+      - release-gate
     if: ${{ !fromJson(needs.plan.outputs.val).announcement_is_prerelease || fromJson(needs.plan.outputs.val).publish_prereleases }}
     uses: ./.github/workflows/publish-pypi.yml
     with:
@@ -270,6 +282,7 @@ jobs:
     needs:
       - plan
       - host
+      - release-gate
       - custom-publish-pypi # DIRTY: see #16989
     if: ${{ !fromJson(needs.plan.outputs.val).announcement_is_prerelease || fromJson(needs.plan.outputs.val).publish_prereleases }}
     uses: ./.github/workflows/publish-crates.yml
@@ -286,12 +299,13 @@ jobs:
     needs:
       - plan
       - host
+      - release-gate
       - custom-publish-pypi
       - custom-publish-crates
     # use "always() && ..." to allow us to wait for all publish jobs while
     # still allowing individual publish jobs to skip themselves (for prereleases).
     # "host" however must run to completion, no skipping allowed!
-    if: ${{ always() && needs.host.result == 'success' && (needs.custom-publish-pypi.result == 'skipped' || needs.custom-publish-pypi.result == 'success') && (needs.custom-publish-crates.result == 'skipped' || needs.custom-publish-crates.result == 'success') }}
+    if: ${{ always() && needs.host.result == 'success' && needs.release-gate.result == 'success' && (needs.custom-publish-pypi.result == 'skipped' || needs.custom-publish-pypi.result == 'success') && (needs.custom-publish-crates.result == 'skipped' || needs.custom-publish-crates.result == 'success') }}
     runs-on: "depot-ubuntu-latest-4"
     environment:
       name: release

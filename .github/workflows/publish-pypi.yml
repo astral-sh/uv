@@ -17,7 +17,6 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: release
-      deployment: false
     permissions:
       id-token: write # For PyPI's trusted publishing
     steps:
@@ -36,7 +35,6 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: release
-      deployment: false
     permissions:
       id-token: write # For PyPI's trusted publishing
     steps:
