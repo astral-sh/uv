@@ -130,6 +130,13 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
         // Script are unsupported through data
         // 2.e Remove empty distribution-1.0.data directory.
         fs_err::remove_dir_all(data_dir)?;
+
+        // Prune RECORD entries that still reference the (now-deleted) .data directory.
+        // This happens when files are skipped during install_data (e.g., macOS AppleDouble
+        // `._*` sidecar files): their RECORD entries are never updated to the target path,
+        // so they still point into the .data prefix.
+        let data_prefix = format!("{dist_info_prefix}.data");
+        record.retain(|entry| !entry.path.starts_with(&data_prefix));
     } else {
         trace!(?name, "No data");
     }
