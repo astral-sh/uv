@@ -3574,9 +3574,18 @@ fn uninstall_last_patch_removes_minor_version_link() {
      - cpython-3.12.8-[PLATFORM] (python3.12)
     ");
 
-    // Both the patch directory and the minor version link should be removed
+    // The patch directory should be removed
     patch_dir.assert(predicate::path::missing());
-    minor_version_link.assert(predicate::path::missing());
+
+    // The minor version link (symlink/junction) itself should be fully removed,
+    // not just dangling. We use `symlink_metadata` because `Path::exists` follows
+    // symlinks/junctions and would return false for a dangling link, hiding the bug.
+    assert!(
+        minor_version_link.path().symlink_metadata().is_err(),
+        "minor version link should be removed after uninstalling the last patch, \
+         but it still exists at: {}",
+        minor_version_link.path().display()
+    );
 }
 
 /// After uninstalling the highest patch but with other patches remaining,
@@ -3616,12 +3625,19 @@ fn uninstall_highest_patch_updates_minor_version_link() {
     patch_dir_9.assert(predicate::path::exists());
     minor_version_link.assert(predicate::path::exists());
 
-    // The minor version link should resolve to the highest patch (3.12.9)
+    // The minor version link should resolve to the highest patch (3.12.9).
+    // Use `dunce::canonicalize` directly because `canonicalize_link_path` goes
+    // through `launcher_path` on Windows, which only works for trampoline
+    // executables, not junction directories.
+    let link_target = dunce::canonicalize(minor_version_link.path())
+        .unwrap()
+        .simplified_display()
+        .to_string();
     insta::with_settings!({
         filters => context.filters(),
     }, {
         insta::assert_snapshot!(
-            canonicalize_link_path(&minor_version_link), @"[TEMP_DIR]/managed/cpython-3.12.9-[PLATFORM]"
+            link_target, @"[TEMP_DIR]/managed/cpython-3.12.9-[PLATFORM]"
         );
     });
 
@@ -3645,11 +3661,15 @@ fn uninstall_highest_patch_updates_minor_version_link() {
 
     // The minor version link should still exist, now pointing to the remaining patch
     minor_version_link.assert(predicate::path::exists());
+    let link_target = dunce::canonicalize(minor_version_link.path())
+        .unwrap()
+        .simplified_display()
+        .to_string();
     insta::with_settings!({
         filters => context.filters(),
     }, {
         insta::assert_snapshot!(
-            canonicalize_link_path(&minor_version_link), @"[TEMP_DIR]/managed/cpython-3.12.8-[PLATFORM]"
+            link_target, @"[TEMP_DIR]/managed/cpython-3.12.8-[PLATFORM]"
         );
     });
 
@@ -3665,9 +3685,18 @@ fn uninstall_highest_patch_updates_minor_version_link() {
      - cpython-3.12.8-[PLATFORM]
     ");
 
-    // Now everything should be gone, including the minor version link
+    // The patch directory should be removed
     patch_dir_8.assert(predicate::path::missing());
-    minor_version_link.assert(predicate::path::missing());
+
+    // The minor version link should be fully removed (see comment in
+    // `uninstall_last_patch_removes_minor_version_link` for why we use
+    // `symlink_metadata` instead of `predicate::path::missing`).
+    assert!(
+        minor_version_link.path().symlink_metadata().is_err(),
+        "minor version link should be removed after uninstalling the last patch, \
+         but it still exists at: {}",
+        minor_version_link.path().display()
+    );
 }
 
 #[cfg(unix)] // Pyodide cannot be used on Windows
