@@ -1,4 +1,5 @@
 use std::io::Cursor;
+use std::path::PathBuf;
 use std::process::Command;
 
 use anyhow::Result;
@@ -14435,82 +14436,52 @@ fn abi_compatibility_on_freethreaded_python() {
     ");
 }
 
-/// Non-debug (`cp314`) wheel installs on non-debug Python (baseline case).
-#[test]
-fn abi_compatibility_on_nondebug_python_with_nondebug_wheel() {
-    let context = uv_test::test_context!("3.14");
+fn build_debug_wheel(context: &TestContext) -> PathBuf {
+    // Build a wheel with debug ABI tag (cp314d).
+    let package_dir = context.temp_dir.child("cpython_debug_package");
+    package_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "cpython-debug-package"
+            version = "1.0.0"
 
-    let wheel_path = context
-        .workspace_root
-        .join("test/links/cpython_package-1.0.0-cp314-cp314-manylinux_2_17_x86_64.whl");
+            [build-system]
+            requires = ["hatchling"]
+            build-backend = "hatchling.build"
 
-    uv_snapshot!(context.filters(), context.pip_install()
-        .arg("--python-platform").arg("linux")
-        .arg(wheel_path), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
+            [tool.hatch.build.hooks.custom]
+        "#})
+        .unwrap();
+    package_dir
+        .child("hatch_build.py")
+        .write_str(indoc! {r#"
+        from hatchling.builders.hooks.plugin.interface import BuildHookInterface
 
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + cpython-package==1.0.0 (from file://[WORKSPACE]/test/links/cpython_package-1.0.0-cp314-cp314-manylinux_2_17_x86_64.whl)
-    ");
-}
+        class CustomBuildHook(BuildHookInterface):
+            def initialize(self, version, build_data):
+                build_data["tag"] = "cp314-cp314d-manylinux_2_17_x86_64"
+                build_data["pure_python"] = False
+    "#})
+        .unwrap();
+    package_dir
+        .child("src/cpython_debug_package/__init__.py")
+        .write_str("# Test package")
+        .unwrap();
 
-/// Non-debug (`cp314`) wheel installs on debug Python since they are ABI-compatible since
-/// CPython 3.8.
-#[test]
-#[cfg(unix)]
-fn abi_compatibility_on_debug_python_with_nondebug_wheel() {
-    let context = uv_test::test_context_with_versions!(&[])
-        .with_filtered_python_keys()
-        .with_managed_python_dirs()
-        .with_python_download_cache()
-        .with_filtered_python_install_bin()
-        .with_filtered_python_names()
-        .with_filtered_exe_suffix();
-
-    // Install debug CPython 3.14.
     context
-        .python_install()
-        .arg("--preview")
-        .arg("3.14+debug")
+        .build()
+        .arg("--wheel")
+        .current_dir(&package_dir)
         .assert()
         .success();
 
-    // Create a virtual environment with the debug Python.
-    context
-        .venv()
-        .arg("--python")
-        .arg("3.14+debug")
-        .assert()
-        .success();
-
-    let wheel_path = context
-        .workspace_root
-        .join("test/links/cpython_package-1.0.0-cp314-cp314-manylinux_2_17_x86_64.whl");
-
-    uv_snapshot!(context.filters(), context.pip_install()
-        .arg("--python-platform").arg("linux")
-        .arg(wheel_path), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + cpython-package==1.0.0 (from file://[WORKSPACE]/test/links/cpython_package-1.0.0-cp314-cp314-manylinux_2_17_x86_64.whl)
-    ");
+    package_dir.join("dist/cpython_debug_package-1.0.0-cp314-cp314d-manylinux_2_17_x86_64.whl")
 }
 
-/// Debug CPython has the same ABI as release CPython since Python 3.8, so a debug interpreter
-/// accepts both debug (`cp314d`) and non-debug (`cp314`) wheels.
+/// Since Python 3.8, a debug interpreter accepts both debug (`cp314d`) and non-debug (`cp314`)
+/// wheels.
 #[test]
-#[cfg(unix)]
 fn abi_compatibility_on_debug_python() {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
@@ -14536,13 +14507,13 @@ fn abi_compatibility_on_debug_python() {
         .assert()
         .success();
 
-    let wheel_path = context
+    // Check that non-debug wheels are supported.
+    let non_debug_wheel = context
         .workspace_root
-        .join("test/links/cpython_debug_package-1.0.0-cp314-cp314d-manylinux_2_17_x86_64.whl");
-
+        .join("test/links/cpython_package-1.0.0-cp314-cp314-manylinux_2_17_x86_64.whl");
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--python-platform").arg("linux")
-        .arg(wheel_path), @"
+        .arg(non_debug_wheel), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14551,7 +14522,23 @@ fn abi_compatibility_on_debug_python() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + cpython-debug-package==1.0.0 (from file://[WORKSPACE]/test/links/cpython_debug_package-1.0.0-cp314-cp314d-manylinux_2_17_x86_64.whl)
+     + cpython-package==1.0.0 (from file://[WORKSPACE]/test/links/cpython_package-1.0.0-cp314-cp314-manylinux_2_17_x86_64.whl)
+    ");
+
+    // Check that debug wheels are supported.
+    let debug_wheel = build_debug_wheel(&context);
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--python-platform").arg("linux")
+        .arg(debug_wheel), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + cpython-debug-package==1.0.0 (from file://[TEMP_DIR]/cpython_debug_package/dist/cpython_debug_package-1.0.0-cp314-cp314d-manylinux_2_17_x86_64.whl)
     ");
 }
 
@@ -14561,13 +14548,11 @@ fn abi_compatibility_on_debug_python() {
 fn abi_compatibility_on_nondebug_python_with_debug_wheel() {
     let context = uv_test::test_context!("3.14");
 
-    let wheel_path = context
-        .workspace_root
-        .join("test/links/cpython_debug_package-1.0.0-cp314-cp314d-manylinux_2_17_x86_64.whl");
-
+    // Check that debug wheels are rejected with a helpful error message.
+    let debug_wheel = build_debug_wheel(&context);
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--python-platform").arg("linux")
-        .arg(wheel_path), @"
+        .arg(debug_wheel), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -14575,7 +14560,7 @@ fn abi_compatibility_on_nondebug_python_with_debug_wheel() {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to determine installation plan
-      Caused by: A path dependency is incompatible with the current platform: [WORKSPACE]/test/links/cpython_debug_package-1.0.0-cp314-cp314d-manylinux_2_17_x86_64.whl
+      Caused by: A path dependency is incompatible with the current platform: cpython_debug_package/dist/cpython_debug_package-1.0.0-cp314-cp314d-manylinux_2_17_x86_64.whl
 
     hint: The wheel is compatible with CPython 3.14 (`cp314d`), but you're using CPython 3.14 (`cp314`)
     ");
