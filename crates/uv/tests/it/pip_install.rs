@@ -14482,6 +14482,8 @@ fn build_debug_wheel(context: &TestContext) -> PathBuf {
 /// Since Python 3.8, a debug interpreter accepts both debug (`cp314d`) and non-debug (`cp314`)
 /// wheels.
 #[test]
+#[cfg(feature = "test-python-managed")]
+#[cfg(any(target_os = "macos", target_os = "linux"))] // PBS doesn't have debug builds for windows
 fn abi_compatibility_on_debug_python() {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
