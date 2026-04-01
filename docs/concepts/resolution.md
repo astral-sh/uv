@@ -729,8 +729,8 @@ The package option also accepts `<package>=false` to opt a package out of the re
 exclude-newer-package = { setuptools = false }
 ```
 
-This is useful to temporarily use a newer version of package or to allow resolving a package from
-an index that does not publish upload times. 
+This is useful to temporarily use a newer version of package or to allow resolving a package from an
+index that does not publish upload times.
 
 Package-specific values will take precedence over global values.
 
