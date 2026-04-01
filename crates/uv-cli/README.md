@@ -5,8 +5,8 @@
 This crate is an internal component of [uv](https://crates.io/crates/uv). The Rust API exposed here
 is unstable and will have frequent breaking changes.
 
-This version (0.0.35) is a component of [uv 0.11.2](https://crates.io/crates/uv/0.11.2). The source
-can be found [here](https://github.com/astral-sh/uv/blob/0.11.2/crates/uv-cli).
+This version (0.0.36) is a component of [uv 0.11.3](https://crates.io/crates/uv/0.11.3). The source
+can be found [here](https://github.com/astral-sh/uv/blob/0.11.3/crates/uv-cli).
 
 See uv's
 [crate versioning policy](https://docs.astral.sh/uv/reference/policies/versioning/#crate-versioning)
