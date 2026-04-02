@@ -72,6 +72,8 @@ jobs:
           maturin-version: v1.12.6
           command: sdist
           args: --out crates/uv-build/dist -m crates/uv-build/Cargo.toml
+      - name: "Fix Cargo.lock in sdist uv-build"
+        run: python scripts/repair-sdist-cargo-lock.py crates/uv-build/dist/${PACKAGE_NAME}_build-*.tar.gz
       - name: "Test sdist uv-build"
         run: |
           pip install crates/uv-build/dist/${PACKAGE_NAME}_build-*.tar.gz --force-reinstall
