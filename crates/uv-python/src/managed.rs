@@ -871,6 +871,30 @@ impl PythonMinorVersionLink {
         }
     }
 
+    /// Check if the minor version link entry exists in the filesystem.
+    ///
+    /// Unlike [`exists`](Self::exists), this does NOT verify that the link points to the
+    /// expected target. It only checks that a symlink (Unix) or junction (Windows) entry
+    /// is present. This is useful during uninstall cleanup where the link target may
+    /// already be deleted, making [`exists`](Self::exists) return `false` even though
+    /// the link entry itself still needs to be removed.
+    pub fn link_entry_exists(&self) -> bool {
+        #[cfg(unix)]
+        {
+            self.symlink_directory
+                .symlink_metadata()
+                .is_ok_and(|metadata| metadata.file_type().is_symlink())
+        }
+        #[cfg(windows)]
+        {
+            self.symlink_directory
+                .symlink_metadata()
+                .is_ok_and(|metadata| {
+                    (metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT.0) != 0
+                })
+        }
+    }
+
     /// Read the target of the minor version link.
     ///
     /// On Unix, this reads the symlink target. On Windows, this reads the junction target

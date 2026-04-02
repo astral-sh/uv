@@ -248,7 +248,7 @@ async fn do_uninstall(
             if let Some(minor_version_link) =
                 PythonMinorVersionLink::from_installation(installation)
             {
-                if minor_version_link.exists() {
+                if minor_version_link.link_entry_exists() {
                     let result = if cfg!(windows) {
                         fs_err::remove_dir(minor_version_link.symlink_directory.as_path())
                     } else {
