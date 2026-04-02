@@ -424,6 +424,17 @@ fn run_pep723_script() -> Result<()> {
     error: No lockfile found for Python script `--locked`; run `uv lock --script` to generate a lockfile
     ");
 
+    // Running a script with `UV_LOCKED` should warn (not error).
+    uv_snapshot!(context.filters(), context.run().env("UV_LOCKED", "1").arg("main.py"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    warning: No lockfile found for Python script (ignoring `UV_LOCKED=1`); run `uv lock --script` to generate a lockfile
+    ");
+
     // If the script can't be resolved, we should reference the script.
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r#"
