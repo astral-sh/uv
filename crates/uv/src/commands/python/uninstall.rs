@@ -198,57 +198,29 @@ async fn do_uninstall(
             .insert(executable);
     }
 
-    let mut tasks = FuturesUnordered::new();
-    for installation in &matching_installations {
-        tasks.push(async {
-            (
-                installation.key(),
-                fs_err::tokio::remove_dir_all(installation.path()).await,
-            )
-        });
-    }
-
-    let mut uninstalled = IndexSet::<PythonInstallationKey>::default();
-    while let Some((key, result)) = tasks.next().await {
-        if let Err(err) = result {
-            errors.push((key.clone(), anyhow::Error::new(err)));
-        } else {
-            uninstalled.insert(key.clone());
-        }
-    }
-
-    // Read all existing managed installations and find the highest installed patch
-    // for each installed minor version. Ensure the minor version link directory
-    // is still valid.
-    let uninstalled_minor_versions: IndexSet<_> = uninstalled
+    // Pre-compute which minor versions will have no remaining installations
+    // after all matching installations are removed.
+    let matching_keys: IndexSet<_> = matching_installations
         .iter()
-        .map(PythonInstallationMinorVersionKey::ref_cast)
+        .map(|installation| installation.key().clone())
         .collect();
-    let remaining_installations: Vec<_> = installed_installations
-        .into_iter()
-        .filter(|installation| !uninstalled.contains(installation.key()))
-        .collect();
-
-    let remaining_minor_versions =
+    let anticipated_remaining_minor_versions =
         PythonInstallationMinorVersionKey::highest_installations_by_minor_version_key(
-            remaining_installations.iter(),
+            installed_installations
+                .iter()
+                .filter(|installation| !matching_keys.contains(installation.key())),
         );
 
-    for (_, installation) in remaining_minor_versions
-        .iter()
-        .filter(|(minor_version, _)| uninstalled_minor_versions.contains(minor_version))
-    {
-        installation.ensure_minor_version_link()?;
-    }
-    // For each uninstalled installation, check if there are no remaining installations
-    // for its minor version. If there are none remaining, remove the symlink directory
-    // (or junction on Windows) if it exists.
+    // Remove minor version links (symlinks on Unix, junctions on Windows) for minor
+    // versions that will have no remaining installations. This must happen before
+    // removing the installation directories so that the link targets still exist,
+    // which is required by `junction::get_target` on Windows.
     for installation in &matching_installations {
-        if !remaining_minor_versions.contains_key(installation.minor_version_key()) {
+        if !anticipated_remaining_minor_versions.contains_key(installation.minor_version_key()) {
             if let Some(minor_version_link) =
                 PythonMinorVersionLink::from_installation(installation)
             {
-                if minor_version_link.link_entry_exists() {
+                if minor_version_link.exists() {
                     let result = if cfg!(windows) {
                         fs_err::remove_dir(minor_version_link.symlink_directory.as_path())
                     } else {
@@ -273,6 +245,49 @@ async fn do_uninstall(
                 }
             }
         }
+    }
+
+    // Remove the installation directories.
+    let mut tasks = FuturesUnordered::new();
+    for installation in &matching_installations {
+        tasks.push(async {
+            (
+                installation.key(),
+                fs_err::tokio::remove_dir_all(installation.path()).await,
+            )
+        });
+    }
+
+    let mut uninstalled = IndexSet::<PythonInstallationKey>::default();
+    while let Some((key, result)) = tasks.next().await {
+        if let Err(err) = result {
+            errors.push((key.clone(), anyhow::Error::new(err)));
+        } else {
+            uninstalled.insert(key.clone());
+        }
+    }
+
+    // Update minor version links for minor versions that still have remaining
+    // installations, ensuring the link points to the new highest patch.
+    let uninstalled_minor_versions: IndexSet<_> = uninstalled
+        .iter()
+        .map(PythonInstallationMinorVersionKey::ref_cast)
+        .collect();
+    let remaining_installations: Vec<_> = installed_installations
+        .into_iter()
+        .filter(|installation| !uninstalled.contains(installation.key()))
+        .collect();
+
+    let remaining_minor_versions =
+        PythonInstallationMinorVersionKey::highest_installations_by_minor_version_key(
+            remaining_installations.iter(),
+        );
+
+    for (_, installation) in remaining_minor_versions
+        .iter()
+        .filter(|(minor_version, _)| uninstalled_minor_versions.contains(minor_version))
+    {
+        installation.ensure_minor_version_link()?;
     }
 
     // Report on any uninstalled installations.
