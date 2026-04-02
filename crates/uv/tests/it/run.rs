@@ -421,7 +421,7 @@ fn run_pep723_script() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No lockfile found for Python script `--locked`; run `uv lock --script` to generate a lockfile
+    error: Unable to find lockfile for Python script, but `--locked` was provided. To create a lockfile, run `uv lock --script`.
     ");
 
     // Running a script with `UV_LOCKED` should warn (not error).
@@ -991,7 +991,7 @@ fn run_pep723_script_lock() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No lockfile found for Python script `--locked`; run `uv lock --script` to generate a lockfile
+    error: Unable to find lockfile for Python script, but `--locked` was provided. To create a lockfile, run `uv lock --script`.
     ");
 
     // Explicitly lock the script.
