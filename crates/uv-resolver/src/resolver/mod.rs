@@ -4142,26 +4142,75 @@ fn find_environments(id: Id<PubGrubPackage>, state: &State<UvDependencyProvider>
         return MarkerTree::TRUE;
     }
 
-    // Retrieve the incompatibilities for the current package.
-    let Some(incompatibilities) = state.incompatibilities.get(&id) else {
-        return MarkerTree::FALSE;
-    };
+    // First, collect the reverse-dependency closure for the package. We limit the propagation
+    // below to this subgraph so cycles in unrelated packages don't matter here.
+    let mut ancestors = FxHashSet::default();
+    let mut stack = vec![id];
+    let mut root = None;
+    ancestors.insert(id);
 
-    // Find all dependencies on the current package.
-    let mut marker = MarkerTree::FALSE;
-    for index in incompatibilities {
-        let incompat = &state.incompatibility_store[*index];
-        if let Kind::FromDependencyOf(id1, _, id2, _) = &incompat.kind {
-            if id == *id2 {
-                marker.or({
-                    let mut marker = package.marker();
-                    marker.and(find_environments(*id1, state));
-                    marker
-                });
+    while let Some(current) = stack.pop() {
+        let Some(incompatibilities) = state.incompatibilities.get(&current) else {
+            continue;
+        };
+
+        for index in incompatibilities {
+            let incompat = &state.incompatibility_store[*index];
+            if let Kind::FromDependencyOf(parent, _, child, _) = &incompat.kind {
+                if current != *child {
+                    continue;
+                }
+                if ancestors.insert(*parent) {
+                    if state.package_store[*parent].is_root() {
+                        root = Some(*parent);
+                    }
+                    stack.push(*parent);
+                }
             }
         }
     }
-    marker
+
+    let Some(root) = root else {
+        return MarkerTree::FALSE;
+    };
+
+    // Propagate markers forward from the root through the collected subgraph. This reaches a
+    // fixpoint even in the presence of cycles, unlike the recursive reverse walk above.
+    let mut environments = FxHashMap::default();
+    let mut queue = VecDeque::from([root]);
+    environments.insert(root, MarkerTree::TRUE);
+
+    while let Some(current) = queue.pop_front() {
+        let Some(current_environment) = environments.get(&current).copied() else {
+            continue;
+        };
+        let Some(incompatibilities) = state.incompatibilities.get(&current) else {
+            continue;
+        };
+
+        for index in incompatibilities {
+            let incompat = &state.incompatibility_store[*index];
+            let Kind::FromDependencyOf(parent, _, child, _) = &incompat.kind else {
+                continue;
+            };
+            if current != *parent || !ancestors.contains(child) {
+                continue;
+            }
+
+            let mut next_environment = state.package_store[*child].marker();
+            next_environment.and(current_environment);
+
+            let entry = environments.entry(*child).or_insert(MarkerTree::FALSE);
+            let mut combined = *entry;
+            combined.or(next_environment);
+            if combined != *entry {
+                *entry = combined;
+                queue.push_back(*child);
+            }
+        }
+    }
+
+    environments.remove(&id).unwrap_or(MarkerTree::FALSE)
 }
 
 #[derive(Debug, Default, Clone)]
