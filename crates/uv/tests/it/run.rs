@@ -414,15 +414,14 @@ fn run_pep723_script() -> Result<()> {
     ----- stderr -----
     ");
 
-    // Running a script with `--locked` should warn.
+    // Running a script with `--locked` should error.
     uv_snapshot!(context.filters(), context.run().arg("--locked").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    Hello, world!
 
     ----- stderr -----
-    warning: No lockfile found for Python script (ignoring `--locked`); run `uv lock --script` to generate a lockfile
+    error: No lockfile found for Python script `--locked`; run `uv lock --script` to generate a lockfile
     ");
 
     // If the script can't be resolved, we should reference the script.
@@ -974,19 +973,14 @@ fn run_pep723_script_lock() -> Result<()> {
        "#
     })?;
 
-    // Without a lockfile, running with `--locked` should warn.
+    // Without a lockfile, running with `--locked` should error.
     uv_snapshot!(context.filters(), context.run().arg("--locked").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    Hello, world!
 
     ----- stderr -----
-    warning: No lockfile found for Python script (ignoring `--locked`); run `uv lock --script` to generate a lockfile
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + iniconfig==2.0.0
+    error: No lockfile found for Python script `--locked`; run `uv lock --script` to generate a lockfile
     ");
 
     // Explicitly lock the script.

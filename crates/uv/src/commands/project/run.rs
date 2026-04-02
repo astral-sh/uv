@@ -359,16 +359,16 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
             Some(environment.into_interpreter())
         } else {
-            // If no lockfile is found, warn against `--locked` and `--frozen`.
+            // If no lockfile is found, error for `--locked` and `--frozen`.
             if let LockCheck::Enabled(lock_check) = lock_check {
-                warn_user!(
-                    "No lockfile found for Python script (ignoring `{lock_check}`); run `{}` to generate a lockfile",
+                bail!(
+                    "No lockfile found for Python script `{lock_check}`; run `{}` to generate a lockfile",
                     "uv lock --script".green(),
                 );
             }
             if frozen.is_some() {
-                warn_user!(
-                    "No lockfile found for Python script (ignoring `--frozen`); run `{}` to generate a lockfile",
+                bail!(
+                    "No lockfile found for Python script `--frozen`; run `{}` to generate a lockfile",
                     "uv lock --script".green(),
                 );
             }
