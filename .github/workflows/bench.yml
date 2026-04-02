@@ -54,7 +54,7 @@ jobs:
         run: tar -cvf benchmarks-walltime.tar target/codspeed target/debug/uv .cache
 
       - name: "Upload benchmark artifacts"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: benchmarks-walltime
           path: benchmarks-walltime.tar
@@ -77,7 +77,7 @@ jobs:
           tool: cargo-codspeed
 
       - name: "Download benchmark artifacts"
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: benchmarks-walltime
 
