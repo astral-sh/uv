@@ -1173,7 +1173,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         hashes: HashPolicy<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         // Before running the build, check that the hashes match.
-        if hashes.is_validate() {
+        if hashes.requires_validation() {
             return Err(Error::HashesNotSupportedSourceTree(source.to_string()));
         }
 
@@ -1277,7 +1277,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         credentials_cache: &CredentialsCache,
     ) -> Result<ArchiveMetadata, Error> {
         // Before running the build, check that the hashes match.
-        if hashes.is_validate() {
+        if hashes.requires_validation() {
             return Err(Error::HashesNotSupportedSourceTree(source.to_string()));
         }
 
@@ -1565,7 +1565,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         client: &ManagedClient<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         // Before running the build, check that the hashes match.
-        if hashes.is_validate() {
+        if hashes.requires_validation() {
             return Err(Error::HashesNotSupportedGit(source.to_string()));
         }
 
@@ -1697,7 +1697,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         credentials_cache: &CredentialsCache,
     ) -> Result<ArchiveMetadata, Error> {
         // Before running the build, check that the hashes match.
-        if hashes.is_validate() {
+        if hashes.requires_validation() {
             return Err(Error::HashesNotSupportedGit(source.to_string()));
         }
 

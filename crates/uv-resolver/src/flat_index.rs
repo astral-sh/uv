@@ -8,9 +8,8 @@ use uv_client::{FlatIndexEntries, FlatIndexEntry};
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    File, HashComparison, HashPolicy, IncompatibleSource, IncompatibleWheel, IndexUrl,
-    PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility,
-    WheelCompatibility,
+    File, HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
+    RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility, WheelCompatibility,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -184,12 +183,11 @@ impl FlatDistributions {
         }
 
         // Check if hashes line up
-        let hash = if let HashPolicy::Validate(required) =
-            hasher.get_package(&filename.name, &filename.version)
-        {
+        let hash_policy = hasher.get_package(&filename.name, &filename.version);
+        let hash = if hash_policy.requires_validation() {
             if hashes.is_empty() {
                 HashComparison::Missing
-            } else if required.iter().any(|hash| hashes.contains(hash)) {
+            } else if hash_policy.matches(hashes) {
                 HashComparison::Matched
             } else {
                 HashComparison::Mismatched
@@ -225,12 +223,11 @@ impl FlatDistributions {
         };
 
         // Check if hashes line up.
-        let hash = if let HashPolicy::Validate(required) =
-            hasher.get_package(&filename.name, &filename.version)
-        {
+        let hash_policy = hasher.get_package(&filename.name, &filename.version);
+        let hash = if hash_policy.requires_validation() {
             if hashes.is_empty() {
                 HashComparison::Missing
-            } else if required.iter().any(|hash| hashes.contains(hash)) {
+            } else if hash_policy.matches(hashes) {
                 HashComparison::Matched
             } else {
                 HashComparison::Mismatched

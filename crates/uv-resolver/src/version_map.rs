@@ -556,7 +556,7 @@ impl VersionMapLazy {
         } else {
             if hashes.is_empty() {
                 HashComparison::Missing
-            } else if hashes.iter().any(|hash| required_hashes.contains(hash)) {
+            } else if hash_policy.matches(hashes) {
                 HashComparison::Matched
             } else {
                 HashComparison::Mismatched
@@ -620,7 +620,7 @@ impl VersionMapLazy {
         } else {
             if hashes.is_empty() {
                 HashComparison::Missing
-            } else if hashes.iter().any(|hash| required_hashes.contains(hash)) {
+            } else if hash_policy.matches(hashes) {
                 HashComparison::Matched
             } else {
                 HashComparison::Mismatched
