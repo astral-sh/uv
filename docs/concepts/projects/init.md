@@ -311,7 +311,7 @@ Hello from example-ext!
 If you only want to create a `pyproject.toml`, use the `--bare` option:
 
 ```console
-$ uv init example --bare
+$ uv init example-bare --bare
 ```
 
 uv will skip creating a Python version pin file, a README, and any source directories or files.
