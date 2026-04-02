@@ -846,6 +846,7 @@ fn python_upgrade_with_uninstall() {
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
+        .with_filtered_python_install_bin()
         .with_filtered_latest_python_versions();
 
     // Install an earlier patch version
@@ -879,4 +880,22 @@ fn python_upgrade_with_uninstall() {
         .filter_map(std::result::Result::ok)
         .any(|entry| entry.file_name().to_string_lossy().contains("3.12.6"));
     assert!(!old_exists, "Old version 3.12.6 should be deleted");
+
+    let python = context
+        .bin_dir
+        .child(format!("python3.12{}", std::env::consts::EXE_SUFFIX));
+    assert!(
+        python.exists(),
+        "python3.12 should still exist after cleanup"
+    );
+
+    let output = std::process::Command::new(python.path())
+        .arg("--version")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        format!("Python {LATEST_PYTHON_3_12}")
+    );
 }

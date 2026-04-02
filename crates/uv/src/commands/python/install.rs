@@ -1088,7 +1088,6 @@ fn remove_bin_links(bin: &Path, installation: &ManagedPythonInstallation) {
         return;
     };
 
-    let key = installation.key();
     for entry in entries.flatten() {
         let Ok(file_type) = entry.file_type() else {
             continue;
@@ -1096,15 +1095,10 @@ fn remove_bin_links(bin: &Path, installation: &ManagedPythonInstallation) {
         if file_type.is_dir() {
             continue;
         }
-        let Some(name) = entry.file_name().to_str().map(String::from) else {
-            continue;
-        };
-        if name == key.executable_name_minor()
-            || name == key.executable_name_major()
-            || name == key.executable_name()
-        {
-            if let Err(err) = fs_err::remove_file(entry.path()) {
-                warn!("Failed to remove {}: {err}", entry.path().display());
+        let path = entry.path();
+        if installation.is_bin_link(&path) {
+            if let Err(err) = fs_err::remove_file(&path) {
+                warn!("Failed to remove {}: {err}", path.display());
             }
         }
     }

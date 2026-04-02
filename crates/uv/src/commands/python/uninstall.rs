@@ -164,6 +164,10 @@ async fn do_uninstall(
                 );
             }
 
+            if outdated {
+                continue;
+            }
+
             if matches!(requests.as_slice(), [PythonRequest::Default]) {
                 writeln!(printer.stderr(), "No Python installations found")?;
                 return Ok(ExitStatus::Failure);

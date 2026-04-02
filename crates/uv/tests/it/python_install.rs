@@ -4454,3 +4454,39 @@ fn python_uninstall_outdated_with_target() {
      - cpython-3.12.1-[PLATFORM]
     ");
 }
+
+#[test]
+fn python_uninstall_outdated_without_installs() {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
+
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("--outdated"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Searching for Python installations
+    No outdated Python installations found
+    ");
+}
+
+#[test]
+fn python_uninstall_outdated_with_target_without_installs() {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
+
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("3.12").arg("--outdated"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Searching for Python versions matching: Python 3.12
+    No outdated Python installations found matching the requests
+    ");
+}
