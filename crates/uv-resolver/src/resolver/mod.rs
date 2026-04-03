@@ -25,19 +25,19 @@ use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier, IncompatibleDist,
     IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations, IndexMetadata,
-    IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement, ResolvedDist,
-    ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
+    IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement,
+    RequirementSource, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep440::{MIN_VERSION, Version, VersionSpecifiers, release_specifiers_to_ranges};
+use uv_pep440::{MIN_VERSION, Operator, Version, VersionSpecifiers, release_specifiers_to_ranges};
 use uv_pep508::{
     MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
 };
 use uv_platform_tags::{IncompatibleTag, Tags};
 use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKindRef, Conflicts, VerbatimParsedUrl};
 use uv_torch::TorchStrategy;
-use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
+use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider, RequestedRequirements};
 use uv_warnings::warn_user_once;
 
 use crate::candidate_selector::{Candidate, CandidateDist, CandidateSelector};
@@ -177,6 +177,29 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
         installed_packages: InstalledPackages,
         database: DistributionDatabase<'a, Context>,
     ) -> Result<Self, ResolveError> {
+        // Apply the `direct-pinned` bypass: disable `exclude-newer` for direct
+        // dependencies that use the `==` operator.
+        let mut exclude_newer = options.exclude_newer.clone();
+        if exclude_newer.allows_direct_pinned_bypass() {
+            let direct_pinned: Vec<PackageName> = manifest
+                .lookaheads
+                .iter()
+                .filter(|lookahead| lookahead.direct())
+                .flat_map(RequestedRequirements::requirements)
+                .chain(manifest.requirements.iter())
+                .filter(|req| {
+                    if let RequirementSource::Registry { specifier, .. } = &req.source {
+                        specifier.iter().any(|s| *s.operator() == Operator::Equal)
+                    } else {
+                        false
+                    }
+                })
+                .map(|req| req.name.clone())
+                .collect();
+            debug!("Applying direct-pinned bypass for: {:?}", direct_pinned);
+            exclude_newer.apply_direct_pinned_bypass(&direct_pinned);
+        }
+
         let provider = DefaultResolverProvider::new(
             database,
             flat_index,
@@ -184,7 +207,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             python_requirement.target(),
             AllowedYanks::from_manifest(&manifest, &env, options.dependency_mode),
             hasher,
-            options.exclude_newer.clone(),
+            exclude_newer,
             build_context.build_options(),
             build_context.capabilities(),
         );

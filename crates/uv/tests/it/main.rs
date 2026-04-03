@@ -54,6 +54,9 @@ mod lock;
 mod lock_conflict;
 
 #[cfg(all(feature = "test-python", feature = "test-pypi"))]
+mod lock_exclude_newer_allow_bypass;
+
+#[cfg(all(feature = "test-python", feature = "test-pypi"))]
 mod lock_exclude_newer_relative;
 
 mod lock_scenarios;

@@ -900,6 +900,11 @@ pub struct ResolverInstallerSchema {
     /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
     /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
     /// Calendar units such as months and years are not allowed.
+    ///
+    /// Also accepts a table form with an optional `allow-bypass` key:
+    /// `{ timestamp = "2006-12-02T02:07:43Z", allow-bypass = ["direct-pinned"] }`.
+    /// When `allow-bypass` contains `"direct-pinned"`, direct dependencies that are pinned
+    /// with `==` will bypass the `exclude-newer` filter.
     #[option(
         default = "None",
         value_type = "str",

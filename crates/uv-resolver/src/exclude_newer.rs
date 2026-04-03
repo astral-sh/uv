@@ -10,6 +10,23 @@ use serde::Deserialize;
 use serde::de::value::MapAccessDeserializer;
 use uv_normalize::PackageName;
 
+/// A bypass mode that allows certain packages to skip the `exclude-newer` filter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(rename_all = "kebab-case")]
+pub enum ExcludeNewerBypass {
+    /// Bypass `exclude-newer` for direct dependencies that are pinned with `==`.
+    DirectPinned,
+}
+
+impl std::fmt::Display for ExcludeNewerBypass {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::DirectPinned => write!(f, "direct-pinned"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExcludeNewerValueChange {
     /// A relative span changed to a new value
@@ -140,6 +157,8 @@ pub struct ExcludeNewerValue {
     timestamp: Timestamp,
     /// The span used to derive the [`Timestamp`], if any.
     span: Option<ExcludeNewerSpan>,
+    /// Bypass modes parsed from the table form, to be propagated to [`ExcludeNewer`].
+    allow_bypass: Vec<ExcludeNewerBypass>,
 }
 
 impl ExcludeNewerValue {
@@ -224,11 +243,14 @@ impl<'de> serde::Deserialize<'de> for ExcludeNewerValue {
         D: serde::Deserializer<'de>,
     {
         // Support both a simple string ("2024-03-11T00:00:00Z") and a table
-        // ({ timestamp = "2024-03-11T00:00:00Z", span = "P2W" })
+        // ({ timestamp = "2024-03-11T00:00:00Z", span = "P2W", allow-bypass = ["direct-pinned"] })
         #[derive(serde::Deserialize)]
+        #[serde(rename_all = "kebab-case")]
         struct TableForm {
             timestamp: Timestamp,
             span: Option<ExcludeNewerSpan>,
+            #[serde(default)]
+            allow_bypass: Vec<ExcludeNewerBypass>,
         }
 
         #[derive(serde::Deserialize)]
@@ -240,7 +262,11 @@ impl<'de> serde::Deserialize<'de> for ExcludeNewerValue {
 
         match Helper::deserialize(deserializer)? {
             Helper::String(s) => Self::from_str(&s).map_err(serde::de::Error::custom),
-            Helper::Table(table) => Ok(Self::new(table.timestamp, table.span)),
+            Helper::Table(table) => {
+                let mut value = Self::new(table.timestamp, table.span);
+                value.allow_bypass = table.allow_bypass;
+                Ok(value)
+            }
         }
     }
 }
@@ -261,9 +287,18 @@ impl ExcludeNewerValue {
         self.span.as_ref()
     }
 
+    /// Return the bypass modes parsed from the table form.
+    pub fn allow_bypass(&self) -> &[ExcludeNewerBypass] {
+        &self.allow_bypass
+    }
+
     /// Create a new [`ExcludeNewerValue`].
     pub fn new(timestamp: Timestamp, span: Option<ExcludeNewerSpan>) -> Self {
-        Self { timestamp, span }
+        Self {
+            timestamp,
+            span,
+            allow_bypass: Vec::new(),
+        }
     }
 }
 
@@ -272,6 +307,7 @@ impl From<Timestamp> for ExcludeNewerValue {
         Self {
             timestamp,
             span: None,
+            allow_bypass: Vec::new(),
         }
     }
 }
@@ -731,20 +767,33 @@ pub struct ExcludeNewer {
     /// Per-package timestamps that override the global timestamp.
     #[serde(default, skip_serializing_if = "FxHashMap::is_empty")]
     pub package: ExcludeNewerPackage,
+    /// Bypass modes that allow certain packages to skip the `exclude-newer` filter.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allow_bypass: Vec<ExcludeNewerBypass>,
 }
 
 impl ExcludeNewer {
     /// Create a new exclude newer configuration with just a global timestamp.
     pub fn global(global: ExcludeNewerValue) -> Self {
+        let allow_bypass = global.allow_bypass.clone();
         Self {
             global: Some(global),
             package: ExcludeNewerPackage::default(),
+            allow_bypass,
         }
     }
 
     /// Create a new exclude newer configuration.
     pub fn new(global: Option<ExcludeNewerValue>, package: ExcludeNewerPackage) -> Self {
-        Self { global, package }
+        let allow_bypass = global
+            .as_ref()
+            .map(|g| g.allow_bypass.clone())
+            .unwrap_or_default();
+        Self {
+            global,
+            package,
+            allow_bypass,
+        }
     }
 
     /// Create from CLI arguments.
@@ -753,8 +802,22 @@ impl ExcludeNewer {
         package: Vec<ExcludeNewerPackageEntry>,
     ) -> Self {
         let package: ExcludeNewerPackage = package.into_iter().collect();
+        let allow_bypass = global
+            .as_ref()
+            .map(|g| g.allow_bypass.clone())
+            .unwrap_or_default();
 
-        Self { global, package }
+        Self {
+            global,
+            package,
+            allow_bypass,
+        }
+    }
+
+    /// Returns whether the `direct-pinned` bypass is enabled.
+    pub fn allows_direct_pinned_bypass(&self) -> bool {
+        self.allow_bypass
+            .contains(&ExcludeNewerBypass::DirectPinned)
     }
 
     /// Returns the exclude-newer value for a specific package, returning `Some(value)` if the
@@ -772,6 +835,21 @@ impl ExcludeNewer {
     /// Returns true if this has any configuration (global or per-package).
     pub fn is_empty(&self) -> bool {
         self.global.is_none() && self.package.is_empty()
+    }
+
+    /// Disable `exclude-newer` for any direct dependency that is pinned with `==`,
+    /// by adding a [`PackageExcludeNewer::Disabled`] entry to the per-package map.
+    ///
+    /// This is a no-op if `allow-bypass` does not contain `direct-pinned`.
+    pub fn apply_direct_pinned_bypass(&mut self, direct_pinned_packages: &[PackageName]) {
+        if !self.allows_direct_pinned_bypass() {
+            return;
+        }
+        for name in direct_pinned_packages {
+            self.package
+                .entry(name.clone())
+                .or_insert(PackageExcludeNewer::Disabled);
+        }
     }
 
     pub fn compare(&self, other: &Self) -> Option<ExcludeNewerChange> {

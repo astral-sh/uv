@@ -54,7 +54,7 @@ use uv_small_str::SmallString;
 use uv_types::{BuildContext, HashStrategy};
 use uv_workspace::{Editability, WorkspaceMember};
 
-use crate::exclude_newer::ExcludeNewerSpan;
+use crate::exclude_newer::{ExcludeNewerBypass, ExcludeNewerSpan};
 use crate::fork_strategy::ForkStrategy;
 pub(crate) use crate::lock::export::PylockTomlPackage;
 pub use crate::lock::export::RequirementsTxtExport;
@@ -1197,6 +1197,15 @@ impl Lock {
                         }
                     }
                     options_table.insert("exclude-newer-package", Item::Table(package_table));
+                }
+
+                // Serialize allow-bypass as an array
+                if !exclude_newer.allow_bypass.is_empty() {
+                    let mut bypass_array = toml_edit::Array::new();
+                    for b in &exclude_newer.allow_bypass {
+                        bypass_array.push(b.to_string());
+                    }
+                    options_table.insert("exclude-newer-allow-bypass", value(bypass_array));
                 }
             }
 
@@ -2345,6 +2354,8 @@ struct ExcludeNewerWire {
     exclude_newer_span: Option<ExcludeNewerSpan>,
     #[serde(default, skip_serializing_if = "ExcludeNewerPackage::is_empty")]
     exclude_newer_package: ExcludeNewerPackage,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    exclude_newer_allow_bypass: Vec<ExcludeNewerBypass>,
 }
 
 impl From<ExcludeNewerWire> for ExcludeNewer {
@@ -2354,6 +2365,7 @@ impl From<ExcludeNewerWire> for ExcludeNewer {
                 .exclude_newer
                 .map(|timestamp| ExcludeNewerValue::new(timestamp, wire.exclude_newer_span)),
             package: wire.exclude_newer_package,
+            allow_bypass: wire.exclude_newer_allow_bypass,
         }
     }
 }
@@ -2368,6 +2380,7 @@ impl From<ExcludeNewer> for ExcludeNewerWire {
             exclude_newer: timestamp,
             exclude_newer_span: span,
             exclude_newer_package: exclude_newer.package,
+            exclude_newer_allow_bypass: exclude_newer.allow_bypass,
         }
     }
 }

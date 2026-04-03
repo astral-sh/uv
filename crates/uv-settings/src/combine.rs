@@ -257,6 +257,10 @@ impl Combine for ExcludeNewer {
             }
         }
 
+        if self.allow_bypass.is_empty() {
+            self.allow_bypass = other.allow_bypass;
+        }
+
         self
     }
 }
