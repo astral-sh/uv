@@ -81,6 +81,7 @@ pub enum ExcludeNewerChange {
     GlobalAdded(ExcludeNewerValue),
     GlobalRemoved,
     Package(ExcludeNewerPackageChange),
+    AllowBypassChanged,
 }
 
 impl ExcludeNewerChange {
@@ -88,7 +89,7 @@ impl ExcludeNewerChange {
     pub fn is_relative_timestamp_change(&self) -> bool {
         match self {
             Self::GlobalChanged(change) => change.is_relative_timestamp_change(),
-            Self::GlobalAdded(_) | Self::GlobalRemoved => false,
+            Self::GlobalAdded(_) | Self::GlobalRemoved | Self::AllowBypassChanged => false,
             Self::Package(change) => change.is_relative_timestamp_change(),
         }
     }
@@ -106,6 +107,9 @@ impl std::fmt::Display for ExcludeNewerChange {
             Self::GlobalRemoved => write!(f, "removal of global exclude newer"),
             Self::Package(change) => {
                 write!(f, "{change}")
+            }
+            Self::AllowBypassChanged => {
+                write!(f, "change of exclude newer allow-bypass setting")
             }
         }
     }
@@ -150,6 +154,7 @@ impl std::fmt::Display for ExcludeNewerPackageChange {
         }
     }
 }
+
 /// A timestamp that excludes files newer than it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExcludeNewerValue {
@@ -865,9 +870,17 @@ impl ExcludeNewer {
             (Some(_), None) => return Some(ExcludeNewerChange::GlobalRemoved),
             (None, None) => (),
         }
-        self.package
+        if let Some(change) = self
+            .package
             .compare(&other.package)
             .map(ExcludeNewerChange::Package)
+        {
+            return Some(change);
+        }
+        if self.allow_bypass != other.allow_bypass {
+            return Some(ExcludeNewerChange::AllowBypassChanged);
+        }
+        None
     }
 }
 
