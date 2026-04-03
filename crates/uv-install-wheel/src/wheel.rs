@@ -1299,7 +1299,7 @@ mod test {
         assert!(!is_apple_double(Path::new("_underscore")));
     }
 
-    /// Verify that `move_folder_recorded` skips macOS AppleDouble sidecar files.
+    /// Verify that `move_folder_recorded` skips macOS `AppleDouble` sidecar files.
     ///
     /// On exFAT, macOS creates `._*` sidecar files that are not in the wheel RECORD.
     /// Without filtering, `move_folder_recorded` fails with a RECORD mismatch error.
