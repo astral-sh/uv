@@ -214,11 +214,11 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             }
 
             // Extend the requirements with the resolved source trees.
-            requirements.extend(
-                resolutions
-                    .into_iter()
-                    .flat_map(|resolution| resolution.requirements),
-            );
+            let source_tree_requirements = resolutions
+                .into_iter()
+                .flat_map(|resolution| resolution.requirements)
+                .collect::<Vec<_>>();
+            requirements.extend(source_tree_requirements);
         }
 
         for (pyproject_path, groups) in groups {
@@ -250,14 +250,19 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             // Apply dependency-groups
             for (group_name, group) in &metadata.dependency_groups {
                 if groups.contains(group_name) {
-                    requirements.extend(group.iter().cloned().map(|group| Requirement {
-                        origin: Some(RequirementOrigin::Group(
-                            pyproject_path.clone(),
-                            metadata.name.clone(),
-                            group_name.clone(),
-                        )),
-                        ..group
-                    }));
+                    let group_requirements = group
+                        .iter()
+                        .cloned()
+                        .map(|group| Requirement {
+                            origin: Some(RequirementOrigin::Group(
+                                pyproject_path.clone(),
+                                metadata.name.clone(),
+                                group_name.clone(),
+                            )),
+                            ..group
+                        })
+                        .collect::<Vec<_>>();
+                    requirements.extend(group_requirements);
                 }
             }
         }

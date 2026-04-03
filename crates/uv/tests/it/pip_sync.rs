@@ -4461,7 +4461,7 @@ fn require_hashes_repeated_dependency() -> Result<()> {
     Ok(())
 }
 
-/// If a dependency is repeated, use the last hash provided. pip seems to use the _first_ hash.
+/// Repeated direct URL requirements merge compatible hashes instead of overwriting them.
 #[test]
 fn require_hashes_repeated_hash() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -4514,12 +4514,12 @@ fn require_hashes_repeated_hash() -> Result<()> {
     "
     );
 
-    // Use a different hash. The first hash is wrong, but that's fine, since we use the last hash.
+    // Use a different hash. The `sha512` is wrong, but the correct `sha256` still allows install.
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str(indoc::indoc! { r"
-            anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
-            anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=md5:420d85e19168705cdf0223621b18831a
+            anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+            anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha512:e30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
     " })?;
 
     uv_snapshot!(context.pip_sync()
@@ -4539,12 +4539,13 @@ fn require_hashes_repeated_hash() -> Result<()> {
     "
     );
 
-    // Use a different hash. The second hash is wrong. This should fail, since we use the last hash.
+    // Use different hashes, but both are wrong. This should fail because none of the merged
+    // hashes match.
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str(indoc::indoc! { r"
             anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
-            anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=md5:520d85e19168705cdf0223621b18831a
+            anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha512:e30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
     " })?;
 
     uv_snapshot!(context.pip_sync()
@@ -4561,10 +4562,50 @@ fn require_hashes_repeated_hash() -> Result<()> {
       ╰─▶ Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
 
           Expected:
-            md5:520d85e19168705cdf0223621b18831a
+            sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+            sha512:e30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
 
           Computed:
-            md5:420d85e19168705cdf0223621b18831a
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+    "
+    );
+
+    Ok(())
+}
+
+/// Repeated direct URL requirements merge hashes across nested requirements files.
+#[test]
+fn require_hashes_repeated_hash_multiple_files() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_a = context.temp_dir.child("requirements-a.txt");
+    requirements_a.write_str(indoc::indoc! { r"
+        anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+    " })?;
+
+    let requirements_b = context.temp_dir.child("requirements-b.txt");
+    requirements_b.write_str(indoc::indoc! { r"
+        anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha512:f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
+    " })?;
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc::indoc! { r"
+        -r requirements-a.txt
+        -r requirements-b.txt
+    " })?;
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
     "
     );
 
