@@ -497,7 +497,7 @@ impl<'lock> PylockToml {
                 Dist::Source(SourceDist::Git(dist)) => {
                     package.vcs = Some(PylockTomlVcs {
                         r#type: VcsKind::Git,
-                        url: Some(dist.git.repository().clone()),
+                        url: Some(dist.git.url().clone()),
                         path: None,
                         requested_revision: dist.git.reference().as_str().map(ToString::to_string),
                         commit_id: dist.git.precise().unwrap_or_else(|| {
@@ -794,7 +794,7 @@ impl<'lock> PylockToml {
             let vcs = match &sdist {
                 Some(SourceDist::Git(sdist)) => Some(PylockTomlVcs {
                     r#type: VcsKind::Git,
-                    url: Some(sdist.git.repository().clone()),
+                    url: Some(sdist.git.url().clone()),
                     path: None,
                     requested_revision: sdist.git.reference().as_str().map(ToString::to_string),
                     commit_id: sdist.git.precise().unwrap_or_else(|| {

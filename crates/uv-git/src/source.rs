@@ -9,7 +9,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use tracing::{debug, instrument};
 
-use uv_cache_key::{RepositoryUrl, cache_digest};
+use uv_cache_key::cache_digest;
 use uv_git_types::{GitOid, GitReference, GitUrl};
 use uv_redacted::DisplaySafeUrl;
 
@@ -61,22 +61,19 @@ impl GitSource {
     }
 
     /// Fetch the underlying Git repository at the given revision.
-    #[instrument(skip(self), fields(repository = %self.git.repository(), rev = ?self.git.precise()))]
+    #[instrument(skip(self), fields(repository = %self.git.url(), rev = ?self.git.precise()))]
     pub fn fetch(self) -> Result<Fetch> {
         let lfs_requested = self.git.lfs().enabled();
 
-        // Compute the canonical URL for the repository.
-        let canonical = RepositoryUrl::new(self.git.repository());
-
         // The path to the repo, within the Git database.
-        let ident = cache_digest(&canonical);
+        let ident = cache_digest(self.git.repository());
         let db_path = self.cache.join("db").join(&ident);
 
         // Authenticate the URL, if necessary.
-        let remote = if let Some(credentials) = GIT_STORE.get(&canonical) {
-            Cow::Owned(credentials.apply(self.git.repository().clone()))
+        let remote = if let Some(credentials) = GIT_STORE.get(self.git.repository()) {
+            Cow::Owned(credentials.apply(self.git.url().clone()))
         } else {
-            Cow::Borrowed(self.git.repository())
+            Cow::Borrowed(self.git.url())
         };
 
         // Fetch the commit, if we don't already have it. Wrapping this section in a closure makes
@@ -90,7 +87,7 @@ impl GitSource {
             // When requested, we also check if LFS artifacts have been fetched and validated.
             if let (Some(rev), Some(db)) = (self.git.precise(), &maybe_db) {
                 if db.contains(rev) && (!lfs_requested || db.contains_lfs_artifacts(rev)) {
-                    debug!("Using existing Git source `{}`", self.git.repository());
+                    debug!("Using existing Git source `{}`", self.git.url());
                     return Ok((
                         maybe_db
                             .unwrap()
@@ -110,7 +107,7 @@ impl GitSource {
                     if let Ok(oid) = maybe_commit.parse::<GitOid>() {
                         if db.contains(oid) && (!lfs_requested || db.contains_lfs_artifacts(oid)) {
                             // This reference is an exact commit. Treat it like it's locked.
-                            debug!("Using existing Git source `{}`", self.git.repository());
+                            debug!("Using existing Git source `{}`", self.git.url());
                             return Ok((
                                 maybe_db
                                     .unwrap()
@@ -126,7 +123,7 @@ impl GitSource {
             // ... otherwise, we use this state to update the Git database. Note that we still check
             // for being offline here, for example in the situation that we have a locked revision
             // but the database doesn't have it.
-            debug!("Updating Git source `{}`", self.git.repository());
+            debug!("Updating Git source `{}`", self.git.url());
 
             // Report the checkout operation to the reporter.
             let task = self.reporter.as_ref().map(|reporter| {
@@ -151,7 +148,7 @@ impl GitSource {
         let short_id = db.to_short_id(actual_rev)?;
 
         // Compute the canonical URL for the repository checkout.
-        let canonical = canonical.with_lfs(Some(lfs_requested));
+        let canonical = self.git.repository().clone().with_lfs(Some(lfs_requested));
         // Recompute the checkout hash when Git LFS is enabled as we want
         // to distinctly differentiate between LFS vs non-LFS source trees.
         let ident = if lfs_requested {

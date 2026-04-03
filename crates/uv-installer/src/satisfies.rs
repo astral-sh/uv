@@ -201,13 +201,13 @@ impl RequirementSatisfaction {
                     return Self::Mismatch;
                 }
 
-                if !RepositoryUrl::parse(installed_url).is_ok_and(|installed_url| {
-                    installed_url == RepositoryUrl::new(requested_git.repository())
-                }) {
+                if !RepositoryUrl::parse(installed_url)
+                    .is_ok_and(|installed_url| installed_url == *requested_git.repository())
+                {
                     debug!(
                         "Repository mismatch: {:?} vs. {:?}",
                         installed_url,
-                        requested_git.repository()
+                        requested_git.url()
                     );
                     return Self::Mismatch;
                 }

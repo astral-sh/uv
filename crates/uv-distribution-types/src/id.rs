@@ -106,18 +106,8 @@ impl VersionId {
 
     /// Create a new [`VersionId`] from a Git URL.
     pub fn from_git(git: &GitUrl, subdirectory: Option<&Path>) -> Self {
-        // TODO(charlie): Canonicalize repository URLs in `GitUrl` itself so `VersionId` does not
-        // need to rebuild the value here.
-        let git = GitUrl::from_fields(
-            DisplaySafeUrl::from(CanonicalUrl::new(git.repository())),
-            git.reference().clone(),
-            git.precise(),
-            git.lfs(),
-        )
-        .expect("canonical Git URLs should preserve supported schemes");
-
         Self::Git {
-            url: git,
+            url: git.clone(),
             subdirectory: subdirectory.map(Path::to_path_buf),
         }
     }
@@ -165,8 +155,8 @@ impl Display for VersionId {
                 write!(f, "{location}")
             }
             Self::Git { url, subdirectory } => {
-                let mut git_url = DisplaySafeUrl::parse(&format!("git+{}", url.repository()))
-                    .expect("canonical Git URLs should be display-safe");
+                let mut git_url = DisplaySafeUrl::parse(&format!("git+{}", url.url()))
+                    .expect("Git URLs should be display-safe");
                 if let Some(precise) = url.precise() {
                     let path = format!("{}@{}", git_url.path(), precise);
                     git_url.set_path(&path);

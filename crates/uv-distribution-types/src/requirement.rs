@@ -343,7 +343,7 @@ impl Display for Requirement {
                 git,
                 subdirectory,
             } => {
-                write!(f, " @ git+{}", git.repository())?;
+                write!(f, " @ git+{}", git.url())?;
                 if let Some(reference) = git.reference().as_str() {
                     write!(f, "@{reference}")?;
                 }
@@ -766,7 +766,7 @@ impl Display for RequirementSource {
                 git,
                 subdirectory,
             } => {
-                write!(f, " git+{}", git.repository())?;
+                write!(f, " git+{}", git.url())?;
                 if let Some(reference) = git.reference().as_str() {
                     write!(f, "@{reference}")?;
                 }
@@ -851,7 +851,7 @@ impl From<RequirementSource> for RequirementSourceWire {
                 subdirectory,
                 url: _,
             } => {
-                let mut url = git.repository().clone();
+                let mut url = git.url().clone();
 
                 // Remove the credentials.
                 url.remove_credentials();

@@ -1575,7 +1575,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .fetch(
                 resource.git,
-                client.unmanaged.disable_ssl(resource.git.repository()),
+                client.unmanaged.disable_ssl(resource.git.url()),
                 client.unmanaged.connectivity() == Connectivity::Offline,
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter
@@ -1730,7 +1730,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     resource.git,
                     client
                         .unmanaged
-                        .uncached_client(resource.git.repository())
+                        .uncached_client(resource.git.url())
                         .raw_client(),
                 )
                 .await
@@ -1790,7 +1790,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .fetch(
                 resource.git,
-                client.unmanaged.disable_ssl(resource.git.repository()),
+                client.unmanaged.disable_ssl(resource.git.url()),
                 client.unmanaged.connectivity() == Connectivity::Offline,
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter
@@ -2037,10 +2037,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .github_fast_path(
                 git,
-                client
-                    .unmanaged
-                    .uncached_client(git.repository())
-                    .raw_client(),
+                client.unmanaged.uncached_client(git.url()).raw_client(),
             )
             .await?
         {
@@ -2054,7 +2051,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .fetch(
                 git,
-                client.unmanaged.disable_ssl(git.repository()),
+                client.unmanaged.disable_ssl(git.url()),
                 client.unmanaged.connectivity() == Connectivity::Offline,
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter
@@ -2100,11 +2097,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         let content = client
             .managed(async |client| {
-                let response = client
-                    .uncached_client(git.repository())
-                    .get(&url)
-                    .send()
-                    .await?;
+                let response = client.uncached_client(git.url()).get(&url).send().await?;
 
                 // If the `pyproject.toml` does not exist, the GitHub API will return a 404.
                 if response.status() == StatusCode::NOT_FOUND {
