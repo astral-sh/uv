@@ -4,8 +4,8 @@ use uv_client::MetadataFormat;
 use uv_configuration::BuildOptions;
 use uv_distribution::{ArchiveMetadata, DistributionDatabase, Reporter};
 use uv_distribution_types::{
-    Dist, IndexCapabilities, IndexMetadata, IndexMetadataRef, InstalledDist, RequestedDist,
-    RequiresPython,
+    Dist, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef, InstalledDist,
+    RequestedDist, RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
@@ -117,6 +117,7 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext> {
     allowed_yanks: AllowedYanks,
     hasher: HashStrategy,
     exclude_newer: ExcludeNewer,
+    index_locations: &'a IndexLocations,
     build_options: &'a BuildOptions,
     capabilities: &'a IndexCapabilities,
 }
@@ -131,6 +132,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
         allowed_yanks: AllowedYanks,
         hasher: &'a HashStrategy,
         exclude_newer: ExcludeNewer,
+        index_locations: &'a IndexLocations,
         build_options: &'a BuildOptions,
         capabilities: &'a IndexCapabilities,
     ) -> Self {
@@ -142,9 +144,21 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
             allowed_yanks,
             hasher: hasher.clone(),
             exclude_newer,
+            index_locations,
             build_options,
             capabilities,
         }
+    }
+
+    fn effective_exclude_newer(
+        &self,
+        package_name: &PackageName,
+        index: &uv_distribution_types::IndexUrl,
+    ) -> Option<crate::ExcludeNewerValue> {
+        self.exclude_newer.exclude_newer_package_for_index(
+            package_name,
+            self.index_locations.exclude_newer_for(index),
+        )
     }
 }
 
@@ -184,7 +198,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                             &self.requires_python,
                             &self.allowed_yanks,
                             &self.hasher,
-                            Some(&self.exclude_newer),
+                            self.effective_exclude_newer(package_name, index),
                             flat_index
                                 .and_then(|flat_index| flat_index.get(package_name))
                                 .cloned(),

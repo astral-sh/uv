@@ -33522,6 +33522,170 @@ fn lock_exclude_newer_hint() -> Result<()> {
     Ok(())
 }
 
+/// Test that `exclude-newer` can be disabled for a specific index.
+///
+/// Regression test for:
+/// - <https://github.com/astral-sh/uv/issues/16813>
+/// - <https://github.com/astral-sh/uv/issues/18799>
+#[tokio::test]
+async fn lock_exclude_newer_index_disable() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [tool.uv]
+        exclude-newer = "2025-01-01T00:00:00Z"
+
+        [tool.uv.sources]
+        iniconfig = {{ index = "internal" }}
+
+        [[tool.uv.index]]
+        name = "internal"
+        url = "{proxy_uri}/no-upload-time/simple"
+        explicit = true
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: iniconfig-2.0.0.tar.gz is missing an upload date, but user provided: 2024-03-25T00:00:00Z
+    warning: iniconfig-2.0.0-py3-none-any.whl is missing an upload date, but user provided: 2024-03-25T00:00:00Z
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there are no versions of iniconfig and your project depends on iniconfig>=2, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2024-03-25T00:00:00Z. Consider using `exclude-newer-package` to override the cutoff for this package.
+    ");
+
+    pyproject_toml.write_str(&format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [tool.uv]
+        exclude-newer = "2025-01-01T00:00:00Z"
+
+        [tool.uv.sources]
+        iniconfig = {{ index = "internal" }}
+
+        [[tool.uv.index]]
+        name = "internal"
+        url = "{proxy_uri}/no-upload-time/simple"
+        explicit = true
+        exclude-newer = false
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(lock.contains(&format!(
+        "source = {{ registry = \"{}/no-upload-time/simple\" }}",
+        proxy.uri()
+    )));
+
+    Ok(())
+}
+
+/// Test that an index can set its own `exclude-newer` value, and package overrides still win.
+#[tokio::test]
+async fn lock_exclude_newer_index_value() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [tool.uv.sources]
+        iniconfig = {{ index = "internal" }}
+
+        [[tool.uv.index]]
+        name = "internal"
+        url = "{proxy_uri}/no-upload-time/simple"
+        explicit = true
+        exclude-newer = "2025-01-01T00:00:00Z"
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: iniconfig-2.0.0.tar.gz is missing an upload date, but user provided: 2025-01-01T00:00:00Z
+    warning: iniconfig-2.0.0-py3-none-any.whl is missing an upload date, but user provided: 2025-01-01T00:00:00Z
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there are no versions of iniconfig and your project depends on iniconfig>=2, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: `iniconfig` was filtered by the index-specific `exclude-newer` setting to only include packages uploaded before 2025-01-01T00:00:00Z. Consider updating that index's cutoff, setting it to `false`, or using `exclude-newer-package` to override the cutoff for this package.
+    ");
+
+    pyproject_toml.write_str(&format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [tool.uv]
+        exclude-newer-package = {{ iniconfig = false }}
+
+        [tool.uv.sources]
+        iniconfig = {{ index = "internal" }}
+
+        [[tool.uv.index]]
+        name = "internal"
+        url = "{proxy_uri}/no-upload-time/simple"
+        explicit = true
+        exclude-newer = "2025-01-01T00:00:00Z"
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Test that lockfile validation includes explicit indexes from path dependencies.
 /// <https://github.com/astral-sh/uv/issues/11419>
 #[tokio::test]

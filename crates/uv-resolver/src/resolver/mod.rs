@@ -78,10 +78,7 @@ use crate::resolver::system::SystemDependency;
 pub(crate) use crate::resolver::urls::Urls;
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::yanks::AllowedYanks;
-use crate::{
-    DependencyMode, ExcludeNewer, Exclusions, FlatIndex, Options, ResolutionMode, VersionMap,
-    marker,
-};
+use crate::{DependencyMode, Exclusions, FlatIndex, Options, ResolutionMode, VersionMap, marker};
 pub(crate) use provider::MetadataUnavailable;
 
 mod availability;
@@ -185,6 +182,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             AllowedYanks::from_manifest(&manifest, &env, options.dependency_mode),
             hasher,
             options.exclude_newer.clone(),
+            build_context.locations(),
             build_context.build_options(),
             build_context.capabilities(),
         );
@@ -372,7 +370,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     state.fork_indexes,
                                     state.env,
                                     self.current_environment.clone(),
-                                    Some(&self.options.exclude_newer),
                                     &visited,
                                 ));
                             }
@@ -2693,7 +2690,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         fork_indexes: ForkIndexes,
         env: ResolverEnvironment,
         current_environment: MarkerEnvironment,
-        exclude_newer: Option<&ExcludeNewer>,
         visited: &FxHashSet<PackageName>,
     ) -> ResolveError {
         err = NoSolutionError::collapse_local_version_segments(NoSolutionError::collapse_proxies(
@@ -2752,9 +2748,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                         for (version, dists) in version_map.iter(&Ranges::full()) {
                             // Don't show versions removed by excluded-newer in hints.
-                            if let Some(exclude_newer) =
-                                exclude_newer.and_then(|en| en.exclude_newer_package(name))
-                            {
+                            if let Some(exclude_newer) = version_map.exclude_newer() {
                                 let Some(prioritized_dist) = dists.prioritized_dist() else {
                                     continue;
                                 };

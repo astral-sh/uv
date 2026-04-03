@@ -20,6 +20,7 @@ use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, Tags};
 
 use crate::candidate_selector::CandidateSelector;
 use crate::error::{ErrorTree, PrefixMatch};
+use crate::exclude_newer::EffectiveExcludeNewerSource;
 use crate::fork_indexes::ForkIndexes;
 use crate::fork_urls::ForkUrls;
 use crate::prerelease::AllowPrerelease;
@@ -641,7 +642,28 @@ impl PubGrubReportFormatter<'_> {
                         output_hints,
                     );
 
-                    if let Some(exclude_newer) = options.exclude_newer.exclude_newer_package(name) {
+                    let exclude_newer = if let Some(index) = fork_indexes.get(name) {
+                        options
+                            .exclude_newer
+                            .exclude_newer_package_for_index_with_source(
+                                name,
+                                index_locations.exclude_newer_for(index.url()),
+                            )
+                    } else {
+                        options
+                            .exclude_newer
+                            .exclude_newer_package(name)
+                            .map(|exclude_newer| {
+                                let source = if options.exclude_newer.package.contains_key(name) {
+                                    EffectiveExcludeNewerSource::Package
+                                } else {
+                                    EffectiveExcludeNewerSource::Global
+                                };
+                                (exclude_newer, source)
+                            })
+                    };
+
+                    if let Some((exclude_newer, source)) = exclude_newer {
                         if self
                             .available_versions
                             .get(name)
@@ -650,7 +672,7 @@ impl PubGrubReportFormatter<'_> {
                         {
                             output_hints.insert(PubGrubHint::ExcludeNewer {
                                 package: name.clone(),
-                                per_package: options.exclude_newer.package.contains_key(name),
+                                source,
                                 exclude_newer,
                             });
                         }
@@ -1248,7 +1270,7 @@ pub(crate) enum PubGrubHint {
     /// All versions of a package were excluded by `exclude-newer`.
     ExcludeNewer {
         package: PackageName,
-        per_package: bool,
+        source: EffectiveExcludeNewerSource,
         // excluded from `PartialEq` and `Hash`
         exclude_newer: ExcludeNewerValue,
     },
@@ -1337,7 +1359,7 @@ enum PubGrubHintCore {
     },
     ExcludeNewer {
         package: PackageName,
-        per_package: bool,
+        source: EffectiveExcludeNewerSource,
     },
     DisjointPythonVersion,
     DisjointEnvironment,
@@ -1408,13 +1430,8 @@ impl From<PubGrubHint> for PubGrubHintCore {
             PubGrubHint::AbiTags { package, .. } => Self::AbiTags { package },
             PubGrubHint::PlatformTags { package, .. } => Self::PlatformTags { package },
             PubGrubHint::ExcludeNewer {
-                package,
-                per_package,
-                ..
-            } => Self::ExcludeNewer {
-                package,
-                per_package,
-            },
+                package, source, ..
+            } => Self::ExcludeNewer { package, source },
             PubGrubHint::DisjointPythonVersion { .. } => Self::DisjointPythonVersion,
             PubGrubHint::DisjointEnvironment => Self::DisjointEnvironment,
         }
@@ -1849,34 +1866,43 @@ impl std::fmt::Display for PubGrubHint {
             }
             Self::ExcludeNewer {
                 package,
-                per_package,
+                source,
                 exclude_newer,
-            } => {
-                if *per_package {
-                    write!(
-                        f,
-                        "{}{} `{}` was filtered by `{}` to only include packages uploaded \
+            } => match source {
+                EffectiveExcludeNewerSource::Package => write!(
+                    f,
+                    "{}{} `{}` was filtered by `{}` to only include packages uploaded \
                         before {}. Consider removing the setting or updating it to a later date.",
-                        "hint".bold().cyan(),
-                        ":".bold(),
-                        package.cyan(),
-                        "exclude-newer-package".green(),
-                        exclude_newer.cyan(),
-                    )
-                } else {
-                    write!(
-                        f,
-                        "{}{} `{}` was filtered by `{}` to only include packages uploaded \
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package.cyan(),
+                    "exclude-newer-package".green(),
+                    exclude_newer.cyan(),
+                ),
+                EffectiveExcludeNewerSource::Global => write!(
+                    f,
+                    "{}{} `{}` was filtered by `{}` to only include packages uploaded \
                         before {}. Consider using `{}` to override the cutoff for this package.",
-                        "hint".bold().cyan(),
-                        ":".bold(),
-                        package.cyan(),
-                        "exclude-newer".green(),
-                        exclude_newer.cyan(),
-                        "exclude-newer-package".green(),
-                    )
-                }
-            }
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package.cyan(),
+                    "exclude-newer".green(),
+                    exclude_newer.cyan(),
+                    "exclude-newer-package".green(),
+                ),
+                EffectiveExcludeNewerSource::Index => write!(
+                    f,
+                    "{}{} `{}` was filtered by the index-specific `{}` setting to only include \
+                        packages uploaded before {}. Consider updating that index's cutoff, setting \
+                        it to `false`, or using `{}` to override the cutoff for this package.",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package.cyan(),
+                    "exclude-newer".green(),
+                    exclude_newer.cyan(),
+                    "exclude-newer-package".green(),
+                ),
+            },
             Self::DisjointPythonVersion { python_version } => {
                 write!(
                     f,

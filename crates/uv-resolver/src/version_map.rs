@@ -23,7 +23,7 @@ use uv_types::HashStrategy;
 use uv_warnings::warn_user_once;
 
 use crate::flat_index::FlatDistributions;
-use crate::{ExcludeNewer, ExcludeNewerValue, yanks::AllowedYanks};
+use crate::{ExcludeNewerValue, yanks::AllowedYanks};
 
 /// A map from versions to distributions.
 #[derive(Debug)]
@@ -51,7 +51,7 @@ impl VersionMap {
         requires_python: &RequiresPython,
         allowed_yanks: &AllowedYanks,
         hasher: &HashStrategy,
-        exclude_newer: Option<&ExcludeNewer>,
+        exclude_newer: Option<ExcludeNewerValue>,
         flat_index: Option<FlatDistributions>,
         build_options: &BuildOptions,
     ) -> Self {
@@ -127,7 +127,7 @@ impl VersionMap {
                 allowed_yanks: allowed_yanks.clone(),
                 hasher: hasher.clone(),
                 requires_python: requires_python.clone(),
-                exclude_newer: exclude_newer.and_then(|en| en.exclude_newer_package(package_name)),
+                exclude_newer,
             }),
         }
     }
@@ -185,6 +185,14 @@ impl VersionMap {
         match &self.inner {
             VersionMapInner::Eager(_) => None,
             VersionMapInner::Lazy(lazy) => Some(&lazy.index),
+        }
+    }
+
+    /// Return the effective `exclude-newer` cutoff for this version map, if any.
+    pub(crate) fn exclude_newer(&self) -> Option<&ExcludeNewerValue> {
+        match &self.inner {
+            VersionMapInner::Eager(_) => None,
+            VersionMapInner::Lazy(lazy) => lazy.exclude_newer.as_ref(),
         }
     }
 
