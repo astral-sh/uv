@@ -74,7 +74,7 @@ use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
 use crate::settings::{
-    FrozenSource, GlobalSettings, LockCheck, ResolverInstallerSettings, ResolverSettings,
+    FrozenSource, GlobalSettings, LockCheck, LockCheckSource, ResolverInstallerSettings, ResolverSettings,
 };
 
 /// Run a command.
@@ -359,18 +359,12 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
             Some(environment.into_interpreter())
         } else {
-            // If no lockfile is found, warn against `--locked` and `--frozen`.
+            // If no lockfile is found, fail if `--locked` or `--frozen` was provided.
             if let LockCheck::Enabled(lock_check) = lock_check {
-                warn_user!(
-                    "No lockfile found for Python script (ignoring `{lock_check}`); run `{}` to generate a lockfile",
-                    "uv lock --script".green(),
-                );
+                return Err(ProjectError::MissingLockfile(lock_check.into()).into());
             }
-            if frozen.is_some() {
-                warn_user!(
-                    "No lockfile found for Python script (ignoring `--frozen`); run `{}` to generate a lockfile",
-                    "uv lock --script".green(),
-                );
+            if let Some(frozen_source) = frozen {
+                return Err(ProjectError::MissingLockfile(frozen_source.into()).into());
             }
 
             // Install the script requirements, if necessary. Otherwise, use an isolated environment.
@@ -1298,6 +1292,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             .dedup()
             .map(PathBuf::from)
             .chain(
+
                 std::env::var_os(EnvVars::PATH)
                     .as_ref()
                     .iter()
@@ -1722,7 +1717,8 @@ impl RunCommand {
     }
 
     /// Convert a [`RunCommand`] into a [`Command`].
-    fn as_command(&self, interpreter: &Interpreter) -> Command {
+    fn as_command(
+0026self, interpreter: &Interpreter) -> Command {
         match self {
             Self::Python(args) => {
                 let mut process = Command::new(interpreter.sys_executable());
