@@ -54,7 +54,6 @@ use uv_small_str::SmallString;
 use uv_types::{BuildContext, HashStrategy};
 use uv_workspace::{Editability, WorkspaceMember};
 
-use crate::exclude_newer::ExcludeNewerSpan;
 use crate::fork_strategy::ForkStrategy;
 pub(crate) use crate::lock::export::PylockTomlPackage;
 pub use crate::lock::export::RequirementsTxtExport;
@@ -65,8 +64,8 @@ pub use crate::lock::tree::TreeDisplay;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{
-    ExcludeNewer, ExcludeNewerPackage, ExcludeNewerValue, InMemoryIndex, MetadataResponse,
-    PackageExcludeNewer, PrereleaseMode, ResolutionMode, ResolverOutput,
+    ExcludeNewer, ExcludeNewerOverride, ExcludeNewerPackage, ExcludeNewerSpan, ExcludeNewerValue,
+    InMemoryIndex, MetadataResponse, PrereleaseMode, ResolutionMode, ResolverOutput,
 };
 
 mod export;
@@ -1173,7 +1172,7 @@ impl Lock {
                     let mut package_table = toml_edit::Table::new();
                     for (name, setting) in &exclude_newer.package {
                         match setting {
-                            PackageExcludeNewer::Enabled(exclude_newer_value) => {
+                            ExcludeNewerOverride::Enabled(exclude_newer_value) => {
                                 if let Some(span) = exclude_newer_value.span() {
                                     // Serialize as inline table with timestamp and span
                                     let mut inline = toml_edit::InlineTable::new();
@@ -1191,7 +1190,7 @@ impl Lock {
                                     );
                                 }
                             }
-                            PackageExcludeNewer::Disabled => {
+                            ExcludeNewerOverride::Disabled => {
                                 package_table.insert(name.as_ref(), value(false));
                             }
                         }
