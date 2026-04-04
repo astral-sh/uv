@@ -4053,6 +4053,8 @@ pub(crate) struct ResolverSettings {
     pub(crate) resolution: ResolutionMode,
     pub(crate) sources: NoSources,
     pub(crate) torch_backend: Option<TorchMode>,
+    pub(crate) cuda_driver_version: Option<String>,
+    pub(crate) amd_gpu_architecture: Option<String>,
     pub(crate) upgrade: Upgrade,
 }
 
@@ -4082,7 +4084,11 @@ impl ResolverSettings {
                 .unwrap_or_default(),
         ));
 
-        Self::from(options)
+        Self {
+            cuda_driver_version: environment.cuda_driver_version.clone(),
+            amd_gpu_architecture: environment.amd_gpu_architecture.clone(),
+            ..Self::from(options)
+        }
     }
 }
 
@@ -4122,6 +4128,8 @@ impl From<ResolverOptions> for ResolverSettings {
             exclude_newer: value.exclude_newer,
             link_mode: value.link_mode.unwrap_or_default(),
             torch_backend: value.torch_backend,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             sources: NoSources::from_args(
                 value.no_sources,
                 value.no_sources_package.unwrap_or_default(),
@@ -4163,7 +4171,15 @@ impl ResolverInstallerSettings {
             ),
         );
 
-        Self::from(options)
+        let base = Self::from(options);
+        Self {
+            resolver: ResolverSettings {
+                cuda_driver_version: environment.cuda_driver_version.clone(),
+                amd_gpu_architecture: environment.amd_gpu_architecture.clone(),
+                ..base.resolver
+            },
+            ..base
+        }
     }
 }
 
@@ -4239,6 +4255,8 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                     value.no_sources_package.unwrap_or_default(),
                 ),
                 torch_backend: value.torch_backend,
+                cuda_driver_version: None,
+                amd_gpu_architecture: None,
                 upgrade: value.upgrade.unwrap_or_default(),
             },
             compile_bytecode: value.compile_bytecode.unwrap_or_default(),
@@ -4265,6 +4283,8 @@ pub(crate) struct PipSettings {
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) torch_backend: Option<TorchMode>,
+    pub(crate) cuda_driver_version: Option<String>,
+    pub(crate) amd_gpu_architecture: Option<String>,
     pub(crate) build_isolation: BuildIsolation,
     pub(crate) extra_build_dependencies: ExtraBuildDependencies,
     pub(crate) extra_build_variables: ExtraBuildVariables,
@@ -4570,6 +4590,8 @@ impl PipSettings {
                 .combine(config_settings_package)
                 .unwrap_or_default(),
             torch_backend: args.torch_backend.combine(torch_backend),
+            cuda_driver_version: environment.cuda_driver_version.clone(),
+            amd_gpu_architecture: environment.amd_gpu_architecture.clone(),
             python_version: args.python_version.combine(python_version),
             python_platform: args.python_platform.combine(python_platform),
             universal: args.universal.combine(universal).unwrap_or_default(),
