@@ -142,6 +142,8 @@ fn pip_compile_baseline() {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -325,6 +327,8 @@ fn pip_install_baseline() {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -501,6 +505,8 @@ fn lock_baseline() {
             resolution: Highest,
             sources: None,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
@@ -628,6 +634,8 @@ fn version_baseline() {
                 resolution: Highest,
                 sources: None,
                 torch_backend: None,
+                cuda_driver_version: None,
+                amd_gpu_architecture: None,
                 upgrade: Upgrade {
                     strategy: None,
                     constraints: {},
@@ -793,6 +801,8 @@ fn tool_install_baseline() {
                 resolution: Highest,
                 sources: None,
                 torch_backend: None,
+                cuda_driver_version: None,
+                amd_gpu_architecture: None,
                 upgrade: Upgrade {
                     strategy: None,
                     constraints: {},
@@ -895,7 +905,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                  flat_index: [],
                  no_index: false,
              },
-    @@ -118,7 +156,7 @@
+    @@ -120,7 +158,7 @@
              allow_empty_requirements: false,
              strict: false,
              dependency_mode: Transitive,
@@ -904,7 +914,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
              prerelease: IfNecessaryOrExplicit,
              fork_strategy: RequiresPython,
              dependency_metadata: DependencyMetadata(
-    @@ -130,7 +168,7 @@
+    @@ -132,7 +170,7 @@
              no_annotate: false,
              no_header: false,
              custom_compile_command: None,
@@ -924,7 +934,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             .arg("--resolution=highest"), @"
     --- old
     +++ new
-    @@ -156,7 +156,7 @@
+    @@ -158,7 +158,7 @@
              allow_empty_requirements: false,
              strict: false,
              dependency_mode: Transitive,
@@ -945,7 +955,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             .arg("--no-generate-hashes"), @"
     --- old
     +++ new
-    @@ -168,7 +168,7 @@
+    @@ -170,7 +170,7 @@
              no_annotate: false,
              no_header: false,
              custom_compile_command: None,
@@ -1051,7 +1061,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                  flat_index: [],
                  no_index: false,
              },
-    @@ -118,7 +156,7 @@
+    @@ -120,7 +158,7 @@
              allow_empty_requirements: false,
              strict: false,
              dependency_mode: Transitive,
@@ -1060,7 +1070,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
              prerelease: IfNecessaryOrExplicit,
              fork_strategy: RequiresPython,
              dependency_metadata: DependencyMetadata(
-    @@ -130,7 +168,7 @@
+    @@ -132,7 +170,7 @@
              no_annotate: false,
              no_header: false,
              custom_compile_command: None,
@@ -1111,7 +1121,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                          format: Simple,
                          publish_url: None,
                          authenticate: Auto,
-    @@ -176,7 +174,9 @@
+    @@ -178,7 +176,9 @@
                  {},
              ),
              python_version: None,
@@ -1431,7 +1441,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         .arg("requirements.in"), @"
     --- old
     +++ new
-    @@ -118,7 +118,7 @@
+    @@ -120,7 +120,7 @@
              allow_empty_requirements: false,
              strict: false,
              dependency_mode: Transitive,
@@ -1558,7 +1568,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         .arg("--resolution=lowest-direct"), @"
     --- old
     +++ new
-    @@ -189,7 +189,7 @@
+    @@ -191,7 +191,7 @@
              allow_empty_requirements: false,
              strict: false,
              dependency_mode: Transitive,
@@ -1608,7 +1618,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @"
     --- old
     +++ new
-    @@ -118,7 +118,7 @@
+    @@ -120,7 +120,7 @@
              allow_empty_requirements: false,
              strict: false,
              dependency_mode: Transitive,
@@ -1635,7 +1645,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @"
     --- old
     +++ new
-    @@ -130,7 +130,7 @@
+    @@ -132,7 +132,7 @@
              no_annotate: false,
              no_header: false,
              custom_compile_command: None,
@@ -1716,7 +1726,7 @@ fn resolve_system_configuration_can_be_disabled() -> anyhow::Result<()> {
         .env_remove(EnvVars::UV_NO_SYSTEM_CONFIG), @"
     --- old
     +++ new
-    @@ -118,7 +118,7 @@
+    @@ -120,7 +120,7 @@
              allow_empty_requirements: false,
              strict: false,
              dependency_mode: Transitive,
@@ -1800,7 +1810,7 @@ fn resolve_tool() -> anyhow::Result<()> {
     +            resolution: LowestDirect,
                  sources: None,
                  torch_backend: None,
-                 upgrade: Upgrade {
+                 cuda_driver_version: None,
     "
     );
 
@@ -1852,7 +1862,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
         .arg("requirements.in"), @"
     --- old
     +++ new
-    @@ -118,7 +118,7 @@
+    @@ -120,7 +120,7 @@
              allow_empty_requirements: false,
              strict: false,
              dependency_mode: Transitive,
@@ -1966,7 +1976,7 @@ fn resolve_both() -> anyhow::Result<()> {
                  flat_index: [],
                  no_index: false,
              },
-    @@ -118,7 +156,7 @@
+    @@ -120,7 +158,7 @@
              allow_empty_requirements: false,
              strict: false,
              dependency_mode: Transitive,
@@ -1975,7 +1985,7 @@ fn resolve_both() -> anyhow::Result<()> {
              prerelease: IfNecessaryOrExplicit,
              fork_strategy: RequiresPython,
              dependency_metadata: DependencyMetadata(
-    @@ -130,7 +168,7 @@
+    @@ -132,7 +170,7 @@
              no_annotate: false,
              no_header: false,
              custom_compile_command: None,
@@ -1984,7 +1994,7 @@ fn resolve_both() -> anyhow::Result<()> {
              config_setting: ConfigSettings(
                  {},
              ),
-    @@ -168,3 +206,7 @@
+    @@ -170,3 +208,7 @@
      }
 
      ----- stderr -----
@@ -2098,7 +2108,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
                  flat_index: [],
                  no_index: false,
              },
-    @@ -118,7 +156,7 @@
+    @@ -120,7 +158,7 @@
              allow_empty_requirements: false,
              strict: false,
              dependency_mode: Transitive,
@@ -2107,7 +2117,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
              prerelease: IfNecessaryOrExplicit,
              fork_strategy: RequiresPython,
              dependency_metadata: DependencyMetadata(
-    @@ -130,7 +168,7 @@
+    @@ -132,7 +170,7 @@
              no_annotate: false,
              no_header: false,
              custom_compile_command: None,
@@ -2116,7 +2126,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
              config_setting: ConfigSettings(
                  {},
              ),
-    @@ -168,3 +206,4 @@
+    @@ -170,3 +208,4 @@
      }
 
      ----- stderr -----
@@ -2311,7 +2321,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
                  flat_index: [],
                  no_index: false,
              },
-    @@ -118,7 +154,7 @@
+    @@ -120,7 +156,7 @@
              allow_empty_requirements: false,
              strict: false,
              dependency_mode: Transitive,
@@ -2320,7 +2330,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
              prerelease: IfNecessaryOrExplicit,
              fork_strategy: RequiresPython,
              dependency_metadata: DependencyMetadata(
-    @@ -130,7 +166,7 @@
+    @@ -132,7 +168,7 @@
              no_annotate: false,
              no_header: false,
              custom_compile_command: None,
@@ -2447,7 +2457,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         .current_dir(&child), @"
     --- old
     +++ new
-    @@ -118,7 +118,7 @@
+    @@ -120,7 +120,7 @@
              allow_empty_requirements: false,
              strict: false,
              dependency_mode: Transitive,
@@ -2780,7 +2790,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             .arg("--show-settings"), @"
     --- old
     +++ new
-    @@ -154,9 +154,7 @@
+    @@ -156,9 +156,7 @@
              link_mode: Clone,
              compile_bytecode: false,
              sources: None,
@@ -2802,7 +2812,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             .arg("--show-settings"), @"
     --- old
     +++ new
-    @@ -155,7 +155,7 @@
+    @@ -157,7 +157,7 @@
              compile_bytecode: false,
              sources: None,
              hash_checking: Some(
@@ -2822,7 +2832,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             .arg("--show-settings"), @"
     --- old
     +++ new
-    @@ -154,9 +154,7 @@
+    @@ -156,9 +156,7 @@
              link_mode: Clone,
              compile_bytecode: false,
              sources: None,
@@ -2844,7 +2854,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             .arg("--show-settings"), @"
     --- old
     +++ new
-    @@ -154,9 +154,7 @@
+    @@ -156,9 +156,7 @@
              link_mode: Clone,
              compile_bytecode: false,
              sources: None,
@@ -2977,7 +2987,7 @@ fn preview_features() {
         @"
     --- old
     +++ new
-    @@ -122,3 +122,4 @@
+    @@ -124,3 +124,4 @@
      }
 
      ----- stderr -----
@@ -2997,7 +3007,7 @@ fn preview_features() {
         @"
     --- old
     +++ new
-    @@ -122,3 +122,4 @@
+    @@ -124,3 +124,4 @@
      }
 
      ----- stderr -----
@@ -3076,7 +3086,7 @@ fn system_certs_cli_aliases_override_env() {
         .env(EnvVars::UV_SYSTEM_CERTS, "1"), @"
     --- old
     +++ new
-    @@ -119,3 +119,4 @@
+    @@ -121,3 +121,4 @@
      }
 
      ----- stderr -----
@@ -3090,7 +3100,7 @@ fn system_certs_cli_aliases_override_env() {
         .env(EnvVars::UV_NATIVE_TLS, "1"), @"
     --- old
     +++ new
-    @@ -119,3 +119,4 @@
+    @@ -121,3 +121,4 @@
      }
 
      ----- stderr -----
@@ -3140,7 +3150,7 @@ fn system_certs_config_aliases() -> anyhow::Result<()> {
         .arg("--show-settings"), @"
     --- old
     +++ new
-    @@ -119,3 +119,4 @@
+    @@ -121,3 +121,4 @@
      }
 
      ----- stderr -----
@@ -3181,7 +3191,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         .arg("requirements.in"), @r#"
     --- old
     +++ new
-    @@ -160,7 +160,14 @@
+    @@ -162,7 +162,14 @@
                  Verify,
              ),
              upgrade: Upgrade {
@@ -3220,7 +3230,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         @r#"
     --- old
     +++ new
-    @@ -160,14 +160,7 @@
+    @@ -162,14 +162,7 @@
                  Verify,
              ),
              upgrade: Upgrade {
@@ -3255,7 +3265,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             .arg("requirements.in"), @r#"
     --- old
     +++ new
-    @@ -160,14 +160,7 @@
+    @@ -162,14 +162,7 @@
                  Verify,
              ),
              upgrade: Upgrade {
@@ -3288,7 +3298,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             .arg("requirements.in"), @r#"
     --- old
     +++ new
-    @@ -163,7 +163,7 @@
+    @@ -165,7 +165,7 @@
                  strategy: Some(
                      {
                          PackageName(
@@ -3308,7 +3318,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             .arg("requirements.in"), @r#"
     --- old
     +++ new
-    @@ -163,7 +163,7 @@
+    @@ -165,7 +165,7 @@
                  strategy: Some(
                      {
                          PackageName(
@@ -3329,7 +3339,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             .arg("requirements.in"), @r#"
     --- old
     +++ new
-    @@ -165,6 +165,9 @@
+    @@ -167,6 +167,9 @@
                          PackageName(
                              "sniffio",
                          ),
@@ -3377,9 +3387,9 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         .arg("--show-settings"), @r#"
     --- old
     +++ new
-    @@ -98,7 +98,14 @@
-             sources: None,
-             torch_backend: None,
+    @@ -100,7 +100,14 @@
+             cuda_driver_version: None,
+             amd_gpu_architecture: None,
              upgrade: Upgrade {
     -            strategy: None,
     +            strategy: Some(
@@ -3419,9 +3429,9 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         @r#"
     --- old
     +++ new
-    @@ -98,14 +98,7 @@
-             sources: None,
-             torch_backend: None,
+    @@ -100,14 +100,7 @@
+             cuda_driver_version: None,
+             amd_gpu_architecture: None,
              upgrade: Upgrade {
     -            strategy: Some(
     -                {
@@ -3457,9 +3467,9 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             .arg("--show-settings"), @r#"
     --- old
     +++ new
-    @@ -98,14 +98,7 @@
-             sources: None,
-             torch_backend: None,
+    @@ -100,14 +100,7 @@
+             cuda_driver_version: None,
+             amd_gpu_architecture: None,
              upgrade: Upgrade {
     -            strategy: Some(
     -                {
@@ -3493,7 +3503,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             .arg("--show-settings"), @r#"
     --- old
     +++ new
-    @@ -101,7 +101,7 @@
+    @@ -103,7 +103,7 @@
                  strategy: Some(
                      {
                          PackageName(
@@ -3512,7 +3522,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             .arg("--show-settings"), @r#"
     --- old
     +++ new
-    @@ -101,7 +101,7 @@
+    @@ -103,7 +103,7 @@
                  strategy: Some(
                      {
                          PackageName(
@@ -3532,7 +3542,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             .arg("--show-settings"), @r#"
     --- old
     +++ new
-    @@ -103,6 +103,9 @@
+    @@ -105,6 +105,9 @@
                          PackageName(
                              "sniffio",
                          ),
@@ -3582,10 +3592,10 @@ fn build_isolation_override() -> anyhow::Result<()> {
         .arg("--no-build-isolation-package").arg("numpy"), @r#"
     --- old
     +++ new
-    @@ -104,13 +104,7 @@
-             index_strategy: FirstIndex,
-             keyring_provider: Disabled,
+    @@ -106,13 +106,7 @@
              torch_backend: None,
+             cuda_driver_version: None,
+             amd_gpu_architecture: None,
     -        build_isolation: SharedPackage(
     -            [
     -                PackageName(
@@ -3611,10 +3621,10 @@ fn build_isolation_override() -> anyhow::Result<()> {
             .arg("--no-build-isolation-package").arg("numpy"), @r#"
     --- old
     +++ new
-    @@ -104,7 +104,13 @@
-             index_strategy: FirstIndex,
-             keyring_provider: Disabled,
+    @@ -106,7 +106,13 @@
              torch_backend: None,
+             cuda_driver_version: None,
+             amd_gpu_architecture: None,
     -        build_isolation: Shared,
     +        build_isolation: SharedPackage(
     +            [
