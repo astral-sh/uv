@@ -1,5 +1,6 @@
 use std::borrow::Cow;
-use std::path::{Component, Path, PathBuf};
+use std::ffi::OsString;
+use std::path::{Component, Path, PathBuf, Prefix};
 use std::sync::LazyLock;
 
 use either::Either;
@@ -351,6 +352,107 @@ pub fn try_relative_to_if(
     }
 }
 
+/// Convert a [`Path`] to a Windows `verbatim` path (prefixed with `\\?\`) when possible to bypass
+/// Win32 path normalization such as [`MAX_PATH`] and removed trailing characters (dot, space).
+/// Other characters as defined by [`Path.GetInvalidFileNameChars`] are still prohibited. This
+/// function will attempt to perform path normalization similar to Win32 default normalization
+/// without triggering the existing Win32 limitations.
+///
+/// Only [`Prefix::UNC`] and [`Prefix::Disk`] conversion compatible components are supported.
+///   * [`Prefix::UNC`] `\\server\share` becomes `\\?\UNC\server\share`
+///   * [`Prefix::Disk`] `DriveLetter:` becomes `\\?\DriveLetter:`
+///
+/// Other representations do not yield a `verbatim` path. The following cases are returned as-is:
+///   * Non-Windows systems.
+///   * Device paths such as those starting with `\\.\`.
+///   * Paths already prefixed with `\\?\` or `\\?\UNC\`.
+///
+/// WARNING: Adding the `\\?\` prefix effectively skips Win32 default path normalization. Even
+/// though it allows operations on paths that are normally unavailable, it can also be used to
+/// create entries that can potentially lead to further issues with operations that expect
+/// normalization such as symbolic links, junctions or reparse points.
+///
+/// [`MAX_PATH`]: https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation
+/// [`Path.GetInvalidFileNameChars`]: https://learn.microsoft.com/en-us/dotnet/api/system.io.path.getinvalidfilenamechars
+///
+/// See:
+///   * <https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file>
+///   * <https://learn.microsoft.com/en-us/dotnet/standard/io/file-path-formats>
+pub fn verbatim_path(path: &Path) -> Cow<'_, Path> {
+    if !cfg!(windows) {
+        return Cow::Borrowed(path);
+    }
+
+    // Attempt to resolve a fully qualified path just like Win32 path normalization would.
+    // std::path::absolute calls GetFullPathNameW which defeats the purpose of this function
+    // as it results in Win32 default path normalization.
+    let resolved_path = if path.is_relative() {
+        Cow::Owned(CWD.join(path))
+    } else {
+        Cow::Borrowed(path)
+    };
+
+    // Fast Path: we only support verbatim conversion for Prefix::UNC and Prefix::Disk
+    if let Some(Component::Prefix(prefix)) = resolved_path.components().next() {
+        match prefix.kind() {
+            Prefix::UNC(..) | Prefix::Disk(_) => {},
+            // return as-is as there's no verbatim equivalent for `\\.\device`
+            Prefix::DeviceNS(_)
+            // return as-is as its already verbatim
+            | Prefix::Verbatim(_)
+            | Prefix::VerbatimDisk(_)
+            | Prefix::VerbatimUNC(..) => return Cow::Borrowed(path)
+        }
+    }
+
+    // Resolve relative directory components while avoiding default Win32 path normalization
+    let normalized_path = normalized(&resolved_path);
+
+    let mut components = normalized_path.components();
+    let Some(Component::Prefix(prefix)) = components.next() else {
+        return Cow::Borrowed(path);
+    };
+
+    match prefix.kind() {
+        // `DriveLetter:` -> `\\?\DriveLetter:`
+        Prefix::Disk(_) => {
+            let mut result = OsString::from(r"\\?\");
+            result.push(normalized_path.as_os_str()); // e.g. "C:"
+            Cow::Owned(PathBuf::from(result))
+        }
+        // `\\server\share` -> `\\?\UNC\server\share`
+        Prefix::UNC(server, share) => {
+            let mut result = OsString::from(r"\\?\UNC\");
+            result.push(server);
+            result.push(r"\");
+            result.push(share);
+            for component in components {
+                match component {
+                    Component::RootDir => {} // being cautious
+                    Component::Prefix(_) => {
+                        debug_assert!(false, "prefix already consumed");
+                    }
+                    Component::CurDir | Component::ParentDir => {
+                        debug_assert!(false, "path already normalized");
+                    }
+                    Component::Normal(_) => {
+                        result.push(r"\");
+                        result.push(component.as_os_str());
+                    }
+                }
+            }
+            Cow::Owned(PathBuf::from(result))
+        }
+        Prefix::DeviceNS(_)
+        | Prefix::Verbatim(_)
+        | Prefix::VerbatimDisk(_)
+        | Prefix::VerbatimUNC(..) => {
+            debug_assert!(false, "skipped via fast path");
+            Cow::Borrowed(path)
+        }
+    }
+}
+
 /// A path that can be serialized and deserialized in a portable way by converting Windows-style
 /// backslashes to forward slashes, and using a `.` for an empty path.
 ///
@@ -608,6 +710,62 @@ mod tests {
         )];
         for (input, expected) in cases {
             assert_eq!(normalize_path(Path::new(input)), Path::new(expected));
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_verbatim_path() {
+        let relative_path = format!(r"\\?\{}\path\to\logging.", CWD.simplified_display());
+        let relative_root = format!(
+            r"\\?\{}\path\to\logging.",
+            CWD.components()
+                .next()
+                .expect("expected a drive letter prefix")
+                .simplified_display()
+        );
+        let cases = [
+            // Non-Verbatim disk
+            (r"C:\path\to\logging.", r"\\?\C:\path\to\logging."),
+            (r"C:\path\to\.\logging.", r"\\?\C:\path\to\logging."),
+            (r"C:\path\to\..\to\logging.", r"\\?\C:\path\to\logging."),
+            (r"C:/path/to/../to/./logging.", r"\\?\C:\path\to\logging."),
+            (r"C:path\to\..\to\logging.", r"\\?\C:path\to\logging."), // @TODO(samypr100) we do not support expanding drive-relative paths
+            (r".\path\to\.\logging.", relative_path.as_str()),
+            (r"path\to\..\to\logging.", relative_path.as_str()),
+            (r"./path/to/logging.", relative_path.as_str()),
+            (r"\path\to\logging.", relative_root.as_str()),
+            // Non-Verbatim UNC
+            (
+                r"\\127.0.0.1\c$\path\to\logging.",
+                r"\\?\UNC\127.0.0.1\c$\path\to\logging.",
+            ),
+            (
+                r"\\127.0.0.1\c$\path\to\.\logging.",
+                r"\\?\UNC\127.0.0.1\c$\path\to\logging.",
+            ),
+            (
+                r"\\127.0.0.1\c$\path\to\..\to\logging.",
+                r"\\?\UNC\127.0.0.1\c$\path\to\logging.",
+            ),
+            (
+                r"//127.0.0.1/c$/path/to/../to/./logging.",
+                r"\\?\UNC\127.0.0.1\c$\path\to\logging.",
+            ),
+            // Verbatim Disk
+            (r"\\?\C:\path\to\logging.", r"\\?\C:\path\to\logging."),
+            // Verbatim UNC
+            (
+                r"\\?\UNC\127.0.0.1\c$\path\to\logging.",
+                r"\\?\UNC\127.0.0.1\c$\path\to\logging.",
+            ),
+            // Device Namespace
+            (r"\\.\PhysicalDrive0", r"\\.\PhysicalDrive0"),
+            (r"\\.\NUL", r"\\.\NUL"),
+        ];
+
+        for (input, expected) in cases {
+            assert_eq!(verbatim_path(Path::new(input)), Path::new(expected));
         }
     }
 }
