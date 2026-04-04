@@ -708,6 +708,7 @@ impl RunSettings {
             settings: ResolverInstallerSettings::combine(
                 resolver_installer_options(installer, build),
                 filesystem,
+                &environment,
             ),
             env_file: EnvFile::from_args(env_file, no_env_file),
             install_mirrors: environment
@@ -1658,6 +1659,7 @@ impl SyncSettings {
         let settings = ResolverInstallerSettings::combine(
             resolver_installer_options(installer, build),
             filesystem,
+            &environment,
         );
 
         let check = flag(check, no_check, "check").unwrap_or_default();
@@ -1790,7 +1792,7 @@ impl LockSettings {
             script,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
-            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
+            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem, &environment),
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -1844,7 +1846,7 @@ impl MetadataSettings {
             dry_run: DryRun::from_args(dry_run),
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
-            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
+            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem, &environment),
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -2069,6 +2071,7 @@ impl AddSettings {
             settings: ResolverInstallerSettings::combine(
                 resolver_installer_options(installer, build),
                 filesystem,
+                &environment,
             ),
             install_mirrors: environment
                 .install_mirrors
@@ -2168,6 +2171,7 @@ impl RemoveSettings {
             settings: ResolverInstallerSettings::combine(
                 resolver_installer_options(installer, build),
                 filesystem,
+                &environment,
             ),
             install_mirrors: environment
                 .install_mirrors
@@ -2252,6 +2256,7 @@ impl VersionSettings {
             settings: ResolverInstallerSettings::combine(
                 resolver_installer_options(installer, build),
                 filesystem,
+                &environment,
             ),
             install_mirrors: environment
                 .install_mirrors
@@ -2351,7 +2356,7 @@ impl TreeSettings {
             python_version,
             python_platform,
             python: python.and_then(Maybe::into_option),
-            resolver: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
+            resolver: ResolverSettings::combine(resolver_options(resolver, build), filesystem, &environment),
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -2493,7 +2498,7 @@ impl ExportSettings {
             script,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
-            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
+            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem, &environment),
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -2628,7 +2633,7 @@ impl AuditSettings {
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
-            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
+            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem, &environment),
             service_format,
             service_url,
             ignore: {
@@ -3542,7 +3547,7 @@ impl BuildSettings {
             ),
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
-            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
+            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem, &environment),
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -3680,12 +3685,18 @@ pub(crate) struct ResolverSettings {
     pub(crate) resolution: ResolutionMode,
     pub(crate) sources: NoSources,
     pub(crate) torch_backend: Option<TorchMode>,
+    pub(crate) cuda_driver_version: Option<String>,
+    pub(crate) amd_gpu_architecture: Option<String>,
     pub(crate) upgrade: Upgrade,
 }
 
 impl ResolverSettings {
     /// Resolve the [`ResolverSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn combine(args: ResolverOptions, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn combine(
+        args: ResolverOptions,
+        filesystem: Option<FilesystemOptions>,
+        environment: &EnvironmentOptions,
+    ) -> Self {
         // The problem is that for `upgrade`... we want to combine the two `Upgrade` structs,
         // not the individual fields.
         let options = args.combine(ResolverOptions::from(
@@ -3695,7 +3706,11 @@ impl ResolverSettings {
                 .unwrap_or_default(),
         ));
 
-        Self::from(options)
+        Self {
+            cuda_driver_version: environment.cuda_driver_version.clone(),
+            amd_gpu_architecture: environment.amd_gpu_architecture.clone(),
+            ..Self::from(options)
+        }
     }
 }
 
@@ -3735,6 +3750,8 @@ impl From<ResolverOptions> for ResolverSettings {
             exclude_newer: value.exclude_newer,
             link_mode: value.link_mode.unwrap_or_default(),
             torch_backend: value.torch_backend,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             sources: NoSources::from_args(
                 value.no_sources,
                 value.no_sources_package.unwrap_or_default(),
@@ -3765,6 +3782,7 @@ impl ResolverInstallerSettings {
     pub(crate) fn combine(
         args: ResolverInstallerOptions,
         filesystem: Option<FilesystemOptions>,
+        environment: &EnvironmentOptions,
     ) -> Self {
         let options = args.combine(ResolverInstallerOptions::from(
             filesystem
@@ -3773,7 +3791,15 @@ impl ResolverInstallerSettings {
                 .unwrap_or_default(),
         ));
 
-        Self::from(options)
+        let base = Self::from(options);
+        Self {
+            resolver: ResolverSettings {
+                cuda_driver_version: environment.cuda_driver_version.clone(),
+                amd_gpu_architecture: environment.amd_gpu_architecture.clone(),
+                ..base.resolver
+            },
+            ..base
+        }
     }
 }
 
@@ -3833,6 +3859,8 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                     value.no_sources_package.unwrap_or_default(),
                 ),
                 torch_backend: value.torch_backend,
+                cuda_driver_version: None,
+                amd_gpu_architecture: None,
                 upgrade: value.upgrade.unwrap_or_default(),
             },
             compile_bytecode: value.compile_bytecode.unwrap_or_default(),
@@ -3859,6 +3887,8 @@ pub(crate) struct PipSettings {
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) torch_backend: Option<TorchMode>,
+    pub(crate) cuda_driver_version: Option<String>,
+    pub(crate) amd_gpu_architecture: Option<String>,
     pub(crate) build_isolation: BuildIsolation,
     pub(crate) extra_build_dependencies: ExtraBuildDependencies,
     pub(crate) extra_build_variables: ExtraBuildVariables,
@@ -4161,6 +4191,8 @@ impl PipSettings {
                 .combine(config_settings_package)
                 .unwrap_or_default(),
             torch_backend: args.torch_backend.combine(torch_backend),
+            cuda_driver_version: environment.cuda_driver_version.clone(),
+            amd_gpu_architecture: environment.amd_gpu_architecture.clone(),
             python_version: args.python_version.combine(python_version),
             python_platform: args.python_platform.combine(python_platform),
             universal: args.universal.combine(universal).unwrap_or_default(),

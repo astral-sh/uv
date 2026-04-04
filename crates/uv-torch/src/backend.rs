@@ -232,13 +232,19 @@ pub enum TorchStrategy {
 
 impl TorchStrategy {
     /// Determine the [`TorchStrategy`] from the given [`TorchMode`], [`Os`], and [`Accelerator`].
+    ///
+    /// The `cuda_driver_version` and `amd_gpu_architecture` overrides, if provided, take
+    /// precedence over system detection and correspond to the `UV_CUDA_DRIVER_VERSION` and
+    /// `UV_AMD_GPU_ARCHITECTURE` environment variables respectively.
     pub fn from_mode(
         mode: TorchMode,
         source: TorchSource,
         os: &Os,
+        cuda_driver_version: Option<&str>,
+        amd_gpu_architecture: Option<&str>,
     ) -> Result<Self, AcceleratorError> {
         let backend = match mode {
-            TorchMode::Auto => match Accelerator::detect()? {
+            TorchMode::Auto => match Accelerator::detect(cuda_driver_version, amd_gpu_architecture)? {
                 Some(Accelerator::Cuda { driver_version }) => {
                     return Ok(Self::Cuda {
                         os: os.clone(),

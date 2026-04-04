@@ -4,7 +4,6 @@ use std::str::FromStr;
 use tracing::debug;
 
 use uv_pep440::Version;
-use uv_static::EnvVars;
 
 #[cfg(windows)]
 use serde::Deserialize;
@@ -57,31 +56,38 @@ impl std::fmt::Display for Accelerator {
 impl Accelerator {
     /// Detect the GPU driver and/or architecture version from the system.
     ///
+    /// The `cuda_driver_version` and `amd_gpu_architecture` overrides, if provided, take
+    /// precedence over system detection and correspond to the `UV_CUDA_DRIVER_VERSION` and
+    /// `UV_AMD_GPU_ARCHITECTURE` environment variables respectively.
+    ///
     /// Query, in order:
-    /// 1. The `UV_CUDA_DRIVER_VERSION` environment variable.
-    /// 2. The `UV_AMD_GPU_ARCHITECTURE` environment variable.
+    /// 1. The `cuda_driver_version` override (from `UV_CUDA_DRIVER_VERSION`).
+    /// 2. The `amd_gpu_architecture` override (from `UV_AMD_GPU_ARCHITECTURE`).
     /// 3. `/sys/module/nvidia/version`, which contains the driver version (e.g., `550.144.03`).
     /// 4. `/proc/driver/nvidia/version`, which contains the driver version among other information.
     /// 5. `nvidia-smi --query-gpu=driver_version --format=csv,noheader`.
     /// 6. `rocm_agent_enumerator`, which lists the AMD GPU architectures.
     /// 7. `/sys/bus/pci/devices`, filtering for the Intel GPU via PCI.
     /// 8. Windows Managmeent Instrumentation (WMI), filtering for the Intel GPU via PCI.
-    pub fn detect() -> Result<Option<Self>, AcceleratorError> {
+    pub fn detect(
+        cuda_driver_version: Option<&str>,
+        amd_gpu_architecture: Option<&str>,
+    ) -> Result<Option<Self>, AcceleratorError> {
         // Constants used for PCI device detection.
         const PCI_BASE_CLASS_MASK: u32 = 0x00ff_0000;
         const PCI_BASE_CLASS_DISPLAY: u32 = 0x0003_0000;
         const PCI_VENDOR_ID_INTEL: u32 = 0x8086;
 
-        // Read from `UV_CUDA_DRIVER_VERSION`.
-        if let Ok(driver_version) = std::env::var(EnvVars::UV_CUDA_DRIVER_VERSION) {
-            let driver_version = Version::from_str(&driver_version)?;
+        // Use the `UV_CUDA_DRIVER_VERSION` override, if provided.
+        if let Some(driver_version) = cuda_driver_version {
+            let driver_version = Version::from_str(driver_version)?;
             debug!("Detected CUDA driver version from `UV_CUDA_DRIVER_VERSION`: {driver_version}");
             return Ok(Some(Self::Cuda { driver_version }));
         }
 
-        // Read from `UV_AMD_GPU_ARCHITECTURE`.
-        if let Ok(gpu_architecture) = std::env::var(EnvVars::UV_AMD_GPU_ARCHITECTURE) {
-            let gpu_architecture = AmdGpuArchitecture::from_str(&gpu_architecture)?;
+        // Use the `UV_AMD_GPU_ARCHITECTURE` override, if provided.
+        if let Some(gpu_architecture) = amd_gpu_architecture {
+            let gpu_architecture = AmdGpuArchitecture::from_str(gpu_architecture)?;
             debug!(
                 "Detected AMD GPU architecture from `UV_AMD_GPU_ARCHITECTURE`: {gpu_architecture}"
             );

@@ -643,6 +643,8 @@ pub struct EnvironmentOptions {
     pub install_mirrors: PythonInstallMirrors,
     pub log_context: Option<bool>,
     pub lfs: Option<bool>,
+    pub cuda_driver_version: Option<String>,
+    pub amd_gpu_architecture: Option<String>,
     pub http_connect_timeout: Duration,
     pub http_read_timeout: Duration,
     /// There's no upload timeout in reqwest, instead we have to use a read timeout as upload
@@ -727,6 +729,12 @@ impl EnvironmentOptions {
             },
             log_context: parse_boolish_environment_variable(EnvVars::UV_LOG_CONTEXT)?,
             lfs: parse_boolish_environment_variable(EnvVars::UV_GIT_LFS)?,
+            cuda_driver_version: parse_string_environment_variable(
+                EnvVars::UV_CUDA_DRIVER_VERSION,
+            )?,
+            amd_gpu_architecture: parse_string_environment_variable(
+                EnvVars::UV_AMD_GPU_ARCHITECTURE,
+            )?,
             http_read_timeout_upload: parse_integer_environment_variable(
                 EnvVars::UV_UPLOAD_HTTP_TIMEOUT,
                 Some("value should be an integer number of seconds"),

@@ -96,6 +96,8 @@ pub(crate) async fn pip_compile(
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     torch_backend: Option<TorchMode>,
+    cuda_driver_version: Option<String>,
+    amd_gpu_architecture: Option<String>,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
     client_builder: &BaseClientBuilder<'_>,
@@ -452,6 +454,8 @@ pub(crate) async fn pip_compile(
                     .as_ref()
                     .unwrap_or(interpreter.platform())
                     .os(),
+                cuda_driver_version.as_deref(),
+                amd_gpu_architecture.as_deref(),
             )
         })
         .transpose()?;

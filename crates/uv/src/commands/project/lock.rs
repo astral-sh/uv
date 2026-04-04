@@ -488,6 +488,8 @@ async fn do_lock(
         build_options,
         sources,
         torch_backend: _,
+        cuda_driver_version: _,
+        amd_gpu_architecture: _,
     } = settings;
 
     // Collect the requirements, etc.
