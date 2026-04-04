@@ -1792,7 +1792,11 @@ impl LockSettings {
             script,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
-            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem, &environment),
+            settings: ResolverSettings::combine(
+                resolver_options(resolver, build),
+                filesystem,
+                &environment,
+            ),
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -1846,7 +1850,11 @@ impl MetadataSettings {
             dry_run: DryRun::from_args(dry_run),
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
-            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem, &environment),
+            settings: ResolverSettings::combine(
+                resolver_options(resolver, build),
+                filesystem,
+                &environment,
+            ),
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -2356,7 +2364,11 @@ impl TreeSettings {
             python_version,
             python_platform,
             python: python.and_then(Maybe::into_option),
-            resolver: ResolverSettings::combine(resolver_options(resolver, build), filesystem, &environment),
+            resolver: ResolverSettings::combine(
+                resolver_options(resolver, build),
+                filesystem,
+                &environment,
+            ),
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -2498,7 +2510,11 @@ impl ExportSettings {
             script,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
-            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem, &environment),
+            settings: ResolverSettings::combine(
+                resolver_options(resolver, build),
+                filesystem,
+                &environment,
+            ),
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -2630,10 +2646,14 @@ impl AuditSettings {
             frozen: resolve_frozen(frozen),
             python_version,
             python_platform,
+            settings: ResolverSettings::combine(
+                resolver_options(resolver, build),
+                filesystem,
+                &environment,
+            ),
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
-            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem, &environment),
             service_format,
             service_url,
             ignore: {
@@ -3547,7 +3567,11 @@ impl BuildSettings {
             ),
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
-            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem, &environment),
+            settings: ResolverSettings::combine(
+                resolver_options(resolver, build),
+                filesystem,
+                &environment,
+            ),
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
