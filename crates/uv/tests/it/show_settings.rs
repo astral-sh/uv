@@ -190,6 +190,8 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -402,6 +404,8 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -615,6 +619,8 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -860,6 +866,8 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -1037,6 +1045,8 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -1259,6 +1269,8 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -1530,6 +1542,8 @@ fn resolve_index_url() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -1812,6 +1826,8 @@ fn resolve_index_url() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -2047,6 +2063,8 @@ fn resolve_find_links() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -2246,6 +2264,8 @@ fn resolve_top_level() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -2507,6 +2527,8 @@ fn resolve_top_level() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -2751,6 +2773,8 @@ fn resolve_top_level() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -2949,6 +2973,8 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -3131,6 +3157,8 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -3313,6 +3341,8 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -3497,6 +3527,8 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -3735,6 +3767,8 @@ fn resolve_tool() -> anyhow::Result<()> {
                 resolution: LowestDirect,
                 sources: None,
                 torch_backend: None,
+                cuda_driver_version: None,
+                amd_gpu_architecture: None,
                 upgrade: Upgrade {
                     strategy: None,
                     constraints: {},
@@ -3898,6 +3932,8 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -4151,6 +4187,8 @@ fn resolve_both() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -4409,6 +4447,8 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -4744,6 +4784,8 @@ fn resolve_config_file() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -5019,6 +5061,8 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -5204,6 +5248,8 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -5408,6 +5454,8 @@ fn allow_insecure_host() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -5677,6 +5725,8 @@ fn index_priority() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -5925,6 +5975,8 @@ fn index_priority() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -6179,6 +6231,8 @@ fn index_priority() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -6428,6 +6482,8 @@ fn index_priority() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -6684,6 +6740,8 @@ fn index_priority() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -6933,6 +6991,8 @@ fn index_priority() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -7122,6 +7182,8 @@ fn verify_hashes() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -7297,6 +7359,8 @@ fn verify_hashes() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -7470,6 +7534,8 @@ fn verify_hashes() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -7645,6 +7711,8 @@ fn verify_hashes() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -7818,6 +7886,8 @@ fn verify_hashes() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -7992,6 +8062,8 @@ fn verify_hashes() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -8213,6 +8285,8 @@ fn preview_features() {
                 resolution: Highest,
                 sources: None,
                 torch_backend: None,
+                cuda_driver_version: None,
+                amd_gpu_architecture: None,
                 upgrade: Upgrade {
                     strategy: None,
                     constraints: {},
@@ -8334,6 +8408,8 @@ fn preview_features() {
                 resolution: Highest,
                 sources: None,
                 torch_backend: None,
+                cuda_driver_version: None,
+                amd_gpu_architecture: None,
                 upgrade: Upgrade {
                     strategy: None,
                     constraints: {},
@@ -8484,6 +8560,8 @@ fn preview_features() {
                 resolution: Highest,
                 sources: None,
                 torch_backend: None,
+                cuda_driver_version: None,
+                amd_gpu_architecture: None,
                 upgrade: Upgrade {
                     strategy: None,
                     constraints: {},
@@ -8608,6 +8686,8 @@ fn preview_features() {
                 resolution: Highest,
                 sources: None,
                 torch_backend: None,
+                cuda_driver_version: None,
+                amd_gpu_architecture: None,
                 upgrade: Upgrade {
                     strategy: None,
                     constraints: {},
@@ -8732,6 +8812,8 @@ fn preview_features() {
                 resolution: Highest,
                 sources: None,
                 torch_backend: None,
+                cuda_driver_version: None,
+                amd_gpu_architecture: None,
                 upgrade: Upgrade {
                     strategy: None,
                     constraints: {},
@@ -8855,6 +8937,8 @@ fn preview_features() {
                 resolution: Highest,
                 sources: None,
                 torch_backend: None,
+                cuda_driver_version: None,
+                amd_gpu_architecture: None,
                 upgrade: Upgrade {
                     strategy: None,
                     constraints: {},
@@ -8988,6 +9072,8 @@ fn system_certs_cli_aliases_override_env() {
                 resolution: Highest,
                 sources: None,
                 torch_backend: None,
+                cuda_driver_version: None,
+                amd_gpu_architecture: None,
                 upgrade: Upgrade {
                     strategy: None,
                     constraints: {},
@@ -9112,6 +9198,8 @@ fn system_certs_cli_aliases_override_env() {
                 resolution: Highest,
                 sources: None,
                 torch_backend: None,
+                cuda_driver_version: None,
+                amd_gpu_architecture: None,
                 upgrade: Upgrade {
                     strategy: None,
                     constraints: {},
@@ -9246,6 +9334,8 @@ fn system_certs_config_aliases() -> anyhow::Result<()> {
                 resolution: Highest,
                 sources: None,
                 torch_backend: None,
+                cuda_driver_version: None,
+                amd_gpu_architecture: None,
                 upgrade: Upgrade {
                     strategy: None,
                     constraints: {},
@@ -9373,6 +9463,8 @@ fn system_certs_config_aliases() -> anyhow::Result<()> {
                 resolution: Highest,
                 sources: None,
                 torch_backend: None,
+                cuda_driver_version: None,
+                amd_gpu_architecture: None,
                 upgrade: Upgrade {
                     strategy: None,
                     constraints: {},
@@ -9514,6 +9606,8 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -9703,6 +9797,8 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -9886,6 +9982,8 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -10067,6 +10165,8 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -10248,6 +10348,8 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -10430,6 +10532,8 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -10633,6 +10737,8 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             resolution: Highest,
             sources: None,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             upgrade: Upgrade {
                 strategy: Packages(
                     {
@@ -10765,6 +10871,8 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             resolution: Highest,
             sources: None,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             upgrade: Upgrade {
                 strategy: None,
                 constraints: {},
@@ -10891,6 +10999,8 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             resolution: Highest,
             sources: None,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             upgrade: Upgrade {
                 strategy: All,
                 constraints: {},
@@ -11015,6 +11125,8 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             resolution: Highest,
             sources: None,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             upgrade: Upgrade {
                 strategy: Packages(
                     {
@@ -11135,6 +11247,8 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             resolution: Highest,
             sources: None,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             upgrade: Upgrade {
                 strategy: Packages(
                     {
@@ -11256,6 +11370,8 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             resolution: Highest,
             sources: None,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             upgrade: Upgrade {
                 strategy: Packages(
                     {
@@ -11405,6 +11521,8 @@ fn build_isolation_override() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: Shared,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -11583,6 +11701,8 @@ fn build_isolation_override() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            cuda_driver_version: None,
+            amd_gpu_architecture: None,
             build_isolation: SharedPackage(
                 [
                     PackageName(
