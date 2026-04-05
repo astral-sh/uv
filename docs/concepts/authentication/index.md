@@ -1,3 +1,7 @@
+---
+title: Authentication
+---
+
 # Authentication
 
 Authentication is required when working with private repositories or package indexes.
