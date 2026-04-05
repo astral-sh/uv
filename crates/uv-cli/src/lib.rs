@@ -6257,6 +6257,12 @@ pub struct PythonListArgs {
     #[arg(long, alias = "all_architectures")]
     pub all_arches: bool,
 
+    /// List Python downloads for all variants, including debug builds.
+    ///
+    /// By default, debug builds are hidden.
+    #[arg(long)]
+    pub all_variants: bool,
+
     /// Only show installed Python versions.
     ///
     /// By default, installed distributions and available downloads for the current platform are shown.
