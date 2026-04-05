@@ -1,3 +1,7 @@
+---
+title: Migration guides
+---
+
 # Migration guides
 
 Learn how to migrate from other tools to uv:
