@@ -1953,6 +1953,18 @@ impl PythonRequest {
         Ok(rest.parse().ok())
     }
 
+    /// Create a request from a `Requires-Python` constraint.
+    pub fn from_requires_python(requires_python: &RequiresPython) -> Option<Self> {
+        if requires_python.specifiers().is_empty() {
+            return None;
+        }
+
+        Some(Self::Version(VersionRequest::Range(
+            requires_python.specifiers().clone(),
+            PythonVariant::Default,
+        )))
+    }
+
     /// Check if this request includes a specific patch version.
     pub fn includes_patch(&self) -> bool {
         match self {
@@ -4378,6 +4390,44 @@ mod tests {
             PythonRequest::Version(VersionRequest::from_str(">=3.10").unwrap()).as_pep440_version(),
             None
         );
+    }
+
+    #[test]
+    fn python_request_from_requires_python() {
+        let requires_python =
+            RequiresPython::from_specifiers(&VersionSpecifiers::from_str(">=3.11,<3.13").unwrap());
+
+        let request = PythonRequest::from_requires_python(&requires_python).unwrap();
+        assert_eq!(
+            request,
+            PythonRequest::Version(VersionRequest::Range(
+                VersionSpecifiers::from_str(">=3.11,<3.13").unwrap(),
+                PythonVariant::Default,
+            ))
+        );
+    }
+
+    #[test]
+    fn python_request_from_upper_bound_only_requires_python() {
+        let requires_python =
+            RequiresPython::from_specifiers(&VersionSpecifiers::from_str("<3.12").unwrap());
+
+        let request = PythonRequest::from_requires_python(&requires_python).unwrap();
+        assert_eq!(
+            request,
+            PythonRequest::Version(VersionRequest::Range(
+                VersionSpecifiers::from_str("<3.12").unwrap(),
+                PythonVariant::Default,
+            ))
+        );
+    }
+
+    #[test]
+    fn python_request_from_unbounded_requires_python() {
+        let requires_python = RequiresPython::from_specifiers(&VersionSpecifiers::empty());
+
+        let request = PythonRequest::from_requires_python(&requires_python);
+        assert!(request.is_none());
     }
 
     #[test]
