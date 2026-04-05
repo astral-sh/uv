@@ -40,7 +40,7 @@ use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 use uv_workspace::{
-    DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceCache, WorkspaceErrorKind,
+    DiscoveryOptions, MemberDiscovery, MemberExclusions, Workspace, WorkspaceCache, WorkspaceErrorKind,
 };
 
 /// Add one or more packages to the project requirements.
@@ -328,7 +328,9 @@ async fn init_project(
         match Workspace::discover(
             parent,
             &DiscoveryOptions {
-                members: MemberDiscovery::Ignore(std::iter::once(path.to_path_buf()).collect()),
+                members: MemberDiscovery::Exclude(MemberExclusions::from_paths(std::iter::once(
+                    path.to_path_buf(),
+                ))),
                 ..DiscoveryOptions::default()
             },
             cache,

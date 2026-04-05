@@ -17,7 +17,7 @@ use rustc_hash::{FxHashSet, FxHasher};
 use tracing::{debug, trace, warn};
 
 use uv_cache::Cache;
-use uv_configuration::{ActiveEnvironment, DependencyGroupsWithDefaults, ExcludeDependency};
+use uv_configuration::{ActiveEnvironment, DependencyGroupsWithDefaults, ExcludeDependency, NoSources};
 use uv_distribution_types::{Index, MinimumLibcVersion, Requirement, RequirementSource};
 use uv_fs::{CWD, Simplified, normalize_path};
 use uv_macros::DebugNoInline;
@@ -236,7 +236,7 @@ impl WorkspaceCache {
                 Some(Ok(workspace)) => Some(Ok(workspace)),
                 Some(Err(_)) | None => None,
             },
-            MemberDiscovery::None | MemberDiscovery::Ignore(_) => None,
+            MemberDiscovery::None | MemberDiscovery::CurrentProjectOnly | MemberDiscovery::Exclude(_) => None,
         }
     }
 
@@ -361,6 +361,43 @@ pub enum DefaultGroupsError {
 }
 
 #[derive(Debug, Default, Clone, Hash, PartialEq, Eq)]
+pub struct MemberExclusions {
+    paths: BTreeSet<PathBuf>,
+    packages: BTreeSet<PackageName>,
+    ignore_missing: bool,
+}
+
+impl MemberExclusions {
+    /// Exclude the given member paths.
+    pub fn from_paths(paths: impl IntoIterator<Item = PathBuf>) -> Self {
+        Self {
+            paths: paths.into_iter().collect(),
+            packages: BTreeSet::new(),
+            ignore_missing: false,
+        }
+    }
+
+    /// Exclude the given member packages.
+    pub fn from_packages(packages: impl IntoIterator<Item = PackageName>) -> Self {
+        Self {
+            paths: BTreeSet::new(),
+            packages: packages.into_iter().collect(),
+            ignore_missing: false,
+        }
+    }
+
+    /// Returns `true` if the given path should be excluded from discovery.
+    pub fn excludes_path(&self, path: &Path) -> bool {
+        self.paths.contains(path)
+    }
+
+    /// Returns `true` if the given package should be excluded from discovery.
+    pub fn excludes_package(&self, package: &PackageName) -> bool {
+        self.packages.contains(package)
+    }
+}
+
+#[derive(Debug, Default, Clone, Hash, PartialEq, Eq)]
 pub enum MemberDiscovery {
     /// Discover all workspace members.
     #[default]
@@ -369,8 +406,29 @@ pub enum MemberDiscovery {
     Existing,
     /// Don't discover any workspace members.
     None,
-    /// Discover workspace members, but ignore the given paths.
-    Ignore(BTreeSet<PathBuf>),
+    /// Discover only the current project, if any.
+    CurrentProjectOnly,
+    /// Discover workspace members, but exclude a subset by path or package name.
+    Exclude(MemberExclusions),
+}
+
+impl MemberDiscovery {
+    /// Select workspace members according to source filtering and frozen discovery.
+    pub fn for_sources(sources: &NoSources, ignore_missing: bool) -> Self {
+        match sources {
+            NoSources::None if ignore_missing => Self::Existing,
+            NoSources::None => Self::All,
+            NoSources::All => Self::CurrentProjectOnly,
+            NoSources::Packages(packages) => Self::Exclude(MemberExclusions {
+                ignore_missing,
+                ..MemberExclusions::from_packages(packages.iter().cloned())
+            }),
+        }
+    }
+
+    fn ignores_missing(&self) -> bool {
+        matches!(self, Self::Existing) || matches!(self, Self::Exclude(exclusions) if exclusions.ignore_missing)
+    }
 }
 
 #[derive(Debug, Default, Clone, Hash, PartialEq, Eq)]
@@ -1145,13 +1203,13 @@ impl Workspace {
         .await?;
         let mut workspace_members = Arc::new(workspace_members);
 
-        // For the cases such as `MemberDiscovery::None`, add the current project if missing.
+        // For discovery modes that skip the active member during collection, add it back here.
         if let Some(root_member) = current_project
             && !workspace_members.contains_key(&root_member.project.name)
         {
             assert_matches!(
                 options.members,
-                MemberDiscovery::None | MemberDiscovery::Ignore(_)
+                MemberDiscovery::None | MemberDiscovery::CurrentProjectOnly | MemberDiscovery::Exclude(_)
             );
             debug!(
                 "Adding current workspace member: {}",
@@ -1241,20 +1299,29 @@ impl Workspace {
         // Add the project at the workspace root, if it exists and if it's distinct from the current
         // project. If it is the current project, it is added as such in the next step.
         if let Some(project) = &workspace_pyproject_toml.project {
-            debug!(
-                "Adding root workspace member: {}",
-                workspace_root.simplified_display()
-            );
+            let skip = match &options.members {
+                MemberDiscovery::CurrentProjectOnly => true,
+                MemberDiscovery::Exclude(exclusions) => exclusions.excludes_package(&project.name),
+                MemberDiscovery::All | MemberDiscovery::Existing | MemberDiscovery::None => false,
+            };
 
-            seen.insert(workspace_root.clone());
-            workspace_members.insert(
-                project.name.clone(),
-                WorkspaceMember {
-                    root: workspace_root.clone(),
-                    project: project.clone(),
-                    pyproject_toml: workspace_pyproject_toml.clone(),
-                },
-            );
+            if !skip {
+
+                debug!(
+                    "Adding root workspace member: `{}`",
+                    workspace_root.simplified_display()
+                );
+
+                seen.insert(workspace_root.clone());
+                workspace_members.insert(
+                    project.name.clone(),
+                    WorkspaceMember {
+                        root: workspace_root.clone(),
+                        project: project.clone(),
+                        pyproject_toml: workspace_pyproject_toml.clone(),
+                    },
+                );
+            }
         }
 
         // Prepare exclusions only after finding a member that is not explicitly ignored.
@@ -1291,11 +1358,14 @@ impl Workspace {
                 let member_root =
                     std::path::absolute(&member_root).map_err(WorkspaceErrorKind::Normalize)?;
 
-                // If the directory is explicitly ignored, skip it.
+                // If the directory is explicitly excluded, skip it.
                 let skip = match &options.members {
                     MemberDiscovery::All | MemberDiscovery::Existing => false,
                     MemberDiscovery::None => true,
-                    MemberDiscovery::Ignore(ignore) => ignore.contains(member_root.as_path()),
+                    MemberDiscovery::CurrentProjectOnly => true,
+                    MemberDiscovery::Exclude(exclusions) => {
+                        exclusions.excludes_path(member_root.as_path())
+                    }
                 };
                 if skip {
                     debug!(
@@ -1334,7 +1404,7 @@ impl Workspace {
                         let metadata = match fs_err::metadata(&member_root) {
                             Ok(metadata) => metadata,
                             Err(err)
-                                if matches!(options.members, MemberDiscovery::Existing)
+                                if options.members.ignores_missing()
                                     && err.kind() == std::io::ErrorKind::NotFound =>
                             {
                                 debug!(
@@ -1377,7 +1447,7 @@ impl Workspace {
                                 continue;
                             }
 
-                            if matches!(options.members, MemberDiscovery::Existing) {
+                            if options.members.ignores_missing() {
                                 debug!(
                                     "Ignoring missing workspace member: {}",
                                     member_root.simplified_display()
@@ -1429,6 +1499,16 @@ impl Workspace {
                         pyproject_path,
                     )));
                 };
+
+                if let MemberDiscovery::Exclude(exclusions) = &options.members {
+                    if exclusions.excludes_package(&project.name) {
+                        debug!(
+                            "Excluding workspace member `{}` by discovery filter",
+                            project.name
+                        );
+                        continue;
+                    }
+                }
 
                 debug!(
                     "Adding discovered workspace member: {}",

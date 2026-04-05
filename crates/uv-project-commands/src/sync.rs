@@ -98,11 +98,7 @@ pub async fn sync(
         SyncTarget::Manifest(&manifest_target)
     } else {
         let options = DiscoveryOptions {
-            members: if frozen.is_some() {
-                MemberDiscovery::Existing
-            } else {
-                MemberDiscovery::All
-            },
+            members: MemberDiscovery::for_sources(&settings.resolver.sources, frozen.is_some()),
             ..DiscoveryOptions::default()
         };
         let selected_package = if let [name] = package.as_slice()

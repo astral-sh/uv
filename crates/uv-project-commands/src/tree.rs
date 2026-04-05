@@ -34,7 +34,7 @@ use uv_resolve_operations::resolution_markers;
 use uv_scripts::Pep723Script;
 use uv_settings::{FrozenSource, LockCheck, PythonInstallMirrors, ResolverSettings};
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, WorkspaceCache};
+use uv_workspace::{DiscoveryOptions, MemberDiscovery, WorkspaceCache};
 
 use uv_resolve_operations::reporters::LatestVersionReporter;
 
@@ -92,7 +92,7 @@ pub async fn tree(
     } else {
         project = DiscoveredProject::discover(
             project_dir,
-            &DiscoveryOptions::default(),
+            &DiscoveryOptions { members: MemberDiscovery::for_sources(&settings.sources, false), ..DiscoveryOptions::default() },
             None,
             frozen,
             preview,

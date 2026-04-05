@@ -28,7 +28,7 @@ use uv_resolve_operations::resolution_markers;
 use uv_scripts::Pep723Script;
 use uv_settings::{FrozenSource, LockCheck, PythonInstallMirrors, ResolverSettings};
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
+use uv_workspace::{Workspace, WorkspaceCache};
 
 pub async fn audit(
     project_dir: &Path,
@@ -83,7 +83,7 @@ pub async fn audit(
     } else {
         workspace = Workspace::discover(
             project_dir,
-            &DiscoveryOptions::default(),
+            &DiscoveryOptions { members: MemberDiscovery::for_sources(&settings.sources, false), ..DiscoveryOptions::default() },
             &cache,
             workspace_cache,
         )
