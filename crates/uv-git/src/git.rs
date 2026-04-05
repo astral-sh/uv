@@ -3,12 +3,14 @@
 //! Source: <https://github.com/rust-lang/cargo/blob/23eb492cf920ce051abfc56bbaf838514dc8365c/src/cargo/sources/git/utils.rs>
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
+use std::process::Output;
 use std::str::{self};
 use std::sync::LazyLock;
 
 use anyhow::{Context, Result, anyhow};
-use cargo_util::{ProcessBuilder, paths};
+use cargo_util::{ProcessBuilder, ProcessError, paths};
 use owo_colors::OwoColorize;
+use tokio::process::Command as AsyncCommand;
 use tracing::{debug, instrument, warn};
 
 use uv_fs::Simplified;
@@ -16,6 +18,36 @@ use uv_git_types::{GitOid, GitReference};
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
+
+/// Run a [`ProcessBuilder`] asynchronously via [`tokio::process::Command`].
+///
+/// This is the async equivalent of [`ProcessBuilder::exec_with_output`]: it pipes
+/// stdout/stderr, awaits the child, and returns the captured [`Output`] on
+/// success or an error describing the failure.
+async fn exec_async(cmd: &ProcessBuilder) -> Result<Output> {
+    let std_cmd = cmd.build_command();
+    let mut async_cmd = AsyncCommand::from(std_cmd);
+    async_cmd
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .stdin(std::process::Stdio::null());
+
+    let output = async_cmd
+        .output()
+        .await
+        .with_context(|| ProcessError::could_not_execute(cmd))?;
+
+    if output.status.success() {
+        Ok(output)
+    } else {
+        Err(ProcessError::new(
+            &format!("process didn't exit successfully: {cmd}"),
+            Some(output.status),
+            Some(&output),
+        )
+        .into())
+    }
+}
 
 /// A file indicates that if present, `git reset` has been done and a repo
 /// checkout is ready to go. See [`GitCheckout::reset`] for why we need this.
@@ -64,7 +96,7 @@ enum ReferenceOrOid<'reference> {
 
 impl ReferenceOrOid<'_> {
     /// Resolves the [`ReferenceOrOid`] to an object ID with objects the `repo` currently has.
-    fn resolve(&self, repo: &GitRepository) -> Result<GitOid> {
+    async fn resolve(&self, repo: &GitRepository) -> Result<GitOid> {
         let refkind = self.kind_str();
         let result = match self {
             // Resolve the commit pointed to by the tag.
@@ -73,32 +105,52 @@ impl ReferenceOrOid<'_> {
             // This also verifies that the tag indeed refers to a commit.
             Self::Reference(GitReference::Tag(s)) => {
                 repo.rev_parse(&format!("refs/remotes/origin/tags/{s}^0"))
+                    .await
             }
 
             // Resolve the commit pointed to by the branch.
-            Self::Reference(GitReference::Branch(s)) => repo.rev_parse(&format!("origin/{s}^0")),
+            Self::Reference(GitReference::Branch(s)) => {
+                repo.rev_parse(&format!("origin/{s}^0")).await
+            }
 
             // Attempt to resolve the branch, then the tag.
-            Self::Reference(GitReference::BranchOrTag(s)) => repo
-                .rev_parse(&format!("origin/{s}^0"))
-                .or_else(|_| repo.rev_parse(&format!("refs/remotes/origin/tags/{s}^0"))),
+            Self::Reference(GitReference::BranchOrTag(s)) => {
+                let result = repo.rev_parse(&format!("origin/{s}^0")).await;
+                if result.is_ok() {
+                    result
+                } else {
+                    repo.rev_parse(&format!("refs/remotes/origin/tags/{s}^0"))
+                        .await
+                }
+            }
 
             // Attempt to resolve the branch, then the tag, then the commit.
-            Self::Reference(GitReference::BranchOrTagOrCommit(s)) => repo
-                .rev_parse(&format!("origin/{s}^0"))
-                .or_else(|_| repo.rev_parse(&format!("refs/remotes/origin/tags/{s}^0")))
-                .or_else(|_| repo.rev_parse(&format!("{s}^0"))),
+            Self::Reference(GitReference::BranchOrTagOrCommit(s)) => {
+                let result = repo.rev_parse(&format!("origin/{s}^0")).await;
+                if result.is_ok() {
+                    result
+                } else {
+                    let result = repo
+                        .rev_parse(&format!("refs/remotes/origin/tags/{s}^0"))
+                        .await;
+                    if result.is_ok() {
+                        result
+                    } else {
+                        repo.rev_parse(&format!("{s}^0")).await
+                    }
+                }
+            }
 
             // We'll be using the HEAD commit.
             Self::Reference(GitReference::DefaultBranch) => {
-                repo.rev_parse("refs/remotes/origin/HEAD")
+                repo.rev_parse("refs/remotes/origin/HEAD").await
             }
 
             // Resolve a named reference.
-            Self::Reference(GitReference::NamedRef(s)) => repo.rev_parse(&format!("{s}^0")),
+            Self::Reference(GitReference::NamedRef(s)) => repo.rev_parse(&format!("{s}^0")).await,
 
             // Resolve a specific commit.
-            Self::Oid(s) => repo.rev_parse(&format!("{s}^0")),
+            Self::Oid(s) => repo.rev_parse(&format!("{s}^0")).await,
         };
 
         result.with_context(|| anyhow::format_err!("failed to find {refkind} `{self}`"))
@@ -164,12 +216,11 @@ pub(crate) struct GitRepository {
 
 impl GitRepository {
     /// Opens an existing Git repository at `path`.
-    pub(crate) fn open(path: &Path) -> Result<Self> {
+    pub(crate) async fn open(path: &Path) -> Result<Self> {
         // Make sure there is a Git repository at the specified path.
-        ProcessBuilder::new(GIT.as_ref()?)
-            .arg("rev-parse")
-            .cwd(path)
-            .exec_with_output()?;
+        let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
+        cmd.arg("rev-parse").cwd(path);
+        exec_async(&cmd).await?;
 
         Ok(Self {
             path: path.to_path_buf(),
@@ -177,7 +228,7 @@ impl GitRepository {
     }
 
     /// Initializes a Git repository at `path`.
-    fn init(path: &Path) -> Result<Self> {
+    async fn init(path: &Path) -> Result<Self> {
         // TODO(ibraheem): see if this still necessary now that we no longer use libgit2
         // Skip anything related to templates, they just call all sorts of issues as
         // we really don't want to use them yet they insist on being used. See #6240
@@ -185,10 +236,9 @@ impl GitRepository {
         // opts.external_template(false);
 
         // Initialize the repository.
-        ProcessBuilder::new(GIT.as_ref()?)
-            .arg("init")
-            .cwd(path)
-            .exec_with_output()?;
+        let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
+        cmd.arg("init").cwd(path);
+        exec_async(&cmd).await?;
 
         Ok(Self {
             path: path.to_path_buf(),
@@ -196,12 +246,10 @@ impl GitRepository {
     }
 
     /// Parses the object ID of the given `refname`.
-    fn rev_parse(&self, refname: &str) -> Result<GitOid> {
-        let result = ProcessBuilder::new(GIT.as_ref()?)
-            .arg("rev-parse")
-            .arg(refname)
-            .cwd(&self.path)
-            .exec_with_output()?;
+    async fn rev_parse(&self, refname: &str) -> Result<GitOid> {
+        let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
+        cmd.arg("rev-parse").arg(refname).cwd(&self.path);
+        let result = exec_async(&cmd).await?;
 
         let mut result = String::from_utf8(result.stdout)?;
         result.truncate(result.trim_end().len());
@@ -210,7 +258,7 @@ impl GitRepository {
 
     /// Verifies LFS artifacts have been initialized for a given `refname`.
     #[instrument(skip_all, fields(path = %self.path.user_display(), refname = %refname))]
-    fn lfs_fsck_objects(&self, refname: &str) -> bool {
+    async fn lfs_fsck_objects(&self, refname: &str) -> bool {
         let mut cmd = if let Ok(lfs) = GIT_LFS.as_ref() {
             lfs.clone()
         } else {
@@ -219,12 +267,11 @@ impl GitRepository {
         };
 
         // Requires Git LFS 3.x (2021 release)
-        let result = cmd
-            .arg("fsck")
+        cmd.arg("fsck")
             .arg("--objects")
             .arg(refname)
-            .cwd(&self.path)
-            .exec_with_output();
+            .cwd(&self.path);
+        let result = exec_async(&cmd).await;
 
         match result {
             Ok(_) => true,
@@ -269,7 +316,7 @@ impl GitRemote {
     /// if we can. If that can successfully load our revision then we've
     /// populated the database with the latest version of `reference`, so
     /// return that database and the rev we resolve to.
-    pub(crate) fn checkout(
+    pub(crate) async fn checkout(
         &self,
         into: &Path,
         db: Option<GitDatabase>,
@@ -284,16 +331,18 @@ impl GitRemote {
             .unwrap_or(ReferenceOrOid::Reference(reference));
         if let Some(mut db) = db {
             fetch(&mut db.repo, &self.url, reference, disable_ssl, offline)
+                .await
                 .with_context(|| format!("failed to fetch into: {}", into.user_display()))?;
 
             let resolved_commit_hash = match locked_rev {
-                Some(rev) => db.contains(rev).then_some(rev),
-                None => reference.resolve(&db.repo).ok(),
+                Some(rev) => db.contains(rev).await.then_some(rev),
+                None => reference.resolve(&db.repo).await.ok(),
             };
 
             if let Some(rev) = resolved_commit_hash {
                 if with_lfs {
                     let lfs_ready = fetch_lfs(&mut db.repo, &self.url, &rev, disable_ssl)
+                        .await
                         .with_context(|| format!("failed to fetch LFS objects at {rev}"))?;
                     db = db.with_lfs_ready(Some(lfs_ready));
                 }
@@ -311,27 +360,30 @@ impl GitRemote {
         }
 
         fs_err::create_dir_all(into)?;
-        let mut repo = GitRepository::init(into)?;
+        let mut repo = GitRepository::init(into).await?;
         fetch(&mut repo, &self.url, reference, disable_ssl, offline)
+            .await
             .with_context(|| format!("failed to clone into: {}", into.user_display()))?;
         let rev = match locked_rev {
             Some(rev) => rev,
-            None => reference.resolve(&repo)?,
+            None => reference.resolve(&repo).await?,
         };
-        let lfs_ready = with_lfs
-            .then(|| {
+        let lfs_ready = if with_lfs {
+            Some(
                 fetch_lfs(&mut repo, &self.url, &rev, disable_ssl)
-                    .with_context(|| format!("failed to fetch LFS objects at {rev}"))
-            })
-            .transpose()?;
+                    .await
+                    .with_context(|| format!("failed to fetch LFS objects at {rev}"))?,
+            )
+        } else {
+            None
+        };
 
         Ok((GitDatabase { repo, lfs_ready }, rev))
     }
 
     /// Creates a [`GitDatabase`] of this remote at `db_path`.
-    #[expect(clippy::unused_self)]
-    pub(crate) fn db_at(&self, db_path: &Path) -> Result<GitDatabase> {
-        let repo = GitRepository::open(db_path)?;
+    pub(crate) async fn db_at(&self, db_path: &Path) -> Result<GitDatabase> {
+        let repo = GitRepository::open(db_path).await?;
         Ok(GitDatabase {
             repo,
             lfs_ready: None,
@@ -341,30 +393,33 @@ impl GitRemote {
 
 impl GitDatabase {
     /// Checkouts to a revision at `destination` from this database.
-    pub(crate) fn copy_to(&self, rev: GitOid, destination: &Path) -> Result<GitCheckout> {
+    pub(crate) async fn copy_to(&self, rev: GitOid, destination: &Path) -> Result<GitCheckout> {
         // If the existing checkout exists, and it is fresh, use it.
         // A non-fresh checkout can happen if the checkout operation was
         // interrupted. In that case, the checkout gets deleted and a new
         // clone is created.
-        let checkout = match GitRepository::open(destination)
-            .ok()
-            .map(|repo| GitCheckout::new(rev, repo))
-            .filter(GitCheckout::is_fresh)
-        {
-            Some(co) => co.with_lfs_ready(self.lfs_ready),
-            None => GitCheckout::clone_into(destination, self, rev)?,
+        let checkout = match GitRepository::open(destination).await {
+            Ok(repo) => {
+                let checkout = GitCheckout::new(rev, repo);
+                if checkout.is_fresh().await {
+                    checkout.with_lfs_ready(self.lfs_ready)
+                } else {
+                    GitCheckout::clone_into(destination, self, rev).await?
+                }
+            }
+            Err(_) => GitCheckout::clone_into(destination, self, rev).await?,
         };
         Ok(checkout)
     }
 
     /// Get a short OID for a `revision`, usually 7 chars or more if ambiguous.
-    pub(crate) fn to_short_id(&self, revision: GitOid) -> Result<String> {
-        let output = ProcessBuilder::new(GIT.as_ref()?)
-            .arg("rev-parse")
+    pub(crate) async fn to_short_id(&self, revision: GitOid) -> Result<String> {
+        let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
+        cmd.arg("rev-parse")
             .arg("--short")
             .arg(revision.as_str())
-            .cwd(&self.repo.path)
-            .exec_with_output()?;
+            .cwd(&self.repo.path);
+        let output = exec_async(&cmd).await?;
 
         let mut result = String::from_utf8(output.stdout)?;
         result.truncate(result.trim_end().len());
@@ -372,13 +427,13 @@ impl GitDatabase {
     }
 
     /// Checks if `oid` resolves to a commit in this database.
-    pub(crate) fn contains(&self, oid: GitOid) -> bool {
-        self.repo.rev_parse(&format!("{oid}^0")).is_ok()
+    pub(crate) async fn contains(&self, oid: GitOid) -> bool {
+        self.repo.rev_parse(&format!("{oid}^0")).await.is_ok()
     }
 
     /// Checks if `oid` contains necessary LFS artifacts in this database.
-    pub(crate) fn contains_lfs_artifacts(&self, oid: GitOid) -> bool {
-        self.repo.lfs_fsck_objects(&format!("{oid}^0"))
+    pub(crate) async fn contains_lfs_artifacts(&self, oid: GitOid) -> bool {
+        self.repo.lfs_fsck_objects(&format!("{oid}^0")).await
     }
 
     /// Set the Git LFS validation state (if any).
@@ -404,7 +459,7 @@ impl GitCheckout {
 
     /// Clone a repo for a `revision` into a local path from a `database`.
     /// This is a filesystem-to-filesystem clone.
-    fn clone_into(into: &Path, database: &GitDatabase, revision: GitOid) -> Result<Self> {
+    async fn clone_into(into: &Path, database: &GitDatabase, revision: GitOid) -> Result<Self> {
         let dirname = into.parent().unwrap();
         fs_err::create_dir_all(dirname)?;
         match fs_err::remove_dir_all(into) {
@@ -416,36 +471,36 @@ impl GitCheckout {
         // Perform a local clone of the repository, which will attempt to use
         // hardlinks to set up the repository. This should speed up the clone operation
         // quite a bit if it works.
-        let res = ProcessBuilder::new(GIT.as_ref()?)
-            .arg("clone")
+        let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
+        cmd.arg("clone")
             .arg("--local")
             // Make sure to pass the local file path and not a file://... url. If given a url,
             // Git treats the repository as a remote origin and gets confused because we don't
             // have a HEAD checked out.
             .arg(database.repo.path.simplified_display().to_string())
-            .arg(into.simplified_display().to_string())
-            .exec_with_output();
+            .arg(into.simplified_display().to_string());
+        let res = exec_async(&cmd).await;
 
         if let Err(e) = res {
             debug!("Cloning git repo with --local failed, retrying without hardlinks: {e}");
 
-            ProcessBuilder::new(GIT.as_ref()?)
-                .arg("clone")
+            let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
+            cmd.arg("clone")
                 .arg("--no-hardlinks")
                 .arg(database.repo.path.simplified_display().to_string())
-                .arg(into.simplified_display().to_string())
-                .exec_with_output()?;
+                .arg(into.simplified_display().to_string());
+            exec_async(&cmd).await?;
         }
 
-        let repo = GitRepository::open(into)?;
+        let repo = GitRepository::open(into).await?;
         let checkout = Self::new(revision, repo);
-        let lfs_ready = checkout.reset(database.lfs_ready)?;
+        let lfs_ready = checkout.reset(database.lfs_ready).await?;
         Ok(checkout.with_lfs_ready(lfs_ready))
     }
 
     /// Checks if the `HEAD` of this checkout points to the expected revision.
-    fn is_fresh(&self) -> bool {
-        match self.repo.rev_parse("HEAD") {
+    async fn is_fresh(&self) -> bool {
+        match self.repo.rev_parse("HEAD").await {
             Ok(id) if id == self.revision => {
                 // See comments in reset() for why we check this
                 self.repo.path.join(CHECKOUT_READY_LOCK).exists()
@@ -479,7 +534,7 @@ impl GitCheckout {
     /// *doesn't* exist, and then once we're done we create the file.
     ///
     /// [`.ok`]: CHECKOUT_READY_LOCK
-    fn reset(&self, with_lfs: Option<bool>) -> Result<Option<bool>> {
+    async fn reset(&self, with_lfs: Option<bool>) -> Result<Option<bool>> {
         let ok_file = self.repo.path.join(CHECKOUT_READY_LOCK);
         let _ = paths::remove_file(&ok_file);
 
@@ -490,31 +545,30 @@ impl GitCheckout {
         debug!("Reset {} to {}", self.repo.path.display(), self.revision);
 
         // Perform the hard reset.
-        ProcessBuilder::new(GIT.as_ref()?)
-            .arg("reset")
+        let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
+        cmd.arg("reset")
             .arg("--hard")
             .arg(self.revision.as_str())
             .env(EnvVars::GIT_LFS_SKIP_SMUDGE, lfs_skip_smudge)
-            .cwd(&self.repo.path)
-            .exec_with_output()?;
+            .cwd(&self.repo.path);
+        exec_async(&cmd).await?;
 
         // Update submodules (`git submodule update --recursive`).
-        ProcessBuilder::new(GIT.as_ref()?)
-            .arg("submodule")
+        let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
+        cmd.arg("submodule")
             .arg("update")
             .arg("--recursive")
             .arg("--init")
             .env(EnvVars::GIT_LFS_SKIP_SMUDGE, lfs_skip_smudge)
-            .cwd(&self.repo.path)
-            .exec_with_output()
-            .map(drop)?;
+            .cwd(&self.repo.path);
+        exec_async(&cmd).await?;
 
         // Validate Git LFS objects (if needed) after the reset.
         // See `fetch_lfs` why we do this.
         let lfs_validation = match with_lfs {
             None => None,
             Some(false) => Some(false),
-            Some(true) => Some(self.repo.lfs_fsck_objects(self.revision.as_str())),
+            Some(true) => Some(self.repo.lfs_fsck_objects(self.revision.as_str()).await),
         };
 
         // The .ok file should be written when the reset is successful.
@@ -536,7 +590,7 @@ impl GitCheckout {
 /// * Dispatches `git fetch` using the git CLI.
 ///
 /// The `remote_url` argument is the git remote URL where we want to fetch from.
-fn fetch(
+async fn fetch(
     repo: &mut GitRepository,
     remote_url: &DisplaySafeUrl,
     reference: ReferenceOrOid<'_>,
@@ -544,7 +598,7 @@ fn fetch(
     offline: bool,
 ) -> Result<()> {
     let oid_to_fetch = if let ReferenceOrOid::Oid(rev) = reference {
-        let local_object = reference.resolve(repo).ok();
+        let local_object = reference.resolve(repo).await.ok();
         if let Some(local_object) = local_object {
             if rev == local_object {
                 return Ok(());
@@ -622,38 +676,39 @@ fn fetch(
 
     debug!("Performing a Git fetch for: {remote_url}");
     let result = match refspec_strategy {
-        RefspecStrategy::All => fetch_with_cli(
-            repo,
-            remote_url,
-            refspecs.as_slice(),
-            tags,
-            disable_ssl,
-            offline,
-        ),
+        RefspecStrategy::All => {
+            fetch_with_cli(
+                repo,
+                remote_url,
+                refspecs.as_slice(),
+                tags,
+                disable_ssl,
+                offline,
+            )
+            .await
+        }
         RefspecStrategy::First => {
-            // Try each refspec
-            let mut errors = refspecs
-                .iter()
-                .map_while(|refspec| {
-                    let fetch_result = fetch_with_cli(
-                        repo,
-                        remote_url,
-                        std::slice::from_ref(refspec),
-                        tags,
-                        disable_ssl,
-                        offline,
-                    );
+            // Try each refspec, stopping after the first success.
+            let mut errors = Vec::new();
+            for refspec in &refspecs {
+                let fetch_result = fetch_with_cli(
+                    repo,
+                    remote_url,
+                    std::slice::from_ref(refspec),
+                    tags,
+                    disable_ssl,
+                    offline,
+                )
+                .await;
 
-                    // Stop after the first success and log failures
-                    match fetch_result {
-                        Err(ref err) => {
-                            debug!("Failed to fetch refspec `{refspec}`: {err}");
-                            Some(fetch_result)
-                        }
-                        Ok(()) => None,
+                match fetch_result {
+                    Ok(()) => break,
+                    Err(ref err) => {
+                        debug!("Failed to fetch refspec `{refspec}`: {err}");
+                        errors.push(fetch_result);
                     }
-                })
-                .collect::<Vec<_>>();
+                }
+            }
 
             if errors.len() == refspecs.len() {
                 if let Some(result) = errors.pop() {
@@ -682,7 +737,7 @@ fn fetch(
 }
 
 /// Attempts to use `git` CLI installed on the system to fetch a repository.
-fn fetch_with_cli(
+async fn fetch_with_cli(
     repo: &mut GitRepository,
     url: &DisplaySafeUrl,
     refspecs: &[String],
@@ -728,7 +783,7 @@ fn fetch_with_cli(
     // We capture the output to avoid streaming it to the user's console during clones.
     // The required `on...line` callbacks currently do nothing.
     // The output appears to be included in error messages by default.
-    cmd.exec_with_output().map_err(|err| {
+    exec_async(&cmd).await.map_err(|err| {
         let msg = err.to_string();
         if msg.contains("transport '") && msg.contains("' not allowed") && offline {
             return GitError::TransportNotAllowed.into();
@@ -763,7 +818,7 @@ pub static GIT_LFS: LazyLock<Result<ProcessBuilder>> = LazyLock::new(|| {
 });
 
 /// Attempts to use `git-lfs` CLI to fetch required LFS objects for a given revision.
-fn fetch_lfs(
+async fn fetch_lfs(
     repo: &mut GitRepository,
     url: &DisplaySafeUrl,
     revision: &GitOid,
@@ -797,7 +852,7 @@ fn fetch_lfs(
         .env_remove(EnvVars::GIT_LFS_SKIP_SMUDGE)
         .cwd(&repo.path);
 
-    cmd.exec_with_output()?;
+    exec_async(&cmd).await?;
 
     // We now validate the Git LFS objects explicitly (if supported). This is
     // needed to avoid issues with Git LFS not being installed or configured
@@ -806,7 +861,7 @@ fn fetch_lfs(
     // We may want to allow the user to skip validation in the future via
     // UV_GIT_LFS_NO_VALIDATION environment variable on rare cases where
     // validation costs outweigh the benefit.
-    let validation_result = repo.lfs_fsck_objects(revision.as_str());
+    let validation_result = repo.lfs_fsck_objects(revision.as_str()).await;
 
     Ok(validation_result)
 }
