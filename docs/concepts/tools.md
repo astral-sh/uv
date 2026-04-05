@@ -21,10 +21,9 @@ Tools can also be installed with `uv tool install`, in which case their executab
 [available on the `PATH`](#tool-executables) — an isolated virtual environment is still used, but it
 is not removed when the command completes.
 
-Tools that need access to your project's installed dependencies, such as `mypy` or `pytest`,
-should generally be added as development dependencies and invoked with `uv run` instead of
-`uvx`. See the [tools guide](../guides/tools.md#choosing-between-uvx-and-uv-run) for examples and
-more context.
+Tools that need access to your project's installed dependencies, such as `mypy` or `pytest`, should
+generally be added as development dependencies and invoked with `uv run` instead of `uvx`. See the
+[tools guide](../guides/tools.md#choosing-between-uvx-and-uv-run) for examples and more context.
 
 ## Execution vs installation
 
