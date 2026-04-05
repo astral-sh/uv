@@ -4964,6 +4964,80 @@ fn sync_group_self() -> Result<()> {
     Ok(())
 }
 
+/// Regression test for: <https://github.com/astral-sh/uv/issues/14645>
+#[test]
+fn sync_workspace_member_group_self_conflicting_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["member"]
+        "#,
+    )?;
+
+    let member = context.temp_dir.child("member");
+    member.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "member"
+        version = "0.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        cpu = ["idna>=3"]
+        gpu = []
+
+        [dependency-groups]
+        ci = ["member[cpu]"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+        [tool.uv]
+        package = true
+        conflicts = [
+          [
+            { extra = "cpu" },
+            { extra = "gpu" },
+          ],
+        ]
+        "#,
+    )?;
+    member
+        .child("src")
+        .child("member")
+        .child("__init__.py")
+        .touch()?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .sync()
+            .arg("--package")
+            .arg("member")
+            .arg("--group")
+            .arg("ci"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + idna==3.6
+     + member==0.0.0 (from file://[TEMP_DIR]/member)
+    "
+    );
+
+    context.assert_command("import idna").success();
+
+    Ok(())
+}
+
 #[test]
 fn sync_non_existent_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");
