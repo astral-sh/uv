@@ -616,4 +616,8 @@ The `required-environments` setting is only relevant for packages that do not pu
 distribution (like PyTorch), as such packages can _only_ be installed on environments covered by the
 set of pre-built binary distributions (wheels) published by that package.
 
+For `required-environments`, uv currently understands platform markers for macOS, Linux, and
+Windows. Markers for other platforms are valid PEP 508 syntax, but they are not currently mapped to
+wheel tags for this setting.
+
 See the [resolution documentation](../resolution.md#required-environments) for more.
