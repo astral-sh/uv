@@ -28,7 +28,7 @@ use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, default_dependency_groups,
-    detect_conflicts,
+    detect_conflicts, discovery_options,
 };
 use crate::commands::{ExitStatus, OutputWriter, diagnostics};
 use crate::printer::Printer;
@@ -95,7 +95,7 @@ pub(crate) async fn export(
                 project_dir,
                 &DiscoveryOptions {
                     members: MemberDiscovery::None,
-                    ..DiscoveryOptions::default()
+                    ..discovery_options(&settings.sources)
                 },
                 &workspace_cache,
             )
@@ -103,7 +103,7 @@ pub(crate) async fn export(
         } else if let [name] = package.as_slice() {
             VirtualProject::discover_with_package(
                 project_dir,
-                &DiscoveryOptions::default(),
+                &discovery_options(&settings.sources),
                 &workspace_cache,
                 name.clone(),
             )
@@ -111,7 +111,7 @@ pub(crate) async fn export(
         } else {
             let project = VirtualProject::discover(
                 project_dir,
-                &DiscoveryOptions::default(),
+                &discovery_options(&settings.sources),
                 &workspace_cache,
             )
             .await?;
@@ -124,6 +124,7 @@ pub(crate) async fn export(
 
             project
         };
+
         ExportTarget::Project(project)
     };
 

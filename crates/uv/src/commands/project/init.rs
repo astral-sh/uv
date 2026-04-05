@@ -31,7 +31,9 @@ use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
-use uv_workspace::{DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceCache, WorkspaceError};
+use uv_workspace::{
+    DiscoveryOptions, MemberDiscovery, MemberExclusions, Workspace, WorkspaceCache, WorkspaceError,
+};
 
 use crate::commands::ExitStatus;
 use crate::commands::project::{find_requires_python, init_script_python_requirement};
@@ -326,7 +328,9 @@ async fn init_project(
         match Workspace::discover(
             parent,
             &DiscoveryOptions {
-                members: MemberDiscovery::Ignore(std::iter::once(path.to_path_buf()).collect()),
+                members: MemberDiscovery::Exclude(MemberExclusions::from_paths(std::iter::once(
+                    path.to_path_buf(),
+                ))),
                 ..DiscoveryOptions::default()
             },
             &workspace_cache,

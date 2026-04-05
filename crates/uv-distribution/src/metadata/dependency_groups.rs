@@ -8,7 +8,8 @@ use uv_normalize::{GroupName, PackageName};
 use uv_workspace::dependency_groups::FlatDependencyGroups;
 use uv_workspace::pyproject::{Sources, ToolUvSources};
 use uv_workspace::{
-    DiscoveryOptions, MemberDiscovery, VirtualProject, WorkspaceCache, WorkspaceError,
+    DiscoveryOptions, MemberDiscovery, MemberExclusions, VirtualProject, WorkspaceCache,
+    WorkspaceError,
 };
 
 use crate::metadata::{GitWorkspaceMember, LoweredRequirement, MetadataError};
@@ -75,10 +76,12 @@ impl SourcedDependencyGroups {
                     .expect("git checkout has a parent")
                     .to_path_buf()
             }),
-            members: if no_sources.is_none() {
-                MemberDiscovery::default()
-            } else {
-                MemberDiscovery::None
+            members: match &no_sources {
+                NoSources::None => MemberDiscovery::default(),
+                NoSources::All => MemberDiscovery::CurrentProjectOnly,
+                NoSources::Packages(packages) => MemberDiscovery::Exclude(
+                    MemberExclusions::from_packages(packages.iter().cloned()),
+                ),
             },
             ..DiscoveryOptions::default()
         };
