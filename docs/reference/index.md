@@ -1,3 +1,7 @@
+---
+title: Reference
+---
+
 # Reference
 
 The reference section provides information about specific parts of uv:
