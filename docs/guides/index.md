@@ -1,3 +1,7 @@
+---
+title: Guides overview
+---
+
 # Guides overview
 
 Check out one of the core guides to get started:
