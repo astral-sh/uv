@@ -60,6 +60,24 @@ Tools are installed into temporary, isolated environments when using `uvx`.
     `uv run` is only beneficial if you want to pin the version of the tool in the project's
     dependencies.
 
+## Choosing between `uvx` and `uv run`
+
+There are two common categories of Python tools:
+
+- Tools that work well in isolation, such as `ruff` or `black`
+- Tools that need access to your project's installed packages, such as `mypy` or `pytest`
+
+Use `uvx` for the first category. Use `uv add --dev` plus `uv run` for the second category, so the
+tool sees the same environment as your project.
+
+For example, `mypy` and any stub packages it needs should usually be added as development
+dependencies:
+
+```console
+$ uv add --dev mypy types-python-dateutil
+$ uv run mypy .
+```
+
 ## Commands with different package names
 
 When `uvx ruff` is invoked, uv installs the `ruff` package which provides the `ruff` command.
@@ -105,13 +123,13 @@ Note the `@` syntax cannot be used for anything other than an exact version.
 The `--from` option can be used to run a tool with extras:
 
 ```console
-$ uvx --from 'mypy[faster-cache,reports]' mypy --xml-report mypy_report
+$ uvx --from 'black[jupyter]' black --version
 ```
 
 This can also be combined with version selection:
 
 ```console
-$ uvx --from 'mypy[faster-cache,reports]==1.13.0' mypy --xml-report mypy_report
+$ uvx --from 'black[jupyter]==25.1.0' black --version
 ```
 
 ## Requesting different sources
