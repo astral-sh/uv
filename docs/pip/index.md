@@ -1,3 +1,7 @@
+---
+title: The pip interface
+---
+
 # The pip interface
 
 uv provides a drop-in replacement for common `pip`, `pip-tools`, and `virtualenv` commands. These
