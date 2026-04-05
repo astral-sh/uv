@@ -194,6 +194,10 @@ resolution contains wheels for specific platforms, or fails if no such wheels ar
 setting accepts a list of
 [PEP 508 environment markers](https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers).
 
+At present, uv only maps `required-environments` markers to wheel tags for macOS, Linux, and
+Windows. Markers for other platforms are not interpreted for `required-environments`, even if they
+are valid PEP 508 expressions.
+
 While the `environments` setting _limits_ the set of environments that uv will consider when
 resolving dependencies, `required-environments` _expands_ the set of platforms that uv _must_
 support when resolving dependencies.
