@@ -1,3 +1,7 @@
+---
+title: Troubleshooting
+---
+
 # Troubleshooting
 
 The troubleshooting section provides information about investigating failures in uv:
