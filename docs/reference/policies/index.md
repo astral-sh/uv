@@ -1,3 +1,7 @@
+---
+title: Policies
+---
+
 # Policies
 
 - [Versioning](./versioning.md)
