@@ -1,0 +1,21 @@
+name = "package-prereleases-global-boundary"
+description = "The user requires a non-prerelease version of `a` but has enabled pre-releases. There are pre-releases on the boundary of their range."
+
+[root]
+requires = ["a<0.2.0"]
+
+[expected]
+satisfiable = true
+explanation = "Since the user did not use a pre-release specifier, pre-releases at the boundary should not be selected even though pre-releases are allowed."
+
+[expected.packages]
+a = "0.1.0"
+
+[packages.a.versions."0.1.0"]
+
+[packages.a.versions."0.2.0a1"]
+
+[packages.a.versions."0.3.0"]
+
+[resolver_options]
+prereleases = true

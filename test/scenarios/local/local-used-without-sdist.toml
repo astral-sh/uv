@@ -1,0 +1,18 @@
+name = "local-used-without-sdist"
+description = "Even if there is a 1.2.3 version published, if it is unavailable for some reason (no sdist and no compatible wheels in this case), a 1.2.3 version with a local segment should be usable instead."
+
+[root]
+requires = ["a==1.2.3"]
+
+[expected]
+satisfiable = true
+explanation = "The version '1.2.3+foo' satisfies the constraint '==1.2.3'."
+
+[expected.packages]
+a = "1.2.3+foo"
+
+[packages.a.versions."1.2.3"]
+wheel_tags = ["py3-any-macosx_10_0_ppc64"]
+sdist = false
+
+[packages.a.versions."1.2.3+foo"]

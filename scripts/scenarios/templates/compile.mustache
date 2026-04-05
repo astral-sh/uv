@@ -3,9 +3,8 @@
 //! Generated with `{{generated_with}}`
 //! Scenarios from <{{generated_from}}>
 //!
-#![cfg(all(feature = "test-python", feature = "test-pypi", unix))]
+#![cfg(all(feature = "test-python", unix))]
 
-use std::env;
 use std::process::Command;
 
 use anyhow::Result;
@@ -15,24 +14,20 @@ use predicates::prelude::predicate;
 
 use uv_static::EnvVars;
 
-use uv_test::{
-    TestContext, build_vendor_links_url, get_bin, packse_index_url, python_path_with_versions,
-    uv_snapshot,
-};
+use uv_test::packse::PackseServer;
+use uv_test::{TestContext, python_path_with_versions, uv_snapshot};
 
 /// Provision python binaries and return a `pip compile` command with options shared across all scenarios.
-fn command(context: &TestContext, python_versions: &[&str]) -> Command {
+fn command(context: &TestContext, python_versions: &[&str], server: &PackseServer) -> Command {
     let python_path = python_path_with_versions(&context.temp_dir, python_versions)
         .expect("Failed to create Python test path");
-    let mut command = Command::new(get_bin!());
+    let mut command = Command::new(uv_test::get_bin!());
     command
         .arg("pip")
         .arg("compile")
         .arg("requirements.in")
         .arg("--index-url")
-        .arg(packse_index_url())
-        .arg("--find-links")
-        .arg(build_vendor_links_url());
+        .arg(server.index_url());
     context.add_shared_options(&mut command, true);
     command.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     command.env(EnvVars::UV_TEST_PYTHON_PATH, python_path);
@@ -57,10 +52,7 @@ fn command(context: &TestContext, python_versions: &[&str]) -> Command {
 fn {{module_name}}() -> Result<()> {
     let context = uv_test::test_context!("{{environment.python}}");
     let python_versions = &[{{#environment.additional_python}}"{{.}}", {{/environment.additional_python}}];
-
-    // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = context.filters();
-    filters.push((r"{{name}}-", "package-"));
+    let server = PackseServer::new("{{scenario_path}}");
 
     let requirements_in = context.temp_dir.child("requirements.in");
     {{#root.requires}}
@@ -70,7 +62,7 @@ fn {{module_name}}() -> Result<()> {
     {{#expected.explanation}}
     // {{expected.explanation}}
     {{/expected.explanation}}
-    let output = uv_snapshot!(filters, command(&context, python_versions)
+    let output = uv_snapshot!(context.filters(), command(&context, python_versions, &server)
         {{#resolver_options.prereleases}}
         .arg("--prerelease=allow")
         {{/resolver_options.prereleases}}

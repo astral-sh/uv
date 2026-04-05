@@ -1,0 +1,18 @@
+name = "package-multiple-prereleases-numbers"
+description = "The user requires `a` which has multiple alphas available."
+
+[root]
+requires = ["a>=1.0.0a1"]
+
+[expected]
+satisfiable = true
+explanation = "The latest alpha version should be selected."
+
+[expected.packages]
+a = "1.0.0a3"
+
+[packages.a.versions."1.0.0a1"]
+
+[packages.a.versions."1.0.0a2"]
+
+[packages.a.versions."1.0.0a3"]
