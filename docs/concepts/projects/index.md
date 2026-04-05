@@ -1,3 +1,7 @@
+---
+title: Projects
+---
+
 # Projects
 
 Projects help manage Python code spanning multiple files.
