@@ -5405,6 +5405,79 @@ fn read_metadata_statically_over_the_cache() -> Result<()> {
     Ok(())
 }
 
+/// Accept equivalent singular version intervals in static `requires-dist` metadata.
+///
+/// See: <https://github.com/astral-sh/uv/issues/17639>
+#[test]
+fn no_install_project_singular_interval_requires_dist() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        requires-python = ">=3.12"
+        dynamic = ["version"]
+        dependencies = ["iniconfig>=2.0.0,<=2.0.0"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv]
+        cache-keys = [{ file = "pyproject.toml" }, { file = "src/__about__.py" }]
+
+        [tool.hatch.version]
+        path = "src/__about__.py"
+        scheme = "standard"
+        "#,
+    )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("__about__.py")
+        .write_str("__version__ = '0.1.0'")?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
+    context.lock().assert().success();
+
+    let lock_path = context.temp_dir.join("uv.lock");
+    let lock = fs_err::read_to_string(&lock_path)?;
+    let lock = lock.replacen(
+        r#"requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0,<=2.0.0" }]"#,
+        r#"requires-dist = [{ name = "iniconfig", specifier = "<=2.0.0,>=2.0.0" }]"#,
+        1,
+    );
+    assert!(
+        lock.contains(r#"requires-dist = [{ name = "iniconfig", specifier = "<=2.0.0,>=2.0.0" }]"#),
+        "expected to rewrite the dynamic package metadata in `uv.lock`"
+    );
+    fs_err::write(&lock_path, lock)?;
+
+    fs_err::remove_dir_all(&context.cache_dir)?;
+    fs_err::remove_file(context.temp_dir.join("src").join("__about__.py"))?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--locked").arg("--no-install-project"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
 /// Avoid syncing the project package when `--no-install-project` is provided.
 #[test]
 fn no_install_project() -> Result<()> {

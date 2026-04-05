@@ -67,7 +67,14 @@ impl VersionSpecifiers {
     fn from_unsorted(mut specifiers: Vec<VersionSpecifier>) -> Self {
         // TODO(konsti): This seems better than sorting on insert and not getting the size hint,
         // but i haven't measured it.
-        specifiers.sort_by(|a, b| a.version().cmp(b.version()));
+        //
+        // Tie-break on the operator so semantically equivalent same-version intervals such as
+        // `>=1.4.4,<=1.4.4` and `<=1.4.4,>=1.4.4` normalize to the same representation.
+        specifiers.sort_by(|a, b| {
+            a.version()
+                .cmp(b.version())
+                .then_with(|| a.operator().cmp(b.operator()))
+        });
         Self(specifiers.into_boxed_slice())
     }
 
@@ -1949,6 +1956,15 @@ mod tests {
                 .to_string(),
             ">=3.7, !=3.9.0, <4.0"
         );
+    }
+
+    #[test]
+    fn test_version_specifiers_singular_interval() {
+        let lower_then_upper = VersionSpecifiers::from_str(">=1.4.4, <=1.4.4").unwrap();
+        let upper_then_lower = VersionSpecifiers::from_str("<=1.4.4, >=1.4.4").unwrap();
+
+        assert_eq!(lower_then_upper, upper_then_lower);
+        assert_eq!(lower_then_upper.to_string(), "<=1.4.4, >=1.4.4");
     }
 
     /// These occur in the simple api, e.g.
