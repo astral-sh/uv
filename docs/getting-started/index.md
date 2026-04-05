@@ -1,3 +1,7 @@
+---
+title: Getting started
+---
+
 # Getting started
 
 To help you get started with uv, we'll cover a few important topics:
