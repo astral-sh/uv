@@ -1,3 +1,7 @@
+---
+title: Integration guides
+---
+
 # Integration guides
 
 Learn how to integrate uv with other software:
