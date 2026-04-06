@@ -4878,3 +4878,109 @@ fn tool_install_removed_python() {
     Installed 2 executables: black, blackd
     ");
 }
+
+/// Test that `uv tool install` fixes broken shims when the tool environment is moved.
+/// This simulates a CI cache restore to a different path.
+#[test]
+#[cfg(unix)]
+fn tool_install_fixes_broken_shims_when_env_moved() {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    
+    // First tool directory (simulates original CI job)
+    let tool_dir_original = context.temp_dir.child("tools_original");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `black` in the original location
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir_original.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    ");
+
+    tool_dir_original.child("black").assert(predicate::path::is_dir());
+    let executable = bin_dir.child("black");
+    assert!(executable.exists());
+
+    // Verify the symlink points to the original location
+    let original_symlink_target = fs_err::read_link(&executable).unwrap();
+    assert!(original_symlink_target.to_string_lossy().contains("tools_original"));
+
+    // Now simulate moving the tool directory (like CI cache restore to different path)
+    let tool_dir_new = context.temp_dir.child("tools_new");
+    
+    // Copy the entire tool directory to the new location
+    copy_dir_all(tool_dir_original.path(), tool_dir_new.path()).unwrap();
+
+    // Remove ONLY the old tool directory, but keep the bin executable
+    // This simulates the scenario where the environment was moved but the
+    // symlinks in bin still point to the old location
+    fs_err::remove_dir_all(tool_dir_original.path()).unwrap();
+
+    // Verify the new location has the environment
+    tool_dir_new.child("black").assert(predicate::path::is_dir());
+
+    // Verify the symlink STILL points to the OLD (now broken) location
+    let symlink_before = fs_err::read_link(&executable).unwrap();
+    assert!(
+        symlink_before.to_string_lossy().contains("tools_original"),
+        "Symlink should still point to old location before fix: {:?}",
+        symlink_before
+    );
+
+    // Reinstall with the new tool directory - should fix the shims
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir_new.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    ");
+
+    // Verify the executable was recreated
+    assert!(executable.exists());
+
+    // Verify the symlink now points to the NEW location
+    let new_symlink_target = fs_err::read_link(&executable).unwrap();
+    assert!(
+        new_symlink_target.to_string_lossy().contains("tools_new"),
+        "Symlink should point to new location: {:?}",
+        new_symlink_target
+    );
+    assert!(
+        !new_symlink_target.to_string_lossy().contains("tools_original"),
+        "Symlink should not point to old location: {:?}",
+        new_symlink_target
+    );
+}

@@ -263,28 +263,92 @@ pub(crate) fn finalize_tool_install(
             ));
         }
 
-        // Error if we're overwriting an existing entrypoint, unless the user passed `--force`.
+        // Check if the existing entrypoints are still valid. An entrypoint is invalid if:
+        // 1. On Unix: The symlink target doesn't match the expected source path (environment moved)
+        // 2. On Windows: The entrypoint copy exists but may have stale shebang (environment moved)
+        // 3. The entrypoint doesn't exist at all
+        let mut invalid_entrypoints = Vec::new();
+        for (name, src, target) in &target_entrypoints {
+            if !target.exists() {
+                // Entrypoint doesn't exist, needs to be installed
+                invalid_entrypoints.push((name.clone(), src.clone(), target.clone()));
+            } else {
+                #[cfg(unix)]
+                {
+                    // On Unix, check if the symlink points to the expected source path
+                    if let Ok(existing_target) = fs_err::read_link(target) {
+                        if existing_target != *src {
+                            debug!(
+                                "Entrypoint `{name}` symlink target changed: {} -> {}",
+                                existing_target.simplified_display(),
+                                src.simplified_display()
+                            );
+                            invalid_entrypoints.push((name.clone(), src.clone(), target.clone()));
+                        }
+                    } else {
+                        // Not a symlink or can't read it, treat as invalid
+                        invalid_entrypoints.push((name.clone(), src.clone(), target.clone()));
+                    }
+                }
+                #[cfg(windows)]
+                {
+                    // On Windows, entrypoints are copied, so we can't easily check if they're valid.
+                    // We rely on the environment path check above to detect moves.
+                    // If the environment was removed and recreated, the entrypoints would be
+                    // removed by `remove_entrypoints` in the install flow.
+                }
+            }
+        }
+
+        // Error if we're overwriting an existing entrypoint, unless the user passed `--force`
+        // or the entrypoints are invalid (environment moved).
+        let entrypoints_to_install = if invalid_entrypoints.is_empty() && !force {
+            // All entrypoints are valid, skip installation
+            vec![]
+        } else if !invalid_entrypoints.is_empty() && !force {
+            // Some entrypoints are invalid (environment moved), reinstall them
+            debug!(
+                "Reinstalling {} invalid entrypoint(s) for `{package}`",
+                invalid_entrypoints.len()
+            );
+            invalid_entrypoints
+        } else {
+            // Force flag or no valid entrypoints, install all
+            target_entrypoints.into_iter().collect()
+        };
+
+        if entrypoints_to_install.is_empty() {
+            // All entrypoints are already valid, skip to next package
+            continue;
+        }
+
+        // Error if we're overwriting an existing entrypoint (that's not invalid), unless the user passed `--force`.
         if !force {
-            let mut existing_entrypoints = target_entrypoints
+            let mut existing_valid_entrypoints = entrypoints_to_install
                 .iter()
-                .filter(|(_, _, target_path)| target_path.exists())
+                .filter(|(_, _, target_path)| {
+                    // Check if the target exists - if it does and we're installing it,
+                    // it means it wasn't in the invalid list (because invalid ones don't exist
+                    // or have wrong symlink targets)
+                    target_path.exists()
+                })
                 .peekable();
-            if existing_entrypoints.peek().is_some() {
+            if existing_valid_entrypoints.peek().is_some() {
                 // Clean up the environment we just created
                 installed_tools.remove_environment(name)?;
 
-                let existing_entrypoints = existing_entrypoints
+                let existing_valid_entrypoints = existing_valid_entrypoints
                     // SAFETY: We know the target has a filename because we just constructed it above
                     .map(|(_, _, target)| target.file_name().unwrap().to_string_lossy())
                     .collect::<Vec<_>>();
-                let (s, exists) = if existing_entrypoints.len() == 1 {
+                let (s, exists) = if existing_valid_entrypoints.len() == 1 {
                     ("", "exists")
                 } else {
                     ("s", "exist")
                 };
                 bail!(
                     "Executable{s} already {exists}: {} (use `--force` to overwrite)",
-                    existing_entrypoints
+                    existing_valid_entrypoints
                         .iter()
                         .map(|name| name.bold())
                         .join(", ")
@@ -296,7 +360,7 @@ pub(crate) fn finalize_tool_install(
         let itself = std::env::current_exe().ok();
 
         let mut names = BTreeSet::new();
-        for (name, src, target) in target_entrypoints {
+        for (name, src, target) in entrypoints_to_install {
             debug!("Installing executable: `{name}`");
 
             #[cfg(unix)]
