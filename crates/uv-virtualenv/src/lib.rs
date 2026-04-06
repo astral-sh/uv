@@ -5,7 +5,7 @@ use thiserror::Error;
 
 use uv_python::{Interpreter, PythonEnvironment};
 
-pub use virtualenv::{OnExisting, RemovalReason, remove_virtualenv};
+pub use virtualenv::{OnExisting, RemovalReason};
 
 mod virtualenv;
 

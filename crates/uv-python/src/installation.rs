@@ -62,13 +62,15 @@ impl PythonInstallation {
         request: &PythonRequest,
         environments: EnvironmentPreference,
         preference: PythonPreference,
-        download_list: &ManagedPythonDownloadList,
+        download_list: Option<&ManagedPythonDownloadList>,
         cache: &Cache,
         preview: Preview,
     ) -> Result<Self, Error> {
         let installation =
             find_python_installation(request, environments, preference, cache, preview)??;
-        installation.warn_if_outdated_prerelease(request, download_list);
+        if let Some(download_list) = download_list {
+            installation.warn_if_outdated_prerelease(request, download_list);
+        }
         Ok(installation)
     }
 
@@ -143,7 +145,7 @@ impl PythonInstallation {
             request,
             environments,
             preference,
-            &download_list,
+            Some(&download_list),
             cache,
             preview,
         ) {

@@ -7,7 +7,7 @@ use indoc::indoc;
 use insta::assert_snapshot;
 use predicates::{prelude::predicate, str::contains};
 use std::path::Path;
-use uv_fs::copy_dir_all;
+use uv_fs::{Simplified, copy_dir_all};
 use uv_python::PYTHON_VERSION_FILENAME;
 use uv_static::EnvVars;
 
@@ -6572,7 +6572,7 @@ fn run_target_workspace_discovery_preview_flag() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment at: project/.venv
+    Creating virtual environment `foo-py3.12-[HASH]` in the centralized store
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -6599,7 +6599,7 @@ fn run_target_workspace_discovery_uv_preview_env() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment at: project/.venv
+    Creating virtual environment `foo-py3.12-[HASH]` in the centralized store
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -6868,6 +6868,68 @@ fn run_project_file_no_ancestor_project() -> Result<()> {
     ----- stderr -----
     warning: Project path `isolated/somefile` is not a directory. This will become an error in a future release. Use `--preview-features project-directory-must-exist` to error on this now.
     error: failed to open file `[TEMP_DIR]/isolated/somefile/uv.toml`: Not a directory (os error 20)
+    ");
+
+    Ok(())
+}
+
+/// `uv run` with centralized environments should work end-to-end.
+#[test]
+fn run_centralized_env() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--preview-features")
+        .arg("centralized-envs")
+        .arg("python")
+        .arg("-c")
+        .arg("print('hello')"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    hello
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment `project-py3.12-[HASH]` in the centralized store
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+
+    // `.venv` should be a symlink/junction pointing into the cache.
+    let link_target = fs_err::read_link(context.temp_dir.child(".venv").path())?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_snapshot!(
+            link_target.portable_display().to_string(),
+            @"[CACHE_DIR]/environments-v2/project-py3.12-[HASH]"
+        );
+    });
+
+    // A second run should reuse the environment without creating it again.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--preview-features")
+        .arg("centralized-envs")
+        .arg("python")
+        .arg("-c")
+        .arg("print('hello again')"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    hello again
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
     ");
 
     Ok(())

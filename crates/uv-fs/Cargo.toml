@@ -43,6 +43,7 @@ rustix = { workspace = true }
 [target.'cfg(windows)'.dependencies]
 backon = { workspace = true }
 junction = { workspace = true }
+self-replace = { workspace = true }
 windows = { workspace = true }
 
 [features]

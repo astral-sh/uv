@@ -274,7 +274,7 @@ fn warn_if_existing_pin_incompatible_with_project(
         pin,
         EnvironmentPreference::OnlySystem,
         python_preference,
-        downloads_list,
+        Some(downloads_list),
         cache,
         preview,
     ) {

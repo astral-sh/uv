@@ -1,15 +1,16 @@
 use std::borrow::Cow;
-use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::{fmt, io};
 
 use owo_colors::OwoColorize;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use uv_cache::Cache;
 use uv_fs::{LockedFile, LockedFileError, Simplified};
 use uv_pep440::Version;
 use uv_preview::Preview;
+use uv_warnings::warn_user_once;
 
 use crate::discovery::find_python_installation;
 use crate::installation::PythonInstallation;
@@ -27,6 +28,7 @@ pub struct PythonEnvironment(Arc<PythonEnvironmentShared>);
 struct PythonEnvironmentShared {
     root: PathBuf,
     interpreter: Interpreter,
+    centralized: bool,
 }
 
 /// The result of failed environment discovery.
@@ -223,6 +225,7 @@ impl PythonEnvironment {
         Ok(Self(Arc::new(PythonEnvironmentShared {
             root: interpreter.sys_prefix().to_path_buf(),
             interpreter,
+            centralized: false,
         })))
     }
 
@@ -236,6 +239,7 @@ impl PythonEnvironment {
         Self(Arc::new(PythonEnvironmentShared {
             root: interpreter.sys_prefix().to_path_buf(),
             interpreter,
+            centralized: false,
         }))
     }
 
@@ -255,6 +259,104 @@ impl PythonEnvironment {
             interpreter: inner.interpreter.with_prefix(prefix)?,
             ..inner
         })))
+    }
+
+    /// Mark this environment as centralized (stored in the uv cache rather than in-project).
+    #[must_use]
+    pub fn with_centralized(self, centralized: bool) -> Self {
+        let mut inner = Arc::unwrap_or_clone(self.0);
+        inner.centralized = centralized;
+        Self(Arc::new(inner))
+    }
+
+    /// Returns `true` if this environment is stored in the centralized environment store.
+    pub fn centralized(&self) -> bool {
+        self.0.centralized
+    }
+
+    /// If this environment is centralized, create or update a `.venv` link at
+    /// `<install_path>/.venv` pointing to the environment root.
+    ///
+    /// Returns a path suitable for constructing sub-paths (e.g. the scripts directory):
+    /// - The link path if a symlink/junction was created (traversable as a directory)
+    /// - The real environment root otherwise (not centralized, path-file fallback, or failure),
+    ///   since `.venv` is not traversable in those cases
+    ///
+    /// When `warn` is `true`, emits user-facing warnings for any failures.
+    pub fn update_venv_link(&self, install_path: &Path, warn: bool) -> PathBuf {
+        if !self.0.centralized {
+            return self.root().to_path_buf();
+        }
+
+        let link_path = install_path.join(".venv");
+        let target = self.root();
+
+        // Delete any pre-existing environment in the link path as centralised environments are
+        // currently only supported for workspaces.
+        if link_path.read_link().is_err() && uv_fs::is_virtualenv_base(&link_path) {
+            let canonicalized = link_path.canonicalize();
+            let path = canonicalized.as_deref().unwrap_or_else(|_| &link_path);
+            if let Err(err) = uv_fs::remove_virtualenv(path) {
+                if warn {
+                    warn_user_once!("Failed to remove existing local virtual environment: {err}");
+                } else {
+                    warn!("Failed to remove virtualenv: {err}");
+                }
+                return target.to_path_buf();
+            }
+        }
+
+        // Try a symlink/junction to start with
+        let symlink_err = match uv_fs::replace_symlink_lenient(target, &link_path) {
+            Ok(()) => return link_path,
+            // These errors are not recoverable with the alternative `link file` path.
+            Err(err)
+                if matches!(
+                    err.kind(),
+                    io::ErrorKind::DirectoryNotEmpty | io::ErrorKind::IsADirectory
+                ) =>
+            {
+                if warn {
+                    warn_user_once!("Failed to create symlink or path file: {err}");
+                } else {
+                    warn!("Failed to create venv symlink or junction: {err}");
+                }
+                return target.to_path_buf();
+            }
+            Err(err) => {
+                if !warn {
+                    warn!("Failed to create venv symlink or junction: {err}");
+                }
+                err
+            }
+        };
+
+        // Fall back to writing a path file
+        let Some(target_str) = target.to_str() else {
+            if warn {
+                warn_user_once!("Failed to create symlink or path file: {symlink_err}");
+            } else {
+                warn!("Failed to convert venv target path to string");
+            }
+            return target.to_path_buf();
+        };
+        match uv_fs::write_atomic_sync(&link_path, target_str.as_bytes()) {
+            Ok(()) => {
+                if warn {
+                    warn_user_once!(
+                        "Failed to create symlink, wrote a path file instead: {symlink_err}"
+                    );
+                }
+            }
+            Err(file_err) => {
+                if warn {
+                    warn_user_once!("Failed to create symlink or path file: {symlink_err}",);
+                } else {
+                    warn!("Failed to create a path file: {file_err}");
+                }
+            }
+        }
+        target.to_path_buf()
     }
 
     /// Returns the root (i.e., `prefix`) of the Python interpreter.
