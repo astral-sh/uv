@@ -207,10 +207,10 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Returns the set of conflicts for the [`LockTarget`].
-    pub(crate) fn conflicts(self) -> Conflicts {
+    pub(crate) fn conflicts(self) -> Result<Conflicts, ProjectError> {
         match self {
-            Self::Workspace(workspace) => workspace.conflicts(),
-            Self::Script(_) => Conflicts::empty(),
+            Self::Workspace(workspace) => Ok(workspace.conflicts()?),
+            Self::Script(_) => Ok(Conflicts::empty()),
         }
     }
 

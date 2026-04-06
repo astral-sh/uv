@@ -15,7 +15,7 @@ use uv_fs::{CWD, Simplified};
 use uv_normalize::{DEV_DEPENDENCIES, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerTree, VerbatimUrl};
-use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
+use uv_pypi_types::{ConflictError, Conflicts, SupportedEnvironments, VerbatimParsedUrl};
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 
@@ -81,6 +81,8 @@ pub enum WorkspaceError {
     Io(#[from] std::io::Error),
     #[error("Failed to parse: `{}`", _0.user_display())]
     Toml(PathBuf, #[source] Box<PyprojectTomlError>),
+    #[error(transparent)]
+    Conflicts(#[from] ConflictError),
     #[error("Failed to normalize workspace member path")]
     Normalize(#[source] std::io::Error),
 }
@@ -548,12 +550,24 @@ impl Workspace {
     }
 
     /// Returns the set of conflicts for the workspace.
-    pub fn conflicts(&self) -> Conflicts {
+    pub fn conflicts(&self) -> Result<Conflicts, WorkspaceError> {
         let mut conflicting = Conflicts::empty();
+        if self.is_non_project() {
+            if let Some(root_conflicts) = self
+                .pyproject_toml
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.conflicts.as_ref())
+            {
+                let mut root_conflicts = root_conflicts.to_conflicts()?;
+                conflicting.append(&mut root_conflicts);
+            }
+        }
         for member in self.packages.values() {
             conflicting.append(&mut member.pyproject_toml.conflicts());
         }
-        conflicting
+        Ok(conflicting)
     }
 
     /// Returns an iterator over the `requires-python` values for each member of the workspace.
