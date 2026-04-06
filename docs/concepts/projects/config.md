@@ -335,6 +335,9 @@ static metadata. If static metadata is unavailable, uv is required to build the 
 dependency resolution phase; as such, uv cannot determine the version of the build dependency that
 would ultimately be installed in the project environment.
 
+For guidance on tracking dynamic metadata changes in the cache, see
+[Dynamic metadata](../cache.md#dynamic-metadata).
+
 In other words, if `flash-attn` did not declare static metadata, uv would not be able to determine
 the version of `torch` that would be installed in the project environment, since it would need to
 build `flash-attn` prior to resolving the `torch` version.
