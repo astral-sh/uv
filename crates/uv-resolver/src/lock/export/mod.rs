@@ -55,6 +55,7 @@ impl<'lock> ExportableRequirements<'lock> {
         install_options: &'lock InstallOptions,
     ) -> Result<Self, LockError> {
         let size_guess = target.lock().packages.len();
+        let has_conflicts = !target.lock().conflicts.is_empty();
         let mut graph = Graph::<Node<'lock>, Edge<'lock>>::with_capacity(size_guess, size_guess);
         let mut inverse = FxHashMap::with_capacity_and_hasher(size_guess, FxBuildHasher);
         let mut selected_extras: FxHashMap<_, Vec<ExtraName>> =
@@ -320,19 +321,27 @@ impl<'lock> ExportableRequirements<'lock> {
                     if let Some(extra) = extra {
                         Edge::Optional(
                             extra,
-                            dep.simplified_marker
-                                .as_simplified_marker_tree()
-                                .simplify_extras(std::slice::from_ref(extra)),
-                        )
-                    } else {
-                        Edge::Prod(selected_extras.get(&package.id).map_or_else(
-                            || dep.simplified_marker.as_simplified_marker_tree(),
-                            |extras| {
+                            if has_conflicts {
+                                dep.simplified_marker.as_simplified_marker_tree()
+                            } else {
                                 dep.simplified_marker
                                     .as_simplified_marker_tree()
-                                    .simplify_extras(extras)
+                                    .simplify_extras(std::slice::from_ref(extra))
                             },
-                        ))
+                        )
+                    } else {
+                        Edge::Prod(if has_conflicts {
+                            dep.simplified_marker.as_simplified_marker_tree()
+                        } else {
+                            selected_extras.get(&package.id).map_or_else(
+                                || dep.simplified_marker.as_simplified_marker_tree(),
+                                |extras| {
+                                    dep.simplified_marker
+                                        .as_simplified_marker_tree()
+                                        .simplify_extras(extras)
+                                },
+                            )
+                        })
                     },
                 );
 
@@ -524,24 +533,13 @@ fn conflict_marker_reachability<'lock>(
                     parent_marker.and(marker);
                 }
                 Edge::Optional(extra, marker) => {
-                    // Resolve any conflicts on the edge.
-                    let marker = resolve_conflicts(*marker, &parent_map);
-
-                    // Propagate the edge to the known conflicts.
-                    for value in parent_map.values_mut() {
-                        value.and(marker);
-                    }
-
-                    // Propagate the edge to the node itself.
-                    parent_marker.and(marker);
-
-                    // Add a known conflict item for the extra.
+                    // The optional extra is active for this edge itself, so add it before
+                    // resolving any conflict markers on the edge.
                     if let Node::Package(parent) = graph[parent_index] {
                         let item = ConflictItem::from((parent.name().clone(), (*extra).clone()));
                         parent_map.insert(item, parent_marker);
                     }
-                }
-                Edge::Dev(group, marker) => {
+
                     // Resolve any conflicts on the edge.
                     let marker = resolve_conflicts(*marker, &parent_map);
 
@@ -552,12 +550,25 @@ fn conflict_marker_reachability<'lock>(
 
                     // Propagate the edge to the node itself.
                     parent_marker.and(marker);
-
-                    // Add a known conflict item for the group.
+                }
+                Edge::Dev(group, marker) => {
+                    // The dependency group is active for this edge itself, so add it before
+                    // resolving any conflict markers on the edge.
                     if let Node::Package(parent) = graph[parent_index] {
                         let item = ConflictItem::from((parent.name().clone(), (*group).clone()));
                         parent_map.insert(item, parent_marker);
                     }
+
+                    // Resolve any conflicts on the edge.
+                    let marker = resolve_conflicts(*marker, &parent_map);
+
+                    // Propagate the edge to the known conflicts.
+                    for value in parent_map.values_mut() {
+                        value.and(marker);
+                    }
+
+                    // Propagate the edge to the node itself.
+                    parent_marker.and(marker);
                 }
             }
 

@@ -3673,6 +3673,103 @@ fn requirements_txt_cyclic_dependencies() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn pylock_workspace_member_conflict_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12.0"
+        dependencies = ["member"]
+
+        [project.optional-dependencies]
+        cpu = ["member[cpu]"]
+        cu124 = ["member[cu124]"]
+
+        [tool.uv.workspace]
+        members = ["packages/member"]
+
+        [tool.uv.sources]
+        member = { workspace = true }
+        "#,
+    )?;
+
+    let member = context.temp_dir.child("packages/member");
+    member.create_dir_all()?;
+    member.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12.0"
+        dependencies = []
+
+        [project.optional-dependencies]
+        cpu = ["torch>=2.6.0"]
+        cu124 = ["torch>=2.6.0"]
+
+        [tool.uv]
+        conflicts = [
+          [
+            { extra = "cpu" },
+            { extra = "cu124" },
+          ],
+        ]
+
+        [tool.uv.sources]
+        torch = [
+          { index = "pytorch-cpu", extra = "cpu" },
+          { index = "pytorch-cu124", extra = "cu124" },
+        ]
+
+        [[tool.uv.index]]
+        name = "pytorch-cpu"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cpu"
+        explicit = true
+
+        [[tool.uv.index]]
+        name = "pytorch-cu124"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu124"
+        explicit = true
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    let output = context
+        .export()
+        .arg("--format")
+        .arg("pylock.toml")
+        .arg("--extra")
+        .arg("cpu")
+        .output()?;
+
+    assert!(
+        output.status.success(),
+        "expected export to succeed, stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        stdout.contains("name = \"torch\""),
+        "expected torch in export, stdout:\n{stdout}\nstderr:\n{stderr}",
+    );
+    assert!(
+        stdout.contains(r#"index = "https://astral-sh.github.io/pytorch-mirror/whl/cpu""#),
+        "expected the CPU torch index in export, stdout:\n{stdout}\nstderr:\n{stderr}",
+    );
+
+    Ok(())
+}
+
 /// Export requirements in the presence of a cycle, with conflicts enabled.
 #[test]
 fn requirements_txt_cyclic_dependencies_conflict() -> Result<()> {
