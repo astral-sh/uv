@@ -357,8 +357,8 @@ fn help_subcommand() {
       -v, --verbose...
               Use verbose output.
               
-              You can configure fine-grained logging using the `RUST_LOG` environment variable.
-              (<https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives>)
+              Configure fine-grained logging with the [`RUST_LOG` environment
+              variable](https://docs.astral.sh/uv/reference/environment/#rust_log).
 
           --color <COLOR_CHOICE>
               Control the use of color in output.
@@ -641,8 +641,8 @@ fn help_subsubcommand() {
       -v, --verbose...
               Use verbose output.
               
-              You can configure fine-grained logging using the `RUST_LOG` environment variable.
-              (<https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives>)
+              Configure fine-grained logging with the [`RUST_LOG` environment
+              variable](https://docs.astral.sh/uv/reference/environment/#rust_log).
 
           --color <COLOR_CHOICE>
               Control the use of color in output.
