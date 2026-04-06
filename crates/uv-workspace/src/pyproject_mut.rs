@@ -2092,6 +2092,35 @@ dependencies = [
     }
 
     #[test]
+    fn remove_last_item_with_trailing_comment_preserves_previous_comment() {
+        let toml = r#"
+[project]
+dependencies = [
+    "boto3", # this is boto3
+    "requests", # this is requests
+]
+"#;
+        let mut doc: DocumentMut = toml.parse().unwrap();
+        let deps = doc["project"]["dependencies"]
+            .as_array_mut()
+            .expect("dependencies array");
+
+        let name = PackageName::from_str("requests").unwrap();
+        remove_dependency(&name, deps);
+
+        assert_snapshot!(
+            doc.to_string(),
+            @r#"
+[project]
+dependencies = [
+    "boto3", # this is boto3
+    # this is requests
+]
+"#
+        );
+    }
+
+    #[test]
     fn remove_item_with_trailing_comment_middle() {
         // When the removed item has an end-of-line comment and is in the middle,
         // toml_edit stores the comment in the next item's prefix. After removal,
@@ -2120,6 +2149,37 @@ dependencies = [
     "requests>=2.32.5",
     # comment on numpy
     "flask>=3.0.0",
+]
+"#
+        );
+    }
+
+    #[test]
+    fn remove_first_item_with_trailing_comment_preserves_leading_comments() {
+        let toml = r#"
+[project]
+dependencies = [
+    # should be in alphabetical order
+    "basedmypy[faster-cache]>=2.8.1", # this is a comment
+    "basedpyright>=1.18.2,<2.0.0",
+]
+"#;
+        let mut doc: DocumentMut = toml.parse().unwrap();
+        let deps = doc["project"]["dependencies"]
+            .as_array_mut()
+            .expect("dependencies array");
+
+        let name = PackageName::from_str("basedmypy").unwrap();
+        remove_dependency(&name, deps);
+
+        assert_snapshot!(
+            doc.to_string(),
+            @r#"
+[project]
+dependencies = [
+    # should be in alphabetical order
+    # this is a comment
+    "basedpyright>=1.18.2,<2.0.0",
 ]
 "#
         );
