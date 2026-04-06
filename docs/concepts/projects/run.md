@@ -12,9 +12,11 @@ $ uv run python -c "import example"
 When using `run`, uv will ensure that the project environment is up-to-date before running the given
 command.
 
-See [locking and syncing](./sync.md) for details on when uv refreshes the lockfile and project
-environment, and the [projects guide](../../guides/projects.md#running-commands) for a task-focused
-overview of `uv run`.
+!!! note
+
+    See [locking and syncing](./sync.md) for details on when uv refreshes the lockfile and
+    project environment, and the [projects guide](../../guides/projects.md#running-commands) for
+    a task-focused overview of `uv run`.
 
 The given command can be provided by the project environment or exist outside of it, e.g.:
 
