@@ -87,6 +87,9 @@ pub(crate) async fn list(
         ManagedPythonDownloadList::new(&client, python_downloads_json_url.as_deref()).await?;
     let mut output = BTreeSet::new();
     if let Some(base_download_request) = base_download_request {
+        // Check before the move since `base_download_request` is consumed below
+        let show_debug = all_variants || base_download_request.allows_debug();
+
         let download_request = match kinds {
             PythonListKinds::Installed => None,
             PythonListKinds::Downloads => Some(if all_platforms {
@@ -119,11 +122,7 @@ pub(crate) async fn list(
             .map(|request| download_list.iter_matching(request))
             .into_iter()
             .flatten()
-            .filter(|download| {
-                all_variants
-                    || base_download_request.allows_debug()
-                    || !download.key().variant().is_debug()
-            });
+            .filter(|download| show_debug || !download.key().variant().is_debug());
 
         for download in downloads {
             output.insert((
