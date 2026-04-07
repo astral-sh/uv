@@ -38,62 +38,57 @@ impl HashStrategy {
             Self::None => HashPolicy::None,
             Self::Generate(mode) => HashPolicy::Generate(*mode),
             Self::Verify(hashes) => {
-                if let Some(hashes) = hashes.get(&distribution.version_id()) {
-                    HashPolicy::Validate(hashes.as_slice())
+                let id = distribution.version_id();
+                if let Some(hashes) = hashes.get(&id) {
+                    hash_policy(&id, hashes.as_slice())
                 } else {
                     HashPolicy::None
                 }
             }
-            Self::Require(hashes) => HashPolicy::Validate(
-                hashes
-                    .get(&distribution.version_id())
-                    .map(Vec::as_slice)
-                    .unwrap_or_default(),
-            ),
+            Self::Require(hashes) => {
+                let id = distribution.version_id();
+                hash_policy(&id, hashes.get(&id).map(Vec::as_slice).unwrap_or_default())
+            }
         }
     }
 
     /// Return the [`HashPolicy`] for the given registry-based package.
     pub fn get_package(&self, name: &PackageName, version: &Version) -> HashPolicy<'_> {
+        let id = VersionId::from_registry(name.clone(), version.clone());
         match self {
             Self::None => HashPolicy::None,
             Self::Generate(mode) => HashPolicy::Generate(*mode),
             Self::Verify(hashes) => {
-                if let Some(hashes) =
-                    hashes.get(&VersionId::from_registry(name.clone(), version.clone()))
-                {
-                    HashPolicy::Validate(hashes.as_slice())
+                if let Some(hashes) = hashes.get(&id) {
+                    HashPolicy::Any(hashes.as_slice())
                 } else {
                     HashPolicy::None
                 }
             }
-            Self::Require(hashes) => HashPolicy::Validate(
-                hashes
-                    .get(&VersionId::from_registry(name.clone(), version.clone()))
-                    .map(Vec::as_slice)
-                    .unwrap_or_default(),
-            ),
+            Self::Require(hashes) => {
+                HashPolicy::Any(hashes.get(&id).map(Vec::as_slice).unwrap_or_default())
+            }
         }
     }
 
     /// Return the [`HashPolicy`] for the given direct URL package.
+    ///
+    /// A direct URL identifies a single concrete artifact, so every provided digest must match.
     pub fn get_url(&self, url: &DisplaySafeUrl) -> HashPolicy<'_> {
+        let id = VersionId::from_url(url);
         match self {
             Self::None => HashPolicy::None,
             Self::Generate(mode) => HashPolicy::Generate(*mode),
             Self::Verify(hashes) => {
-                if let Some(hashes) = hashes.get(&VersionId::from_url(url)) {
-                    HashPolicy::Validate(hashes.as_slice())
+                if let Some(hashes) = hashes.get(&id) {
+                    HashPolicy::All(hashes.as_slice())
                 } else {
                     HashPolicy::None
                 }
             }
-            Self::Require(hashes) => HashPolicy::Validate(
-                hashes
-                    .get(&VersionId::from_url(url))
-                    .map(Vec::as_slice)
-                    .unwrap_or_default(),
-            ),
+            Self::Require(hashes) => {
+                HashPolicy::All(hashes.get(&id).map(Vec::as_slice).unwrap_or_default())
+            }
         }
     }
 
@@ -325,6 +320,17 @@ impl HashStrategy {
     }
 }
 
+fn hash_policy<'a>(id: &VersionId, digests: &'a [HashDigest]) -> HashPolicy<'a> {
+    match id {
+        VersionId::NameVersion { .. } => HashPolicy::Any(digests),
+        VersionId::ArchiveUrl { .. }
+        | VersionId::Git { .. }
+        | VersionId::Path { .. }
+        | VersionId::Directory { .. }
+        | VersionId::Unknown { .. } => HashPolicy::All(digests),
+    }
+}
+
 /// Merge repeated hashes for a requirement or constraint into the hash map.
 fn merge_hashes(
     hashes: &mut FxHashMap<VersionId, Vec<HashDigest>>,
@@ -466,10 +472,7 @@ mod tests {
             let RequirementSource::Url { url, .. } = &requirement.source else {
                 panic!("expected direct URL requirement");
             };
-            let HashPolicy::Validate(digests) = hasher.get_url(url) else {
-                panic!("expected hash validation policy");
-            };
-            assert_eq!(digests, expected.as_slice());
+            assert_eq!(hasher.get_url(url), HashPolicy::All(expected.as_slice()));
         }
     }
 }
