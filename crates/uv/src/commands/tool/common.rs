@@ -268,6 +268,7 @@ pub(crate) fn finalize_tool_install(
         // 2. On Windows: The entrypoint copy exists but may have stale shebang (environment moved)
         // 3. The entrypoint doesn't exist at all
         let mut invalid_entrypoints = Vec::new();
+        let mut valid_entrypoints = Vec::new();
         for (name, src, target) in &target_entrypoints {
             if !target.exists() {
                 // Entrypoint doesn't exist, needs to be installed
@@ -284,6 +285,8 @@ pub(crate) fn finalize_tool_install(
                                 src.simplified_display()
                             );
                             invalid_entrypoints.push((name.clone(), src.clone(), target.clone()));
+                        } else {
+                            valid_entrypoints.push((name.clone(), src.clone(), target.clone()));
                         }
                     } else {
                         // Not a symlink or can't read it, treat as invalid
@@ -296,6 +299,8 @@ pub(crate) fn finalize_tool_install(
                     // We rely on the environment path check above to detect moves.
                     // If the environment was removed and recreated, the entrypoints would be
                     // removed by `remove_entrypoints` in the install flow.
+                    // For now, assume existing entrypoints are valid on Windows.
+                    valid_entrypoints.push((name.clone(), src.clone(), target.clone()));
                 }
             }
         }
@@ -311,7 +316,7 @@ pub(crate) fn finalize_tool_install(
                 "Reinstalling {} invalid entrypoint(s) for `{package}`",
                 invalid_entrypoints.len()
             );
-            invalid_entrypoints
+            invalid_entrypoints.clone()
         } else {
             // Force flag or no valid entrypoints, install all
             target_entrypoints.into_iter().collect()
@@ -319,36 +324,45 @@ pub(crate) fn finalize_tool_install(
 
         if entrypoints_to_install.is_empty() {
             // All entrypoints are already valid, skip to next package
+            // But first, record the valid entrypoints for the receipt
+            for (name, _src, target) in &valid_entrypoints {
+                let tool_entry = ToolEntrypoint::new(name, target.clone(), package.to_string());
+                installed_entrypoints.push(tool_entry);
+            }
             continue;
         }
 
-        // Error if we're overwriting an existing entrypoint (that's not invalid), unless the user passed `--force`.
-        if !force {
-            let mut existing_valid_entrypoints = entrypoints_to_install
+        // Error if we're overwriting an existing entrypoint from another tool (not invalid ones we're repairing).
+        // When repairing invalid entrypoints, we skip this check since we're explicitly fixing broken symlinks.
+        let is_repair_mode = !invalid_entrypoints.is_empty() && !force && entrypoints_to_install.len() == invalid_entrypoints.len();
+        if !force && !is_repair_mode {
+            let mut existing_other_entrypoints = entrypoints_to_install
                 .iter()
                 .filter(|(_, _, target_path)| {
-                    // Check if the target exists - if it does and we're installing it,
-                    // it means it wasn't in the invalid list (because invalid ones don't exist
-                    // or have wrong symlink targets)
-                    target_path.exists()
+                    // Check if the target exists and is NOT one of the invalid entrypoints we're repairing
+                    if !target_path.exists() {
+                        return false;
+                    }
+                    // If this target is in our invalid list, we're allowed to overwrite it
+                    !invalid_entrypoints.iter().any(|(_, _, invalid_target)| invalid_target == target_path)
                 })
                 .peekable();
-            if existing_valid_entrypoints.peek().is_some() {
+            if existing_other_entrypoints.peek().is_some() {
                 // Clean up the environment we just created
                 installed_tools.remove_environment(name)?;
 
-                let existing_valid_entrypoints = existing_valid_entrypoints
+                let existing_other_entrypoints = existing_other_entrypoints
                     // SAFETY: We know the target has a filename because we just constructed it above
                     .map(|(_, _, target)| target.file_name().unwrap().to_string_lossy())
                     .collect::<Vec<_>>();
-                let (s, exists) = if existing_valid_entrypoints.len() == 1 {
+                let (s, exists) = if existing_other_entrypoints.len() == 1 {
                     ("", "exists")
                 } else {
                     ("s", "exist")
                 };
                 bail!(
                     "Executable{s} already {exists}: {} (use `--force` to overwrite)",
-                    existing_valid_entrypoints
+                    existing_other_entrypoints
                         .iter()
                         .map(|name| name.bold())
                         .join(", ")
@@ -360,19 +374,28 @@ pub(crate) fn finalize_tool_install(
         let itself = std::env::current_exe().ok();
 
         let mut names = BTreeSet::new();
+        
+        // First, record any valid entrypoints that we're not reinstalling (for the receipt)
+        for (name, _src, target) in &valid_entrypoints {
+            let tool_entry = ToolEntrypoint::new(name, target.clone(), package.to_string());
+            names.insert(tool_entry.name.clone());
+            installed_entrypoints.push(tool_entry);
+        }
+        
+        // Then install the invalid/new entrypoints
         for (name, src, target) in entrypoints_to_install {
             debug!("Installing executable: `{name}`");
 
             #[cfg(unix)]
-            replace_symlink(src, &target).context("Failed to install executable")?;
+            replace_symlink(&src, &target).context("Failed to install executable")?;
 
             #[cfg(windows)]
             if itself.as_ref().is_some_and(|itself| {
                 std::path::absolute(&target).is_ok_and(|target| *itself == target)
             }) {
-                self_replace::self_replace(src).context("Failed to install entrypoint")?;
+                self_replace::self_replace(&src).context("Failed to install entrypoint")?;
             } else {
-                fs_err::copy(src, &target).context("Failed to install entrypoint")?;
+                fs_err::copy(&src, &target).context("Failed to install entrypoint")?;
             }
 
             let tool_entry = ToolEntrypoint::new(&name, target, package.to_string());
