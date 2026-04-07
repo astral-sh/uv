@@ -574,7 +574,7 @@ pub(crate) async fn pip_install(
             .build();
 
         // Resolve the requirements.
-        let resolution = match operations::resolve(
+        let (resolution, hasher) = match operations::resolve(
             requirements,
             constraints,
             overrides,
@@ -605,7 +605,7 @@ pub(crate) async fn pip_install(
         )
         .await
         {
-            Ok(graph) => Resolution::from(graph),
+            Ok((graph, hasher)) => (Resolution::from(graph), hasher),
             Err(err) => {
                 return diagnostics::OperationDiagnostic::with_system_certs(
                     client_builder.system_certs(),

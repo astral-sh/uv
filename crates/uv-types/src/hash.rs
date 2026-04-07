@@ -114,6 +114,32 @@ impl HashStrategy {
         }
     }
 
+    /// Return a [`HashStrategy`] augmented with archive URL hashes discovered in additional
+    /// requirements after the initial command-line parse.
+    pub fn augment_with_requirements<'a>(
+        self,
+        requirements: impl Iterator<Item = &'a Requirement>,
+    ) -> Result<Self, HashStrategyError> {
+        Ok(match self {
+            Self::None => Self::None,
+            Self::Generate(mode) => Self::Generate(mode),
+            Self::Verify(existing) => {
+                if let Some(hashes) = Self::augment_hashes(existing.as_ref(), requirements)? {
+                    Self::Verify(Arc::new(hashes))
+                } else {
+                    Self::Verify(existing)
+                }
+            }
+            Self::Require(existing) => {
+                if let Some(hashes) = Self::augment_hashes(existing.as_ref(), requirements)? {
+                    Self::Require(Arc::new(hashes))
+                } else {
+                    Self::Require(existing)
+                }
+            }
+        })
+    }
+
     /// Generate the required hashes from a set of [`UnresolvedRequirement`] entries.
     ///
     /// When the environment is not given, this treats all marker expressions
@@ -281,6 +307,52 @@ impl HashStrategy {
             HashCheckingMode::Verify => Ok(Self::Verify(Arc::new(hashes))),
             HashCheckingMode::Require => Ok(Self::Require(Arc::new(hashes))),
         }
+    }
+
+    /// Augment an existing set of hashes with archive URL hashes discovered in additional
+    /// requirements.
+    ///
+    /// Archive URL requirements are keyed by a [`VersionId`] so that requirements that refer to
+    /// the same underlying archive but differ only in hash fragments are merged onto the same
+    /// digest set.
+    ///
+    /// Returns `Ok(None)` if no new hashes were added or updated.
+    fn augment_hashes<'a>(
+        existing: &FxHashMap<VersionId, Vec<HashDigest>>,
+        requirements: impl Iterator<Item = &'a Requirement>,
+    ) -> Result<Option<FxHashMap<VersionId, Vec<HashDigest>>>, HashStrategyError> {
+        let mut hashes = None;
+
+        for requirement in requirements {
+            let Some((id, digests)) = Self::requirement_hashes(requirement) else {
+                continue;
+            };
+            let current = hashes.as_ref().unwrap_or(existing);
+            let current_digests = current.get(&id);
+            let mut merged = current_digests.cloned().unwrap_or_default();
+            merge_digests(&mut merged, &digests, requirement)?;
+
+            if current_digests.map(Vec::as_slice) == Some(merged.as_slice()) {
+                continue;
+            }
+
+            hashes
+                .get_or_insert_with(|| existing.clone())
+                .insert(id, merged);
+        }
+
+        Ok(hashes)
+    }
+
+    /// Extract the archive URL hash target and digests for a requirement, if any.
+    fn requirement_hashes(requirement: &Requirement) -> Option<(VersionId, Vec<HashDigest>)> {
+        let mut digests = HashDigests::from(requirement.hashes()?).to_vec();
+        if digests.is_empty() {
+            return None;
+        }
+        digests.sort_unstable();
+        let id = Self::pin(requirement)?;
+        Some((id, digests))
     }
 
     /// Pin a [`Requirement`] to a [`VersionId`], if possible.

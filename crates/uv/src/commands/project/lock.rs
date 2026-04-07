@@ -913,7 +913,7 @@ async fn do_lock(
             );
 
             // Resolve the requirements.
-            let resolution = pip::operations::resolve(
+            let (resolution, _) = pip::operations::resolve(
                 ExtrasResolver::new(&hasher, state.index(), database)
                     .with_reporter(Arc::new(ResolverReporter::from(printer)))
                     .resolve(target.members_requirements())

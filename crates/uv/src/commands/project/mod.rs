@@ -2199,7 +2199,8 @@ pub(crate) async fn resolve_environment(
         logger,
         printer,
     )
-    .await?)
+    .await?
+    .0)
 }
 
 /// Sync a [`PythonEnvironment`] with a set of resolved requirements.
@@ -2565,7 +2566,7 @@ pub(crate) async fn update_environment(
     );
 
     // Resolve the requirements.
-    let resolution = match pip::operations::resolve(
+    let (resolution, hasher) = match pip::operations::resolve(
         requirements,
         constraints,
         overrides,
@@ -2596,7 +2597,7 @@ pub(crate) async fn update_environment(
     )
     .await
     {
-        Ok(resolution) => Resolution::from(resolution),
+        Ok((resolution, hasher)) => (Resolution::from(resolution), hasher),
         Err(err) => return Err(err.into()),
     };
 
