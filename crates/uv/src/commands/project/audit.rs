@@ -18,6 +18,7 @@ use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 
 use anyhow::Result;
+use rustc_hash::FxHashSet;
 use tracing::trace;
 use uv_audit::service::{VulnerabilityServiceFormat, osv};
 use uv_audit::types::{Dependency, Finding, VulnerabilityID};
@@ -217,20 +218,28 @@ pub(crate) async fn audit(
 
     reporter.on_audit_complete();
 
-    // Filter out ignored vulnerabilities.
+    // Filter out ignored vulnerabilities, tracking how many were ignored
+    // and which ignore rules actually matched.
+    let mut n_ignored = 0usize;
+    let mut matched_ignores: FxHashSet<&VulnerabilityID> = FxHashSet::default();
     let all_findings: Vec<_> = all_findings
         .into_iter()
         .filter(|finding| match finding {
             Finding::Vulnerability(vulnerability) => {
-                if ignore.iter().any(|id| vulnerability.matches(id)) {
+                if let Some(id) = ignore.iter().find(|id| vulnerability.matches(id)) {
+                    matched_ignores.insert(id);
+                    n_ignored += 1;
                     return false;
                 }
-                if vulnerability.fix_versions.is_empty()
-                    && ignore_until_fixed
-                        .iter()
-                        .any(|id| vulnerability.matches(id))
+                if let Some(id) = ignore_until_fixed
+                    .iter()
+                    .find(|id| vulnerability.matches(id))
                 {
-                    return false;
+                    matched_ignores.insert(id);
+                    if vulnerability.fix_versions.is_empty() {
+                        n_ignored += 1;
+                        return false;
+                    }
                 }
                 true
             }
@@ -238,9 +247,20 @@ pub(crate) async fn audit(
         })
         .collect();
 
+    // Warn about ignore rules that didn't match any vulnerability.
+    for id in ignore.iter().chain(ignore_until_fixed.iter()) {
+        if !matched_ignores.contains(id) {
+            warn_user!(
+                "Ignored vulnerability `{}` did not match any known vulnerability; your ignore setting may be out-of-date or incorrect",
+                id.as_str()
+            );
+        }
+    }
+
     let display = AuditResults {
         printer,
         n_packages: auditable.len(),
+        n_ignored,
         findings: all_findings,
     };
     display.render()
@@ -249,6 +269,7 @@ pub(crate) async fn audit(
 struct AuditResults {
     printer: Printer,
     n_packages: usize,
+    n_ignored: usize,
     findings: Vec<Finding>,
 }
 
@@ -260,11 +281,15 @@ impl AuditResults {
                 Finding::ProjectStatus(status) => itertools::Either::Right(status),
             });
 
-        let vuln_banner = if !vulns.is_empty() {
-            let s = if vulns.len() == 1 { "y" } else { "ies" };
-            format!("{} known vulnerabilit{}", vulns.len(), s)
-                .yellow()
-                .to_string()
+        let vuln_banner = if !vulns.is_empty() || self.n_ignored > 0 {
+            let visible = vulns.len();
+            let total = visible + self.n_ignored;
+            let s = if total == 1 { "y" } else { "ies" };
+            let mut banner = format!("{total} known vulnerabilit{s}");
+            if self.n_ignored > 0 {
+                write!(banner, " ({} ignored)", self.n_ignored).unwrap();
+            }
+            banner.yellow().to_string()
         } else {
             "no known vulnerabilities".bold().to_string()
         };

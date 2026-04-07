@@ -36,7 +36,7 @@ impl Dependency {
 /// within that bucket. For example, `CVE-2026-12345` or `PYSEC-2023-0001`.
 ///
 /// No assumptions should be made about the format of these identifiers.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct VulnerabilityID(SmallString);
 
 impl VulnerabilityID {
