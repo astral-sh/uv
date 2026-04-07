@@ -86,6 +86,19 @@ Dependencies declared in a `requirements.txt` file can be added to the project w
 uv add -r requirements.txt
 ```
 
+Constraints can be imported separately from a local file or URL:
+
+```console
+$ uv add -c constraints.txt
+$ uv add -c https://example.com/constraints.txt
+```
+
+When `uv add` is invoked with `--constraints` on its own, uv writes the imported constraints to
+`[tool.uv].constraint-dependencies` in the project's `pyproject.toml`.
+
+If packages or `-r/--requirements` inputs are provided alongside `--constraints`, the constraints
+are only applied during resolution and are not added to `pyproject.toml`.
+
 See the [pip migration guide](../../guides/migration/pip-to-project.md#importing-requirements-files)
 for more details.
 
