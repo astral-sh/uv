@@ -29,10 +29,11 @@ use crate::commands::pip::loggers::{
 };
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::{
-    EnvironmentUpdate, PlatformState, resolve_environment, sync_environment, update_environment,
+    EnvironmentUpdate, PlatformState, apply_editable_mode, resolve_environment, sync_environment,
+    update_environment,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::tool::common::{remove_entrypoints, tool_requirement_editable};
+use crate::commands::tool::common::{remove_entrypoints, tool_package_editable_override};
 use crate::commands::{ExitStatus, conjunction, tool::common::finalize_tool_install};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -338,9 +339,9 @@ async fn upgrade_tool(
         existing_tool_receipt.overrides().to_vec(),
         existing_tool_receipt.excludes().to_vec(),
     );
-    let editable = existing_tool_receipt
-        .target_requirement()
-        .and_then(tool_requirement_editable);
+    let editable_override =
+        tool_package_editable_override(existing_tool_receipt.requirements(), workspace_cache)
+            .await?;
 
     // Initialize any shared state.
     let state = PlatformState::default();
@@ -363,7 +364,6 @@ async fn upgrade_tool(
             concurrency,
             cache,
             workspace_cache,
-            editable,
             printer,
             preview,
         )
@@ -373,7 +373,7 @@ async fn upgrade_tool(
 
         let environment = sync_environment(
             environment,
-            &resolution.into(),
+            &apply_editable_mode(resolution.into(), editable_override.as_ref()),
             Modifications::Exact,
             build_constraints,
             (&settings).into(),
@@ -401,7 +401,7 @@ async fn upgrade_tool(
             spec,
             Modifications::Exact,
             python_platform,
-            editable,
+            editable_override.clone(),
             build_constraints,
             ExtraBuildRequires::default(),
             &settings,

@@ -38,11 +38,11 @@ use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::{self, Modifications};
 use crate::commands::pip::{resolution_markers, resolution_tags};
 use crate::commands::project::{
-    EnvironmentSpecification, PlatformState, ProjectError, resolve_environment, resolve_names,
-    sync_environment, update_environment,
+    EnvironmentSpecification, PlatformState, ProjectError, apply_editable_mode,
+    resolve_environment, resolve_names, sync_environment, update_environment,
 };
 use crate::commands::tool::common::{
-    finalize_tool_install, refine_interpreter, remove_entrypoints, tool_requirement_editable,
+    finalize_tool_install, refine_interpreter, remove_entrypoints, tool_package_editable_override,
 };
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
@@ -176,7 +176,6 @@ pub(crate) async fn install(
                 &concurrency,
                 &cache,
                 workspace_cache,
-                Some(editable),
                 printer,
                 preview,
                 lfs,
@@ -317,7 +316,6 @@ pub(crate) async fn install(
     };
 
     let package_name = &requirement.name;
-    let editable = tool_requirement_editable(&requirement);
 
     // If the user passed, e.g., `ruff@latest`, we need to mark it as upgradable.
     let settings = if request.is_latest() {
@@ -367,7 +365,6 @@ pub(crate) async fn install(
                 &concurrency,
                 &cache,
                 workspace_cache,
-                editable,
                 printer,
                 preview,
                 lfs,
@@ -394,7 +391,6 @@ pub(crate) async fn install(
         &concurrency,
         &cache,
         workspace_cache,
-        editable,
         printer,
         preview,
         lfs,
@@ -411,6 +407,8 @@ pub(crate) async fn install(
             .into_iter()
             .map(|constraint| constraint.requirement)
             .collect();
+
+    let editable_override = tool_package_editable_override(&requirements, workspace_cache).await?;
 
     // Convert to tool options.
     let options = ToolOptions::from(options);
@@ -514,6 +512,8 @@ pub(crate) async fn install(
 
                 // Check if the installed packages meet the requirements.
                 let site_packages = SitePackages::from_environment(environment.environment())?;
+                // TODO(charlie): This fast path only validates the explicit requested
+                // requirements. It can miss editable-mode drift for implicit workspace members.
                 if matches!(
                     site_packages.satisfies_requirements(
                         requirements.iter(),
@@ -580,7 +580,7 @@ pub(crate) async fn install(
             spec,
             Modifications::Exact,
             python_platform.as_ref(),
-            editable,
+            editable_override.clone(),
             Constraints::from_requirements(build_constraints.iter().cloned()),
             ExtraBuildRequires::default(),
             &settings,
@@ -633,7 +633,6 @@ pub(crate) async fn install(
             &concurrency,
             &cache,
             workspace_cache,
-            editable,
             printer,
             preview,
         )
@@ -690,7 +689,6 @@ pub(crate) async fn install(
                         &concurrency,
                         &cache,
                         workspace_cache,
-                        editable,
                         printer,
                         preview,
                     )
@@ -722,7 +720,7 @@ pub(crate) async fn install(
         // Sync the environment with the resolved requirements.
         match sync_environment(
             environment,
-            &resolution.into(),
+            &apply_editable_mode(resolution.into(), editable_override.as_ref()),
             Modifications::Exact,
             Constraints::from_requirements(build_constraints.iter().cloned()),
             (&settings).into(),

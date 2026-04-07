@@ -1281,7 +1281,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Err(Error::HashesNotSupportedSourceTree(source.to_string()));
         }
 
-        let editable = resource.editable.or(self.build_context.editable());
+        let editable = self.build_context.editable();
 
         // If the metadata is static, return it.
         let dynamic = match StaticMetadata::read(source, resource.install_path, None).await? {

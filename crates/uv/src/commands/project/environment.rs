@@ -149,7 +149,6 @@ impl CachedEnvironment {
                 concurrency,
                 cache,
                 workspace_cache,
-                None,
                 printer,
                 preview,
             )
