@@ -1,4 +1,4 @@
-#![allow(clippy::print_stdout)]
+#![expect(clippy::print_stdout)]
 
 use globset::GlobSetBuilder;
 use std::env::args;

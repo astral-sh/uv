@@ -905,7 +905,7 @@ fn create_symlink(original: &Path, link: &Path) -> io::Result<()> {
 }
 
 #[cfg(test)]
-#[allow(clippy::print_stderr)]
+#[expect(clippy::print_stderr)]
 mod tests {
     use super::*;
     use tempfile::TempDir;

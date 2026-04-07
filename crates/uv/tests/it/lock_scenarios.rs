@@ -4,9 +4,8 @@
 //! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.59/scenarios>
 //!
 #![cfg(all(feature = "test-python", feature = "test-pypi"))]
-#![allow(clippy::needless_raw_string_hashes)]
-#![allow(clippy::doc_markdown)]
-#![allow(clippy::doc_lazy_continuation)]
+#![expect(clippy::needless_raw_string_hashes)]
+#![expect(clippy::doc_markdown)]
 
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;

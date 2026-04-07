@@ -6,7 +6,7 @@
 // instead. But that's a monster. On the other hand, applying this suppression
 // instruction more granularly is annoying. So we just slap it on the module
 // for now. ---AG
-#![allow(clippy::redundant_closure_for_method_calls)]
+#![expect(clippy::redundant_closure_for_method_calls)]
 
 use std::borrow::Cow;
 use std::ops::Bound;

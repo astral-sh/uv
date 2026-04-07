@@ -1,4 +1,3 @@
-#![allow(clippy::disallowed_types)]
 use std::ffi::CString;
 use std::path::{Path, PathBuf};
 use std::vec::Vec;

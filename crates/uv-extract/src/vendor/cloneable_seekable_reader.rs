@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![allow(clippy::cast_sign_loss)]
+#![expect(clippy::cast_sign_loss)]
 
 use std::{
     io::{BufReader, Cursor, Read, Seek, SeekFrom},
