@@ -12,7 +12,7 @@ use uv_pypi_types::{HashDigest, Yanked};
 
 use crate::{
     File, InstalledDist, KnownPlatform, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
-    ResolvedDistRef,
+    RequiresPython, ResolvedDistRef,
 };
 
 /// A collection of distributions that have been filtered by relevance.
@@ -425,7 +425,16 @@ impl PrioritizedDist {
 
     /// Return the highest-priority distribution for the package version, if any.
     pub fn get(&self) -> Option<CompatibleDist<'_>> {
-        let best_wheel = self.0.best_wheel_index.map(|i| &self.0.wheels[i]);
+        self.get_python_compatible(None)
+    }
+
+    /// Return the highest-priority distribution for the package version, if any, while applying
+    /// the given Python requirement to wheel tags.
+    pub fn get_python_compatible(
+        &self,
+        requires_python: Option<&RequiresPython>,
+    ) -> Option<CompatibleDist<'_>> {
+        let best_wheel = self.best_wheel_for_python(requires_python);
         match (&best_wheel, &self.0.source) {
             // If both are compatible, break ties based on the hash outcome. For example, prefer a
             // source distribution with a matching hash over a wheel with a mismatched hash. When
@@ -481,6 +490,23 @@ impl PrioritizedDist {
         }
     }
 
+    /// Return the highest-priority incompatibility for the package version while applying the
+    /// given Python requirement to wheel tags.
+    pub fn incompatible_dist_for_python(
+        &self,
+        requires_python: Option<&RequiresPython>,
+    ) -> IncompatibleDist {
+        if let Some(incompatibility) = self.incompatible_source() {
+            IncompatibleDist::Source(incompatibility.clone())
+        } else if let Some((_, WheelCompatibility::Incompatible(incompatibility))) =
+            self.best_wheel_for_python(requires_python)
+        {
+            IncompatibleDist::Wheel(incompatibility)
+        } else {
+            IncompatibleDist::Unavailable
+        }
+    }
+
     /// Return the incompatibility for the best source distribution, if any.
     pub fn incompatible_source(&self) -> Option<&IncompatibleSource> {
         self.0
@@ -517,21 +543,29 @@ impl PrioritizedDist {
     /// If this prioritized dist has at least one wheel, then this creates
     /// a built distribution with the best wheel in this prioritized dist.
     pub fn built_dist(&self) -> Option<RegistryBuiltDist> {
-        let best_wheel_index = self.0.best_wheel_index?;
+        let (wheel, _) = self.best_wheel()?;
+        self.built_dist_for(wheel)
+    }
+
+    /// If this prioritized dist has the given wheel, then this creates a built distribution with
+    /// that wheel as the selected best wheel.
+    pub fn built_dist_for(&self, selected: &RegistryBuiltWheel) -> Option<RegistryBuiltDist> {
+        self.0.best_wheel_index?;
 
         // Remove any excluded wheels from the list of wheels, and adjust the wheel index to be
         // relative to the filtered list.
         let mut adjusted_wheels = Vec::with_capacity(self.0.wheels.len());
-        let mut adjusted_best_index = 0;
-        for (i, (wheel, compatibility)) in self.0.wheels.iter().enumerate() {
+        let mut adjusted_best_index = None;
+        for (wheel, compatibility) in &self.0.wheels {
             if compatibility.is_excluded() {
                 continue;
             }
-            if i == best_wheel_index {
-                adjusted_best_index = adjusted_wheels.len();
+            if wheel.filename == selected.filename {
+                adjusted_best_index = Some(adjusted_wheels.len());
             }
             adjusted_wheels.push(wheel.clone());
         }
+        let adjusted_best_index = adjusted_best_index?;
 
         let sdist = self.0.source.as_ref().map(|(sdist, _)| sdist.clone());
         Some(RegistryBuiltDist {
@@ -567,6 +601,18 @@ impl PrioritizedDist {
     /// exists.
     pub fn best_wheel(&self) -> Option<&(RegistryBuiltWheel, WheelCompatibility)> {
         self.0.best_wheel_index.map(|i| &self.0.wheels[i])
+    }
+
+    /// Returns the minimum Python version supported by any compatible wheel in this distribution.
+    pub fn wheel_requires_python(&self) -> Option<RequiresPython> {
+        let lower = self
+            .0
+            .wheels
+            .iter()
+            .filter(|(_, compatibility)| compatibility.is_compatible())
+            .filter_map(|(wheel, _)| wheel_python_lower_bound(&wheel.filename))
+            .min()?;
+        Some(RequiresPython::greater_than_equal_version(&lower))
     }
 
     /// Returns an iterator of all wheels and the source distribution, if any.
@@ -618,6 +664,25 @@ impl PrioritizedDist {
                 [].iter()
             }
         })
+    }
+
+    fn best_wheel_for_python(
+        &self,
+        requires_python: Option<&RequiresPython>,
+    ) -> Option<(&RegistryBuiltWheel, WheelCompatibility)> {
+        let mut best = None;
+
+        for (wheel, compatibility) in &self.0.wheels {
+            let compatibility =
+                effective_wheel_compatibility(wheel, compatibility, requires_python);
+            if best.as_ref().is_none_or(|(_, best_compatibility)| {
+                compatibility.is_more_compatible(best_compatibility)
+            }) {
+                best = Some((wheel, compatibility));
+            }
+        }
+
+        best
     }
 }
 
@@ -1030,6 +1095,79 @@ fn implied_python_markers(filename: &WheelFilename) -> MarkerTree {
     }
 
     marker
+}
+
+fn effective_wheel_compatibility(
+    wheel: &RegistryBuiltWheel,
+    compatibility: &WheelCompatibility,
+    requires_python: Option<&RequiresPython>,
+) -> WheelCompatibility {
+    match compatibility {
+        WheelCompatibility::Compatible(_, _, _)
+            if requires_python.is_some_and(|requires_python| {
+                !requires_python.matches_wheel_tag(&wheel.filename)
+            }) =>
+        {
+            WheelCompatibility::Incompatible(IncompatibleWheel::Tag(
+                IncompatibleTag::AbiPythonVersion,
+            ))
+        }
+        _ => compatibility.clone(),
+    }
+}
+
+/// Return the lowest Python version implied by the wheel filename's Python tags.
+fn wheel_python_lower_bound(filename: &WheelFilename) -> Option<Version> {
+    let mut lower: Option<Version> = None;
+
+    for python_tag in filename.python_tags() {
+        match python_tag {
+            LanguageTag::Python { major: 3, minor } => {
+                let candidate = Version::new([3, u64::from(minor.unwrap_or(0))]);
+                lower = Some(lower.map_or(candidate.clone(), |lower| lower.min(candidate)));
+            }
+            LanguageTag::CPython {
+                python_version: (3, minor),
+            }
+            | LanguageTag::PyPy {
+                python_version: (3, minor),
+            }
+            | LanguageTag::GraalPy {
+                python_version: (3, minor),
+            }
+            | LanguageTag::Pyston {
+                python_version: (3, minor),
+            } => {
+                let candidate = Version::new([3, u64::from(*minor)]);
+                lower = Some(lower.map_or(candidate.clone(), |lower| lower.min(candidate)));
+            }
+            _ => {}
+        }
+    }
+
+    for abi_tag in filename.abi_tags() {
+        let candidate = match abi_tag {
+            AbiTag::Abi3 => Some(Version::new([3, 2])),
+            AbiTag::CPython {
+                python_version: (3, minor),
+                ..
+            }
+            | AbiTag::PyPy {
+                python_version: Some((3, minor)),
+                ..
+            }
+            | AbiTag::GraalPy {
+                python_version: (3, minor),
+                ..
+            } => Some(Version::new([3, u64::from(*minor)])),
+            _ => None,
+        };
+        if let Some(candidate) = candidate {
+            lower = Some(lower.map_or(candidate.clone(), |lower| lower.min(candidate)));
+        }
+    }
+
+    lower
 }
 
 #[cfg(test)]

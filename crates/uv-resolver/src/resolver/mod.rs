@@ -25,8 +25,8 @@ use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier, IncompatibleDist,
     IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations, IndexMetadata,
-    IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement, ResolvedDist,
-    ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
+    IndexUrl, InstalledDist, Name, PrioritizedDist, PythonRequirementKind, RemoteSource,
+    Requirement, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -1220,7 +1220,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
 
             // If the wheel's Python tag doesn't match the target Python, it's incompatible.
-            if !python_requirement.target().matches_wheel_tag(filename) {
+            if !python_requirement.target().matches_wheel_minimum(filename) {
                 return Ok(Some(ResolverVersion::Unavailable(
                     filename.version.clone(),
                     UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
@@ -1313,6 +1313,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             index,
             env,
             self.tags.as_ref(),
+            self.tags
+                .as_ref()
+                .is_none()
+                .then_some(python_requirement.target()),
         ) else {
             // Short circuit: we couldn't find _any_ versions for a package.
             return Ok(None);
@@ -1389,6 +1393,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             range,
             preferences,
             env,
+            python_requirement,
             pubgrub,
             pins,
             request_sink,
@@ -1443,6 +1448,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         range: &Range<Version>,
         preferences: &Preferences,
         env: &ResolverEnvironment,
+        python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
         pins: &mut FilePins,
         request_sink: &Sender<Request>,
@@ -1505,6 +1511,46 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
         }
 
+        // If this wheel-only version doesn't cover the project's minimum supported Python version,
+        // fork at the earliest supported wheel tag and let the lower fork pick an older version.
+        if matches!(self.options.fork_strategy, ForkStrategy::RequiresPython) {
+            if let Some(requires_python) = dist
+                .prioritized()
+                .filter(|prioritized| prioritized.source_dist().is_none())
+                .and_then(PrioritizedDist::wheel_requires_python)
+                .filter(|requires_python| python_requirement.raises(requires_python.range()))
+            {
+                let forks = fork_version_by_python_requirement(
+                    requires_python.specifiers(),
+                    python_requirement,
+                    env,
+                );
+                if !forks.is_empty() {
+                    debug!(
+                        "Forking Python requirement `{}` on wheel tags `{}` for {}=={} ({})",
+                        python_requirement.target(),
+                        requires_python,
+                        name,
+                        candidate.version(),
+                        forks
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
+                    let forks = forks
+                        .into_iter()
+                        .map(|env| VersionFork {
+                            env,
+                            id,
+                            version: None,
+                        })
+                        .collect();
+                    return Ok(Some(ResolverVersion::Forked(forks)));
+                }
+            }
+        }
+
         // For now, we only apply this to local versions.
         if !candidate.version().is_local() {
             return Ok(None);
@@ -1531,6 +1577,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             index,
             env,
             self.tags.as_ref(),
+            self.tags
+                .as_ref()
+                .is_none()
+                .then_some(python_requirement.target()),
         ) else {
             return Ok(None);
         };
@@ -2557,6 +2607,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     None,
                     &env,
                     self.tags.as_ref(),
+                    self.tags
+                        .as_ref()
+                        .is_none()
+                        .then_some(self.python_requirement.target()),
                 ) else {
                     return Ok(None);
                 };
@@ -3554,14 +3608,11 @@ impl<'a> From<ResolvedDistRef<'a>> for Request {
             ResolvedDistRef::InstallableRegistryBuiltDist {
                 wheel, prioritized, ..
             } => {
-                assert_eq!(
-                    Some(&wheel.filename),
-                    prioritized.best_wheel().map(|(wheel, _)| &wheel.filename),
-                    "expected chosen wheel to match best wheel"
-                );
                 // This is okay because we're only here if the prioritized dist
                 // has at least one wheel, so this always succeeds.
-                let built = prioritized.built_dist().expect("at least one wheel");
+                let built = prioritized
+                    .built_dist_for(wheel)
+                    .expect("selected wheel should be preserved");
                 Self::Dist(Dist::Built(BuiltDist::Registry(built)))
             }
             ResolvedDistRef::Installed { dist } => Self::Installed(dist.clone()),

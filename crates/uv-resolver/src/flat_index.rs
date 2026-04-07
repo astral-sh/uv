@@ -9,12 +9,12 @@ use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
     File, HashComparison, HashPolicy, IncompatibleSource, IncompatibleWheel, IndexUrl,
-    PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility,
-    WheelCompatibility,
+    PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, RequiresPython,
+    SourceDistCompatibility, WheelCompatibility,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_platform_tags::{TagCompatibility, Tags};
+use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
 use uv_pypi_types::HashDigest;
 use uv_types::HashStrategy;
 
@@ -38,6 +38,19 @@ impl FlatIndex {
         hasher: &HashStrategy,
         build_options: &BuildOptions,
     ) -> Self {
+        Self::from_entries_with_requires_python(entries, tags, None, hasher, build_options)
+    }
+
+    /// Collect all files from a `--find-links` target into a [`FlatIndex`], optionally filtering
+    /// wheels by the initial `requires-python`.
+    #[instrument(skip_all)]
+    pub fn from_entries_with_requires_python(
+        entries: FlatIndexEntries,
+        tags: Option<&Tags>,
+        requires_python: Option<&RequiresPython>,
+        hasher: &HashStrategy,
+        build_options: &BuildOptions,
+    ) -> Self {
         // Collect compatible distributions.
         let mut index = FxHashMap::<PackageName, FlatDistributions>::default();
         for entry in entries.entries {
@@ -46,6 +59,7 @@ impl FlatIndex {
                 entry.file,
                 entry.filename,
                 tags,
+                requires_python,
                 hasher,
                 build_options,
                 entry.index,
@@ -84,12 +98,26 @@ impl FlatDistributions {
         hasher: &HashStrategy,
         build_options: &BuildOptions,
     ) -> Self {
+        Self::from_entries_with_requires_python(entries, tags, None, hasher, build_options)
+    }
+
+    /// Collect all files from a `--find-links` target into a [`FlatIndex`], optionally filtering
+    /// wheels by the initial `requires-python`.
+    #[instrument(skip_all)]
+    pub fn from_entries_with_requires_python(
+        entries: Vec<FlatIndexEntry>,
+        tags: Option<&Tags>,
+        requires_python: Option<&RequiresPython>,
+        hasher: &HashStrategy,
+        build_options: &BuildOptions,
+    ) -> Self {
         let mut distributions = Self::default();
         for entry in entries {
             distributions.add_file(
                 entry.file,
                 entry.filename,
                 tags,
+                requires_python,
                 hasher,
                 build_options,
                 entry.index,
@@ -114,12 +142,11 @@ impl FlatDistributions {
         file: File,
         filename: DistFilename,
         tags: Option<&Tags>,
+        requires_python: Option<&RequiresPython>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
         index: IndexUrl,
     ) {
-        // No `requires-python` here: for source distributions, we don't have that information;
-        // for wheels, we read it lazily only when selected.
         match filename {
             DistFilename::WheelFilename(filename) => {
                 let version = filename.version.clone();
@@ -128,6 +155,7 @@ impl FlatDistributions {
                     &filename,
                     file.hashes.as_slice(),
                     tags,
+                    requires_python,
                     hasher,
                     build_options,
                 );
@@ -205,6 +233,7 @@ impl FlatDistributions {
         filename: &WheelFilename,
         hashes: &[HashDigest],
         tags: Option<&Tags>,
+        requires_python: Option<&RequiresPython>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
     ) -> WheelCompatibility {
@@ -214,14 +243,24 @@ impl FlatDistributions {
         }
 
         // Determine a compatibility for the wheel based on tags.
-        let priority = match tags {
-            Some(tags) => match filename.compatibility(tags) {
+        let priority = if let Some(tags) = tags {
+            match filename.compatibility(tags) {
                 TagCompatibility::Incompatible(tag) => {
                     return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag));
                 }
                 TagCompatibility::Compatible(priority) => Some(priority),
-            },
-            None => None,
+            }
+        } else {
+            // Check if the wheel is compatible with the `requires-python` (i.e., the
+            // Python ABI tag is not less than the `requires-python` minimum version).
+            if let Some(requires_python) = requires_python {
+                if !requires_python.matches_wheel_tag(filename) {
+                    return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(
+                        IncompatibleTag::AbiPythonVersion,
+                    ));
+                }
+            }
+            None
         };
 
         // Check if hashes line up.

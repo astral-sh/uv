@@ -136,6 +136,7 @@ impl VersionMap {
     pub(crate) fn from_flat_metadata(
         flat_metadata: Vec<FlatIndexEntry>,
         tags: Option<&Tags>,
+        requires_python: &RequiresPython,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
     ) -> Self {
@@ -143,9 +144,13 @@ impl VersionMap {
         let mut local = false;
         let mut map = BTreeMap::new();
 
-        for (version, prioritized_dist) in
-            FlatDistributions::from_entries(flat_metadata, tags, hasher, build_options)
-        {
+        for (version, prioritized_dist) in FlatDistributions::from_entries_with_requires_python(
+            flat_metadata,
+            tags,
+            tags.is_none().then_some(requires_python),
+            hasher,
+            build_options,
+        ) {
             stable |= version.is_stable();
             local |= version.is_local();
             map.insert(version, prioritized_dist);

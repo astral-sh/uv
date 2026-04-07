@@ -7,7 +7,9 @@ use smallvec::SmallVec;
 use tracing::{debug, trace};
 
 use uv_configuration::IndexStrategy;
-use uv_distribution_types::{CompatibleDist, IncompatibleDist, IncompatibleSource, IndexUrl};
+use uv_distribution_types::{
+    CompatibleDist, IncompatibleDist, IncompatibleSource, IndexUrl, RequiresPython,
+};
 use uv_distribution_types::{DistributionMetadata, IncompatibleWheel, Name, PrioritizedDist};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -86,6 +88,7 @@ impl CandidateSelector {
         index: Option<&'a IndexUrl>,
         env: &ResolverEnvironment,
         tags: Option<&'a Tags>,
+        requires_python: Option<&'a RequiresPython>,
     ) -> Option<Candidate<'a>> {
         let reinstall = exclusions.reinstall(package_name);
         let upgrade = exclusions.upgrade(package_name);
@@ -109,6 +112,7 @@ impl CandidateSelector {
             index,
             env,
             tags,
+            requires_python,
         ) {
             trace!("Using preference {} {}", preferred.name, preferred.version);
             return Some(preferred);
@@ -134,7 +138,8 @@ impl CandidateSelector {
         }
 
         // Otherwise, find the best candidate from the version maps.
-        let compatible = self.select_no_preference(package_name, range, version_maps, env);
+        let compatible =
+            self.select_no_preference(package_name, range, version_maps, env, requires_python);
 
         // Cross-reference against the already-installed distribution.
         //
@@ -180,6 +185,7 @@ impl CandidateSelector {
         index: Option<&'a IndexUrl>,
         env: &ResolverEnvironment,
         tags: Option<&'a Tags>,
+        requires_python: Option<&'a RequiresPython>,
     ) -> Option<Candidate<'a>> {
         let preferences = preferences.get(package_name);
 
@@ -236,6 +242,7 @@ impl CandidateSelector {
             reinstall,
             env,
             tags,
+            requires_python,
         )
     }
 
@@ -250,6 +257,7 @@ impl CandidateSelector {
         reinstall: bool,
         env: &ResolverEnvironment,
         tags: Option<&Tags>,
+        requires_python: Option<&'a RequiresPython>,
     ) -> Option<Candidate<'a>> {
         for (version, source) in preferences {
             // Respect the version range for this requirement.
@@ -347,6 +355,7 @@ impl CandidateSelector {
                                 local,
                                 dist,
                                 VersionChoiceKind::Preference,
+                                requires_python,
                             ));
                         }
                     }
@@ -357,6 +366,7 @@ impl CandidateSelector {
                     version,
                     file,
                     VersionChoiceKind::Preference,
+                    requires_python,
                 ));
             }
         }
@@ -418,6 +428,7 @@ impl CandidateSelector {
         range: &Range<Version>,
         version_maps: &'a [VersionMap],
         env: &ResolverEnvironment,
+        requires_python: Option<&'a RequiresPython>,
     ) -> Option<Candidate<'a>> {
         trace!(
             "Selecting candidate for {package_name} with range {range} with {} remote versions",
@@ -457,6 +468,7 @@ impl CandidateSelector {
                     package_name,
                     range,
                     allow_prerelease,
+                    requires_python,
                 )
             } else {
                 Self::select_candidate(
@@ -479,6 +491,7 @@ impl CandidateSelector {
                     package_name,
                     range,
                     allow_prerelease,
+                    requires_python,
                 )
             }
         } else {
@@ -489,6 +502,7 @@ impl CandidateSelector {
                         package_name,
                         range,
                         allow_prerelease,
+                        requires_python,
                     )
                 })
             } else {
@@ -498,6 +512,7 @@ impl CandidateSelector {
                         package_name,
                         range,
                         allow_prerelease,
+                        requires_python,
                     )
                 })
             }
@@ -531,6 +546,7 @@ impl CandidateSelector {
         package_name: &'a PackageName,
         range: &Range<Version>,
         allow_prerelease: bool,
+        requires_python: Option<&'a RequiresPython>,
     ) -> Option<Candidate<'a>> {
         let mut steps = 0usize;
         let mut incompatible: Option<Candidate> = None;
@@ -561,7 +577,13 @@ impl CandidateSelector {
                 trace!(
                     "Found candidate for package {package_name} with range {range} after {steps} steps: {version} version"
                 );
-                Candidate::new(package_name, version, dist, VersionChoiceKind::Compatible)
+                Candidate::new(
+                    package_name,
+                    version,
+                    dist,
+                    VersionChoiceKind::Compatible,
+                    requires_python,
+                )
             };
 
             // If candidate is not compatible due to exclude newer, continue searching.
@@ -653,24 +675,16 @@ impl CandidateDist<'_> {
     }
 }
 
-impl<'a> From<&'a PrioritizedDist> for CandidateDist<'a> {
-    fn from(value: &'a PrioritizedDist) -> Self {
-        if let Some(dist) = value.get() {
+impl CandidateDist<'_> {
+    fn from_prioritized<'a>(
+        value: &'a PrioritizedDist,
+        requires_python: Option<&RequiresPython>,
+    ) -> CandidateDist<'a> {
+        if let Some(dist) = value.get_python_compatible(requires_python) {
             CandidateDist::Compatible(dist)
         } else {
-            // TODO(zanieb)
-            // We always return the source distribution (if one exists) instead of the wheel
-            // but in the future we may want to return both so the resolver can explain
-            // why neither distribution kind can be used.
-            let dist = if let Some(incompatibility) = value.incompatible_source() {
-                IncompatibleDist::Source(incompatibility.clone())
-            } else if let Some(incompatibility) = value.incompatible_wheel() {
-                IncompatibleDist::Wheel(incompatibility.clone())
-            } else {
-                IncompatibleDist::Unavailable
-            };
             CandidateDist::Incompatible {
-                incompatible_dist: dist,
+                incompatible_dist: value.incompatible_dist_for_python(requires_python),
                 prioritized_dist: value,
             }
         }
@@ -717,11 +731,12 @@ impl<'a> Candidate<'a> {
         version: &'a Version,
         dist: &'a PrioritizedDist,
         choice_kind: VersionChoiceKind,
+        requires_python: Option<&RequiresPython>,
     ) -> Self {
         Self {
             name,
             version,
-            dist: CandidateDist::from(dist),
+            dist: CandidateDist::from_prioritized(dist, requires_python),
             choice_kind,
         }
     }
