@@ -8,6 +8,7 @@ use jiff::{Span, Timestamp, ToSpan, Unit, tz::TimeZone};
 use rustc_hash::FxHashMap;
 use serde::Deserialize;
 use serde::de::value::MapAccessDeserializer;
+use serde::ser::SerializeMap;
 use uv_normalize::PackageName;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -215,6 +216,24 @@ impl serde::Serialize for ExcludeNewerValue {
         S: serde::Serializer,
     {
         self.timestamp.serialize(serializer)
+    }
+}
+
+pub struct ExcludeNewerValueWithSpanRef<'a>(pub &'a ExcludeNewerValue);
+
+impl serde::Serialize for ExcludeNewerValueWithSpanRef<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        if let Some(span) = self.0.span() {
+            let mut map = serializer.serialize_map(Some(2))?;
+            map.serialize_entry("timestamp", &self.0.timestamp())?;
+            map.serialize_entry("span", span)?;
+            map.end()
+        } else {
+            self.0.timestamp().serialize(serializer)
+        }
     }
 }
 
@@ -618,6 +637,29 @@ impl serde::Serialize for PackageExcludeNewer {
             Self::Disabled => serializer.serialize_bool(false),
         }
     }
+}
+
+pub fn serialize_exclude_newer_package_with_spans<S>(
+    value: &Option<ExcludeNewerPackage>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    let Some(value) = value else {
+        return serializer.serialize_none();
+    };
+
+    let mut map = serializer.serialize_map(Some(value.len()))?;
+    for (name, setting) in value {
+        match setting {
+            PackageExcludeNewer::Disabled => map.serialize_entry(name, &false)?,
+            PackageExcludeNewer::Enabled(value) => {
+                map.serialize_entry(name, &ExcludeNewerValueWithSpanRef(value.as_ref()))?;
+            }
+        }
+    }
+    map.end()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
