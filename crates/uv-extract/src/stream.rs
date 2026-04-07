@@ -755,7 +755,7 @@ pub fn untar_zst_file<R: std::io::Read>(
     let dst = fs_err::canonicalize(&target).unwrap_or(target.as_ref().to_path_buf());
 
     // Delay any directory entries until the end (they will be created if needed by
-    // descendants), to ensure that directory permissions do not interfer with descendant
+    // descendants), to ensure that directory permissions do not interfere with descendant
     // extraction.
     let mut directories = Vec::new();
     for entry in archive.entries().map_err(Error::io_or_compression)? {
