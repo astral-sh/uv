@@ -983,7 +983,7 @@ fn store_credentials_from_target(target: InstallTarget<'_>, client_builder: &Bas
         };
         match &url.parsed_url {
             ParsedUrl::Git(ParsedGitUrl { url, .. }) => {
-                uv_git::store_credentials_from_url(url.repository());
+                uv_git::store_credentials_from_url(url.url());
             }
             ParsedUrl::Archive(ParsedArchiveUrl { url, .. }) => {
                 client_builder.store_credentials_from_url(url);

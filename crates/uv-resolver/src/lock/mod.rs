@@ -4604,7 +4604,7 @@ impl From<GitSourceKind> for GitReference {
 
 /// Construct the lockfile-compatible [`DisplaySafeUrl`] for a [`GitSourceDist`].
 fn locked_git_url(git_dist: &GitSourceDist) -> DisplaySafeUrl {
-    let mut url = git_dist.git.repository().clone();
+    let mut url = git_dist.git.url().clone();
 
     // Remove the credentials.
     url.remove_credentials();
@@ -5371,7 +5371,7 @@ fn normalize_requirement(
         } => {
             // Reconstruct the Git URL.
             let git = {
-                let mut repository = git.repository().clone();
+                let mut repository = git.url().clone();
 
                 // Remove the credentials.
                 repository.remove_credentials();
