@@ -149,7 +149,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
     let environment = EnvironmentOptions::new()?;
 
     // Resolve preview flags before config discovery for decisions that affect the discovery root.
-    let early_preview = settings::resolve_preview(&cli.top_level.global_args, None, &environment);
+    let early_preview = settings::resolve_preview(&cli.top_level.global_args, None, &environment)?;
 
     if global_initialization.needs_initialization() {
         // Make the early preview flags globally available.
@@ -480,7 +480,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         &cli.top_level.global_args,
         filesystem.as_ref(),
         &environment,
-    );
+    )?;
 
     if global_initialization.needs_initialization() {
         // Set the global flags.
@@ -724,13 +724,13 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipCompileSettings::resolve(args, filesystem, environment);
+            let args = PipCompileSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
             globals
                 .network_settings
-                .check_refresh_conflict(&args.refresh);
+                .check_refresh_conflict(&args.refresh)?;
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -843,13 +843,13 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipSyncSettings::resolve(args, filesystem, environment);
+            let args = PipSyncSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
             globals
                 .network_settings
-                .check_refresh_conflict(&args.refresh);
+                .check_refresh_conflict(&args.refresh)?;
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -932,7 +932,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let mut args = PipInstallSettings::resolve(args, filesystem, environment);
+            let mut args = PipInstallSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             let mut requirements = Vec::with_capacity(
@@ -1020,7 +1020,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             // Check for conflicts between offline and refresh.
             globals
                 .network_settings
-                .check_refresh_conflict(&args.refresh);
+                .check_refresh_conflict(&args.refresh)?;
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -1094,7 +1094,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipUninstallSettings::resolve(args, filesystem, environment);
+            let args = PipUninstallSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -1129,7 +1129,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             command: PipCommand::Freeze(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipFreezeSettings::resolve(args, filesystem, environment);
+            let args = PipFreezeSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -1155,7 +1155,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipListSettings::resolve(args, filesystem, environment);
+            let args = PipListSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -1188,7 +1188,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             command: PipCommand::Show(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipShowSettings::resolve(args, filesystem, environment);
+            let args = PipShowSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -1211,7 +1211,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             command: PipCommand::Tree(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipTreeSettings::resolve(args, filesystem, environment);
+            let args = PipTreeSettings::resolve(args, filesystem, environment)?;
 
             // Initialize the cache.
             let cache = cache.init().await?;
@@ -1244,7 +1244,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             command: PipCommand::Check(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipCheckSettings::resolve(args, filesystem, environment);
+            let args = PipCheckSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -1286,13 +1286,13 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         }) => commands::cache_size(&cache, args.human, printer, globals.preview),
         Commands::Build(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::BuildSettings::resolve(args, filesystem, environment);
+            let args = settings::BuildSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
             globals
                 .network_settings
-                .check_refresh_conflict(&args.refresh);
+                .check_refresh_conflict(&args.refresh)?;
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -1354,13 +1354,13 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             }
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::VenvSettings::resolve(args, filesystem, environment);
+            let args = settings::VenvSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
             globals
                 .network_settings
-                .check_refresh_conflict(&args.refresh);
+                .check_refresh_conflict(&args.refresh)?;
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -1523,13 +1523,13 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 filesystem,
                 invocation_source,
                 environment,
-            );
+            )?;
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
             globals
                 .network_settings
-                .check_refresh_conflict(&args.refresh);
+                .check_refresh_conflict(&args.refresh)?;
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -1614,13 +1614,13 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             command: ToolCommand::Install(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::ToolInstallSettings::resolve(args, filesystem, environment);
+            let args = settings::ToolInstallSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
             globals
                 .network_settings
-                .check_refresh_conflict(&args.refresh);
+                .check_refresh_conflict(&args.refresh)?;
 
             // Initialize the cache.
             let refresh = args
@@ -1715,7 +1715,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             command: ToolCommand::List(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::ToolListSettings::resolve(args, filesystem);
+            let args = settings::ToolListSettings::resolve(args, filesystem)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -1741,7 +1741,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             command: ToolCommand::Upgrade(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::ToolUpgradeSettings::resolve(args, filesystem, &environment);
+            let args = settings::ToolUpgradeSettings::resolve(args, filesystem, &environment)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -1827,7 +1827,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             command: PythonCommand::Install(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::PythonInstallSettings::resolve(args, filesystem, environment);
+            let args = settings::PythonInstallSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -1861,7 +1861,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             command: PythonCommand::Upgrade(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::PythonUpgradeSettings::resolve(args, filesystem, environment);
+            let args = settings::PythonUpgradeSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
             let upgrade = commands::PythonUpgrade::Enabled(commands::PythonUpgradeSource::Upgrade);
 
@@ -1905,7 +1905,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             command: PythonCommand::Find(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::PythonFindSettings::resolve(args, filesystem, environment);
+            let args = settings::PythonFindSettings::resolve(args, filesystem, environment)?;
 
             // Initialize the cache.
             let cache = cache.init().await?;
@@ -1947,7 +1947,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             command: PythonCommand::Pin(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::PythonPinSettings::resolve(args, filesystem, environment);
+            let args = settings::PythonPinSettings::resolve(args, filesystem, environment)?;
 
             // Initialize the cache.
             let cache = cache.init().await?;
@@ -2039,13 +2039,13 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         Commands::Workspace(WorkspaceNamespace { command }) => match command {
             WorkspaceCommand::Metadata(args) => {
                 // Resolve the settings from the command-line arguments and workspace configuration.
-                let args = settings::MetadataSettings::resolve(args, filesystem, environment);
+                let args = settings::MetadataSettings::resolve(args, filesystem, environment)?;
                 show_settings!(args);
 
                 // Check for conflicts between offline and refresh.
                 globals
                     .network_settings
-                    .check_refresh_conflict(&args.refresh);
+                    .check_refresh_conflict(&args.refresh)?;
 
                 // Initialize the cache.
                 let cache = cache.init().await?.with_refresh(
@@ -2282,13 +2282,13 @@ async fn run_project(
         }
         ProjectCommand::Run(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::RunSettings::resolve(args, filesystem, environment);
+            let args = settings::RunSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
             globals
                 .network_settings
-                .check_refresh_conflict(&args.refresh);
+                .check_refresh_conflict(&args.refresh)?;
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -2353,13 +2353,13 @@ async fn run_project(
         }
         ProjectCommand::Sync(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::SyncSettings::resolve(args, filesystem, environment);
+            let args = settings::SyncSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
             globals
                 .network_settings
-                .check_refresh_conflict(&args.refresh);
+                .check_refresh_conflict(&args.refresh)?;
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -2410,13 +2410,13 @@ async fn run_project(
         }
         ProjectCommand::Lock(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::LockSettings::resolve(args, filesystem, environment);
+            let args = settings::LockSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
             globals
                 .network_settings
-                .check_refresh_conflict(&args.refresh);
+                .check_refresh_conflict(&args.refresh)?;
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -2490,7 +2490,7 @@ async fn run_project(
         }
         ProjectCommand::Add(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let mut args = settings::AddSettings::resolve(args, filesystem, environment);
+            let mut args = settings::AddSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // If the script already exists, use it; otherwise, propagate the file path and we'll
@@ -2562,7 +2562,7 @@ async fn run_project(
             // Check for conflicts between offline and refresh.
             globals
                 .network_settings
-                .check_refresh_conflict(&args.refresh);
+                .check_refresh_conflict(&args.refresh)?;
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -2625,13 +2625,13 @@ async fn run_project(
         }
         ProjectCommand::Remove(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::RemoveSettings::resolve(args, filesystem, environment);
+            let args = settings::RemoveSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
             globals
                 .network_settings
-                .check_refresh_conflict(&args.refresh);
+                .check_refresh_conflict(&args.refresh)?;
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -2675,13 +2675,13 @@ async fn run_project(
         }
         ProjectCommand::Version(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::VersionSettings::resolve(args, filesystem, environment);
+            let args = settings::VersionSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
             globals
                 .network_settings
-                .check_refresh_conflict(&args.refresh);
+                .check_refresh_conflict(&args.refresh)?;
 
             // Reading a project version only accesses `pyproject.toml` or the lockfile.
             let cache = if args.value.is_none() && args.bump.is_empty() {
@@ -2727,7 +2727,7 @@ async fn run_project(
         }
         ProjectCommand::Tree(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::TreeSettings::resolve(args, filesystem, environment);
+            let args = settings::TreeSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -2774,7 +2774,7 @@ async fn run_project(
         }
         ProjectCommand::Export(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::ExportSettings::resolve(args, filesystem, environment);
+            let args = settings::ExportSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -2851,13 +2851,13 @@ async fn run_project(
         }
         ProjectCommand::Check(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::CheckSettings::resolve(args, filesystem, environment);
+            let args = settings::CheckSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
             globals
                 .network_settings
-                .check_refresh_conflict(&args.refresh);
+                .check_refresh_conflict(&args.refresh)?;
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -2902,7 +2902,7 @@ async fn run_project(
             .await
         }
         ProjectCommand::Audit(audit_args) => {
-            let args = settings::AuditSettings::resolve(audit_args, filesystem, environment);
+            let args = settings::AuditSettings::resolve(audit_args, filesystem, environment)?;
             show_settings!(args);
 
             // Initialize the cache.
