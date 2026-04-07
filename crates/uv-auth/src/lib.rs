@@ -17,6 +17,7 @@ mod cache;
 mod credentials;
 mod index;
 mod keyring;
+mod matching;
 mod middleware;
 mod providers;
 mod pyx;
