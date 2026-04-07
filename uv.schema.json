@@ -185,7 +185,7 @@
       }
     },
     "exclude-newer": {
-      "description": "Limit candidate packages to those that were uploaded prior to the given date.\n\nAccepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), a \"friendly\" duration (e.g.,\n`24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`, `P7D`, `P30D`).\n\nDurations do not respect semantics of the local time zone and are always resolved to a fixed\nnumber of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).\nCalendar units such as months and years are not allowed.",
+      "description": "Limit candidate packages to those that were uploaded prior to the given date.\n\nThe date is compared against the upload time of each individual distribution artifact\n(i.e., when each file was uploaded to the package index), not the release date of the\npackage version.\n\nAccepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), a \"friendly\" duration (e.g.,\n`24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`, `P7D`, `P30D`).\n\nDurations do not respect semantics of the local time zone and are always resolved to a fixed\nnumber of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).\nCalendar units such as months and years are not allowed.",
       "anyOf": [
         {
           "$ref": "#/definitions/ExcludeNewerValue"
@@ -1255,7 +1255,7 @@
           "type": ["boolean", "null"]
         },
         "exclude-newer": {
-          "description": "Limit candidate packages to those that were uploaded prior to a given point in time.\n\nAccepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,\n`2006-12-02T02:07:43Z`). A full timestamp is required to ensure that the resolver will\nbehave consistently across timezones.",
+          "description": "Limit candidate packages to those that were uploaded prior to a given point in time.\n\nThe date is compared against the upload time of each individual distribution artifact\n(i.e., when each file was uploaded to the package index), not the release date of the\npackage version.\n\nAccepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,\n`2006-12-02T02:07:43Z`). A full timestamp is required to ensure that the resolver will\nbehave consistently across timezones.",
           "anyOf": [
             {
               "$ref": "#/definitions/ExcludeNewerValue"

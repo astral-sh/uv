@@ -19,8 +19,8 @@ use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{
-    AnnotationStyle, ExcludeNewer, ExcludeNewerPackage, ExcludeNewerValue, ForkStrategy,
-    PrereleaseMode, ResolutionMode,
+    AnnotationStyle, ExcludeNewer, ExcludeNewerPackage, ExcludeNewerSpan, ExcludeNewerValue,
+    ForkStrategy, PrereleaseMode, ResolutionMode, serialize_exclude_newer_package_with_spans,
 };
 use uv_torch::TorchMode;
 use uv_workspace::pyproject::ExtraBuildDependencies;
@@ -497,6 +497,25 @@ pub struct ResolverInstallerOptions {
     pub no_build_package: Option<Vec<PackageName>>,
     pub no_binary: Option<bool>,
     pub no_binary_package: Option<Vec<PackageName>>,
+}
+
+impl ResolverInstallerOptions {
+    /// Recompute any relative exclude-newer values against the current time.
+    #[must_use]
+    pub fn recompute_exclude_newer(mut self) -> Self {
+        let exclude_newer = ExcludeNewer::new(
+            self.exclude_newer.take(),
+            self.exclude_newer_package.take().unwrap_or_default(),
+        )
+        .recompute();
+        self.exclude_newer = exclude_newer.global;
+        self.exclude_newer_package = if exclude_newer.package.is_empty() {
+            None
+        } else {
+            Some(exclude_newer.package)
+        };
+        self
+    }
 }
 
 impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
@@ -2130,6 +2149,41 @@ pub struct ToolOptions {
     pub torch_backend: Option<TorchMode>,
 }
 
+/// The on-disk representation of [`ToolOptions`] in a tool receipt.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub struct ToolOptionsWire {
+    pub index: Option<Vec<Index>>,
+    pub index_url: Option<PipIndex>,
+    pub extra_index_url: Option<Vec<PipExtraIndex>>,
+    pub no_index: Option<bool>,
+    pub find_links: Option<Vec<PipFindLinks>>,
+    pub index_strategy: Option<IndexStrategy>,
+    pub keyring_provider: Option<KeyringProviderType>,
+    pub resolution: Option<ResolutionMode>,
+    pub prerelease: Option<PrereleaseMode>,
+    pub fork_strategy: Option<ForkStrategy>,
+    pub dependency_metadata: Option<Vec<StaticMetadata>>,
+    pub config_settings: Option<ConfigSettings>,
+    pub config_settings_package: Option<PackageConfigSettings>,
+    pub build_isolation: Option<BuildIsolation>,
+    pub extra_build_dependencies: Option<ExtraBuildDependencies>,
+    pub extra_build_variables: Option<ExtraBuildVariables>,
+    pub exclude_newer: Option<ExcludeNewerValue>,
+    pub exclude_newer_span: Option<ExcludeNewerSpan>,
+    #[serde(serialize_with = "serialize_exclude_newer_package_with_spans")]
+    pub exclude_newer_package: Option<ExcludeNewerPackage>,
+    pub link_mode: Option<LinkMode>,
+    pub compile_bytecode: Option<bool>,
+    pub no_sources: Option<bool>,
+    pub no_sources_package: Option<Vec<PackageName>>,
+    pub no_build: Option<bool>,
+    pub no_build_package: Option<Vec<PackageName>>,
+    pub no_binary: Option<bool>,
+    pub no_binary_package: Option<Vec<PackageName>>,
+    pub torch_backend: Option<TorchMode>,
+}
+
 impl From<ResolverInstallerOptions> for ToolOptions {
     fn from(value: ResolverInstallerOptions) -> Self {
         Self {
@@ -2155,6 +2209,90 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             extra_build_dependencies: value.extra_build_dependencies,
             extra_build_variables: value.extra_build_variables,
             exclude_newer: value.exclude_newer,
+            exclude_newer_package: value.exclude_newer_package,
+            link_mode: value.link_mode,
+            compile_bytecode: value.compile_bytecode,
+            no_sources: value.no_sources,
+            no_sources_package: value.no_sources_package,
+            no_build: value.no_build,
+            no_build_package: value.no_build_package,
+            no_binary: value.no_binary,
+            no_binary_package: value.no_binary_package,
+            torch_backend: value.torch_backend,
+        }
+    }
+}
+
+impl From<ToolOptionsWire> for ToolOptions {
+    fn from(value: ToolOptionsWire) -> Self {
+        let exclude_newer = value.exclude_newer.map(|exclude_newer| {
+            if exclude_newer.span().is_none() {
+                ExcludeNewerValue::new(exclude_newer.timestamp(), value.exclude_newer_span)
+            } else {
+                exclude_newer
+            }
+        });
+
+        Self {
+            index: value.index,
+            index_url: value.index_url,
+            extra_index_url: value.extra_index_url,
+            no_index: value.no_index,
+            find_links: value.find_links,
+            index_strategy: value.index_strategy,
+            keyring_provider: value.keyring_provider,
+            resolution: value.resolution,
+            prerelease: value.prerelease,
+            fork_strategy: value.fork_strategy,
+            dependency_metadata: value.dependency_metadata,
+            config_settings: value.config_settings,
+            config_settings_package: value.config_settings_package,
+            build_isolation: value.build_isolation,
+            extra_build_dependencies: value.extra_build_dependencies,
+            extra_build_variables: value.extra_build_variables,
+            exclude_newer,
+            exclude_newer_package: value.exclude_newer_package,
+            link_mode: value.link_mode,
+            compile_bytecode: value.compile_bytecode,
+            no_sources: value.no_sources,
+            no_sources_package: value.no_sources_package,
+            no_build: value.no_build,
+            no_build_package: value.no_build_package,
+            no_binary: value.no_binary,
+            no_binary_package: value.no_binary_package,
+            torch_backend: value.torch_backend,
+        }
+    }
+}
+
+impl From<ToolOptions> for ToolOptionsWire {
+    fn from(value: ToolOptions) -> Self {
+        let (exclude_newer, exclude_newer_span) = value
+            .exclude_newer
+            .map(ExcludeNewerValue::into_parts)
+            .map_or((None, None), |(timestamp, span)| {
+                (Some(ExcludeNewerValue::from(timestamp)), span)
+            });
+
+        Self {
+            index: value.index,
+            index_url: value.index_url,
+            extra_index_url: value.extra_index_url,
+            no_index: value.no_index,
+            find_links: value.find_links,
+            index_strategy: value.index_strategy,
+            keyring_provider: value.keyring_provider,
+            resolution: value.resolution,
+            prerelease: value.prerelease,
+            fork_strategy: value.fork_strategy,
+            dependency_metadata: value.dependency_metadata,
+            config_settings: value.config_settings,
+            config_settings_package: value.config_settings_package,
+            build_isolation: value.build_isolation,
+            extra_build_dependencies: value.extra_build_dependencies,
+            extra_build_variables: value.extra_build_variables,
+            exclude_newer,
+            exclude_newer_span,
             exclude_newer_package: value.exclude_newer_package,
             link_mode: value.link_mode,
             compile_bytecode: value.compile_bytecode,
