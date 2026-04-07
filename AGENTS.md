@@ -1,6 +1,7 @@
 - Read CONTRIBUTING.md for guidelines on how to run tools
 - ALWAYS attempt to add a test case for changed behavior
 - PREFER integration tests, e.g., at `it/...` over unit tests
+- PREFER `insta` snapshots following patterns in nearby tests over substring assertions
 - When making changes for Windows from Unix, use `cargo xwin clippy` to check compilation
 - NEVER perform builds with the release profile, unless asked or reproducing performance issues
 - PREFER running specific tests over running the entire test suite
