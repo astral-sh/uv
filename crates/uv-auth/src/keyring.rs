@@ -5,9 +5,37 @@ use uv_redacted::DisplaySafeUrl;
 use uv_warnings::warn_user_once;
 
 use crate::credentials::Credentials;
+use crate::matching;
+use crate::realm::Realm;
+use crate::service::Service;
+use crate::store::PersistentCredential;
 
 /// Service name prefix for storing credentials in a keyring.
 static UV_SERVICE_PREFIX: &str = "uv:";
+
+/// Return the legacy keyring service names that may contain credentials for `url`.
+///
+/// Earlier native-auth implementations stored credentials as plain passwords keyed by
+/// the full URL, the host, or `scheme://host:port` for non-HTTPS URLs.
+fn legacy_service_names(url: &DisplaySafeUrl) -> Vec<String> {
+    let mut service_names = vec![url.as_str().to_string()];
+
+    if let Some(host) = url.host_str() {
+        let host = if let Some(port) = url.port() {
+            format!("{host}:{port}")
+        } else {
+            host.to_string()
+        };
+        service_names.push(host.clone());
+
+        if url.scheme() != "https" {
+            service_names.push(format!("{}://{host}", url.scheme()));
+        }
+    }
+
+    service_names.dedup();
+    service_names
+}
 
 /// A backend for retrieving credentials from a keyring.
 ///
@@ -22,6 +50,15 @@ pub struct KeyringProvider {
 pub enum Error {
     #[error(transparent)]
     Keyring(#[from] uv_keyring::Error),
+
+    #[error("Stored credentials in the system keyring are corrupt")]
+    CorruptStoredCredentials(#[source] serde_json::Error),
+
+    #[error("Failed to serialize credentials for the system keyring")]
+    SerializeStoredCredentials(#[source] serde_json::Error),
+
+    #[error("Multiple credentials found for URL '{0}', specify which username to use")]
+    AmbiguousUsername(DisplaySafeUrl),
 
     #[error("The '{0}' keyring provider does not support storing credentials")]
     StoreUnsupported(KeyringProviderBackend),
@@ -75,38 +112,37 @@ impl KeyringProvider {
         url: &DisplaySafeUrl,
         credentials: &Credentials,
     ) -> Result<bool, Error> {
-        let Some(username) = credentials.username() else {
+        // Ensure we have username and password
+        if credentials.username().is_none() {
             trace!("Unable to store credentials in keyring for {url} due to missing username");
             return Ok(false);
-        };
-        let Some(password) = credentials.password() else {
+        }
+        if credentials.password().is_none() {
             trace!("Unable to store credentials in keyring for {url} due to missing password");
             return Ok(false);
+        }
+
+        // Ensure we strip credentials from the URL before storing.
+        let clean_url = url.without_credentials().into_owned();
+        let clean_url = match DisplaySafeUrl::parse(clean_url.as_str()) {
+            Ok(url) => url,
+            Err(err) => {
+                trace!("Unable to re-parse URL: {err}");
+                return Ok(false);
+            }
         };
 
-        // Ensure we strip credentials from the URL before storing
-        let url = url.without_credentials();
-
-        // If there's no path, we'll perform a host-level login
-        let target = if let Some(host) = url.host_str().filter(|_| !url.path().is_empty()) {
-            let mut target = String::new();
-            if url.scheme() != "https" {
-                target.push_str(url.scheme());
-                target.push_str("://");
+        let service = match Service::try_from(clean_url) {
+            Ok(service) => service,
+            Err(err) => {
+                trace!("Unable to create service from URL: {err}");
+                return Ok(false);
             }
-            target.push_str(host);
-            if let Some(port) = url.port() {
-                target.push(':');
-                target.push_str(&port.to_string());
-            }
-            target
-        } else {
-            url.to_string()
         };
 
         match &self.backend {
             KeyringProviderBackend::Native => {
-                self.store_native(&target, username, password).await?;
+                self.store_native(&service, credentials).await?;
                 Ok(true)
             }
             KeyringProviderBackend::Subprocess => {
@@ -118,47 +154,88 @@ impl KeyringProvider {
     }
 
     /// Store credentials to the system keyring.
-    #[instrument(skip(self))]
+    ///
+    /// Uses realm-based storage where the keyring service name is the realm
+    /// (scheme://host:port) and all credentials for that realm are stored as a JSON
+    /// array in the password field. Each entry in the array contains the full Service
+    /// URL + credentials.
+    ///
+    /// This supports multiple users per realm by storing them all in a single keyring
+    /// entry as an array.
+    #[instrument(skip(self, credentials))]
     async fn store_native(
         &self,
-        service: &str,
-        username: &str,
-        password: &str,
+        service: &Service,
+        credentials: &Credentials,
     ) -> Result<(), Error> {
-        let prefixed_service = format!("{UV_SERVICE_PREFIX}{service}");
-        let entry = uv_keyring::Entry::new(&prefixed_service, username)?;
-        entry.set_password(password).await?;
+        // Get the realm for the service name
+        let realm = Realm::from(service.url());
+        let realm_str = realm.to_string();
+        let prefixed_service = format!("{UV_SERVICE_PREFIX}{realm_str}");
+
+        // Use a fixed username for the realm entry
+        let keyring_username = "_uv_";
+        let entry = uv_keyring::Entry::new(&prefixed_service, keyring_username)?;
+
+        // Fetch existing credentials for this realm.
+        let mut credentials_list: Vec<PersistentCredential> = match entry.get_password().await {
+            Ok(json_data) => {
+                serde_json::from_str(&json_data).map_err(Error::CorruptStoredCredentials)?
+            }
+            Err(uv_keyring::Error::NoEntry) => {
+                trace!("No existing credentials for realm {realm_str}");
+                Vec::new()
+            }
+            Err(err) => return Err(Error::Keyring(err)),
+        };
+
+        // Create the new credential entry
+        let new_credential = PersistentCredential {
+            service: service.clone(),
+            credentials: credentials.clone(),
+        };
+
+        let new_username = credentials.to_username();
+
+        // Remove any existing credential with the same service URL and username
+        credentials_list.retain(|cred| {
+            let matches_service = cred.service.url() == service.url();
+            let matches_username = cred.credentials.to_username() == new_username;
+            !(matches_service && matches_username)
+        });
+
+        // Add the new credential
+        credentials_list.push(new_credential);
+
+        // Serialize the updated list.
+        let json_data =
+            serde_json::to_string(&credentials_list).map_err(Error::SerializeStoredCredentials)?;
+
+        entry.set_password(&json_data).await?;
+
+        trace!("Stored credentials for realm {realm_str} in system keyring");
         Ok(())
     }
 
-    /// Remove credentials for the given [`DisplaySafeUrl`] and username from the keyring.
+    /// Remove credentials for the given [`DisplaySafeUrl`] from the keyring.
     ///
     /// Only [`KeyringProviderBackend::Native`] is supported at this time.
     #[instrument(skip_all, fields(url = % url.to_string(), username))]
     pub async fn remove(&self, url: &DisplaySafeUrl, username: &str) -> Result<(), Error> {
-        // Ensure we strip credentials from the URL before storing
-        let url = url.without_credentials();
-
-        // If there's no path, we'll perform a host-level login
-        let target = if let Some(host) = url.host_str().filter(|_| !url.path().is_empty()) {
-            let mut target = String::new();
-            if url.scheme() != "https" {
-                target.push_str(url.scheme());
-                target.push_str("://");
-            }
-            target.push_str(host);
-            if let Some(port) = url.port() {
-                target.push(':');
-                target.push_str(&port.to_string());
-            }
-            target
-        } else {
-            url.to_string()
-        };
+        // Ensure we strip credentials from the URL before storing.
+        let url = url.without_credentials().into_owned();
+        let url = DisplaySafeUrl::parse(url.as_str()).map_err(|err| {
+            trace!("Unable to re-parse URL for removal: {err}");
+            Error::Keyring(uv_keyring::Error::NoEntry)
+        })?;
+        let service = Service::try_from(url).map_err(|err| {
+            trace!("Unable to create service from URL for removal: {err}");
+            Error::Keyring(uv_keyring::Error::NoEntry)
+        })?;
 
         match &self.backend {
             KeyringProviderBackend::Native => {
-                self.remove_native(&target, username).await?;
+                self.remove_native(&service, username).await?;
                 Ok(())
             }
             KeyringProviderBackend::Subprocess => {
@@ -169,27 +246,130 @@ impl KeyringProvider {
         }
     }
 
-    /// Remove credentials from the system keyring for the given `service_name`/`username`
-    /// pair.
+    /// Remove credentials from the system keyring for the given service and username.
+    ///
+    /// Removes matching entries from both the new realm-based JSON format and the legacy
+    /// plain-password format. If the last credential is removed from a realm entry, the keyring
+    /// entry is deleted entirely.
     #[instrument(skip(self))]
-    async fn remove_native(
+    async fn remove_native(&self, service: &Service, username: &str) -> Result<(), Error> {
+        let removed_from_realm = self.remove_native_realm_entry(service, username).await?;
+        let removed_from_legacy = self.remove_native_legacy(service.url(), username).await?;
+
+        if removed_from_realm || removed_from_legacy {
+            Ok(())
+        } else {
+            debug!("No credential found for {username}@{service}");
+            Err(Error::Keyring(uv_keyring::Error::NoEntry))
+        }
+    }
+
+    /// Remove credentials from the new realm-based JSON keyring entry.
+    #[instrument(skip(self))]
+    async fn remove_native_realm_entry(
+        &self,
+        service: &Service,
+        username: &str,
+    ) -> Result<bool, Error> {
+        let realm = Realm::from(service.url());
+        let realm_str = realm.to_string();
+        let prefixed_service = format!("{UV_SERVICE_PREFIX}{realm_str}");
+        let keyring_username = "_uv_";
+        let entry = uv_keyring::Entry::new(&prefixed_service, keyring_username)?;
+
+        // Fetch existing credentials for this realm.
+        let json_data = match entry.get_password().await {
+            Ok(json_data) => json_data,
+            Err(uv_keyring::Error::NoEntry) => return Ok(false),
+            Err(err) => return Err(Error::Keyring(err)),
+        };
+
+        let mut credentials_list: Vec<PersistentCredential> =
+            serde_json::from_str(&json_data).map_err(Error::CorruptStoredCredentials)?;
+
+        // Find and remove the credential matching the requested service and username.
+        let initial_len = credentials_list.len();
+        credentials_list.retain(|credential| {
+            let matches_service = credential.service == *service;
+            let matches_username =
+                credential.credentials.to_username().as_deref() == Some(username);
+            !(matches_service && matches_username)
+        });
+
+        // Check if we actually removed something.
+        if credentials_list.len() == initial_len {
+            return Ok(false);
+        }
+
+        // If this was the last credential, delete the entire entry.
+        if credentials_list.is_empty() {
+            entry.delete_credential().await?;
+            trace!("Removed last credential for realm {realm_str}, deleted keyring entry");
+        } else {
+            // Otherwise, update with the remaining credentials.
+            let json_data = serde_json::to_string(&credentials_list)
+                .map_err(Error::SerializeStoredCredentials)?;
+            entry.set_password(&json_data).await?;
+            trace!(
+                "Removed credentials for {username}@{service}, {} credentials remaining",
+                credentials_list.len()
+            );
+        }
+
+        Ok(true)
+    }
+
+    /// Remove credentials from the legacy plain-password keyring entries.
+    #[instrument(skip(self, url))]
+    async fn remove_native_legacy(
+        &self,
+        url: &DisplaySafeUrl,
+        username: &str,
+    ) -> Result<bool, Error> {
+        let mut removed = false;
+
+        for service_name in legacy_service_names(url) {
+            removed |= self
+                .remove_native_legacy_entry(&service_name, username)
+                .await?;
+        }
+
+        Ok(removed)
+    }
+
+    /// Remove credentials from a single legacy plain-password keyring entry.
+    #[instrument(skip(self))]
+    async fn remove_native_legacy_entry(
         &self,
         service_name: &str,
         username: &str,
-    ) -> Result<(), uv_keyring::Error> {
+    ) -> Result<bool, Error> {
         let prefixed_service = format!("{UV_SERVICE_PREFIX}{service_name}");
         let entry = uv_keyring::Entry::new(&prefixed_service, username)?;
-        entry.delete_credential().await?;
-        trace!("Removed credentials for {username}@{service_name} from system keyring");
-        Ok(())
+
+        match entry.delete_credential().await {
+            Ok(()) => {
+                trace!("Removed legacy credentials for {username}@{service_name}");
+                Ok(true)
+            }
+            Err(uv_keyring::Error::NoEntry) => Ok(false),
+            Err(err) => Err(Error::Keyring(err)),
+        }
     }
 
     /// Fetch credentials for the given [`Url`] from the keyring.
     ///
-    /// Returns [`None`] if no password was found for the username or if any errors
-    /// are encountered in the keyring backend.
+    /// Returns [`Ok(None)`] if no password was found for the username.
+    ///
+    /// For the native backend, this uses realm-based storage with JSON serialization.
+    /// It checks the realm (scheme://host:port) for matching credentials and performs
+    /// prefix matching on paths, returning the most specific match.
     #[instrument(skip_all, fields(url = % url.to_string(), username))]
-    pub async fn fetch(&self, url: &DisplaySafeUrl, username: Option<&str>) -> Option<Credentials> {
+    pub async fn fetch(
+        &self,
+        url: &DisplaySafeUrl,
+        username: Option<&str>,
+    ) -> Result<Option<Credentials>, Error> {
         // Validate the request
         debug_assert!(
             url.host_str().is_some(),
@@ -204,58 +384,195 @@ impl KeyringProvider {
             "Should only use keyring with a non-empty username"
         );
 
-        // Check the full URL first
-        // <https://github.com/pypa/pip/blob/ae5fff36b0aad6e5e0037884927eaa29163c0611/src/pip/_internal/network/auth.py#L376C1-L379C14>
-        trace!("Checking keyring for URL {url}");
-        let mut credentials = match self.backend {
-            KeyringProviderBackend::Native => self.fetch_native(url.as_str(), username).await,
+        match self.backend {
+            KeyringProviderBackend::Native => {
+                self.fetch_native_with_prefix_matching(url, username).await
+            }
             KeyringProviderBackend::Subprocess => {
-                self.fetch_subprocess(url.as_str(), username).await
+                // For subprocess backend, keep the old logic.
+                trace!("Checking keyring for URL {url}");
+                let mut credentials = self.fetch_subprocess(url.as_str(), username).await;
+                if credentials.is_none() {
+                    let Some(host) = url.host_str() else {
+                        return Ok(None);
+                    };
+                    let host = if let Some(port) = url.port() {
+                        format!("{host}:{port}")
+                    } else {
+                        host.to_string()
+                    };
+                    trace!("Checking keyring for host {host}");
+                    credentials = self.fetch_subprocess(&host, username).await;
+
+                    // For non-HTTPS URLs, also try `scheme://host:port` to avoid
+                    // cross-scheme credential leaks.
+                    if credentials.is_none() && url.scheme() != "https" {
+                        let scheme_host = format!("{}://{host}", url.scheme());
+                        trace!("Checking keyring for scheme+host {scheme_host}");
+                        credentials = self.fetch_subprocess(&scheme_host, username).await;
+                    }
+                }
+                Ok(credentials
+                    .map(|(username, password)| Credentials::basic(Some(username), Some(password))))
             }
             #[cfg(test)]
             KeyringProviderBackend::Dummy(ref store) => {
-                Self::fetch_dummy(store, url.as_str(), username)
-            }
-        };
-        // And fallback to a check for the host
-        if credentials.is_none() {
-            let host = if let Some(port) = url.port() {
-                format!("{}:{}", url.host_str()?, port)
-            } else {
-                url.host_str()?.to_string()
-            };
-            trace!("Checking keyring for host {host}");
-            credentials = match self.backend {
-                KeyringProviderBackend::Native => self.fetch_native(&host, username).await,
-                KeyringProviderBackend::Subprocess => self.fetch_subprocess(&host, username).await,
-                #[cfg(test)]
-                KeyringProviderBackend::Dummy(ref store) => {
-                    Self::fetch_dummy(store, &host, username)
-                }
-            };
+                trace!("Checking keyring for URL {url}");
+                let mut credentials = Self::fetch_dummy(store, url.as_str(), username);
+                if credentials.is_none() {
+                    let Some(host) = url.host_str() else {
+                        return Ok(None);
+                    };
+                    let host = if let Some(port) = url.port() {
+                        format!("{host}:{port}")
+                    } else {
+                        host.to_string()
+                    };
+                    trace!("Checking keyring for host {host}");
+                    credentials = Self::fetch_dummy(store, &host, username);
 
-            // For non-HTTPS URLs, `store` includes the scheme in the service name
-            // (e.g., `http://host:port`) to avoid leaking credentials across schemes.
-            // Try `scheme://host:port` as a fallback to match those entries.
-            if credentials.is_none() && url.scheme() != "https" {
-                let scheme_host = format!("{}://{host}", url.scheme());
-                trace!("Checking keyring for scheme+host {scheme_host}");
-                credentials = match self.backend {
-                    KeyringProviderBackend::Native => {
-                        self.fetch_native(&scheme_host, username).await
+                    // For non-HTTPS URLs, also try `scheme://host:port` to avoid
+                    // cross-scheme credential leaks.
+                    if credentials.is_none() && url.scheme() != "https" {
+                        let scheme_host = format!("{}://{host}", url.scheme());
+                        trace!("Checking keyring for scheme+host {scheme_host}");
+                        credentials = Self::fetch_dummy(store, &scheme_host, username);
                     }
-                    KeyringProviderBackend::Subprocess => {
-                        self.fetch_subprocess(&scheme_host, username).await
+                }
+                Ok(credentials
+                    .map(|(username, password)| Credentials::basic(Some(username), Some(password))))
+            }
+        }
+    }
+
+    /// Fetch credentials from the native keyring with prefix matching.
+    ///
+    /// This mimics the behavior of the text credential store by:
+    /// 1. Fetching all credentials stored for the realm
+    /// 2. Filtering and matching based on service URL path prefix and username
+    /// 3. Returning the most specific match (longest path prefix)
+    /// 4. Fall back to legacy format with full URL/host (plain password with old service name)
+    #[instrument(skip(self))]
+    async fn fetch_native_with_prefix_matching(
+        &self,
+        url: &DisplaySafeUrl,
+        username: Option<&str>,
+    ) -> Result<Option<Credentials>, Error> {
+        let request_realm = Realm::from(&**url);
+
+        trace!("Checking keyring for realm {request_realm}");
+
+        // Try to fetch from the realm-based entry (new format with JSON array).
+        if let Some(credentials_list) = self.fetch_native_json_array(&request_realm).await? {
+            // Find all matching credentials and pick the most specific one.
+            let mut best: Option<(usize, &PersistentCredential)> = None;
+
+            for persistent_credential in &credentials_list {
+                let service = &persistent_credential.service;
+                let credentials = &persistent_credential.credentials;
+                let stored_username = credentials.to_username();
+
+                // Check if this credential matches using shared matching logic.
+                if let Some(specificity) = matching::match_specificity(
+                    service,
+                    &stored_username,
+                    url,
+                    &request_realm,
+                    username,
+                ) {
+                    if best.is_none_or(|(best_specificity, _)| specificity > best_specificity) {
+                        best = Some((specificity, persistent_credential));
+                    } else if best
+                        .is_some_and(|(best_specificity, _)| specificity == best_specificity)
+                    {
+                        return Err(Error::AmbiguousUsername(url.clone()));
                     }
-                    #[cfg(test)]
-                    KeyringProviderBackend::Dummy(ref store) => {
-                        Self::fetch_dummy(store, &scheme_host, username)
-                    }
-                };
+                }
+            }
+
+            if let Some((_, persistent_credential)) = best {
+                trace!("Found matching credentials in new format for {url}");
+                return Ok(Some(persistent_credential.credentials.clone()));
             }
         }
 
-        credentials.map(|(username, password)| Credentials::basic(Some(username), Some(password)))
+        // Fall back to old format: try all legacy service names in lookup order.
+        trace!("Checking keyring for legacy plain password format");
+        let mut credentials = None;
+        for service_name in legacy_service_names(url) {
+            trace!("Checking legacy keyring entry {service_name}");
+            credentials = self.fetch_native_legacy(&service_name, username).await?;
+            if credentials.is_some() {
+                break;
+            }
+        }
+
+        Ok(credentials
+            .map(|(username, password)| Credentials::basic(Some(username), Some(password))))
+    }
+
+    /// Fetch and parse JSON credentials array from the native keyring for a given realm.
+    #[instrument(skip(self))]
+    async fn fetch_native_json_array(
+        &self,
+        realm: &Realm,
+    ) -> Result<Option<Vec<PersistentCredential>>, Error> {
+        let realm_str = realm.to_string();
+        let prefixed_service = format!("{UV_SERVICE_PREFIX}{realm_str}");
+        let keyring_username = "_uv_";
+
+        let Ok(entry) = uv_keyring::Entry::new(&prefixed_service, keyring_username) else {
+            return Ok(None);
+        };
+
+        match entry.get_password().await {
+            Ok(json_data) => {
+                // Try to parse as JSON array.
+                let credentials_list =
+                    serde_json::from_str::<Vec<PersistentCredential>>(&json_data)
+                        .map_err(Error::CorruptStoredCredentials)?;
+                trace!(
+                    "Successfully parsed {} credentials from keyring for realm {realm_str}",
+                    credentials_list.len()
+                );
+                Ok(Some(credentials_list))
+            }
+            Err(uv_keyring::Error::NoEntry) => {
+                trace!("No entry found in system keyring for realm {realm_str}");
+                Ok(None)
+            }
+            Err(err) => Err(Error::Keyring(err)),
+        }
+    }
+
+    /// Fetch credentials from the native keyring using the legacy format.
+    ///
+    /// This maintains backward compatibility with credentials stored before
+    /// the JSON-based storage was implemented.
+    #[instrument(skip(self))]
+    async fn fetch_native_legacy(
+        &self,
+        service: &str,
+        username: Option<&str>,
+    ) -> Result<Option<(String, String)>, Error> {
+        let prefixed_service = format!("{UV_SERVICE_PREFIX}{service}");
+        let Some(username) = username else {
+            return Ok(None);
+        };
+        let Ok(entry) = uv_keyring::Entry::new(&prefixed_service, username) else {
+            return Ok(None);
+        };
+        match entry.get_password().await {
+            Ok(password) => {
+                trace!("Found legacy format credentials for {service}");
+                Ok(Some((username.to_string(), password)))
+            }
+            Err(uv_keyring::Error::NoEntry) => {
+                trace!("No legacy entry found in system keyring for {service}");
+                Ok(None)
+            }
+            Err(err) => Err(Error::Keyring(err)),
+        }
     }
 
     #[instrument(skip(self))]
@@ -350,31 +667,6 @@ impl KeyringProvider {
         }
     }
 
-    #[instrument(skip(self))]
-    async fn fetch_native(
-        &self,
-        service: &str,
-        username: Option<&str>,
-    ) -> Option<(String, String)> {
-        let prefixed_service = format!("{UV_SERVICE_PREFIX}{service}");
-        let username = username?;
-        let Ok(entry) = uv_keyring::Entry::new(&prefixed_service, username) else {
-            return None;
-        };
-        match entry.get_password().await {
-            Ok(password) => return Some((username.to_string(), password)),
-            Err(uv_keyring::Error::NoEntry) => {
-                debug!("No entry found in system keyring for {service}");
-            }
-            Err(err) => {
-                warn_user_once!(
-                    "Unable to fetch credentials for {service} from system keyring: {err}"
-                );
-            }
-        }
-        None
-    }
-
     #[cfg(test)]
     fn fetch_dummy(
         store: &Vec<(String, &'static str, &'static str)>,
@@ -415,9 +707,141 @@ impl KeyringProvider {
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        any::Any,
+        collections::HashMap,
+        sync::{Arc, LazyLock, Mutex},
+    };
+
     use super::*;
     use futures::FutureExt;
+    use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
     use url::Url;
+    use uv_keyring::credential::{
+        Credential, CredentialApi, CredentialBuilderApi, CredentialPersistence,
+    };
+
+    static NATIVE_KEYRING_TEST_LOCK: LazyLock<AsyncMutex<()>> =
+        LazyLock::new(|| AsyncMutex::new(()));
+
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+    struct InMemoryCredentialKey {
+        target: Option<String>,
+        service: String,
+        user: String,
+    }
+
+    #[derive(Debug)]
+    struct InMemoryCredential {
+        key: InMemoryCredentialKey,
+        entries: Arc<Mutex<HashMap<InMemoryCredentialKey, Vec<u8>>>>,
+    }
+
+    #[async_trait::async_trait]
+    impl CredentialApi for InMemoryCredential {
+        async fn set_secret(&self, secret: &[u8]) -> uv_keyring::Result<()> {
+            let mut entries = self.entries.lock().unwrap();
+            entries.insert(self.key.clone(), secret.to_vec());
+            Ok(())
+        }
+
+        async fn get_secret(&self) -> uv_keyring::Result<Vec<u8>> {
+            let entries = self.entries.lock().unwrap();
+            let Some(secret) = entries.get(&self.key) else {
+                return Err(uv_keyring::Error::NoEntry);
+            };
+            Ok(secret.clone())
+        }
+
+        async fn delete_credential(&self) -> uv_keyring::Result<()> {
+            let mut entries = self.entries.lock().unwrap();
+            if entries.remove(&self.key).is_some() {
+                Ok(())
+            } else {
+                Err(uv_keyring::Error::NoEntry)
+            }
+        }
+
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+    }
+
+    #[derive(Debug)]
+    struct InMemoryCredentialBuilder {
+        entries: Arc<Mutex<HashMap<InMemoryCredentialKey, Vec<u8>>>>,
+    }
+
+    impl CredentialBuilderApi for InMemoryCredentialBuilder {
+        fn build(
+            &self,
+            target: Option<&str>,
+            service: &str,
+            user: &str,
+        ) -> uv_keyring::Result<Box<Credential>> {
+            Ok(Box::new(InMemoryCredential {
+                key: InMemoryCredentialKey {
+                    target: target.map(ToString::to_string),
+                    service: service.to_string(),
+                    user: user.to_string(),
+                },
+                entries: Arc::clone(&self.entries),
+            }))
+        }
+
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+
+        fn persistence(&self) -> CredentialPersistence {
+            CredentialPersistence::UntilDelete
+        }
+    }
+
+    struct NativeTestKeyring {
+        _guard: AsyncMutexGuard<'static, ()>,
+    }
+
+    impl NativeTestKeyring {
+        async fn install() -> Self {
+            let guard = NATIVE_KEYRING_TEST_LOCK.lock().await;
+            let entries = Arc::new(Mutex::new(HashMap::new()));
+            uv_keyring::set_default_credential_builder(Box::new(InMemoryCredentialBuilder {
+                entries,
+            }));
+            Self { _guard: guard }
+        }
+
+        async fn insert_legacy(&self, service_name: &str, username: &str, password: &str) {
+            let entry =
+                uv_keyring::Entry::new(&format!("{UV_SERVICE_PREFIX}{service_name}"), username)
+                    .unwrap();
+            entry.set_password(password).await.unwrap();
+        }
+
+        async fn assert_legacy_absent(&self, service_name: &str, username: &str) {
+            let entry =
+                uv_keyring::Entry::new(&format!("{UV_SERVICE_PREFIX}{service_name}"), username)
+                    .unwrap();
+            match entry.get_password().await {
+                Err(uv_keyring::Error::NoEntry) => {}
+                Ok(password) => {
+                    panic!(
+                        "expected no legacy credential for {username}@{service_name}, found {password}"
+                    );
+                }
+                Err(err) => {
+                    panic!("expected no legacy credential for {username}@{service_name}: {err}");
+                }
+            }
+        }
+    }
+
+    impl Drop for NativeTestKeyring {
+        fn drop(&mut self) {
+            uv_keyring::set_default_credential_builder(uv_keyring::default_credential_builder());
+        }
+    }
 
     #[tokio::test]
     async fn fetch_url_no_host() {
@@ -429,7 +853,7 @@ mod tests {
             let result = std::panic::AssertUnwindSafe(fetch).catch_unwind().await;
             assert!(result.is_err());
         } else {
-            assert_eq!(fetch.await, None);
+            assert_eq!(fetch.await.unwrap(), None);
         }
     }
 
@@ -443,7 +867,7 @@ mod tests {
             let result = std::panic::AssertUnwindSafe(fetch).catch_unwind().await;
             assert!(result.is_err());
         } else {
-            assert_eq!(fetch.await, None);
+            assert_eq!(fetch.await.unwrap(), None);
         }
     }
 
@@ -457,7 +881,7 @@ mod tests {
             let result = std::panic::AssertUnwindSafe(fetch).catch_unwind().await;
             assert!(result.is_err());
         } else {
-            assert_eq!(fetch.await, None);
+            assert_eq!(fetch.await.unwrap(), None);
         }
     }
 
@@ -467,7 +891,7 @@ mod tests {
         let url = DisplaySafeUrl::ref_cast(&url);
         let keyring = KeyringProvider::empty();
         let credentials = keyring.fetch(url, Some("user"));
-        assert!(credentials.await.is_none());
+        assert!(credentials.await.unwrap().is_none());
     }
 
     #[tokio::test]
@@ -477,7 +901,8 @@ mod tests {
         assert_eq!(
             keyring
                 .fetch(DisplaySafeUrl::ref_cast(&url), Some("user"))
-                .await,
+                .await
+                .unwrap(),
             Some(Credentials::basic(
                 Some("user".to_string()),
                 Some("password".to_string())
@@ -489,7 +914,8 @@ mod tests {
                     DisplaySafeUrl::ref_cast(&url.join("test").unwrap()),
                     Some("user")
                 )
-                .await,
+                .await
+                .unwrap(),
             Some(Credentials::basic(
                 Some("user".to_string()),
                 Some("password".to_string())
@@ -503,7 +929,8 @@ mod tests {
         let keyring = KeyringProvider::dummy([("other.com", "user", "password")]);
         let credentials = keyring
             .fetch(DisplaySafeUrl::ref_cast(&url), Some("user"))
-            .await;
+            .await
+            .unwrap();
         assert_eq!(credentials, None);
     }
 
@@ -520,7 +947,8 @@ mod tests {
                     DisplaySafeUrl::ref_cast(&url.join("foo").unwrap()),
                     Some("user")
                 )
-                .await,
+                .await
+                .unwrap(),
             Some(Credentials::basic(
                 Some("user".to_string()),
                 Some("password".to_string())
@@ -529,7 +957,8 @@ mod tests {
         assert_eq!(
             keyring
                 .fetch(DisplaySafeUrl::ref_cast(&url), Some("user"))
-                .await,
+                .await
+                .unwrap(),
             Some(Credentials::basic(
                 Some("user".to_string()),
                 Some("other-password".to_string())
@@ -541,7 +970,8 @@ mod tests {
                     DisplaySafeUrl::ref_cast(&url.join("bar").unwrap()),
                     Some("user")
                 )
-                .await,
+                .await
+                .unwrap(),
             Some(Credentials::basic(
                 Some("user".to_string()),
                 Some("other-password".to_string())
@@ -555,7 +985,8 @@ mod tests {
         let keyring = KeyringProvider::dummy([(url.host_str().unwrap(), "user", "password")]);
         let credentials = keyring
             .fetch(DisplaySafeUrl::ref_cast(&url), Some("user"))
-            .await;
+            .await
+            .unwrap();
         assert_eq!(
             credentials,
             Some(Credentials::basic(
@@ -569,7 +1000,10 @@ mod tests {
     async fn fetch_url_no_username() {
         let url = Url::parse("https://example.com").unwrap();
         let keyring = KeyringProvider::dummy([(url.host_str().unwrap(), "user", "password")]);
-        let credentials = keyring.fetch(DisplaySafeUrl::ref_cast(&url), None).await;
+        let credentials = keyring
+            .fetch(DisplaySafeUrl::ref_cast(&url), None)
+            .await
+            .unwrap();
         assert_eq!(
             credentials,
             Some(Credentials::basic(
@@ -585,14 +1019,16 @@ mod tests {
         let keyring = KeyringProvider::dummy([(url.host_str().unwrap(), "foo", "password")]);
         let credentials = keyring
             .fetch(DisplaySafeUrl::ref_cast(&url), Some("bar"))
-            .await;
+            .await
+            .unwrap();
         assert_eq!(credentials, None);
 
         // Still fails if we have `foo` in the URL itself
         let url = Url::parse("https://foo@example.com").unwrap();
         let credentials = keyring
             .fetch(DisplaySafeUrl::ref_cast(&url), Some("bar"))
-            .await;
+            .await
+            .unwrap();
         assert_eq!(credentials, None);
     }
 
@@ -604,7 +1040,8 @@ mod tests {
         let keyring = KeyringProvider::dummy([("http://127.0.0.1:8080", "user", "password")]);
         let credentials = keyring
             .fetch(DisplaySafeUrl::ref_cast(&url), Some("user"))
-            .await;
+            .await
+            .unwrap();
         assert_eq!(
             credentials,
             Some(Credentials::basic(
@@ -621,7 +1058,93 @@ mod tests {
         let keyring = KeyringProvider::dummy([("http://127.0.0.1:8080", "user", "password")]);
         let credentials = keyring
             .fetch(DisplaySafeUrl::ref_cast(&url), Some("user"))
-            .await;
+            .await
+            .unwrap();
         assert_eq!(credentials, None);
+    }
+
+    #[tokio::test]
+    async fn native_remove_removes_legacy_host_entry() {
+        let test_keyring = NativeTestKeyring::install().await;
+        let provider = KeyringProvider::native();
+        let url = DisplaySafeUrl::parse("https://legacy-auth.example.test/first").unwrap();
+        let username = "legacy-user";
+
+        test_keyring
+            .insert_legacy("legacy-auth.example.test", username, "legacy-pass")
+            .await;
+
+        assert_eq!(
+            provider.fetch(&url, Some(username)).await.unwrap(),
+            Some(Credentials::basic(
+                Some(username.to_string()),
+                Some("legacy-pass".to_string())
+            ))
+        );
+
+        provider.remove(&url, username).await.unwrap();
+
+        test_keyring
+            .assert_legacy_absent("legacy-auth.example.test", username)
+            .await;
+        assert_eq!(provider.fetch(&url, Some(username)).await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn native_remove_removes_all_matching_legacy_entries() {
+        let test_keyring = NativeTestKeyring::install().await;
+        let provider = KeyringProvider::native();
+        let url = DisplaySafeUrl::parse("https://legacy-auth.example.test/path").unwrap();
+        let username = "legacy-user";
+
+        test_keyring
+            .insert_legacy("legacy-auth.example.test", username, "host-pass")
+            .await;
+        test_keyring
+            .insert_legacy(url.as_str(), username, "url-pass")
+            .await;
+
+        assert_eq!(
+            provider.fetch(&url, Some(username)).await.unwrap(),
+            Some(Credentials::basic(
+                Some(username.to_string()),
+                Some("url-pass".to_string())
+            ))
+        );
+
+        provider.remove(&url, username).await.unwrap();
+
+        test_keyring
+            .assert_legacy_absent(url.as_str(), username)
+            .await;
+        test_keyring
+            .assert_legacy_absent("legacy-auth.example.test", username)
+            .await;
+        assert_eq!(provider.fetch(&url, Some(username)).await.unwrap(), None);
+    }
+
+    #[test]
+    fn legacy_service_names_https_include_url_and_host() {
+        let url = DisplaySafeUrl::parse("https://example.com/api").unwrap();
+        assert_eq!(
+            legacy_service_names(&url),
+            vec![
+                "https://example.com/api".to_string(),
+                "example.com".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn legacy_service_names_http_include_scheme_host() {
+        let url = DisplaySafeUrl::parse("http://127.0.0.1:8080/api").unwrap();
+        assert_eq!(
+            legacy_service_names(&url),
+            vec![
+                "http://127.0.0.1:8080/api".to_string(),
+                "127.0.0.1:8080".to_string(),
+                "http://127.0.0.1:8080".to_string(),
+            ]
+        );
     }
 }

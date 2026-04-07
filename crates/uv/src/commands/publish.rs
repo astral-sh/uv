@@ -563,7 +563,7 @@ async fn gather_credentials(
                 debug!("Fetching password from keyring");
                 if let Some(keyring_password) = provider
                     .fetch(DisplaySafeUrl::ref_cast(&publish_url), Some(username))
-                    .await
+                    .await?
                     .as_ref()
                     .and_then(|credentials| credentials.password())
                 {
