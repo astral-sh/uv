@@ -838,10 +838,22 @@
       "type": "string",
       "format": "uri"
     },
+    "ExcludeNewerOverride": {
+      "oneOf": [
+        {
+          "description": "Disable exclude-newer.",
+          "type": "boolean",
+          "const": false
+        },
+        {
+          "$ref": "#/definitions/ExcludeNewerValue"
+        }
+      ]
+    },
     "ExcludeNewerPackage": {
       "type": "object",
       "additionalProperties": {
-        "$ref": "#/definitions/PackageExcludeNewer"
+        "$ref": "#/definitions/ExcludeNewerOverride"
       }
     },
     "ExcludeNewerValue": {
@@ -1135,18 +1147,6 @@
       "additionalProperties": {
         "$ref": "#/definitions/ConfigSettings"
       }
-    },
-    "PackageExcludeNewer": {
-      "oneOf": [
-        {
-          "description": "Disable exclude-newer for this package.",
-          "type": "boolean",
-          "const": false
-        },
-        {
-          "$ref": "#/definitions/ExcludeNewerValue"
-        }
-      ]
     },
     "PackageName": {
       "description": "The normalized name of a package.\n\nConverts the name to lowercase and collapses runs of `-`, `_`, and `.` down to a single `-`.\nFor example, `---`, `.`, and `__` are all converted to a single `-`.\n\nSee: <https://packaging.python.org/en/latest/specifications/name-normalization/>",
