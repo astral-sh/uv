@@ -1,7 +1,7 @@
 use anyhow::Result;
 use itertools::Itertools;
 use owo_colors::{AnsiColors, OwoColorize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::str::FromStr;
 use tracing::{debug, trace};
@@ -29,10 +29,11 @@ use crate::commands::pip::loggers::{
 };
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::{
-    EnvironmentUpdate, PlatformState, resolve_environment, sync_environment, update_environment,
+    EnvironmentUpdate, PlatformState, apply_editable_mode, resolve_environment, sync_environment,
+    update_environment,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::tool::common::remove_entrypoints;
+use crate::commands::tool::common::{remove_entrypoints, tool_package_editable_override};
 use crate::commands::{ExitStatus, conjunction, tool::common::finalize_tool_install};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -338,6 +339,26 @@ async fn upgrade_tool(
         existing_tool_receipt.overrides().to_vec(),
         existing_tool_receipt.excludes().to_vec(),
     );
+    let explicit_local_requirements: BTreeSet<_> = existing_tool_receipt
+        .requirements()
+        .iter()
+        .filter(|requirement| {
+            requirement.name != *name
+                && matches!(requirement.source, RequirementSource::Directory { .. })
+        })
+        .map(|requirement| requirement.name.clone())
+        .collect();
+    let editable_override = if let Some(requirement) = existing_tool_receipt
+        .requirements()
+        .iter()
+        .find(|requirement| requirement.name == *name)
+        .or_else(|| existing_tool_receipt.requirements().first())
+    {
+        tool_package_editable_override(requirement, &explicit_local_requirements, workspace_cache)
+            .await?
+    } else {
+        None
+    };
 
     // Initialize any shared state.
     let state = PlatformState::default();
@@ -369,7 +390,7 @@ async fn upgrade_tool(
 
         let environment = sync_environment(
             environment,
-            &resolution.into(),
+            &apply_editable_mode(resolution.into(), editable_override.as_ref()),
             Modifications::Exact,
             build_constraints,
             (&settings).into(),
@@ -397,6 +418,7 @@ async fn upgrade_tool(
             spec,
             Modifications::Exact,
             python_platform,
+            editable_override.clone(),
             build_constraints,
             ExtraBuildRequires::default(),
             &settings,

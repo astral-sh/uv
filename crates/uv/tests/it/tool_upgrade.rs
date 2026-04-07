@@ -1,6 +1,9 @@
+use std::process::Command;
+
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
+use indoc::indoc;
 use insta::assert_snapshot;
 
 use uv_static::EnvVars;
@@ -90,6 +93,132 @@ fn tool_upgrade_empty() {
     ----- stderr -----
     Nothing to upgrade
     ");
+}
+
+#[test]
+fn tool_upgrade_preserves_workspace_member_editability() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let root_pyproject = context.temp_dir.child("pyproject.toml");
+    root_pyproject.write_str(indoc! {
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [project.scripts]
+        root_cli = "root:main"
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.sources]
+        child = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["child"]
+        "#
+    })?;
+
+    let root_src = context.temp_dir.child("src").child("root");
+    root_src.create_dir_all()?;
+    root_src.child("__init__.py").write_str(indoc! {
+        r"
+        def main():
+            import child
+            print(child.MESSAGE)
+        "
+    })?;
+
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    let child_src = child.child("src").child("child");
+    child_src.create_dir_all()?;
+    child_src
+        .child("__init__.py")
+        .write_str("MESSAGE = 'OK'\n")?;
+
+    let status = context
+        .tool_install()
+        .arg(context.temp_dir.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .status()
+        .expect("failed to run uv tool install");
+    assert!(status.success());
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    OK
+
+    ----- stderr -----
+    ");
+
+    child_src
+        .child("__init__.py")
+        .write_str("MESSAGE = 'PRE-UPGRADE'\n")?;
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    OK
+
+    ----- stderr -----
+    ");
+
+    let status = context
+        .tool_upgrade()
+        .arg("root")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .status()
+        .expect("failed to run uv tool upgrade");
+    assert!(status.success());
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    OK
+
+    ----- stderr -----
+    ");
+
+    child_src
+        .child("__init__.py")
+        .write_str("MESSAGE = 'POST-UPGRADE'\n")?;
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    OK
+
+    ----- stderr -----
+    ");
+
+    Ok(())
 }
 
 #[test]

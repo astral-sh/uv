@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fmt::Write;
 use std::str::FromStr;
 
@@ -9,11 +10,11 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DryRun, GitLfsSetting, Reinstall, TargetTriple, Upgrade,
+    Concurrency, Constraints, DryRun, EditableMode, GitLfsSetting, Reinstall, TargetTriple, Upgrade,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    ExtraBuildRequires, IndexCapabilities, NameRequirementSpecification, Requirement,
+    ExtraBuildRequires, IndexCapabilities, Name, NameRequirementSpecification, Requirement,
     RequirementSource, UnresolvedRequirementSpecification,
 };
 use uv_fs::CWD;
@@ -38,11 +39,11 @@ use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::{self, Modifications};
 use crate::commands::pip::{resolution_markers, resolution_tags};
 use crate::commands::project::{
-    EnvironmentSpecification, PlatformState, ProjectError, resolve_environment, resolve_names,
-    sync_environment, update_environment,
+    EditableOverride, EnvironmentSpecification, PlatformState, ProjectError, apply_editable_mode,
+    resolve_environment, resolve_names, sync_environment, update_environment,
 };
 use crate::commands::tool::common::{
-    finalize_tool_install, refine_interpreter, remove_entrypoints,
+    finalize_tool_install, refine_interpreter, remove_entrypoints, tool_package_editable_override,
 };
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
@@ -374,6 +375,16 @@ pub(crate) async fn install(
         requirements
     };
 
+    let explicit_local_requirements: BTreeSet<_> = requirements
+        .iter()
+        .skip(1)
+        .filter(|requirement| matches!(requirement.source, RequirementSource::Directory { .. }))
+        .map(|requirement| requirement.name.clone())
+        .collect();
+    let editable_override =
+        tool_package_editable_override(&requirement, &explicit_local_requirements, workspace_cache)
+            .await?;
+
     // Resolve the constraints.
     let constraints: Vec<_> = spec
         .constraints
@@ -524,6 +535,9 @@ pub(crate) async fn install(
                         extra_build_variables,
                     ),
                     Ok(SatisfiesResult::Fresh { .. })
+                ) && installed_packages_match_editable_mode(
+                    &site_packages,
+                    editable_override.as_ref(),
                 ) {
                     // Then we're done! Though we might need to update the receipt.
                     if *tool_receipt.options() != options {
@@ -576,6 +590,7 @@ pub(crate) async fn install(
             spec,
             Modifications::Exact,
             python_platform.as_ref(),
+            editable_override.clone(),
             Constraints::from_requirements(build_constraints.iter().cloned()),
             ExtraBuildRequires::default(),
             &settings,
@@ -715,7 +730,7 @@ pub(crate) async fn install(
         // Sync the environment with the resolved requirements.
         match sync_environment(
             environment,
-            &resolution.into(),
+            &apply_editable_mode(resolution.into(), editable_override.as_ref()),
             Modifications::Exact,
             Constraints::from_requirements(build_constraints.iter().cloned()),
             (&settings).into(),
@@ -816,4 +831,25 @@ fn existing_environment_usable(
     }
 
     true
+}
+
+/// Return `true` if installed packages already satisfy the requested editable override.
+fn installed_packages_match_editable_mode(
+    site_packages: &SitePackages,
+    editable: Option<&EditableOverride>,
+) -> bool {
+    let Some(editable) = editable else {
+        return true;
+    };
+
+    site_packages.iter().all(|dist| {
+        if !editable.includes(dist.name()) {
+            return true;
+        }
+
+        match editable.mode() {
+            EditableMode::Editable => dist.is_local() && dist.is_editable(),
+            EditableMode::NonEditable => !dist.is_editable(),
+        }
+    })
 }

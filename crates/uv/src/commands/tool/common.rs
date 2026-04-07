@@ -10,8 +10,9 @@ use std::{
 use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_distribution_types::Requirement;
+use uv_configuration::EditableMode;
 use uv_distribution_types::{InstalledDist, Name};
+use uv_distribution_types::{Requirement, RequirementSource};
 use uv_fs::Simplified;
 #[cfg(unix)]
 use uv_fs::replace_symlink;
@@ -27,9 +28,10 @@ use uv_settings::{PythonInstallMirrors, ToolOptions};
 use uv_shell::Shell;
 use uv_tool::{InstalledTools, Tool, ToolEntrypoint, entrypoint_paths};
 use uv_warnings::warn_user_once;
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
 use crate::commands::pip;
-use crate::commands::project::ProjectError;
+use crate::commands::project::{EditableOverride, ProjectError};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
 
@@ -70,6 +72,49 @@ pub(crate) fn remove_entrypoints(tool: &Tool) {
             );
         }
     }
+}
+
+/// Build the editable override for a local tool target.
+///
+/// For local directory tools in a workspace, this applies the target's editable mode to the
+/// target package and any implicitly included workspace members. Explicit local requirements (for
+/// example, from `--with` or `--with-editable`) keep their own source editability.
+pub(crate) async fn tool_package_editable_override(
+    requirement: &Requirement,
+    explicit_local_requirements: &BTreeSet<PackageName>,
+    workspace_cache: &WorkspaceCache,
+) -> anyhow::Result<Option<EditableOverride>> {
+    let RequirementSource::Directory { install_path, .. } = &requirement.source else {
+        return Ok(None);
+    };
+
+    let mode = if requirement.is_editable() {
+        EditableMode::Editable
+    } else {
+        EditableMode::NonEditable
+    };
+
+    let mut packages = if install_path.join("pyproject.toml").is_file() {
+        let mut packages: BTreeSet<_> =
+            VirtualProject::discover(install_path, &DiscoveryOptions::default(), workspace_cache)
+                .await?
+                .workspace()
+                .packages()
+                .keys()
+                .cloned()
+                .collect();
+        packages.retain(|package| {
+            *package == requirement.name || !explicit_local_requirements.contains(package)
+        });
+        packages
+    } else {
+        BTreeSet::new()
+    };
+    if packages.is_empty() {
+        packages.insert(requirement.name.clone());
+    }
+
+    Ok(Some(EditableOverride::Packages { mode, packages }))
 }
 
 /// Given a no-solution error and the [`Interpreter`] that was used during the solve, attempt to
