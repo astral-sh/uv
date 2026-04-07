@@ -456,6 +456,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     spec,
                     modifications,
                     python_platform.as_ref(),
+                    None,
                     build_constraints.unwrap_or_default(),
                     script_extra_build_requires,
                     &settings,
