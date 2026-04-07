@@ -901,11 +901,19 @@ impl DistributionMetadata for DirectUrlBuiltDist {
     fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Url(&self.url)
     }
+
+    fn version_id(&self) -> VersionId {
+        VersionId::from_archive(self.location.as_ref(), None)
+    }
 }
 
 impl DistributionMetadata for PathBuiltDist {
     fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Url(&self.url)
+    }
+
+    fn version_id(&self) -> VersionId {
+        VersionId::from_path(self.install_path.as_ref())
     }
 }
 
@@ -919,11 +927,19 @@ impl DistributionMetadata for DirectUrlSourceDist {
     fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Url(&self.url)
     }
+
+    fn version_id(&self) -> VersionId {
+        VersionId::from_archive(self.location.as_ref(), self.subdirectory.as_deref())
+    }
 }
 
 impl DistributionMetadata for GitSourceDist {
     fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Url(&self.url)
+    }
+
+    fn version_id(&self) -> VersionId {
+        VersionId::from_git(self.git.as_ref(), self.subdirectory.as_deref())
     }
 }
 
@@ -931,11 +947,19 @@ impl DistributionMetadata for PathSourceDist {
     fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Url(&self.url)
     }
+
+    fn version_id(&self) -> VersionId {
+        VersionId::from_path(self.install_path.as_ref())
+    }
 }
 
 impl DistributionMetadata for DirectorySourceDist {
     fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Url(&self.url)
+    }
+
+    fn version_id(&self) -> VersionId {
+        VersionId::from_directory(self.install_path.as_ref())
     }
 }
 
@@ -949,6 +973,16 @@ impl DistributionMetadata for SourceDist {
             Self::Directory(dist) => dist.version_or_url(),
         }
     }
+
+    fn version_id(&self) -> VersionId {
+        match self {
+            Self::Registry(dist) => dist.version_id(),
+            Self::DirectUrl(dist) => dist.version_id(),
+            Self::Git(dist) => dist.version_id(),
+            Self::Path(dist) => dist.version_id(),
+            Self::Directory(dist) => dist.version_id(),
+        }
+    }
 }
 
 impl DistributionMetadata for BuiltDist {
@@ -959,6 +993,14 @@ impl DistributionMetadata for BuiltDist {
             Self::Path(dist) => dist.version_or_url(),
         }
     }
+
+    fn version_id(&self) -> VersionId {
+        match self {
+            Self::Registry(dist) => dist.version_id(),
+            Self::DirectUrl(dist) => dist.version_id(),
+            Self::Path(dist) => dist.version_id(),
+        }
+    }
 }
 
 impl DistributionMetadata for Dist {
@@ -966,6 +1008,13 @@ impl DistributionMetadata for Dist {
         match self {
             Self::Built(dist) => dist.version_or_url(),
             Self::Source(dist) => dist.version_or_url(),
+        }
+    }
+
+    fn version_id(&self) -> VersionId {
+        match self {
+            Self::Built(dist) => dist.version_id(),
+            Self::Source(dist) => dist.version_id(),
         }
     }
 }

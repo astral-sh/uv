@@ -7,7 +7,7 @@ use uv_pypi_types::{HashDigest, HashDigests, VerbatimParsedUrl};
 
 use crate::{
     BuildInfo, BuiltDist, Dist, DistributionMetadata, Hashed, InstalledMetadata, InstalledVersion,
-    Name, ParsedUrl, SourceDist, VersionOrUrlRef,
+    Name, ParsedUrl, SourceDist, VersionId, VersionOrUrlRef,
 };
 
 /// A built distribution (wheel) that exists in the local cache.
@@ -211,6 +211,10 @@ impl DistributionMetadata for CachedDirectUrlDist {
     fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Url(&self.url.verbatim)
     }
+
+    fn version_id(&self) -> VersionId {
+        VersionId::from_parsed_url(&self.url.parsed_url)
+    }
 }
 
 impl DistributionMetadata for CachedDist {
@@ -218,6 +222,13 @@ impl DistributionMetadata for CachedDist {
         match self {
             Self::Registry(dist) => dist.version_or_url(),
             Self::Url(dist) => dist.version_or_url(),
+        }
+    }
+
+    fn version_id(&self) -> VersionId {
+        match self {
+            Self::Registry(dist) => dist.version_id(),
+            Self::Url(dist) => dist.version_id(),
         }
     }
 }
