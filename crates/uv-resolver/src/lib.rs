@@ -29,6 +29,7 @@ pub use resolver::{
     ResolverProvider, VersionsResponse, WheelMetadataResult,
 };
 pub use universal_marker::{ConflictMarker, UniversalMarker};
+pub use upgrade::UpgradePackages;
 pub use version_map::VersionMap;
 pub use yanks::AllowedYanks;
 
@@ -66,5 +67,6 @@ mod resolution;
 mod resolution_mode;
 mod resolver;
 mod universal_marker;
+mod upgrade;
 mod version_map;
 mod yanks;

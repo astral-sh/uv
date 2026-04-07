@@ -7,7 +7,9 @@ use uv_configuration::Upgrade;
 use uv_fs::CWD;
 use uv_git::ResolvedRepositoryReference;
 use uv_requirements_txt::RequirementsTxt;
-use uv_resolver::{Lock, LockError, Preference, PreferenceError, PylockToml, PylockTomlErrorKind};
+use uv_resolver::{
+    Lock, LockError, Preference, PreferenceError, PylockToml, PylockTomlErrorKind, UpgradePackages,
+};
 
 #[derive(Debug, Default)]
 pub struct LockedRequirements {
@@ -49,6 +51,8 @@ pub async fn read_requirements_txt(
         .collect::<Result<Vec<_>, PreferenceError>>()?;
 
     // Apply the upgrade strategy to the requirements.
+    let upgrade_packages = UpgradePackages::for_non_project(upgrade);
+
     Ok(if upgrade.is_none() {
         // Respect all pinned versions from the existing lockfile.
         preferences
@@ -56,7 +60,7 @@ pub async fn read_requirements_txt(
         // Ignore all pinned versions for packages that should be upgraded.
         preferences
             .into_iter()
-            .filter(|preference| !upgrade.contains(preference.name()))
+            .filter(|preference| !upgrade_packages.contains(preference.name()))
             .collect()
     })
 }
@@ -72,12 +76,17 @@ pub fn read_lock_requirements(
         return Ok(LockedRequirements::default());
     }
 
+    // Resolve the full set of packages to upgrade, combining `--upgrade-package` and
+    // `--upgrade-group`.
+    let upgrade_packages = UpgradePackages::for_workspace(lock, upgrade);
+
     let mut preferences = Vec::new();
     let mut git = Vec::new();
 
     for package in lock.packages() {
-        // Skip the distribution if it's not included in the upgrade strategy.
-        if upgrade.contains(package.name()) {
+        // Skip the distribution if it's included in the upgrade strategy (either by explicit
+        // package name or via a dependency group).
+        if upgrade_packages.contains(package.name()) {
             continue;
         }
 
@@ -110,12 +119,14 @@ pub async fn read_pylock_toml_requirements(
     let lock = info_span!("toml::from_str upgrade", path = %output_file.display())
         .in_scope(|| toml::from_str::<PylockToml>(&content))?;
 
+    let upgrade_packages = UpgradePackages::for_non_project(upgrade);
+
     let mut preferences = Vec::new();
     let mut git = Vec::new();
 
     for package in &lock.packages {
         // Skip the distribution if it's not included in the upgrade strategy.
-        if upgrade.contains(&package.name) {
+        if upgrade_packages.contains(&package.name) {
             continue;
         }
 

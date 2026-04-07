@@ -5903,8 +5903,9 @@ pub struct ToolUpgradeArgs {
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
 
-    // The following is equivalent to flattening `ResolverInstallerArgs`, with the `--upgrade`, and
-    // `--upgrade-package` options hidden, and the `--no-upgrade` option removed.
+    // The following is equivalent to flattening `ResolverInstallerArgs`, with the `--upgrade`,
+    // `--upgrade-package`, and `--upgrade-group` options hidden, and the `--no-upgrade` option
+    // removed.
     /// Allow package upgrades, ignoring pinned versions in any existing output file. Implies
     /// `--refresh`.
     #[arg(hide = true, long, short = 'U', help_heading = "Resolver options")]
@@ -5914,6 +5915,11 @@ pub struct ToolUpgradeArgs {
     /// file. Implies `--refresh-package`.
     #[arg(hide = true, long, short = 'P', help_heading = "Resolver options")]
     pub upgrade_package: Vec<Requirement<VerbatimParsedUrl>>,
+
+    /// Allow upgrades for all packages in a dependency group, ignoring pinned versions in any
+    /// existing output file.
+    #[arg(hide = true, long, help_heading = "Resolver options")]
+    pub upgrade_group: Vec<GroupName>,
 
     #[command(flatten)]
     pub index_args: IndexArgs,
@@ -7242,6 +7248,11 @@ pub struct ResolverArgs {
     #[arg(long, short = 'P', help_heading = "Resolver options")]
     pub upgrade_package: Vec<Requirement<VerbatimParsedUrl>>,
 
+    /// Allow upgrades for all packages in a dependency group, ignoring pinned versions in any
+    /// existing output file.
+    #[arg(long, help_heading = "Resolver options")]
+    pub upgrade_group: Vec<GroupName>,
+
     /// The strategy to use when resolving against multiple index URLs.
     ///
     /// By default, uv will stop at the first index on which a given package is available, and limit
@@ -7456,6 +7467,11 @@ pub struct ResolverInstallerArgs {
     /// Implies `--refresh-package`.
     #[arg(long, short = 'P', help_heading = "Resolver options", value_hint = ValueHint::Other)]
     pub upgrade_package: Vec<Requirement<VerbatimParsedUrl>>,
+
+    /// Allow upgrades for all packages in a dependency group, ignoring pinned versions in any
+    /// existing output file.
+    #[arg(long, help_heading = "Resolver options")]
+    pub upgrade_group: Vec<GroupName>,
 
     /// Reinstall all packages, regardless of whether they're already installed. Implies
     /// `--refresh`.

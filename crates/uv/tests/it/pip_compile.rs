@@ -5921,6 +5921,28 @@ fn upgrade_package() -> Result<()> {
     Ok(())
 }
 
+/// `--upgrade-group` is not supported in pip commands.
+#[test]
+fn upgrade_group_not_supported() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+            .arg("requirements.in")
+            .arg("--upgrade-group")
+            .arg("dev"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `--upgrade-group` is not supported in `uv pip` commands
+    ");
+
+    Ok(())
+}
+
 /// Upgrade a package with a constraint on the allowed upgrade.
 #[test]
 fn upgrade_constraint() -> Result<()> {

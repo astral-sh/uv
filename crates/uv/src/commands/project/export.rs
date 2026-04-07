@@ -451,6 +451,19 @@ fn cmd() -> String {
                 return Some(None);
             }
 
+            // Always skip the `--upgrade-group` and mark the next item to be skipped
+            if arg == "--upgrade-group" {
+                *skip_next = Some(true);
+                return Some(None);
+            }
+
+            // Skip only this argument if option and value are together
+            if arg.starts_with("--upgrade-group=") {
+                // Reset state; skip this iteration.
+                *skip_next = None;
+                return Some(None);
+            }
+
             // Always skip the `--quiet` flag.
             if arg == "--quiet" || arg == "-q" {
                 *skip_next = None;
