@@ -229,12 +229,17 @@ pub(crate) async fn tree(
             .build();
             let download_concurrency = concurrency.downloads_semaphore.clone();
 
+            // Recompute the exclude-newer timestamps from relative spans so that
+            // `--outdated` judges outdatedness relative to the current moment,
+            // not the time the lock was originally generated.
+            let exclude_newer = lock.exclude_newer().recompute();
+
             // Initialize the client to fetch the latest version of each package.
             let client = LatestClient {
                 client: &client,
                 capabilities: &capabilities,
                 prerelease: lock.prerelease_mode(),
-                exclude_newer: &lock.exclude_newer(),
+                exclude_newer: &exclude_newer,
                 requires_python: Some(lock.requires_python()),
                 tags: None,
             };
