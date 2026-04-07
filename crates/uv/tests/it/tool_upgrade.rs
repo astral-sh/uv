@@ -114,8 +114,8 @@ fn tool_upgrade_preserves_workspace_member_editability() -> Result<()> {
         root_cli = "root:main"
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         child = { workspace = true }
@@ -144,8 +144,8 @@ fn tool_upgrade_preserves_workspace_member_editability() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
 
     let child_src = child.child("src").child("child");
@@ -239,8 +239,8 @@ fn tool_upgrade_preserves_mixed_workspace_member_editability() -> Result<()> {
         root_cli = "tool_root:main"
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     let tool_root_src = tool_root.child("src").child("tool_root");
     tool_root_src.create_dir_all()?;
@@ -266,8 +266,8 @@ fn tool_upgrade_preserves_mixed_workspace_member_editability() -> Result<()> {
         dependencies = ["other-child"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         other-child = { workspace = true }
@@ -288,8 +288,8 @@ fn tool_upgrade_preserves_mixed_workspace_member_editability() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     let other_child_src = other_child.child("src").child("other_child");
     other_child_src.create_dir_all()?;
@@ -328,8 +328,8 @@ fn tool_upgrade_preserves_mixed_workspace_member_editability() -> Result<()> {
         root_cli = "tool_root:main"
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
 
     let status = context
