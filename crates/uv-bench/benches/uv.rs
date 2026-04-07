@@ -70,7 +70,9 @@ fn setup(manifest: Manifest, universal: bool) -> impl Fn() {
     let interpreter = PythonEnvironment::from_root("../../.venv", &cache)
         .unwrap()
         .into_interpreter();
-    let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache.clone()).build();
+    let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache.clone())
+        .build()
+        .expect("failed to build registry client");
 
     // Prime the cache: First run for performance the network operation, the second run primes
     // reading from the cache from the first run. If they are already primed, we only lose ~1s for
@@ -92,7 +94,8 @@ fn setup(manifest: Manifest, universal: bool) -> impl Fn() {
         BaseClientBuilder::default().connectivity(Connectivity::Offline),
         cache.clone(),
     )
-    .build();
+    .build()
+    .expect("failed to build registry client");
 
     move || {
         runtime

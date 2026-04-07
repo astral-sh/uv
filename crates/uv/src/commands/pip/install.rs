@@ -419,7 +419,7 @@ pub(crate) async fn pip_install(
         .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
-        .build();
+        .build()?;
 
     // Combine the `--no-binary` and `--no-build` flags from the requirements files.
     let build_options = build_options.combine(no_binary, no_build);
@@ -497,7 +497,7 @@ pub(crate) async fn pip_install(
             if pylock.starts_with("http://") || pylock.starts_with("https://") {
                 // Fetch the `pylock.toml` over HTTP(S).
                 let url = uv_redacted::DisplaySafeUrl::parse(&pylock.to_string_lossy())?;
-                let client = client_builder.build();
+                let client = client_builder.build()?;
                 let response = client
                     .for_host(&url)
                     .get(url::Url::from(url.clone()))

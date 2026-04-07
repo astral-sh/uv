@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::Result;
+use rcgen::CustomExtension;
 use temp_env::async_with_vars;
 use tempfile::{NamedTempFile, TempDir};
 use url::Url;
@@ -15,7 +16,8 @@ use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 
 use crate::http_util::{
-    SelfSigned, generate_self_signed_certs_with_ca, start_https_mtls_user_agent_server,
+    SelfSigned, generate_self_signed_certs_with_ca,
+    generate_self_signed_certs_with_ca_custom_extensions, start_https_mtls_user_agent_server,
     start_https_user_agent_server, test_cert_dir,
 };
 
@@ -39,11 +41,28 @@ impl TestCertificate {
     /// Generate a fresh CA, server cert, and client cert, persisting the
     /// relevant PEM files to a temporary directory.
     fn new() -> Result<Self> {
+        let (ca, server, client) = generate_self_signed_certs_with_ca()?;
+        Self::persist(ca, server, &client)
+    }
+
+    /// Generate a fresh certificate set whose CA contains an unsupported
+    /// critical extension.
+    fn new_with_unsupported_critical_ca_extension() -> Result<Self> {
+        let mut unsupported_extension = CustomExtension::from_oid_content(
+            &[1, 2, 3, 4],
+            [vec![0x0c, 0x0b], b"unsupported".to_vec()].concat(),
+        );
+        unsupported_extension.set_criticality(true);
+
+        let (ca, server, client) =
+            generate_self_signed_certs_with_ca_custom_extensions(vec![unsupported_extension])?;
+        Self::persist(ca, server, &client)
+    }
+
+    fn persist(ca: SelfSigned, server: SelfSigned, client: &SelfSigned) -> Result<Self> {
         let cert_dir = test_cert_dir();
         fs_err::create_dir_all(&cert_dir)?;
         let temp_dir = TempDir::new_in(cert_dir)?;
-
-        let (ca, server, client) = generate_self_signed_certs_with_ca()?;
 
         let trust_path = temp_dir.path().join("ca.pem");
         fs_err::write(&trust_path, ca.public.pem())?;
@@ -342,7 +361,9 @@ async fn send_request_to(
     let base = BaseClientBuilder::default()
         .no_retry_delay(true)
         .with_system_certs(system_certs);
-    let client = RegistryClientBuilder::new(base, cache).build();
+    let client = RegistryClientBuilder::new(base, cache)
+        .build()
+        .expect("failed to build registry client");
     client
         .cached_client()
         .uncached()
@@ -429,6 +450,30 @@ async fn test_ssl_cert_file_valid() -> Result<()> {
         .ssl_cert_file(&cert.trust_path)
         .expect_https_connect_succeeds(&cert)
         .await;
+    Ok(())
+}
+
+/// An unsupported critical extension in `SSL_CERT_FILE` returns a builder
+/// error instead of panicking.
+#[tokio::test]
+async fn test_ssl_cert_file_unsupported_critical_extension_returns_error() -> Result<()> {
+    let cert = TestCertificate::new_with_unsupported_critical_ca_extension()?;
+    let test_client = client().ssl_cert_file(&cert.trust_path);
+    let vars = test_client.ssl_vars();
+
+    async_with_vars(vars, async {
+        let err = BaseClientBuilder::default()
+            .build()
+            .expect_err("expected client build to fail");
+
+        assert!(err.is_builder(), "expected builder error, got: {err:?}");
+        assert!(
+            format!("{err:?}").contains("UnsupportedCriticalExtension"),
+            "expected error to mention UnsupportedCriticalExtension, got: {err:?}"
+        );
+    })
+    .await;
+
     Ok(())
 }
 

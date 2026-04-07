@@ -916,7 +916,7 @@ mod tests {
         let platform_name = platform.as_cargo_dist_triple();
         let client_builder = BaseClientBuilder::default().retries(0);
         let retry_policy = client_builder.retry_policy();
-        let client = client_builder.build();
+        let client = client_builder.build().expect("failed to build base client");
 
         fetch_with_url_fallback(urls, retry_policy, "manifest for `uv`", |url| {
             fetch_and_find_matching_version(
@@ -1042,7 +1042,9 @@ mod tests {
         });
 
         let url = DisplaySafeUrl::parse(&format!("http://{addr}/ruff.tar.gz")).unwrap();
-        let client = BaseClientBuilder::default().build();
+        let client = BaseClientBuilder::default()
+            .build()
+            .expect("failed to build base client");
         let response = client
             .for_host(&url)
             .get(Url::from(url.clone()))

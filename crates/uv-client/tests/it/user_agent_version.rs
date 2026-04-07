@@ -26,7 +26,7 @@ async fn test_user_agent_has_version() -> Result<()> {
 
     // Initialize uv-client
     let cache = Cache::temp()?.init().await?;
-    let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache).build();
+    let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache).build()?;
 
     // Send request to our dummy server
     let url = DisplaySafeUrl::from_str(&format!("http://{addr}"))?;
@@ -86,7 +86,7 @@ async fn test_user_agent_has_subcommand() -> Result<()> {
         BaseClientBuilder::default().subcommand(vec!["foo".to_owned(), "bar".to_owned()]),
         cache,
     )
-    .build();
+    .build()?;
 
     // Send request to our dummy server
     let url = DisplaySafeUrl::from_str(&format!("http://{addr}"))?;
@@ -182,7 +182,7 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
     } else if cfg!(target_os = "macos") {
         builder = builder.platform(&macos);
     }
-    let client = builder.build();
+    let client = builder.build()?;
 
     // Send request to our dummy server
     let url = DisplaySafeUrl::from_str(&format!("http://{addr}"))?;

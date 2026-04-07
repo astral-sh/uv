@@ -776,7 +776,7 @@ pub(super) async fn do_sync(
         .index_strategy(index_strategy)
         .markers(venv.interpreter().markers())
         .platform(venv.interpreter().platform())
-        .build();
+        .build()?;
 
     // Determine whether to enable build isolation.
     let build_isolation = match build_isolation {

@@ -338,7 +338,7 @@ async fn perform_install(
     let retry_policy = client_builder.retry_policy();
     // Python downloads are performing their own retries to catch stream errors, disable the
     // default retries to avoid the middleware from performing uncontrolled retries.
-    let client = client_builder.retries(0).build();
+    let client = client_builder.retries(0).build()?;
     let download_list =
         ManagedPythonDownloadList::new(&client, python_downloads_json_url.as_deref()).await?;
     // TODO(zanieb): We use this variable to special-case .python-version files, but it'd be nice to

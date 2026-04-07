@@ -89,7 +89,7 @@ async fn credentials_for_url(
         }
         let client = client_builder
             .auth_integration(uv_client::AuthIntegration::NoAuthMiddleware)
-            .build();
+            .build()?;
         let token = pyx_store
             .access_token(
                 client.for_host(pyx_store.api()).raw_client(),

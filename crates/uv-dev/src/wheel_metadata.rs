@@ -30,7 +30,7 @@ pub(crate) async fn wheel_metadata(
             .connect_timeout(environment.http_connect_timeout),
         cache,
     )
-    .build();
+    .build()?;
     let capabilities = IndexCapabilities::default();
 
     let filename = WheelFilename::from_str(&args.url.filename()?)?;

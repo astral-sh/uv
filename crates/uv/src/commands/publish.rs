@@ -142,14 +142,14 @@ pub(crate) async fn publish(
         .read_timeout(environment.http_read_timeout_upload)
         .connect_timeout(environment.http_connect_timeout)
         .client_name("upload")
-        .build();
+        .build()?;
     // For OIDC (trusted publishing), we need retries (GitHub's networking is unreliable)
     // and default timeouts.
     let oidc_client = client_builder
         .clone()
         .auth_integration(AuthIntegration::NoAuthMiddleware)
         .client_name("oidc")
-        .build();
+        .build()?;
     // For S3 uploads, we roll our own retry loop, use upload timeouts, and no auth middleware.
     let s3_client = client_builder
         .clone()
@@ -158,7 +158,7 @@ pub(crate) async fn publish(
         .read_timeout(environment.http_read_timeout_upload)
         .connect_timeout(environment.http_connect_timeout)
         .client_name("s3")
-        .build();
+        .build()?;
 
     let retry_policy = client_builder.retry_policy();
     // We're only checking a single URL and one at a time, so 1 permit is sufficient
@@ -616,7 +616,7 @@ mod tests {
         username: Option<String>,
         password: Option<String>,
     ) -> Result<(DisplaySafeUrl, Credentials)> {
-        let client = BaseClientBuilder::default().build();
+        let client = BaseClientBuilder::default().build()?;
         let token_store = PyxTokenStore::from_settings()?;
         gather_credentials(
             url,

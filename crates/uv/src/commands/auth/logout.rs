@@ -99,7 +99,7 @@ async fn pyx_logout(
     printer: Printer,
 ) -> Result<ExitStatus> {
     // Initialize the client.
-    let client = client_builder.build();
+    let client = client_builder.build()?;
 
     // Retrieve the token store.
     let Some(tokens) = store.read().await? else {

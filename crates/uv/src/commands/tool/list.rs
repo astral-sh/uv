@@ -141,7 +141,7 @@ pub(crate) async fn list(
                     .index_strategy(settings.resolver.index_strategy)
                     .markers(interpreter.markers())
                     .platform(interpreter.platform())
-                    .build();
+                    .build()?;
 
                     let requires_python = RequiresPython::greater_than_equal_version(
                         interpreter.python_full_version(),

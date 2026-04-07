@@ -226,7 +226,7 @@ pub(crate) async fn tree(
             )
             .index_locations(index_locations.clone())
             .keyring(*keyring_provider)
-            .build();
+            .build()?;
             let download_concurrency = concurrency.downloads_semaphore.clone();
 
             // Initialize the client to fetch the latest version of each package.

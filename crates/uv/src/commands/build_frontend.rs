@@ -61,6 +61,8 @@ enum Error {
     #[error(transparent)]
     FlatIndex(#[from] uv_client::FlatIndexError),
     #[error(transparent)]
+    Reqwest(#[from] reqwest::Error),
+    #[error(transparent)]
     BuildPlan(anyhow::Error),
     #[error(transparent)]
     Extract(#[from] uv_extract::Error),
@@ -587,7 +589,7 @@ async fn build_package(
         .keyring(keyring_provider)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
-        .build();
+        .build()?;
 
     // Determine whether to enable build isolation.
     let environment;
