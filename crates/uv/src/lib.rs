@@ -1627,6 +1627,8 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.show_extras,
                 args.show_python,
                 args.outdated,
+                args.args,
+                args.filesystem,
                 client_builder.subcommand(vec!["tool".to_owned(), "list".to_owned()]),
                 globals.concurrency,
                 &cache,

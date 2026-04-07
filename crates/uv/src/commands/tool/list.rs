@@ -15,7 +15,7 @@ use uv_distribution_types::{IndexCapabilities, RequiresPython};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_python::LenientImplementationName;
-use uv_settings::ResolverInstallerOptions;
+use uv_settings::{Combine, ResolverInstallerOptions};
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user;
 
@@ -34,6 +34,8 @@ pub(crate) async fn list(
     show_extras: bool,
     show_python: bool,
     outdated: bool,
+    args: ResolverInstallerOptions,
+    filesystem: ResolverInstallerOptions,
     client_builder: BaseClientBuilder<'_>,
     concurrency: Concurrency,
     cache: &Cache,
@@ -124,10 +126,12 @@ pub(crate) async fn list(
             .map(|(name, tool, tool_env, _version)| {
                 let client_builder = client_builder.clone();
                 let download_concurrency = download_concurrency.clone();
+                let args = args.clone();
+                let filesystem = filesystem.clone();
                 async move {
                     let capabilities = IndexCapabilities::default();
-                    let settings = ResolverInstallerSettings::from(ResolverInstallerOptions::from(
-                        tool.options().clone(),
+                    let settings = ResolverInstallerSettings::from(args.combine(
+                        ResolverInstallerOptions::from(tool.options().clone()).combine(filesystem),
                     ));
                     let interpreter = tool_env.environment().interpreter();
 
