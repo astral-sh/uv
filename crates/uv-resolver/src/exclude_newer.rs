@@ -266,7 +266,7 @@ impl ExcludeNewerValue {
         Self { timestamp, span }
     }
 
-    /// If this value was derived from a relative span, recompute the timestamp relative to `now`.
+    /// If this value was derived from a relative span, recompute the timestamp relative to now.
     ///
     /// Returns `self` unchanged if there is no span (i.e., the timestamp is absolute).
     #[must_use]
