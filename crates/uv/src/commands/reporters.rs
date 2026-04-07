@@ -72,7 +72,7 @@ impl Deref for ProgressBarKind {
 struct BarState {
     /// The number of bars that precede any download bars (i.e., build/checkout status).
     headers: usize,
-    /// A list of download bar sizes, in insertion order.
+    /// A list of download bar sizes, in descending order.
     sizes: Vec<u64>,
     /// A map of progress bars, by ID.
     bars: FxHashMap<usize, ProgressBarKind>,
@@ -223,9 +223,11 @@ impl ProgressReporter {
 
         let mut state = state.lock().unwrap();
 
-        // Add new bars at the bottom to avoid reordering existing bars.
-        let position = state.sizes.len();
-        state.sizes.push(size.unwrap_or(0));
+        // Preserve descending order, so larger downloads appear at the top.
+        let position = size.map_or(state.sizes.len(), |size| {
+            state.sizes.partition_point(|&len| len > size)
+        });
+        state.sizes.insert(position, size.unwrap_or(0));
         state.max_len = std::cmp::max(state.max_len, name.len());
 
         let max_len = state.max_len;
