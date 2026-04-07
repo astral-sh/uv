@@ -183,7 +183,7 @@ pub(crate) fn finalize_tool_install(
     excludes: Vec<PackageName>,
     build_constraints: Vec<Requirement>,
     printer: Printer,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<bool> {
     let executable_directory = uv_tool::tool_executable_dir()?;
     fs_err::create_dir_all(&executable_directory)
         .context("Failed to create executable directory")?;
@@ -193,6 +193,18 @@ pub(crate) fn finalize_tool_install(
     );
 
     let mut installed_entrypoints = Vec::new();
+    let mut installed_any_entrypoints = false;
+    let existing_entrypoint_paths = installed_tools
+        .get_tool_receipt(name)
+        .ok()
+        .flatten()
+        .map(|tool| {
+            tool.entrypoints()
+                .iter()
+                .map(|entrypoint| entrypoint.install_path.clone())
+                .collect::<BTreeSet<_>>()
+        })
+        .unwrap_or_default();
     let site_packages = SitePackages::from_environment(environment)?;
     let ordered_packages = entrypoints
         // Install dependencies first
@@ -267,6 +279,7 @@ pub(crate) fn finalize_tool_install(
         // 1. On Unix: The symlink target doesn't match the expected source path (environment moved)
         // 2. On Windows: The entrypoint copy exists but may have stale shebang (environment moved)
         // 3. The entrypoint doesn't exist at all
+        let mut conflicting_entrypoints = Vec::new();
         let mut invalid_entrypoints = Vec::new();
         let mut valid_entrypoints = Vec::new();
         for (name, src, target) in &target_entrypoints {
@@ -274,8 +287,15 @@ pub(crate) fn finalize_tool_install(
                 // Entrypoint doesn't exist, needs to be installed
                 invalid_entrypoints.push((name.clone(), src.clone(), target.clone()));
             } else {
+                let is_uv_managed_entrypoint = existing_entrypoint_paths.contains(target);
+
                 #[cfg(unix)]
                 {
+                    if !is_uv_managed_entrypoint {
+                        conflicting_entrypoints.push((name.clone(), src.clone(), target.clone()));
+                        continue;
+                    }
+
                     // On Unix, check if the symlink points to the expected source path
                     if let Ok(existing_target) = fs_err::read_link(target) {
                         if existing_target != *src {
@@ -295,6 +315,11 @@ pub(crate) fn finalize_tool_install(
                 }
                 #[cfg(windows)]
                 {
+                    if !is_uv_managed_entrypoint {
+                        conflicting_entrypoints.push((name.clone(), src.clone(), target.clone()));
+                        continue;
+                    }
+
                     // On Windows, entrypoints are copied, so we can't easily check if they're valid.
                     // We rely on the environment path check above to detect moves.
                     // If the environment was removed and recreated, the entrypoints would be
@@ -322,7 +347,7 @@ pub(crate) fn finalize_tool_install(
             target_entrypoints.into_iter().collect()
         };
 
-        if entrypoints_to_install.is_empty() {
+        if entrypoints_to_install.is_empty() && conflicting_entrypoints.is_empty() {
             // All entrypoints are already valid, skip to next package
             // But first, record the valid entrypoints for the receipt
             for (name, _src, target) in &valid_entrypoints {
@@ -334,13 +359,14 @@ pub(crate) fn finalize_tool_install(
 
         // Error if we're overwriting an existing entrypoint from another tool (not invalid ones we're repairing).
         // When repairing invalid entrypoints, we skip this check since we're explicitly fixing broken symlinks.
-        let is_repair_mode = !invalid_entrypoints.is_empty()
+        let is_repair_mode = conflicting_entrypoints.is_empty()
+            && !invalid_entrypoints.is_empty()
             && !force
             && entrypoints_to_install.len() == invalid_entrypoints.len();
         if !force && !is_repair_mode {
-            let mut existing_other_entrypoints = entrypoints_to_install
+            let mut existing_other_entrypoints = conflicting_entrypoints
                 .iter()
-                .filter(|(_, _, target_path)| {
+                .chain(entrypoints_to_install.iter().filter(|(_, _, target_path)| {
                     // Check if the target exists and is NOT one of the invalid entrypoints we're repairing
                     if !target_path.exists() {
                         return false;
@@ -349,7 +375,7 @@ pub(crate) fn finalize_tool_install(
                     !invalid_entrypoints
                         .iter()
                         .any(|(_, _, invalid_target)| invalid_target == target_path)
-                })
+                }))
                 .peekable();
             if existing_other_entrypoints.peek().is_some() {
                 // Clean up the environment we just created
@@ -389,6 +415,7 @@ pub(crate) fn finalize_tool_install(
         // Then install the invalid/new entrypoints
         for (name, src, target) in entrypoints_to_install {
             debug!("Installing executable: `{name}`");
+            installed_any_entrypoints = true;
 
             #[cfg(unix)]
             replace_symlink(&src, &target).context("Failed to install executable")?;
@@ -436,7 +463,7 @@ pub(crate) fn finalize_tool_install(
 
     warn_out_of_path(&executable_directory);
 
-    Ok(())
+    Ok(installed_any_entrypoints)
 }
 
 fn warn_out_of_path(executable_directory: &Path) {

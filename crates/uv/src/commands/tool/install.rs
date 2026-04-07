@@ -525,18 +525,34 @@ pub(crate) async fn install(
                     Ok(SatisfiesResult::Fresh { .. })
                 ) {
                     // Then we're done! Though we might need to update the receipt.
-                    if *tool_receipt.options() != options {
-                        installed_tools.add_tool_receipt(
-                            package_name,
-                            tool_receipt.clone().with_options(options),
+                    let repaired_entrypoints = finalize_tool_install(
+                        environment.environment(),
+                        package_name,
+                        entrypoints,
+                        &installed_tools,
+                        &options,
+                        force || invalid_tool_receipt,
+                        // Only persist the Python request if it was explicitly provided
+                        if explicit_python_request {
+                            python_request.clone()
+                        } else {
+                            None
+                        },
+                        requirements.clone(),
+                        constraints.clone(),
+                        overrides.clone(),
+                        excludes.clone(),
+                        build_constraints.clone(),
+                        printer,
+                    )?;
+
+                    if !repaired_entrypoints {
+                        writeln!(
+                            printer.stderr(),
+                            "`{}` is already installed",
+                            requirement.cyan()
                         )?;
                     }
-
-                    writeln!(
-                        printer.stderr(),
-                        "`{}` is already installed",
-                        requirement.cyan()
-                    )?;
 
                     return Ok(ExitStatus::Success);
                 }

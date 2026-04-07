@@ -4932,13 +4932,9 @@ fn tool_install_fixes_broken_shims_when_env_moved() {
     // Now simulate moving the tool directory (like CI cache restore to different path)
     let tool_dir_new = context.temp_dir.child("tools_new");
 
-    // Copy the entire tool directory to the new location
-    copy_dir_all(tool_dir_original.path(), tool_dir_new.path()).unwrap();
-
-    // Remove ONLY the old tool directory, but keep the bin executable
-    // This simulates the scenario where the environment was moved but the
-    // symlinks in bin still point to the old location
-    fs_err::remove_dir_all(tool_dir_original.path()).unwrap();
+    // Move the entire tool directory to the new location while leaving the shims behind.
+    // This simulates a cache restore under a different tool root without rewriting bin links.
+    fs_err::rename(tool_dir_original.path(), tool_dir_new.path()).unwrap();
 
     // Verify the new location has the environment
     tool_dir_new
@@ -4949,8 +4945,7 @@ fn tool_install_fixes_broken_shims_when_env_moved() {
     let symlink_before = fs_err::read_link(&executable).unwrap();
     assert!(
         symlink_before.to_string_lossy().contains("tools_original"),
-        "Symlink should still point to old location before fix: {:?}",
-        symlink_before
+        "Symlink should still point to old location before fix: {symlink_before:?}",
     );
 
     // Reinstall with the new tool directory - should fix the shims
@@ -4964,15 +4959,6 @@ fn tool_install_fixes_broken_shims_when_env_moved() {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + black==24.3.0
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
     Installed 2 executables: black, blackd
     ");
 
@@ -4983,14 +4969,12 @@ fn tool_install_fixes_broken_shims_when_env_moved() {
     let new_symlink_target = fs_err::read_link(&executable).unwrap();
     assert!(
         new_symlink_target.to_string_lossy().contains("tools_new"),
-        "Symlink should point to new location: {:?}",
-        new_symlink_target
+        "Symlink should point to new location: {new_symlink_target:?}",
     );
     assert!(
         !new_symlink_target
             .to_string_lossy()
             .contains("tools_original"),
-        "Symlink should not point to old location: {:?}",
-        new_symlink_target
+        "Symlink should not point to old location: {new_symlink_target:?}",
     );
 }
