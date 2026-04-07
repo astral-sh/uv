@@ -4887,7 +4887,7 @@ fn tool_install_fixes_broken_shims_when_env_moved() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
-    
+
     // First tool directory (simulates original CI job)
     let tool_dir_original = context.temp_dir.child("tools_original");
     let bin_dir = context.temp_dir.child("bin");
@@ -4915,17 +4915,23 @@ fn tool_install_fixes_broken_shims_when_env_moved() {
     Installed 2 executables: black, blackd
     ");
 
-    tool_dir_original.child("black").assert(predicate::path::is_dir());
+    tool_dir_original
+        .child("black")
+        .assert(predicate::path::is_dir());
     let executable = bin_dir.child("black");
     assert!(executable.exists());
 
     // Verify the symlink points to the original location
     let original_symlink_target = fs_err::read_link(&executable).unwrap();
-    assert!(original_symlink_target.to_string_lossy().contains("tools_original"));
+    assert!(
+        original_symlink_target
+            .to_string_lossy()
+            .contains("tools_original")
+    );
 
     // Now simulate moving the tool directory (like CI cache restore to different path)
     let tool_dir_new = context.temp_dir.child("tools_new");
-    
+
     // Copy the entire tool directory to the new location
     copy_dir_all(tool_dir_original.path(), tool_dir_new.path()).unwrap();
 
@@ -4935,7 +4941,9 @@ fn tool_install_fixes_broken_shims_when_env_moved() {
     fs_err::remove_dir_all(tool_dir_original.path()).unwrap();
 
     // Verify the new location has the environment
-    tool_dir_new.child("black").assert(predicate::path::is_dir());
+    tool_dir_new
+        .child("black")
+        .assert(predicate::path::is_dir());
 
     // Verify the symlink STILL points to the OLD (now broken) location
     let symlink_before = fs_err::read_link(&executable).unwrap();
@@ -4979,7 +4987,9 @@ fn tool_install_fixes_broken_shims_when_env_moved() {
         new_symlink_target
     );
     assert!(
-        !new_symlink_target.to_string_lossy().contains("tools_original"),
+        !new_symlink_target
+            .to_string_lossy()
+            .contains("tools_original"),
         "Symlink should not point to old location: {:?}",
         new_symlink_target
     );

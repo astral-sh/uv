@@ -334,7 +334,9 @@ pub(crate) fn finalize_tool_install(
 
         // Error if we're overwriting an existing entrypoint from another tool (not invalid ones we're repairing).
         // When repairing invalid entrypoints, we skip this check since we're explicitly fixing broken symlinks.
-        let is_repair_mode = !invalid_entrypoints.is_empty() && !force && entrypoints_to_install.len() == invalid_entrypoints.len();
+        let is_repair_mode = !invalid_entrypoints.is_empty()
+            && !force
+            && entrypoints_to_install.len() == invalid_entrypoints.len();
         if !force && !is_repair_mode {
             let mut existing_other_entrypoints = entrypoints_to_install
                 .iter()
@@ -344,7 +346,9 @@ pub(crate) fn finalize_tool_install(
                         return false;
                     }
                     // If this target is in our invalid list, we're allowed to overwrite it
-                    !invalid_entrypoints.iter().any(|(_, _, invalid_target)| invalid_target == target_path)
+                    !invalid_entrypoints
+                        .iter()
+                        .any(|(_, _, invalid_target)| invalid_target == target_path)
                 })
                 .peekable();
             if existing_other_entrypoints.peek().is_some() {
@@ -374,14 +378,14 @@ pub(crate) fn finalize_tool_install(
         let itself = std::env::current_exe().ok();
 
         let mut names = BTreeSet::new();
-        
+
         // First, record any valid entrypoints that we're not reinstalling (for the receipt)
         for (name, _src, target) in &valid_entrypoints {
             let tool_entry = ToolEntrypoint::new(name, target.clone(), package.to_string());
             names.insert(tool_entry.name.clone());
             installed_entrypoints.push(tool_entry);
         }
-        
+
         // Then install the invalid/new entrypoints
         for (name, src, target) in entrypoints_to_install {
             debug!("Installing executable: `{name}`");
