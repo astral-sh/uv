@@ -1,4 +1,4 @@
-#![allow(clippy::disallowed_types)]
+#![expect(clippy::disallowed_types)]
 
 #[cfg(feature = "test-git")]
 mod conditional_imports {

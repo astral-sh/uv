@@ -1,4 +1,4 @@
-#![allow(clippy::disallowed_types)]
+#![expect(clippy::disallowed_types)]
 
 use anyhow::{Ok, Result};
 use assert_cmd::assert::OutputAssertExt;

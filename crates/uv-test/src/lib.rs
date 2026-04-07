@@ -1852,7 +1852,6 @@ impl TestContext {
     }
 
     /// For when we add pypy to the test suite.
-    #[allow(clippy::unused_self)]
     pub fn python_kind(&self) -> &'static str {
         "python"
     }
@@ -2171,7 +2170,7 @@ pub fn run_and_format_with_status<T: AsRef<str>>(
     // Support profiling test run commands with traces.
     if let Ok(root) = env::var(EnvVars::TRACING_DURATIONS_TEST_ROOT) {
         // We only want to fail if the variable is set at runtime.
-        #[allow(clippy::assertions_on_constants)]
+        #[expect(clippy::assertions_on_constants)]
         {
             assert!(
                 cfg!(feature = "tracing-durations-export"),

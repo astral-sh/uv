@@ -4076,8 +4076,7 @@ impl TryFrom<SourceWire> for Source {
     type Error = LockError;
 
     fn try_from(wire: SourceWire) -> Result<Self, LockError> {
-        #[allow(clippy::enum_glob_use)]
-        use self::SourceWire::*;
+        use self::SourceWire::{Direct, Directory, Editable, Git, Path, Registry, Virtual};
 
         match wire {
             Registry { registry } => Ok(Self::Registry(registry.into())),
