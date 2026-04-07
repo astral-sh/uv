@@ -91,6 +91,7 @@ impl Metadata {
         git_source: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         sources: NoSources,
+        editable: Option<bool>,
         cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
@@ -113,6 +114,7 @@ impl Metadata {
             git_source,
             locations,
             sources,
+            editable,
             cache,
             credentials_cache,
         )

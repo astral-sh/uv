@@ -238,6 +238,7 @@ mod resolver {
             &hashes,
             exclude_newer,
             sources,
+            None,
             workspace_cache,
             concurrency.clone(),
             Preview::default(),

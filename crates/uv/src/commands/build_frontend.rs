@@ -642,6 +642,7 @@ async fn build_package(
         &hasher,
         exclude_newer,
         sources.clone(),
+        None,
         workspace_cache.clone(),
         concurrency.clone(),
         preview,

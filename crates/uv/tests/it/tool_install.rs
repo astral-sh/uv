@@ -713,6 +713,119 @@ fn tool_install_workspace_members_do_not_override_explicit_with_requirements() -
 }
 
 #[test]
+fn tool_install_preserves_mixed_workspace_member_editability() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let tool_root = context.temp_dir.child("tool-root");
+    tool_root.create_dir_all()?;
+    tool_root.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "tool-root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.scripts]
+        root_cli = "tool_root:main"
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+    let tool_root_src = tool_root.child("src").child("tool_root");
+    tool_root_src.create_dir_all()?;
+    tool_root_src.child("__init__.py").write_str(indoc! {
+        r#"
+        def main():
+            import importlib.metadata
+            import other_child
+
+            print(f"{importlib.metadata.version('tool-root')} {other_child.MESSAGE}")
+        "#
+    })?;
+
+    let other_workspace = context.temp_dir.child("other-workspace");
+    other_workspace.create_dir_all()?;
+    other_workspace
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "other-workspace"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["other-child"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.sources]
+        other-child = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+    let other_workspace_src = other_workspace.child("src").child("other_workspace");
+    other_workspace_src.create_dir_all()?;
+    other_workspace_src.child("__init__.py").touch()?;
+
+    let other_child = other_workspace.child("packages").child("other-child");
+    other_child.create_dir_all()?;
+    other_child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "other-child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+    let other_child_src = other_child.child("src").child("other_child");
+    other_child_src.create_dir_all()?;
+    other_child_src
+        .child("__init__.py")
+        .write_str("MESSAGE = 'OK'\n")?;
+
+    let status = context
+        .tool_install()
+        .arg("--with-editable")
+        .arg(other_workspace.path())
+        .arg(tool_root.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .status()
+        .expect("failed to run uv tool install with mixed workspace editability");
+    assert!(status.success());
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    0.1.0 OK
+
+    ----- stderr -----
+    ");
+
+    other_child_src
+        .child("__init__.py")
+        .write_str("MESSAGE = 'CHANGED'\n")?;
+
+    uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    0.1.0 CHANGED
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn tool_install_reinstall_converts_workspace_members_to_non_editable() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");

@@ -1,6 +1,7 @@
 use std::fmt::Write;
 use std::ops::Deref;
 use std::path::Path;
+use std::sync::Arc;
 
 use anyhow::Result;
 use itertools::Itertools;
@@ -42,9 +43,9 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    EditableOverride, EnvironmentUpdate, PlatformState, ProjectEnvironment, ProjectError,
-    ScriptEnvironment, UniversalState, apply_editable_mode, default_dependency_groups,
-    detect_conflicts, script_extra_build_requires, script_specification, update_environment,
+    EnvironmentUpdate, PlatformState, ProjectEnvironment, ProjectError, ScriptEnvironment,
+    UniversalState, default_dependency_groups, detect_conflicts, script_extra_build_requires,
+    script_specification, update_environment,
 };
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
@@ -777,8 +778,7 @@ pub(super) async fn do_sync(
     let resolution = apply_no_virtual_project(resolution);
 
     // If necessary, convert editable to non-editable distributions.
-    let editable = editable.map(EditableOverride::All);
-    let resolution = apply_editable_mode(resolution, editable.as_ref());
+    let resolution = apply_editable_mode(resolution, editable);
 
     // Constrain any build requirements marked as `match-runtime = true`.
     let extra_build_requires = extra_build_requires.match_runtime(&resolution)?;
@@ -843,6 +843,7 @@ pub(super) async fn do_sync(
         &build_hasher,
         exclude_newer.clone(),
         sources.clone(),
+        None,
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
@@ -896,6 +897,74 @@ fn apply_no_virtual_project(resolution: Resolution) -> Resolution {
 
         !dist.r#virtual.unwrap_or(false)
     })
+}
+
+/// If necessary, convert any editable requirements to non-editable.
+fn apply_editable_mode(resolution: Resolution, editable: Option<EditableMode>) -> Resolution {
+    match editable {
+        // No modifications are necessary for editable mode; retain any editable distributions.
+        None => resolution,
+
+        // Filter out any non-editable distributions.
+        Some(EditableMode::Editable) => resolution.map(|dist| {
+            let ResolvedDist::Installable { dist, version } = dist else {
+                return None;
+            };
+            let Dist::Source(SourceDist::Directory(uv_distribution_types::DirectorySourceDist {
+                name,
+                install_path,
+                editable: None | Some(false),
+                r#virtual,
+                url,
+            })) = dist.as_ref()
+            else {
+                return None;
+            };
+
+            Some(ResolvedDist::Installable {
+                dist: Arc::new(Dist::Source(SourceDist::Directory(
+                    uv_distribution_types::DirectorySourceDist {
+                        name: name.clone(),
+                        install_path: install_path.clone(),
+                        editable: Some(true),
+                        r#virtual: *r#virtual,
+                        url: url.clone(),
+                    },
+                ))),
+                version: version.clone(),
+            })
+        }),
+
+        // Filter out any editable distributions.
+        Some(EditableMode::NonEditable) => resolution.map(|dist| {
+            let ResolvedDist::Installable { dist, version } = dist else {
+                return None;
+            };
+            let Dist::Source(SourceDist::Directory(uv_distribution_types::DirectorySourceDist {
+                name,
+                install_path,
+                editable: None | Some(true),
+                r#virtual,
+                url,
+            })) = dist.as_ref()
+            else {
+                return None;
+            };
+
+            Some(ResolvedDist::Installable {
+                dist: Arc::new(Dist::Source(SourceDist::Directory(
+                    uv_distribution_types::DirectorySourceDist {
+                        name: name.clone(),
+                        install_path: install_path.clone(),
+                        editable: Some(false),
+                        r#virtual: *r#virtual,
+                        url: url.clone(),
+                    },
+                ))),
+                version: version.clone(),
+            })
+        }),
+    }
 }
 
 /// Extract any credentials that are defined on the workspace dependencies themselves. While we

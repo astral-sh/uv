@@ -454,6 +454,7 @@ pub(crate) async fn add(
                 &build_hasher,
                 settings.resolver.exclude_newer.clone(),
                 sources,
+                None,
                 // No workspace caching since `uv add` changes the workspace definition.
                 WorkspaceCache::default(),
                 concurrency.clone(),
