@@ -99,6 +99,11 @@ pub trait BuildContext {
     /// Whether to incorporate `tool.uv.sources` when resolving requirements.
     fn sources(&self) -> &NoSources;
 
+    /// Whether implicit workspace member requirements should be installed as editable.
+    fn editable(&self) -> Option<bool> {
+        None
+    }
+
     /// The index locations being searched.
     fn locations(&self) -> &IndexLocations;
 

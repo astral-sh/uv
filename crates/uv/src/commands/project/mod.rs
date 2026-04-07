@@ -12,15 +12,14 @@ use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, EditableMode,
-    ExtrasSpecification, GitLfsSetting, Reinstall, TargetTriple, Upgrade,
+    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
+    GitLfsSetting, Reinstall, TargetTriple, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
 use uv_distribution_types::{
-    DirectorySourceDist, Dist, ExtraBuildRequirement, ExtraBuildRequires, Index, Requirement,
-    RequiresPython, Resolution, ResolvedDist, SourceDist, UnresolvedRequirement,
-    UnresolvedRequirementSpecification,
+    ExtraBuildRequirement, ExtraBuildRequires, Index, Requirement, RequiresPython, Resolution,
+    UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::{CWD, LockedFile, LockedFileError, LockedFileMode, Simplified};
 use uv_git::ResolvedRepositoryReference;
@@ -1806,6 +1805,7 @@ pub(crate) async fn resolve_names(
     concurrency: &Concurrency,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
+    editable: Option<bool>,
     printer: Printer,
     preview: Preview,
     lfs: GitLfsSetting,
@@ -1929,6 +1929,7 @@ pub(crate) async fn resolve_names(
         &build_hasher,
         exclude_newer.clone(),
         sources.clone(),
+        editable,
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
@@ -2005,6 +2006,7 @@ pub(crate) async fn resolve_environment(
     concurrency: &Concurrency,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
+    editable: Option<bool>,
     printer: Printer,
     preview: Preview,
 ) -> Result<ResolverOutput, ProjectError> {
@@ -2168,6 +2170,7 @@ pub(crate) async fn resolve_environment(
         &build_hasher,
         exclude_newer.clone(),
         sources.clone(),
+        editable,
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
@@ -2308,6 +2311,7 @@ pub(crate) async fn sync_environment(
         &build_hasher,
         exclude_newer.clone(),
         sources,
+        None,
         workspace_cache,
         concurrency.clone(),
         preview,
@@ -2361,95 +2365,13 @@ impl EnvironmentUpdate {
     }
 }
 
-/// An editable-mode override applied during installation.
-///
-/// This can apply to every directory distribution in a resolution, or to a selected set of
-/// packages.
-#[derive(Debug, Clone)]
-pub(crate) enum EditableOverride {
-    /// Apply the editable mode to every directory distribution in the resolution.
-    All(EditableMode),
-    /// Apply the editable mode only to the given packages.
-    Packages {
-        /// The editable mode to apply.
-        mode: EditableMode,
-        /// The packages included in the override.
-        packages: BTreeSet<PackageName>,
-    },
-}
-
-impl EditableOverride {
-    /// Return the editable mode enforced by this override.
-    pub(crate) fn mode(&self) -> EditableMode {
-        match self {
-            Self::All(mode) | Self::Packages { mode, .. } => *mode,
-        }
-    }
-
-    /// Return `true` if the override applies to the given package.
-    pub(crate) fn includes(&self, package: &PackageName) -> bool {
-        match self {
-            Self::All(_) => true,
-            Self::Packages { packages, .. } => packages.contains(package),
-        }
-    }
-}
-
-/// Apply an editable override to a resolution.
-pub(crate) fn apply_editable_mode(
-    resolution: Resolution,
-    editable: Option<&EditableOverride>,
-) -> Resolution {
-    let Some(editable) = editable else {
-        return resolution;
-    };
-
-    resolution.map(|dist| {
-        let ResolvedDist::Installable { dist, version } = dist else {
-            return None;
-        };
-        let Dist::Source(SourceDist::Directory(DirectorySourceDist {
-            name,
-            install_path,
-            editable: current_editable,
-            r#virtual,
-            url,
-        })) = dist.as_ref()
-        else {
-            return None;
-        };
-        if !editable.includes(name) {
-            return None;
-        }
-
-        let editable = Some(match editable.mode() {
-            EditableMode::Editable => true,
-            EditableMode::NonEditable => false,
-        });
-        if *current_editable == editable {
-            return None;
-        }
-
-        Some(ResolvedDist::Installable {
-            dist: Arc::new(Dist::Source(SourceDist::Directory(DirectorySourceDist {
-                name: name.clone(),
-                install_path: install_path.clone(),
-                editable,
-                r#virtual: *r#virtual,
-                url: url.clone(),
-            }))),
-            version: version.clone(),
-        })
-    })
-}
-
 /// Update a [`PythonEnvironment`] to satisfy a set of [`RequirementsSource`]s.
 pub(crate) async fn update_environment(
     venv: PythonEnvironment,
     spec: RequirementsSpecification,
     modifications: Modifications,
     python_platform: Option<&TargetTriple>,
-    editable: Option<EditableOverride>,
+    editable: Option<bool>,
     build_constraints: Constraints,
     extra_build_requires: ExtraBuildRequires,
     settings: &ResolverInstallerSettings,
@@ -2647,6 +2569,7 @@ pub(crate) async fn update_environment(
         &build_hasher,
         exclude_newer.clone(),
         sources.clone(),
+        editable,
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
@@ -2687,7 +2610,6 @@ pub(crate) async fn update_environment(
         Ok((resolution, hasher)) => (Resolution::from(resolution), hasher),
         Err(err) => return Err(err.into()),
     };
-    let resolution = apply_editable_mode(resolution, editable.as_ref());
 
     // Sync the environment.
     let changelog = pip::operations::install(

@@ -546,6 +546,7 @@ pub(crate) async fn pip_compile(
         &build_hashes,
         exclude_newer.clone(),
         sources,
+        None,
         workspace_cache,
         concurrency.clone(),
         preview,

@@ -42,6 +42,7 @@ impl BuildRequires {
         install_path: &Path,
         locations: &IndexLocations,
         sources: &NoSources,
+        editable: Option<bool>,
         cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
@@ -64,6 +65,7 @@ impl BuildRequires {
             &project_workspace,
             locations,
             sources,
+            editable,
             credentials_cache,
         )
     }
@@ -74,6 +76,7 @@ impl BuildRequires {
         project_workspace: &ProjectWorkspace,
         locations: &IndexLocations,
         sources: &NoSources,
+        editable: Option<bool>,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
@@ -132,6 +135,7 @@ impl BuildRequires {
                             locations,
                             project_workspace.workspace(),
                             None,
+                            editable,
                             credentials_cache,
                         )
                         .map(move |requirement| match requirement {
@@ -205,6 +209,7 @@ impl BuildRequires {
                         group,
                         locations,
                         workspace,
+                        None,
                         None,
                         credentials_cache,
                     )
@@ -293,6 +298,7 @@ impl LoweredExtraBuildDependencies {
                                     group,
                                     index_locations,
                                     workspace,
+                                    None,
                                     None,
                                     credentials_cache,
                                 )
