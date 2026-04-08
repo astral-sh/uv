@@ -361,6 +361,10 @@ jobs:
     runs-on: windows-latest
 
     steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
       - name: "Download binary"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -369,7 +373,7 @@ jobs:
       - name: "Install Python via Python Install manager"
         run: |
           # https://www.python.org/downloads/release/pymanager-250/
-          winget install --accept-package-agreements --accept-source-agreements 9NQ7512CXL7T
+          ./scripts/winget-install-with-retry.ps1 -Package "9NQ7512CXL7T"
           # Call Python Install Manager's py.exe by full path to avoid legacy py.exe
           & "$env:LOCALAPPDATA\Microsoft\WindowsApps\py.exe" install 3.14
 
