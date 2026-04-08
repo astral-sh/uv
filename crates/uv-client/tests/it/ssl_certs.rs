@@ -509,7 +509,7 @@ Caused by: certificate in `[TMP]/ca.pem` (from `SSL_CERT_FILE`) uses an unsuppor
 }
 
 /// An invalid trust anchor in `SSL_CERT_FILE` returns a builder error with a
-/// generic trust-anchor message.
+/// more specific validation message.
 #[tokio::test]
 async fn test_ssl_cert_file_invalid_trust_anchor_returns_error() -> Result<()> {
     let cert = TestCertificate::new_with_duplicate_basic_constraints_ca_extension()?;
@@ -524,16 +524,14 @@ async fn test_ssl_cert_file_invalid_trust_anchor_returns_error() -> Result<()> {
             .expect_err("expected client build to fail");
 
         let source = err.source().expect("expected client build error source");
-        let next_source = source.source().expect("expected trust anchor validation cause");
-        let display = format!("{err}\nCaused by: {source}\nCaused by: {next_source}");
+        let display = format!("{err}\nCaused by: {source}");
 
         with_settings!({
             filters => vec![(temp_dir_filter.as_str(), "[TMP]/")]
         }, {
             assert_snapshot!(display, @r#"
 failed to build HTTP client
-Caused by: certificate in `[TMP]/ca.pem` (from `SSL_CERT_FILE`) could not be used as a trust anchor on certificate `CN=uv-test-ca, O=Astral Software Inc.`
-Caused by: ExtensionValueInvalid
+Caused by: certificate in `[TMP]/ca.pem` (from `SSL_CERT_FILE`) could not be used as a trust anchor on certificate `CN=uv-test-ca, O=Astral Software Inc.`: invalid certificate extension value
 "#);
         });
     })
