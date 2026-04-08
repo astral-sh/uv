@@ -180,6 +180,25 @@ struct QueryBatchResponse {
     results: Vec<QueryBatchResult>,
 }
 
+/// Filter for OSV queries.
+#[derive(Debug, Copy, Clone)]
+pub enum Filter {
+    /// Return all vulnerabilities.
+    All,
+    /// Return only vulnerabilities matching the `MAL-` prefix.
+    Malware,
+}
+
+impl Filter {
+    /// Returns `true` if the given vulnerability ID matches this filter.
+    fn matches(self, id: &str) -> bool {
+        match self {
+            Self::All => true,
+            Self::Malware => id.starts_with("MAL-"),
+        }
+    }
+}
+
 /// Represents [OSV](https://osv.dev/), an open-source vulnerability database.
 pub struct Osv {
     base_url: DisplaySafeUrl,
@@ -208,6 +227,7 @@ impl Osv {
     pub async fn query_batch(
         &self,
         dependencies: &[types::Dependency],
+        filter: Filter,
     ) -> Result<Vec<types::Finding>, Error> {
         if dependencies.is_empty() {
             return Ok(vec![]);
@@ -253,7 +273,13 @@ impl Osv {
 
             let mut next_pending = Vec::new();
             for ((dep, _), result) in pending.iter().zip(batch_response.results.iter()) {
-                dep_vuln_ids.extend(result.vulns.iter().map(|v| (*dep, v.id.clone())));
+                dep_vuln_ids.extend(
+                    result
+                        .vulns
+                        .iter()
+                        .filter(|v| filter.matches(&v.id))
+                        .map(|v| (*dep, v.id.clone())),
+                );
                 if let Some(token) = &result.next_page_token {
                     next_pending.push((*dep, Some(token.clone())));
                 }
@@ -403,7 +429,7 @@ mod tests {
     use wiremock::matchers::{body_json, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    use crate::service::osv::RangeType;
+    use crate::service::osv::{Filter, RangeType};
     use crate::types::{Dependency, Finding};
 
     use super::Event;
@@ -517,7 +543,7 @@ mod tests {
         ];
 
         let findings = osv
-            .query_batch(&dependencies)
+            .query_batch(&dependencies, Filter::All)
             .await
             .expect("Failed to query batch");
 
@@ -711,7 +737,7 @@ mod tests {
         ];
 
         let findings = osv
-            .query_batch(&dependencies)
+            .query_batch(&dependencies, Filter::All)
             .await
             .expect("Failed to query batch");
 
@@ -733,6 +759,76 @@ mod tests {
             server.received_requests().await.unwrap().len(),
             5,
             "Expected two querybatch requests and three vuln detail requests"
+        );
+    }
+
+    /// Ensure that `query_batch` with `Filter::Malware` only fetches full records for `MAL-`
+    /// prefixed vulnerability IDs, skipping non-malware vulnerabilities entirely.
+    #[tokio::test]
+    async fn test_query_batch_malware_filter() {
+        let server = MockServer::start().await;
+
+        // Querybatch returns both a MAL- and a non-MAL vulnerability.
+        Mock::given(method("POST"))
+            .and(path("/v1/querybatch"))
+            .and(body_json(json!({
+                "queries": [
+                    {
+                        "package": { "name": "package-a", "ecosystem": "PyPI" },
+                        "version": "1.0.0",
+                    }
+                ]
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "results": [
+                    {
+                        "vulns": [
+                            { "id": "MAL-2026-1234", "modified": "2026-01-01T00:00:00Z" },
+                            { "id": "GHSA-xxxx-yyyy", "modified": "2026-01-02T00:00:00Z" }
+                        ]
+                    }
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        // Only the MAL- vuln should be fetched.
+        Mock::given(method("GET"))
+            .and(path("/v1/vulns/MAL-2026-1234"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "MAL-2026-1234",
+                "modified": "2026-01-01T00:00:00Z",
+            })))
+            .mount(&server)
+            .await;
+
+        let osv = Osv::new(
+            ClientWithMiddleware::default(),
+            Some(DisplaySafeUrl::parse(&server.uri()).unwrap()),
+            Concurrency::default(),
+        );
+
+        let dependencies = vec![Dependency::new(
+            PackageName::from_str("package-a").unwrap(),
+            Version::from_str("1.0.0").unwrap(),
+        )];
+
+        let findings = osv
+            .query_batch(&dependencies, Filter::Malware)
+            .await
+            .expect("Failed to query batch");
+
+        assert_eq!(findings.len(), 1);
+        match &findings[0] {
+            Finding::Vulnerability(v) => assert_eq!(v.id.as_str(), "MAL-2026-1234"),
+            Finding::ProjectStatus(_) => unreachable!(),
+        }
+
+        // 1 querybatch + 1 vuln detail fetch (GHSA- was skipped).
+        assert_eq!(
+            server.received_requests().await.unwrap().len(),
+            2,
+            "Expected one querybatch request and one vuln detail request (non-MAL skipped)"
         );
     }
 }
