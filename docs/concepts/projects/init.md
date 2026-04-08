@@ -327,7 +327,7 @@ uv will also not add extra metadata to the `pyproject.toml`, such as the `descri
 
 ```toml
 [project]
-name = "example"
+name = "example-bare"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = []
@@ -339,5 +339,5 @@ cases uv will still configure a build system but will not create the expected fi
 When `--bare` is used, additional features can still be used opt-in:
 
 ```console
-$ uv init example --bare --description "Hello world" --author-from git --vcs git --python-pin
+$ uv init example-bare --bare --description "Hello world" --author-from git --vcs git --python-pin
 ```
