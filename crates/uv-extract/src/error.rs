@@ -5,7 +5,7 @@ pub enum Error {
     #[error("I/O operation failed during extraction")]
     Io(#[source] std::io::Error),
     #[error("Invalid zip file structure")]
-    AsyncZip(#[from] async_zip::error::ZipError),
+    AsyncZip(#[source] async_zip::error::ZipError),
     #[error("Invalid tar file")]
     Tar(#[from] tokio_tar::TarError),
     #[error(
@@ -91,6 +91,19 @@ pub enum Error {
     EmptyFilename,
     #[error("Archive contains unacceptable filename: {filename}")]
     UnacceptableFilename { filename: String },
+    #[error(
+        "Archive contains a file with an unsupported compression method; files must be compressed with 'stored', 'DEFLATE', or 'zstd'"
+    )]
+    UnsupportedCompression,
+}
+
+impl From<async_zip::error::ZipError> for Error {
+    fn from(err: async_zip::error::ZipError) -> Self {
+        match err {
+            async_zip::error::ZipError::CompressionNotSupported(_) => Self::UnsupportedCompression,
+            o => Self::AsyncZip(o),
+        }
+    }
 }
 
 impl Error {
@@ -108,7 +121,7 @@ impl Error {
             Err(err) => err,
         };
         let err = match err.downcast::<async_zip::error::ZipError>() {
-            Ok(zip_err) => return Self::AsyncZip(zip_err),
+            Ok(zip_err) => return Self::from(zip_err),
             Err(err) => err,
         };
         Self::Io(err)
