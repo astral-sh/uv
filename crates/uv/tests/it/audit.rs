@@ -1126,3 +1126,166 @@ async fn audit_ignore_partial() {
     Found 1 known vulnerability and no adverse project statuses in 1 package
     ");
 }
+
+/// `--ignore` warns when the ignored ID doesn't match any vulnerability.
+#[tokio::test]
+async fn audit_ignore_unmatched() {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+    "#})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    // Ignoring a non-existent vulnerability should warn.
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--frozen")
+        .arg("--preview")
+        .arg("--ignore")
+        .arg("CVE-XXXX-YYYY")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Ignored vulnerability `CVE-XXXX-YYYY` does not match any vulnerability in the project
+    Found no known vulnerabilities and no adverse project statuses in 1 package
+    ");
+}
+
+/// `--ignore-until-fixed` warns when the ignored ID doesn't match any vulnerability.
+#[tokio::test]
+async fn audit_ignore_until_fixed_unmatched() {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+    "#})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    // Ignoring a non-existent vulnerability with --ignore-until-fixed should warn.
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--frozen")
+        .arg("--preview")
+        .arg("--ignore-until-fixed")
+        .arg("CVE-XXXX-YYYY")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Ignored vulnerability `CVE-XXXX-YYYY` does not match any vulnerability in the project
+    Found no known vulnerabilities and no adverse project statuses in 1 package
+    ");
+}
+
+/// `--ignore` with multiple IDs warns only about the unmatched ones.
+#[tokio::test]
+async fn audit_ignore_mixed_matched_unmatched() {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+    "#})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": [{"id": "PYSEC-2023-0001"}]}]
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/vulns/PYSEC-2023-0001"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "PYSEC-2023-0001",
+            "modified": "2026-01-01T00:00:00Z",
+            "summary": "A test vulnerability in iniconfig",
+            "affected": [{
+                "ranges": [{
+                    "type": "ECOSYSTEM",
+                    "events": [
+                        {"introduced": "0"},
+                        {"fixed": "2.1.0"}
+                    ]
+                }]
+            }]
+        })))
+        .mount(&server)
+        .await;
+
+    // Ignore one real and one non-existent vulnerability: the real one is suppressed,
+    // and the non-existent one triggers a warning.
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--frozen")
+        .arg("--preview")
+        .arg("--ignore")
+        .arg("PYSEC-2023-0001")
+        .arg("--ignore")
+        .arg("CVE-DOES-NOT-EXIST")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Ignored vulnerability `CVE-DOES-NOT-EXIST` does not match any vulnerability in the project
+    Found no known vulnerabilities and no adverse project statuses in 1 package
+    ");
+}
