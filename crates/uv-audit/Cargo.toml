@@ -24,6 +24,7 @@ uv-small-str = { workspace = true }
 
 clap = { workspace = true, optional = true }
 futures = { workspace = true }
+indexmap = { workspace = true }
 jiff = { workspace = true }
 reqwest-middleware = { workspace = true, features = ["json"] }
 rustc-hash = { workspace = true }

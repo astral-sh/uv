@@ -115,6 +115,8 @@ pub(crate) async fn run(
     env_file: EnvFile,
     preview: Preview,
     max_recursion_depth: u32,
+    no_malware_check: bool,
+    malware_check_url: Option<DisplaySafeUrl>,
 ) -> anyhow::Result<ExitStatus> {
     // Check if max recursion depth was exceeded. This most commonly happens
     // for scripts with a shebang line like `#!/usr/bin/env -S uv run`, so try
@@ -340,6 +342,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 DryRun::Disabled,
                 printer,
                 preview,
+                no_malware_check,
+                malware_check_url.clone(),
             )
             .await
             {
@@ -891,6 +895,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     DryRun::Disabled,
                     printer,
                     preview,
+                    no_malware_check,
+                    malware_check_url.clone(),
                 )
                 .await
                 {

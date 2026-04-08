@@ -8,7 +8,9 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashSet;
 use serde::Serialize;
-use tracing::warn;
+use tracing::{trace, warn};
+use uv_audit::service::osv::{self, Filter};
+use uv_audit::types::Dependency;
 use uv_cache::Cache;
 use uv_cli::SyncFormat;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -29,6 +31,7 @@ use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl, ParsedUrl};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
+use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{FlatIndex, ForkStrategy, Installable, Lock, PrereleaseMode, ResolutionMode};
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
@@ -57,6 +60,7 @@ use crate::settings::{
 };
 
 /// Sync the project environment.
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn sync(
     project_dir: &Path,
     lock_check: LockCheck,
@@ -86,6 +90,8 @@ pub(crate) async fn sync(
     printer: Printer,
     preview: Preview,
     output_format: SyncFormat,
+    no_malware_check: bool,
+    malware_check_url: Option<DisplaySafeUrl>,
 ) -> Result<ExitStatus> {
     if preview.is_enabled(PreviewFeature::JsonOutput) && matches!(output_format, SyncFormat::Json) {
         warn_user!(
@@ -436,6 +442,8 @@ pub(crate) async fn sync(
         dry_run,
         printer,
         preview,
+        no_malware_check,
+        malware_check_url,
     )
     .await
     {
@@ -650,6 +658,8 @@ pub(super) async fn do_sync(
     dry_run: DryRun,
     printer: Printer,
     preview: Preview,
+    no_malware_check: bool,
+    malware_check_url: Option<DisplaySafeUrl>,
 ) -> Result<Changelog, ProjectError> {
     // Extract the project settings.
     let InstallerSettingsRef {
@@ -715,6 +725,9 @@ pub(super) async fn do_sync(
     }
     .into_inner();
 
+    // Save a reference to the base client builder for the post-install malware check,
+    // before we clone-and-modify it for the registry client below.
+    let malware_check_client_builder = client_builder;
     let client_builder = client_builder.clone().keyring(keyring_provider);
 
     // Validate that the Python version is supported by the lockfile.
@@ -851,6 +864,19 @@ pub(super) async fn do_sync(
         preview,
     );
 
+    // Run a malware check against OSV before installing.
+    if preview.is_enabled(PreviewFeature::MalwareCheck) && !no_malware_check {
+        check_malware(
+            &target,
+            extras,
+            groups,
+            malware_check_client_builder,
+            concurrency,
+            malware_check_url.clone(),
+        )
+        .await?;
+    }
+
     let site_packages = SitePackages::from_environment(venv)?;
 
     // Sync the environment.
@@ -880,6 +906,77 @@ pub(super) async fn do_sync(
     .await?;
 
     Ok(changelog)
+}
+
+/// Run a malware check against OSV before installing dependencies.
+///
+/// This queries the OSV batch endpoint with [`Filter::Malware`] to detect only `MAL-`-prefixed
+/// advisories. If malware is found, installation is aborted. Network errors or service failures
+/// are silently swallowed (with a `trace!` log) so that offline scenarios don't block work.
+async fn check_malware(
+    target: &InstallTarget<'_>,
+    extras: &ExtrasSpecificationWithDefaults,
+    groups: &DependencyGroupsWithDefaults,
+    client_builder: &BaseClientBuilder<'_>,
+    concurrency: &Concurrency,
+    malware_check_url: Option<DisplaySafeUrl>,
+) -> Result<(), ProjectError> {
+    // NOTE: For now, we only check locked packages that indicate a source from
+    // PyPI. The rationale behind this is that private (i.e. non-PyPI) packages
+    // are almost certainly not going to be included in the OSV DB, and scanning
+    // for them against a remote service is both wasteful and arguably a small
+    // information leak (of potentially private package names).
+    // This effectively excludes public packages that are mirrored onto private
+    // indices, which is a tradeoff we'll need to reconsider.
+    let auditable = target.lock().pypi_packages_for_audit(extras, groups);
+    if auditable.is_empty() {
+        return Ok(());
+    }
+
+    let dependencies: Vec<Dependency> = auditable
+        .iter()
+        .map(|(name, version)| Dependency::new((*name).clone(), (*version).clone()))
+        .collect();
+
+    let osv_url = malware_check_url.unwrap_or_else(|| osv::API_BASE.clone());
+
+    let base_client = client_builder.build()?;
+    let client = base_client.for_host(&osv_url).raw_client().clone();
+    let service = osv::Osv::new(client, Some(osv_url), concurrency.clone());
+
+    trace!(
+        "Running malware check for {} dependencies",
+        dependencies.len()
+    );
+
+    // NOTE: For now, we produce a hard failure if the OSV request fails.
+    // In the future we may want to relax this to a warning, but a hard failure
+    // seems fine while we're in preview since it'll help us shake out
+    // any reliability risks with OSV.
+    let identifiers = service
+        .query_identifiers(&dependencies, Filter::Malware)
+        .await?;
+
+    let malware_details: Vec<_> = identifiers
+        .iter()
+        .flat_map(|(dependency, vuln_ids)| {
+            vuln_ids.iter().map(move |vuln_id| {
+                format!(
+                    "  - `{}=={}`: {} (https://osv.dev/vulnerability/{})",
+                    dependency.name(),
+                    dependency.version(),
+                    vuln_id.as_str(),
+                    vuln_id.as_str(),
+                )
+            })
+        })
+        .collect();
+
+    if malware_details.is_empty() {
+        Ok(())
+    } else {
+        Err(ProjectError::MalwareFound(malware_details.join("\n")))
+    }
 }
 
 /// If necessary, convert any editable requirements to non-editable.

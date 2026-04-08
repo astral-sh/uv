@@ -69,6 +69,8 @@ The following preview features are available:
 - `workspace-metadata`: Allows using `uv workspace metadata`.
 - `workspace-dir`: Allows using `uv workspace dir`.
 - `workspace-list`: Allows using `uv workspace list`.
+- `malware-check`: Allows `uv sync` and other commands to check for malware using
+  [OSV](https://osv.dev) before installing packages.
 
 ## Disabling preview features
 

@@ -30,8 +30,8 @@ use uv_distribution_filename::{
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
     Dist, FileLocation, GitSourceDist, Identifier, IndexLocations, IndexMetadata, IndexUrl, Name,
-    PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
-    RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
+    PYPI_URL, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
+    RegistrySourceDist, RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
     SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
@@ -814,6 +814,29 @@ impl Lock {
         extras: &'lock ExtrasSpecificationWithDefaults,
         groups: &'lock DependencyGroupsWithDefaults,
     ) -> Vec<(&'lock PackageName, &'lock Version)> {
+        self.collect_auditable_packages(extras, groups, |_| true)
+    }
+
+    /// Like [`Lock::packages_for_audit`], but only includes packages sourced from the
+    /// PyPI registry (`https://pypi.org/simple`).
+    pub fn pypi_packages_for_audit<'lock>(
+        &'lock self,
+        extras: &'lock ExtrasSpecificationWithDefaults,
+        groups: &'lock DependencyGroupsWithDefaults,
+    ) -> Vec<(&'lock PackageName, &'lock Version)> {
+        self.collect_auditable_packages(extras, groups, |package| {
+            package.id.source.is_pypi_registry()
+        })
+    }
+
+    /// Traverse the lockfile dependency graph and collect auditable packages, applying
+    /// `collect_filter` to decide which non-workspace packages to include.
+    fn collect_auditable_packages<'lock>(
+        &'lock self,
+        extras: &'lock ExtrasSpecificationWithDefaults,
+        groups: &'lock DependencyGroupsWithDefaults,
+        collect_filter: impl Fn(&Package) -> bool,
+    ) -> Vec<(&'lock PackageName, &'lock Version)> {
         // Enqueue a dependency for auditability checks: base package (no extra) first, then each activated extra.
         fn enqueue_dep<'lock>(
             lock: &'lock Lock,
@@ -910,8 +933,9 @@ impl Lock {
         while let Some((package, extra)) = queue.pop_front() {
             let is_member = workspace_member_ids.contains(&package.id);
 
-            // Collect non-workspace packages that have version information.
-            if !is_member {
+            // Collect non-workspace packages that have version information
+            // and pass the caller's filter.
+            if !is_member && collect_filter(package) {
                 if let Some(version) = package.version() {
                     auditable.insert((package.name(), version));
                 } else {
@@ -3889,6 +3913,14 @@ impl Source {
                 subdirectory: git_dist.subdirectory.clone(),
                 lfs: git_dist.git.lfs(),
             },
+        )
+    }
+
+    /// Returns `true` if the source is a registry entry pointing at PyPI (`https://pypi.org/simple`).
+    fn is_pypi_registry(&self) -> bool {
+        matches!(
+            self,
+            Self::Registry(RegistrySource::Url(url)) if url.as_ref() == PYPI_URL.as_str()
         )
     }
 
