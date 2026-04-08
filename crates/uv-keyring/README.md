@@ -18,7 +18,7 @@ platform's persistent credential store.) The password or secret can then be read
 `get_password` or `get_secret` methods. The underlying credential (with its password/secret data)
 can then be removed using the `delete_credential` method.
 
-```rust,no_run
+```rust,ignore
 use uv_keyring::{Entry, Result};
 
 #[tokio::main]

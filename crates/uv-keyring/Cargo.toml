@@ -40,7 +40,6 @@ windows = { workspace = true, features = ["Win32_Foundation", "Win32_Security_Cr
 zeroize = { workspace = true }
 
 [dev-dependencies]
-doc-comment = "0.3"
 env_logger = "0.11.5"
 fastrand = { workspace = true }
 
