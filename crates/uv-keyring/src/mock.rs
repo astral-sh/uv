@@ -7,11 +7,10 @@ that is platform-independent, provides no persistence, and allows the client
 to specify the return values (including errors) for each call. The credentials
 in this store have no attributes at all.
 
-To use this credential store instead of the default, make this call during
-application startup _before_ creating any entries:
-```rust,ignore
-uv_keyring::set_default_credential_builder(uv_keyring::mock::default_credential_builder());
-```
+To use this credential store instead of the default, call
+[`set_default_credential_builder`](crate::set_default_credential_builder)
+with [`default_credential_builder`] during application startup
+_before_ creating any entries.
 
 You can then create entries as you usually do, and call their usual methods
 to set, get, and delete passwords.  There is no persistence other than
@@ -22,16 +21,7 @@ If you want a method call on an entry to fail in a specific way, you can
 downcast the entry to a [`MockCredential`] and then call [`set_error`](MockCredential::set_error)
 with the appropriate error.  The next entry method called on the credential
 will fail with the error you set.  The error will then be cleared, so the next
-call on the mock will operate as usual.  Here's a complete example:
-```rust,ignore
-use uv_keyring::{Entry, Error, mock, mock::MockCredential};
-uv_keyring::set_default_credential_builder(mock::default_credential_builder());
-let entry = Entry::new("service", "user").unwrap();
-let mock: &MockCredential = entry.get_credential().downcast_ref().unwrap();
-mock.set_error(Error::Invalid("mock error".to_string(), "takes precedence".to_string()));
-entry.set_password("test").await.expect_err("error will override");
-entry.set_password("test").await.expect("error has been cleared");
-```
+call on the mock will operate as usual.
  */
 use std::cell::RefCell;
 use std::sync::Mutex;
