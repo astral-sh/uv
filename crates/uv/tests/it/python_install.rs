@@ -3532,8 +3532,6 @@ fn uninstall_last_patch() {
 /// Regression test for <https://github.com/astral-sh/uv/issues/18793>.
 #[test]
 fn uninstall_last_patch_removes_minor_version_link() {
-    use uv_python::managed::platform_key_from_env;
-
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
