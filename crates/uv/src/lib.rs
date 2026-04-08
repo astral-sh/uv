@@ -245,12 +245,13 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     } else if let Ok(workspace) =
         Workspace::discover(&project_dir, &DiscoveryOptions::default(), &workspace_cache).await
     {
-        let project = FilesystemOptions::find(workspace.install_path())?;
+        let project =
+            FilesystemOptions::find(workspace.install_path(), Some(workspace.install_path()))?;
         let system = FilesystemOptions::system()?;
         let user = FilesystemOptions::user()?;
         project.combine(user).combine(system)
     } else {
-        let project = FilesystemOptions::find(&project_dir)?;
+        let project = FilesystemOptions::find(&project_dir, Some(&project_dir))?;
         let system = FilesystemOptions::system()?;
         let user = FilesystemOptions::user()?;
         project.combine(user).combine(system)

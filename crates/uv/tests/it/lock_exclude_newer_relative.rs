@@ -1218,19 +1218,17 @@ fn lock_exclude_newer_relative_values_pyproject() -> Result<()> {
 
     uv_snapshot!(context.filters(), context
         .lock(), @r#"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    warning: Failed to parse `pyproject.toml` during settings discovery:
-      TOML parse error at line 9, column 25
-        |
-      9 |         exclude-newer = "invalid span"
-        |                         ^^^^^^^^^^^^^^
-      `invalid span` could not be parsed as a valid exclude-newer value (expected a date like `2024-01-01`, a timestamp like `2024-01-01T00:00:00Z`, or a duration like `3 days` or `P3D`)
-
-    Resolved 2 packages in [TIME]
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 9, column 25
+      |
+    9 |         exclude-newer = "invalid span"
+      |                         ^^^^^^^^^^^^^^
+    `invalid span` could not be parsed as a valid exclude-newer value (expected a date like `2024-01-01`, a timestamp like `2024-01-01T00:00:00Z`, or a duration like `3 days` or `P3D`)
     "#);
 
     pyproject_toml.write_str(
@@ -1248,19 +1246,17 @@ fn lock_exclude_newer_relative_values_pyproject() -> Result<()> {
 
     uv_snapshot!(context.filters(), context
         .lock(), @r#"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    warning: Failed to parse `pyproject.toml` during settings discovery:
-      TOML parse error at line 9, column 25
-        |
-      9 |         exclude-newer = "2 foos"
-        |                         ^^^^^^^^
-      `2 foos` could not be parsed as a duration: failed to parse input in the "friendly" duration format: expected to find unit designator suffix (e.g., `years` or `secs`) after parsing integer
-
-    Resolved 2 packages in [TIME]
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 9, column 25
+      |
+    9 |         exclude-newer = "2 foos"
+      |                         ^^^^^^^^
+    `2 foos` could not be parsed as a duration: failed to parse input in the "friendly" duration format: expected to find unit designator suffix (e.g., `years` or `secs`) after parsing integer
     "#);
 
     pyproject_toml.write_str(
@@ -1278,19 +1274,17 @@ fn lock_exclude_newer_relative_values_pyproject() -> Result<()> {
 
     uv_snapshot!(context.filters(), context
         .lock(), @r#"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    warning: Failed to parse `pyproject.toml` during settings discovery:
-      TOML parse error at line 9, column 25
-        |
-      9 |         exclude-newer = "P4Z"
-        |                         ^^^^^
-      `P4Z` could not be parsed as an ISO 8601 duration: expected to find date unit designator suffix (`Y`, `M`, `W` or `D`), but found `Z` instead
-
-    Resolved 2 packages in [TIME]
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 9, column 25
+      |
+    9 |         exclude-newer = "P4Z"
+      |                         ^^^^^
+    `P4Z` could not be parsed as an ISO 8601 duration: expected to find date unit designator suffix (`Y`, `M`, `W` or `D`), but found `Z` instead
     "#);
 
     pyproject_toml.write_str(
@@ -1308,19 +1302,129 @@ fn lock_exclude_newer_relative_values_pyproject() -> Result<()> {
 
     uv_snapshot!(context.filters(), context
         .lock(), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 9, column 25
+      |
+    9 |         exclude-newer = "10"
+      |                         ^^^^
+    `10` could not be parsed as a valid exclude-newer value (expected a date like `2024-01-01`, a timestamp like `2024-01-01T00:00:00Z`, or a duration like `3 days` or `P3D`)
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn lock_invalid_index_strategy_pyproject_warns() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [tool.uv]
+        index-strategy = "not-a-strategy"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     warning: Failed to parse `pyproject.toml` during settings discovery:
-      TOML parse error at line 9, column 25
+      TOML parse error at line 9, column 26
         |
-      9 |         exclude-newer = "10"
-        |                         ^^^^
-      `10` could not be parsed as a valid exclude-newer value (expected a date like `2024-01-01`, a timestamp like `2024-01-01T00:00:00Z`, or a duration like `3 days` or `P3D`)
+      9 |         index-strategy = "not-a-strategy"
+        |                          ^^^^^^^^^^^^^^^^
+      unknown variant `not-a-strategy`, expected one of `first-index`, `unsafe-any-match`, `unsafe-first-match`, `unsafe-best-match`
 
     Resolved 2 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn lock_invalid_exclude_newer_uv_toml_errors() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(
+        r#"
+        exclude-newer = "invalid span"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock(), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `uv.toml`
+      Caused by: TOML parse error at line 2, column 25
+      |
+    2 |         exclude-newer = "invalid span"
+      |                         ^^^^^^^^^^^^^^
+    `invalid span` could not be parsed as a valid exclude-newer value (expected a date like `2024-01-01`, a timestamp like `2024-01-01T00:00:00Z`, or a duration like `3 days` or `P3D`)
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn lock_invalid_exclude_newer_package_pyproject_errors() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [tool.uv]
+        exclude-newer-package = { iniconfig = "invalid-date" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock(), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 9, column 47
+      |
+    9 |         exclude-newer-package = { iniconfig = "invalid-date" }
+      |                                               ^^^^^^^^^^^^^^
+    failed to parse exclude-newer value: `invalid-date` could not be parsed as a valid exclude-newer value (expected a date like `2024-01-01`, a timestamp like `2024-01-01T00:00:00Z`, or a duration like `3 days` or `P3D`)
     "#);
 
     Ok(())
