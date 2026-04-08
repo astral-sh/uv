@@ -221,16 +221,10 @@ async fn do_uninstall(
                 PythonMinorVersionLink::from_installation(installation)
             {
                 if minor_version_link.exists() {
-                    let result = if cfg!(windows) {
-                        fs_err::remove_dir(minor_version_link.symlink_directory.as_path())
+                    if cfg!(windows) {
+                        fs_err::remove_dir(minor_version_link.symlink_directory.as_path())?;
                     } else {
-                        fs_err::remove_file(minor_version_link.symlink_directory.as_path())
-                    };
-                    if result.is_err() {
-                        return Err(anyhow::anyhow!(
-                            "Failed to remove symlink directory {}",
-                            minor_version_link.symlink_directory.display()
-                        ));
+                        fs_err::remove_file(minor_version_link.symlink_directory.as_path())?;
                     }
                     let symlink_term = if cfg!(windows) {
                         "junction"
