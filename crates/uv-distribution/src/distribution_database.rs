@@ -714,8 +714,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
 
-        let query_url = &url.clone();
-
         let download = |response: reqwest::Response| {
             async {
                 let size = size.or_else(|| content_length(&response));
@@ -744,7 +742,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         let mut reader = ProgressReader::new(&mut hasher, progress, &**reporter);
                         match extension {
                             WheelExtension::Whl => {
-                                uv_extract::stream::unzip(query_url, &mut reader, temp_dir.path())
+                                uv_extract::stream::unzip(&mut reader, temp_dir.path())
                                     .await
                                     .map_err(|err| Error::Extract(filename.to_string(), err))?
                             }
@@ -757,7 +755,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     }
                     None => match extension {
                         WheelExtension::Whl => {
-                            uv_extract::stream::unzip(query_url, &mut hasher, temp_dir.path())
+                            uv_extract::stream::unzip(&mut hasher, temp_dir.path())
                                 .await
                                 .map_err(|err| Error::Extract(filename.to_string(), err))?
                         }
@@ -1129,11 +1127,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
             // Unzip the wheel to a temporary directory.
             let files = match extension {
-                WheelExtension::Whl => {
-                    uv_extract::stream::unzip(path.display(), &mut hasher, temp_dir.path())
-                        .await
-                        .map_err(|err| Error::Extract(filename.to_string(), err))?
-                }
+                WheelExtension::Whl => uv_extract::stream::unzip(&mut hasher, temp_dir.path())
+                    .await
+                    .map_err(|err| Error::Extract(filename.to_string(), err))?,
                 WheelExtension::WhlZst => {
                     uv_extract::stream::untar_zst(&mut hasher, temp_dir.path())
                         .await
