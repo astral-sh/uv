@@ -503,15 +503,20 @@ mod tests {
         fs_err::remove_file(&direct_wheel_path)?;
 
         // Build a source distribution.
-        let (_name, source_dist_list_files) =
-            list_source_dist(source_root, MOCK_UV_VERSION, false)?;
+        let (_name, source_dist_list_files) = {
+            let _preview = uv_preview::test::with_features(preview_features);
+            list_source_dist(source_root, MOCK_UV_VERSION, false)?
+        };
         // TODO(konsti): This should run in the unpacked source dist tempdir, but we need to
         // normalize the path.
         let (_name, wheel_list_files) = {
             let _preview = uv_preview::test::with_features(preview_features);
             list_wheel(source_root, MOCK_UV_VERSION, false)?
         };
-        let source_dist_filename = build_source_dist(source_root, dist, MOCK_UV_VERSION, false)?;
+        let source_dist_filename = {
+            let _preview = uv_preview::test::with_features(preview_features);
+            build_source_dist(source_root, dist, MOCK_UV_VERSION, false)?
+        };
         let source_dist_path = dist.join(source_dist_filename.to_string());
         let source_dist_contents = sdist_contents(&source_dist_path);
 
@@ -685,18 +690,17 @@ mod tests {
         // Check that the source dist is reproducible across platforms.
         assert_snapshot!(
             format!("{:x}", sha2::Sha256::digest(fs_err::read(&source_dist_path).unwrap())),
-            @"1d9ce1ce63195fbee07314c0b595ba9e063670da8d10c252c351b21e94e3f508"
+            @"8bed1f7a8059064bcbeedb61a867cca7f63a474306011d0114280de631ac705e"
         );
         // Check both the files we report and the actual files
         assert_snapshot!(format_file_list(build.source_dist_list_files, src.path()), @"
         built_by_uv-0.1.0/PKG-INFO (generated)
-        built_by_uv-0.1.0/pyproject.toml (generated)
-        built_by_uv-0.1.0/pyproject.toml.orig (pyproject.toml)
         built_by_uv-0.1.0/LICENSE-APACHE (LICENSE-APACHE)
         built_by_uv-0.1.0/LICENSE-MIT (LICENSE-MIT)
         built_by_uv-0.1.0/README.md (README.md)
         built_by_uv-0.1.0/assets/data.csv (assets/data.csv)
         built_by_uv-0.1.0/header/built_by_uv.h (header/built_by_uv.h)
+        built_by_uv-0.1.0/pyproject.toml (pyproject.toml)
         built_by_uv-0.1.0/scripts/whoami.sh (scripts/whoami.sh)
         built_by_uv-0.1.0/src/built_by_uv/__init__.py (src/built_by_uv/__init__.py)
         built_by_uv-0.1.0/src/built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
@@ -717,7 +721,6 @@ mod tests {
         built_by_uv-0.1.0/header
         built_by_uv-0.1.0/header/built_by_uv.h
         built_by_uv-0.1.0/pyproject.toml
-        built_by_uv-0.1.0/pyproject.toml.orig
         built_by_uv-0.1.0/scripts
         built_by_uv-0.1.0/scripts/whoami.sh
         built_by_uv-0.1.0/src
@@ -846,7 +849,10 @@ mod tests {
 
         // Build a wheel from a source distribution
         let output_dir = TempDir::new().unwrap();
-        build_source_dist(src.path(), output_dir.path(), "0.5.15", false).unwrap();
+        {
+            let _preview = uv_preview::test::with_features(&[]);
+            build_source_dist(src.path(), output_dir.path(), "0.5.15", false).unwrap();
+        }
         let sdist_tree = TempDir::new().unwrap();
         let source_dist_path = output_dir.path().join("pep_pep639_license-1.0.0.tar.gz");
         let sdist_reader = BufReader::new(File::open(&source_dist_path).unwrap());
@@ -990,7 +996,6 @@ mod tests {
         two_step_build-1.0.0/
         two_step_build-1.0.0/PKG-INFO
         two_step_build-1.0.0/pyproject.toml
-        two_step_build-1.0.0/pyproject.toml.orig
         two_step_build-1.0.0/two_step_build
         two_step_build-1.0.0/two_step_build/__init__.py
         ");
@@ -1101,7 +1106,10 @@ mod tests {
         let dist = TempDir::new().unwrap();
 
         // Source dist build should fail
-        let sdist_result = build_source_dist(src.path(), dist.path(), MOCK_UV_VERSION, false);
+        let sdist_result = {
+            let _preview = uv_preview::test::with_features(&[]);
+            build_source_dist(src.path(), dist.path(), MOCK_UV_VERSION, false)
+        };
         assert!(sdist_result.is_err());
 
         // Wheel build should fail
@@ -1149,7 +1157,10 @@ mod tests {
         fs_err::write(&wheel_path, old_content).unwrap();
 
         // Build should fail and delete existing files
-        let sdist_result = build_source_dist(src.path(), dist.path(), MOCK_UV_VERSION, false);
+        let sdist_result = {
+            let _preview = uv_preview::test::with_features(&[]);
+            build_source_dist(src.path(), dist.path(), MOCK_UV_VERSION, false)
+        };
         assert!(sdist_result.is_err());
 
         let wheel_result = {
@@ -1207,7 +1218,10 @@ mod tests {
         fs_err::write(&wheel_path, old_content).unwrap();
 
         // Build should succeed and overwrite existing files
-        build_source_dist(src.path(), dist.path(), MOCK_UV_VERSION, false).unwrap();
+        {
+            let _preview = uv_preview::test::with_features(&[]);
+            build_source_dist(src.path(), dist.path(), MOCK_UV_VERSION, false).unwrap();
+        }
         {
             let _preview = uv_preview::test::with_features(&[]);
             build_wheel(src.path(), dist.path(), None, MOCK_UV_VERSION, false).unwrap();
@@ -1395,7 +1409,6 @@ mod tests {
         simple_namespace_part-1.0.0/
         simple_namespace_part-1.0.0/PKG-INFO
         simple_namespace_part-1.0.0/pyproject.toml
-        simple_namespace_part-1.0.0/pyproject.toml.orig
         simple_namespace_part-1.0.0/src
         simple_namespace_part-1.0.0/src/simple_namespace
         simple_namespace_part-1.0.0/src/simple_namespace/part
@@ -1655,7 +1668,6 @@ mod tests {
         simple_namespace_part-1.0.0/
         simple_namespace_part-1.0.0/PKG-INFO
         simple_namespace_part-1.0.0/pyproject.toml
-        simple_namespace_part-1.0.0/pyproject.toml.orig
         simple_namespace_part-1.0.0/src
         simple_namespace_part-1.0.0/src/foo
         simple_namespace_part-1.0.0/src/foo/__init__.py
@@ -1770,7 +1782,6 @@ mod tests {
         duplicate-1.0.0/
         duplicate-1.0.0/PKG-INFO
         duplicate-1.0.0/pyproject.toml
-        duplicate-1.0.0/pyproject.toml.orig
         duplicate-1.0.0/src
         duplicate-1.0.0/src/bar
         duplicate-1.0.0/src/bar/baz
@@ -1872,16 +1883,24 @@ mod tests {
         .unwrap();
 
         let dist = TempDir::new().unwrap();
+        let _preview =
+            uv_preview::test::with_features(&[PreviewFeature::TomlBackwardsCompatibility]);
         let source_dist_filename =
             build_source_dist(tmp_dir.path(), dist.path(), MOCK_UV_VERSION, false).unwrap();
         let source_dist_path = dist.path().join(source_dist_filename.to_string());
         let contents = sdist_contents(&source_dist_path);
 
-        // The nested pyproject.toml should be present
+        // The nested `pyproject.toml` should be present, and not being rewritten
+        // with a `pyproject.toml.orig`.
         assert!(
             contents
                 .iter()
                 .any(|f| f.contains("nested_pyproject/pyproject.toml")),
+        );
+        assert!(
+            !contents
+                .iter()
+                .any(|f| f.contains("nested_pyproject/pyproject.toml.oirg")),
         );
     }
 
@@ -1920,7 +1939,12 @@ mod tests {
         .unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build = build(src.path(), dist.path(), &[]).unwrap();
+        let build = build(
+            src.path(),
+            dist.path(),
+            &[PreviewFeature::TomlBackwardsCompatibility],
+        )
+        .unwrap();
 
         // Check that both `pyproject.toml` and `pyproject.toml.orig` are in the sdist.
         assert_snapshot!(build.source_dist_contents.join("\n"), @"
