@@ -10,7 +10,7 @@ in this store have no attributes at all.
 To use this credential store instead of the default, make this call during
 application startup _before_ creating any entries:
 ```rust
-keyring::set_default_credential_builder(keyring::mock::default_credential_builder());
+uv_keyring::set_default_credential_builder(uv_keyring::mock::default_credential_builder());
 ```
 
 You can then create entries as you usually do, and call their usual methods
@@ -24,13 +24,15 @@ with the appropriate error.  The next entry method called on the credential
 will fail with the error you set.  The error will then be cleared, so the next
 call on the mock will operate as usual.  Here's a complete example:
 ```rust
-# use keyring::{Entry, Error, mock, mock::MockCredential};
-# keyring::set_default_credential_builder(mock::default_credential_builder());
+# use uv_keyring::{Entry, Error, mock, mock::MockCredential};
+# uv_keyring::set_default_credential_builder(mock::default_credential_builder());
+# tokio::runtime::Runtime::new().unwrap().block_on(async {
 let entry = Entry::new("service", "user").unwrap();
 let mock: &MockCredential = entry.get_credential().downcast_ref().unwrap();
 mock.set_error(Error::Invalid("mock error".to_string(), "takes precedence".to_string()));
-entry.set_password("test").expect_err("error will override");
-entry.set_password("test").expect("error has been cleared");
+entry.set_password("test").await.expect_err("error will override");
+entry.set_password("test").await.expect("error has been cleared");
+# });
 ```
  */
 use std::cell::RefCell;

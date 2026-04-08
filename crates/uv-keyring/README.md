@@ -18,10 +18,11 @@ platform's persistent credential store.) The password or secret can then be read
 `get_password` or `get_secret` methods. The underlying credential (with its password/secret data)
 can then be removed using the `delete_credential` method.
 
-```rust
-use keyring::{Entry, Result};
+```rust,no_run
+use uv_keyring::{Entry, Result};
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let entry = Entry::new("my-service", "my-name")?;
     entry.set_password("topS3cr3tP4$$w0rd").await?;
     let password = entry.get_password().await?;
