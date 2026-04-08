@@ -47,7 +47,7 @@ use uv_warnings::warn_user_once;
 
 use crate::linehaul::LineHaul;
 use crate::middleware::OfflineMiddleware;
-use crate::tls::{Certificates, read_identity};
+use crate::tls::{Certificates, TlsConfigurationError, read_identity};
 use crate::{Connectivity, WrappedReqwestError};
 
 pub const DEFAULT_RETRIES: u32 = 3;
@@ -70,6 +70,44 @@ pub const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// reqwest does not support something like a read timeout for uploads, so we have to set a (large)
 /// timeout on the entire upload.
 pub const DEFAULT_READ_TIMEOUT_UPLOAD: Duration = Duration::from_mins(15);
+
+#[derive(Debug)]
+pub struct ClientBuildError(ClientBuildErrorKind);
+
+#[derive(Debug, Error)]
+enum ClientBuildErrorKind {
+    #[error(transparent)]
+    Reqwest(reqwest::Error),
+    #[error(transparent)]
+    TlsConfiguration(TlsConfigurationError),
+}
+
+impl std::fmt::Display for ClientBuildError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("failed to build HTTP client")
+    }
+}
+
+impl std::error::Error for ClientBuildError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match &self.0 {
+            ClientBuildErrorKind::Reqwest(error) => Some(error),
+            ClientBuildErrorKind::TlsConfiguration(error) => Some(error),
+        }
+    }
+}
+
+impl From<reqwest::Error> for ClientBuildError {
+    fn from(error: reqwest::Error) -> Self {
+        Self(ClientBuildErrorKind::Reqwest(error))
+    }
+}
+
+impl From<TlsConfigurationError> for ClientBuildError {
+    fn from(error: TlsConfigurationError) -> Self {
+        Self(ClientBuildErrorKind::TlsConfiguration(error))
+    }
+}
 
 /// Selectively skip parts or the entire auth middleware.
 #[derive(Debug, Clone, Copy, Default)]
@@ -380,7 +418,7 @@ impl<'a> BaseClientBuilder<'a> {
         retry_policy(self.retries, self.no_retry_delay)
     }
 
-    pub fn build(&self) -> reqwest::Result<BaseClient> {
+    pub fn build(&self) -> Result<BaseClient, ClientBuildError> {
         if let Some(name) = self.client_name {
             debug!(
                 "Using request connect timeout of {}s and read timeout of {}s for {} client",
@@ -464,7 +502,7 @@ impl<'a> BaseClientBuilder<'a> {
         &self,
         read_timeout: Duration,
         connect_timeout: Duration,
-    ) -> reqwest::Result<(Client, Client)> {
+    ) -> Result<(Client, Client), ClientBuildError> {
         // Create user agent.
         let mut user_agent_string = format!("uv/{}", version());
 
@@ -475,7 +513,7 @@ impl<'a> BaseClientBuilder<'a> {
         }
 
         // Load custom CA certificates from `SSL_CERT_FILE` and `SSL_CERT_DIR`.
-        let custom_certs = Certificates::from_env().map(|certs| certs.to_reqwest_certs());
+        let custom_certs = Certificates::from_env()?.map(|certs| certs.to_reqwest_certs());
 
         // Create a secure client that validates certificates.
         let raw_client = self.create_client(
@@ -508,7 +546,7 @@ impl<'a> BaseClientBuilder<'a> {
         custom_certs: Option<Vec<Certificate>>,
         security: Security,
         redirect_policy: RedirectPolicy,
-    ) -> reqwest::Result<Client> {
+    ) -> Result<Client, ClientBuildError> {
         // Configure the builder.
         let client_builder = ClientBuilder::new()
             .http1_title_case_headers()
@@ -574,7 +612,7 @@ impl<'a> BaseClientBuilder<'a> {
             client_builder = client_builder.proxy(proxy);
         }
 
-        client_builder.build()
+        client_builder.build().map_err(Into::into)
     }
 
     fn apply_middleware(&self, client: Client) -> ClientWithMiddleware {

@@ -334,6 +334,8 @@ rcgen = { version = "0.14.5", features = [
 ], default-features = false }
 rustls = { version = "0.23.36", default-features = false }
 similar = { version = "2.6.0" }
+webpki = { package = "rustls-webpki", version = "0.103.10" }
+x509-parser = { version = "0.18.0" }
 temp-env = { version = "0.3.6", features = ["async_closure"] }
 test-case = { version = "3.3.1" }
 test-log = { version = "0.2.16", features = [

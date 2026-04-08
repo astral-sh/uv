@@ -1,4 +1,5 @@
 use std::env;
+use std::fmt::{Display, Formatter};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
@@ -7,10 +8,147 @@ use reqwest::{Certificate, Identity};
 use rustls_native_certs::{CertificateResult, load_certs_from_paths};
 use rustls_pki_types::CertificateDer;
 use tracing::debug;
+use webpki::{Error as WebPkiError, anchor_from_trusted_cert};
+use x509_parser::prelude::{FromDer, X509Certificate};
 
 use uv_fs::Simplified;
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
+
+#[derive(Debug, Clone)]
+pub(crate) enum CertificateSource {
+    SslCertFile(PathBuf),
+    SslCertDir(PathBuf),
+}
+
+impl CertificateSource {
+    const fn env_var(&self) -> &'static str {
+        match self {
+            Self::SslCertFile(_) => EnvVars::SSL_CERT_FILE,
+            Self::SslCertDir(_) => EnvVars::SSL_CERT_DIR,
+        }
+    }
+
+    fn path(&self) -> &Path {
+        match self {
+            Self::SslCertFile(path) | Self::SslCertDir(path) => path,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct DiagnosticCertificate(CertificateDer<'static>);
+
+impl DiagnosticCertificate {
+    fn parse(&self) -> Option<X509Certificate<'_>> {
+        let (_, certificate) = X509Certificate::from_der(self.0.as_ref()).ok()?;
+        Some(certificate)
+    }
+}
+
+#[derive(Debug)]
+pub(crate) enum TlsConfigurationError {
+    UnsupportedCriticalExtension {
+        source: CertificateSource,
+        certificate: DiagnosticCertificate,
+    },
+    InvalidTrustAnchor {
+        source: CertificateSource,
+        certificate: DiagnosticCertificate,
+        error: WebPkiError,
+    },
+}
+
+impl TlsConfigurationError {
+    fn from_webpki_error(
+        source: CertificateSource,
+        error: WebPkiError,
+        cert: &CertificateDer<'_>,
+    ) -> Self {
+        let certificate = DiagnosticCertificate(cert.clone().into_owned());
+        match error {
+            WebPkiError::UnsupportedCriticalExtension => Self::UnsupportedCriticalExtension {
+                source,
+                certificate,
+            },
+            error => Self::InvalidTrustAnchor {
+                source,
+                certificate,
+                error,
+            },
+        }
+    }
+}
+
+impl Display for TlsConfigurationError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnsupportedCriticalExtension {
+                source,
+                certificate,
+            } => {
+                write!(
+                    f,
+                    "certificate in `{}` (from `{}`) uses an unsupported critical extension",
+                    source.path().simplified_display(),
+                    source.env_var()
+                )?;
+                if let Some(certificate) = certificate.parse() {
+                    let subject = certificate.subject();
+                    if subject.iter_attributes().next().is_some() {
+                        write!(f, " on certificate `{subject}`")?;
+                    }
+                    let critical_extensions = certificate
+                        .iter_extensions()
+                        .filter(|extension| extension.critical)
+                        .map(|extension| extension.oid.to_owned())
+                        .collect::<Vec<_>>();
+                    if let [critical_extension] = critical_extensions.as_slice() {
+                        write!(f, "; critical extension: `{critical_extension}`")?;
+                    } else if !critical_extensions.is_empty() {
+                        write!(
+                            f,
+                            "; critical extensions: {}",
+                            critical_extensions
+                                .iter()
+                                .map(|oid| format!("`{oid}`"))
+                                .join(", ")
+                        )?;
+                    }
+                }
+                Ok(())
+            }
+            Self::InvalidTrustAnchor {
+                source,
+                certificate,
+                ..
+            } => {
+                write!(
+                    f,
+                    "certificate in `{}` (from `{}`) could not be used as a trust anchor",
+                    source.path().simplified_display(),
+                    source.env_var()
+                )?;
+                if let Some(certificate) = certificate.parse() {
+                    let subject = certificate.subject();
+                    if subject.iter_attributes().next().is_some() {
+                        write!(f, " on certificate `{subject}`")?;
+                    }
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+impl std::error::Error for TlsConfigurationError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::UnsupportedCriticalExtension { .. } => None,
+            Self::InvalidTrustAnchor { error, .. } => Some(error),
+        }
+    }
+}
 
 /// A collection of TLS certificates in DER form.
 #[derive(Debug, Clone, Default)]
@@ -37,34 +175,40 @@ impl Certificates {
     /// Returns `None` if neither variable is set, if the referenced files or directories are
     /// missing or inaccessible, or if no valid certificates are found (with a warning in each
     /// case). Delegates path loading to [`rustls_native_certs::load_certs_from_paths`].
-    pub(crate) fn from_env() -> Option<Self> {
+    pub(crate) fn from_env() -> Result<Option<Self>, TlsConfigurationError> {
         let mut certs = Self::default();
         let mut has_source = false;
 
         if let Some(ssl_cert_file) = env::var_os(EnvVars::SSL_CERT_FILE)
-            && let Some(file_certs) = Self::from_ssl_cert_file(&ssl_cert_file)
+            && let Some(file_certs) = Self::from_ssl_cert_file(&ssl_cert_file)?
         {
             has_source = true;
             certs.merge(file_certs);
         }
 
         if let Some(ssl_cert_dir) = env::var_os(EnvVars::SSL_CERT_DIR)
-            && let Some(dir_certs) = Self::from_ssl_cert_dir(&ssl_cert_dir)
+            && let Some(dir_certs) = Self::from_ssl_cert_dir(&ssl_cert_dir)?
         {
             has_source = true;
             certs.merge(dir_certs);
         }
 
-        if has_source { Some(certs) } else { None }
+        if has_source {
+            Ok(Some(certs))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Load certificates from the value of `SSL_CERT_FILE`.
     ///
     /// Returns `None` if the value is empty, the path does not refer to an accessible file,
     /// or the file contains no valid certificates.
-    fn from_ssl_cert_file(ssl_cert_file: &std::ffi::OsStr) -> Option<Self> {
+    fn from_ssl_cert_file(
+        ssl_cert_file: &std::ffi::OsStr,
+    ) -> Result<Option<Self>, TlsConfigurationError> {
         if ssl_cert_file.is_empty() {
-            return None;
+            return Ok(None);
         }
 
         let file = PathBuf::from(ssl_cert_file);
@@ -83,30 +227,31 @@ impl Certificates {
                         "Ignoring `SSL_CERT_FILE`. No certificates found in: {}.",
                         file.simplified_display().cyan()
                     );
-                    return None;
+                    return Ok(None);
                 }
-                Some(certs)
+                certs.validate_trust_anchors(CertificateSource::SslCertFile(file))?;
+                Ok(Some(certs))
             }
             Ok(_) => {
                 warn_user_once!(
                     "Ignoring invalid `SSL_CERT_FILE`. Path is not a file: {}.",
                     file.simplified_display().cyan()
                 );
-                None
+                Ok(None)
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
                 warn_user_once!(
                     "Ignoring invalid `SSL_CERT_FILE`. Path does not exist: {}.",
                     file.simplified_display().cyan()
                 );
-                None
+                Ok(None)
             }
             Err(err) => {
                 warn_user_once!(
                     "Ignoring invalid `SSL_CERT_FILE`. Path is not accessible: {} ({err}).",
                     file.simplified_display().cyan()
                 );
-                None
+                Ok(None)
             }
         }
     }
@@ -118,9 +263,11 @@ impl Certificates {
     ///
     /// Returns `None` if the value is empty, no listed directories exist, or no valid
     /// certificates are found.
-    fn from_ssl_cert_dir(ssl_cert_dir: &std::ffi::OsStr) -> Option<Self> {
+    fn from_ssl_cert_dir(
+        ssl_cert_dir: &std::ffi::OsStr,
+    ) -> Result<Option<Self>, TlsConfigurationError> {
         if ssl_cert_dir.is_empty() {
-            return None;
+            return Ok(None);
         }
 
         let (existing, missing): (Vec<_>, Vec<_>) =
@@ -140,7 +287,7 @@ impl Certificates {
                     .join(", ")
                     .cyan()
             );
-            return None;
+            return Ok(None);
         }
 
         if !missing.is_empty() {
@@ -168,7 +315,11 @@ impl Certificates {
                     dir.simplified_display().cyan()
                 );
             }
-            certs.merge(Self::from(result));
+            let dir_certs = Self::from(result);
+            if !dir_certs.0.is_empty() {
+                dir_certs.validate_trust_anchors(CertificateSource::SslCertDir(dir.clone()))?;
+                certs.merge(dir_certs);
+            }
         }
 
         if certs.0.is_empty() {
@@ -180,15 +331,35 @@ impl Certificates {
                     .join(", ")
                     .cyan()
             );
-            return None;
+            return Ok(None);
         }
 
-        Some(certs)
+        Ok(Some(certs))
     }
 
     /// Load certificates from explicit file and directory paths.
     fn from_paths(file: Option<&Path>, dir: Option<&Path>) -> CertificateResult {
         load_certs_from_paths(file, dir)
+    }
+
+    fn validate_trust_anchors(
+        &self,
+        source: CertificateSource,
+    ) -> Result<(), TlsConfigurationError> {
+        for cert in &self.0 {
+            if let Err(error) = anchor_from_trusted_cert(cert) {
+                debug!(
+                    "Failed to validate certificate from `{}` ({}): {error}",
+                    source.env_var(),
+                    source.path().simplified_display()
+                );
+
+                return Err(TlsConfigurationError::from_webpki_error(
+                    source, error, cert,
+                ));
+            }
+        }
+        Ok(())
     }
 
     /// Remove duplicate certificates, sorting by DER bytes.
@@ -272,13 +443,13 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let missing_file = dir.path().join("missing.pem");
 
-        let certs = Certificates::from_ssl_cert_file(missing_file.as_os_str());
+        let certs = Certificates::from_ssl_cert_file(missing_file.as_os_str()).unwrap();
         assert!(certs.is_none());
     }
 
     #[test]
     fn test_from_ssl_cert_file_empty_value_returns_none() {
-        let certs = Certificates::from_ssl_cert_file(OsString::new().as_os_str());
+        let certs = Certificates::from_ssl_cert_file(OsString::new().as_os_str()).unwrap();
         assert!(certs.is_none());
     }
 
@@ -288,13 +459,13 @@ mod tests {
         let cert_path = dir.path().join("empty.pem");
         fs_err::write(&cert_path, "not a certificate").unwrap();
 
-        let certs = Certificates::from_ssl_cert_file(cert_path.as_os_str());
+        let certs = Certificates::from_ssl_cert_file(cert_path.as_os_str()).unwrap();
         assert!(certs.is_none());
     }
 
     #[test]
     fn test_from_ssl_cert_dir_empty_value_returns_none() {
-        let certs = Certificates::from_ssl_cert_dir(OsString::new().as_os_str());
+        let certs = Certificates::from_ssl_cert_dir(OsString::new().as_os_str()).unwrap();
         assert!(certs.is_none());
     }
 
@@ -304,7 +475,7 @@ mod tests {
         let missing_dir = dir.path().join("missing-dir");
         let cert_dirs = std::env::join_paths([&missing_dir]).unwrap();
 
-        let certs = Certificates::from_ssl_cert_dir(cert_dirs.as_os_str());
+        let certs = Certificates::from_ssl_cert_dir(cert_dirs.as_os_str()).unwrap();
         assert!(certs.is_none());
     }
 
@@ -313,7 +484,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let cert_dirs = std::env::join_paths([dir.path()]).unwrap();
 
-        let certs = Certificates::from_ssl_cert_dir(cert_dirs.as_os_str());
+        let certs = Certificates::from_ssl_cert_dir(cert_dirs.as_os_str()).unwrap();
         assert!(certs.is_none());
     }
 

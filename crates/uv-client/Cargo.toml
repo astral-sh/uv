@@ -63,6 +63,8 @@ rustc-hash = { workspace = true }
 rustls-native-certs = { workspace = true }
 rustls-pki-types = { workspace = true }
 serde = { workspace = true }
+webpki = { workspace = true }
+x509-parser = { workspace = true }
 serde_json = { workspace = true }
 uv-platform = { workspace = true }
 thiserror = { workspace = true }

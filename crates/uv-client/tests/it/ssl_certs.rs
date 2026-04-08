@@ -1,9 +1,11 @@
+use std::error::Error;
 use std::io::Write;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::Result;
+use insta::{assert_snapshot, with_settings};
 use rcgen::CustomExtension;
 use temp_env::async_with_vars;
 use tempfile::{NamedTempFile, TempDir};
@@ -12,6 +14,7 @@ use url::Url;
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_client::RegistryClientBuilder;
+use uv_fs::Simplified;
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 
@@ -37,6 +40,13 @@ struct TestCertificate {
     client_cert_path: PathBuf,
 }
 
+fn temp_dir_filter(path: &Path) -> String {
+    format!(
+        r"{}\\?/?",
+        regex::escape(&path.simplified_display().to_string()).replace(r"\\", r"(\\|/)")
+    )
+}
+
 impl TestCertificate {
     /// Generate a fresh CA, server cert, and client cert, persisting the
     /// relevant PEM files to a temporary directory.
@@ -56,6 +66,19 @@ impl TestCertificate {
 
         let (ca, server, client) =
             generate_self_signed_certs_with_ca_custom_extensions(vec![unsupported_extension])?;
+        Self::persist(ca, server, &client)
+    }
+
+    /// Generate a fresh certificate set whose CA contains a duplicate
+    /// `basicConstraints` extension, which webpki rejects as an invalid trust
+    /// anchor.
+    fn new_with_duplicate_basic_constraints_ca_extension() -> Result<Self> {
+        let duplicate_basic_constraints =
+            CustomExtension::from_oid_content(&[2, 5, 29, 19], vec![0x30, 0x00]);
+
+        let (ca, server, client) = generate_self_signed_certs_with_ca_custom_extensions(vec![
+            duplicate_basic_constraints,
+        ])?;
         Self::persist(ca, server, &client)
     }
 
@@ -461,16 +484,58 @@ async fn test_ssl_cert_file_unsupported_critical_extension_returns_error() -> Re
     let test_client = client().ssl_cert_file(&cert.trust_path);
     let vars = test_client.ssl_vars();
 
-    async_with_vars(vars, async {
+    let temp_dir_filter = temp_dir_filter(cert._temp_dir.path());
+
+    async_with_vars(vars, async move {
         let err = BaseClientBuilder::default()
             .build()
             .expect_err("expected client build to fail");
 
-        assert!(err.is_builder(), "expected builder error, got: {err:?}");
-        assert!(
-            format!("{err:?}").contains("UnsupportedCriticalExtension"),
-            "expected error to mention UnsupportedCriticalExtension, got: {err:?}"
-        );
+        let source = err.source().expect("expected client build error source");
+        let display = format!("{err}\nCaused by: {source}");
+
+        with_settings!({
+            filters => vec![(temp_dir_filter.as_str(), "[TMP]/")]
+        }, {
+            assert_snapshot!(display, @r#"
+failed to build HTTP client
+Caused by: certificate in `[TMP]/ca.pem` (from `SSL_CERT_FILE`) uses an unsupported critical extension on certificate `CN=uv-test-ca, O=Astral Software Inc.`; critical extensions: `2.5.29.15`, `2.5.29.19`, `1.2.3.4`
+"#);
+        });
+    })
+    .await;
+
+    Ok(())
+}
+
+/// An invalid trust anchor in `SSL_CERT_FILE` returns a builder error with a
+/// generic trust-anchor message.
+#[tokio::test]
+async fn test_ssl_cert_file_invalid_trust_anchor_returns_error() -> Result<()> {
+    let cert = TestCertificate::new_with_duplicate_basic_constraints_ca_extension()?;
+    let test_client = client().ssl_cert_file(&cert.trust_path);
+    let vars = test_client.ssl_vars();
+
+    let temp_dir_filter = temp_dir_filter(cert._temp_dir.path());
+
+    async_with_vars(vars, async move {
+        let err = BaseClientBuilder::default()
+            .build()
+            .expect_err("expected client build to fail");
+
+        let source = err.source().expect("expected client build error source");
+        let next_source = source.source().expect("expected trust anchor validation cause");
+        let display = format!("{err}\nCaused by: {source}\nCaused by: {next_source}");
+
+        with_settings!({
+            filters => vec![(temp_dir_filter.as_str(), "[TMP]/")]
+        }, {
+            assert_snapshot!(display, @r#"
+failed to build HTTP client
+Caused by: certificate in `[TMP]/ca.pem` (from `SSL_CERT_FILE`) could not be used as a trust anchor on certificate `CN=uv-test-ca, O=Astral Software Inc.`
+Caused by: ExtensionValueInvalid
+"#);
+        });
     })
     .await;
 

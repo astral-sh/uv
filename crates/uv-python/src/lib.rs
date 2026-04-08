@@ -88,7 +88,7 @@ pub enum Error {
     Download(#[from] downloads::Error),
 
     #[error(transparent)]
-    Reqwest(#[from] reqwest::Error),
+    ClientBuild(#[from] uv_client::ClientBuildError),
 
     // TODO(zanieb) We might want to ensure this is always wrapped in another type
     #[error(transparent)]

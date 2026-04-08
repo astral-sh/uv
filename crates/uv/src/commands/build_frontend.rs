@@ -61,7 +61,7 @@ enum Error {
     #[error(transparent)]
     FlatIndex(#[from] uv_client::FlatIndexError),
     #[error(transparent)]
-    Reqwest(#[from] reqwest::Error),
+    ClientBuild(#[from] uv_client::ClientBuildError),
     #[error(transparent)]
     BuildPlan(anyhow::Error),
     #[error(transparent)]
