@@ -471,6 +471,13 @@ workspace members must be explicitly stated. Workspace members are always
 [editable](#editable-dependencies) . See the [workspace](./workspaces.md) documentation for more
 details on workspaces.
 
+To source a dependency from a different workspace, `workspace` can also be a path string:
+
+```toml title="pyproject.toml"
+[tool.uv.sources]
+foo = { workspace = "../other-workspace" }
+```
+
 ```toml title="pyproject.toml"
 [project]
 dependencies = ["foo==0.1.0"]

@@ -78,6 +78,7 @@ impl RequiresDist {
             git_member,
             locations,
             &sources,
+            cache,
             credentials_cache,
         )
     }
@@ -88,6 +89,7 @@ impl RequiresDist {
         git_member: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         no_sources: &NoSources,
+        cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
@@ -149,6 +151,7 @@ impl RequiresDist {
                                 locations,
                                 project_workspace.workspace(),
                                 git_member,
+                                cache,
                                 credentials_cache,
                             )
                             .map(move |requirement| match requirement {
@@ -191,6 +194,7 @@ impl RequiresDist {
                         locations,
                         project_workspace.workspace(),
                         git_member,
+                        cache,
                         credentials_cache,
                     )
                     .map(move |requirement| match requirement {
@@ -459,6 +463,8 @@ mod test {
         temp_dir: &Path,
         contents: &str,
     ) -> anyhow::Result<RequiresDist> {
+        let cache = WorkspaceCache::default();
+        fs_err::create_dir_all(temp_dir)?;
         fs_err::write(temp_dir.join("pyproject.toml"), contents)?;
         let project_workspace = ProjectWorkspace::discover(
             temp_dir,
@@ -466,7 +472,7 @@ mod test {
                 stop_discovery_at: Some(temp_dir.to_path_buf()),
                 ..DiscoveryOptions::default()
             },
-            &WorkspaceCache::default(),
+            &cache,
         )
         .await?;
         let pyproject_toml = uv_pypi_types::PyProjectToml::from_toml(contents, "pyproject.toml")?;
@@ -477,6 +483,7 @@ mod test {
             None,
             &IndexLocations::default(),
             &NoSources::default(),
+            &cache,
             &CredentialsCache::new(),
         )?)
     }

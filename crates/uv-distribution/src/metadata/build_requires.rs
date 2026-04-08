@@ -64,6 +64,7 @@ impl BuildRequires {
             &project_workspace,
             locations,
             sources,
+            cache,
             credentials_cache,
         )
     }
@@ -74,6 +75,7 @@ impl BuildRequires {
         project_workspace: &ProjectWorkspace,
         locations: &IndexLocations,
         sources: &NoSources,
+        cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
@@ -132,6 +134,7 @@ impl BuildRequires {
                             locations,
                             project_workspace.workspace(),
                             None,
+                            cache,
                             credentials_cache,
                         )
                         .map(move |requirement| match requirement {
@@ -160,6 +163,7 @@ impl BuildRequires {
         workspace: &Workspace,
         locations: &IndexLocations,
         sources: &NoSources,
+        cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
@@ -206,6 +210,7 @@ impl BuildRequires {
                         locations,
                         workspace,
                         None,
+                        cache,
                         credentials_cache,
                     )
                     .map(move |requirement| match requirement {
@@ -247,6 +252,7 @@ impl LoweredExtraBuildDependencies {
         workspace: &Workspace,
         index_locations: &IndexLocations,
         source_strategy: &NoSources,
+        cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         match source_strategy {
@@ -294,6 +300,7 @@ impl LoweredExtraBuildDependencies {
                                     index_locations,
                                     workspace,
                                     None,
+                                    cache,
                                     credentials_cache,
                                 )
                                 .map(move |requirement| {

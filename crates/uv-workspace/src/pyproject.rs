@@ -1201,9 +1201,12 @@ pub enum Source {
     },
     /// A dependency on another package in the workspace.
     Workspace {
+        /// `true` selects the current workspace. A string selects another workspace discovered
+        /// from the given path.
+        ///
         /// When set to `false`, the package will be fetched from the remote index, rather than
         /// included as a workspace package.
-        workspace: bool,
+        workspace: WorkspaceReference,
         /// Whether the package should be installed as editable. Defaults to `true`.
         editable: Option<bool>,
         #[serde(
@@ -1215,6 +1218,15 @@ pub enum Source {
         extra: Option<ExtraName>,
         group: Option<GroupName>,
     },
+}
+
+/// A reference to either the current workspace or a workspace discovered from a path.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema), schemars(untagged))]
+#[serde(untagged)]
+pub enum WorkspaceReference {
+    Bool(bool),
+    Path(PortablePathBuf),
 }
 
 /// A custom deserialization implementation for [`Source`]. This is roughly equivalent to
@@ -1238,7 +1250,7 @@ impl<'de> Deserialize<'de> for Source {
             editable: Option<bool>,
             package: Option<bool>,
             index: Option<IndexName>,
-            workspace: Option<bool>,
+            workspace: Option<WorkspaceReference>,
             #[serde(
                 skip_serializing_if = "uv_pep508::marker::ser::is_empty",
                 serialize_with = "uv_pep508::marker::ser::serialize",
@@ -1689,7 +1701,7 @@ impl Source {
             return match source {
                 RequirementSource::Registry { .. } | RequirementSource::Directory { .. } => {
                     Ok(Some(Self::Workspace {
-                        workspace: true,
+                        workspace: WorkspaceReference::Bool(true),
                         editable,
                         marker: MarkerTree::TRUE,
                         extra: None,
