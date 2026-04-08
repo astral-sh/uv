@@ -7312,6 +7312,7 @@ dependencies = [
  "uv-pep508",
  "uv-pypi-types",
  "uv-python",
+ "uv-resolver",
  "uv-settings",
  "uv-state",
  "uv-static",
