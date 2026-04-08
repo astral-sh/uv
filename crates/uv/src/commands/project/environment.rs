@@ -2,14 +2,6 @@ use std::path::Path;
 
 use tracing::debug;
 
-use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
-use crate::commands::pip::operations::Modifications;
-use crate::commands::project::{
-    EnvironmentSpecification, PlatformState, ProjectError, resolve_environment, sync_environment,
-};
-use crate::printer::Printer;
-use crate::settings::ResolverInstallerSettings;
-
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_info::CacheInfo;
 use uv_cache_key::{cache_digest, hash_digest};
@@ -22,6 +14,14 @@ use uv_fs::PythonExt;
 use uv_preview::Preview;
 use uv_python::{Interpreter, PythonEnvironment, canonicalize_executable};
 use uv_workspace::WorkspaceCache;
+
+use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
+use crate::commands::pip::operations::Modifications;
+use crate::commands::project::{
+    EnvironmentSpecification, PlatformState, ProjectError, resolve_environment, sync_environment,
+};
+use crate::printer::Printer;
+use crate::settings::ResolverInstallerSettings;
 
 /// An ephemeral [`PythonEnvironment`] for running an individual command.
 #[derive(Debug)]
@@ -202,7 +202,11 @@ impl CachedEnvironment {
             cache_digest(&canonicalize_executable(interpreter.sys_executable())?);
 
         // Search in the content-addressed cache.
-        let cache_entry = cache.entry(CacheBucket::Environments, interpreter_hash, resolution_hash);
+        let cache_entry = cache.entry(
+            CacheBucket::Environments,
+            &interpreter_hash,
+            &resolution_hash,
+        );
 
         if let Ok(root) = cache.resolve_link(cache_entry.path()) {
             if let Ok(environment) = PythonEnvironment::from_root(root, cache) {
@@ -241,7 +245,13 @@ impl CachedEnvironment {
         .await?;
 
         // Now that the environment is complete, sync it to its content-addressed location.
-        let id = cache.persist(temp_dir.keep(), cache_entry.path()).await?;
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(interpreter_hash.as_bytes());
+        hasher.update(resolution_hash.as_bytes());
+        let blake3_digest = hasher.finalize().to_hex();
+        let id = cache
+            .persist(temp_dir.keep(), cache_entry.path(), blake3_digest.as_str())
+            .await?;
         let root = cache.archive(&id);
 
         Ok(Self(PythonEnvironment::from_root(root, cache)?))

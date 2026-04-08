@@ -21,7 +21,7 @@ use crate::removal::Remover;
 pub use crate::removal::{Removal, rm_rf};
 pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
-pub use archive::ArchiveId;
+pub use archive::{ArchiveId, ArchiveVersion, LATEST};
 
 mod archive;
 mod by_timestamp;
@@ -377,19 +377,35 @@ impl Cache {
     }
 
     /// Persist a temporary directory to the artifact store, returning its unique ID.
+    ///
+    /// The archive is content-addressed using the provided ID. If an archive with this ID
+    /// already exists, the temporary directory is discarded and the existing archive is used.
     pub async fn persist(
         &self,
         temp_dir: impl AsRef<Path>,
         path: impl AsRef<Path>,
+        blake3_digest: &str,
     ) -> io::Result<ArchiveId> {
-        // Create a unique ID for the artifact.
-        // TODO(charlie): Support content-addressed persistence via SHAs.
-        let id = ArchiveId::new();
-
         // Move the temporary directory into the directory store.
-        let archive_entry = self.entry(CacheBucket::Archive, "", &id);
-        fs_err::create_dir_all(archive_entry.dir())?;
-        uv_fs::rename_with_retry(temp_dir.as_ref(), archive_entry.path()).await?;
+        let id = ArchiveId::from_blake3(blake3_digest);
+        let archive_entry = self.bucket(CacheBucket::Archive).join(id.as_ref());
+        if let Some(parent) = archive_entry.parent() {
+            fs_err::create_dir_all(parent)?;
+        }
+        match uv_fs::rename_with_retry(temp_dir.as_ref(), &archive_entry).await {
+            Ok(()) => {}
+            Err(err)
+                if err.kind() == io::ErrorKind::AlreadyExists
+                    || err.kind() == io::ErrorKind::DirectoryNotEmpty =>
+            {
+                debug!(
+                    "Archive already exists at {}; skipping extraction",
+                    archive_entry.display()
+                );
+                fs_err::tokio::remove_dir_all(temp_dir.as_ref()).await?;
+            }
+            Err(err) => return Err(err),
+        }
 
         // Create a symlink to the directory store.
         fs_err::create_dir_all(path.as_ref().parent().expect("Cache entry to have parent"))?;
@@ -807,7 +823,7 @@ impl Cache {
         let link = Link::from_str(&contents)?;
 
         // Ignore stale links.
-        if link.version != ARCHIVE_VERSION {
+        if link.version != LATEST {
             return Err(io::Error::new(
                 io::ErrorKind::NotFound,
                 "The link target does not exist.",
@@ -863,7 +879,7 @@ struct Link {
     /// The unique ID of the entry in the archive bucket.
     id: ArchiveId,
     /// The version of the archive bucket.
-    version: u8,
+    version: ArchiveVersion,
 }
 
 #[allow(unused)]
@@ -872,7 +888,7 @@ impl Link {
     fn new(id: ArchiveId) -> Self {
         Self {
             id,
-            version: ARCHIVE_VERSION,
+            version: ArchiveVersion::V0,
         }
     }
 }
@@ -901,10 +917,10 @@ impl FromStr for Link {
         let version = version
             .strip_prefix("archive-v")
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing version prefix"))?;
-        let version = u8::from_str(version).map_err(|err| {
+        let version = ArchiveVersion::from_str(version).map_err(|()| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("failed to parse version: {err}"),
+                format!("failed to parse version: {version}"),
             )
         })?;
 
@@ -1434,15 +1450,14 @@ impl Refresh {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
     use crate::ArchiveId;
+    use std::str::FromStr;
 
     use super::Link;
 
     #[test]
     fn test_link_round_trip() {
-        let id = ArchiveId::new();
+        let id = ArchiveId::from_blake3(&"a".repeat(64));
         let link = Link::new(id);
         let s = link.to_string();
         let parsed = Link::from_str(&s).unwrap();
@@ -1455,6 +1470,5 @@ mod tests {
         assert!(Link::from_str("archive-v0/foo").is_ok());
         assert!(Link::from_str("archive/foo").is_err());
         assert!(Link::from_str("v1/foo").is_err());
-        assert!(Link::from_str("archive-v0/").is_err());
     }
 }

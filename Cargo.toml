@@ -118,6 +118,7 @@ backon = { version = "1.3.0" }
 base64 = { version = "0.22.1" }
 bitflags = { version = "2.6.0" }
 blake2 = { version = "0.10.6" }
+blake3 = { version = "1.8.3", features = ["rayon", "mmap"] }
 boxcar = { version = "0.2.5" }
 bytecheck = { version = "0.8.0" }
 cargo-util = { version = "0.2.14" }

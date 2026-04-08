@@ -404,7 +404,6 @@ fn prune_stale_revision() -> Result<()> {
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-v9/[ENTRY]
-    DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed [N] files ([SIZE])
     ");
 

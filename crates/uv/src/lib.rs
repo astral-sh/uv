@@ -668,7 +668,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 groups: args.settings.groups,
             };
 
-            commands::pip_compile(
+            Box::pin(commands::pip_compile(
                 &requirements,
                 &constraints,
                 &overrides,
@@ -730,7 +730,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 workspace_cache,
                 printer,
                 globals.preview,
-            )
+            ))
             .await
         }
         Commands::Pip(PipNamespace {

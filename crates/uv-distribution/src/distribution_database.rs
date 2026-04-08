@@ -6,14 +6,13 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use futures::{FutureExt, TryStreamExt};
-use tempfile::TempDir;
 use tokio::io::{AsyncRead, AsyncSeekExt, ReadBuf};
 use tokio::sync::Semaphore;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{Instrument, info_span, instrument, warn};
 use url::Url;
 
-use uv_cache::{ArchiveId, CacheBucket, CacheEntry, WheelCache};
+use uv_cache::{ArchiveId, CacheBucket, CacheEntry, LATEST, WheelCache};
 use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
@@ -713,16 +712,18 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     },
                 }
 
-                // If necessary, exhaust the reader to compute the hash.
-                if !hashes.is_none() {
-                    hasher.finish().await.map_err(Error::HashExhaustion)?;
-                }
+                // Exhaust the reader to compute the hash.
+                hasher.finish().await.map_err(Error::HashExhaustion)?;
+
+                // Extract the blake3 hash for content-addressing.
+                let blake3_digest = hasher.blake3_digest();
+
+                let hash_digests: HashDigests = hashers.into_iter().map(HashDigest::from).collect();
 
                 // Persist the temporary directory to the directory store.
-                let id = self
-                    .build_context
+                self.build_context
                     .cache()
-                    .persist(temp_dir.keep(), wheel_entry.path())
+                    .persist(temp_dir.keep(), wheel_entry.path(), blake3_digest.as_str())
                     .await
                     .map_err(Error::CacheRead)?;
 
@@ -731,8 +732,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 }
 
                 Ok(Archive::new(
-                    id,
-                    hashers.into_iter().map(HashDigest::from).collect(),
+                    blake3_digest.as_str(),
+                    hash_digests,
                     filename.clone(),
                 ))
             }
@@ -763,7 +764,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
-        let archive = self
+        let archive: Archive = self
             .client
             .managed(|client| {
                 client.cached_client().get_serde_with_retry(
@@ -782,7 +783,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // If the archive is missing the required hashes, or has since been removed, force a refresh.
         let archive = Some(archive)
             .filter(|archive| archive.has_digests(hashes))
-            .filter(|archive| archive.exists(self.build_context.cache()));
+            .filter(|archive| archive.version == LATEST)
+            .filter(|archive| self.build_context.cache().archive(&archive.id).exists());
 
         let archive = if let Some(archive) = archive {
             archive
@@ -882,58 +884,36 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .await
                     .map_err(Error::CacheWrite)?;
 
-                // If no hashes are required, parallelize the unzip operation.
-                let hashes = if hashes.is_none() {
-                    let file = file.into_std().await;
-                    tokio::task::spawn_blocking({
-                        let target = temp_dir.path().to_owned();
-                        move || -> Result<(), uv_extract::Error> {
-                            // Unzip the wheel into a temporary directory.
-                            match extension {
-                                WheelExtension::Whl => {
-                                    uv_extract::unzip(file, &target)?;
-                                }
-                                WheelExtension::WhlZst => {
-                                    uv_extract::stream::untar_zst_file(file, &target)?;
-                                }
-                            }
-                            Ok(())
-                        }
-                    })
-                    .await?
-                    .map_err(|err| Error::Extract(filename.to_string(), err))?;
+                // Create a hasher for each hash algorithm.
+                let algorithms = hashes.algorithms();
+                let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
+                let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
 
-                    HashDigests::empty()
-                } else {
-                    // Create a hasher for each hash algorithm.
-                    let algorithms = hashes.algorithms();
-                    let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
-                    let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
-
-                    match extension {
-                        WheelExtension::Whl => {
-                            uv_extract::stream::unzip(query_url, &mut hasher, temp_dir.path())
-                                .await
-                                .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                        }
-                        WheelExtension::WhlZst => {
-                            uv_extract::stream::untar_zst(&mut hasher, temp_dir.path())
-                                .await
-                                .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                        }
+                match extension {
+                    WheelExtension::Whl => {
+                        uv_extract::stream::unzip(query_url, &mut hasher, temp_dir.path())
+                            .await
+                            .map_err(|err| Error::Extract(filename.to_string(), err))?;
                     }
+                    WheelExtension::WhlZst => {
+                        uv_extract::stream::untar_zst(&mut hasher, temp_dir.path())
+                            .await
+                            .map_err(|err| Error::Extract(filename.to_string(), err))?;
+                    }
+                }
 
-                    // If necessary, exhaust the reader to compute the hash.
-                    hasher.finish().await.map_err(Error::HashExhaustion)?;
+                // Exhaust the reader to compute the hash.
+                hasher.finish().await.map_err(Error::HashExhaustion)?;
 
-                    hashers.into_iter().map(HashDigest::from).collect()
-                };
+                // Extract the blake3 hash for content-addressing.
+                let blake3_digest = hasher.blake3_digest();
+
+                let hash_digests: HashDigests = hashers.into_iter().map(HashDigest::from).collect();
 
                 // Persist the temporary directory to the directory store.
-                let id = self
-                    .build_context
+                self.build_context
                     .cache()
-                    .persist(temp_dir.keep(), wheel_entry.path())
+                    .persist(temp_dir.keep(), wheel_entry.path(), blake3_digest.as_str())
                     .await
                     .map_err(Error::CacheRead)?;
 
@@ -941,7 +921,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     reporter.on_download_complete(dist.name(), progress);
                 }
 
-                Ok(Archive::new(id, hashes, filename.clone()))
+                Ok(Archive::new(
+                    blake3_digest.as_str(),
+                    hash_digests,
+                    filename.clone(),
+                ))
             }
             .instrument(info_span!("wheel", wheel = %dist))
         };
@@ -970,7 +954,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
-        let archive = self
+        let archive: Archive = self
             .client
             .managed(|client| {
                 client.cached_client().get_serde_with_retry(
@@ -989,7 +973,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // If the archive is missing the required hashes, or has since been removed, force a refresh.
         let archive = Some(archive)
             .filter(|archive| archive.has_digests(hashes))
-            .filter(|archive| archive.exists(self.build_context.cache()));
+            .filter(|archive| archive.version == LATEST)
+            .filter(|archive| self.build_context.cache().archive(&archive.id).exists());
 
         let archive = if let Some(archive) = archive {
             archive
@@ -1059,42 +1044,15 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 cache: CacheInfo::from_timestamp(modified),
                 build: None,
             })
-        } else if hashes.is_none() {
-            // Otherwise, unzip the wheel.
-            let archive = Archive::new(
-                self.unzip_wheel(path, wheel_entry.path()).await?,
-                HashDigests::empty(),
-                filename.clone(),
-            );
-
-            // Write the archive pointer to the cache.
-            let pointer = LocalArchivePointer {
-                timestamp: modified,
-                archive: archive.clone(),
-            };
-            pointer.write_to(&pointer_entry).await?;
-
-            Ok(LocalWheel {
-                dist: Dist::Built(dist.clone()),
-                archive: self
-                    .build_context
-                    .cache()
-                    .archive(&archive.id)
-                    .into_boxed_path(),
-                hashes: archive.hashes,
-                filename: filename.clone(),
-                cache: CacheInfo::from_timestamp(modified),
-                build: None,
-            })
         } else {
-            // If necessary, compute the hashes of the wheel.
+            // Otherwise, unzip the wheel and compute the requested hashes.
             let file = fs_err::tokio::File::open(path)
                 .await
                 .map_err(Error::CacheRead)?;
             let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
                 .map_err(Error::CacheWrite)?;
 
-            // Create a hasher for each hash algorithm.
+            // Create a hasher for each requested hash algorithm.
             let algorithms = hashes.algorithms();
             let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
             let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
@@ -1116,18 +1074,20 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             // Exhaust the reader to compute the hash.
             hasher.finish().await.map_err(Error::HashExhaustion)?;
 
-            let hashes = hashers.into_iter().map(HashDigest::from).collect();
+            // Extract the blake3 hash for content-addressing.
+            let blake3_digest = hasher.blake3_digest();
+
+            let hash_digests: HashDigests = hashers.into_iter().map(HashDigest::from).collect();
 
             // Persist the temporary directory to the directory store.
-            let id = self
-                .build_context
+            self.build_context
                 .cache()
-                .persist(temp_dir.keep(), wheel_entry.path())
+                .persist(temp_dir.keep(), wheel_entry.path(), blake3_digest.as_str())
                 .await
                 .map_err(Error::CacheWrite)?;
 
             // Create an archive.
-            let archive = Archive::new(id, hashes, filename.clone());
+            let archive = Archive::new(blake3_digest.as_str(), hash_digests, filename.clone());
 
             // Write the archive pointer to the cache.
             let pointer = LocalArchivePointer {
@@ -1152,26 +1112,28 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     }
 
     /// Unzip a wheel into the cache, returning the path to the unzipped directory.
+    ///
+    /// Uses synchronous parallel extraction with rayon and blake3 multi-threaded hashing, since
+    /// the wheel is already on disk (locally built).
     async fn unzip_wheel(&self, path: &Path, target: &Path) -> Result<ArchiveId, Error> {
-        let temp_dir = tokio::task::spawn_blocking({
-            let path = path.to_owned();
-            let root = self.build_context.cache().root().to_path_buf();
-            move || -> Result<TempDir, Error> {
-                // Unzip the wheel into a temporary directory.
-                let temp_dir = tempfile::tempdir_in(root).map_err(Error::CacheWrite)?;
-                let reader = fs_err::File::open(&path).map_err(Error::CacheWrite)?;
-                uv_extract::unzip(reader, temp_dir.path())
-                    .map_err(|err| Error::Extract(path.to_string_lossy().into_owned(), err))?;
-                Ok(temp_dir)
-            }
+        // Unzip the wheel in parallel and compute the blake3 hash using mmap.
+        let path = path.to_path_buf();
+        let cache_root = self.build_context.cache().root().to_path_buf();
+        let (temp_dir, blake3_digest) = tokio::task::spawn_blocking(move || {
+            let temp_dir = tempfile::tempdir_in(&cache_root)?;
+            let blake3_digest = uv_extract::sync::unzip(&path, temp_dir.path());
+            Ok::<_, io::Error>((temp_dir, blake3_digest))
         })
-        .await??;
+        .await
+        .map_err(|err| Error::Extract(String::new(), uv_extract::Error::Io(err.into())))?
+        .map_err(Error::CacheWrite)?;
+        let blake3_digest = blake3_digest.map_err(|err| Error::Extract(String::new(), err))?;
 
         // Persist the temporary directory to the directory store.
         let id = self
             .build_context
             .cache()
-            .persist(temp_dir.keep(), target)
+            .persist(temp_dir.keep(), target, blake3_digest.as_str())
             .await
             .map_err(Error::CacheWrite)?;
 

@@ -1,4 +1,4 @@
-use uv_cache::{ARCHIVE_VERSION, ArchiveId, Cache};
+use uv_cache::{ArchiveId, ArchiveVersion, LATEST};
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::Hashed;
 use uv_pypi_types::{HashDigest, HashDigests};
@@ -13,23 +13,21 @@ pub struct Archive {
     /// The filename of the wheel.
     pub filename: WheelFilename,
     /// The version of the archive bucket.
-    pub version: u8,
+    pub version: ArchiveVersion,
 }
 
 impl Archive {
-    /// Create a new [`Archive`] with the given ID and hashes.
-    pub(crate) fn new(id: ArchiveId, hashes: HashDigests, filename: WheelFilename) -> Self {
+    /// Create a new [`Archive`] with the given blake3 digest and hashes.
+    ///
+    /// The archive ID is derived from the blake3 hash of the wheel's contents.
+    pub(crate) fn new(blake3_digest: &str, hashes: HashDigests, filename: WheelFilename) -> Self {
+        let id = ArchiveId::from_blake3(blake3_digest);
         Self {
             id,
             hashes,
             filename,
-            version: ARCHIVE_VERSION,
+            version: LATEST,
         }
-    }
-
-    /// Returns `true` if the archive exists in the cache.
-    pub(crate) fn exists(&self, cache: &Cache) -> bool {
-        self.version == ARCHIVE_VERSION && cache.archive(&self.id).exists()
     }
 }
 

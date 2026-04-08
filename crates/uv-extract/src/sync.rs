@@ -1,6 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{LazyLock, Mutex};
 
+use crate::hash::Blake3Digest;
 use crate::vendor::CloneableSeekableReader;
 use crate::{CompressionMethod, Error, insecure_no_validate, validate_archive_member_name};
 use rayon::prelude::*;
@@ -10,20 +11,30 @@ use uv_configuration::RAYON_INITIALIZE;
 use uv_warnings::warn_user_once;
 use zip::ZipArchive;
 
-/// Unzip a `.zip` archive into the target directory.
-pub fn unzip(reader: fs_err::File, target: &Path) -> Result<(), Error> {
-    let (reader, filename) = reader.into_parts();
+/// Unzip a `.zip` archive into the target directory, returning the blake3 hash of the archive.
+///
+/// The blake3 hash and extraction are computed concurrently via [`rayon::join`]. The blake3 hash
+/// uses multi-threaded, memory-mapped I/O, while extraction proceeds in parallel over zip entries.
+/// Since both share the rayon thread pool and the mmap populates the page cache, the extraction's
+/// reads are effectively free.
+pub fn unzip(path: &Path, target: &Path) -> Result<Blake3Digest, Error> {
+    // Initialize the rayon thread pool before spawning work.
+    LazyLock::force(&RAYON_INITIALIZE);
 
-    // Unzip in parallel.
-    let reader = std::io::BufReader::new(reader);
+    // Open the file for extraction.
+    let file = fs_err::File::open(path).map_err(Error::Io)?;
+    let reader = std::io::BufReader::new(file);
     let archive = ZipArchive::new(CloneableSeekableReader::new(reader))?;
     let directories = Mutex::new(FxHashSet::default());
     let skip_validation = insecure_no_validate();
-    // Initialize the threadpool with the user settings.
-    LazyLock::force(&RAYON_INITIALIZE);
-    (0..archive.len())
-        .into_par_iter()
-        .map(|file_number| {
+
+    // Run blake3 hashing and zip extraction concurrently on the rayon pool.
+    let (blake3_result, extract_result) = rayon::join(
+        || blake3_hash(path),
+        || {
+            (0..archive.len())
+                .into_par_iter()
+                .map(|file_number| {
             let mut archive = archive.clone();
             let mut file = archive.by_index(file_number)?;
 
@@ -31,7 +42,7 @@ pub fn unzip(reader: fs_err::File, target: &Path) -> Result<(), Error> {
             if !compression.is_well_known() {
                 warn_user_once!(
                     "One or more file entries in '{filename}' use the '{compression}' compression method, which is not widely supported. A future version of uv will reject ZIP archives containing entries compressed with this method. Entries must be compressed with the '{stored}', '{deflate}', or '{zstd}' compression methods.",
-                    filename = filename.display(),
+                    filename = path.display(),
                     stored = CompressionMethod::Stored,
                     deflate = CompressionMethod::Deflated,
                     zstd = CompressionMethod::Zstd,
@@ -104,30 +115,20 @@ pub fn unzip(reader: fs_err::File, target: &Path) -> Result<(), Error> {
 
             Ok(())
         })
-        .collect::<Result<_, Error>>()
+        .collect::<Result<(), Error>>()
+        },
+    );
+
+    extract_result?;
+    blake3_result
 }
 
-/// Extract the top-level directory from an unpacked archive.
+/// Compute the blake3 hash of a file using multi-threaded, memory-mapped I/O.
 ///
-/// The specification says:
-/// > A .tar.gz source distribution (sdist) contains a single top-level directory called
-/// > `{name}-{version}` (e.g. foo-1.0), containing the source files of the package.
-///
-/// This function returns the path to that top-level directory.
-pub fn strip_component(source: impl AsRef<Path>) -> Result<PathBuf, Error> {
-    // TODO(konstin): Verify the name of the directory.
-    let top_level = fs_err::read_dir(source.as_ref())
-        .map_err(Error::Io)?
-        .collect::<std::io::Result<Vec<fs_err::DirEntry>>>()
-        .map_err(Error::Io)?;
-    match top_level.as_slice() {
-        [root] => Ok(root.path()),
-        [] => Err(Error::EmptyArchive),
-        _ => Err(Error::NonSingularArchive(
-            top_level
-                .into_iter()
-                .map(|entry| entry.file_name())
-                .collect(),
-        )),
-    }
+/// The caller must ensure the rayon thread pool is initialized before calling this function.
+fn blake3_hash(path: &Path) -> Result<Blake3Digest, Error> {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update_mmap_rayon(path).map_err(Error::Io)?;
+    let hash = hasher.finalize();
+    Ok(Blake3Digest::new(hash.to_hex().to_string()))
 }

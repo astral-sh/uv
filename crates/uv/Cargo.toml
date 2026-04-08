@@ -73,6 +73,7 @@ axoupdater = { workspace = true, features = [
     "github_releases",
     "tokio",
 ], optional = true }
+blake3 = { workspace = true }
 clap = { workspace = true, features = ["derive", "string", "wrap_help"] }
 console = { workspace = true }
 ctrlc = { workspace = true }
