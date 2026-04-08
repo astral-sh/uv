@@ -64,7 +64,7 @@ jobs:
     # environment is only approved when the `release-gate` job succeeds.
     environment:
       name: release-gate
-      deployment: false
+      deployment: true
     steps:
       - run: echo "Release approved"
 
