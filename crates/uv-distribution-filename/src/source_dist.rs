@@ -188,7 +188,7 @@ mod tests {
 
     use uv_normalize::PackageName;
 
-    use crate::{SourceDistExtension, SourceDistFilename};
+    use crate::{SourceDistExtension, SourceDistFilename, extension::LegacySourceDistExtension};
 
     /// Only test already normalized names since the parsing is lossy
     ///
@@ -239,8 +239,14 @@ mod tests {
     fn malformed_non_ascii() {
         let package_name = PackageName::from_str("a").unwrap();
         for (filename, extension) in [
-            ("é-1.2.3.zip", SourceDistExtension::Zip),
-            ("aé1.2.3.zip", SourceDistExtension::Zip),
+            (
+                "é-1.2.3.zip",
+                SourceDistExtension::Legacy(LegacySourceDistExtension::Zip),
+            ),
+            (
+                "aé1.2.3.zip",
+                SourceDistExtension::Legacy(LegacySourceDistExtension::Zip),
+            ),
             ("é-1.zip", SourceDistExtension::TarGz),
         ] {
             assert!(SourceDistFilename::parse(filename, extension, &package_name).is_err());
@@ -257,9 +263,13 @@ mod tests {
             "Foo.Bar-1.2.3.zip",
         ] {
             assert_eq!(
-                SourceDistFilename::parse(filename, SourceDistExtension::Zip, &package_name)
-                    .unwrap()
-                    .name,
+                SourceDistFilename::parse(
+                    filename,
+                    SourceDistExtension::Legacy(LegacySourceDistExtension::Zip),
+                    &package_name
+                )
+                .unwrap()
+                .name,
                 package_name
             );
         }
@@ -270,7 +280,7 @@ mod tests {
         assert!(
             SourceDistFilename::parse(
                 "foo.zip",
-                SourceDistExtension::Zip,
+                SourceDistExtension::Legacy(LegacySourceDistExtension::Zip),
                 &PackageName::from_str("foo-lib").unwrap()
             )
             .is_err()
