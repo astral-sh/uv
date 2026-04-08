@@ -265,7 +265,6 @@ fn lock_sdist_git() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Setting `exclude-newer` on configured indexes is experimental and may change without warning. Pass `--preview-features index-exclude-newer` to disable this warning.
     Resolved 2 packages in [TIME]
     ");
 
@@ -356,7 +355,6 @@ fn lock_sdist_git() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Setting `exclude-newer` on configured indexes is experimental and may change without warning. Pass `--preview-features index-exclude-newer` to disable this warning.
     Resolved 2 packages in [TIME]
     ");
 
@@ -472,7 +470,6 @@ fn lock_sdist_git() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Setting `exclude-newer` on configured indexes is experimental and may change without warning. Pass `--preview-features index-exclude-newer` to disable this warning.
     Resolved 2 packages in [TIME]
     ");
 
@@ -535,7 +532,6 @@ fn lock_sdist_git_subdirectory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Setting `exclude-newer` on configured indexes is experimental and may change without warning. Pass `--preview-features index-exclude-newer` to disable this warning.
     Resolved 2 packages in [TIME]
     ");
 
@@ -630,7 +626,6 @@ fn lock_sdist_git_pep508() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Setting `exclude-newer` on configured indexes is experimental and may change without warning. Pass `--preview-features index-exclude-newer` to disable this warning.
     Resolved 2 packages in [TIME]
     ");
 
@@ -11081,7 +11076,6 @@ async fn lock_relative_index() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Setting `exclude-newer` on configured indexes is experimental and may change without warning. Pass `--preview-features index-exclude-newer` to disable this warning.
     Resolved 2 packages in [TIME]
     ");
 
@@ -19902,7 +19896,6 @@ async fn lock_named_index() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Setting `exclude-newer` on configured indexes is experimental and may change without warning. Pass `--preview-features index-exclude-newer` to disable this warning.
     Resolved 2 packages in [TIME]
     ");
 
