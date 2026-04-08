@@ -5901,6 +5901,7 @@ dependencies = [
  "astral-reqwest-middleware",
  "clap",
  "futures",
+ "indexmap",
  "insta",
  "jiff",
  "reqwest",

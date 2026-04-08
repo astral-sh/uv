@@ -575,6 +575,8 @@ pub(crate) struct RunSettings {
     pub(crate) settings: ResolverInstallerSettings,
     pub(crate) env_file: EnvFile,
     pub(crate) max_recursion_depth: u32,
+    pub(crate) no_malware_check: bool,
+    pub(crate) malware_check_url: Option<DisplaySafeUrl>,
 }
 
 impl RunSettings {
@@ -714,6 +716,8 @@ impl RunSettings {
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
             max_recursion_depth: max_recursion_depth.unwrap_or(Self::DEFAULT_MAX_RECURSION_DEPTH),
+            no_malware_check: environment.no_malware_check.value == Some(true),
+            malware_check_url: environment.malware_check_url.clone(),
         }
     }
 }
@@ -1628,6 +1632,8 @@ pub(crate) struct SyncSettings {
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
     pub(crate) output_format: SyncFormat,
+    pub(crate) no_malware_check: bool,
+    pub(crate) malware_check_url: Option<DisplaySafeUrl>,
 }
 
 impl SyncSettings {
@@ -1758,6 +1764,8 @@ impl SyncSettings {
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
+            no_malware_check: environment.no_malware_check.value == Some(true),
+            malware_check_url: environment.malware_check_url.clone(),
         }
     }
 }
@@ -1918,6 +1926,8 @@ pub(crate) struct AddSettings {
     pub(crate) refresh: Refresh,
     pub(crate) indexes: Vec<Index>,
     pub(crate) settings: ResolverInstallerSettings,
+    pub(crate) no_malware_check: bool,
+    pub(crate) malware_check_url: Option<DisplaySafeUrl>,
 }
 
 impl AddSettings {
@@ -2102,6 +2112,8 @@ impl AddSettings {
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
+            no_malware_check: environment.no_malware_check.value == Some(true),
+            malware_check_url: environment.malware_check_url.clone(),
         }
     }
 }
@@ -2122,6 +2134,8 @@ pub(crate) struct RemoveSettings {
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
+    pub(crate) no_malware_check: bool,
+    pub(crate) malware_check_url: Option<DisplaySafeUrl>,
 }
 
 impl RemoveSettings {
@@ -2201,6 +2215,8 @@ impl RemoveSettings {
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
+            no_malware_check: environment.no_malware_check.value == Some(true),
+            malware_check_url: environment.malware_check_url.clone(),
         }
     }
 }
@@ -2222,6 +2238,8 @@ pub(crate) struct VersionSettings {
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
+    pub(crate) no_malware_check: bool,
+    pub(crate) malware_check_url: Option<DisplaySafeUrl>,
 }
 
 impl VersionSettings {
@@ -2285,6 +2303,8 @@ impl VersionSettings {
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
+            no_malware_check: environment.no_malware_check.value == Some(true),
+            malware_check_url: environment.malware_check_url,
         }
     }
 }

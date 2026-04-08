@@ -20,6 +20,7 @@ use uv_normalize::PackageName;
 use uv_pep440::{BumpCommand, PrereleaseKind, Version};
 use uv_preview::Preview;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
+use uv_redacted::DisplaySafeUrl;
 use uv_settings::PythonInstallMirrors;
 use uv_workspace::VirtualProject;
 use uv_workspace::pyproject_mut::Error;
@@ -92,6 +93,8 @@ pub(crate) async fn project_version(
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
+    no_malware_check: bool,
+    malware_check_url: Option<DisplaySafeUrl>,
 ) -> Result<ExitStatus> {
     // Read the metadata
     let project = find_target(
@@ -353,6 +356,8 @@ pub(crate) async fn project_version(
             cache,
             printer,
             preview,
+            no_malware_check,
+            malware_check_url,
         ))
         .await?
     } else {
@@ -542,6 +547,7 @@ async fn print_frozen_version(
 }
 
 /// Re-lock and re-sync the project after a series of edits.
+#[expect(clippy::fn_params_excessive_bools)]
 async fn lock_and_sync(
     project: VirtualProject,
     project_dir: &Path,
@@ -561,6 +567,8 @@ async fn lock_and_sync(
     cache: &Cache,
     printer: Printer,
     preview: Preview,
+    no_malware_check: bool,
+    malware_check_url: Option<DisplaySafeUrl>,
 ) -> Result<ExitStatus> {
     // If frozen, don't touch the lock or sync at all
     if frozen.is_some() {
@@ -708,6 +716,8 @@ async fn lock_and_sync(
         DryRun::Disabled,
         printer,
         preview,
+        no_malware_check,
+        malware_check_url,
     )
     .await
     {

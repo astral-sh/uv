@@ -205,9 +205,8 @@ pub(crate) async fn audit(
             VulnerabilityServiceFormat::Osv => {
                 let osv_url = service_url
                     .as_deref()
-                    .unwrap_or(osv::API_BASE)
-                    .parse()
-                    .expect("invalid OSV service URL");
+                    .map(|url| url.parse().expect("invalid OSV service URL"))
+                    .unwrap_or_else(|| osv::API_BASE.clone());
                 let client = base_client.for_host(&osv_url).raw_client().clone();
                 let service = osv::Osv::new(client, Some(osv_url), concurrency);
                 trace!("Auditing {n} dependencies against OSV", n = auditable.len());
