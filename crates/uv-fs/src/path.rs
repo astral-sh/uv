@@ -206,17 +206,36 @@ pub fn normalize_absolute_path(path: &Path) -> Result<PathBuf, std::io::Error> {
     Ok(ret)
 }
 
-/// Normalize a [`Path`], removing things like `.` and `..`.
+/// Normalize a [`Path`], removing `.`, `..`, and trailing slashes.
 pub fn normalize_path(path: &Path) -> Cow<'_, Path> {
-    // Fast path: if the path is already normalized, return it as-is.
-    if path.components().all(|component| match component {
+    // A path with `.` or `..` is not normalized.
+    if !path.components().all(|component| match component {
         Component::Prefix(_) | Component::RootDir | Component::Normal(_) => true,
         Component::ParentDir | Component::CurDir => false,
     }) {
-        Cow::Borrowed(path)
-    } else {
-        Cow::Owned(normalized(path))
+        return Cow::Owned(normalized(path));
     }
+
+    // A path with a trailing path separator is not normalized.
+    if path
+        .as_os_str()
+        .as_encoded_bytes()
+        .last()
+        .is_some_and(|trailing| {
+            if cfg!(windows) {
+                *trailing == b'\\' || *trailing == b'/'
+            } else if cfg!(unix) {
+                *trailing == b'/'
+            } else {
+                unimplemented!("Only Windows and Unix are supported")
+            }
+        })
+    {
+        return Cow::Owned(normalized(path));
+    }
+
+    // Fast path: if the path is already normalized, return it as-is.
+    Cow::Borrowed(path)
 }
 
 /// Normalize a [`PathBuf`], removing things like `.` and `..`.
@@ -560,6 +579,33 @@ mod tests {
             ("./a/../../b", "../b"),
             ("/usr/../../foo", "/../foo"),
         ];
+        for (input, expected) in cases {
+            assert_eq!(normalize_path(Path::new(input)), Path::new(expected));
+        }
+    }
+
+    #[test]
+    fn test_normalize_trailing_path_separator() {
+        let cases = [
+            (
+                "/home/ferris/projects/python/",
+                "/home/ferris/projects/python",
+            ),
+            ("python/", "python"),
+            ("/", "/"),
+        ];
+        for (input, expected) in cases {
+            assert_eq!(normalize_path(Path::new(input)), Path::new(expected));
+        }
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_normalize_trailing_path_separator_windows() {
+        let cases = [(
+            r"C:\Users\Ferris\projects\python\",
+            r"C:\Users\Ferris\projects\python",
+        )];
         for (input, expected) in cases {
             assert_eq!(normalize_path(Path::new(input)), Path::new(expected));
         }
