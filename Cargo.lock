@@ -6700,7 +6700,6 @@ version = "0.0.37"
 dependencies = [
  "async-trait",
  "byteorder",
- "doc-comment",
  "env_logger",
  "fastrand",
  "secret-service",
