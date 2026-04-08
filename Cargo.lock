@@ -6215,6 +6215,7 @@ dependencies = [
  "rustls",
  "rustls-native-certs",
  "rustls-pki-types",
+ "rustls-webpki",
  "serde",
  "serde_json",
  "temp-env",
@@ -6248,6 +6249,7 @@ dependencies = [
  "uv-warnings",
  "webpki-root-certs",
  "wiremock",
+ "x509-parser",
 ]
 
 [[package]]

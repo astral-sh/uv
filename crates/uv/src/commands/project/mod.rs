@@ -279,7 +279,7 @@ pub(crate) enum ProjectError {
     Client(#[from] uv_client::Error),
 
     #[error(transparent)]
-    Reqwest(#[from] reqwest::Error),
+    ClientBuild(#[from] uv_client::ClientBuildError),
 
     #[error(transparent)]
     Python(#[from] uv_python::Error),
