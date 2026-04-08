@@ -1018,8 +1018,8 @@ impl BuildSystem {
                 if !specifier.contains(&uv_version) {
                     // This is allowed to happen when testing prereleases, but we should still warn.
                     warnings.push(format!(
-                        r#"`build_system.requires = ["{uv_requirement}"]` does not contain the
-                        current uv version {uv_version}"#,
+                        "`build_system.requires = [\"{uv_requirement}\"]` does not contain the \
+                        current uv version {uv_version}",
                     ));
                 }
                 Ranges::from(specifier.clone())
