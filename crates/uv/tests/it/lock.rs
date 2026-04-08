@@ -265,6 +265,7 @@ fn lock_sdist_git() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: Setting `exclude-newer` on configured indexes is experimental and may change without warning. Pass `--preview-features index-exclude-newer` to disable this warning.
     Resolved 2 packages in [TIME]
     ");
 
@@ -355,6 +356,7 @@ fn lock_sdist_git() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: Setting `exclude-newer` on configured indexes is experimental and may change without warning. Pass `--preview-features index-exclude-newer` to disable this warning.
     Resolved 2 packages in [TIME]
     ");
 
@@ -470,6 +472,7 @@ fn lock_sdist_git() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: Setting `exclude-newer` on configured indexes is experimental and may change without warning. Pass `--preview-features index-exclude-newer` to disable this warning.
     Resolved 2 packages in [TIME]
     ");
 
@@ -532,6 +535,7 @@ fn lock_sdist_git_subdirectory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: Setting `exclude-newer` on configured indexes is experimental and may change without warning. Pass `--preview-features index-exclude-newer` to disable this warning.
     Resolved 2 packages in [TIME]
     ");
 
@@ -626,6 +630,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: Setting `exclude-newer` on configured indexes is experimental and may change without warning. Pass `--preview-features index-exclude-newer` to disable this warning.
     Resolved 2 packages in [TIME]
     ");
 
@@ -11076,6 +11081,7 @@ async fn lock_relative_index() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: Setting `exclude-newer` on configured indexes is experimental and may change without warning. Pass `--preview-features index-exclude-newer` to disable this warning.
     Resolved 2 packages in [TIME]
     ");
 
@@ -19896,6 +19902,7 @@ async fn lock_named_index() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: Setting `exclude-newer` on configured indexes is experimental and may change without warning. Pass `--preview-features index-exclude-newer` to disable this warning.
     Resolved 2 packages in [TIME]
     ");
 
@@ -33598,6 +33605,7 @@ async fn lock_exclude_newer_index_disable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: Setting `exclude-newer` on configured indexes is experimental and may change without warning. Pass `--preview-features index-exclude-newer` to disable this warning.
     Resolved 2 packages in [TIME]
     ");
 
@@ -33638,6 +33646,24 @@ async fn lock_exclude_newer_index_value() -> Result<()> {
     ))?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Setting `exclude-newer` on configured indexes is experimental and may change without warning. Pass `--preview-features index-exclude-newer` to disable this warning.
+    warning: iniconfig-2.0.0.tar.gz is missing an upload date, but user provided: 2025-01-01T00:00:00Z
+    warning: iniconfig-2.0.0-py3-none-any.whl is missing an upload date, but user provided: 2025-01-01T00:00:00Z
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there are no versions of iniconfig and your project depends on iniconfig>=2, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: `iniconfig` was filtered by the index-specific `exclude-newer` setting to only include packages uploaded before 2025-01-01T00:00:00Z. Consider updating that index's cutoff, setting it to `false`, or using `exclude-newer-package` to override the cutoff for this package.
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("index-exclude-newer"), @"
     success: false
     exit_code: 1
     ----- stdout -----

@@ -8,6 +8,8 @@ use rustc_hash::FxHashMap;
 use serde::ser::SerializeMap;
 use uv_distribution_types::{ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue};
 use uv_normalize::PackageName;
+use uv_preview::PreviewFeature;
+use uv_warnings::warn_user_once;
 
 /// The configuration layer that supplied the effective `exclude-newer` cutoff for a package.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -444,6 +446,15 @@ impl ExcludeNewer {
         }
     }
 
+    fn warn_index_exclude_newer_preview() {
+        if !uv_preview::is_enabled(PreviewFeature::IndexExcludeNewer) {
+            warn_user_once!(
+                "Setting `exclude-newer` on configured indexes is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                PreviewFeature::IndexExcludeNewer
+            );
+        }
+    }
+
     /// Create a new exclude newer configuration.
     pub fn new(global: Option<ExcludeNewerValue>, package: ExcludeNewerPackage) -> Self {
         Self { global, package }
@@ -495,9 +506,15 @@ impl ExcludeNewer {
             )),
             Some(ExcludeNewerOverride::Disabled) => None,
             None => match index {
-                Some(ExcludeNewerOverride::Disabled) => None,
+                Some(ExcludeNewerOverride::Disabled) => {
+                    Self::warn_index_exclude_newer_preview();
+                    None
+                }
                 Some(ExcludeNewerOverride::Enabled(timestamp)) => Some((
-                    ExcludeNewerValue::from(timestamp.timestamp()),
+                    {
+                        Self::warn_index_exclude_newer_preview();
+                        ExcludeNewerValue::from(timestamp.timestamp())
+                    },
                     EffectiveExcludeNewerSource::Index,
                 )),
                 None => self

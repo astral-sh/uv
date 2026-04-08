@@ -63,6 +63,7 @@ The following preview features are available:
 - `python-install-default`: Allows
   [installing `python` and `python3` executables](./python-versions.md#installing-python-executables).
 - `format`: Allows using `uv format`.
+- `index-exclude-newer`: Allows setting `exclude-newer` on configured package indexes.
 - `native-auth`: Enables storage of credentials in a
   [system-native location](../concepts/authentication/http.md#the-uv-credentials-store).
 - `workspace-metadata`: Allows using `uv workspace metadata`.

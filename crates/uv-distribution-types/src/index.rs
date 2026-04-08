@@ -239,6 +239,8 @@ pub struct Index {
     /// globally-specified value, unless a package-specific `exclude-newer-package` override is
     /// present.
     ///
+    /// This option is in preview and may change in any future release.
+    ///
     /// ```toml
     /// [tool.uv]
     /// exclude-newer = "2025-01-01T00:00:00Z"

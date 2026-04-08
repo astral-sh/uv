@@ -194,6 +194,7 @@ pub enum PreviewFeature {
     PublishRequireNormalized = 1 << 25,
     Audit = 1 << 26,
     ProjectDirectoryMustExist = 1 << 27,
+    IndexExcludeNewer = 1 << 28,
 }
 
 impl PreviewFeature {
@@ -228,6 +229,7 @@ impl PreviewFeature {
             Self::PublishRequireNormalized => "publish-require-normalized",
             Self::Audit => "audit",
             Self::ProjectDirectoryMustExist => "project-directory-must-exist",
+            Self::IndexExcludeNewer => "index-exclude-newer",
         }
     }
 }
@@ -275,6 +277,7 @@ impl FromStr for PreviewFeature {
             "publish-require-normalized" => Self::PublishRequireNormalized,
             "audit" => Self::Audit,
             "project-directory-must-exist" => Self::ProjectDirectoryMustExist,
+            "index-exclude-newer" => Self::IndexExcludeNewer,
             _ => return Err(PreviewFeatureParseError),
         })
     }
@@ -523,6 +526,10 @@ mod tests {
         assert_eq!(
             PreviewFeature::ProjectDirectoryMustExist.as_str(),
             "project-directory-must-exist"
+        );
+        assert_eq!(
+            PreviewFeature::IndexExcludeNewer.as_str(),
+            "index-exclude-newer"
         );
     }
 
