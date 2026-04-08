@@ -19,6 +19,7 @@
 //! | `/basic-auth-heron/files/…`        | `public:heron` | 302 redirect → `files.pythonhosted.org`                |
 //! | `/basic-auth-eagle/simple/{pkg}/`   | `public:eagle` | Same, different password                               |
 //! | `/basic-auth-eagle/files/…`        | `public:eagle` | 302 redirect → `files.pythonhosted.org`                |
+//! | `/no-upload-time/simple/{pkg}/`     | No             | Simple API JSON without `upload-time`                  |
 
 use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
@@ -220,6 +221,41 @@ fn build_simple_api_response(
     })
 }
 
+/// Build the JSON Simple API response for a package without `upload-time`.
+fn build_simple_api_response_without_upload_time(
+    package_name: &str,
+    entries: &[PackageEntry],
+    file_url_prefix: &str,
+) -> serde_json::Value {
+    let files: Vec<serde_json::Value> = entries
+        .iter()
+        .map(|entry| {
+            let rewritten_url = entry.url.replace(
+                "https://files.pythonhosted.org/",
+                &format!("{file_url_prefix}/"),
+            );
+            let mut file_obj = json!({
+                "filename": entry.filename,
+                "url": rewritten_url,
+                "hashes": {
+                    "sha256": entry.sha256
+                },
+                "size": entry.size,
+            });
+            if let Some(rp) = entry.requires_python {
+                file_obj["requires-python"] = json!(rp);
+            }
+            file_obj
+        })
+        .collect();
+
+    json!({
+        "meta": { "api-version": "1.1" },
+        "name": package_name,
+        "files": files,
+    })
+}
+
 /// Build the JSON Simple API response for a package with relative file URLs.
 ///
 /// File URLs are relative paths like `../../../files/packages/...`
@@ -312,6 +348,7 @@ impl PypiProxy {
 /// - `/basic-auth-eagle/simple/{pkg}/` — authenticated Simple API (public:eagle)
 /// - `/relative/simple/{pkg}/` — unauthenticated Simple API with relative file links
 /// - `/basic-auth/relative/simple/{pkg}/` — authenticated Simple API with relative file links
+/// - `/no-upload-time/simple/{pkg}/` — unauthenticated Simple API without `upload-time`
 /// - `/files/…` — unauthenticated file redirect to `files.pythonhosted.org`
 /// - `/basic-auth/files/…` — authenticated file redirect (public:heron)
 /// - `/basic-auth-heron/files/…` — authenticated file redirect (public:heron)
@@ -476,6 +513,17 @@ pub(crate) async fn start() -> PypiProxy {
             if let Some(pkg) = extract_package_name(path, "/relative/simple/") {
                 if let Some(entries) = db.get(pkg) {
                     let body = build_simple_api_response_relative(pkg, entries);
+                    return simple_api_response(&body);
+                }
+                return ResponseTemplate::new(404);
+            }
+
+            // Route: /no-upload-time/simple/{pkg}/  (unauthenticated)
+            if let Some(pkg) = extract_package_name(path, "/no-upload-time/simple/") {
+                if let Some(entries) = db.get(pkg) {
+                    let file_prefix = "https://files.pythonhosted.org";
+                    let body =
+                        build_simple_api_response_without_upload_time(pkg, entries, file_prefix);
                     return simple_api_response(&body);
                 }
                 return ResponseTemplate::new(404);

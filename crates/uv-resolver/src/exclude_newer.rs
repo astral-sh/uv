@@ -8,6 +8,19 @@ use rustc_hash::FxHashMap;
 use serde::ser::SerializeMap;
 use uv_distribution_types::{ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue};
 use uv_normalize::PackageName;
+use uv_preview::PreviewFeature;
+use uv_warnings::warn_user_once;
+
+/// The configuration layer that supplied the effective `exclude-newer` cutoff for a package.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum EffectiveExcludeNewerSource {
+    /// The global `exclude-newer` setting.
+    Global,
+    /// A package-specific `exclude-newer-package` override.
+    Package,
+    /// An index-specific `[[tool.uv.index]].exclude-newer` override.
+    Index,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExcludeNewerValueChange {
@@ -433,6 +446,15 @@ impl ExcludeNewer {
         }
     }
 
+    fn warn_index_exclude_newer_preview() {
+        if !uv_preview::is_enabled(PreviewFeature::IndexExcludeNewer) {
+            warn_user_once!(
+                "Setting `exclude-newer` on configured indexes is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                PreviewFeature::IndexExcludeNewer
+            );
+        }
+    }
+
     /// Create a new exclude newer configuration.
     pub fn new(global: Option<ExcludeNewerValue>, package: ExcludeNewerPackage) -> Self {
         Self { global, package }
@@ -457,6 +479,49 @@ impl ExcludeNewer {
             Some(ExcludeNewerOverride::Enabled(timestamp)) => Some(timestamp.as_ref().clone()),
             Some(ExcludeNewerOverride::Disabled) => None,
             None => self.global.clone(),
+        }
+    }
+
+    /// Returns the effective exclude-newer value for a package resolved from a specific index.
+    pub fn exclude_newer_package_for_index(
+        &self,
+        package_name: &PackageName,
+        index: Option<&ExcludeNewerOverride>,
+    ) -> Option<ExcludeNewerValue> {
+        self.exclude_newer_package_for_index_with_source(package_name, index)
+            .map(|(exclude_newer, _)| exclude_newer)
+    }
+
+    /// Returns the effective exclude-newer value and its source for a package resolved from a
+    /// specific index.
+    pub(crate) fn exclude_newer_package_for_index_with_source(
+        &self,
+        package_name: &PackageName,
+        index: Option<&ExcludeNewerOverride>,
+    ) -> Option<(ExcludeNewerValue, EffectiveExcludeNewerSource)> {
+        match self.package.get(package_name) {
+            Some(ExcludeNewerOverride::Enabled(timestamp)) => Some((
+                timestamp.as_ref().clone(),
+                EffectiveExcludeNewerSource::Package,
+            )),
+            Some(ExcludeNewerOverride::Disabled) => None,
+            None => match index {
+                Some(ExcludeNewerOverride::Disabled) => {
+                    Self::warn_index_exclude_newer_preview();
+                    None
+                }
+                Some(ExcludeNewerOverride::Enabled(timestamp)) => Some((
+                    {
+                        Self::warn_index_exclude_newer_preview();
+                        ExcludeNewerValue::from(timestamp.timestamp())
+                    },
+                    EffectiveExcludeNewerSource::Index,
+                )),
+                None => self
+                    .global
+                    .clone()
+                    .map(|timestamp| (timestamp, EffectiveExcludeNewerSource::Global)),
+            },
         }
     }
 

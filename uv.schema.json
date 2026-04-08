@@ -971,6 +971,14 @@
           "type": "boolean",
           "default": false
         },
+        "exclude-newer": {
+          "description": "An index-specific `exclude-newer` cutoff.\n\nAccepts the same date, timestamp, and duration values as the global `exclude-newer`\nsetting. Set this to `false` to disable `exclude-newer` for this index entirely.\n\nWhen set to a value, packages resolved from this index will use that cutoff instead of the\nglobally-specified value, unless a package-specific `exclude-newer-package` override is\npresent.\n\nThis option is in preview and may change in any future release.\n\n```toml\n[tool.uv]\nexclude-newer = \"2025-01-01T00:00:00Z\"\n\n[[tool.uv.index]]\nname = \"internal\"\nurl = \"https://internal.example.com/simple\"\nexclude-newer = \"7 days\"\n```",
+          "allOf": [
+            {
+              "$ref": "#/definitions/ExcludeNewerOverride"
+            }
+          ]
+        },
         "explicit": {
           "description": "Mark the index as explicit.\n\nExplicit indexes will _only_ be used when explicitly requested via a `[tool.uv.sources]`\ndefinition, as in:\n\n```toml\n[[tool.uv.index]]\nname = \"pytorch\"\nurl = \"https://download.pytorch.org/whl/cu121\"\nexplicit = true\n\n[tool.uv.sources]\ntorch = { index = \"pytorch\" }\n```",
           "type": "boolean",
