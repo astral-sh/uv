@@ -251,7 +251,7 @@ pub(crate) async fn audit(
     for id in ignore.iter().chain(ignore_until_fixed.iter()) {
         if !matched_ignores.contains(id) {
             warn_user!(
-                "Ignored vulnerability `{}` did not match any known vulnerability; your ignore setting may be out-of-date or incorrect",
+                "Ignored vulnerability `{}` does not match any vulnerability in the project",
                 id.as_str()
             );
         }
@@ -281,11 +281,9 @@ impl AuditResults {
                 Finding::ProjectStatus(status) => itertools::Either::Right(status),
             });
 
-        let vuln_banner = if !vulns.is_empty() || self.n_ignored > 0 {
-            let visible = vulns.len();
-            let total = visible + self.n_ignored;
-            let s = if total == 1 { "y" } else { "ies" };
-            let mut banner = format!("{total} known vulnerabilit{s}");
+        let vuln_banner = if !vulns.is_empty() {
+            let s = if vulns.len() == 1 { "y" } else { "ies" };
+            let mut banner = format!("{} known vulnerabilit{s}", vulns.len());
             if self.n_ignored > 0 {
                 write!(banner, " ({} ignored)", self.n_ignored).unwrap();
             }

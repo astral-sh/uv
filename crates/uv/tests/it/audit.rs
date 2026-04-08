@@ -714,7 +714,7 @@ async fn audit_ignore_by_id() {
     ----- stdout -----
 
     ----- stderr -----
-    Found 1 known vulnerability (1 ignored) and no adverse project statuses in 1 package
+    Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
 }
 
@@ -771,7 +771,7 @@ async fn audit_ignore_by_alias() {
     ----- stdout -----
 
     ----- stderr -----
-    Found 1 known vulnerability (1 ignored) and no adverse project statuses in 1 package
+    Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
 }
 
@@ -828,7 +828,7 @@ async fn audit_ignore_until_fixed() {
     ----- stdout -----
 
     ----- stderr -----
-    Found 1 known vulnerability (1 ignored) and no adverse project statuses in 1 package
+    Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
 }
 
@@ -971,7 +971,7 @@ async fn audit_ignore_config() {
     ----- stdout -----
 
     ----- stderr -----
-    Found 1 known vulnerability (1 ignored) and no adverse project statuses in 1 package
+    Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
 }
 
@@ -1028,7 +1028,7 @@ async fn audit_ignore_until_fixed_config() {
     ----- stdout -----
 
     ----- stderr -----
-    Found 1 known vulnerability (1 ignored) and no adverse project statuses in 1 package
+    Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
 }
 
@@ -1123,7 +1123,7 @@ async fn audit_ignore_partial() {
 
 
     ----- stderr -----
-    Found 2 known vulnerabilities (1 ignored) and no adverse project statuses in 1 package
+    Found 1 known vulnerability (1 ignored) and no adverse project statuses in 1 package
     ");
 }
 
@@ -1169,7 +1169,7 @@ async fn audit_ignore_unmatched() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Ignored vulnerability `CVE-XXXX-YYYY` did not match any known vulnerability; your ignore setting may be out-of-date or incorrect
+    warning: Ignored vulnerability `CVE-XXXX-YYYY` does not match any vulnerability in the project
     Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
 }
@@ -1216,7 +1216,7 @@ async fn audit_ignore_until_fixed_unmatched() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Ignored vulnerability `CVE-XXXX-YYYY` did not match any known vulnerability; your ignore setting may be out-of-date or incorrect
+    warning: Ignored vulnerability `CVE-XXXX-YYYY` does not match any vulnerability in the project
     Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
 }
@@ -1285,7 +1285,7 @@ async fn audit_ignore_mixed_matched_unmatched() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Ignored vulnerability `CVE-DOES-NOT-EXIST` did not match any known vulnerability; your ignore setting may be out-of-date or incorrect
-    Found 1 known vulnerability (1 ignored) and no adverse project statuses in 1 package
+    warning: Ignored vulnerability `CVE-DOES-NOT-EXIST` does not match any vulnerability in the project
+    Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
 }
