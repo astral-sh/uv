@@ -2065,7 +2065,9 @@ mod tests {
             .with_implementation(ImplementationName::CPython)
             .with_build("20240814".to_string());
 
-        let client = uv_client::BaseClientBuilder::default().build();
+        let client = uv_client::BaseClientBuilder::default()
+            .build()
+            .expect("failed to build base client");
         let download_list = ManagedPythonDownloadList::new(&client, None).await.unwrap();
 
         let downloads: Vec<_> = download_list
@@ -2091,7 +2093,9 @@ mod tests {
             .with_implementation(ImplementationName::CPython)
             .with_build("99999999".to_string());
 
-        let client = uv_client::BaseClientBuilder::default().build();
+        let client = uv_client::BaseClientBuilder::default()
+            .build()
+            .expect("failed to build base client");
         let download_list = ManagedPythonDownloadList::new(&client, None).await.unwrap();
 
         // Should find no matching downloads

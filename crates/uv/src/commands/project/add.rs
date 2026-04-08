@@ -384,7 +384,7 @@ pub(crate) async fn add(
                 .index_strategy(settings.resolver.index_strategy)
                 .markers(target.interpreter().markers())
                 .platform(target.interpreter().platform())
-                .build();
+                .build()?;
 
             // Determine whether to enable build isolation.
             let environment;

@@ -88,7 +88,7 @@ impl PythonInstallation {
         preview: Preview,
     ) -> Result<Self, Error> {
         let retry_policy = client_builder.retry_policy();
-        let client = client_builder.clone().retries(0).build();
+        let client = client_builder.clone().retries(0).build()?;
         let download_list =
             ManagedPythonDownloadList::new(&client, python_downloads_json_url).await?;
         let downloads_enabled = preference.allows_managed()
@@ -134,7 +134,7 @@ impl PythonInstallation {
         // Python downloads are performing their own retries to catch stream errors, disable the
         // default retries to avoid the middleware performing uncontrolled retries.
         let retry_policy = client_builder.retry_policy();
-        let client = client_builder.clone().retries(0).build();
+        let client = client_builder.clone().retries(0).build()?;
         let download_list =
             ManagedPythonDownloadList::new(&client, python_downloads_json_url).await?;
 

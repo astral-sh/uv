@@ -219,7 +219,7 @@ pub(crate) async fn venv(
             .keyring(keyring_provider)
             .markers(interpreter.markers())
             .platform(interpreter.platform())
-            .build();
+            .build()?;
 
         // Resolve the flat indexes from `--find-links`.
         let flat_index = {

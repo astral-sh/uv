@@ -13,8 +13,8 @@ use hyper::{Request, Response};
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto::Builder;
 use rcgen::{
-    BasicConstraints, Certificate, CertificateParams, DnType, ExtendedKeyUsagePurpose, IsCa,
-    Issuer, KeyPair, KeyUsagePurpose, SanType, date_time_ymd,
+    BasicConstraints, Certificate, CertificateParams, CustomExtension, DnType,
+    ExtendedKeyUsagePurpose, IsCa, Issuer, KeyPair, KeyUsagePurpose, SanType, date_time_ymd,
 };
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::server::WebPkiClientVerifier;
@@ -53,7 +53,14 @@ pub(crate) fn test_cert_dir() -> PathBuf {
 ///
 /// Use sparingly as generation of these certs is a very slow operation.
 pub(crate) fn generate_self_signed_certs_with_ca() -> Result<(SelfSigned, SelfSigned, SelfSigned)> {
-    // Generate the CA
+    generate_self_signed_certs_with_ca_custom_extensions(Vec::new())
+}
+
+/// Generates a self-signed root CA, server certificate, and client certificate,
+/// with additional custom extensions on the CA certificate.
+pub(crate) fn generate_self_signed_certs_with_ca_custom_extensions(
+    custom_extensions: Vec<CustomExtension>,
+) -> Result<(SelfSigned, SelfSigned, SelfSigned)> {
     let mut ca_params = CertificateParams::default();
     ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained); // root cert
     ca_params.not_before = date_time_ymd(1975, 1, 1);
@@ -61,6 +68,7 @@ pub(crate) fn generate_self_signed_certs_with_ca() -> Result<(SelfSigned, SelfSi
     ca_params.key_usages.push(KeyUsagePurpose::DigitalSignature);
     ca_params.key_usages.push(KeyUsagePurpose::KeyCertSign);
     ca_params.key_usages.push(KeyUsagePurpose::CrlSign);
+    ca_params.custom_extensions = custom_extensions;
     ca_params
         .distinguished_name
         .push(DnType::OrganizationName, "Astral Software Inc.");

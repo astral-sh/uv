@@ -36,8 +36,9 @@ pub(crate) async fn self_update(
     }
 
     let mut updater = AxoUpdater::new_for("uv");
+    let updater_client = client_builder.build()?;
     updater
-        .set_client(client_builder.build().raw_client().clone())
+        .set_client(updater_client.raw_client().clone())
         .disable_installer_output();
 
     if let Some(ref token) = token {
@@ -113,7 +114,7 @@ pub(crate) async fn self_update(
         debug!("Using official public self-update path");
 
         let retry_policy = client_builder.retry_policy();
-        let client = client_builder.retries(0).build();
+        let client = client_builder.retries(0).build()?;
         let constraints = official_target_version_specifiers(version.as_deref())?;
 
         let resolved = find_matching_version(

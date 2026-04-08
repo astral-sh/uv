@@ -67,7 +67,7 @@ pub(crate) async fn format(
     let retry_policy = client_builder.retry_policy();
     // Python downloads are performing their own retries to catch stream errors, disable the
     // default retries to avoid the middleware from performing uncontrolled retries.
-    let client = client_builder.retries(0).build();
+    let client = client_builder.retries(0).build()?;
 
     // Determine the version to use and get the path to Ruff.
     let reporter = BinaryDownloadReporter::single(printer);

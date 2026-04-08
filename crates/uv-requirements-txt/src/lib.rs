@@ -289,7 +289,21 @@ impl RequirementsTxt {
                     });
                 }
 
-                let client = client_builder.build();
+                let url = DisplaySafeUrl::parse(&requirements_txt.display().to_string()).map_err(
+                    |err| RequirementsTxtFileError {
+                        file: requirements_txt.to_path_buf(),
+                        error: RequirementsTxtParserError::InvalidUrl(
+                            requirements_txt.display().to_string(),
+                            err,
+                        ),
+                    },
+                )?;
+                let client = client_builder
+                    .build()
+                    .map_err(|err| RequirementsTxtFileError {
+                        file: requirements_txt.to_path_buf(),
+                        error: RequirementsTxtParserError::from_reqwest(url, err),
+                    })?;
                 let content = read_url_to_string(&requirements_txt, client)
                     .await
                     .map_err(|err| RequirementsTxtFileError {

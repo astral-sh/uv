@@ -163,7 +163,7 @@ impl<'a> RegistryClientBuilder<'a> {
         }
     }
 
-    pub fn build(mut self) -> RegistryClient {
+    pub fn build(mut self) -> reqwest::Result<RegistryClient> {
         self.cache_index_credentials();
         let index_urls = self.index_locations.index_urls();
 
@@ -173,7 +173,7 @@ impl<'a> RegistryClientBuilder<'a> {
             .indexes(Indexes::from(&self.index_locations))
             .redirect(RedirectPolicy::RetriggerMiddleware);
 
-        let client = builder.build();
+        let client = builder.build()?;
 
         let read_timeout = client.read_timeout();
         let connectivity = client.connectivity();
@@ -181,7 +181,7 @@ impl<'a> RegistryClientBuilder<'a> {
         // Wrap in the cache middleware.
         let client = CachedClient::new(client);
 
-        RegistryClient {
+        Ok(RegistryClient {
             index_urls,
             index_strategy: self.index_strategy,
             torch_backend: self.torch_backend,
@@ -191,7 +191,7 @@ impl<'a> RegistryClientBuilder<'a> {
             read_timeout,
             flat_indexes: Arc::default(),
             pyx_token_store: PyxTokenStore::from_settings().ok(),
-        }
+        })
     }
 
     /// Share the underlying client between two different middleware configurations.
@@ -1693,7 +1693,8 @@ mod tests {
         let cache = Cache::temp()?;
         let registry_client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache)
             .allow_cross_origin_credentials()
-            .build();
+            .build()
+            .expect("failed to build registry client");
         let client = registry_client.cached_client().uncached();
 
         assert_eq!(
@@ -1753,7 +1754,8 @@ mod tests {
         let cache = Cache::temp()?;
         let registry_client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache)
             .allow_cross_origin_credentials()
-            .build();
+            .build()
+            .expect("failed to build registry client");
         let client = registry_client.cached_client().uncached();
 
         let mut url = redirect_server_url.clone();
@@ -1801,7 +1803,8 @@ mod tests {
         let cache = Cache::temp()?;
         let registry_client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache)
             .allow_cross_origin_credentials()
-            .build();
+            .build()
+            .expect("failed to build registry client");
         let client = registry_client.cached_client().uncached();
 
         let redirect_server_url = DisplaySafeUrl::parse(&redirect_server.uri())?.join("foo/")?;

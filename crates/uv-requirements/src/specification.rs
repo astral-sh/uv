@@ -782,7 +782,7 @@ async fn read_file(path: &Path, client_builder: &BaseClientBuilder<'_>) -> Resul
         if !cfg!(unix) || matches!(path.try_exists(), Ok(false)) {
             let url = DisplaySafeUrl::parse(&path.to_string_lossy())?;
 
-            let client = client_builder.build();
+            let client = client_builder.build()?;
             let response = client
                 .for_host(&url)
                 .get(Url::from(url.clone()))

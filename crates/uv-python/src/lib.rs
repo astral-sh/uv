@@ -87,6 +87,9 @@ pub enum Error {
     #[error(transparent)]
     Download(#[from] downloads::Error),
 
+    #[error(transparent)]
+    Reqwest(#[from] reqwest::Error),
+
     // TODO(zanieb) We might want to ensure this is always wrapped in another type
     #[error(transparent)]
     KeyError(#[from] installation::PythonInstallationKeyError),
@@ -1000,6 +1003,11 @@ mod tests {
     ) -> Result<PythonInstallation, crate::Error> {
         let client_builder = BaseClientBuilder::default();
         let download_list = ManagedPythonDownloadList::new_only_embedded()?;
+        let client = client_builder
+            .clone()
+            .retries(0)
+            .build()
+            .expect("failed to build base client");
         tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -1010,7 +1018,7 @@ mod tests {
                 preference,
                 false,
                 &download_list,
-                &client_builder.clone().retries(0).build(),
+                &client,
                 &client_builder.retry_policy(),
                 cache,
                 None,

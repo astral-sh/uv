@@ -117,7 +117,7 @@ pub(crate) async fn pip_list(
         .index_strategy(index_strategy)
         .markers(environment.interpreter().markers())
         .platform(environment.interpreter().platform())
-        .build();
+        .build()?;
         let download_concurrency = concurrency.downloads_semaphore.clone();
 
         // Determine the platform tags.
