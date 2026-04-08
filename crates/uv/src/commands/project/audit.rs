@@ -220,7 +220,6 @@ pub(crate) async fn audit(
 
     // Filter out ignored vulnerabilities, tracking how many were ignored
     // and which ignore rules actually matched.
-    let mut n_ignored = 0usize;
     let mut matched_ignores: FxHashSet<&VulnerabilityID> = FxHashSet::default();
     let all_findings: Vec<_> = all_findings
         .into_iter()
@@ -228,7 +227,6 @@ pub(crate) async fn audit(
             Finding::Vulnerability(vulnerability) => {
                 if let Some(id) = ignore.iter().find(|id| vulnerability.matches(id)) {
                     matched_ignores.insert(id);
-                    n_ignored += 1;
                     return false;
                 }
                 if let Some(id) = ignore_until_fixed
@@ -237,7 +235,6 @@ pub(crate) async fn audit(
                 {
                     matched_ignores.insert(id);
                     if vulnerability.fix_versions.is_empty() {
-                        n_ignored += 1;
                         return false;
                     }
                 }
@@ -260,7 +257,6 @@ pub(crate) async fn audit(
     let display = AuditResults {
         printer,
         n_packages: auditable.len(),
-        n_ignored,
         findings: all_findings,
     };
     display.render()
@@ -269,7 +265,6 @@ pub(crate) async fn audit(
 struct AuditResults {
     printer: Printer,
     n_packages: usize,
-    n_ignored: usize,
     findings: Vec<Finding>,
 }
 
@@ -283,11 +278,9 @@ impl AuditResults {
 
         let vuln_banner = if !vulns.is_empty() {
             let s = if vulns.len() == 1 { "y" } else { "ies" };
-            let mut banner = format!("{} known vulnerabilit{s}", vulns.len());
-            if self.n_ignored > 0 {
-                write!(banner, " ({} ignored)", self.n_ignored).unwrap();
-            }
-            banner.yellow().to_string()
+            format!("{} known vulnerabilit{s}", vulns.len())
+                .yellow()
+                .to_string()
         } else {
             "no known vulnerabilities".bold().to_string()
         };

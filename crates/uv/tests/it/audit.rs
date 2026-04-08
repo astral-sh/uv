@@ -1123,7 +1123,7 @@ async fn audit_ignore_partial() {
 
 
     ----- stderr -----
-    Found 1 known vulnerability (1 ignored) and no adverse project statuses in 1 package
+    Found 1 known vulnerability and no adverse project statuses in 1 package
     ");
 }
 
