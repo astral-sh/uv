@@ -12582,19 +12582,23 @@ async fn bogus_redirect() -> Result<()> {
         .mount(&redirect_server)
         .await;
 
-    uv_snapshot!(
-        context
+    uv_snapshot!(context.filters(), context
             .pip_install()
             .arg("--default-index")
             .arg(redirect_server.uri())
             .arg("sniffio"),
         @"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: The index returned metadata for the wrong package: expected distribution for sniffio, got distribution for anyio
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there are no versions of sniffio and you require sniffio, we can conclude that your requirements are unsatisfiable.
+
+          hint: The index `http://[LOCALHOST]/` returned a malformed response, the index page for `sniffio` returned information for `anyio`
+
+          hint: `sniffio` was filtered by `exclude-newer` to only include packages uploaded before 2024-03-25T00:00:00Z. Consider using `exclude-newer-package` to override the cutoff for this package.
     "
     );
 

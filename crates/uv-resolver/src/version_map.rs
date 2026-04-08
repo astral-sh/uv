@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::collections::Bound;
 use std::collections::btree_map::{BTreeMap, Entry};
 use std::ops::RangeBounds;
@@ -120,6 +121,8 @@ impl VersionMap {
                 local,
                 core_metadata,
                 simple_metadata,
+                package_name: package_name.clone(),
+                mismatched_names: std::sync::Mutex::new(BTreeSet::new()),
                 no_binary: build_options.no_binary_package(package_name),
                 no_build: build_options.no_build_package(package_name),
                 index: index.clone(),
@@ -284,6 +287,20 @@ impl VersionMap {
             VersionMapInner::Lazy(ref map) => map.local,
         }
     }
+
+    /// Returns the set of package names that were found on this index page but didn't match
+    /// the expected package name.
+    pub(crate) fn mismatched_names(&self) -> BTreeSet<(PackageName, IndexUrl)> {
+        match self.inner {
+            // Only used for flat indexes, which can't have mismatches.
+            VersionMapInner::Eager(_) => BTreeSet::new(),
+            VersionMapInner::Lazy(ref lazy) => lazy
+                .mismatched_names
+                .lock()
+                .expect("mismatched_names lock is not poisoned")
+                .clone(),
+        }
+    }
 }
 
 impl From<FlatDistributions> for VersionMap {
@@ -380,6 +397,10 @@ struct VersionMapLazy {
     /// The raw simple metadata from which `PrioritizedDist`s should
     /// be constructed.
     simple_metadata: OwnedArchive<SimpleDetailMetadata>,
+    /// The expected package name for this version map.
+    package_name: PackageName,
+    /// Package names from distributions on this index page that don't match the expected name.
+    mismatched_names: std::sync::Mutex<BTreeSet<(PackageName, IndexUrl)>>,
     /// When true, wheels aren't allowed.
     no_binary: bool,
     /// When true, source dists aren't allowed.
@@ -443,6 +464,15 @@ impl VersionMapLazy {
             .expect("archived version files always deserializes");
             let mut priority_dist = init.cloned().unwrap_or_default();
             for (filename, file) in files.all() {
+                // Skip files with a different package name than the index page.
+                if filename.name() != &self.package_name {
+                    self.mismatched_names
+                        .lock()
+                        .expect("mismatched_names lock is not poisoned")
+                        .insert((filename.name().clone(), self.index.clone()));
+                    continue;
+                }
+
                 // Support resolving as if it were an earlier timestamp, at least as long files have
                 // upload time information.
                 let (excluded, upload_time) = if let Some(exclude_newer) = &self.exclude_newer {
