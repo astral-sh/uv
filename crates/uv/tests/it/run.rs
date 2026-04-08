@@ -1690,6 +1690,8 @@ fn run_with_overlay_interpreter() -> Result<()> {
                 context.read("main"), @r#"
             #![CACHE_DIR]/builds-v0/[TMP]/python
             # -*- coding: utf-8 -*-
+            import asyncio
+            import inspect
             import sys
             from foo import main
             if __name__ == "__main__":
@@ -1697,7 +1699,10 @@ fn run_with_overlay_interpreter() -> Result<()> {
                     sys.argv[0] = sys.argv[0][:-11]
                 elif sys.argv[0].endswith(".exe"):
                     sys.argv[0] = sys.argv[0][:-4]
-                sys.exit(main())
+                result = main()
+                if inspect.isawaitable(result):
+                    result = asyncio.run(result)
+                sys.exit(result)
             "#
             );
         }
@@ -1802,6 +1807,8 @@ fn run_with_overlay_interpreter() -> Result<()> {
                 context.read("main"), @r#"
             #![CACHE_DIR]/builds-v0/[TMP]/python
             # -*- coding: utf-8 -*-
+            import asyncio
+            import inspect
             import sys
             from foo import main
             if __name__ == "__main__":
@@ -1809,7 +1816,10 @@ fn run_with_overlay_interpreter() -> Result<()> {
                     sys.argv[0] = sys.argv[0][:-11]
                 elif sys.argv[0].endswith(".exe"):
                     sys.argv[0] = sys.argv[0][:-4]
-                sys.exit(main())
+                result = main()
+                if inspect.isawaitable(result):
+                    result = asyncio.run(result)
+                sys.exit(result)
             "#
             );
         }
@@ -4253,6 +4263,50 @@ fn run_script_module_conflict() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Checked 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn run_script_async_entrypoint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo:app"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#
+    })?;
+
+    let init = context.temp_dir.child("src/foo/__init__.py");
+    init.write_str(indoc! { r#"
+        async def app():
+            print("Hello from async")
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("foo"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from async
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/)
     ");
 
     Ok(())

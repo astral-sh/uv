@@ -38,6 +38,8 @@ fn get_script_launcher(entry_point: &Script, shebang: &str) -> String {
     format!(
         r#"{shebang}
 # -*- coding: utf-8 -*-
+import asyncio
+import inspect
 import sys
 from {module} import {import_name}
 if __name__ == "__main__":
@@ -45,7 +47,10 @@ if __name__ == "__main__":
         sys.argv[0] = sys.argv[0][:-11]
     elif sys.argv[0].endswith(".exe"):
         sys.argv[0] = sys.argv[0][:-4]
-    sys.exit({function}())
+    result = {function}()
+    if inspect.isawaitable(result):
+        result = asyncio.run(result)
+    sys.exit(result)
 "#
     )
 }
