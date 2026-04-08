@@ -328,12 +328,14 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
     .await
     {
         let project =
-            FilesystemOptions::find(workspace.install_path()).map_err(map_settings_error)?;
+            FilesystemOptions::find(workspace.install_path(), Some(workspace.install_path()))
+                .map_err(map_settings_error)?;
         let system = FilesystemOptions::system().map_err(map_settings_error)?;
         let user = FilesystemOptions::user().map_err(map_settings_error)?;
         project.combine(user).combine(system)
     } else {
-        let project = FilesystemOptions::find(&project_dir).map_err(map_settings_error)?;
+        let project = FilesystemOptions::find(&project_dir, Some(&project_dir))
+            .map_err(map_settings_error)?;
         let system = FilesystemOptions::system().map_err(map_settings_error)?;
         let user = FilesystemOptions::user().map_err(map_settings_error)?;
         project.combine(user).combine(system)
