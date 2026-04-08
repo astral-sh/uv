@@ -22,6 +22,7 @@ use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{InstallationStrategy, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups};
+use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::Conflicts;
 use uv_python::{
@@ -34,7 +35,7 @@ use uv_resolver::{
     PythonRequirement, ResolutionMode, ResolverEnvironment,
 };
 use uv_settings::PythonInstallMirrors;
-use uv_torch::{TorchMode, TorchSource, TorchStrategy};
+use uv_torch::{AmdGpuArchitecture, TorchMode, TorchSource, TorchStrategy};
 use uv_types::HashStrategy;
 use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
@@ -63,8 +64,8 @@ pub(crate) async fn pip_sync(
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     torch_backend: Option<TorchMode>,
-    cuda_driver_version: Option<String>,
-    amd_gpu_architecture: Option<String>,
+    cuda_driver_version: Option<Version>,
+    amd_gpu_architecture: Option<AmdGpuArchitecture>,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
     client_builder: &BaseClientBuilder<'_>,
@@ -312,8 +313,8 @@ pub(crate) async fn pip_sync(
                     .as_ref()
                     .unwrap_or(interpreter.platform())
                     .os(),
-                cuda_driver_version.as_deref(),
-                amd_gpu_architecture.as_deref(),
+                cuda_driver_version,
+                amd_gpu_architecture,
             )
         })
         .transpose()?;

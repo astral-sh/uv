@@ -44,6 +44,7 @@ use uv_distribution_types::{
 };
 use uv_install_wheel::LinkMode;
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
+use uv_pep440::Version;
 use uv_pep508::{MarkerTree, RequirementOrigin};
 use uv_preview::Preview;
 use uv_pypi_types::SupportedEnvironments;
@@ -58,7 +59,7 @@ use uv_settings::{
     PythonInstallMirrors, ResolverInstallerOptions, ResolverInstallerSchema, ResolverOptions,
 };
 use uv_static::EnvVars;
-use uv_torch::TorchMode;
+use uv_torch::{AmdGpuArchitecture, TorchMode};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{DependencyType, ExtraBuildDependencies};
 use uv_workspace::pyproject_mut::AddBoundsKind;
@@ -3709,8 +3710,8 @@ pub(crate) struct ResolverSettings {
     pub(crate) resolution: ResolutionMode,
     pub(crate) sources: NoSources,
     pub(crate) torch_backend: Option<TorchMode>,
-    pub(crate) cuda_driver_version: Option<String>,
-    pub(crate) amd_gpu_architecture: Option<String>,
+    pub(crate) cuda_driver_version: Option<Version>,
+    pub(crate) amd_gpu_architecture: Option<AmdGpuArchitecture>,
     pub(crate) upgrade: Upgrade,
 }
 
@@ -3911,8 +3912,8 @@ pub(crate) struct PipSettings {
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) torch_backend: Option<TorchMode>,
-    pub(crate) cuda_driver_version: Option<String>,
-    pub(crate) amd_gpu_architecture: Option<String>,
+    pub(crate) cuda_driver_version: Option<Version>,
+    pub(crate) amd_gpu_architecture: Option<AmdGpuArchitecture>,
     pub(crate) build_isolation: BuildIsolation,
     pub(crate) extra_build_dependencies: ExtraBuildDependencies,
     pub(crate) extra_build_variables: ExtraBuildVariables,

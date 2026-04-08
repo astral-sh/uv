@@ -1869,8 +1869,8 @@ pub(crate) async fn resolve_names(
                 mode,
                 source,
                 interpreter.platform().os(),
-                cuda_driver_version.as_deref(),
-                amd_gpu_architecture.as_deref(),
+                cuda_driver_version.clone(),
+                amd_gpu_architecture.clone(),
             )
         })
         .transpose()
@@ -2073,8 +2073,8 @@ pub(crate) async fn resolve_environment(
                     .as_ref()
                     .unwrap_or(interpreter.platform())
                     .os(),
-                cuda_driver_version.as_deref(),
-                amd_gpu_architecture.as_deref(),
+                cuda_driver_version.clone(),
+                amd_gpu_architecture.clone(),
             )
         })
         .transpose()?;
@@ -2501,8 +2501,8 @@ pub(crate) async fn update_environment(
                     .as_ref()
                     .unwrap_or(interpreter.platform())
                     .os(),
-                cuda_driver_version.as_deref(),
-                amd_gpu_architecture.as_deref(),
+                cuda_driver_version.clone(),
+                amd_gpu_architecture.clone(),
             )
         })
         .transpose()?;

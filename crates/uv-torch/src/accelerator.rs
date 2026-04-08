@@ -70,8 +70,8 @@ impl Accelerator {
     /// 7. `/sys/bus/pci/devices`, filtering for the Intel GPU via PCI.
     /// 8. Windows Managmeent Instrumentation (WMI), filtering for the Intel GPU via PCI.
     pub fn detect(
-        cuda_driver_version: Option<&str>,
-        amd_gpu_architecture: Option<&str>,
+        cuda_driver_version: Option<Version>,
+        amd_gpu_architecture: Option<AmdGpuArchitecture>,
     ) -> Result<Option<Self>, AcceleratorError> {
         // Constants used for PCI device detection.
         const PCI_BASE_CLASS_MASK: u32 = 0x00ff_0000;
@@ -80,14 +80,12 @@ impl Accelerator {
 
         // Use the `UV_CUDA_DRIVER_VERSION` override, if provided.
         if let Some(driver_version) = cuda_driver_version {
-            let driver_version = Version::from_str(driver_version)?;
             debug!("Detected CUDA driver version from `UV_CUDA_DRIVER_VERSION`: {driver_version}");
             return Ok(Some(Self::Cuda { driver_version }));
         }
 
         // Use the `UV_AMD_GPU_ARCHITECTURE` override, if provided.
         if let Some(gpu_architecture) = amd_gpu_architecture {
-            let gpu_architecture = AmdGpuArchitecture::from_str(gpu_architecture)?;
             debug!(
                 "Detected AMD GPU architecture from `UV_AMD_GPU_ARCHITECTURE`: {gpu_architecture}"
             );
