@@ -825,25 +825,28 @@ pub(crate) fn write_record(
     Ok(())
 }
 
-/// Validate the RECORD and heal it if it isn't.
+/// Validate the RECORD and heal invalid RECORD files.
 ///
 /// This ensures that all unpacked wheels have record that matches the contents, and uninstall can't
 /// remove files that don't belong to the wheel.
+///
+/// This function is given both the location of the unpacked wheel and the list of files from the
+/// wheel that were unpacked to avoid a walkdir for this check.
 pub fn validate_and_heal_record<'a>(
-    files: impl IntoIterator<Item = &'a (PathBuf, u64)>,
-    target: &Path,
+    wheel_dir: &Path,
+    unpacked_wheel: impl IntoIterator<Item = &'a (PathBuf, u64)>,
     dist: impl Display,
 ) -> Result<(), Error> {
     // On the filesystem: The unpacked files of the wheel.
-    let mut files: BTreeMap<&Path, u64> = files
+    let mut files: BTreeMap<&Path, u64> = unpacked_wheel
         .into_iter()
         .map(|(path, size)| (path.as_path(), *size))
         .collect();
 
     // In the record: The files we expect in the wheel.
-    let dist_info_prefix = find_dist_info(target)?;
+    let dist_info_prefix = find_dist_info(wheel_dir)?;
     let dist_info_dir = format!("{dist_info_prefix}.dist-info");
-    let record_path = target.join(&dist_info_dir).join("RECORD");
+    let record_path = wheel_dir.join(&dist_info_dir).join("RECORD");
     let mut record_file = File::open(&record_path)?;
     let mut record = read_record(&mut record_file)?;
 
@@ -908,7 +911,7 @@ pub fn validate_and_heal_record<'a>(
             });
         }
 
-        write_record(target, &dist_info_prefix, record)?;
+        write_record(wheel_dir, &dist_info_prefix, record)?;
     }
 
     Ok(())

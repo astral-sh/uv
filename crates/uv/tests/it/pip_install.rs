@@ -12,7 +12,6 @@ use fs_err::File;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
-use regex::Regex;
 use url::Url;
 use walkdir::WalkDir;
 use wiremock::{
@@ -27,8 +26,8 @@ use uv_static::EnvVars;
 #[cfg(feature = "test-git")]
 use uv_test::decode_token;
 use uv_test::{
-    DEFAULT_PYTHON_VERSION, TestContext, build_vendor_links_url, download_to_disk, get_bin,
-    packse_index_url, uv_snapshot, venv_bin_path,
+    DEFAULT_PYTHON_VERSION, TestContext, apply_filters, build_vendor_links_url, download_to_disk,
+    get_bin, packse_index_url, uv_snapshot, venv_bin_path,
 };
 
 #[test]
@@ -14929,7 +14928,10 @@ fn upgrade_group_not_supported() {
 /// installation.
 #[test]
 fn handle_record_mismatches() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filter((
+        regex::escape(r"foo-0.1.0.dist-info/uv_cache.json,sha256=") + ".*",
+        r"foo-0.1.0.dist-info/uv_cache.json,sha256=[SHA256],[SIZE]",
+    ));
 
     // Build a small wheel and unpack it for modification.
     context.init().arg("--lib").arg("foo").assert().success();
@@ -14980,7 +14982,6 @@ fn handle_record_mismatches() -> Result<()> {
     }
     writer.finish()?;
 
-    // Find links avoids a URL in `direct_url.json`.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--find-links")
         .arg(context.temp_dir.as_ref())
@@ -15001,12 +15002,10 @@ fn handle_record_mismatches() -> Result<()> {
     // Read the healed RECORD.
     let installed_record =
         fs_err::read_to_string(context.site_packages().join("foo-0.1.0.dist-info/RECORD"))?;
-    let filter = regex::escape(r"foo-0.1.0.dist-info/uv_cache.json,sha256=") + ".*";
-    let replacement = r"foo-0.1.0.dist-info/uv_cache.json,sha256=[SHA256],[SIZE]";
-    let installed_record = Regex::new(&filter)?.replace(&installed_record, replacement);
+    let snapshot = apply_filters(installed_record, context.filters());
 
     // Ensure that all expected files are present.
-    assert_snapshot!(&installed_record, @"
+    assert_snapshot!(&snapshot, @"
     foo-0.1.0.dist-info/INSTALLER,sha256=5hhM4Q4mYTT9z6QB6PGpUAW81PGNFrYrdXMj4oM_6ak,2
     foo-0.1.0.dist-info/METADATA,,147
     foo-0.1.0.dist-info/RECORD,,

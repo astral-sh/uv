@@ -161,11 +161,12 @@ pub fn uninstall_wheel(
 
 static WARNED_FOR_PACKAGE: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 
-/// Warn and reject paths that are not part of the venv or the system interpreter.
+/// Check if the path is inside the venv or a system interpreter path, and warn if it isn't.
 ///
-/// Reject RECORD entries that escape site-packages via path traversal (e.g.,
-/// `../../../etc/passwd`). A malicious wheel could include such entries to cause
-/// deletion of arbitrary files on uninstall.
+/// Returns `false` is a path is outside the paths that files from a wheel can be installed into,
+/// so that the caller can reject RECORD entries that escape site-packages via path traversal (e.g.,
+/// `../../../etc/passwd`). A malicious wheel could otherwise include such entries to cause deletion
+/// of arbitrary files on uninstall.
 fn is_path_in_scheme(
     path: &str,
     site_packages: &Path,

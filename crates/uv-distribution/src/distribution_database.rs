@@ -723,7 +723,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
                 // Before we make the wheel accessible by persisting it, ensure that the RECORD is
                 // valid.
-                validate_and_heal_record(files.iter(), temp_dir.path(), dist)
+                validate_and_heal_record(temp_dir.path(), files.iter(), dist)
                     .map_err(Error::InstallWheelError)?;
 
                 // Persist the temporary directory to the directory store.
@@ -931,7 +931,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
                 // Before we make the wheel accessible by persisting it, ensure that the RECORD is
                 // valid.
-                validate_and_heal_record(files.iter(), temp_dir.path(), dist)
+                validate_and_heal_record(temp_dir.path(), files.iter(), dist)
                     .map_err(Error::InstallWheelError)?;
 
                 // Persist the temporary directory to the directory store.
@@ -1126,7 +1126,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
             // Before we make the wheel accessible by persisting it, ensure that the RECORD is
             // valid.
-            validate_and_heal_record(files.iter(), temp_dir.path(), dist)
+            validate_and_heal_record(temp_dir.path(), files.iter(), dist)
                 .map_err(Error::InstallWheelError)?;
 
             // Persist the temporary directory to the directory store.
@@ -1184,7 +1184,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         .await??;
 
         // Before we make the wheel accessible by persisting it, ensure that the RECORD is valid.
-        validate_and_heal_record(files.iter(), temp_dir.path(), dist)
+        validate_and_heal_record(temp_dir.path(), files.iter(), dist)
             .map_err(Error::InstallWheelError)?;
 
         // Persist the temporary directory to the directory store.
