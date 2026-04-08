@@ -1,4 +1,3 @@
-use std::fmt::Display;
 use std::path::{Component, Path, PathBuf};
 use std::pin::Pin;
 
@@ -10,9 +9,8 @@ use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::{debug, warn};
 
 use uv_distribution_filename::SourceDistExtension;
-use uv_warnings::warn_user_once;
 
-use crate::{CompressionMethod, Error, insecure_no_validate, validate_archive_member_name};
+use crate::{Error, insecure_no_validate, validate_archive_member_name};
 
 const DEFAULT_BUF_SIZE: usize = 128 * 1024;
 
@@ -46,12 +44,8 @@ struct ComputedEntry {
 /// is already fully on disk, consider using `unzip_archive`, which can use multiple
 /// threads to work faster in that case.
 ///
-/// `source_hint` is used for warning messages, to identify the source of the ZIP archive
-/// beneath the reader. It might be a URL, a file path, or something else.
-///
 /// Returns the list of unpacked files and their sizes.
-pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
-    source_hint: D,
+pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<Vec<(PathBuf, u64)>, Error> {
@@ -89,18 +83,6 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
 
     while let Some(mut entry) = zip.next_with_entry().await? {
         let zip_entry = entry.reader().entry();
-
-        // Check for unexpected compression methods.
-        // A future version of uv will reject instead of warning about these.
-        let compression = CompressionMethod::from(zip_entry.compression());
-        if !compression.is_well_known() {
-            warn_user_once!(
-                "One or more file entries in '{source_hint}' use the '{compression}' compression method, which is not widely supported. A future version of uv will reject ZIP archives containing entries compressed with this method. Entries must be compressed with the '{stored}', '{deflate}', or '{zstd}' compression methods.",
-                stored = CompressionMethod::Stored,
-                deflate = CompressionMethod::Deflated,
-                zstd = CompressionMethod::Zstd,
-            );
-        }
 
         // Construct the (expected) path to the file on-disk.
         let path = match zip_entry.filename().as_str() {
@@ -836,18 +818,14 @@ pub async fn untar<R: tokio::io::AsyncRead + Unpin>(
 /// Unpack a `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.zst`, or `.tar.xz` archive into the target directory,
 /// without requiring `Seek`.
 ///
-/// `source_hint` is used for warning messages, to identify the source of the archive
-/// beneath the reader. It might be a URL, a file path, or something else.
-///
 /// Returns the list of unpacked files and their sizes.
-pub async fn archive<D: Display, R: tokio::io::AsyncRead + Unpin>(
-    source_hint: D,
+pub async fn archive<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     ext: SourceDistExtension,
     target: impl AsRef<Path>,
 ) -> Result<Vec<(PathBuf, u64)>, Error> {
     match ext {
-        SourceDistExtension::Zip => unzip(source_hint, reader, target).await,
+        SourceDistExtension::Zip => unzip(reader, target).await,
         SourceDistExtension::Tar => untar(reader, target).await,
         SourceDistExtension::Tgz | SourceDistExtension::TarGz => untar_gz(reader, target).await,
         SourceDistExtension::Tbz | SourceDistExtension::TarBz2 => untar_bz2(reader, target).await,
