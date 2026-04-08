@@ -1,0 +1,13 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ x86_64-macos, arm64-macos ]
+install-name:    '/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation'
+exports:
+  - targets:     [ x86_64-macos, arm64-macos ]
+    symbols:     [ _NSLog, _NSClassFromString, _OBJC_CLASS_$_NSObject,
+                   _OBJC_CLASS_$_NSString, _OBJC_CLASS_$_NSArray,
+                   _OBJC_CLASS_$_NSDictionary, _OBJC_CLASS_$_NSNumber,
+                   _OBJC_CLASS_$_NSURL, _OBJC_CLASS_$_NSData,
+                   _OBJC_CLASS_$_NSError, _OBJC_CLASS_$_NSBundle,
+                   _OBJC_CLASS_$_NSProcessInfo ]
+...
