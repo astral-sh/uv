@@ -7731,6 +7731,158 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
     Ok(())
 }
 
+/// Ensure that relative flat index URLs in `[tool.uv.sources]` with markers are stored as relative
+/// paths (not absolute `file:///` URLs) in the lockfile's `requires-dist` metadata.
+///
+/// See: <https://github.com/astral-sh/uv/issues/15055>
+///
+/// TODO(tk): Also add a test for absolute
+#[test]
+fn lock_relative_index_in_requires_dist() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Create a flat index directory with a wheel.
+    let links = context.temp_dir.child("workspace").child("flat-index");
+    fs_err::create_dir_all(&links)?;
+
+    for entry in fs_err::read_dir(context.workspace_root.join("test/links"))? {
+        let entry = entry?;
+        let path = entry.path();
+        if path
+            .file_name()
+            .and_then(|file_name| file_name.to_str())
+            .is_some_and(|file_name| file_name.starts_with("tqdm-1000"))
+        {
+            let dest = links.join(path.file_name().unwrap());
+            fs_err::copy(&path, &dest)?;
+        }
+    }
+
+    let workspace = context.temp_dir.child("workspace");
+
+    let pyproject_toml = workspace.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["tqdm"]
+
+        [tool.uv.sources]
+        tqdm = [
+            { index = "local", marker = "sys_platform == 'linux'" },
+            { index = "pypi", marker = "sys_platform != 'linux'" },
+        ]
+
+        [[tool.uv.index]]
+        name = "local"
+        url = "./flat-index"
+        format = "flat"
+
+        [[tool.uv.index]]
+        name = "pypi"
+        url = "https://pypi.org/simple"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 4 packages in [TIME]
+    ");
+
+    let lock = fs_err::read_to_string(workspace.join("uv.lock")).unwrap();
+
+    // The `index` in `requires-dist` should use a relative path (`flat-index`),
+    // NOT an absolute `file:///` URL.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'linux'",
+            "sys_platform != 'linux'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "colorama"
+        version = "0.4.6"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697, upload-time = "2022-10-25T02:36:22.414Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335, upload-time = "2022-10-25T02:36:20.889Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "tqdm", version = "4.66.2", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux'" },
+            { name = "tqdm", version = "1000.0.0", source = { registry = "flat-index" }, marker = "sys_platform == 'linux'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "tqdm", marker = "sys_platform != 'linux'", index = "https://pypi.org/simple" },
+            { name = "tqdm", marker = "sys_platform == 'linux'", index = "flat-index" },
+        ]
+
+        [[package]]
+        name = "tqdm"
+        version = "4.66.2"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+            "sys_platform != 'linux'",
+        ]
+        dependencies = [
+            { name = "colorama", marker = "sys_platform == 'win32'" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/ea/85/3ce0f9f7d3f596e7ea57f4e5ce8c18cb44e4a9daa58ddb46ee0d13d6bff8/tqdm-4.66.2.tar.gz", hash = "sha256:6cd52cdf0fef0e0f543299cfc96fec90d7b8a7e88745f411ec33eb44d5ed3531", size = 169462, upload-time = "2024-02-10T18:19:57.214Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/2a/14/e75e52d521442e2fcc9f1df3c5e456aead034203d4797867980de558ab34/tqdm-4.66.2-py3-none-any.whl", hash = "sha256:1ee4f8a893eb9bef51c6e35730cebf234d5d0b6bd112b0271e10ed7c24a02bd9", size = 78296, upload-time = "2024-02-10T18:19:53.524Z" },
+        ]
+
+        [[package]]
+        name = "tqdm"
+        version = "1000.0.0"
+        source = { registry = "flat-index" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+        ]
+        wheels = [
+            { path = "tqdm-1000.0.0-py3-none-any.whl" },
+        ]
+        "#
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").current_dir(&workspace), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Check PEP 508 URL handling when they contain variables
 #[test]
 fn lock_pep508_urls_with_vars() -> Result<()> {

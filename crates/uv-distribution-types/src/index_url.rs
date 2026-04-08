@@ -1,7 +1,8 @@
 use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
+use std::io;
 use std::ops::Deref;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock, RwLock};
 
@@ -11,6 +12,7 @@ use thiserror::Error;
 use url::{ParseError, Url};
 use uv_auth::RealmRef;
 use uv_cache_key::CanonicalUrl;
+use uv_fs::try_relative_to_if;
 use uv_pep508::{Scheme, VerbatimUrl, VerbatimUrlError, split_scheme};
 use uv_redacted::DisplaySafeUrl;
 use uv_warnings::warn_user;
@@ -26,12 +28,31 @@ static DEFAULT_INDEX: LazyLock<Index> = LazyLock::new(|| {
     ))))
 });
 
+/// The [`VerbatimUrl`] and [`Path`] of an [`IndexUrl::Path`]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+pub struct IndexPath {
+    pub url: VerbatimUrl,
+    pub path: Box<Path>,
+}
+
+impl IndexPath {
+    pub fn relative_to(&self, path: &Path) -> io::Result<Arc<Self>> {
+        let new_path =
+            try_relative_to_if(self.path.as_ref(), path, !self.url.was_given_absolute())?
+                .into_boxed_path();
+        Ok(Arc::new(Self {
+            url: self.url.clone(),
+            path: new_path,
+        }))
+    }
+}
+
 /// The URL of an index to use for fetching packages (e.g., PyPI).
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub enum IndexUrl {
     Pypi(Arc<VerbatimUrl>),
     Url(Arc<VerbatimUrl>),
-    Path(Arc<VerbatimUrl>),
+    Path(Arc<IndexPath>),
 }
 
 impl IndexUrl {
@@ -85,7 +106,8 @@ impl IndexUrl {
     #[inline]
     fn inner(&self) -> &VerbatimUrl {
         match self {
-            Self::Pypi(url) | Self::Url(url) | Self::Path(url) => url,
+            Self::Pypi(url) | Self::Url(url) => url,
+            Self::Path(index_path) => &index_path.url,
         }
     }
 
@@ -117,11 +139,11 @@ impl IndexUrl {
     /// This is a temporary warning. Ambiguous values will not be
     /// accepted in the future.
     pub fn warn_on_disambiguated_relative_path(&self) {
-        let Self::Path(verbatim_url) = &self else {
+        let Self::Path(index_path) = &self else {
             return;
         };
 
-        if let Some(path) = verbatim_url.given() {
+        if let Some(path) = index_path.url.given() {
             if !is_disambiguated_path(path) {
                 if cfg!(windows) {
                     warn_user!(
@@ -225,7 +247,14 @@ impl<'de> serde::de::Deserialize<'de> for IndexUrl {
 impl From<VerbatimUrl> for IndexUrl {
     fn from(url: VerbatimUrl) -> Self {
         if url.scheme() == "file" {
-            Self::Path(Arc::new(url))
+            let install_path = url
+                .to_file_path()
+                .unwrap_or_else(|()| PathBuf::from(url.path()))
+                .into_boxed_path();
+            Self::Path(Arc::new(IndexPath {
+                url,
+                path: install_path,
+            }))
         } else if *url.raw() == *PYPI_URL {
             Self::Pypi(Arc::new(url))
         } else {

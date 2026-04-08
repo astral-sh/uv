@@ -686,9 +686,28 @@ impl RequirementSource {
     }
 
     /// Convert the source to a [`RequirementSource`] relative to the given path.
-    pub fn relative_to(self, path: &Path) -> Result<Self, io::Error> {
+    pub fn relative_to(self, path: &Path) -> io::Result<Self> {
         match self {
-            Self::Registry { .. } | Self::Url { .. } | Self::Git { .. } => Ok(self),
+            Self::Registry {
+                specifier,
+                index,
+                conflict,
+            } => {
+                let index = if let Some(mut index) = index {
+                    if let IndexUrl::Path(ref index_path) = index.url {
+                        index.url = IndexUrl::Path(index_path.relative_to(path)?);
+                    }
+                    Some(index)
+                } else {
+                    None
+                };
+                Ok(Self::Registry {
+                    specifier,
+                    index,
+                    conflict,
+                })
+            }
+            Self::Url { .. } | Self::Git { .. } => Ok(self),
             Self::Path {
                 install_path,
                 ext,
@@ -814,9 +833,22 @@ enum RequirementSourceWire {
     Registry {
         #[serde(skip_serializing_if = "VersionSpecifiers::is_empty", default)]
         specifier: VersionSpecifiers,
-        index: Option<DisplaySafeUrl>,
+        index: Option<IndexWire>,
         conflict: Option<ConflictItem>,
     },
+}
+
+/// The wire representation of an index URL in `requires-dist` metadata.
+///
+/// This mirrors the `RegistrySource` split in the lockfile: URLs are stored as strings,
+/// while local paths are stored as portable paths (which may be relative).
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(untagged)]
+enum IndexWire {
+    /// A URL-based index (e.g., `https://pypi.org/simple`).
+    Url(DisplaySafeUrl),
+    /// A path-based index (e.g., `flat-index` or `../local_packages`).
+    Path(PortablePathBuf),
 }
 
 impl From<RequirementSource> for RequirementSourceWire {
@@ -827,9 +859,17 @@ impl From<RequirementSource> for RequirementSourceWire {
                 index,
                 conflict,
             } => {
-                let index = index.map(|index| index.url.into_url()).map(|mut index| {
-                    index.remove_credentials();
-                    index
+                let index = index.map(|index| match index.url {
+                    // Special case relative paths to preserve putting `file:///` urls for absolute
+                    // paths in the lockfile.
+                    IndexUrl::Path(index_path) if index_path.path.is_relative() => {
+                        IndexWire::Path(PortablePathBuf::from(&*index_path.path))
+                    }
+                    _ => {
+                        let mut url = index.url.into_url();
+                        url.remove_credentials();
+                        IndexWire::Url(url)
+                    }
                 });
                 Self::Registry {
                     specifier,
@@ -941,12 +981,29 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 specifier,
                 index,
                 conflict,
-            } => Ok(Self::Registry {
-                specifier,
-                index: index
-                    .map(|index| IndexMetadata::from(IndexUrl::from(VerbatimUrl::from_url(index)))),
-                conflict,
-            }),
+            } => {
+                let index = if let Some(index_wire) = index {
+                    let metadata = match index_wire {
+                        IndexWire::Url(url) => {
+                            IndexMetadata::from(IndexUrl::from(VerbatimUrl::from_url(url)))
+                        }
+                        IndexWire::Path(path) => {
+                            let path_str = path.to_string();
+                            let verbatim_url = VerbatimUrl::from_url_or_path(&path_str, None)?;
+                            IndexMetadata::from(IndexUrl::from(verbatim_url))
+                        }
+                    };
+                    Some(metadata)
+                } else {
+                    None
+                };
+
+                Ok(Self::Registry {
+                    specifier,
+                    index,
+                    conflict,
+                })
+            }
             RequirementSourceWire::Git { git } => {
                 let mut repository = DisplaySafeUrl::parse(&git)?;
 

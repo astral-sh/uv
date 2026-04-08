@@ -142,13 +142,10 @@ impl<'a> FlatIndexClient<'a> {
     /// Fetch a flat remote index from a `--find-links` URL.
     pub async fn fetch_index(&self, index: &IndexUrl) -> Result<FlatIndexEntries, FlatIndexError> {
         match index {
-            IndexUrl::Path(url) => {
-                let path = url
-                    .to_file_path()
-                    .map_err(|()| FlatIndexError::NonFileUrl(url.to_url()))?;
-                Self::read_from_directory(&path, index)
-                    .map_err(|err| FlatIndexError::FindLinksDirectory(path.clone(), err))
-            }
+            IndexUrl::Path(index_path) => Self::read_from_directory(&index_path.path, index)
+                .map_err(|err| {
+                    FlatIndexError::FindLinksDirectory(index_path.path.to_path_buf(), err)
+                }),
             IndexUrl::Pypi(url) | IndexUrl::Url(url) => self
                 .read_from_url(url, index)
                 .await

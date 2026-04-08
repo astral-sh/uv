@@ -29,9 +29,9 @@ use uv_distribution_filename::{
 };
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
-    Dist, FileLocation, GitSourceDist, Identifier, IndexLocations, IndexMetadata, IndexUrl, Name,
-    PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
-    RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
+    Dist, FileLocation, GitSourceDist, Identifier, IndexLocations, IndexMetadata, IndexPath,
+    IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
+    RegistrySourceDist, RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
     SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, try_relative_to_if};
@@ -1803,11 +1803,14 @@ impl Lock {
                 .into_iter()
                 .filter_map(|index| match index.url() {
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => None,
-                    IndexUrl::Path(url) => {
-                        let path = url.to_file_path().ok()?;
-                        let path = try_relative_to_if(&path, root, !url.was_given_absolute())
-                            .ok()?
-                            .into_boxed_path();
+                    IndexUrl::Path(index_path) => {
+                        let path = try_relative_to_if(
+                            &index_path.path,
+                            root,
+                            !index_path.url.was_given_absolute(),
+                        )
+                        .ok()?
+                        .into_boxed_path();
                         Some(path)
                     }
                 })
@@ -1850,11 +1853,13 @@ impl Lock {
                             ));
                         }
                     }
-                    IndexUrl::Path(url) => {
+                    IndexUrl::Path(index_path) => {
                         if let Some(locals) = locals.as_mut() {
-                            if let Some(path) = url.to_file_path().ok().and_then(|path| {
-                                try_relative_to_if(&path, root, !url.was_given_absolute()).ok()
-                            }) {
+                            if let Ok(path) = try_relative_to_if(
+                                &index_path.path,
+                                root,
+                                !index_path.url.was_given_absolute(),
+                            ) {
                                 locals.insert(path.into_boxed_path());
                             }
                         }
@@ -2193,11 +2198,13 @@ impl Lock {
                                 ));
                             }
                         }
-                        IndexUrl::Path(url) => {
+                        IndexUrl::Path(index_path) => {
                             if let Some(locals) = locals.as_mut() {
-                                if let Some(path) = url.to_file_path().ok().and_then(|path| {
-                                    try_relative_to_if(&path, root, !url.was_given_absolute()).ok()
-                                }) {
+                                if let Ok(path) = try_relative_to_if(
+                                    &index_path.path,
+                                    root,
+                                    !index_path.url.was_given_absolute(),
+                                ) {
                                     locals.insert(path.into_boxed_path());
                                 }
                             }
@@ -3865,12 +3872,13 @@ impl Source {
                 let source = RegistrySource::Url(UrlString::from(redacted.as_ref()));
                 Ok(Self::Registry(source))
             }
-            IndexUrl::Path(url) => {
-                let path = url
-                    .to_file_path()
-                    .map_err(|()| LockErrorKind::UrlToPath { url: url.to_url() })?;
-                let path = try_relative_to_if(&path, root, !url.was_given_absolute())
-                    .map_err(LockErrorKind::IndexRelativePath)?;
+            IndexUrl::Path(index_path) => {
+                let path = try_relative_to_if(
+                    &index_path.path,
+                    root,
+                    !index_path.url.was_given_absolute(),
+                )
+                .map_err(LockErrorKind::IndexRelativePath)?;
                 let source = RegistrySource::Path(path.into_boxed_path());
                 Ok(Self::Registry(source))
             }
@@ -4421,10 +4429,7 @@ impl SourceDist {
                     },
                 }))
             }
-            IndexUrl::Path(path) => {
-                let index_path = path
-                    .to_file_path()
-                    .map_err(|()| LockErrorKind::UrlToPath { url: path.to_url() })?;
+            IndexUrl::Path(index_path) => {
                 let url = reg_dist
                     .file
                     .url
@@ -4435,10 +4440,13 @@ impl SourceDist {
                     let reg_dist_path = url
                         .to_file_path()
                         .map_err(|()| LockErrorKind::UrlToPath { url })?;
-                    let path =
-                        try_relative_to_if(&reg_dist_path, index_path, !path.was_given_absolute())
-                            .map_err(LockErrorKind::DistributionRelativePath)?
-                            .into_boxed_path();
+                    let path = try_relative_to_if(
+                        &reg_dist_path,
+                        &index_path.path,
+                        !index_path.url.was_given_absolute(),
+                    )
+                    .map_err(LockErrorKind::DistributionRelativePath)?
+                    .into_boxed_path();
                     let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
                     let size = reg_dist.file.size;
                     let upload_time = reg_dist
@@ -4773,20 +4781,20 @@ impl Wheel {
                     .map_err(LockError::from)?;
                 WheelWireSource::Url { url }
             }
-            IndexUrl::Path(path) => {
-                let index_path = path
-                    .to_file_path()
-                    .map_err(|()| LockErrorKind::UrlToPath { url: path.to_url() })?;
+            IndexUrl::Path(index_path) => {
                 let wheel_url = wheel.file.url.to_url().map_err(LockErrorKind::InvalidUrl)?;
 
                 if wheel_url.scheme() == "file" {
                     let wheel_path = wheel_url
                         .to_file_path()
                         .map_err(|()| LockErrorKind::UrlToPath { url: wheel_url })?;
-                    let path =
-                        try_relative_to_if(&wheel_path, index_path, !path.was_given_absolute())
-                            .map_err(LockErrorKind::DistributionRelativePath)?
-                            .into_boxed_path();
+                    let path = try_relative_to_if(
+                        &wheel_path,
+                        &index_path.path,
+                        !index_path.url.was_given_absolute(),
+                    )
+                    .map_err(LockErrorKind::DistributionRelativePath)?
+                    .into_boxed_path();
                     WheelWireSource::Path { path }
                 } else {
                     let url = normalize_file_location(&wheel.file.url)
@@ -5460,14 +5468,22 @@ fn normalize_requirement(
             index,
             conflict,
         } => {
-            // Round-trip the index to remove anything apart from the URL.
-            let index = index
-                .map(|index| index.url.into_url())
-                .map(|mut index| {
-                    index.remove_credentials();
-                    index
-                })
-                .map(|index| IndexMetadata::from(IndexUrl::from(VerbatimUrl::from_url(index))));
+            // Round-trip the index to remove anything apart from the URL,
+            // resolving relative install paths against the project root.
+            let index = index.map(|mut index| {
+                if let IndexUrl::Path(ref index_path) = index.url {
+                    if index_path.path.is_relative() {
+                        index.url = IndexUrl::Path(Arc::new(IndexPath {
+                            url: index_path.url.clone(),
+                            path: uv_fs::normalize_path_buf(root.join(&*index_path.path))
+                                .into_boxed_path(),
+                        }));
+                    }
+                }
+                let mut url = index.url.into_url();
+                url.remove_credentials();
+                IndexMetadata::from(IndexUrl::from(VerbatimUrl::from_url(url)))
+            });
             Ok(Requirement {
                 name: requirement.name,
                 extras: requirement.extras,

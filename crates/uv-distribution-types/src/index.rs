@@ -446,8 +446,8 @@ impl Index {
 
     /// Resolve the index relative to the given root directory.
     pub fn relative_to(mut self, root_dir: &Path) -> Result<Self, IndexUrlError> {
-        if let IndexUrl::Path(ref url) = self.url {
-            if let Some(given) = url.given() {
+        if let IndexUrl::Path(ref index_path) = self.url {
+            if let Some(given) = index_path.url.given() {
                 self.url = IndexUrl::parse(given, Some(root_dir))?;
             }
         }
