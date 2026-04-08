@@ -544,7 +544,9 @@ fn looks_like_unnamed_requirement(cursor: &mut Cursor) -> bool {
 /// Returns `true` if a file looks like an archive.
 ///
 /// See <https://github.com/pypa/pip/blob/111eed14b6e9fba7c78a5ec2b7594812d17b5d2b/src/pip/_internal/utils/filetypes.py#L8>
-/// for the list of supported archive extensions.
+/// for the original list of supported archive extensions.
+///
+/// Observe that we're currently much stricter here, as we no longer accept bz2 or lzma variants.
 fn looks_like_archive(file: impl AsRef<Path>) -> bool {
     let file = file.as_ref();
 
@@ -560,8 +562,7 @@ fn looks_like_archive(file: impl AsRef<Path>) -> bool {
 
     matches!(
         (pre_extension, extension),
-        (_, "whl" | "tbz" | "txz" | "tlz" | "zip" | "tgz" | "tar")
-            | (Some("tar"), "bz2" | "xz" | "lz" | "lzma" | "gz")
+        (_, "whl" | "zip" | "tgz" | "tar") | (Some("tar"), "gz")
     )
 }
 

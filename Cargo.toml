@@ -103,19 +103,14 @@ arrayvec = { version = "0.7.6" }
 astral-tokio-tar = { version = "0.6.3" }
 async-channel = { version = "2.3.1" }
 async-compression = { version = "0.4.12", features = [
-  "bzip2",
   "gzip",
-  "xz",
   "zstd",
 ] }
 async-trait = { version = "0.1.82" }
 async_http_range_reader = { version = "0.11.0", package = "astral_async_http_range_reader" }
 async_zip = { version = "0.0.20", package = "astral_async_zip", features = [
-  "bzip2",
   "deflate",
-  "lzma",
   "tokio",
-  "xz",
   "zstd",
 ] }
 axoupdater = { version = "0.10.0", default-features = false }
@@ -317,7 +312,6 @@ windows = { version = "0.61.0", features = [
 windows-registry = { version = "0.5.0" }
 windows-version = { version = "0.1.6" }
 wiremock = { version = "0.6.4" }
-xz2 = { version = "0.1.7", features = ["static"] }
 zeroize = { version = "1.8.1" }
 
 # dev-dependencies

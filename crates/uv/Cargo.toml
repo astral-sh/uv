@@ -160,7 +160,7 @@ nix = { workspace = true }
 uv-unix = { workspace = true }
 
 [features]
-default = ["performance", "uv-distribution/static", "test-defaults"]
+default = ["performance", "test-defaults"]
 native-auth = []
 # Use better memory allocators, etc.
 performance = ["performance-memory-allocator"]
