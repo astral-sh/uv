@@ -240,8 +240,8 @@ impl TorchStrategy {
         mode: TorchMode,
         source: TorchSource,
         os: &Os,
-        cuda_driver_version: Option<&str>,
-        amd_gpu_architecture: Option<&str>,
+        cuda_driver_version: Option<Version>,
+        amd_gpu_architecture: Option<AmdGpuArchitecture>,
     ) -> Result<Self, AcceleratorError> {
         let backend = match mode {
             TorchMode::Auto => {
