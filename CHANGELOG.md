@@ -3,6 +3,38 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.11.4
+
+Released on 2026-04-07.
+
+### Python
+
+- Add CPython 3.13.13, 3.14.4, and 3.15.0a8 ([#18908](https://github.com/astral-sh/uv/pull/18908))
+
+### Enhancements
+
+- Add support for `--upgrade-group` ([#18266](https://github.com/astral-sh/uv/pull/18266))
+- Merge repeated archive URL hashes by version ID ([#18841](https://github.com/astral-sh/uv/pull/18841))
+- Require all direct URL hash algorithms to match ([#18842](https://github.com/astral-sh/uv/pull/18842))
+
+### Bug fixes
+
+- Avoid panics in environment finding via cycle detection ([#18828](https://github.com/astral-sh/uv/pull/18828))
+- Enforce direct URL hashes for `pyproject.toml` dependencies ([#18786](https://github.com/astral-sh/uv/pull/18786))
+- Error on `--locked` and `--frozen` when script lockfile is missing ([#18832](https://github.com/astral-sh/uv/pull/18832))
+- Fix `uv export` extra resolution for workspace member and conflicting extras ([#18888](https://github.com/astral-sh/uv/pull/18888))
+- Include conflicts defined in virtual workspace root ([#18886](https://github.com/astral-sh/uv/pull/18886))
+- Recompute relative `exclude-newer` values during `uv tree --outdated` ([#18899](https://github.com/astral-sh/uv/pull/18899))
+- Respect `--exclude-newer` in `uv tool list --outdated` ([#18861](https://github.com/astral-sh/uv/pull/18861))
+- Sort by comparator to break specifier ties ([#18850](https://github.com/astral-sh/uv/pull/18850))
+- Store relative timestamps in tool receipts ([#18901](https://github.com/astral-sh/uv/pull/18901))
+- Track newly-activated extras when determining conflicts ([#18852](https://github.com/astral-sh/uv/pull/18852))
+- Patch `Cargo.lock` in `uv-build` source distributions ([#18831](https://github.com/astral-sh/uv/pull/18831))
+
+### Documentation
+
+- Clarify that `--exclude-newer` compares artifact upload times ([#18830](https://github.com/astral-sh/uv/pull/18830))
+
 ## 0.11.3
 
 Released on 2026-04-01.
