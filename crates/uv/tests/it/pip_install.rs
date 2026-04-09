@@ -14948,10 +14948,11 @@ fn handle_record_mismatches() -> Result<()> {
     // Snapshot the current (correct) RECORD.
     let record = unpacked.join("foo-0.1.0.dist-info/RECORD");
     let correct_record = fs_err::read_to_string(&record)?;
+    let correct_record = apply_filters(correct_record, context.filters());
     assert_snapshot!(correct_record, @"
     foo/__init__.py,sha256=jv2QBpHSNajIRNeADSmtqOWL9QcdUddyMK277kbp06o,49
     foo/py.typed,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
-    foo-0.1.0.dist-info/WHEEL,sha256=hbX8mDThv1n7VEIpQRy6c2yAFTw4iAQlEC53gDAhHSo,80
+    foo-0.1.0.dist-info/WHEEL,sha256=[SHA256],[SIZE]
     foo-0.1.0.dist-info/METADATA,sha256=d-PGjuBKXweF5NgWUW5yDnAjBY0lg4uFZBqcnmGtNgY,147
     foo-0.1.0.dist-info/RECORD,,
     ");
@@ -15015,7 +15016,7 @@ fn handle_record_mismatches() -> Result<()> {
     foo-0.1.0.dist-info/METADATA,,147
     foo-0.1.0.dist-info/RECORD,,
     foo-0.1.0.dist-info/REQUESTED,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
-    foo-0.1.0.dist-info/WHEEL,sha256=[WHEEL],[SIZE]
+    foo-0.1.0.dist-info/WHEEL,sha256=[SHA256],[SIZE]
     foo-0.1.0.dist-info/uv_cache.json,sha256=[SHA256],[SIZE]
     foo/__init__.py,,49
     foo/py.typed,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
