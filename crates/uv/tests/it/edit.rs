@@ -11515,6 +11515,70 @@ async fn add_index_by_name() -> Result<()> {
 }
 
 #[tokio::test]
+async fn add_index_by_name_from_project_uv_toml() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(&formatdoc! {r#"
+        [[index]]
+        name = "test-index"
+        url = "{proxy_url}"
+    "#,
+        proxy_url = proxy.url("/simple"),
+    })?;
+
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("test-index"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    // Check that the named index from `uv.toml` was copied into `pyproject.toml` so the source
+    // remains valid on subsequent commands.
+    let pyproject = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig>=2.0.0",
+        ]
+
+        [[tool.uv.index]]
+        name = "test-index"
+        url = "http://[LOCALHOST]/simple"
+
+        [tool.uv.sources]
+        iniconfig = { index = "test-index" }
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn add_index_by_name_for_workspace() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let proxy = crate::pypi_proxy::start().await;
@@ -11742,6 +11806,60 @@ async fn add_index_by_name_for_workspace_member() -> Result<()> {
         "#
         );
     });
+
+    Ok(())
+}
+
+#[test]
+fn add_index_by_name_for_workspace_member_with_relative_path() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let workspace_toml = context.temp_dir.child("pyproject.toml");
+    workspace_toml.write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["child"]
+    "#})?;
+
+    let child_dir = context.temp_dir.child("child");
+    child_dir.create_dir_all()?;
+    let child_pyproject = child_dir.child("pyproject.toml");
+    child_pyproject.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [[tool.uv.index]]
+        name = "local"
+        url = "./packages"
+    "#})?;
+
+    let packages = child_dir.child("packages");
+    packages.create_dir_all()?;
+    let wheel_src = context
+        .workspace_root
+        .join("test/links/ok-1.0.0-py3-none-any.whl");
+    let wheel_dst = packages.child("ok-1.0.0-py3-none-any.whl");
+    fs_err::copy(&wheel_src, &wheel_dst)?;
+
+    uv_snapshot!(context.filters(), context
+        .add()
+        .arg("--package")
+        .arg("child")
+        .arg("ok")
+        .arg("--index")
+        .arg("local"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
 
     Ok(())
 }
