@@ -14928,10 +14928,15 @@ fn upgrade_group_not_supported() {
 /// installation.
 #[test]
 fn handle_record_mismatches() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((
-        regex::escape(r"foo-0.1.0.dist-info/uv_cache.json,sha256=") + ".*",
-        r"foo-0.1.0.dist-info/uv_cache.json,sha256=[SHA256],[SIZE]",
-    ));
+    let context = uv_test::test_context!("3.12")
+        .with_filter((
+            regex::escape(r"foo-0.1.0.dist-info/uv_cache.json,sha256=") + ".*",
+            r"foo-0.1.0.dist-info/uv_cache.json,sha256=[SHA256],[SIZE]",
+        ))
+        .with_filter((
+            regex::escape(r"foo-0.1.0.dist-info/WHEEL,sha256=") + ".*",
+            r"foo-0.1.0.dist-info/WHEEL,sha256=[SHA256],[SIZE]",
+        ));
 
     // Build a small wheel and unpack it for modification.
     context.init().arg("--lib").arg("foo").assert().success();
@@ -15010,7 +15015,7 @@ fn handle_record_mismatches() -> Result<()> {
     foo-0.1.0.dist-info/METADATA,,147
     foo-0.1.0.dist-info/RECORD,,
     foo-0.1.0.dist-info/REQUESTED,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
-    foo-0.1.0.dist-info/WHEEL,sha256=hbX8mDThv1n7VEIpQRy6c2yAFTw4iAQlEC53gDAhHSo,80
+    foo-0.1.0.dist-info/WHEEL,sha256=[WHEEL],[SIZE]
     foo-0.1.0.dist-info/uv_cache.json,sha256=[SHA256],[SIZE]
     foo/__init__.py,,49
     foo/py.typed,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
