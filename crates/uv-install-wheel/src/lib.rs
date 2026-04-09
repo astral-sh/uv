@@ -13,8 +13,9 @@ use uv_pypi_types::Scheme;
 
 pub use install::install_wheel;
 pub use linker::{InstallState, LinkMode, link_wheel_files};
+pub use record::RecordEntry;
 pub use uninstall::{Uninstall, uninstall_egg, uninstall_legacy_editable, uninstall_wheel};
-pub use wheel::{LibKind, WheelFile, read_record_file};
+pub use wheel::{LibKind, WheelFile, read_record, validate_and_heal_record};
 
 mod install;
 mod linker;
@@ -47,10 +48,20 @@ pub enum Error {
     /// Doesn't follow file name schema
     #[error("Failed to move data files")]
     WalkDir(#[from] walkdir::Error),
-    #[error("RECORD file doesn't match wheel contents: {0}")]
-    RecordFile(String),
+    // This shouldn't be possible anymore, we keep it for better error reporting.
+    #[error(
+        "RECORD file doesn't match wheel contents, could not find entry for: {} ({})",
+        relative.simplified_display(),
+        absolute.simplified_display()
+    )]
+    RecordFile {
+        relative: PathBuf,
+        absolute: PathBuf,
+    },
     #[error("RECORD file is invalid")]
     RecordCsv(#[from] csv::Error),
+    #[error("Non-UTF8 path in {0}: {1:?}")]
+    NonUtf8WheelPath(String, PathBuf),
     #[error("Broken virtual environment: {0}")]
     BrokenVenv(String),
     #[error(

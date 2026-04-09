@@ -1,4 +1,5 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
+use std::fmt::Display;
 use std::io;
 use std::io::{BufReader, Read, Write};
 use std::path::{Path, PathBuf};
@@ -6,13 +7,14 @@ use std::path::{Path, PathBuf};
 use data_encoding::BASE64URL_NOPAD;
 use fs_err as fs;
 use fs_err::{DirEntry, File};
+use itertools::Itertools;
 use mailparse::parse_headers;
 use rustc_hash::FxHashMap;
 use sha2::{Digest, Sha256};
 use tracing::{debug, instrument, trace, warn};
 use walkdir::WalkDir;
 
-use uv_fs::{Simplified, persist_with_retry_sync, relative_to};
+use uv_fs::{PortablePath, Simplified, persist_with_retry_sync, relative_to};
 use uv_normalize::PackageName;
 use uv_pypi_types::DirectUrl;
 use uv_shell::escape_posix_for_single_quotes;
@@ -366,12 +368,9 @@ pub(crate) fn move_folder_recorded(
             let entry = record
                 .iter_mut()
                 .find(|entry| Path::new(&entry.path) == relative_to_site_packages)
-                .ok_or_else(|| {
-                    Error::RecordFile(format!(
-                        "Could not find entry for {} ({})",
-                        relative_to_site_packages.simplified_display(),
-                        src.simplified_display()
-                    ))
+                .ok_or_else(|| Error::RecordFile {
+                    relative: relative_to_site_packages.to_path_buf(),
+                    absolute: src.to_path_buf(),
                 })?;
             entry.path = relative_to(&target, site_packages)?
                 .portable_display()
@@ -569,12 +568,11 @@ fn install_script(
         .iter_mut()
         .find(|entry| Path::new(&entry.path) == relative_to_site_packages)
         .ok_or_else(|| {
-            // This should be possible to occur at this point, but filesystems and such
-            Error::RecordFile(format!(
-                "Could not find entry for {} ({})",
-                relative_to_site_packages.simplified_display(),
-                path.simplified_display()
-            ))
+            // It should not be possible to error at this point, but filesystems and such.
+            Error::RecordFile {
+                relative: relative_to_site_packages.to_path_buf(),
+                absolute: path.clone(),
+            }
         })?;
 
     // Update the entry in the `RECORD`.
@@ -793,7 +791,7 @@ pub(crate) fn get_relocatable_executable(
 
 /// Reads the record file
 /// <https://www.python.org/dev/peps/pep-0376/#record>
-pub fn read_record_file(record: &mut impl Read) -> Result<Vec<RecordEntry>, Error> {
+pub fn read_record(record: impl Read) -> Result<Vec<RecordEntry>, Error> {
     csv::ReaderBuilder::new()
         .has_headers(false)
         .escape(Some(b'"'))
@@ -808,6 +806,113 @@ pub fn read_record_file(record: &mut impl Read) -> Result<Vec<RecordEntry>, Erro
             })
         })
         .collect()
+}
+
+pub(crate) fn write_record(
+    site_packages: &Path,
+    dist_info_prefix: &str,
+    mut record: Vec<RecordEntry>,
+) -> Result<(), Error> {
+    let record_file = site_packages.join(format!("{dist_info_prefix}.dist-info/RECORD"));
+    let mut record_writer = csv::WriterBuilder::new()
+        .has_headers(false)
+        .escape(b'"')
+        .from_path(record_file)?;
+    record.sort();
+    for entry in record {
+        record_writer.serialize(entry)?;
+    }
+    Ok(())
+}
+
+/// Validate the RECORD and heal invalid RECORD files.
+///
+/// This ensures that all unpacked wheels have record that matches the contents, and uninstall can't
+/// remove files that don't belong to the wheel.
+///
+/// This function is given both the location of the unpacked wheel and the list of files from the
+/// wheel that were unpacked to avoid a walkdir for this check.
+pub fn validate_and_heal_record<'a>(
+    wheel_dir: &Path,
+    unpacked_wheel: impl IntoIterator<Item = &'a (PathBuf, u64)>,
+    dist: impl Display,
+) -> Result<(), Error> {
+    // On the filesystem: The unpacked files of the wheel.
+    let mut files: BTreeMap<&Path, u64> = unpacked_wheel
+        .into_iter()
+        .map(|(path, size)| (path.as_path(), *size))
+        .collect();
+
+    // In the record: The files we expect in the wheel.
+    let dist_info_prefix = find_dist_info(wheel_dir)?;
+    let dist_info_dir = format!("{dist_info_prefix}.dist-info");
+    let record_path = wheel_dir.join(&dist_info_dir).join("RECORD");
+    let mut record_file = File::open(&record_path)?;
+    let mut record = read_record(&mut record_file)?;
+
+    // Remove matching files from both collections.
+    let mut extra_record_entries = Vec::new();
+    record.retain(|entry| {
+        let path = Path::new(&entry.path);
+        if files.remove(path).is_some() {
+            return true;
+        }
+        // Allow non-canonical spellings such as `./foo`.
+        if files.remove(uv_fs::normalize_path(path).as_ref()).is_some() {
+            return true;
+        }
+        extra_record_entries.push(path.to_path_buf());
+        false
+    });
+
+    if !files.is_empty() {
+        // Deprecated, but not listed in RECORD if used.
+        files.remove(Path::new(&dist_info_dir).join("RECORD.jws").as_path());
+        files.remove(Path::new(&dist_info_dir).join("RECORD.p7s").as_path());
+    }
+
+    // If the RECORD was correct, there were no extra entries in the record and no missing entries
+    // that weren't removed from files.
+    if !extra_record_entries.is_empty() {
+        debug!(
+            "RECORD contains files not in wheel archive for {}: `{}`",
+            dist,
+            extra_record_entries
+                .iter()
+                .map(Simplified::simplified_display)
+                .join("`, `")
+        );
+    }
+    if !files.is_empty() {
+        debug!(
+            "Wheel archive contains files not in RECORD for {}: `{}`",
+            dist,
+            files
+                .keys()
+                .map(Simplified::simplified_display)
+                .join("`, `")
+        );
+    }
+    if !extra_record_entries.is_empty() || !files.is_empty() {
+        debug!("Rewriting RECORD to match actual wheel contents for {dist}");
+        // We already removed RECORD entries with no matching unpacked file, now add files that
+        // were unpacked but not listed in the archive.
+        for (path, size) in files {
+            record.push(RecordEntry {
+                // RECORD entries always use forward slashes, even on Windows.
+                path: PortablePath::from(path).to_string(),
+                // We don't heal the hash. It's not validated anyway (pip doesn't), and by rules of
+                // the spec the wheel would have been rejected anyway (if the spec would have been
+                // enforced).
+                hash: None,
+                size: Some(size),
+            });
+        }
+
+        write_record(wheel_dir, &dist_info_prefix, record)?;
+    }
+
+    Ok(())
 }
 
 /// Parse a file with email message format such as WHEEL and METADATA
@@ -842,7 +947,7 @@ fn parse_email_message_file(
     Ok(data)
 }
 
-/// Find the `dist-info` directory in an unzipped wheel.
+/// Find the prefix of the `dist-info` directory in an unzipped wheel.
 ///
 /// See: <https://github.com/PyO3/python-pkginfo-rs>
 ///
@@ -953,7 +1058,7 @@ mod test {
 
     use super::{
         Error, RecordEntry, Script, WheelFile, format_shebang, get_script_executable,
-        parse_email_message_file, read_record_file, write_installer_metadata,
+        parse_email_message_file, read_record, write_installer_metadata,
     };
 
     #[test]
@@ -1040,7 +1145,7 @@ mod test {
             selenium-4.1.0.dist-info/RECORD,,
         "};
 
-        let entries = read_record_file(&mut record.as_bytes()).unwrap();
+        let entries = read_record(&mut record.as_bytes()).unwrap();
         let expected = [
             "selenium/__init__.py",
             "selenium/common/exceptions.py",

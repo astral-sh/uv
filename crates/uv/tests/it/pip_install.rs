@@ -1,3 +1,4 @@
+use std::io;
 use std::io::Cursor;
 use std::path::PathBuf;
 use std::process::Command;
@@ -9,20 +10,24 @@ use flate2::write::GzEncoder;
 use fs_err as fs;
 use fs_err::File;
 use indoc::{formatdoc, indoc};
+use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use url::Url;
+use walkdir::WalkDir;
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{basic_auth, method, path},
 };
+use zip::write::SimpleFileOptions;
+use zip::{ZipArchive, ZipWriter};
 
-use uv_fs::Simplified;
+use uv_fs::{PortablePath, Simplified};
 use uv_static::EnvVars;
 #[cfg(feature = "test-git")]
 use uv_test::decode_token;
 use uv_test::{
-    DEFAULT_PYTHON_VERSION, TestContext, build_vendor_links_url, download_to_disk, get_bin,
-    packse_index_url, uv_snapshot, venv_bin_path,
+    DEFAULT_PYTHON_VERSION, TestContext, apply_filters, build_vendor_links_url, download_to_disk,
+    get_bin, packse_index_url, uv_snapshot, venv_bin_path,
 };
 
 #[test]
@@ -14917,4 +14922,107 @@ fn upgrade_group_not_supported() {
     ----- stderr -----
     error: `--upgrade-group` is not supported in `uv pip` commands
     ");
+}
+
+/// Check that the RECORD in a wheel with that doesn't match its contents gets fixed before
+/// installation.
+#[test]
+fn handle_record_mismatches() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filter((
+            regex::escape(r"foo-0.1.0.dist-info/uv_cache.json,sha256=") + ".*",
+            r"foo-0.1.0.dist-info/uv_cache.json,sha256=[SHA256],[SIZE]",
+        ))
+        .with_filter((
+            regex::escape(r"foo-0.1.0.dist-info/WHEEL,sha256=") + ".*",
+            r"foo-0.1.0.dist-info/WHEEL,sha256=[SHA256],[SIZE]",
+        ));
+
+    // Build a small wheel and unpack it for modification.
+    context.init().arg("--lib").arg("foo").assert().success();
+    context.build().arg("--wheel").arg("foo").assert().success();
+    let built_wheel = context.temp_dir.join("foo/dist/foo-0.1.0-py3-none-any.whl");
+    let unpacked = context.temp_dir.join("foo-unpacked");
+    ZipArchive::new(File::open(built_wheel)?)?.extract(&unpacked)?;
+
+    // Snapshot the current (correct) RECORD.
+    let record = unpacked.join("foo-0.1.0.dist-info/RECORD");
+    let correct_record = fs_err::read_to_string(&record)?;
+    let correct_record = apply_filters(correct_record, context.filters());
+    assert_snapshot!(correct_record, @"
+    foo/__init__.py,sha256=jv2QBpHSNajIRNeADSmtqOWL9QcdUddyMK277kbp06o,49
+    foo/py.typed,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
+    foo-0.1.0.dist-info/WHEEL,sha256=[SHA256],[SIZE]
+    foo-0.1.0.dist-info/METADATA,sha256=d-PGjuBKXweF5NgWUW5yDnAjBY0lg4uFZBqcnmGtNgY,147
+    foo-0.1.0.dist-info/RECORD,,
+    ");
+
+    // Create a broken RECORD: Remove 2 files, and add a bogus one.
+    fs_err::write(
+        &record,
+        indoc! {"
+        foo/py.typed,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
+        foo-0.1.0.dist-info/WHEEL,sha256=hbX8mDThv1n7VEIpQRy6c2yAFTw4iAQlEC53gDAhHSo,80
+        foo-0.1.0.dist-info/RECORD,,
+        ../../../../etc/passwd,,0
+    "},
+    )?;
+
+    // Repack the wheel.
+    let repacked_wheel = context.temp_dir.join("foo-0.1.0-py3-none-any.whl");
+    let mut writer = ZipWriter::new(File::create(&repacked_wheel)?);
+    let options = SimpleFileOptions::default();
+    for entry in WalkDir::new(&unpacked) {
+        let entry = entry?;
+        let path = entry.path();
+        let name = path.strip_prefix(&unpacked)?;
+        if name.as_os_str().is_empty() {
+            continue;
+        }
+        // Zip entries must use forward slashes, even on Windows.
+        let name = PortablePath::from(name).to_string();
+        if path.is_dir() {
+            writer.add_directory(&name, options)?;
+        } else {
+            writer.start_file(&name, options)?;
+            io::copy(&mut File::open(path)?, &mut writer)?;
+        }
+    }
+    writer.finish()?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--find-links")
+        .arg(context.temp_dir.as_ref())
+        .arg("--offline")
+        .arg("foo"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==0.1.0
+    "
+    );
+
+    // Read the healed RECORD.
+    let installed_record =
+        fs_err::read_to_string(context.site_packages().join("foo-0.1.0.dist-info/RECORD"))?;
+    let snapshot = apply_filters(installed_record, context.filters());
+
+    // Ensure that all expected files are present.
+    assert_snapshot!(&snapshot, @"
+    foo-0.1.0.dist-info/INSTALLER,sha256=5hhM4Q4mYTT9z6QB6PGpUAW81PGNFrYrdXMj4oM_6ak,2
+    foo-0.1.0.dist-info/METADATA,,147
+    foo-0.1.0.dist-info/RECORD,,
+    foo-0.1.0.dist-info/REQUESTED,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
+    foo-0.1.0.dist-info/WHEEL,sha256=[SHA256],[SIZE]
+    foo-0.1.0.dist-info/uv_cache.json,sha256=[SHA256],[SIZE]
+    foo/__init__.py,,49
+    foo/py.typed,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
+    ");
+
+    Ok(())
 }

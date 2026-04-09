@@ -8,7 +8,7 @@ use tracing::trace;
 use uv_fs::write_atomic_sync;
 use uv_warnings::warn_user;
 
-use crate::wheel::read_record_file;
+use crate::wheel::read_record;
 use crate::{Error, Layout};
 
 /// Uninstall the wheel represented by the given `.dist-info` directory.
@@ -33,7 +33,7 @@ pub fn uninstall_wheel(
             }
             Err(err) => return Err(err.into()),
         };
-        read_record_file(&mut record_file)?
+        read_record(&mut record_file)?
     };
 
     let mut file_count = 0usize;
@@ -161,11 +161,12 @@ pub fn uninstall_wheel(
 
 static WARNED_FOR_PACKAGE: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 
-/// Warn and reject paths that are not part of the venv or the system interpreter.
+/// Check if the path is inside the venv or a system interpreter path, and warn if it isn't.
 ///
-/// Reject RECORD entries that escape site-packages via path traversal (e.g.,
-/// `../../../etc/passwd`). A malicious wheel could include such entries to cause
-/// deletion of arbitrary files on uninstall.
+/// Returns `false` is a path is outside the paths that files from a wheel can be installed into,
+/// so that the caller can reject RECORD entries that escape site-packages via path traversal (e.g.,
+/// `../../../etc/passwd`). A malicious wheel could otherwise include such entries to cause deletion
+/// of arbitrary files on uninstall.
 fn is_path_in_scheme(
     path: &str,
     site_packages: &Path,
