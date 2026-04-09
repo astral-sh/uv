@@ -497,9 +497,6 @@ pub(crate) async fn add(
         }
     }
 
-    // Store the content prior to any modifications.
-    let snapshot = target.snapshot().await?;
-
     // If the user provides a single, named index, pin all requirements to that index.
     let index = indexes
         .first()
@@ -509,6 +506,21 @@ pub(crate) async fn add(
         .inspect(|index| {
             debug!("Pinning all requirements to index: `{index}`");
         });
+
+    if !raw
+        && let Some(index_name) = index
+        && indexes
+            .first()
+            .is_some_and(|index| matches!(index.origin, Some(Origin::Project)))
+        && !is_declared_in_pyproject(&target, index_name)
+    {
+        bail!(
+            "Index `{index_name}` was found in a project-level `uv.toml`, but `uv add` cannot persist it to `tool.uv.sources`. Define the index in the project's `pyproject.toml` first, or use `--raw`."
+        );
+    }
+
+    // Store the content prior to any modifications.
+    let snapshot = target.snapshot().await?;
 
     // Track modification status, for reverts.
     let mut modified = false;
@@ -776,6 +788,22 @@ pub(crate) async fn add(
                 err => Err(err.into()),
             }
         }
+    }
+}
+
+fn is_declared_in_pyproject(target: &AddTarget, index_name: &IndexName) -> bool {
+    match target {
+        AddTarget::Script(_, _) => true,
+        AddTarget::Project(project, _) => project
+            .pyproject_toml()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.index.as_ref())
+            .into_iter()
+            .flatten()
+            .chain(project.workspace().indexes().iter())
+            .any(|index| index.name.as_ref().is_some_and(|name| name == index_name)),
     }
 }
 
