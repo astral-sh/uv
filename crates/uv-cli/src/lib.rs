@@ -916,6 +916,23 @@ pub struct CleanArgs {
     /// `--force` is used, `uv cache clean` will proceed without taking a lock.
     #[arg(long)]
     pub force: bool,
+
+    /// Run cache deletion in the background.
+    ///
+    /// When `--background` is used, `uv cache clean` will move the cache to a temporary directory
+    /// and spawn a background process to delete it. The main process exits immediately while
+    /// deletion continues asynchronously.
+    ///
+    /// This can significantly reduce perceived latency for large caches.
+    #[arg(long)]
+    pub background: bool,
+
+    /// The target for a backgrounded cache deletion.
+    ///
+    /// This flag is not intended for end users. It is used internally by `--background` to
+    /// re-invoke `uv` in a detached process that performs the actual deletion.
+    #[arg(long, hide = true)]
+    pub background_daemon_target: Option<std::path::PathBuf>,
 }
 
 #[derive(Args, Debug)]
