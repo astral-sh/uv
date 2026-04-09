@@ -55,9 +55,9 @@ index name instead of a URL.
 
 For backwards compatibility, if a directory with the same name as an index exists in the working
 directory, uv will search the directory for packages instead. Names are looked up in the project's
-`pyproject.toml`, then the workspace's `pyproject.toml` (if in a workspace), and finally the
-user's and system's `uv.toml` files. Indexes marked as `explicit = true` cannot be referenced this
-way, since explicit indexes are only usable via `tool.uv.sources`.
+`pyproject.toml`, then the workspace's `pyproject.toml` (if in a workspace), and finally the user's
+and system's `uv.toml` files. Indexes marked as `explicit = true` cannot be referenced this way,
+since explicit indexes are only usable via `tool.uv.sources`.
 
 !!! note
 
