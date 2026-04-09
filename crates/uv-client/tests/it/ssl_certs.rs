@@ -1,11 +1,9 @@
-use std::error::Error;
 use std::io::Write;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::Result;
-use insta::{assert_snapshot, with_settings};
 use rcgen::CustomExtension;
 use temp_env::async_with_vars;
 use tempfile::{NamedTempFile, TempDir};
@@ -14,7 +12,6 @@ use url::Url;
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_client::RegistryClientBuilder;
-use uv_fs::Simplified;
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 
@@ -38,13 +35,6 @@ struct TestCertificate {
     /// Path to the combined client cert + key PEM — the file you put in
     /// `SSL_CLIENT_CERT` for mTLS.
     client_cert_path: PathBuf,
-}
-
-fn temp_dir_filter(path: &Path) -> String {
-    format!(
-        r"{}\\?/?",
-        regex::escape(&path.simplified_display().to_string()).replace(r"\\", r"(\\|/)")
-    )
 }
 
 impl TestCertificate {
@@ -476,67 +466,28 @@ async fn test_ssl_cert_file_valid() -> Result<()> {
     Ok(())
 }
 
-/// An unsupported critical extension in `SSL_CERT_FILE` returns a builder
-/// error instead of panicking.
+/// If `SSL_CERT_FILE` contains only an invalid certificate with an
+/// unsupported critical extension, the invalid certificate is ignored and the
+/// client falls back to webpki roots.
 #[tokio::test]
-async fn test_ssl_cert_file_unsupported_critical_extension_returns_error() -> Result<()> {
+async fn test_ssl_cert_file_unsupported_critical_extension_falls_back() -> Result<()> {
     let cert = TestCertificate::new_with_unsupported_critical_ca_extension()?;
-    let test_client = client().ssl_cert_file(&cert.trust_path);
-    let vars = test_client.ssl_vars();
-
-    let temp_dir_filter = temp_dir_filter(cert._temp_dir.path());
-
-    async_with_vars(vars, async move {
-        let err = BaseClientBuilder::default()
-            .build()
-            .expect_err("expected client build to fail");
-
-        let source = err.source().expect("expected client build error source");
-        let display = format!("{err}\nCaused by: {source}");
-
-        with_settings!({
-            filters => vec![(temp_dir_filter.as_str(), "[TMP]/")]
-        }, {
-            assert_snapshot!(display, @r#"
-failed to build HTTP client
-Caused by: certificate in `[TMP]/ca.pem` (from `SSL_CERT_FILE`) uses an unsupported critical extension on certificate `CN=uv-test-ca, O=Astral Software Inc.`; critical extensions: `2.5.29.15`, `2.5.29.19`, `1.2.3.4`
-"#);
-        });
-    })
-    .await;
-
+    client()
+        .ssl_cert_file(&cert.trust_path)
+        .expect_https_connect_fails(&cert)
+        .await;
     Ok(())
 }
 
-/// An invalid trust anchor in `SSL_CERT_FILE` returns a builder error with a
-/// more specific validation message.
+/// If `SSL_CERT_FILE` contains only an invalid trust anchor, the invalid
+/// certificate is ignored and the client falls back to webpki roots.
 #[tokio::test]
-async fn test_ssl_cert_file_invalid_trust_anchor_returns_error() -> Result<()> {
+async fn test_ssl_cert_file_invalid_trust_anchor_falls_back() -> Result<()> {
     let cert = TestCertificate::new_with_duplicate_basic_constraints_ca_extension()?;
-    let test_client = client().ssl_cert_file(&cert.trust_path);
-    let vars = test_client.ssl_vars();
-
-    let temp_dir_filter = temp_dir_filter(cert._temp_dir.path());
-
-    async_with_vars(vars, async move {
-        let err = BaseClientBuilder::default()
-            .build()
-            .expect_err("expected client build to fail");
-
-        let source = err.source().expect("expected client build error source");
-        let display = format!("{err}\nCaused by: {source}");
-
-        with_settings!({
-            filters => vec![(temp_dir_filter.as_str(), "[TMP]/")]
-        }, {
-            assert_snapshot!(display, @r#"
-failed to build HTTP client
-Caused by: certificate in `[TMP]/ca.pem` (from `SSL_CERT_FILE`) could not be used as a trust anchor on certificate `CN=uv-test-ca, O=Astral Software Inc.`: invalid certificate extension value
-"#);
-        });
-    })
-    .await;
-
+    client()
+        .ssl_cert_file(&cert.trust_path)
+        .expect_https_connect_fails(&cert)
+        .await;
     Ok(())
 }
 
@@ -548,6 +499,28 @@ async fn test_ssl_cert_file_bundle() -> Result<()> {
     client()
         .ssl_cert_file(bundle.path())
         .expect_https_connect_succeeds(&cert)
+        .await;
+    Ok(())
+}
+
+/// Invalid certificates in `SSL_CERT_FILE` are ignored when valid
+/// certificates are also present, and the valid certificates remain trusted.
+#[tokio::test]
+async fn test_ssl_cert_file_bundle_ignores_invalid_trust_anchor() -> Result<()> {
+    let valid_cert = TestCertificate::new()?;
+    let invalid_cert = TestCertificate::new_with_duplicate_basic_constraints_ca_extension()?;
+
+    let mut bundle = NamedTempFile::new()?;
+    write!(
+        bundle,
+        "{}\n{}",
+        invalid_cert.ca.public.pem(),
+        valid_cert.ca.public.pem()
+    )?;
+
+    client()
+        .ssl_cert_file(bundle.path())
+        .expect_https_connect_succeeds(&valid_cert)
         .await;
     Ok(())
 }
@@ -575,6 +548,24 @@ async fn test_ssl_cert_dir_bundle_files() -> Result<()> {
     client()
         .ssl_cert_dir(dir.path())
         .expect_https_connect_succeeds(&cert)
+        .await;
+    Ok(())
+}
+
+/// Invalid certificates in `SSL_CERT_DIR` are ignored when valid
+/// certificates are also present, and the valid certificates remain trusted.
+#[tokio::test]
+async fn test_ssl_cert_dir_ignores_invalid_trust_anchor() -> Result<()> {
+    let valid_cert = TestCertificate::new()?;
+    let invalid_cert = TestCertificate::new_with_duplicate_basic_constraints_ca_extension()?;
+
+    let dir = TempDir::new()?;
+    fs_err::write(dir.path().join("valid.pem"), valid_cert.ca.public.pem())?;
+    fs_err::write(dir.path().join("invalid.pem"), invalid_cert.ca.public.pem())?;
+
+    client()
+        .ssl_cert_dir(dir.path())
+        .expect_https_connect_succeeds(&valid_cert)
         .await;
     Ok(())
 }
