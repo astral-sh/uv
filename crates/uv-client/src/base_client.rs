@@ -47,7 +47,7 @@ use uv_warnings::warn_user_once;
 
 use crate::linehaul::LineHaul;
 use crate::middleware::OfflineMiddleware;
-use crate::tls::{Certificates, TlsConfigurationError, read_identity};
+use crate::tls::{Certificates, read_identity};
 use crate::{Connectivity, WrappedReqwestError};
 
 pub const DEFAULT_RETRIES: u32 = 3;
@@ -71,41 +71,13 @@ pub const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// timeout on the entire upload.
 pub const DEFAULT_READ_TIMEOUT_UPLOAD: Duration = Duration::from_mins(15);
 
-#[derive(Debug)]
-pub struct ClientBuildError(ClientBuildErrorKind);
-
 #[derive(Debug, Error)]
-enum ClientBuildErrorKind {
-    #[error(transparent)]
-    Reqwest(reqwest::Error),
-    #[error(transparent)]
-    TlsConfiguration(TlsConfigurationError),
-}
-
-impl std::fmt::Display for ClientBuildError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("failed to build HTTP client")
-    }
-}
-
-impl std::error::Error for ClientBuildError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match &self.0 {
-            ClientBuildErrorKind::Reqwest(error) => Some(error),
-            ClientBuildErrorKind::TlsConfiguration(error) => Some(error),
-        }
-    }
-}
+#[error("failed to build HTTP client")]
+pub struct ClientBuildError(#[source] reqwest::Error);
 
 impl From<reqwest::Error> for ClientBuildError {
     fn from(error: reqwest::Error) -> Self {
-        Self(ClientBuildErrorKind::Reqwest(error))
-    }
-}
-
-impl From<TlsConfigurationError> for ClientBuildError {
-    fn from(error: TlsConfigurationError) -> Self {
-        Self(ClientBuildErrorKind::TlsConfiguration(error))
+        Self(error)
     }
 }
 
@@ -513,7 +485,7 @@ impl<'a> BaseClientBuilder<'a> {
         }
 
         // Load custom CA certificates from `SSL_CERT_FILE` and `SSL_CERT_DIR`.
-        let custom_certs = Certificates::from_env()?.map(|certs| certs.to_reqwest_certs());
+        let custom_certs = Certificates::from_env().map(|certs| certs.to_reqwest_certs());
 
         // Create a secure client that validates certificates.
         let raw_client = self.create_client(
