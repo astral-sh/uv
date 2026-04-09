@@ -572,6 +572,8 @@ fn tool_upgrade_recomputes_relative_exclude_newer() {
 
     context
         .tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("black")
         .arg("--exclude-newer")
         .arg("3 weeks")
@@ -584,6 +586,8 @@ fn tool_upgrade_recomputes_relative_exclude_newer() {
         .success();
 
     uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("black")
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2024-04-15T00:00:00Z")

@@ -2089,6 +2089,7 @@ pub(crate) async fn resolve_environment(
         .index_strategy(*index_strategy)
         .build_options(build_options.clone())
         .build();
+
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
     let extras = ExtrasSpecification::default();
