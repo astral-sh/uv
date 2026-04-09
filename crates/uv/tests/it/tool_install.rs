@@ -20,12 +20,15 @@ use uv_test::uv_snapshot;
 fn tool_install() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
+        .with_filtered_exe_suffix()
+        .with_filtered_compiled();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `black`
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("black")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
@@ -173,7 +176,7 @@ fn tool_install() {
     success: true
     exit_code: 0
     ----- stdout -----
-    black, 24.3.0 (compiled: yes)
+    black, 24.3.0 (compiled: [COMPILED])
     Python (CPython) 3.12.[X]
 
     ----- stderr -----
@@ -181,6 +184,8 @@ fn tool_install() {
 
     // Install another tool
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("flask")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
@@ -358,6 +363,8 @@ fn tool_install_relative_exclude_newer_receipt_preserves_span() {
 
     context
         .tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("black==24.2.0")
         .arg("--exclude-newer")
         .arg("3 weeks")
@@ -1781,6 +1788,8 @@ fn tool_install_with_compatible_build_constraints() -> Result<()> {
     constraints_txt.write_str("setuptools>=40")?;
 
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("black")
         .arg("--with")
         .arg("requests==1.2")
@@ -2061,12 +2070,16 @@ fn tool_install_suggest_other_packages_with_executable() {
 /// Test installing a tool at a version
 #[test]
 fn tool_install_version() {
-    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_filtered_compiled();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `black`
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("black==24.2.0")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
@@ -2214,7 +2227,7 @@ fn tool_install_version() {
     success: true
     exit_code: 0
     ----- stdout -----
-    black, 24.2.0 (compiled: yes)
+    black, 24.2.0 (compiled: [COMPILED])
     Python (CPython) 3.12.[X]
 
     ----- stderr -----
@@ -2230,6 +2243,8 @@ fn tool_install_editable() {
 
     // Install `black` as an editable package.
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("-e")
         .arg(context.workspace_root.join("test/packages/black_editable"))
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
@@ -2332,6 +2347,8 @@ fn tool_install_editable() {
 
     // Request `black`. It should reinstall from the registry.
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("black")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
@@ -2439,6 +2456,8 @@ fn tool_install_editable() {
 
     // Request `black` at a different version. It should install a new version.
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("black")
         .arg("--from")
         .arg("black==24.2.0")
@@ -2564,9 +2583,9 @@ fn tool_install_remove_on_empty() -> Result<()> {
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // Request `black`. It should reinstall from the registry.
+    // Install `pyflakes`.
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black")
+        .arg("pyflakes")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
@@ -2575,23 +2594,18 @@ fn tool_install_remove_on_empty() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 6 packages in [TIME]
-    Prepared 6 packages in [TIME]
-    Installed 6 packages in [TIME]
-     + black==24.3.0
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    Installed 2 executables: black, blackd
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + pyflakes==3.2.0
+    Installed 1 executable: pyflakes
     ");
 
     insta::with_settings!({
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("pyflakes").join("uv-receipt.toml")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -2600,78 +2614,21 @@ fn tool_install_remove_on_empty() -> Result<()> {
         exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
-        requirements = [{ name = "black" }]
+        requirements = [{ name = "pyflakes" }]
 
         [[package]]
-        name = "black"
-        version = "24.3.0"
+        name = "pyflakes"
+        version = "3.2.0"
         source = { registry = "https://pypi.org/simple" }
-        dependencies = [
-            { name = "click" },
-            { name = "mypy-extensions" },
-            { name = "packaging" },
-            { name = "pathspec" },
-            { name = "platformdirs" },
-        ]
-        sdist = { url = "https://files.pythonhosted.org/packages/8f/5f/bac24a952668c7482cfdb4ebf91ba57a796c9da8829363a772040c1a3312/black-24.3.0.tar.gz", hash = "sha256:a0c9c4a0771afc6919578cec71ce82a3e31e054904e7197deacbc9382671c41f", size = 634292, upload-time = "2024-03-15T19:35:43.699Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/57/f9/669d8c9c86613c9d568757c7f5824bd3197d7b1c6c27553bc5618a27cce2/pyflakes-3.2.0.tar.gz", hash = "sha256:1c61603ff154621fb2a9172037d84dca3500def8c8b630657d1701f026f8af3f", size = 63788, upload-time = "2024-01-05T00:28:47.703Z" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/b6/c6/1d174efa9ff02b22d0124c73fc5f4d4fb006d0d9a081aadc354d05754a13/black-24.3.0-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:2818cf72dfd5d289e48f37ccfa08b460bf469e67fb7c4abb07edc2e9f16fb63f", size = 1600822, upload-time = "2024-03-15T19:45:20.337Z" },
-            { url = "https://files.pythonhosted.org/packages/d9/ed/704731afffe460b8ff0672623b40fce9fe569f2ee617c15857e4d4440a3a/black-24.3.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:4acf672def7eb1725f41f38bf6bf425c8237248bb0804faa3965c036f7672d11", size = 1429987, upload-time = "2024-03-15T19:45:00.637Z" },
-            { url = "https://files.pythonhosted.org/packages/a8/05/8dd038e30caadab7120176d4bc109b7ca2f4457f12eef746b0560a583458/black-24.3.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c7ed6668cbbfcd231fa0dc1b137d3e40c04c7f786e626b405c62bcd5db5857e4", size = 1755319, upload-time = "2024-03-15T19:38:24.009Z" },
-            { url = "https://files.pythonhosted.org/packages/71/9d/e5fa1ff4ef1940be15a64883c0bb8d2fcf626efec996eab4ae5a8c691d2c/black-24.3.0-cp312-cp312-win_amd64.whl", hash = "sha256:56f52cfbd3dabe2798d76dbdd299faa046a901041faf2cf33288bc4e6dae57b5", size = 1385180, upload-time = "2024-03-15T19:39:37.014Z" },
-            { url = "https://files.pythonhosted.org/packages/4d/ea/31770a7e49f3eedfd8cd7b35e78b3a3aaad860400f8673994bc988318135/black-24.3.0-py3-none-any.whl", hash = "sha256:41622020d7120e01d377f74249e677039d20e6344ff5851de8a10f11f513bf93", size = 201493, upload-time = "2024-03-15T19:35:41.572Z" },
-        ]
-
-        [[package]]
-        name = "click"
-        version = "8.1.7"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121, upload-time = "2023-08-17T17:29:11.868Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/00/2e/d53fa4befbf2cfa713304affc7ca780ce4fc1fd8710527771b58311a3229/click-8.1.7-py3-none-any.whl", hash = "sha256:ae74fb96c20a0277a1d615f1e4d73c8414f5a98db8b799a7931d1582f3390c28", size = 97941, upload-time = "2023-08-17T17:29:10.08Z" },
-        ]
-
-        [[package]]
-        name = "mypy-extensions"
-        version = "1.0.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/98/a4/1ab47638b92648243faf97a5aeb6ea83059cc3624972ab6b8d2316078d3f/mypy_extensions-1.0.0.tar.gz", hash = "sha256:75dbf8955dc00442a438fc4d0666508a9a97b6bd41aa2f0ffe9d2f2725af0782", size = 4433, upload-time = "2023-02-04T12:11:27.157Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/2a/e2/5d3f6ada4297caebe1a2add3b126fe800c96f56dbe5d1988a2cbe0b267aa/mypy_extensions-1.0.0-py3-none-any.whl", hash = "sha256:4392f6c0eb8a5668a69e23d168ffa70f0be9ccfd32b5cc2d26a34ae5b844552d", size = 4695, upload-time = "2023-02-04T12:11:25.002Z" },
-        ]
-
-        [[package]]
-        name = "packaging"
-        version = "24.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/ee/b5/b43a27ac7472e1818c4bafd44430e69605baefe1f34440593e0332ec8b4d/packaging-24.0.tar.gz", hash = "sha256:eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9", size = 147882, upload-time = "2024-03-10T09:39:28.33Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/49/df/1fceb2f8900f8639e278b056416d49134fb8d84c5942ffaa01ad34782422/packaging-24.0-py3-none-any.whl", hash = "sha256:2ddfb553fdf02fb784c234c7ba6ccc288296ceabec964ad2eae3777778130bc5", size = 53488, upload-time = "2024-03-10T09:39:25.947Z" },
-        ]
-
-        [[package]]
-        name = "pathspec"
-        version = "0.12.1"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/ca/bc/f35b8446f4531a7cb215605d100cd88b7ac6f44ab3fc94870c120ab3adbf/pathspec-0.12.1.tar.gz", hash = "sha256:a482d51503a1ab33b1c67a6c3813a26953dbdc71c31dacaef9a838c4e29f5712", size = 51043, upload-time = "2023-12-10T22:30:45Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/cc/20/ff623b09d963f88bfde16306a54e12ee5ea43e9b597108672ff3a408aad6/pathspec-0.12.1-py3-none-any.whl", hash = "sha256:a0d503e138a4c123b27490a4f7beda6a01c6f288df0e4a8b79c7eb0dc7b4cc08", size = 31191, upload-time = "2023-12-10T22:30:43.14Z" },
-        ]
-
-        [[package]]
-        name = "platformdirs"
-        version = "4.2.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/96/dc/c1d911bf5bb0fdc58cc05010e9f3efe3b67970cef779ba7fbc3183b987a8/platformdirs-4.2.0.tar.gz", hash = "sha256:ef0cc731df711022c174543cb70a9b5bd22e5a9337c8624ef2c2ceb8ddad8768", size = 20055, upload-time = "2024-01-31T01:00:36.02Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717, upload-time = "2024-01-31T01:00:34.019Z" },
+            { url = "https://files.pythonhosted.org/packages/d4/d7/f1b7db88d8e4417c5d47adad627a93547f44bdc9028372dbd2313f34a855/pyflakes-3.2.0-py2.py3-none-any.whl", hash = "sha256:84b5be138a2dfbb40689ca07e2152deb896a65c3a3e24c251c5c62489568074a", size = 62725, upload-time = "2024-01-05T00:28:45.903Z" },
         ]
 
         [tool]
-        requirements = [{ name = "black" }]
+        requirements = [{ name = "pyflakes" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
+            { name = "pyflakes", install-path = "[TEMP_DIR]/bin/pyflakes", from = "pyflakes" },
         ]
 
         [tool.options]
@@ -2679,16 +2636,16 @@ fn tool_install_remove_on_empty() -> Result<()> {
         "#);
     });
 
-    // Install `black` as an editable package, but without any entrypoints.
-    let black = context.temp_dir.child("black");
-    fs_err::create_dir_all(black.path())?;
+    // Install `pyflakes` as an editable package, but without any entrypoints.
+    let pyflakes_local = context.temp_dir.child("pyflakes");
+    fs_err::create_dir_all(pyflakes_local.path())?;
 
-    let pyproject_toml = black.child("pyproject.toml");
+    let pyproject_toml = pyflakes_local.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
         [project]
-        name = "black"
+        name = "pyflakes"
         version = "0.1.0"
-        description = "Black without any entrypoints"
+        description = "pyflakes without any entrypoints"
         authors = []
         dependencies = []
         requires-python = ">=3.11,<3.13"
@@ -2699,7 +2656,7 @@ fn tool_install_remove_on_empty() -> Result<()> {
         "#
     })?;
 
-    let src = black.child("src").child("black");
+    let src = pyflakes_local.child("src").child("pyflakes");
     fs_err::create_dir_all(src.path())?;
 
     let init = src.child("__init__.py");
@@ -2707,33 +2664,28 @@ fn tool_install_remove_on_empty() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("-e")
-        .arg(black.path())
+        .arg(pyflakes_local.path())
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     success: false
     exit_code: 2
     ----- stdout -----
-    No executables are provided by package `black`; removing tool
+    No executables are provided by package `pyflakes`; removing tool
 
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
-    Uninstalled 6 packages in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - black==24.3.0
-     + black==0.1.0 (from file://[TEMP_DIR]/black)
-     - click==8.1.7
-     - mypy-extensions==1.0.0
-     - packaging==24.0
-     - pathspec==0.12.1
-     - platformdirs==4.2.0
-    error: Failed to install entrypoints for `black`
+     - pyflakes==3.2.0
+     + pyflakes==0.1.0 (from file://[TEMP_DIR]/pyflakes)
+    error: Failed to install entrypoints for `pyflakes`
     ");
 
-    // Re-request `black`. It should reinstall, without requiring `--force`.
+    // Re-request `pyflakes`. It should reinstall, without requiring `--force`.
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black")
+        .arg("pyflakes")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
@@ -2742,22 +2694,17 @@ fn tool_install_remove_on_empty() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 6 packages in [TIME]
-    Installed 6 packages in [TIME]
-     + black==24.3.0
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    Installed 2 executables: black, blackd
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + pyflakes==3.2.0
+    Installed 1 executable: pyflakes
     ");
 
     insta::with_settings!({
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("pyflakes").join("uv-receipt.toml")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -2766,78 +2713,21 @@ fn tool_install_remove_on_empty() -> Result<()> {
         exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
-        requirements = [{ name = "black" }]
+        requirements = [{ name = "pyflakes" }]
 
         [[package]]
-        name = "black"
-        version = "24.3.0"
+        name = "pyflakes"
+        version = "3.2.0"
         source = { registry = "https://pypi.org/simple" }
-        dependencies = [
-            { name = "click" },
-            { name = "mypy-extensions" },
-            { name = "packaging" },
-            { name = "pathspec" },
-            { name = "platformdirs" },
-        ]
-        sdist = { url = "https://files.pythonhosted.org/packages/8f/5f/bac24a952668c7482cfdb4ebf91ba57a796c9da8829363a772040c1a3312/black-24.3.0.tar.gz", hash = "sha256:a0c9c4a0771afc6919578cec71ce82a3e31e054904e7197deacbc9382671c41f", size = 634292, upload-time = "2024-03-15T19:35:43.699Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/57/f9/669d8c9c86613c9d568757c7f5824bd3197d7b1c6c27553bc5618a27cce2/pyflakes-3.2.0.tar.gz", hash = "sha256:1c61603ff154621fb2a9172037d84dca3500def8c8b630657d1701f026f8af3f", size = 63788, upload-time = "2024-01-05T00:28:47.703Z" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/b6/c6/1d174efa9ff02b22d0124c73fc5f4d4fb006d0d9a081aadc354d05754a13/black-24.3.0-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:2818cf72dfd5d289e48f37ccfa08b460bf469e67fb7c4abb07edc2e9f16fb63f", size = 1600822, upload-time = "2024-03-15T19:45:20.337Z" },
-            { url = "https://files.pythonhosted.org/packages/d9/ed/704731afffe460b8ff0672623b40fce9fe569f2ee617c15857e4d4440a3a/black-24.3.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:4acf672def7eb1725f41f38bf6bf425c8237248bb0804faa3965c036f7672d11", size = 1429987, upload-time = "2024-03-15T19:45:00.637Z" },
-            { url = "https://files.pythonhosted.org/packages/a8/05/8dd038e30caadab7120176d4bc109b7ca2f4457f12eef746b0560a583458/black-24.3.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c7ed6668cbbfcd231fa0dc1b137d3e40c04c7f786e626b405c62bcd5db5857e4", size = 1755319, upload-time = "2024-03-15T19:38:24.009Z" },
-            { url = "https://files.pythonhosted.org/packages/71/9d/e5fa1ff4ef1940be15a64883c0bb8d2fcf626efec996eab4ae5a8c691d2c/black-24.3.0-cp312-cp312-win_amd64.whl", hash = "sha256:56f52cfbd3dabe2798d76dbdd299faa046a901041faf2cf33288bc4e6dae57b5", size = 1385180, upload-time = "2024-03-15T19:39:37.014Z" },
-            { url = "https://files.pythonhosted.org/packages/4d/ea/31770a7e49f3eedfd8cd7b35e78b3a3aaad860400f8673994bc988318135/black-24.3.0-py3-none-any.whl", hash = "sha256:41622020d7120e01d377f74249e677039d20e6344ff5851de8a10f11f513bf93", size = 201493, upload-time = "2024-03-15T19:35:41.572Z" },
-        ]
-
-        [[package]]
-        name = "click"
-        version = "8.1.7"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121, upload-time = "2023-08-17T17:29:11.868Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/00/2e/d53fa4befbf2cfa713304affc7ca780ce4fc1fd8710527771b58311a3229/click-8.1.7-py3-none-any.whl", hash = "sha256:ae74fb96c20a0277a1d615f1e4d73c8414f5a98db8b799a7931d1582f3390c28", size = 97941, upload-time = "2023-08-17T17:29:10.08Z" },
-        ]
-
-        [[package]]
-        name = "mypy-extensions"
-        version = "1.0.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/98/a4/1ab47638b92648243faf97a5aeb6ea83059cc3624972ab6b8d2316078d3f/mypy_extensions-1.0.0.tar.gz", hash = "sha256:75dbf8955dc00442a438fc4d0666508a9a97b6bd41aa2f0ffe9d2f2725af0782", size = 4433, upload-time = "2023-02-04T12:11:27.157Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/2a/e2/5d3f6ada4297caebe1a2add3b126fe800c96f56dbe5d1988a2cbe0b267aa/mypy_extensions-1.0.0-py3-none-any.whl", hash = "sha256:4392f6c0eb8a5668a69e23d168ffa70f0be9ccfd32b5cc2d26a34ae5b844552d", size = 4695, upload-time = "2023-02-04T12:11:25.002Z" },
-        ]
-
-        [[package]]
-        name = "packaging"
-        version = "24.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/ee/b5/b43a27ac7472e1818c4bafd44430e69605baefe1f34440593e0332ec8b4d/packaging-24.0.tar.gz", hash = "sha256:eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9", size = 147882, upload-time = "2024-03-10T09:39:28.33Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/49/df/1fceb2f8900f8639e278b056416d49134fb8d84c5942ffaa01ad34782422/packaging-24.0-py3-none-any.whl", hash = "sha256:2ddfb553fdf02fb784c234c7ba6ccc288296ceabec964ad2eae3777778130bc5", size = 53488, upload-time = "2024-03-10T09:39:25.947Z" },
-        ]
-
-        [[package]]
-        name = "pathspec"
-        version = "0.12.1"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/ca/bc/f35b8446f4531a7cb215605d100cd88b7ac6f44ab3fc94870c120ab3adbf/pathspec-0.12.1.tar.gz", hash = "sha256:a482d51503a1ab33b1c67a6c3813a26953dbdc71c31dacaef9a838c4e29f5712", size = 51043, upload-time = "2023-12-10T22:30:45Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/cc/20/ff623b09d963f88bfde16306a54e12ee5ea43e9b597108672ff3a408aad6/pathspec-0.12.1-py3-none-any.whl", hash = "sha256:a0d503e138a4c123b27490a4f7beda6a01c6f288df0e4a8b79c7eb0dc7b4cc08", size = 31191, upload-time = "2023-12-10T22:30:43.14Z" },
-        ]
-
-        [[package]]
-        name = "platformdirs"
-        version = "4.2.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/96/dc/c1d911bf5bb0fdc58cc05010e9f3efe3b67970cef779ba7fbc3183b987a8/platformdirs-4.2.0.tar.gz", hash = "sha256:ef0cc731df711022c174543cb70a9b5bd22e5a9337c8624ef2c2ceb8ddad8768", size = 20055, upload-time = "2024-01-31T01:00:36.02Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717, upload-time = "2024-01-31T01:00:34.019Z" },
+            { url = "https://files.pythonhosted.org/packages/d4/d7/f1b7db88d8e4417c5d47adad627a93547f44bdc9028372dbd2313f34a855/pyflakes-3.2.0-py2.py3-none-any.whl", hash = "sha256:84b5be138a2dfbb40689ca07e2152deb896a65c3a3e24c251c5c62489568074a", size = 62725, upload-time = "2024-01-05T00:28:45.903Z" },
         ]
 
         [tool]
-        requirements = [{ name = "black" }]
+        requirements = [{ name = "pyflakes" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
+            { name = "pyflakes", install-path = "[TEMP_DIR]/bin/pyflakes", from = "pyflakes" },
         ]
 
         [tool.options]
@@ -3036,6 +2926,8 @@ fn tool_install_already_installed() {
 
     // Install `black`
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("black")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
@@ -3180,6 +3072,8 @@ fn tool_install_already_installed() {
 
     // Install `black` again
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("black")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
@@ -3301,6 +3195,8 @@ fn tool_install_migrates_lockless_receipt() -> Result<()> {
 
     context
         .tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("black")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
@@ -3333,6 +3229,8 @@ fn tool_install_migrates_lockless_receipt() -> Result<()> {
     });
 
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("black")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
@@ -3615,12 +3513,12 @@ fn tool_install_force() {
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    let executable = bin_dir.child(format!("black{}", std::env::consts::EXE_SUFFIX));
+    let executable = bin_dir.child(format!("pyflakes{}", std::env::consts::EXE_SUFFIX));
     executable.touch().unwrap();
 
-    // Attempt to install `black`
+    // Attempt to install `pyflakes`
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black")
+        .arg("pyflakes")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
@@ -3632,33 +3530,28 @@ fn tool_install_force() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + black==24.3.0
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    error: Executable already exists: black (use `--force` to overwrite)
+     + pyflakes==3.2.0
+    error: Executable already exists: pyflakes (use `--force` to overwrite)
     ");
 
     // We should delete the virtual environment
-    assert!(!tool_dir.child("black").exists());
+    assert!(!tool_dir.child("pyflakes").exists());
 
     // We should not write a tools entry
-    assert!(!tool_dir.join("black").join("uv-receipt.toml").exists());
+    assert!(!tool_dir.join("pyflakes").join("uv-receipt.toml").exists());
 
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // Nor should we change the `black` entry point that exists
+        // Nor should we change the `pyflakes` entry point that exists
         assert_snapshot!(fs_err::read_to_string(&executable).unwrap(), @"");
 
     });
 
-    // Attempt to install `black` with the `--reinstall` flag
+    // Attempt to install `pyflakes` with the `--reinstall` flag
     // Should have no effect
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black")
+        .arg("pyflakes")
         .arg("--reinstall")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
@@ -3671,17 +3564,12 @@ fn tool_install_force() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + black==24.3.0
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    error: Executable already exists: black (use `--force` to overwrite)
+     + pyflakes==3.2.0
+    error: Executable already exists: pyflakes (use `--force` to overwrite)
     ");
 
     // We should not create a virtual environment
-    assert!(!tool_dir.child("black").exists());
+    assert!(!tool_dir.child("pyflakes").exists());
 
     // We should not write a tools entry
     assert!(!tool_dir.join("tools.toml").exists());
@@ -3689,40 +3577,14 @@ fn tool_install_force() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // Nor should we change the `black` entry point that exists
+        // Nor should we change the `pyflakes` entry point that exists
         assert_snapshot!(fs_err::read_to_string(&executable).unwrap(), @"");
 
     });
 
-    // Test error message when multiple entry points exist
-    bin_dir
-        .child(format!("blackd{}", std::env::consts::EXE_SUFFIX))
-        .touch()
-        .unwrap();
+    // Install `pyflakes` with `--force`
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + black==24.3.0
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    error: Executables already exist: black, blackd (use `--force` to overwrite)
-    ");
-
-    // Install `black` with `--force`
-    uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black")
+        .arg("pyflakes")
         .arg("--force")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
@@ -3734,24 +3596,19 @@ fn tool_install_force() {
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + black==24.3.0
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    Installed 2 executables: black, blackd
+     + pyflakes==3.2.0
+    Installed 1 executable: pyflakes
     ");
 
-    tool_dir.child("black").assert(predicate::path::is_dir());
+    tool_dir.child("pyflakes").assert(predicate::path::is_dir());
 
-    let marker = tool_dir.child("black").child("marker");
+    let marker = tool_dir.child("pyflakes").child("marker");
     fs_err::write(&marker, b"marker").unwrap();
     marker.assert(predicate::path::is_file());
 
-    // Re-install `black` with `--force`
+    // Re-install `pyflakes` with `--force`
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black")
+        .arg("pyflakes")
         .arg("--force")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
@@ -3763,21 +3620,16 @@ fn tool_install_force() {
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + black==24.3.0
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    Installed 2 executables: black, blackd
+     + pyflakes==3.2.0
+    Installed 1 executable: pyflakes
     ");
 
-    tool_dir.child("black").assert(predicate::path::is_dir());
+    tool_dir.child("pyflakes").assert(predicate::path::is_dir());
     marker.assert(predicate::path::missing());
 
-    // Re-install `black` without `--force`
+    // Re-install `pyflakes` without `--force`
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black")
+        .arg("pyflakes")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
@@ -3786,14 +3638,14 @@ fn tool_install_force() {
     ----- stdout -----
 
     ----- stderr -----
-    `black` is already installed
+    `pyflakes` is already installed
     ");
 
-    tool_dir.child("black").assert(predicate::path::is_dir());
+    tool_dir.child("pyflakes").assert(predicate::path::is_dir());
 
-    // Re-install `black` with `--reinstall`
+    // Re-install `pyflakes` with `--reinstall`
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black")
+        .arg("pyflakes")
         .arg("--reinstall")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
@@ -3807,126 +3659,29 @@ fn tool_install_force() {
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     ~ black==24.3.0
-     ~ click==8.1.7
-     ~ mypy-extensions==1.0.0
-     ~ packaging==24.0
-     ~ pathspec==0.12.1
-     ~ platformdirs==4.2.0
-    Installed 2 executables: black, blackd
+     ~ pyflakes==3.2.0
+    Installed 1 executable: pyflakes
     ");
 
-    tool_dir.child("black").assert(predicate::path::is_dir());
-
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        // We write a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
-        version = 1
-        revision = 3
-        requires-python = ">=3.12.[X]"
-
-        [options]
-        exclude-newer = "2024-03-25T00:00:00Z"
-
-        [manifest]
-        requirements = [{ name = "black" }]
-
-        [[package]]
-        name = "black"
-        version = "24.3.0"
-        source = { registry = "https://pypi.org/simple" }
-        dependencies = [
-            { name = "click" },
-            { name = "mypy-extensions" },
-            { name = "packaging" },
-            { name = "pathspec" },
-            { name = "platformdirs" },
-        ]
-        sdist = { url = "https://files.pythonhosted.org/packages/8f/5f/bac24a952668c7482cfdb4ebf91ba57a796c9da8829363a772040c1a3312/black-24.3.0.tar.gz", hash = "sha256:a0c9c4a0771afc6919578cec71ce82a3e31e054904e7197deacbc9382671c41f", size = 634292, upload-time = "2024-03-15T19:35:43.699Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/b6/c6/1d174efa9ff02b22d0124c73fc5f4d4fb006d0d9a081aadc354d05754a13/black-24.3.0-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:2818cf72dfd5d289e48f37ccfa08b460bf469e67fb7c4abb07edc2e9f16fb63f", size = 1600822, upload-time = "2024-03-15T19:45:20.337Z" },
-            { url = "https://files.pythonhosted.org/packages/d9/ed/704731afffe460b8ff0672623b40fce9fe569f2ee617c15857e4d4440a3a/black-24.3.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:4acf672def7eb1725f41f38bf6bf425c8237248bb0804faa3965c036f7672d11", size = 1429987, upload-time = "2024-03-15T19:45:00.637Z" },
-            { url = "https://files.pythonhosted.org/packages/a8/05/8dd038e30caadab7120176d4bc109b7ca2f4457f12eef746b0560a583458/black-24.3.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c7ed6668cbbfcd231fa0dc1b137d3e40c04c7f786e626b405c62bcd5db5857e4", size = 1755319, upload-time = "2024-03-15T19:38:24.009Z" },
-            { url = "https://files.pythonhosted.org/packages/71/9d/e5fa1ff4ef1940be15a64883c0bb8d2fcf626efec996eab4ae5a8c691d2c/black-24.3.0-cp312-cp312-win_amd64.whl", hash = "sha256:56f52cfbd3dabe2798d76dbdd299faa046a901041faf2cf33288bc4e6dae57b5", size = 1385180, upload-time = "2024-03-15T19:39:37.014Z" },
-            { url = "https://files.pythonhosted.org/packages/4d/ea/31770a7e49f3eedfd8cd7b35e78b3a3aaad860400f8673994bc988318135/black-24.3.0-py3-none-any.whl", hash = "sha256:41622020d7120e01d377f74249e677039d20e6344ff5851de8a10f11f513bf93", size = 201493, upload-time = "2024-03-15T19:35:41.572Z" },
-        ]
-
-        [[package]]
-        name = "click"
-        version = "8.1.7"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121, upload-time = "2023-08-17T17:29:11.868Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/00/2e/d53fa4befbf2cfa713304affc7ca780ce4fc1fd8710527771b58311a3229/click-8.1.7-py3-none-any.whl", hash = "sha256:ae74fb96c20a0277a1d615f1e4d73c8414f5a98db8b799a7931d1582f3390c28", size = 97941, upload-time = "2023-08-17T17:29:10.08Z" },
-        ]
-
-        [[package]]
-        name = "mypy-extensions"
-        version = "1.0.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/98/a4/1ab47638b92648243faf97a5aeb6ea83059cc3624972ab6b8d2316078d3f/mypy_extensions-1.0.0.tar.gz", hash = "sha256:75dbf8955dc00442a438fc4d0666508a9a97b6bd41aa2f0ffe9d2f2725af0782", size = 4433, upload-time = "2023-02-04T12:11:27.157Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/2a/e2/5d3f6ada4297caebe1a2add3b126fe800c96f56dbe5d1988a2cbe0b267aa/mypy_extensions-1.0.0-py3-none-any.whl", hash = "sha256:4392f6c0eb8a5668a69e23d168ffa70f0be9ccfd32b5cc2d26a34ae5b844552d", size = 4695, upload-time = "2023-02-04T12:11:25.002Z" },
-        ]
-
-        [[package]]
-        name = "packaging"
-        version = "24.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/ee/b5/b43a27ac7472e1818c4bafd44430e69605baefe1f34440593e0332ec8b4d/packaging-24.0.tar.gz", hash = "sha256:eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9", size = 147882, upload-time = "2024-03-10T09:39:28.33Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/49/df/1fceb2f8900f8639e278b056416d49134fb8d84c5942ffaa01ad34782422/packaging-24.0-py3-none-any.whl", hash = "sha256:2ddfb553fdf02fb784c234c7ba6ccc288296ceabec964ad2eae3777778130bc5", size = 53488, upload-time = "2024-03-10T09:39:25.947Z" },
-        ]
-
-        [[package]]
-        name = "pathspec"
-        version = "0.12.1"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/ca/bc/f35b8446f4531a7cb215605d100cd88b7ac6f44ab3fc94870c120ab3adbf/pathspec-0.12.1.tar.gz", hash = "sha256:a482d51503a1ab33b1c67a6c3813a26953dbdc71c31dacaef9a838c4e29f5712", size = 51043, upload-time = "2023-12-10T22:30:45Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/cc/20/ff623b09d963f88bfde16306a54e12ee5ea43e9b597108672ff3a408aad6/pathspec-0.12.1-py3-none-any.whl", hash = "sha256:a0d503e138a4c123b27490a4f7beda6a01c6f288df0e4a8b79c7eb0dc7b4cc08", size = 31191, upload-time = "2023-12-10T22:30:43.14Z" },
-        ]
-
-        [[package]]
-        name = "platformdirs"
-        version = "4.2.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/96/dc/c1d911bf5bb0fdc58cc05010e9f3efe3b67970cef779ba7fbc3183b987a8/platformdirs-4.2.0.tar.gz", hash = "sha256:ef0cc731df711022c174543cb70a9b5bd22e5a9337c8624ef2c2ceb8ddad8768", size = 20055, upload-time = "2024-01-31T01:00:36.02Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717, upload-time = "2024-01-31T01:00:34.019Z" },
-        ]
-
-        [tool]
-        requirements = [{ name = "black" }]
-        entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
-        ]
-
-        [tool.options]
-        exclude-newer = "2024-03-25T00:00:00Z"
-        "#);
-    });
+    tool_dir.child("pyflakes").assert(predicate::path::is_dir());
 
     // On Windows, we can't snapshot an executable file.
     #[cfg(not(windows))]
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // Should run black in the virtual environment
+        // Should run pyflakes in the virtual environment
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r#"
-        #![TEMP_DIR]/tools/black/bin/python3
+        #![TEMP_DIR]/tools/pyflakes/bin/python3
         # -*- coding: utf-8 -*-
         import sys
-        from black import patched_main
+        from pyflakes.api import main
         if __name__ == "__main__":
             if sys.argv[0].endswith("-script.pyw"):
                 sys.argv[0] = sys.argv[0][:-11]
             elif sys.argv[0].endswith(".exe"):
                 sys.argv[0] = sys.argv[0][:-4]
-            sys.exit(patched_main())
+            sys.exit(main())
         "#);
 
     });
@@ -3935,7 +3690,7 @@ fn tool_install_force() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("pyflakes").join("uv-receipt.toml")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -3944,94 +3699,27 @@ fn tool_install_force() {
         exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
-        requirements = [{ name = "black" }]
+        requirements = [{ name = "pyflakes" }]
 
         [[package]]
-        name = "black"
-        version = "24.3.0"
+        name = "pyflakes"
+        version = "3.2.0"
         source = { registry = "https://pypi.org/simple" }
-        dependencies = [
-            { name = "click" },
-            { name = "mypy-extensions" },
-            { name = "packaging" },
-            { name = "pathspec" },
-            { name = "platformdirs" },
-        ]
-        sdist = { url = "https://files.pythonhosted.org/packages/8f/5f/bac24a952668c7482cfdb4ebf91ba57a796c9da8829363a772040c1a3312/black-24.3.0.tar.gz", hash = "sha256:a0c9c4a0771afc6919578cec71ce82a3e31e054904e7197deacbc9382671c41f", size = 634292, upload-time = "2024-03-15T19:35:43.699Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/57/f9/669d8c9c86613c9d568757c7f5824bd3197d7b1c6c27553bc5618a27cce2/pyflakes-3.2.0.tar.gz", hash = "sha256:1c61603ff154621fb2a9172037d84dca3500def8c8b630657d1701f026f8af3f", size = 63788, upload-time = "2024-01-05T00:28:47.703Z" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/b6/c6/1d174efa9ff02b22d0124c73fc5f4d4fb006d0d9a081aadc354d05754a13/black-24.3.0-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:2818cf72dfd5d289e48f37ccfa08b460bf469e67fb7c4abb07edc2e9f16fb63f", size = 1600822, upload-time = "2024-03-15T19:45:20.337Z" },
-            { url = "https://files.pythonhosted.org/packages/d9/ed/704731afffe460b8ff0672623b40fce9fe569f2ee617c15857e4d4440a3a/black-24.3.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:4acf672def7eb1725f41f38bf6bf425c8237248bb0804faa3965c036f7672d11", size = 1429987, upload-time = "2024-03-15T19:45:00.637Z" },
-            { url = "https://files.pythonhosted.org/packages/a8/05/8dd038e30caadab7120176d4bc109b7ca2f4457f12eef746b0560a583458/black-24.3.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c7ed6668cbbfcd231fa0dc1b137d3e40c04c7f786e626b405c62bcd5db5857e4", size = 1755319, upload-time = "2024-03-15T19:38:24.009Z" },
-            { url = "https://files.pythonhosted.org/packages/71/9d/e5fa1ff4ef1940be15a64883c0bb8d2fcf626efec996eab4ae5a8c691d2c/black-24.3.0-cp312-cp312-win_amd64.whl", hash = "sha256:56f52cfbd3dabe2798d76dbdd299faa046a901041faf2cf33288bc4e6dae57b5", size = 1385180, upload-time = "2024-03-15T19:39:37.014Z" },
-            { url = "https://files.pythonhosted.org/packages/4d/ea/31770a7e49f3eedfd8cd7b35e78b3a3aaad860400f8673994bc988318135/black-24.3.0-py3-none-any.whl", hash = "sha256:41622020d7120e01d377f74249e677039d20e6344ff5851de8a10f11f513bf93", size = 201493, upload-time = "2024-03-15T19:35:41.572Z" },
-        ]
-
-        [[package]]
-        name = "click"
-        version = "8.1.7"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121, upload-time = "2023-08-17T17:29:11.868Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/00/2e/d53fa4befbf2cfa713304affc7ca780ce4fc1fd8710527771b58311a3229/click-8.1.7-py3-none-any.whl", hash = "sha256:ae74fb96c20a0277a1d615f1e4d73c8414f5a98db8b799a7931d1582f3390c28", size = 97941, upload-time = "2023-08-17T17:29:10.08Z" },
-        ]
-
-        [[package]]
-        name = "mypy-extensions"
-        version = "1.0.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/98/a4/1ab47638b92648243faf97a5aeb6ea83059cc3624972ab6b8d2316078d3f/mypy_extensions-1.0.0.tar.gz", hash = "sha256:75dbf8955dc00442a438fc4d0666508a9a97b6bd41aa2f0ffe9d2f2725af0782", size = 4433, upload-time = "2023-02-04T12:11:27.157Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/2a/e2/5d3f6ada4297caebe1a2add3b126fe800c96f56dbe5d1988a2cbe0b267aa/mypy_extensions-1.0.0-py3-none-any.whl", hash = "sha256:4392f6c0eb8a5668a69e23d168ffa70f0be9ccfd32b5cc2d26a34ae5b844552d", size = 4695, upload-time = "2023-02-04T12:11:25.002Z" },
-        ]
-
-        [[package]]
-        name = "packaging"
-        version = "24.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/ee/b5/b43a27ac7472e1818c4bafd44430e69605baefe1f34440593e0332ec8b4d/packaging-24.0.tar.gz", hash = "sha256:eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9", size = 147882, upload-time = "2024-03-10T09:39:28.33Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/49/df/1fceb2f8900f8639e278b056416d49134fb8d84c5942ffaa01ad34782422/packaging-24.0-py3-none-any.whl", hash = "sha256:2ddfb553fdf02fb784c234c7ba6ccc288296ceabec964ad2eae3777778130bc5", size = 53488, upload-time = "2024-03-10T09:39:25.947Z" },
-        ]
-
-        [[package]]
-        name = "pathspec"
-        version = "0.12.1"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/ca/bc/f35b8446f4531a7cb215605d100cd88b7ac6f44ab3fc94870c120ab3adbf/pathspec-0.12.1.tar.gz", hash = "sha256:a482d51503a1ab33b1c67a6c3813a26953dbdc71c31dacaef9a838c4e29f5712", size = 51043, upload-time = "2023-12-10T22:30:45Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/cc/20/ff623b09d963f88bfde16306a54e12ee5ea43e9b597108672ff3a408aad6/pathspec-0.12.1-py3-none-any.whl", hash = "sha256:a0d503e138a4c123b27490a4f7beda6a01c6f288df0e4a8b79c7eb0dc7b4cc08", size = 31191, upload-time = "2023-12-10T22:30:43.14Z" },
-        ]
-
-        [[package]]
-        name = "platformdirs"
-        version = "4.2.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/96/dc/c1d911bf5bb0fdc58cc05010e9f3efe3b67970cef779ba7fbc3183b987a8/platformdirs-4.2.0.tar.gz", hash = "sha256:ef0cc731df711022c174543cb70a9b5bd22e5a9337c8624ef2c2ceb8ddad8768", size = 20055, upload-time = "2024-01-31T01:00:36.02Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717, upload-time = "2024-01-31T01:00:34.019Z" },
+            { url = "https://files.pythonhosted.org/packages/d4/d7/f1b7db88d8e4417c5d47adad627a93547f44bdc9028372dbd2313f34a855/pyflakes-3.2.0-py2.py3-none-any.whl", hash = "sha256:84b5be138a2dfbb40689ca07e2152deb896a65c3a3e24c251c5c62489568074a", size = 62725, upload-time = "2024-01-05T00:28:45.903Z" },
         ]
 
         [tool]
-        requirements = [{ name = "black" }]
+        requirements = [{ name = "pyflakes" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
+            { name = "pyflakes", install-path = "[TEMP_DIR]/bin/pyflakes", from = "pyflakes" },
         ]
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
         "#);
     });
-
-    uv_snapshot!(context.filters(), Command::new("black").arg("--version").env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    black, 24.3.0 (compiled: yes)
-    Python (CPython) 3.12.[X]
-
-    ----- stderr -----
-    ");
 }
 
 /// Test `uv tool install` when the bin directory is inferred from `$HOME`
@@ -4904,6 +4592,8 @@ fn tool_install_with_dependencies_from_script() -> Result<()> {
 
     // script dependencies (anyio) are now installed.
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("--with-requirements")
         .arg("script.py")
         .arg("black")
@@ -5074,6 +4764,8 @@ fn tool_install_with_dependencies_from_script() -> Result<()> {
 
     // Install `black`
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("black")
         .arg("--with-requirements")
         .arg("script.py")
@@ -5249,6 +4941,8 @@ fn tool_install_requirements_txt() {
 
     // Install `black`
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("black")
         .arg("--with-requirements")
         .arg("requirements.txt")
@@ -5385,6 +5079,8 @@ fn tool_install_requirements_txt() {
 
     // Install `black`
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("black")
         .arg("--with-requirements")
         .arg("requirements.txt")
@@ -5531,6 +5227,8 @@ fn tool_install_requirements_txt_arguments() {
 
     // Install `black`
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("black")
         .arg("--with-requirements")
         .arg("requirements.txt")
@@ -5675,6 +5373,8 @@ fn tool_install_requirements_txt_arguments() {
 
     // Install `black`
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("black")
         .arg("--with-requirements")
         .arg("requirements.txt")
@@ -5700,6 +5400,8 @@ fn tool_install_requirements_txt_arguments() {
 
     // Install `flask`
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("flask")
         .arg("--with-requirements")
         .arg("requirements.txt")
@@ -5739,6 +5441,8 @@ fn tool_install_upgrade() {
 
     // Install `black`.
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("black==24.1.1")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
@@ -5855,6 +5559,8 @@ fn tool_install_upgrade() {
     // Install without the constraint. It should be replaced, but the package shouldn't be installed
     // since it's already satisfied in the environment.
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("black")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
@@ -5963,6 +5669,8 @@ fn tool_install_upgrade() {
 
     // Install with a `with`. It should be added to the environment.
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("black")
         .arg("--with")
         .arg("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl")
@@ -6004,6 +5712,8 @@ fn tool_install_upgrade() {
     // Install with `--upgrade`. `black` should be reinstalled with a more recent version, and
     // `iniconfig` should be removed.
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("black")
         .arg("--upgrade")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
@@ -6615,6 +6325,8 @@ fn tool_install_settings() {
 
     // Install `black`
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("flask>=3")
         .arg("--resolution=lowest-direct")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
@@ -6782,6 +6494,8 @@ fn tool_install_settings() {
 
     // Reinstall with `highest`. This is a no-op, since we _do_ have a compatible version installed.
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("flask>=3")
         .arg("--resolution=highest")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
@@ -6912,6 +6626,8 @@ fn tool_install_settings() {
     // Reinstall with `highest` and `--upgrade`. This should change the setting and install a higher
     // version.
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("flask>=3")
         .arg("--resolution=highest")
         .arg("--upgrade")
@@ -7056,6 +6772,8 @@ fn tool_install_at_version() {
 
     // Install `black` at `24.1.0`.
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("black@24.1.0")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
@@ -7171,6 +6889,8 @@ fn tool_install_at_version() {
     // Combining `{package}@{version}` with a `--from` should fail (even if they're ultimately
     // compatible).
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("black@24.1.0")
         .arg("--from")
         .arg("black==24.1.0")
@@ -7197,6 +6917,8 @@ fn tool_install_at_latest() {
 
     // Install `black` at latest.
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("black@latest")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
@@ -7449,6 +7171,8 @@ fn tool_install_at_latest_upgrade() {
 
     // Install `black`.
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("black==24.1.1")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
@@ -7565,6 +7289,8 @@ fn tool_install_at_latest_upgrade() {
     // Install without the constraint. It should be replaced, but the package shouldn't be installed
     // since it's already satisfied in the environment.
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("black")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
@@ -7673,6 +7399,8 @@ fn tool_install_at_latest_upgrade() {
 
     // Install with `{package}@{latest}`. `black` should be reinstalled with a more recent version.
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("black@latest")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
@@ -7801,6 +7529,8 @@ fn tool_install_constraints() -> Result<()> {
 
     // Install `black`.
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("black")
         .arg("--constraints")
         .arg(constraints_txt.as_os_str())
@@ -7923,6 +7653,8 @@ fn tool_install_constraints() -> Result<()> {
 
     // Installing with the same constraints should be a no-op.
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("black")
         .arg("--constraints")
         .arg(constraints_txt.as_os_str())
@@ -7944,6 +7676,8 @@ fn tool_install_constraints() -> Result<()> {
 
     // Installing with revised constraints should reinstall the tool.
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("black")
         .arg("--constraints")
         .arg(constraints_txt.as_os_str())
@@ -8457,6 +8191,8 @@ fn tool_install_with_executables_from() {
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("--with-executables-from")
         .arg("ansible-core,black")
         .arg("ansible==9.3.0")

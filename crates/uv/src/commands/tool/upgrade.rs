@@ -395,11 +395,10 @@ async fn upgrade_tool(
             &resolution,
             &receipt_manifest,
         );
-        let resolution = resolution.into();
 
         let environment = sync_environment(
             environment,
-            &resolution,
+            &resolution.into(),
             Modifications::Exact,
             build_constraints,
             (&settings).into(),

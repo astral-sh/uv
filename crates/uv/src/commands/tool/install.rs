@@ -10,9 +10,7 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
-    ExtrasSpecificationWithDefaults, GitLfsSetting, InstallOptions, Reinstall, TargetTriple,
-    Upgrade,
+    Concurrency, Constraints, DryRun, GitLfsSetting, Reinstall, TargetTriple, Upgrade,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
@@ -580,13 +578,10 @@ pub(crate) async fn install(
                             .target_requirement()
                             .map(|requirement| &requirement.name),
                     )
-                    .to_resolution(
+                    .to_resolution_simple(
                         &markers,
                         &tags,
-                        &ExtrasSpecificationWithDefaults::none(),
-                        &DependencyGroupsWithDefaults::none(),
                         &settings.resolver.build_options,
-                        &InstallOptions::default(),
                     )?;
                     Planner::new(&resolution)
                         .build(
