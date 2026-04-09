@@ -6963,3 +6963,55 @@ async fn run_index_by_name() -> Result<()> {
 
     Ok(())
 }
+
+/// Run using `--index <name>` for an index marked `default = true`.
+#[tokio::test]
+async fn run_index_by_name_default_selected_on_cli() -> Result<()> {
+    use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
+
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&server)
+        .await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [[tool.uv.index]]
+        name = "primary"
+        url = "{server_url}"
+
+        [[tool.uv.index]]
+        name = "example"
+        url = "{proxy_url}"
+        default = true
+        "#,
+        server_url = server.uri(),
+        proxy_url = proxy.url("/simple"),
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--index").arg("example").arg("python").arg("-c").arg("import iniconfig; print('ok')"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ok
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
