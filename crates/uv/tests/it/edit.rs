@@ -11538,19 +11538,15 @@ async fn add_index_by_name_from_project_uv_toml() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("test-index"), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + iniconfig==2.0.0
+    error: Index `test-index` was found in a project-level `uv.toml`, but `uv add` cannot persist it to `tool.uv.sources`. Define the index in the project's `pyproject.toml` first, or use `--raw`.
     ");
 
-    // Check that the named index from `uv.toml` was copied into `pyproject.toml` so the source
-    // remains valid on subsequent commands.
+    // Check that the project was left unchanged.
     let pyproject = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
     insta::with_settings!({
         filters => context.filters(),
@@ -11561,16 +11557,7 @@ async fn add_index_by_name_from_project_uv_toml() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = [
-            "iniconfig>=2.0.0",
-        ]
-
-        [[tool.uv.index]]
-        name = "test-index"
-        url = "http://[LOCALHOST]/simple"
-
-        [tool.uv.sources]
-        iniconfig = { index = "test-index" }
+        dependencies = []
         "#
         );
     });
