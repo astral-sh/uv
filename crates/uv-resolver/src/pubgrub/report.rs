@@ -5,7 +5,7 @@ use std::ops::Bound;
 use indexmap::IndexSet;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use pubgrub::{DerivationTree, Derived, External, Map, Range, Ranges, ReportFormatter, Term};
+use pubgrub::{DerivationTree, Derived, External, Map, Range, ReportFormatter, Term};
 use rustc_hash::FxHashMap;
 
 use uv_configuration::{IndexStrategy, NoBinary, NoBuild};
@@ -36,10 +36,17 @@ use crate::{
 
 #[derive(Debug)]
 pub(crate) struct PubGrubReportFormatter<'a> {
-    /// The versions that were available for each package.
+    /// The versions that were available for each package after `exclude-newer` filtering.
+    /// Used in error messages to display version ranges and availability.
     pub(crate) available_versions: &'a FxHashMap<PackageName, BTreeSet<Version>>,
 
-    /// The versions that were available for each package.
+    /// All versions present in the index for each package, without `exclude-newer` filtering
+    /// (optionally filtered by [`EnvVars::UV_INTERNAL__EXCLUDE_NEWER_REPRODUCIBLE`] for
+    /// deterministic test output). Used by the `exclude-newer` hint to detect versions that
+    /// were filtered.
+    pub(crate) index_versions: &'a FxHashMap<PackageName, BTreeSet<Version>>,
+
+    /// The Python requirement for the resolution.
     pub(crate) python_requirement: &'a PythonRequirement,
 
     /// The members of the workspace.
@@ -543,6 +550,7 @@ impl PubGrubReportFormatter<'_> {
         tags: Option<&Tags>,
         workspace_members: &BTreeSet<PackageName>,
         options: &Options,
+        inherited_exclude_newer_ranges: &FxHashMap<PackageName, Range<Version>>,
         output_hints: &mut IndexSet<PubGrubHint>,
     ) {
         // Check for disjoint target hints (only applicable to universal resolution).
@@ -664,16 +672,34 @@ impl PubGrubReportFormatter<'_> {
                     };
 
                     if let Some((exclude_newer, source)) = exclude_newer {
-                        if self
+                        // Check if there are no available versions in the requested
+                        // range, but the index does have versions in that range (i.e.,
+                        // they were filtered out by `exclude-newer`).
+                        let no_available_in_set = self
                             .available_versions
                             .get(name)
-                            .is_some_and(BTreeSet::is_empty)
-                            && Self::has_versions_in_index(name, index, fork_indexes)
-                        {
+                            .is_none_or(|versions| !versions.iter().any(|v| set.contains(v)));
+                        let index_has_versions_in_set = self
+                            .index_versions
+                            .get(name)
+                            .is_some_and(|versions| versions.iter().any(|v| set.contains(v)));
+                        if no_available_in_set && index_has_versions_in_set {
+                            let version_hint_set =
+                                inherited_exclude_newer_ranges.get(name).map_or_else(
+                                    || set.clone(),
+                                    |exclude_newer_range| set.union(exclude_newer_range),
+                                );
+                            let matching_version = self.exclude_newer_version_hint(
+                                name,
+                                &version_hint_set,
+                                index,
+                                fork_indexes,
+                            );
                             output_hints.insert(PubGrubHint::ExcludeNewer {
                                 package: name.clone(),
                                 source,
                                 exclude_newer,
+                                matching_version,
                             });
                         }
                     }
@@ -730,6 +756,29 @@ impl PubGrubReportFormatter<'_> {
             }
             DerivationTree::External(External::NotRoot(..)) => {}
             DerivationTree::Derived(derived) => {
+                let cause1_exclude_newer_ranges =
+                    Self::subtree_exclude_newer_ranges(&derived.cause1);
+                let cause2_exclude_newer_ranges =
+                    Self::subtree_exclude_newer_ranges(&derived.cause2);
+
+                let mut cause1_inherited_exclude_newer_ranges =
+                    inherited_exclude_newer_ranges.clone();
+                for (name, range) in &cause2_exclude_newer_ranges {
+                    cause1_inherited_exclude_newer_ranges
+                        .entry(name.clone())
+                        .and_modify(|existing| *existing = existing.union(range))
+                        .or_insert_with(|| range.clone());
+                }
+
+                let mut cause2_inherited_exclude_newer_ranges =
+                    inherited_exclude_newer_ranges.clone();
+                for (name, range) in &cause1_exclude_newer_ranges {
+                    cause2_inherited_exclude_newer_ranges
+                        .entry(name.clone())
+                        .and_modify(|existing| *existing = existing.union(range))
+                        .or_insert_with(|| range.clone());
+                }
+
                 self.generate_hints(
                     &derived.cause1,
                     index,
@@ -746,6 +795,7 @@ impl PubGrubReportFormatter<'_> {
                     tags,
                     workspace_members,
                     options,
+                    &cause1_inherited_exclude_newer_ranges,
                     output_hints,
                 );
                 self.generate_hints(
@@ -764,10 +814,102 @@ impl PubGrubReportFormatter<'_> {
                     tags,
                     workspace_members,
                     options,
+                    &cause2_inherited_exclude_newer_ranges,
                     output_hints,
                 );
             }
         }
+    }
+
+    /// Collect the version ranges in `derivation_tree` that were excluded solely by
+    /// `exclude-newer`, grouped by package name.
+    fn subtree_exclude_newer_ranges(
+        derivation_tree: &ErrorTree,
+    ) -> FxHashMap<PackageName, Range<Version>> {
+        fn collect(
+            derivation_tree: &ErrorTree,
+            exclude_newer_ranges: &mut FxHashMap<PackageName, Range<Version>>,
+        ) {
+            match derivation_tree {
+                DerivationTree::External(External::Custom(package, versions, reason)) => {
+                    if matches!(
+                        reason,
+                        UnavailableReason::Version(UnavailableVersion::IncompatibleDist(
+                            IncompatibleDist::Wheel(IncompatibleWheel::ExcludeNewer(_))
+                                | IncompatibleDist::Source(IncompatibleSource::ExcludeNewer(_))
+                        ))
+                    ) {
+                        if let Some(name) = package.name() {
+                            exclude_newer_ranges
+                                .entry(name.clone())
+                                .and_modify(|set| *set = set.union(versions))
+                                .or_insert_with(|| versions.clone());
+                        }
+                    }
+                }
+                DerivationTree::External(_) => {}
+                DerivationTree::Derived(derived) => {
+                    collect(&derived.cause1, exclude_newer_ranges);
+                    collect(&derived.cause2, exclude_newer_ranges);
+                }
+            }
+        }
+
+        let mut exclude_newer_ranges = FxHashMap::default();
+        collect(derivation_tree, &mut exclude_newer_ranges);
+        exclude_newer_ranges
+    }
+
+    /// Return the latest version in `set` that is visible without the hint-specific
+    /// `exclude-newer` filtering, along with the earliest known publish date for that version.
+    fn exclude_newer_version_hint(
+        &self,
+        name: &PackageName,
+        set: &Range<Version>,
+        index: &InMemoryIndex,
+        fork_indexes: &ForkIndexes,
+    ) -> Option<ExcludeNewerVersionDetail> {
+        let version = self.index_versions.get(name).and_then(|versions| {
+            versions
+                .iter()
+                .rfind(|version| set.contains(version))
+                .cloned()
+        })?;
+
+        let response = if let Some(url) = fork_indexes.get(name).map(IndexMetadata::url) {
+            index.explicit().get(&(name.clone(), url.clone()))
+        } else {
+            index.implicit().get(name)
+        }?;
+
+        let VersionsResponse::Found(version_maps) = &*response else {
+            return None;
+        };
+
+        let publish_date = version_maps
+            .iter()
+            .filter_map(|version_map| {
+                version_map.get(&version).and_then(|prioritized| {
+                    prioritized
+                        .files()
+                        .filter_map(|file| file.upload_time_utc_ms)
+                        .min()
+                })
+            })
+            .min()
+            .and_then(|upload_time| {
+                Some(
+                    jiff::Timestamp::from_millisecond(upload_time)
+                        .ok()?
+                        .to_string(),
+                )
+            });
+
+        Some(ExcludeNewerVersionDetail {
+            version,
+            publish_date,
+            singleton: set.as_singleton().is_some(),
+        })
     }
 
     /// Generate a [`PubGrubHint`] for a package that doesn't have any wheels matching the current
@@ -1075,30 +1217,13 @@ impl PubGrubReportFormatter<'_> {
             }
         }
     }
+}
 
-    fn has_versions_in_index(
-        name: &PackageName,
-        index: &InMemoryIndex,
-        fork_indexes: &ForkIndexes,
-    ) -> bool {
-        let response = if let Some(url) = fork_indexes.get(name).map(IndexMetadata::url) {
-            index.explicit().get(&(name.clone(), url.clone()))
-        } else {
-            index.implicit().get(name)
-        };
-
-        let Some(response) = response else {
-            return false;
-        };
-
-        let VersionsResponse::Found(ref version_maps) = *response else {
-            return false;
-        };
-
-        version_maps
-            .iter()
-            .any(|vm| vm.iter(&Ranges::full()).next().is_some())
-    }
+#[derive(Debug, Clone)]
+pub(crate) struct ExcludeNewerVersionDetail {
+    version: Version,
+    publish_date: Option<String>,
+    singleton: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -1267,12 +1392,14 @@ pub(crate) enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         tags: BTreeSet<PlatformTag>,
     },
-    /// All versions of a package were excluded by `exclude-newer`.
+    /// Versions of a package were excluded by `exclude-newer`.
     ExcludeNewer {
         package: PackageName,
         source: EffectiveExcludeNewerSource,
         // excluded from `PartialEq` and `Hash`
         exclude_newer: ExcludeNewerValue,
+        // excluded from `PartialEq` and `Hash`
+        matching_version: Option<ExcludeNewerVersionDetail>,
     },
     /// The resolution failed for a Python version that is different from the current Python version.
     DisjointPythonVersion {
@@ -1868,41 +1995,78 @@ impl std::fmt::Display for PubGrubHint {
                 package,
                 source,
                 exclude_newer,
-            } => match source {
-                EffectiveExcludeNewerSource::Package => write!(
-                    f,
-                    "{}{} `{}` was filtered by `{}` to only include packages uploaded \
-                        before {}. Consider removing the setting or updating it to a later date.",
-                    "hint".bold().cyan(),
-                    ":".bold(),
-                    package.cyan(),
-                    "exclude-newer-package".green(),
-                    exclude_newer.cyan(),
-                ),
-                EffectiveExcludeNewerSource::Global => write!(
-                    f,
-                    "{}{} `{}` was filtered by `{}` to only include packages uploaded \
-                        before {}. Consider using `{}` to override the cutoff for this package.",
-                    "hint".bold().cyan(),
-                    ":".bold(),
-                    package.cyan(),
-                    "exclude-newer".green(),
-                    exclude_newer.cyan(),
-                    "exclude-newer-package".green(),
-                ),
-                EffectiveExcludeNewerSource::Index => write!(
-                    f,
-                    "{}{} `{}` was filtered by the index-specific `{}` setting to only include \
-                        packages uploaded before {}. Consider updating that index's cutoff, setting \
+                matching_version,
+            } => {
+                let latest = match matching_version {
+                    Some(ExcludeNewerVersionDetail {
+                        version,
+                        publish_date: Some(publish_date),
+                        singleton: true,
+                    }) => format!(
+                        " The requested version, {}, was published at {}.",
+                        format!("v{version}").cyan(),
+                        publish_date.cyan()
+                    ),
+                    Some(ExcludeNewerVersionDetail {
+                        version: _,
+                        publish_date: None,
+                        singleton: true,
+                    }) => String::new(),
+                    Some(ExcludeNewerVersionDetail {
+                        version,
+                        publish_date: Some(publish_date),
+                        singleton: false,
+                    }) => format!(
+                        " The latest version satisfying the requirement is {}, published at {}.",
+                        format!("v{version}").cyan(),
+                        publish_date.cyan()
+                    ),
+                    Some(ExcludeNewerVersionDetail {
+                        version,
+                        publish_date: None,
+                        singleton: false,
+                    }) => format!(
+                        " The latest version satisfying the requirement is {}.",
+                        format!("v{version}").cyan()
+                    ),
+                    None => String::new(),
+                };
+                match source {
+                    EffectiveExcludeNewerSource::Package => write!(
+                        f,
+                        "{}{} `{}` was filtered by `{}` to only include packages uploaded \
+                        before {}.{latest} Consider removing the setting or updating it to a later date.",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        package.cyan(),
+                        "exclude-newer-package".green(),
+                        exclude_newer.cyan(),
+                    ),
+                    EffectiveExcludeNewerSource::Global => write!(
+                        f,
+                        "{}{} `{}` was filtered by `{}` to only include packages uploaded \
+                        before {}.{latest} Consider using `{}` to override the cutoff for this package.",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        package.cyan(),
+                        "exclude-newer".green(),
+                        exclude_newer.cyan(),
+                        "exclude-newer-package".green(),
+                    ),
+                    EffectiveExcludeNewerSource::Index => write!(
+                        f,
+                        "{}{} `{}` was filtered by the index-specific `{}` setting to only include \
+                        packages uploaded before {}.{latest} Consider updating that index's cutoff, setting \
                         it to `false`, or using `{}` to override the cutoff for this package.",
-                    "hint".bold().cyan(),
-                    ":".bold(),
-                    package.cyan(),
-                    "exclude-newer".green(),
-                    exclude_newer.cyan(),
-                    "exclude-newer-package".green(),
-                ),
-            },
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        package.cyan(),
+                        "exclude-newer".green(),
+                        exclude_newer.cyan(),
+                        "exclude-newer-package".green(),
+                    ),
+                }
+            }
             Self::DisjointPythonVersion { python_version } => {
                 write!(
                     f,

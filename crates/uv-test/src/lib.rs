@@ -1236,6 +1236,12 @@ impl TestContext {
             // Lock to a point in time view of the world
             .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
             .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, EXCLUDE_NEWER)
+            // Apply the same exclude-newer filter to versions visible to the
+            // exclude-newer resolver hint, to keep snapshots deterministic.
+            .env(
+                EnvVars::UV_INTERNAL__EXCLUDE_NEWER_REPRODUCIBLE,
+                EXCLUDE_NEWER,
+            )
             // When installations are allowed, we don't want to write to global state, like the
             // Windows registry
             .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "0")

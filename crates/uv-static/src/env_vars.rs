@@ -622,6 +622,15 @@ impl EnvVars {
     #[attr_added_in("0.9.29")]
     pub const UV_INTERNAL__PYTHONHOME: &'static str = "UV_INTERNAL__PYTHONHOME";
 
+    /// When set to a timestamp, applies an `exclude-newer` filter to the versions visible
+    /// to the `exclude-newer` resolver hint. This ensures the hint uses deterministic data
+    /// in the test suite, where `exclude-newer` is set for reproducibility rather than
+    /// intentional filtering. Should be set to an RFC 3339 timestamp (e.g., `2024-03-25T00:00:00Z`).
+    #[attr_hidden]
+    #[attr_added_in("0.11.7")]
+    pub const UV_INTERNAL__EXCLUDE_NEWER_REPRODUCIBLE: &'static str =
+        "UV_INTERNAL__EXCLUDE_NEWER_REPRODUCIBLE";
+
     /// Path to system-level configuration directory on Unix systems.
     #[attr_added_in("0.4.26")]
     pub const XDG_CONFIG_DIRS: &'static str = "XDG_CONFIG_DIRS";

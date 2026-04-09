@@ -162,7 +162,13 @@ pub type ErrorTree = DerivationTree<PubGrubPackage, Range<Version>, UnavailableR
 pub struct NoSolutionError {
     error: pubgrub::NoSolutionError<UvDependencyProvider>,
     index: InMemoryIndex,
+    /// The versions that were available for each package after `exclude-newer` filtering.
+    /// Used in error messages to display version ranges and availability.
     available_versions: FxHashMap<PackageName, BTreeSet<Version>>,
+    /// All versions present in the index, without `exclude-newer` filtering (optionally
+    /// filtered by [`EnvVars::UV_INTERNAL__EXCLUDE_NEWER_REPRODUCIBLE`] for deterministic
+    /// test output). Used by the `exclude-newer` hint to detect versions that were filtered.
+    index_versions: FxHashMap<PackageName, BTreeSet<Version>>,
     available_indexes: FxHashMap<PackageName, BTreeSet<IndexUrl>>,
     selector: CandidateSelector,
     python_requirement: PythonRequirement,
@@ -185,6 +191,7 @@ impl NoSolutionError {
         error: pubgrub::NoSolutionError<UvDependencyProvider>,
         index: InMemoryIndex,
         available_versions: FxHashMap<PackageName, BTreeSet<Version>>,
+        index_versions: FxHashMap<PackageName, BTreeSet<Version>>,
         available_indexes: FxHashMap<PackageName, BTreeSet<IndexUrl>>,
         selector: CandidateSelector,
         python_requirement: PythonRequirement,
@@ -204,6 +211,7 @@ impl NoSolutionError {
             error,
             index,
             available_versions,
+            index_versions,
             available_indexes,
             selector,
             python_requirement,
@@ -389,6 +397,7 @@ impl std::fmt::Debug for NoSolutionError {
             error,
             index: _,
             available_versions,
+            index_versions,
             available_indexes,
             selector,
             python_requirement,
@@ -407,6 +416,7 @@ impl std::fmt::Debug for NoSolutionError {
         f.debug_struct("NoSolutionError")
             .field("error", error)
             .field("available_versions", available_versions)
+            .field("index_versions", index_versions)
             .field("available_indexes", available_indexes)
             .field("selector", selector)
             .field("python_requirement", python_requirement)
@@ -432,6 +442,7 @@ impl std::fmt::Display for NoSolutionError {
         // Write the derivation report.
         let formatter = PubGrubReportFormatter {
             available_versions: &self.available_versions,
+            index_versions: &self.index_versions,
             python_requirement: &self.python_requirement,
             workspace_members: &self.workspace_members,
             tags: self.tags.as_ref(),
@@ -481,6 +492,7 @@ impl std::fmt::Display for NoSolutionError {
 
         // Include any additional hints.
         let mut additional_hints = IndexSet::default();
+        let inherited_exclude_newer_ranges = FxHashMap::default();
         formatter.generate_hints(
             &tree,
             &self.index,
@@ -497,6 +509,7 @@ impl std::fmt::Display for NoSolutionError {
             self.tags.as_ref(),
             &self.workspace_members,
             &self.options,
+            &inherited_exclude_newer_ranges,
             &mut additional_hints,
         );
         for hint in additional_hints {

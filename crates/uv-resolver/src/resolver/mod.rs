@@ -23,10 +23,10 @@ use tracing::{Level, debug, info, instrument, trace, warn};
 use uv_configuration::{Constraints, Excludes, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
-    BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier, IncompatibleDist,
-    IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations, IndexMetadata,
-    IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement, ResolvedDist,
-    ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
+    BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, ExcludeNewerValue, Identifier,
+    IncompatibleDist, IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations,
+    IndexMetadata, IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement,
+    ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -36,6 +36,7 @@ use uv_pep508::{
 };
 use uv_platform_tags::{IncompatibleTag, Tags};
 use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKindRef, Conflicts, VerbatimParsedUrl};
+use uv_static::EnvVars;
 use uv_torch::TorchStrategy;
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
 use uv_warnings::warn_user_once;
@@ -2722,6 +2723,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         let mut available_indexes = FxHashMap::default();
         let mut available_versions = FxHashMap::default();
+        let mut index_versions = FxHashMap::default();
+
+        // If set, apply an `exclude-newer` filter to the versions visible to the
+        // `exclude-newer` resolver hint. This is used in the test suite to keep
+        // snapshots deterministic.
+        let hint_exclude_newer: Option<ExcludeNewerValue> =
+            std::env::var(EnvVars::UV_INTERNAL__EXCLUDE_NEWER_REPRODUCIBLE)
+                .ok()
+                .and_then(|s| s.parse().ok());
+
         for package in err.packages() {
             let Some(name) = package.name() else { continue };
             if !visited.contains(name) {
@@ -2745,23 +2756,54 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         let package_versions = available_versions
                             .entry(name.clone())
                             .or_insert_with(BTreeSet::new);
+                        let package_index_versions = index_versions
+                            .entry(name.clone())
+                            .or_insert_with(BTreeSet::new);
 
                         for (version, dists) in version_map.iter(&Ranges::full()) {
                             // Don't show versions removed by excluded-newer in hints.
-                            if let Some(exclude_newer) = version_map.exclude_newer() {
-                                let Some(prioritized_dist) = dists.prioritized_dist() else {
-                                    continue;
+                            // Files with missing upload times are treated as excluded
+                            // (matching the resolution behavior in `version_map.rs`).
+                            let excluded_from_available = || {
+                                let Some(exclude_newer) = version_map.exclude_newer() else {
+                                    return false;
                                 };
-                                if prioritized_dist.files().all(|file| {
+                                let Some(prioritized_dist) = dists.prioritized_dist() else {
+                                    return true;
+                                };
+                                prioritized_dist.files().all(|file| {
                                     file.upload_time_utc_ms.is_none_or(|upload_time| {
                                         upload_time >= exclude_newer.timestamp_millis()
                                     })
-                                }) {
-                                    continue;
-                                }
+                                })
+                            };
+
+                            if !excluded_from_available() {
+                                package_versions.insert(version.clone());
                             }
 
-                            package_versions.insert(version.clone());
+                            // Track all versions visible to the exclude-newer hint,
+                            // optionally filtered by the hint-specific exclude-newer.
+                            // Files with missing upload times are treated as *not*
+                            // excluded, since we only want to filter versions we can
+                            // confirm were published after the cutoff.
+                            let excluded_from_index = || {
+                                let Some(ref exclude_newer) = hint_exclude_newer else {
+                                    return false;
+                                };
+                                let Some(prioritized_dist) = dists.prioritized_dist() else {
+                                    return false;
+                                };
+                                prioritized_dist.files().all(|file| {
+                                    file.upload_time_utc_ms.is_some_and(|upload_time| {
+                                        upload_time >= exclude_newer.timestamp_millis()
+                                    })
+                                })
+                            };
+
+                            if !excluded_from_index() {
+                                package_index_versions.insert(version.clone());
+                            }
                         }
                     }
 
@@ -2782,6 +2824,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             err,
             self.index.clone(),
             available_versions,
+            index_versions,
             available_indexes,
             self.selector.clone(),
             self.python_requirement.clone(),
