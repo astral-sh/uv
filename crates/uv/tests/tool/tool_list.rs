@@ -354,6 +354,8 @@ fn tool_list_deprecated() -> Result<()> {
     // Install `black`
     context
         .tool_install()
+        .arg("--python-platform")
+        .arg("linux")
         .arg("black==24.2.0")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
