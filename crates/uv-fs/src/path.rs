@@ -207,31 +207,48 @@ pub fn normalize_absolute_path(path: &Path) -> Result<PathBuf, std::io::Error> {
     Ok(ret)
 }
 
-/// Normalize a [`Path`], removing `.`, `..`, and trailing slashes.
+/// Returns `false` if [`Path::components`] discarded any bytes from `path`, without allocating.
+///
+/// [`Path::components`] silently strips interior `.` segments, repeated separators, and
+/// trailing separators. If the `path` length differs from the computed byte length from
+/// `path.components().collect()`, the path isn't normalized (or there is a special case we handle
+/// here, in which case we perform a redundant normalization pass later).
+fn path_equals_components(path: &Path) -> bool {
+    // We count the length in bytes; the encoding scheme doesn't matter as we count bytes in
+    // both expected and the input path
+    let mut expected_len = 0;
+    let mut prev_ends_with_separator = false;
+    for (idx, component) in path.components().enumerate() {
+        let bytes = component.as_os_str().as_encoded_bytes();
+        // `PathBuf::push` inserts a separator between components unless the previous one
+        // already ends in one, or the new component is itself the root (which embeds it).
+        if idx > 0 && !prev_ends_with_separator && !matches!(component, Component::RootDir) {
+            // Assumption: forward and backwards slashes encode with the same length.
+            expected_len += Path::new("/").as_os_str().as_encoded_bytes().len();
+        }
+        expected_len += bytes.len();
+        prev_ends_with_separator = match component {
+            Component::RootDir => true,
+            // A `Prefix` like `\\?\C:` or `\\server\share` may already end in a separator.
+            Component::Prefix(_) => bytes.last().is_some_and(|&b| b == b'\\' || b == b'/'),
+            _ => false,
+        };
+    }
+    expected_len == path.as_os_str().as_encoded_bytes().len()
+}
+
+/// Normalize a [`Path`], removing `.`, `..`, repeated separators (`//`) and trailing slashes.
 pub fn normalize_path(path: &Path) -> Cow<'_, Path> {
-    // A path with `.` or `..` is not normalized.
-    if !path.components().all(|component| match component {
-        Component::Prefix(_) | Component::RootDir | Component::Normal(_) => true,
-        Component::ParentDir | Component::CurDir => false,
-    }) {
+    // A path with `..` is not normalized.
+    if path
+        .components()
+        .any(|component| matches!(component, Component::ParentDir | Component::CurDir))
+    {
         return Cow::Owned(normalized(path));
     }
 
-    // A path with a trailing path separator is not normalized.
-    if path
-        .as_os_str()
-        .as_encoded_bytes()
-        .last()
-        .is_some_and(|trailing| {
-            if cfg!(windows) {
-                *trailing == b'\\' || *trailing == b'/'
-            } else if cfg!(unix) {
-                *trailing == b'/'
-            } else {
-                unimplemented!("Only Windows and Unix are supported")
-            }
-        })
-    {
+    // A path with `..`, repeated separators (`//`), or trailing slashes is not normalized.
+    if !path_equals_components(path) {
         return Cow::Owned(normalized(path));
     }
 
@@ -242,13 +259,14 @@ pub fn normalize_path(path: &Path) -> Cow<'_, Path> {
 /// Normalize a [`PathBuf`], removing things like `.` and `..`.
 pub fn normalize_path_buf(path: PathBuf) -> PathBuf {
     // Fast path: if the path is already normalized, return it as-is.
-    if path.components().all(|component| match component {
-        Component::Prefix(_) | Component::RootDir | Component::Normal(_) => true,
-        Component::ParentDir | Component::CurDir => false,
-    }) {
-        path
-    } else {
+    if path
+        .components()
+        .any(|component| matches!(component, Component::ParentDir | Component::CurDir))
+        || !path_equals_components(&path)
+    {
         normalized(&path)
+    } else {
+        path
     }
 }
 
@@ -680,9 +698,44 @@ mod tests {
             ),
             ("./a/../../b", "../b"),
             ("/usr/../../foo", "/../foo"),
+            // Interior `.` segments (stripped by `Path::components`).
+            ("foo/./bar", "foo/bar"),
+            ("/a/./b/./c", "/a/b/c"),
+            ("./foo/bar", "foo/bar"),
+            (".", ""),
+            ("./.", ""),
+            ("foo/.", "foo"),
+            // Repeated separators (also stripped by `Path::components`).
+            ("foo//bar", "foo/bar"),
+            ("/a///b//c", "/a/b/c"),
+            // Mixed `.` and `..`.
+            ("foo/./../bar", "bar"),
+            ("foo/bar/./../baz", "foo/baz"),
+            // Already-normalized paths.
+            ("foo/bar", "foo/bar"),
+            ("/a/b/c", "/a/b/c"),
+            ("", ""),
         ];
         for (input, expected) in cases {
-            assert_eq!(normalize_path(Path::new(input)), Path::new(expected));
+            assert_eq!(
+                normalize_path(Path::new(input)),
+                Path::new(expected),
+                "input: {input:?}"
+            );
+            assert_eq!(
+                normalize_path_buf(PathBuf::from(input)),
+                PathBuf::from(expected),
+                "input: {input:?}"
+            );
+        }
+
+        // Verify the fast path: already-normalized inputs are returned borrowed.
+        for already_normalized in ["foo/bar", "/a/b/c", "foo", "/", ""] {
+            let path = Path::new(already_normalized);
+            assert!(
+                matches!(normalize_path(path), Cow::Borrowed(_)),
+                "expected borrowed for {already_normalized:?}"
+            );
         }
     }
 
@@ -695,6 +748,8 @@ mod tests {
             ),
             ("python/", "python"),
             ("/", "/"),
+            ("foo/bar/", "foo/bar"),
+            ("foo//", "foo"),
         ];
         for (input, expected) in cases {
             assert_eq!(normalize_path(Path::new(input)), Path::new(expected));
@@ -704,10 +759,16 @@ mod tests {
     #[test]
     #[cfg(windows)]
     fn test_normalize_trailing_path_separator_windows() {
-        let cases = [(
-            r"C:\Users\Ferris\projects\python\",
-            r"C:\Users\Ferris\projects\python",
-        )];
+        let cases = [
+            (
+                r"C:\Users\Ferris\projects\python\",
+                r"C:\Users\Ferris\projects\python",
+            ),
+            (r"C:\foo\.\bar", r"C:\foo\bar"),
+            (r"C:\foo\\bar", r"C:\foo\bar"),
+            (r"C:\foo\bar\..\baz", r"C:\foo\baz"),
+            (r"foo\.\bar", r"foo\bar"),
+        ];
         for (input, expected) in cases {
             assert_eq!(normalize_path(Path::new(input)), Path::new(expected));
         }
