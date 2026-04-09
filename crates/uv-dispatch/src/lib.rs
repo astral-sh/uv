@@ -378,8 +378,9 @@ impl BuildContext for BuildDispatch<'_> {
 
         // Remove any unnecessary packages.
         if !reinstalls.is_empty() {
+            let layout = venv.interpreter().layout();
             for dist_info in &reinstalls {
-                let summary = uv_installer::uninstall(dist_info)
+                let summary = uv_installer::uninstall(dist_info, &layout)
                     .await
                     .context("Failed to uninstall build dependencies")?;
                 debug!(

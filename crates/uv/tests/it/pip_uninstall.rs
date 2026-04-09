@@ -509,3 +509,73 @@ fn dry_run_uninstall_egg_info() -> Result<()> {
 
     Ok(())
 }
+
+/// Uninstall must not remove files outside the install scheme.
+///
+/// A malformed or malicious wheel can include path-traversal entries
+/// (e.g. `../../../../../etc/passwd`) in its RECORD file. During uninstall those entries are joined
+/// with the site-packages directory and could cause deletion of files outside the installation
+/// scheme.
+#[test]
+fn uninstall_record_path_traversal() -> Result<()> {
+    // The traversal-depth count differs between Unix (`.venv/lib/pythonX.Y/site-packages`)
+    // and Windows (`.venv/Lib/site-packages`), so normalize the `../` sequence in the warning.
+    let context = uv_test::test_context!("3.12").with_filter((
+        r"(\.\./)+traversal_target\.txt",
+        "[..]/traversal_target.txt",
+    ));
+
+    context
+        .init()
+        .arg("--lib")
+        .arg("evilpkg")
+        .assert()
+        .success();
+    context.pip_install().arg("./evilpkg").assert().success();
+
+    // Build the relative traversal path from site-packages to a target file outside
+    // site-packages but inside the test temp dir. RECORD uses forward slashes, even on
+    // Windows, and the venv layout (and thus the traversal depth) differs by platform,
+    // so we construct the path manually and filter the leading `../` sequence out of the
+    // snapshot above.
+    let target_file = context.temp_dir.child("traversal_target.txt");
+    target_file.write_str("I should not be deleted")?;
+    // Canonicalize the temp dir, since `site_packages` is built from a canonicalized path
+    // (with `\\?\`), which would otherwise make `strip_prefix` fail.
+    let canonical_temp_dir = context.temp_dir.canonicalize()?;
+    let depth = context
+        .site_packages()
+        .strip_prefix(&canonical_temp_dir)?
+        .components()
+        .count();
+    let traversal_record = format!("{}traversal_target.txt", "../".repeat(depth));
+
+    let record_file = context
+        .site_packages()
+        .join("evilpkg-0.1.0.dist-info/RECORD");
+    let record = fs_err::read_to_string(&record_file)?;
+    let record = format!("{}\n{},,0\n", record.trim(), traversal_record);
+    fs_err::write(record_file, &record)?;
+
+    let init_py = context.site_packages().join("evilpkg/__init__.py");
+    assert!(context.site_packages().join(&traversal_record).exists());
+    assert!(init_py.exists());
+
+    uv_snapshot!(context.filters(), context.pip_uninstall()
+        .arg("evilpkg"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Invalid RECORD entry in evilpkg==0.1.0 (from file://[TEMP_DIR]/evilpkg) that escapes the Python environment, skipping: [..]/traversal_target.txt
+    Uninstalled 1 package in [TIME]
+     - evilpkg==0.1.0 (from file://[TEMP_DIR]/evilpkg)
+    ");
+
+    // The regular package files have been removed, while the file outside the scheme still exists.
+    assert!(target_file.exists());
+    assert!(!init_py.exists());
+
+    Ok(())
+}
