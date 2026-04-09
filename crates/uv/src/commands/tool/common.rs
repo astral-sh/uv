@@ -2,7 +2,7 @@ use anyhow::{Context, bail};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use std::{
-    collections::{BTreeMap, BTreeSet, Bound},
+    collections::{BTreeSet, Bound},
     ffi::OsString,
     fmt::Write,
     path::Path,
@@ -10,7 +10,6 @@ use std::{
 use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_configuration::EditableMode;
 use uv_distribution_types::{InstalledDist, Name};
 use uv_distribution_types::{Requirement, RequirementSource};
 use uv_fs::Simplified;
@@ -28,10 +27,9 @@ use uv_settings::{PythonInstallMirrors, ToolOptions};
 use uv_shell::Shell;
 use uv_tool::{InstalledTools, Tool, ToolEntrypoint, entrypoint_paths};
 use uv_warnings::warn_user_once;
-use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
 use crate::commands::pip;
-use crate::commands::project::{EditableOverride, ProjectError};
+use crate::commands::project::ProjectError;
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
 
@@ -74,63 +72,35 @@ pub(crate) fn remove_entrypoints(tool: &Tool) {
     }
 }
 
-/// Build the editable override for local tool requirements.
+/// Normalize tool-local directory requirements so non-editable inputs are represented explicitly.
 ///
-/// For local directory tools in a workspace, this applies each requirement's editable mode to the
-/// target package and any implicitly included workspace members. Explicit local requirements keep
-/// their own source editability.
-pub(crate) async fn tool_package_editable_override(
-    requirements: &[Requirement],
-    workspace_cache: &WorkspaceCache,
-) -> anyhow::Result<Option<EditableOverride>> {
-    let explicit_local_requirements: BTreeSet<_> = requirements
-        .iter()
-        .filter(|requirement| matches!(requirement.source, RequirementSource::Directory { .. }))
-        .map(|requirement| requirement.name.clone())
-        .collect();
-
-    let mut packages = BTreeMap::new();
-    for requirement in requirements {
-        let RequirementSource::Directory { install_path, .. } = &requirement.source else {
-            continue;
-        };
-
-        let mode = if requirement.is_editable() {
-            EditableMode::Editable
-        } else {
-            EditableMode::NonEditable
-        };
-
-        let mut includes_workspace_member = false;
-        if install_path.join("pyproject.toml").is_file() {
-            for member in VirtualProject::discover(
-                install_path,
-                &DiscoveryOptions::default(),
-                workspace_cache,
-            )
-            .await?
-            .workspace()
-            .packages()
-            .keys()
-            {
-                if member != &requirement.name && explicit_local_requirements.contains(member) {
-                    continue;
-                }
-                packages.insert(member.clone(), mode);
-                includes_workspace_member = true;
-            }
-        }
-
-        if !includes_workspace_member {
-            packages.insert(requirement.name.clone(), mode);
-        }
-    }
-
-    if packages.is_empty() {
-        Ok(None)
-    } else {
-        Ok(Some(EditableOverride::Packages(packages)))
-    }
+/// The CLI parser distinguishes editable local directories with `editable = Some(true)`, but
+/// leaves non-editable directories as `editable = None`. Tools need to preserve each local
+/// requirement's chosen mode while lowering implicit workspace members, so convert the implicit
+/// non-editable case into `Some(false)` before resolution.
+pub(crate) fn normalize_tool_local_requirements(
+    requirements: impl IntoIterator<Item = Requirement>,
+) -> Vec<Requirement> {
+    requirements
+        .into_iter()
+        .map(|requirement| Requirement {
+            source: match requirement.source {
+                RequirementSource::Directory {
+                    install_path,
+                    editable: None,
+                    r#virtual,
+                    url,
+                } => RequirementSource::Directory {
+                    install_path,
+                    editable: Some(false),
+                    r#virtual,
+                    url,
+                },
+                source => source,
+            },
+            ..requirement
+        })
+        .collect()
 }
 
 /// Given a no-solution error and the [`Interpreter`] that was used during the solve, attempt to

@@ -1,6 +1,7 @@
 use std::fmt::Write;
 use std::ops::Deref;
 use std::path::Path;
+use std::sync::Arc;
 
 use anyhow::Result;
 use itertools::Itertools;
@@ -18,7 +19,9 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::LoweredExtraBuildDependencies;
-use uv_distribution_types::{Dist, Index, Name, Requirement, Resolution, ResolvedDist, SourceDist};
+use uv_distribution_types::{
+    DirectorySourceDist, Dist, Index, Name, Requirement, Resolution, ResolvedDist, SourceDist,
+};
 use uv_fs::{PortablePathBuf, Simplified};
 use uv_installer::{InstallationStrategy, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
@@ -29,7 +32,7 @@ use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequ
 use uv_resolver::{FlatIndex, ForkStrategy, Installable, Lock, PrereleaseMode, ResolutionMode};
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
-use uv_types::{BuildIsolation, HashStrategy};
+use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user;
 use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
@@ -42,9 +45,9 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    EditableOverride, EnvironmentUpdate, PlatformState, ProjectEnvironment, ProjectError,
-    ScriptEnvironment, UniversalState, apply_editable_mode, default_dependency_groups,
-    detect_conflicts, script_extra_build_requires, script_specification, update_environment,
+    EnvironmentUpdate, PlatformState, ProjectEnvironment, ProjectError, ScriptEnvironment,
+    UniversalState, default_dependency_groups, detect_conflicts, script_extra_build_requires,
+    script_specification, update_environment,
 };
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
@@ -264,7 +267,7 @@ pub(crate) async fn sync(
                 spec,
                 modifications,
                 python_platform.as_ref(),
-                None,
+                SourceTreeEditablePolicy::Ignore,
                 build_constraints.unwrap_or_default(),
                 script_extra_build_requires,
                 &settings,
@@ -777,8 +780,7 @@ pub(super) async fn do_sync(
     let resolution = apply_no_virtual_project(resolution);
 
     // If necessary, convert editable to non-editable distributions.
-    let editable = editable.map(EditableOverride::All);
-    let resolution = apply_editable_mode(resolution, editable.as_ref());
+    let resolution = apply_editable_mode(resolution, editable);
 
     // Constrain any build requirements marked as `match-runtime = true`.
     let extra_build_requires = extra_build_requires.match_runtime(&resolution)?;
@@ -843,7 +845,7 @@ pub(super) async fn do_sync(
         &build_hasher,
         exclude_newer.clone(),
         sources.clone(),
-        None,
+        SourceTreeEditablePolicy::Ignore,
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
@@ -878,6 +880,65 @@ pub(super) async fn do_sync(
     .await?;
 
     Ok(changelog)
+}
+
+/// If necessary, convert any editable requirements to non-editable.
+fn apply_editable_mode(resolution: Resolution, editable: Option<EditableMode>) -> Resolution {
+    match editable {
+        None => resolution,
+        Some(EditableMode::Editable) => resolution.map(|dist| {
+            let ResolvedDist::Installable { dist, version } = dist else {
+                return None;
+            };
+            let Dist::Source(SourceDist::Directory(DirectorySourceDist {
+                name,
+                install_path,
+                editable: None | Some(false),
+                r#virtual,
+                url,
+            })) = dist.as_ref()
+            else {
+                return None;
+            };
+
+            Some(ResolvedDist::Installable {
+                dist: Arc::new(Dist::Source(SourceDist::Directory(DirectorySourceDist {
+                    name: name.clone(),
+                    install_path: install_path.clone(),
+                    editable: Some(true),
+                    r#virtual: *r#virtual,
+                    url: url.clone(),
+                }))),
+                version: version.clone(),
+            })
+        }),
+        Some(EditableMode::NonEditable) => resolution.map(|dist| {
+            let ResolvedDist::Installable { dist, version } = dist else {
+                return None;
+            };
+            let Dist::Source(SourceDist::Directory(DirectorySourceDist {
+                name,
+                install_path,
+                editable: None | Some(true),
+                r#virtual,
+                url,
+            })) = dist.as_ref()
+            else {
+                return None;
+            };
+
+            Some(ResolvedDist::Installable {
+                dist: Arc::new(Dist::Source(SourceDist::Directory(DirectorySourceDist {
+                    name: name.clone(),
+                    install_path: install_path.clone(),
+                    editable: Some(false),
+                    r#virtual: *r#virtual,
+                    url: url.clone(),
+                }))),
+                version: version.clone(),
+            })
+        }),
+    }
 }
 
 /// Filter out any virtual workspace members.

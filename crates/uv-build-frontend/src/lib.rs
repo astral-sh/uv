@@ -1096,7 +1096,9 @@ async fn create_pep517_build_environment(
             install_path,
             locations,
             &no_sources,
-            build_context.editable(),
+            build_context
+                .source_tree_editable_policy()
+                .default_editable(),
             workspace_cache,
             credentials_cache,
         )

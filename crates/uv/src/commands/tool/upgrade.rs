@@ -21,6 +21,7 @@ use uv_python::{
 use uv_requirements::RequirementsSpecification;
 use uv_settings::{Combine, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::{InstalledTools, Tool};
+use uv_types::SourceTreeEditablePolicy;
 use uv_warnings::write_error_chain;
 use uv_workspace::WorkspaceCache;
 
@@ -29,11 +30,10 @@ use crate::commands::pip::loggers::{
 };
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::{
-    EnvironmentUpdate, PlatformState, apply_editable_mode, resolve_environment, sync_environment,
-    update_environment,
+    EnvironmentUpdate, PlatformState, resolve_environment, sync_environment, update_environment,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::tool::common::{remove_entrypoints, tool_package_editable_override};
+use crate::commands::tool::common::{normalize_tool_local_requirements, remove_entrypoints};
 use crate::commands::{ExitStatus, conjunction, tool::common::finalize_tool_install};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -324,25 +324,28 @@ async fn upgrade_tool(
     );
     let settings = ResolverInstallerSettings::from(options.clone());
 
-    let build_constraints =
-        Constraints::from_requirements(existing_tool_receipt.build_constraints().iter().cloned());
+    let build_constraints = Constraints::from_requirements(
+        normalize_tool_local_requirements(
+            existing_tool_receipt.build_constraints().iter().cloned(),
+        )
+        .into_iter(),
+    );
 
     // Resolve the requirements.
-    let spec = RequirementsSpecification::from_excludes(
-        existing_tool_receipt.requirements().to_vec(),
+    let constraints = normalize_tool_local_requirements(
         existing_tool_receipt
             .constraints()
             .iter()
             .chain(constraints)
             .cloned()
-            .collect(),
-        existing_tool_receipt.overrides().to_vec(),
+            .collect::<Vec<_>>(),
+    );
+    let spec = RequirementsSpecification::from_excludes(
+        normalize_tool_local_requirements(existing_tool_receipt.requirements().to_vec()),
+        constraints,
+        normalize_tool_local_requirements(existing_tool_receipt.overrides().to_vec()),
         existing_tool_receipt.excludes().to_vec(),
     );
-    let editable_override =
-        tool_package_editable_override(existing_tool_receipt.requirements(), workspace_cache)
-            .await?;
-
     // Initialize any shared state.
     let state = PlatformState::default();
 
@@ -356,6 +359,7 @@ async fn upgrade_tool(
             spec.into(),
             interpreter,
             python_platform,
+            SourceTreeEditablePolicy::Respect,
             build_constraints.clone(),
             &settings.resolver,
             client_builder,
@@ -373,7 +377,7 @@ async fn upgrade_tool(
 
         let environment = sync_environment(
             environment,
-            &apply_editable_mode(resolution.into(), editable_override.as_ref()),
+            &resolution.into(),
             Modifications::Exact,
             build_constraints,
             (&settings).into(),
@@ -401,7 +405,7 @@ async fn upgrade_tool(
             spec,
             Modifications::Exact,
             python_platform,
-            editable_override.clone(),
+            SourceTreeEditablePolicy::Respect,
             build_constraints,
             ExtraBuildRequires::default(),
             &settings,
