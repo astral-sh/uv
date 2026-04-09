@@ -14,7 +14,7 @@ use sha2::{Digest, Sha256};
 use tracing::{debug, instrument, trace, warn};
 use walkdir::WalkDir;
 
-use uv_fs::{Simplified, persist_with_retry_sync, relative_to};
+use uv_fs::{PortablePath, Simplified, persist_with_retry_sync, relative_to};
 use uv_normalize::PackageName;
 use uv_pypi_types::DirectUrl;
 use uv_shell::escape_posix_for_single_quotes;
@@ -899,10 +899,8 @@ pub fn validate_and_heal_record<'a>(
         // were unpacked but not listed in the archive.
         for (path, size) in files {
             record.push(RecordEntry {
-                path: path
-                    .to_str()
-                    .ok_or_else(|| Error::NonUtf8WheelPath(dist.to_string(), path.to_path_buf()))?
-                    .to_string(),
+                // RECORD entries always use forward slashes, even on Windows.
+                path: PortablePath::from(path).to_string(),
                 // We don't heal the hash. It's not validated anyway (pip doesn't), and by rules of
                 // the spec the wheel would have been rejected anyway (if the spec would have been
                 // enforced).

@@ -21,7 +21,7 @@ use wiremock::{
 use zip::write::SimpleFileOptions;
 use zip::{ZipArchive, ZipWriter};
 
-use uv_fs::Simplified;
+use uv_fs::{PortablePath, Simplified};
 use uv_static::EnvVars;
 #[cfg(feature = "test-git")]
 use uv_test::decode_token;
@@ -14979,10 +14979,12 @@ fn handle_record_mismatches() -> Result<()> {
         if name.as_os_str().is_empty() {
             continue;
         }
+        // Zip entries must use forward slashes, even on Windows.
+        let name = PortablePath::from(name).to_string();
         if path.is_dir() {
-            writer.add_directory(name.to_str().unwrap(), options)?;
+            writer.add_directory(&name, options)?;
         } else {
-            writer.start_file(name.to_str().unwrap(), options)?;
+            writer.start_file(&name, options)?;
             io::copy(&mut File::open(path)?, &mut writer)?;
         }
     }
