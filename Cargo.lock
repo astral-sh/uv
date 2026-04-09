@@ -6626,7 +6626,6 @@ dependencies = [
  "configparser",
  "csv",
  "data-encoding",
- "dunce",
  "fs-err",
  "indoc",
  "itertools 0.14.0",
