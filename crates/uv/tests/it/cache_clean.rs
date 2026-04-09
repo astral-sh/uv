@@ -275,3 +275,48 @@ async fn cache_timeout() {
     error: Timeout ([TIME]) when waiting for lock on `[CACHE_DIR]/` at `[CACHE_DIR]/.lock`, is another uv process running? You can set `UV_LOCK_TIMEOUT` to increase the timeout.
     ");
 }
+
+/// `cache clean` should handle file paths normally restricted by Win32 path normalization.
+#[cfg(windows)]
+#[test]
+fn clean_handles_verbatim_paths() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Clean slate
+    fs_err::remove_dir_all(&context.cache_dir)?;
+
+    // Cached sdist path resembling the uwsgi==2.0.31 build failure.
+    let uwsgi_shard = context
+        .cache_dir
+        .child("sdists-v9")
+        .child("pypi")
+        .child("uwsgi")
+        .child("2.0.31")
+        .child("QxDIp0qpjbsWjWURKmegK")
+        .child("src")
+        .child("core");
+
+    // Attempt to create a file with a trailing dot (we need to make it verbatim to do so)
+    uwsgi_shard.create_dir_all()?;
+    let invalid_path = uwsgi_shard.child("logging.").to_path_buf();
+    let invalid_file = uv_fs::verbatim_path(invalid_path.as_path());
+    fs_err::write(&invalid_file, b"")?;
+
+    // Confirm Win32 normalized path causes an os error when attempting to remove
+    let remove_err = fs_err::remove_file(&invalid_path).expect_err("expected to fail");
+    assert_eq!(remove_err.kind(), std::io::ErrorKind::NotFound);
+
+    // Tests cache clean leverages verbatim conversion
+    uv_snapshot!(context.filters(), context.clean().arg("--verbose"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    DEBUG uv [VERSION] ([COMMIT] DATE)
+    Clearing cache at: [CACHE_DIR]/
+    Removed 2 files
+    ");
+
+    Ok(())
+}
