@@ -23,6 +23,17 @@ use crate::record::RecordEntry;
 use crate::script::{Script, scripts_from_ini};
 use crate::{Error, Layout};
 
+/// Returns `true` if the path refers to a macOS `AppleDouble` resource fork sidecar (`._*`).
+///
+/// On non-native filesystems (exFAT, FAT32, SMB), macOS stores extended attributes as `._`
+/// sidecar files. These appear in directory listings but are not part of the wheel contents
+/// and must be skipped during installation to avoid RECORD mismatches.
+fn is_apple_double(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(|n| n.starts_with("._"))
+}
+
 /// Wrapper script template function
 ///
 /// <https://github.com/pypa/pip/blob/7f8a6844037fb7255cfd0d34ff8e8cf44f2598d4/src/pip/_vendor/distlib/scripts.py#L41-L48>
@@ -348,6 +359,12 @@ pub(crate) fn move_folder_recorded(
     for entry in WalkDir::new(src_dir) {
         let entry = entry?;
         let src = entry.path();
+
+        // Skip macOS AppleDouble resource fork sidecar files (`._*`).
+        if is_apple_double(src) {
+            continue;
+        }
+
         // This is the base path for moving to the actual target for the data
         // e.g. for data it's without <..>.data/data/
         let relative_to_data = src
@@ -622,6 +639,11 @@ pub(crate) fn install_data(
                 let mut initialized = false;
                 for file in fs::read_dir(path)? {
                     let file = file?;
+
+                    // Skip macOS AppleDouble resource fork sidecar files (`._*`).
+                    if is_apple_double(&file.path()) {
+                        continue;
+                    }
 
                     // Couldn't find any docs for this, took it directly from
                     // https://github.com/pypa/pip/blob/b5457dfee47dd9e9f6ec45159d9d410ba44e5ea1/src/pip/_internal/operations/install/wheel.py#L565-L583
@@ -953,7 +975,8 @@ mod test {
 
     use super::{
         Error, RecordEntry, Script, WheelFile, format_shebang, get_script_executable,
-        parse_email_message_file, read_record_file, write_installer_metadata,
+        is_apple_double, move_folder_recorded, parse_email_message_file, read_record_file,
+        write_installer_metadata,
     };
 
     #[test]
@@ -1265,5 +1288,51 @@ mod test {
             .map(|entry| entry.path)
             .collect::<Vec<String>>();
         assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn test_is_apple_double() {
+        assert!(is_apple_double(Path::new("._foo.txt")));
+        assert!(is_apple_double(Path::new("/some/path/._bar.py")));
+        assert!(!is_apple_double(Path::new("foo.txt")));
+        assert!(!is_apple_double(Path::new(".hidden")));
+        assert!(!is_apple_double(Path::new("_underscore")));
+    }
+
+    /// Verify that `move_folder_recorded` skips macOS `AppleDouble` sidecar files.
+    ///
+    /// On exFAT, macOS creates `._*` sidecar files that are not in the wheel RECORD.
+    /// Without filtering, `move_folder_recorded` fails with a RECORD mismatch error.
+    #[test]
+    fn test_move_folder_recorded_skips_apple_double() -> Result<(), Error> {
+        let temp_dir = assert_fs::TempDir::new().unwrap();
+
+        let site_packages = temp_dir.child("site-packages");
+        let src_dir = site_packages.child("pkg.data").child("data");
+        src_dir.create_dir_all().unwrap();
+
+        // Legitimate file that should be moved.
+        src_dir.child("real_file.txt").write_str("hello").unwrap();
+
+        // macOS AppleDouble sidecar (not in RECORD).
+        src_dir
+            .child("._real_file.txt")
+            .write_binary(&[0x00, 0x05, 0x16, 0x07])
+            .unwrap();
+
+        let dest_dir = temp_dir.child("dest");
+        let record_path = Path::new("pkg.data").join("data").join("real_file.txt");
+        let mut record = vec![RecordEntry {
+            path: record_path.to_string_lossy().to_string(),
+            hash: None,
+            size: None,
+        }];
+
+        move_folder_recorded(&src_dir, &dest_dir, site_packages.path(), &mut record)?;
+
+        assert!(dest_dir.child("real_file.txt").exists());
+        assert!(!dest_dir.child("._real_file.txt").exists());
+
+        Ok(())
     }
 }
