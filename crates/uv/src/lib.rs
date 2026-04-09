@@ -252,14 +252,22 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         // from the workspace member's `pyproject.toml` for named index resolution.
         if let Commands::Project(command) = &*cli.command {
             if let Some(package) = command.package() {
-                package_indexes = workspace.packages().get(package).and_then(|member| {
-                    member
-                        .pyproject_toml()
-                        .tool
-                        .as_ref()
-                        .and_then(|tool| tool.uv.as_ref())
-                        .and_then(|uv| uv.index.clone())
-                });
+                package_indexes = workspace
+                    .packages()
+                    .get(package)
+                    .map(|member| {
+                        member
+                            .pyproject_toml()
+                            .tool
+                            .as_ref()
+                            .and_then(|tool| tool.uv.as_ref())
+                            .and_then(|uv| uv.index.clone())
+                            .into_iter()
+                            .flatten()
+                            .map(|index| index.relative_to(member.root()))
+                            .collect::<Result<Vec<_>, _>>()
+                    })
+                    .transpose()?;
             }
         }
 
