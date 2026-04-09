@@ -7,6 +7,8 @@
 
 Released on 2026-04-09.
 
+This release resolves a low severity security advisory in which wheels with malformed RECORD entries could delete arbitrary files on uninstall. See [GHSA-pjjw-68hj-v9mw](https://github.com/astral-sh/uv/security/advisories/GHSA-pjjw-68hj-v9mw) for details.
+
 ### Bug fixes
 
 - Do not remove files outside the venv on uninstall ([#18942](https://github.com/astral-sh/uv/pull/18942))
