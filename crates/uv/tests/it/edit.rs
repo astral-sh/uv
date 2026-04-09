@@ -11870,6 +11870,77 @@ fn add_index_by_name_for_workspace_member_with_relative_path() -> Result<()> {
 }
 
 #[test]
+fn add_index_by_name_for_current_workspace_member() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let workspace_toml = context.temp_dir.child("pyproject.toml");
+    workspace_toml.write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["child"]
+    "#})?;
+
+    let child_dir = context.temp_dir.child("child");
+    child_dir.create_dir_all()?;
+    let child_pyproject = child_dir.child("pyproject.toml");
+    child_pyproject.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [[tool.uv.index]]
+        name = "local"
+        url = "./packages"
+    "#})?;
+
+    let packages = child_dir.child("packages");
+    packages.create_dir_all()?;
+
+    let tqdm = packages.child("tqdm");
+    tqdm.create_dir_all()?;
+    let index = tqdm.child("index.html");
+    index.write_str(&formatdoc! {r#"
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta name="pypi:repository-version" content="1.1" />
+          </head>
+          <body>
+            <h1>Links for tqdm</h1>
+            <a
+              href="{}/tqdm-1000.0.0-py3-none-any.whl"
+              data-requires-python=">=3.8"
+            >
+              tqdm-1000.0.0-py3-none-any.whl
+            </a>
+          </body>
+        </html>
+    "#, Url::from_directory_path(context.workspace_root.join("test/links/")).unwrap().as_str()})?;
+
+    uv_snapshot!(context.filters(), context
+        .add()
+        .current_dir(&child_dir)
+        .arg("tqdm")
+        .arg("--index")
+        .arg("local")
+        .arg("--exclude-newer-package")
+        .arg("tqdm=false"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tqdm==1000.0.0
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn add_index_by_name_no_cross_member_references() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
