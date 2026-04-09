@@ -11213,6 +11213,85 @@ fn add_index_with_existing_relative_path_index() -> Result<()> {
     Ok(())
 }
 
+/// Add an index with an existing relative path without disambiguating it.
+#[test]
+fn add_index_with_existing_ambiguous_relative_path_index() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Create test-index/ subdirectory and copy our "offline" tqdm wheel there
+    let packages = context.temp_dir.child("test-index");
+    packages.create_dir_all()?;
+
+    let wheel_src = context
+        .workspace_root
+        .join("test/links/ok-1.0.0-py3-none-any.whl");
+    let wheel_dst = packages.child("ok-1.0.0-py3-none-any.whl");
+    fs_err::copy(&wheel_src, &wheel_dst)?;
+
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("test-index"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `--index test-index` is an ambiguous reference to a local directory. Use `--index ./test-index` instead to disambiguate from an index name. In the future, uv will exit with an error. Use `--preview-features index-assume-name` to treat this request as an index name reference immediately.
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
+/// With preview enabled, require a matching index name for ambiguous values.
+#[test]
+fn add_index_with_existing_ambiguous_relative_path_index_preview() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Create test-index/ subdirectory and copy our "offline" tqdm wheel there
+    let packages = context.temp_dir.child("test-index");
+    packages.create_dir_all()?;
+
+    let wheel_src = context
+        .workspace_root
+        .join("test/links/ok-1.0.0-py3-none-any.whl");
+    let wheel_dst = packages.child("ok-1.0.0-py3-none-any.whl");
+    fs_err::copy(&wheel_src, &wheel_dst)?;
+
+    uv_snapshot!(context.add()
+        .arg("iniconfig")
+        .arg("--index").arg("test-index")
+        .arg("--preview-features").arg("index-assume-name"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Could not find an index named `test-index`
+    ");
+
+    Ok(())
+}
+
 /// Add an index with a non-existent relative path.
 #[test]
 fn add_index_with_non_existent_relative_path() -> Result<()> {
@@ -12005,16 +12084,13 @@ async fn add_index_by_name_directory_ambiguity() -> Result<()> {
     proxy_dir.create_dir_all()?;
 
     // Should warn about ambiguity and use the directory (which will fail since it's empty)
-    let mut filters = context.filters();
-    // On Windows the hint includes both `.\\proxy` (normalised to `./proxy`) and `./proxy`.
-    filters.push(("`./proxy` or ", ""));
-    uv_snapshot!(filters, context.add().arg("iniconfig").arg("--index").arg("proxy"), @"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("proxy"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: Relative paths passed to `--index` should be disambiguated from index names (use `./proxy`). Pass `--preview-features index-assume-name` to treat this as the named index. In the future, this will become the default.
+    warning: `--index proxy` is an ambiguous reference to both a local directory and named index. Use `--index ./proxy` to prefer the local directory or `--preview-features index-assume-name` to prefer the named index. A future version of uv will always assume ambiguous references are to named indexes.
     warning: Index directory `file://[TEMP_DIR]/proxy` is empty, skipping
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -12139,7 +12215,7 @@ fn add_index_by_name_explicit_multiple() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Explicit index `explicit-index` cannot be used on the command line. Explicit indexes are only usable when referenced by `[tool.uv.sources]`.
+    error: The requested index `explicit-index` is marked as `explicit` and can only be used in `uv add` or `[tool.uv.sources]`.
     ");
 
     Ok(())
