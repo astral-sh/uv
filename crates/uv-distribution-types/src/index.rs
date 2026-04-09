@@ -670,8 +670,14 @@ impl IndexArg {
             };
         };
 
+        let mut index = index.borrow().clone();
+        // A named index selected via `--index <name>` should behave like any
+        // other explicit CLI index, regardless of whether it was marked as a
+        // config-level default.
+        index.default = false;
+
         match strategy {
-            IndexArgStrategy::IgnoreDirectory => Ok(index.borrow().clone()),
+            IndexArgStrategy::IgnoreDirectory => Ok(index),
             IndexArgStrategy::PreferDirectory => {
                 // If a directory of the same name exists, treat it as a directory but
                 // warn the user of the impending changes.
@@ -687,7 +693,7 @@ impl IndexArg {
                     );
                     Ok(Index::new(directory).with_origin(Origin::Cli))
                 } else {
-                    Ok(index.borrow().clone())
+                    Ok(index)
                 }
             }
         }
