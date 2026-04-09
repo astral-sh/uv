@@ -236,6 +236,12 @@ pub(crate) enum ProjectError {
     #[error("PEP 723 scripts do not support optional dependencies, but extra `{0}` was specified")]
     MissingExtraScript(ExtraName),
 
+    #[error("Package `{0}` was not found in project dependencies, but was specified for upgrade via `--upgrade-package`")]
+    MissingUpgradePackage(PackageName),
+
+    #[error("Group `{0}` was not found in the project's `dependency-groups` table, but was specified for upgrade via `--upgrade-group`")]
+    MissingUpgradeGroup(GroupName),
+
     #[error("Supported environments must be disjoint, but the following markers overlap: `{0}` and `{1}`.\n\n{hint}{colon} replace `{1}` with `{2}`.", hint = "hint".bold().cyan(), colon = ":".bold())]
     OverlappingMarkers(String, String, String),
 

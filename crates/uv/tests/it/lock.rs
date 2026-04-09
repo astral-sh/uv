@@ -12240,6 +12240,67 @@ fn lock_upgrade_drop_fork_markers() -> Result<()> {
     Ok(())
 }
 
+/// Reject when specified packages don't exist in the project with `--upgrade-package`.
+#[test]
+fn lock_upgrade_package_nonexistent() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
+        "#,
+    )?;
+
+    // Try to upgrade a non-existent package
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade-package").arg("nonexistent"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Package `nonexistent` was not found in project dependencies, but was specified for upgrade via `--upgrade-package`
+    ");
+
+    Ok(())
+}
+
+/// Reject when specified groups don't exist in the project with `--upgrade-group`.
+#[test]
+fn lock_upgrade_group_nonexistent() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
+
+        [dependency-groups]
+        dev = ["pytest"]
+        "#,
+    )?;
+
+    // Try to upgrade a non-existent group
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade-group").arg("nonexistent"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Group `nonexistent` was not found in the project's `dependency-groups` table, but was specified for upgrade via `--upgrade-group`
+    ");
+
+    Ok(())
+}
+
 /// Warn when there are missing bounds on transitive dependencies with `--resolution lowest`.
 #[test]
 fn lock_warn_missing_transitive_lower_bounds() -> Result<()> {

@@ -77,6 +77,48 @@ impl LockResult {
     }
 }
 
+/// Validate that all specified upgrade packages and groups exist in the project.
+///
+/// This function checks:
+/// - All packages from `--upgrade-package` exist in project dependencies or dependency groups
+/// - All groups from `--upgrade-group` exist in the dependency groups
+fn validate_upgrade_packages_and_groups(
+    upgrade: &Upgrade,
+    requirements: &[Requirement],
+    dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
+) -> Result<(), ProjectError> {
+    // Extract all package names from direct requirements
+    let mut available_packages: rustc_hash::FxHashSet<PackageName> =
+        requirements.iter().map(|req| req.name.clone()).collect();
+
+    // Add packages from all dependency groups
+    for group_reqs in dependency_groups.values() {
+        for req in group_reqs {
+            available_packages.insert(req.name.clone());
+        }
+    }
+
+    // Check if all packages specified for upgrade exist
+    if let Some(packages) = upgrade.packages() {
+        for package in packages {
+            if !available_packages.contains(package) {
+                return Err(ProjectError::MissingUpgradePackage(package.clone()));
+            }
+        }
+    }
+
+    // Check if all groups specified for upgrade exist
+    if let Some(groups) = upgrade.groups() {
+        for group in groups {
+            if !dependency_groups.contains_key(group) {
+                return Err(ProjectError::MissingUpgradeGroup(group.clone()));
+            }
+        }
+    }
+
+    Ok(())
+}
+
 /// Resolve the project requirements into a lockfile.
 pub(crate) async fn lock(
     project_dir: &Path,
@@ -539,6 +581,11 @@ async fn do_lock(
             Ok((name, requirements))
         })
         .collect::<Result<BTreeMap<_, _>, ProjectError>>()?;
+
+    // Validate that all specified upgrade packages and groups exist in the project
+    if let Some(upgrade_) = upgrade {
+        validate_upgrade_packages_and_groups(upgrade_, &requirements, &dependency_groups)?;
+    }
 
     // Collect the conflicts.
     let mut conflicts = target.conflicts()?;
