@@ -11824,19 +11824,37 @@ fn add_index_by_name_for_workspace_member_with_relative_path() -> Result<()> {
 
     let packages = child_dir.child("packages");
     packages.create_dir_all()?;
-    let wheel_src = context
-        .workspace_root
-        .join("test/links/ok-1.0.0-py3-none-any.whl");
-    let wheel_dst = packages.child("ok-1.0.0-py3-none-any.whl");
-    fs_err::copy(&wheel_src, &wheel_dst)?;
+
+    let tqdm = packages.child("tqdm");
+    tqdm.create_dir_all()?;
+    let index = tqdm.child("index.html");
+    index.write_str(&formatdoc! {r#"
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta name="pypi:repository-version" content="1.1" />
+          </head>
+          <body>
+            <h1>Links for tqdm</h1>
+            <a
+              href="{}/tqdm-1000.0.0-py3-none-any.whl"
+              data-requires-python=">=3.8"
+            >
+              tqdm-1000.0.0-py3-none-any.whl
+            </a>
+          </body>
+        </html>
+    "#, Url::from_directory_path(context.workspace_root.join("test/links/")).unwrap().as_str()})?;
 
     uv_snapshot!(context.filters(), context
         .add()
         .arg("--package")
         .arg("child")
-        .arg("ok")
+        .arg("tqdm")
         .arg("--index")
-        .arg("local"), @"
+        .arg("local")
+        .arg("--exclude-newer-package")
+        .arg("tqdm=false"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11845,7 +11863,7 @@ fn add_index_by_name_for_workspace_member_with_relative_path() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + ok==1.0.0
+     + tqdm==1000.0.0
     ");
 
     Ok(())
