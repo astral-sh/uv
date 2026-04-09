@@ -518,7 +518,12 @@ fn dry_run_uninstall_egg_info() -> Result<()> {
 /// scheme.
 #[test]
 fn uninstall_record_path_traversal() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    // The traversal-depth count differs between Unix (`.venv/lib/pythonX.Y/site-packages`)
+    // and Windows (`.venv/Lib/site-packages`), so normalize the `../` sequence in the warning.
+    let context = uv_test::test_context!("3.12").with_filter((
+        r"(\.\./)+traversal_target\.txt",
+        "[..]/traversal_target.txt",
+    ));
 
     context
         .init()
@@ -528,23 +533,33 @@ fn uninstall_record_path_traversal() -> Result<()> {
         .success();
     context.pip_install().arg("./evilpkg").assert().success();
 
-    let site_packages = ChildPath::new(context.site_packages());
-
-    // Build the relative traversal path from site-packages to the target file
-    // outside site-packages but inside the test temp dir.
+    // Build the relative traversal path from site-packages to a target file outside
+    // site-packages but inside the test temp dir. RECORD uses forward slashes, even on
+    // Windows, and the venv layout (and thus the traversal depth) differs by platform,
+    // so we construct the path manually and filter the leading `../` sequence out of the
+    // snapshot above.
     let target_file = context.temp_dir.child("traversal_target.txt");
     target_file.write_str("I should not be deleted")?;
-    let traversal_path = pathdiff::diff_paths(target_file.path(), site_packages.path()).unwrap();
-    // RECORD uses forward slashes, even on Windows.
-    let traversal_record = traversal_path.to_string_lossy().replace('\\', "/");
+    // Canonicalize the temp dir, since `site_packages` is built from a canonicalized path
+    // (on Windows that means an extended-length `\\?\` prefix, which would otherwise make
+    // `strip_prefix` fail).
+    let canonical_temp_dir = context.temp_dir.canonicalize()?;
+    let depth = context
+        .site_packages()
+        .strip_prefix(&canonical_temp_dir)?
+        .components()
+        .count();
+    let traversal_record = format!("{}traversal_target.txt", "../".repeat(depth));
 
-    let record_file = site_packages.child("evilpkg-0.1.0.dist-info/RECORD");
+    let record_file = context
+        .site_packages()
+        .join("evilpkg-0.1.0.dist-info/RECORD");
     let record = fs_err::read_to_string(&record_file)?;
     let record = format!("{}\n{},,0\n", record.trim(), traversal_record);
-    record_file.write_str(&record)?;
+    fs_err::write(record_file, &record)?;
 
-    let init_py = site_packages.join("evilpkg/__init__.py");
-    assert!(site_packages.join(traversal_path).exists());
+    let init_py = context.site_packages().join("evilpkg/__init__.py");
+    assert!(context.site_packages().join(&traversal_record).exists());
     assert!(init_py.exists());
 
     uv_snapshot!(context.filters(), context.pip_uninstall()
@@ -554,7 +569,7 @@ fn uninstall_record_path_traversal() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Invalid RECORD entry in evilpkg==0.1.0 (from file://[TEMP_DIR]/evilpkg) that escapes the Python environment, skipping: ../../../../traversal_target.txt
+    warning: Invalid RECORD entry in evilpkg==0.1.0 (from file://[TEMP_DIR]/evilpkg) that escapes the Python environment, skipping: [..]/traversal_target.txt
     Uninstalled 1 package in [TIME]
      - evilpkg==0.1.0 (from file://[TEMP_DIR]/evilpkg)
     ");
