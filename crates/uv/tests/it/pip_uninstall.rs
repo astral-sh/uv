@@ -541,8 +541,7 @@ fn uninstall_record_path_traversal() -> Result<()> {
     let target_file = context.temp_dir.child("traversal_target.txt");
     target_file.write_str("I should not be deleted")?;
     // Canonicalize the temp dir, since `site_packages` is built from a canonicalized path
-    // (on Windows that means an extended-length `\\?\` prefix, which would otherwise make
-    // `strip_prefix` fail).
+    // (with `\\?\`), which would otherwise make `strip_prefix` fail.
     let canonical_temp_dir = context.temp_dir.canonicalize()?;
     let depth = context
         .site_packages()
