@@ -36,7 +36,9 @@ use uv_resolver::{
 };
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
-use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
+use uv_types::{
+    BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy,
+};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Editability, Workspace, WorkspaceCache, WorkspaceMember};
 
@@ -795,7 +797,7 @@ async fn do_lock(
         &build_hasher,
         exclude_newer.clone(),
         sources.clone(),
-        None,
+        SourceTreeEditablePolicy::Ignore,
         workspace_cache.clone(),
         concurrency.clone(),
         preview,

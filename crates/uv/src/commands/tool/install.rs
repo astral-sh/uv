@@ -29,6 +29,7 @@ use uv_python::{
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
+use uv_types::SourceTreeEditablePolicy;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
 
@@ -38,11 +39,12 @@ use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::{self, Modifications};
 use crate::commands::pip::{resolution_markers, resolution_tags};
 use crate::commands::project::{
-    EnvironmentSpecification, PlatformState, ProjectError, apply_editable_mode,
-    resolve_environment, resolve_names, sync_environment, update_environment,
+    EnvironmentSpecification, PlatformState, ProjectError, resolve_environment, resolve_names,
+    sync_environment, update_environment,
 };
 use crate::commands::tool::common::{
-    finalize_tool_install, refine_interpreter, remove_entrypoints, tool_package_editable_override,
+    finalize_tool_install, normalize_tool_local_requirements, refine_interpreter,
+    remove_entrypoints,
 };
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
@@ -371,44 +373,46 @@ pub(crate) async fn install(
             )
             .await?,
         );
-        requirements
+        normalize_tool_local_requirements(requirements)
     };
 
     // Resolve the constraints.
-    let constraints: Vec<_> = spec
-        .constraints
-        .into_iter()
-        .map(|constraint| constraint.requirement)
-        .collect();
+    let constraints = normalize_tool_local_requirements(
+        spec.constraints
+            .into_iter()
+            .map(|constraint| constraint.requirement)
+            .collect::<Vec<_>>(),
+    );
 
     // Resolve the overrides.
-    let overrides = resolve_names(
-        spec.overrides,
-        &interpreter,
-        &settings,
-        &client_builder,
-        &state,
-        &concurrency,
-        &cache,
-        workspace_cache,
-        printer,
-        preview,
-        lfs,
-    )
-    .await?;
+    let overrides = normalize_tool_local_requirements(
+        resolve_names(
+            spec.overrides,
+            &interpreter,
+            &settings,
+            &client_builder,
+            &state,
+            &concurrency,
+            &cache,
+            workspace_cache,
+            printer,
+            preview,
+            lfs,
+        )
+        .await?,
+    );
 
     // Resolve the excludes.
     let excludes = spec.excludes.clone();
 
     // Resolve the build constraints.
-    let build_constraints: Vec<Requirement> =
+    let build_constraints = normalize_tool_local_requirements(
         operations::read_constraints(build_constraints, &client_builder)
             .await?
             .into_iter()
             .map(|constraint| constraint.requirement)
-            .collect();
-
-    let editable_override = tool_package_editable_override(&requirements, workspace_cache).await?;
+            .collect::<Vec<_>>(),
+    );
 
     // Convert to tool options.
     let options = ToolOptions::from(options);
@@ -580,7 +584,7 @@ pub(crate) async fn install(
             spec,
             Modifications::Exact,
             python_platform.as_ref(),
-            editable_override.clone(),
+            SourceTreeEditablePolicy::Respect,
             Constraints::from_requirements(build_constraints.iter().cloned()),
             ExtraBuildRequires::default(),
             &settings,
@@ -625,6 +629,7 @@ pub(crate) async fn install(
             spec.clone(),
             &interpreter,
             python_platform.as_ref(),
+            SourceTreeEditablePolicy::Respect,
             Constraints::from_requirements(build_constraints.iter().cloned()),
             &settings.resolver,
             &client_builder,
@@ -681,6 +686,7 @@ pub(crate) async fn install(
                         spec,
                         &interpreter,
                         python_platform.as_ref(),
+                        SourceTreeEditablePolicy::Respect,
                         Constraints::from_requirements(build_constraints.iter().cloned()),
                         &settings.resolver,
                         &client_builder,
@@ -720,7 +726,7 @@ pub(crate) async fn install(
         // Sync the environment with the resolved requirements.
         match sync_environment(
             environment,
-            &apply_editable_mode(resolution.into(), editable_override.as_ref()),
+            &resolution.into(),
             Modifications::Exact,
             Constraints::from_requirements(build_constraints.iter().cloned()),
             (&settings).into(),
