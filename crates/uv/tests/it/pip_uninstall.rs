@@ -535,10 +535,12 @@ fn uninstall_record_path_traversal() -> Result<()> {
     let target_file = context.temp_dir.child("traversal_target.txt");
     target_file.write_str("I should not be deleted")?;
     let traversal_path = pathdiff::diff_paths(target_file.path(), site_packages.path()).unwrap();
+    // RECORD uses forward slashes, even on Windows.
+    let traversal_record = traversal_path.to_string_lossy().replace('\\', "/");
 
     let record_file = site_packages.child("evilpkg-0.1.0.dist-info/RECORD");
     let record = fs_err::read_to_string(&record_file)?;
-    let record = format!("{}\n{},,0\n", record.trim(), traversal_path.display());
+    let record = format!("{}\n{},,0\n", record.trim(), traversal_record);
     record_file.write_str(&record)?;
 
     let init_py = site_packages.join("evilpkg/__init__.py");
