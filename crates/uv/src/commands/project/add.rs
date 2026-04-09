@@ -673,14 +673,18 @@ pub(crate) async fn add(
     }
     let indexes = valid_indexes;
 
-    // Add any indexes that were provided on the command-line, in priority order.
+    // Add any non-project indexes from the resolved settings, in priority order.
     if !raw {
         let urls = IndexUrls::from_indexes(indexes);
         let mut indexes = urls.defined_indexes().collect::<Vec<_>>();
         indexes.reverse();
         for index in indexes {
-            if !matches!(index.origin, Some(Origin::Project)) {
-                toml.add_index(index)?;
+            match index.origin {
+                Some(Origin::Project) => {}
+                Some(Origin::Cli | Origin::User | Origin::System | Origin::RequirementsTxt)
+                | None => {
+                    toml.add_index(index)?;
+                }
             }
         }
     }

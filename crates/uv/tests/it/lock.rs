@@ -35508,7 +35508,8 @@ async fn lock_index_by_name() -> Result<()> {
     Ok(())
 }
 
-/// Test that explicit indexes passed via CLI produce an error.
+/// Unlike `uv add` (which allows a single explicit index), `uv lock` errors when an explicit
+/// index is passed via `--index`.
 #[test]
 fn lock_index_by_name_explicit() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -35535,7 +35536,7 @@ fn lock_index_by_name_explicit() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Explicit index `explicit` cannot be used on the command line. Explicit indexes are only usable when referenced by `[tool.uv.sources]`.
+    error: The requested index `explicit` is marked as `explicit` and can only be used in `uv add` or `[tool.uv.sources]`.
     ");
 
     Ok(())

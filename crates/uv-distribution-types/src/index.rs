@@ -579,7 +579,7 @@ pub fn check_for_explicit_indexes(indexes: &[Index]) {
     // Hack to get `write_error_chain` to format things correctly
     #[derive(Debug, Error)]
     #[error(
-        "Explicit index `{0}` cannot be used on the command line. Explicit indexes are only usable when referenced by `[tool.uv.sources]`."
+        "The requested index `{0}` is marked as `explicit` and can only be used in `uv add` or `[tool.uv.sources]`."
     )]
     struct WrapperError(String);
 
@@ -676,36 +676,57 @@ impl IndexArg {
             Self::Unresolved(unresolved) => unresolved,
         };
 
+        let directory = if let Ok(url @ IndexUrl::Path(_)) = IndexUrl::from_str(unresolved.as_ref())
+            && let Ok(path) = url.inner().as_path()
+            && path.is_dir()
+        {
+            Some(url)
+        } else {
+            None
+        };
+
         let Some(index) = indexes
             .into_iter()
             .find(|index| index.borrow().name.as_ref() == Some(&unresolved))
         else {
-            return Err(ResolveIndexArgError(unresolved));
+            return match (strategy, directory) {
+                (IndexArgStrategy::PreferDirectory, Some(directory)) => {
+                    let path_hint = if cfg!(windows) {
+                        format!("`--index .\\{unresolved}`")
+                    } else {
+                        format!("`--index ./{unresolved}`")
+                    };
+                    warn_user_once!(
+                        "`--index {unresolved}` is an ambiguous reference to a local directory. Use {path_hint} instead to disambiguate from an index name. In the future, uv will exit with an error. Use `--preview-features {feature}` to treat this request as an index name reference immediately.",
+                        feature = PreviewFeature::IndexAssumeName
+                    );
+                    Ok(Index::new(directory).with_origin(Origin::Cli))
+                }
+                (IndexArgStrategy::PreferDirectory, None)
+                | (IndexArgStrategy::IgnoreDirectory, _) => Err(ResolveIndexArgError(unresolved)),
+            };
         };
 
         match strategy {
-            IndexArgStrategy::IgnoreDirectory => return Ok(index.borrow().clone()),
-            IndexArgStrategy::PreferDirectory => (),
-        }
-
-        // If a directory of the same name exists, treat it as a directory but
-        // warn the user of the impending changes.
-        if let Ok(url @ IndexUrl::Path(_)) = IndexUrl::from_str(unresolved.as_ref())
-            && let Ok(path) = url.inner().as_path()
-            && path.is_dir()
-        {
-            let path_hint = if cfg!(windows) {
-                format!("`.\\{unresolved}` or `./{unresolved}`")
-            } else {
-                format!("`./{unresolved}`")
-            };
-            warn_user_once!(
-                "Relative paths passed to `--index` should be disambiguated from index names (use {path_hint}). Pass `--preview-features {feature}` to treat this as the named index. In the future, this will become the default.",
-                feature = PreviewFeature::IndexAssumeName
-            );
-            Ok(Index::new(url.clone()).with_origin(Origin::Cli))
-        } else {
-            Ok(index.borrow().clone())
+            IndexArgStrategy::IgnoreDirectory => Ok(index.borrow().clone()),
+            IndexArgStrategy::PreferDirectory => {
+                // If a directory of the same name exists, treat it as a directory but
+                // warn the user of the impending changes.
+                if let Some(directory) = directory {
+                    let path_hint = if cfg!(windows) {
+                        format!("`--index .\\{unresolved}`")
+                    } else {
+                        format!("`--index ./{unresolved}`")
+                    };
+                    warn_user_once!(
+                        "`--index {unresolved}` is an ambiguous reference to both a local directory and named index. Use {path_hint} to prefer the local directory or `--preview-features {feature}` to prefer the named index. A future version of uv will always assume ambiguous references are to named indexes.",
+                        feature = PreviewFeature::IndexAssumeName
+                    );
+                    Ok(Index::new(directory).with_origin(Origin::Cli))
+                } else {
+                    Ok(index.borrow().clone())
+                }
+            }
         }
     }
 }

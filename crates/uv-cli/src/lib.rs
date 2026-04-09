@@ -6855,12 +6855,12 @@ pub struct IndexArgs {
     /// `--default-index` (which defaults to PyPI). When multiple `--index` flags are provided,
     /// earlier values take priority.
     ///
-    /// Index names can be used to reference indexes defined in the project, workspace, user, or
-    /// system configuration. If a directory exists with the same name as a defined index, the
-    /// directory will be used (with a warning). Use `./` or `../` on Unix or `.\\`, `..\\`, `./` or
-    /// `../` on Windows to disambiguate relative paths from index names. Enable the
-    /// `index-assume-name` preview feature to pick the named index in favour of a directory of the
-    /// same name.
+    /// Indexes defined in the project or configuration files can be referenced by name.
+    ///
+    /// For backwards compatibility, if a directory with the same name as an index exists in the
+    /// working directory, uv will search the directory for packages instead. In the future, uv will
+    /// require disambiguation, e.g., with `./name`, to prefer the local directory. To enable this
+    /// behavior now, enable the `index-assume-name` preview feature.
     //
     // The nested Vec structure (`Vec<Vec<Maybe<IndexArg>>>`) is required for clap's
     // value parsing mechanism, which processes one value at a time, in order to handle
