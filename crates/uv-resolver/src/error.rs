@@ -930,103 +930,224 @@ fn collapse_unavailable_versions(
     match tree {
         DerivationTree::External(_) => {}
         DerivationTree::Derived(derived) => {
-            match (
-                Arc::make_mut(&mut derived.cause1),
-                Arc::make_mut(&mut derived.cause2),
-            ) {
-                // If we have a node for unavailable package versions
-                (
-                    DerivationTree::External(External::Custom(package, versions, reason)),
-                    ref mut other,
-                )
-                | (
-                    ref mut other,
-                    DerivationTree::External(External::Custom(package, versions, reason)),
-                ) => {
-                    // First, recursively collapse the other side of the tree
-                    collapse_unavailable_versions(other);
+            collapse_unavailable_versions(Arc::make_mut(&mut derived.cause1));
+            collapse_unavailable_versions(Arc::make_mut(&mut derived.cause2));
 
-                    // If it's not a derived tree, nothing to do.
-                    let DerivationTree::Derived(Derived {
-                        terms,
-                        shared_id,
-                        cause1,
-                        cause2,
-                    }) = other
-                    else {
-                        return;
-                    };
+            if let Some(collapsed) = collapse_unavailable_version_chain(derived) {
+                *tree = collapsed;
+                return;
+            }
 
-                    // If the other tree has an unavailable package...
-                    match (&**cause1, &**cause2) {
-                        // Note the following cases are the same, but we need two matches to retain
-                        // the ordering of the causes
-                        (
-                            _,
-                            DerivationTree::External(External::Custom(
-                                other_package,
-                                other_versions,
-                                other_reason,
-                            )),
-                        ) => {
-                            // And the package and reason are the same...
-                            if package == other_package && reason == other_reason {
-                                // Collapse both into a new node, with a union of their ranges
-                                let versions = other_versions.union(versions);
-                                let mut terms = terms.clone();
-                                if let Some(Term::Positive(range)) = terms.get_mut(package) {
-                                    *range = versions.clone();
-                                }
-                                *tree = DerivationTree::Derived(Derived {
-                                    terms,
-                                    shared_id: *shared_id,
-                                    cause1: cause1.clone(),
-                                    cause2: Arc::new(DerivationTree::External(External::Custom(
-                                        package.clone(),
-                                        versions,
-                                        reason.clone(),
-                                    ))),
-                                });
-                            }
-                        }
-                        (
-                            DerivationTree::External(External::Custom(
-                                other_package,
-                                other_versions,
-                                other_reason,
-                            )),
-                            _,
-                        ) => {
-                            // And the package and reason are the same...
-                            if package == other_package && reason == other_reason {
-                                // Collapse both into a new node, with a union of their ranges
-                                let versions = other_versions.union(versions);
-                                let mut terms = terms.clone();
-                                if let Some(Term::Positive(range)) = terms.get_mut(package) {
-                                    *range = versions.clone();
-                                }
-                                *tree = DerivationTree::Derived(Derived {
-                                    terms,
-                                    shared_id: *shared_id,
-                                    cause1: Arc::new(DerivationTree::External(External::Custom(
-                                        package.clone(),
-                                        versions,
-                                        reason.clone(),
-                                    ))),
-                                    cause2: cause2.clone(),
-                                });
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-                // If not, just recurse
-                _ => {
-                    collapse_unavailable_versions(Arc::make_mut(&mut derived.cause1));
-                    collapse_unavailable_versions(Arc::make_mut(&mut derived.cause2));
-                }
+            if let Some(collapsed) = collapse_sibling_unavailable_versions(derived) {
+                *tree = collapsed;
+                return;
+            }
+
+            if let Some(collapsed) = collapse_adjacent_unavailable_versions(derived) {
+                *tree = collapsed;
             }
         }
+    }
+}
+
+/// Collapse sibling unavailable-version incompatibilities for the same package and reason.
+fn collapse_sibling_unavailable_versions(
+    derived: &Derived<PubGrubPackage, Range<Version>, UnavailableReason>,
+) -> Option<DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>> {
+    match (&*derived.cause1, &*derived.cause2) {
+        (
+            DerivationTree::External(External::Custom(package, versions, reason)),
+            DerivationTree::External(External::Custom(other_package, other_versions, other_reason)),
+        ) if package == other_package
+            && unavailable_reasons_equivalent_for_reporting(reason, other_reason) =>
+        {
+            Some(DerivationTree::External(External::Custom(
+                package.clone(),
+                versions.union(other_versions),
+                reason.clone(),
+            )))
+        }
+        _ => None,
+    }
+}
+
+/// Collapse a ladder of unavailable versions for the same package and reason.
+///
+/// If the unavailable versions, combined with the trailing `NoVersions` clause, cover all
+/// versions of the package, we collapse to a single incompatibility covering all versions.
+/// Otherwise, we preserve the `NoVersions` proof so the reporter can still describe the remaining
+/// available versions accurately.
+fn collapse_unavailable_version_chain(
+    derived: &Derived<PubGrubPackage, Range<Version>, UnavailableReason>,
+) -> Option<DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>> {
+    let ((DerivationTree::External(External::Custom(package, versions, reason)), other)
+    | (other, DerivationTree::External(External::Custom(package, versions, reason)))) =
+        (&*derived.cause1, &*derived.cause2)
+    else {
+        return None;
+    };
+
+    let (other_versions, no_versions) = collect_unavailable_version_chain(other, package, reason)?;
+    let versions = other_versions.union(versions);
+
+    if versions.union(&no_versions) == Range::full() && versions.as_singleton().is_none() {
+        return Some(DerivationTree::External(External::Custom(
+            package.clone(),
+            Range::full(),
+            reason.clone(),
+        )));
+    }
+
+    Some(DerivationTree::Derived(Derived {
+        terms: derived.terms.clone(),
+        shared_id: derived.shared_id,
+        cause1: Arc::new(DerivationTree::External(External::NoVersions(
+            package.clone(),
+            no_versions,
+        ))),
+        cause2: Arc::new(DerivationTree::External(External::Custom(
+            package.clone(),
+            versions,
+            reason.clone(),
+        ))),
+    }))
+}
+
+/// Collect a chain of unavailable versions for the same package and reason, ending in a
+/// `NoVersions` clause for the package.
+fn collect_unavailable_version_chain(
+    tree: &DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+    package: &PubGrubPackage,
+    reason: &UnavailableReason,
+) -> Option<(Range<Version>, Range<Version>)> {
+    match tree {
+        DerivationTree::External(External::NoVersions(other_package, no_versions))
+            if other_package == package =>
+        {
+            Some((Range::empty(), no_versions.clone()))
+        }
+        DerivationTree::Derived(derived) => {
+            let (versions, other) = match (&*derived.cause1, &*derived.cause2) {
+                (
+                    DerivationTree::External(External::Custom(
+                        other_package,
+                        versions,
+                        other_reason,
+                    )),
+                    other,
+                )
+                | (
+                    other,
+                    DerivationTree::External(External::Custom(
+                        other_package,
+                        versions,
+                        other_reason,
+                    )),
+                ) if other_package == package
+                    && unavailable_reasons_equivalent_for_reporting(other_reason, reason) =>
+                {
+                    (versions, other)
+                }
+                _ => return None,
+            };
+
+            let (other_versions, no_versions) =
+                collect_unavailable_version_chain(other, package, reason)?;
+            Some((other_versions.union(versions), no_versions))
+        }
+        DerivationTree::External(_) => None,
+    }
+}
+
+/// Return whether two unavailable reasons would be rendered equivalently in resolver reports.
+fn unavailable_reasons_equivalent_for_reporting(
+    left: &UnavailableReason,
+    right: &UnavailableReason,
+) -> bool {
+    if left == right {
+        return true;
+    }
+
+    match (left, right) {
+        (UnavailableReason::Package(left), UnavailableReason::Package(right)) => {
+            left.message() == right.message() && left.singular_message() == right.singular_message()
+        }
+        (UnavailableReason::Version(left), UnavailableReason::Version(right)) => {
+            left.message() == right.message()
+                && left.singular_message() == right.singular_message()
+                && left.plural_message() == right.plural_message()
+        }
+        _ => false,
+    }
+}
+
+/// Collapse adjacent unavailable-version nodes for the same package and reason.
+fn collapse_adjacent_unavailable_versions(
+    derived: &Derived<PubGrubPackage, Range<Version>, UnavailableReason>,
+) -> Option<DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>> {
+    let ((DerivationTree::External(External::Custom(package, versions, reason)), other)
+    | (other, DerivationTree::External(External::Custom(package, versions, reason)))) =
+        (&*derived.cause1, &*derived.cause2)
+    else {
+        return None;
+    };
+
+    let DerivationTree::Derived(Derived {
+        terms,
+        shared_id,
+        cause1,
+        cause2,
+    }) = other
+    else {
+        return None;
+    };
+
+    match (&**cause1, &**cause2) {
+        (
+            _,
+            DerivationTree::External(External::Custom(other_package, other_versions, other_reason)),
+        ) if package == other_package
+            && unavailable_reasons_equivalent_for_reporting(reason, other_reason) =>
+        {
+            let versions = other_versions.union(versions);
+            let mut terms = terms.clone();
+            if let Some(Term::Positive(range)) = terms.get_mut(package) {
+                *range = versions.clone();
+            }
+            Some(DerivationTree::Derived(Derived {
+                terms,
+                shared_id: *shared_id,
+                cause1: cause1.clone(),
+                cause2: Arc::new(DerivationTree::External(External::Custom(
+                    package.clone(),
+                    versions,
+                    reason.clone(),
+                ))),
+            }))
+        }
+        (
+            DerivationTree::External(External::Custom(other_package, other_versions, other_reason)),
+            _,
+        ) if package == other_package
+            && unavailable_reasons_equivalent_for_reporting(reason, other_reason) =>
+        {
+            let versions = other_versions.union(versions);
+            let mut terms = terms.clone();
+            if let Some(Term::Positive(range)) = terms.get_mut(package) {
+                *range = versions.clone();
+            }
+            Some(DerivationTree::Derived(Derived {
+                terms,
+                shared_id: *shared_id,
+                cause1: Arc::new(DerivationTree::External(External::Custom(
+                    package.clone(),
+                    versions,
+                    reason.clone(),
+                ))),
+                cause2: cause2.clone(),
+            }))
+        }
+        _ => None,
     }
 }
 

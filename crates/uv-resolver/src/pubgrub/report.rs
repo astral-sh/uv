@@ -606,6 +606,90 @@ impl PubGrubReportFormatter<'_> {
                                     option: options.build_options.no_build().clone(),
                                 });
                             }
+                            IncompatibleDist::Source(IncompatibleSource::ExcludeNewer(_))
+                            | IncompatibleDist::Wheel(IncompatibleWheel::ExcludeNewer(_)) => {
+                                let exclude_newer = if let Some(index) = fork_indexes.get(name) {
+                                    options
+                                        .exclude_newer
+                                        .exclude_newer_package_for_index_with_source(
+                                            name,
+                                            index_locations.exclude_newer_for(index.url()),
+                                        )
+                                } else {
+                                    options.exclude_newer.exclude_newer_package(name).map(
+                                        |exclude_newer| {
+                                            let source =
+                                                if options.exclude_newer.package.contains_key(name)
+                                                {
+                                                    EffectiveExcludeNewerSource::Package
+                                                } else {
+                                                    EffectiveExcludeNewerSource::Global
+                                                };
+                                            (exclude_newer, source)
+                                        },
+                                    )
+                                };
+
+                                if let Some((exclude_newer, source)) = exclude_newer {
+                                    // Check if there are no included versions in the requested
+                                    // range, but there are still available versions in that range
+                                    // (i.e., they were filtered out by `exclude-newer`).
+                                    let no_included_in_set =
+                                        self.included_versions.get(name).is_none_or(|versions| {
+                                            !versions.iter().any(|v| set.contains(v))
+                                        });
+                                    let available_has_versions_in_set =
+                                        self.available_versions.get(name).is_some_and(|versions| {
+                                            versions.iter().any(|v| set.contains(v))
+                                        });
+                                    if no_included_in_set && available_has_versions_in_set {
+                                        let (matching_version, latest_available_version) =
+                                            if set.as_singleton().is_some() {
+                                                (
+                                                    self.exclude_newer_version_hint(
+                                                        name,
+                                                        set,
+                                                        index,
+                                                        fork_indexes,
+                                                    ),
+                                                    None,
+                                                )
+                                            } else if let Some(latest_available_version) = self
+                                                .included_versions
+                                                .get(name)
+                                                .and_then(|versions| versions.last().cloned())
+                                            {
+                                                (None, Some(latest_available_version))
+                                            } else {
+                                                let version_hint_set =
+                                                    inherited_exclude_newer_ranges
+                                                        .get(name)
+                                                        .map_or_else(
+                                                            || set.clone(),
+                                                            |exclude_newer_range| {
+                                                                set.union(exclude_newer_range)
+                                                            },
+                                                        );
+                                                (
+                                                    self.exclude_newer_version_hint(
+                                                        name,
+                                                        &version_hint_set,
+                                                        index,
+                                                        fork_indexes,
+                                                    ),
+                                                    None,
+                                                )
+                                            };
+                                        output_hints.insert(PubGrubHint::ExcludeNewer {
+                                            package: name.clone(),
+                                            source,
+                                            exclude_newer,
+                                            matching_version,
+                                            latest_available_version,
+                                        });
+                                    }
+                                }
+                            }
                             // Check for unavailable versions due to incompatible tags.
                             IncompatibleDist::Wheel(IncompatibleWheel::Tag(tag)) => {
                                 if let Some(hint) = self.tag_hint(
@@ -696,6 +780,7 @@ impl PubGrubReportFormatter<'_> {
                                 source,
                                 exclude_newer,
                                 matching_version,
+                                latest_available_version: None,
                             });
                         }
                     }
@@ -1396,6 +1481,8 @@ pub(crate) enum PubGrubHint {
         exclude_newer: ExcludeNewerValue,
         // excluded from `PartialEq` and `Hash`
         matching_version: Option<ExcludeNewerVersionDetail>,
+        // excluded from `PartialEq` and `Hash`
+        latest_available_version: Option<Version>,
     },
     /// The resolution failed for a Python version that is different from the current Python version.
     DisjointPythonVersion {
@@ -1992,40 +2079,48 @@ impl std::fmt::Display for PubGrubHint {
                 source,
                 exclude_newer,
                 matching_version,
+                latest_available_version,
             } => {
-                let latest = match matching_version {
-                    Some(ExcludeNewerVersionDetail {
-                        version,
-                        publish_date: Some(publish_date),
-                        singleton: true,
-                    }) => format!(
-                        " The requested version, {}, was published at {}.",
-                        format!("v{version}").cyan(),
-                        publish_date.cyan()
-                    ),
-                    Some(ExcludeNewerVersionDetail {
-                        version: _,
-                        publish_date: None,
-                        singleton: true,
-                    }) => String::new(),
-                    Some(ExcludeNewerVersionDetail {
-                        version,
-                        publish_date: Some(publish_date),
-                        singleton: false,
-                    }) => format!(
-                        " The latest version satisfying the requirement is {}, published at {}.",
-                        format!("v{version}").cyan(),
-                        publish_date.cyan()
-                    ),
-                    Some(ExcludeNewerVersionDetail {
-                        version,
-                        publish_date: None,
-                        singleton: false,
-                    }) => format!(
-                        " The latest version satisfying the requirement is {}.",
+                let latest = if let Some(version) = latest_available_version {
+                    format!(
+                        " The latest available version is {}.",
                         format!("v{version}").cyan()
-                    ),
-                    None => String::new(),
+                    )
+                } else {
+                    match matching_version {
+                        Some(ExcludeNewerVersionDetail {
+                            version,
+                            publish_date: Some(publish_date),
+                            singleton: true,
+                        }) => format!(
+                            " The requested version, {}, was published at {}.",
+                            format!("v{version}").cyan(),
+                            publish_date.cyan()
+                        ),
+                        Some(ExcludeNewerVersionDetail {
+                            version: _,
+                            publish_date: None,
+                            singleton: true,
+                        }) => String::new(),
+                        Some(ExcludeNewerVersionDetail {
+                            version,
+                            publish_date: Some(publish_date),
+                            singleton: false,
+                        }) => format!(
+                            " The latest version satisfying the requirement is {}, published at {}.",
+                            format!("v{version}").cyan(),
+                            publish_date.cyan()
+                        ),
+                        Some(ExcludeNewerVersionDetail {
+                            version,
+                            publish_date: None,
+                            singleton: false,
+                        }) => format!(
+                            " The latest version satisfying the requirement is {}.",
+                            format!("v{version}").cyan()
+                        ),
+                        None => String::new(),
+                    }
                 };
                 match source {
                     EffectiveExcludeNewerSource::Package => write!(
