@@ -818,11 +818,11 @@ mod tests {
             .await
             .expect("Failed to query batch");
 
-        assert_eq!(findings.len(), 1);
-        match &findings[0] {
-            Finding::Vulnerability(v) => assert_eq!(v.id.as_str(), "MAL-2026-1234"),
-            Finding::ProjectStatus(_) => unreachable!(),
-        }
+        let [Finding::Vulnerability(v)] = findings.as_slice() else {
+            panic!("Expected exactly one vulnerability finding");
+        };
+
+        assert_eq!(v.id.as_str(), "MAL-2026-1234");
 
         // 1 querybatch + 1 vuln detail fetch (GHSA- was skipped).
         assert_eq!(
