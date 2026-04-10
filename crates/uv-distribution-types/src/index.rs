@@ -708,9 +708,8 @@ impl IndexArg {
         };
 
         let mut index = index.borrow().clone();
-        // A named index selected via `--index <name>` should behave like any
-        // other explicit CLI index, regardless of whether it was marked as a
-        // config-level default.
+        // A named index selected via `--index <name>` should follow precedence
+        // rules of an index provided by the CLI and ignore `default = true`.
         index.default = false;
 
         match strategy {
