@@ -239,7 +239,7 @@ fn path_equals_components(path: &Path) -> bool {
 
 /// Normalize a [`Path`], removing `.`, `..`, repeated separators (`//`) and trailing slashes.
 pub fn normalize_path(path: &Path) -> Cow<'_, Path> {
-    // A path with `..` is not normalized.
+    // A path with `.` or `..` is not normalized.
     if path
         .components()
         .any(|component| matches!(component, Component::ParentDir | Component::CurDir))
