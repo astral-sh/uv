@@ -370,10 +370,10 @@ impl<'env> LockOperation<'env> {
             LockMode::Locked(interpreter, lock_source) => {
                 // Read the existing lockfile.
                 let lock_filename = target.lock_filename();
-                let existing = target
-                    .read()
-                    .await?
-                    .ok_or(ProjectError::MissingLockfile(lock_source.into(), lock_filename))?;
+                let existing = target.read().await?.ok_or(ProjectError::MissingLockfile(
+                    lock_source.into(),
+                    lock_filename,
+                ))?;
 
                 // Perform the lock operation, but don't write the lockfile to disk.
                 let result = Box::pin(do_lock(
