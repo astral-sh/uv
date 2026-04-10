@@ -127,9 +127,9 @@ fn prune_cached_env() {
         ])
         .collect();
 
-    uv_snapshot!(filters, context.prune().arg("--verbose"), @r"
-    success: false
-    exit_code: 2
+    uv_snapshot!(filters, context.prune().arg("--verbose"), @"
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
@@ -137,8 +137,7 @@ fn prune_cached_env() {
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling cache environment: [CACHE_DIR]/environments-v2/[ENTRY]
     DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
-    error: Failed to prune cache at: [CACHE_DIR]/
-      Caused by: failed to remove file `[CACHE_DIR]/archive-v0/[ENTRY]
+    Removed [N] files ([SIZE])
     ");
 }
 
