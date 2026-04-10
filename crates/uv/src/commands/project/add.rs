@@ -497,25 +497,29 @@ pub(crate) async fn add(
         }
     }
 
-    // If the user provides a single, named index, pin all requirements to that index.
-    let index = indexes
+    // `uv add` only pins added requirements to an index when a single named
+    // index was provided. If multiple indexes were provided, or the index is
+    // unnamed, we do not write a `tool.uv.sources` entry.
+    let pinned_index_name = indexes
         .first()
         .as_ref()
         .and_then(|index| index.name.as_ref())
         .filter(|_| indexes.len() == 1)
-        .inspect(|index| {
-            debug!("Pinning all requirements to index: `{index}`");
+        .inspect(|index_name| {
+            debug!("Pinning all requirements to index: `{index_name}`");
         });
 
+    // Raw requirements do not create `tool.uv.sources`, so they do not need a
+    // named index that can be represented in the `pyproject.toml`.
     if !raw
-        && let Some(index_name) = index
+        && let Some(index_name) = pinned_index_name
         && indexes
             .first()
             .is_some_and(|index| matches!(index.origin, Some(Origin::Project)))
         && !is_declared_in_pyproject(&target, index_name)
     {
         bail!(
-            "Index `{index_name}` was found in a project-level `uv.toml`, but `uv add` cannot persist it to `tool.uv.sources`. Define the index in the project's `pyproject.toml` first, or use `--raw`."
+            "Index `{index_name}` was found in a project-level `uv.toml`, but `uv add` can only write `tool.uv.sources` entries for indexes defined in `pyproject.toml`. Move the index definition into `pyproject.toml` or use `--raw`."
         );
     }
 
@@ -645,7 +649,7 @@ pub(crate) async fn add(
         branch.as_deref(),
         lfs,
         &extras_of_dependency,
-        index,
+        pinned_index_name,
         &mut toml,
     )?;
 
