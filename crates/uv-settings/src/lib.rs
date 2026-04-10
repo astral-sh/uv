@@ -5,7 +5,7 @@ use std::time::Duration;
 use tracing::info_span;
 use uv_client::{DEFAULT_CONNECT_TIMEOUT, DEFAULT_READ_TIMEOUT, DEFAULT_READ_TIMEOUT_UPLOAD};
 use uv_dirs::{system_config_file, user_config_dir};
-use uv_distribution_types::Origin;
+use uv_distribution_types::{Origin, ProjectOrigin};
 use uv_flags::EnvironmentFlags;
 use uv_fs::Simplified;
 use uv_static::{EnvVars, InvalidEnvironmentVariable, parse_boolish_environment_variable};
@@ -141,7 +141,9 @@ impl FilesystemOptions {
 
                 tracing::debug!("Found workspace configuration at `{}`", path.display());
                 validate_uv_toml(&path, &options)?;
-                return Ok(Some(Self(options.with_origin(Origin::Project))));
+                return Ok(Some(Self(
+                    options.with_origin(Origin::Project(ProjectOrigin::UvToml)),
+                )));
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
             Err(err) => return Err(err.into()),
@@ -174,7 +176,9 @@ impl FilesystemOptions {
                 let options = options.relative_to(&std::path::absolute(dir)?)?;
 
                 tracing::debug!("Found workspace configuration at `{}`", path.display());
-                return Ok(Some(Self(options.with_origin(Origin::Project))));
+                return Ok(Some(Self(
+                    options.with_origin(Origin::Project(ProjectOrigin::PyprojectToml)),
+                )));
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
             Err(err) => return Err(err.into()),
