@@ -505,6 +505,10 @@ class PyodideFinder(Finder):
         libc="musl",
     )
 
+    # Matches a PEP 440-style prerelease marker at the end of a Pyodide tag
+    # name, e.g. `a1` in `314.0.0a1` or `rc2` in `0.30.0rc2`.
+    _PYODIDE_PRERELEASE_RE = re.compile(r"(a|b|rc)\d+$", re.ASCII)
+
     def __init__(self, client: httpx.AsyncClient):
         self.client = client
 
@@ -525,18 +529,29 @@ class PyodideFinder(Finder):
 
         results = {}
         for release in releases:
-            # Skip Pyodide prereleases. The xbuildenv's `python_version` field
-            # carries no prerelease marker, so an alpha Pyodide release (e.g.
-            # `314.0.0a1`) would otherwise be emitted as if it targeted a
-            # stable CPython patch version.
-            if release.get("prerelease"):
-                continue
             pyodide_version = release["tag_name"]
             meta = metadata.get(pyodide_version, None)
             if meta is None:
                 continue
 
-            python_version = Version.from_str(meta["python_version"])
+            # Pyodide's cross-build-environments metadata only exposes a bare
+            # CPython `python_version` string like `3.14.2`, so for prerelease
+            # Pyodide releases (e.g. `314.0.0a1`) we have to parse the marker
+            # off the Pyodide tag and apply it to the resulting [`Version`].
+            # Otherwise the entry would look like a stable CPython build while
+            # pointing at an alpha xbuildenv.
+            python_version_str = meta["python_version"]
+            if release.get("prerelease"):
+                marker_match = self._PYODIDE_PRERELEASE_RE.search(pyodide_version)
+                if marker_match is None:
+                    logging.warning(
+                        "Skipping Pyodide prerelease %s: cannot extract "
+                        "prerelease marker from tag",
+                        pyodide_version,
+                    )
+                    continue
+                python_version_str += marker_match.group()
+            python_version = Version.from_str(python_version_str)
 
             # Find xbuildenv asset
             for asset in release["assets"]:
