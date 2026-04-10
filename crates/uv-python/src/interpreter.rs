@@ -1150,15 +1150,14 @@ impl InterpreterInfo {
         let canonical = canonicalize_executable(&absolute).map_err(handle_io_error)?;
 
         // If the executable is inside a virtual environment, include the `pyvenv.cfg`
-        // modification time in the cache key. This ensures the cache is invalidated when the
-        // virtual environment is recreated with different settings (e.g., toggling
-        // `--system-site-packages`), even if the underlying Python executable hasn't changed.
-        let pyvenv_cfg: Option<String> = absolute
+        // content in the cache key. This ensures the cache is invalidated when the virtual
+        // environment is recreated with different settings (e.g., `--system-site-packages`),
+        // even if the underlying Python executable hasn't changed.
+        let pyvenv_cfg_content = absolute
             .parent()
             .and_then(|p| p.parent())
             .map(|venv_root| venv_root.join("pyvenv.cfg"))
-            .and_then(|pyvenv_cfg| Timestamp::from_path(&pyvenv_cfg).ok())
-            .map(|timestamp| format!("{timestamp:?}"));
+            .and_then(|pyvenv_cfg| fs::read_to_string(&pyvenv_cfg).ok());
 
         let cache_entry = cache.entry(
             CacheBucket::Interpreter,
@@ -1181,12 +1180,12 @@ impl InterpreterInfo {
             // have a `.venv/bin/python` pointing to both Python 3.12 and Python 3.13 that were
             // modified at the same time.
             //
-            // We also include the `pyvenv.cfg` modification time so that recreating a virtual
-            // environment with different configuration (e.g., toggling
-            // `--system-site-packages`) produces a different cache key, avoiding stale results.
+            // We also include the `pyvenv.cfg` content so that recreating a virtual environment
+            // with different configuration (e.g., toggling `--system-site-packages`) produces a
+            // different cache key, avoiding stale results.
             format!(
                 "{}.msgpack",
-                cache_digest(&(&absolute, &canonical, &pyvenv_cfg))
+                cache_digest(&(&absolute, &canonical, &pyvenv_cfg_content))
             ),
         );
 
