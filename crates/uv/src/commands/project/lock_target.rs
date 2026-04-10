@@ -268,17 +268,7 @@ impl<'lock> LockTarget<'lock> {
 
     /// Return the filename of the lockfile, for use in user-facing messages.
     pub(crate) fn lock_filename(self) -> PathBuf {
-        match self {
-            Self::Workspace(_) => PathBuf::from("uv.lock"),
-            Self::Script(script) => {
-                let mut file_name = match script.path.file_name() {
-                    Some(f) => f.to_os_string(),
-                    None => panic!("Script path has no file name"),
-                };
-                file_name.push(".lock");
-                PathBuf::from(file_name)
-            }
-        }
+        PathBuf::from(self.lock_path().file_name().unwrap())
     }
 
     /// Return the path to the lockfile.
