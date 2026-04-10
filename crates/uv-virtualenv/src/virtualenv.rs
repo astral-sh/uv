@@ -615,15 +615,15 @@ fn confirm_clear(location: &Path, name: &'static str) -> Result<Option<bool>, io
 /// Perform a safe removal of a virtual environment.
 pub fn remove_virtualenv(location: &Path) -> Result<(), Error> {
     #[cfg(windows)]
-    fn retry_remove<T>(
-        mut f: impl FnMut() -> Result<T, io::Error>,
-    ) -> Result<T, io::Error> {
+    fn retry_remove<T>(mut f: impl FnMut() -> Result<T, io::Error>) -> Result<T, io::Error> {
         const RETRIES: u32 = 5;
 
         for attempt in 0..RETRIES {
             match f() {
                 Ok(value) => return Ok(value),
-                Err(err) if err.kind() == io::ErrorKind::PermissionDenied && attempt + 1 < RETRIES => {
+                Err(err)
+                    if err.kind() == io::ErrorKind::PermissionDenied && attempt + 1 < RETRIES =>
+                {
                     std::thread::sleep(Duration::from_millis(u64::from((attempt + 1) * 10)));
                 }
                 Err(err) => return Err(err),
