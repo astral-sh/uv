@@ -1031,6 +1031,14 @@ impl ProjectInterpreter {
                         }
                         // Otherwise, we'll delete it
                     }
+                    InvalidEnvironmentKind::MissingPyVenvCfg => {
+                        if fs_err::read_dir(&root).is_ok_and(|mut dir| dir.next().is_some()) {
+                            return Err(ProjectError::InvalidProjectEnvironmentDir(
+                                root,
+                                "it is not a compatible environment but cannot be recreated because it is not a virtual environment".to_string(),
+                            ));
+                        }
+                    }
                     // If the environment is an empty directory, it's fine to use
                     InvalidEnvironmentKind::Empty => {}
                 }
