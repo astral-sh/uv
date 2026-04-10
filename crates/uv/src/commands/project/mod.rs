@@ -27,7 +27,7 @@ use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep440::{TildeVersionSpecifier, Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
-use uv_preview::{Preview, PreviewFeature};
+use uv_preview::Preview;
 use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts};
 use uv_python::{
     BrokenLink, EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads,
@@ -1422,10 +1422,9 @@ impl ProjectEnvironment {
             })
             .ok();
 
-        let upgradeable = preview.is_enabled(PreviewFeature::PythonUpgrade)
-            && python
-                .as_ref()
-                .is_none_or(|request| !request.includes_patch());
+        let upgradeable = python
+            .as_ref()
+            .is_none_or(|request| !request.includes_patch());
 
         match ProjectInterpreter::discover(
             workspace,
