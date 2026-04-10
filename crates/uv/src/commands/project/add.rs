@@ -23,7 +23,7 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
     Identifier, Index, IndexName, IndexUrl, IndexUrls, NameRequirementSpecification, Origin,
-    Requirement, RequirementSource, UnresolvedRequirement,
+    ProjectOrigin, Requirement, RequirementSource, UnresolvedRequirement,
 };
 use uv_fs::{LockedFile, LockedFileError, Simplified};
 use uv_git::GIT_STORE;
@@ -513,10 +513,9 @@ pub(crate) async fn add(
     // named index that can be represented in the `pyproject.toml`.
     if !raw
         && let Some(index_name) = pinned_index_name
-        && indexes
-            .first()
-            .is_some_and(|index| matches!(index.origin, Some(Origin::Project)))
-        && !is_declared_in_pyproject(&target, index_name)
+        && indexes.first().is_some_and(|index| {
+            matches!(index.origin, Some(Origin::Project(ProjectOrigin::UvToml)))
+        })
     {
         bail!(
             "Index `{index_name}` was found in a project-level `uv.toml`, but `uv add` can only write `tool.uv.sources` entries for indexes defined in `pyproject.toml`. Move the index definition into `pyproject.toml` or use `--raw`."
@@ -689,14 +688,14 @@ pub(crate) async fn add(
     }
     let indexes = valid_indexes;
 
-    // Add any non-project indexes from the resolved settings, in priority order.
+    // Add any indexes not already declared in `pyproject.toml`, in priority order.
     if !raw {
         let urls = IndexUrls::from_indexes(indexes);
         let mut indexes = urls.defined_indexes().collect::<Vec<_>>();
         indexes.reverse();
         for index in indexes {
             match index.origin {
-                Some(Origin::Project) => {}
+                Some(Origin::Project(ProjectOrigin::PyprojectToml | ProjectOrigin::UvToml)) => {}
                 Some(Origin::Cli | Origin::User | Origin::System | Origin::RequirementsTxt)
                 | None => {
                     toml.add_index(index)?;
@@ -792,22 +791,6 @@ pub(crate) async fn add(
                 err => Err(err.into()),
             }
         }
-    }
-}
-
-fn is_declared_in_pyproject(target: &AddTarget, index_name: &IndexName) -> bool {
-    match target {
-        AddTarget::Script(_, _) => true,
-        AddTarget::Project(project, _) => project
-            .pyproject_toml()
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.index.as_ref())
-            .into_iter()
-            .flatten()
-            .chain(project.workspace().indexes().iter())
-            .any(|index| index.name.as_ref().is_some_and(|name| name == index_name)),
     }
 }
 
