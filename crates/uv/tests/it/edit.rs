@@ -11543,7 +11543,7 @@ async fn add_index_by_name_from_project_uv_toml() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Index `test-index` was found in a project-level `uv.toml`, but `uv add` cannot persist it to `tool.uv.sources`. Define the index in the project's `pyproject.toml` first, or use `--raw`.
+    error: Index `test-index` was found in a project-level `uv.toml`, but `uv add` can only write `tool.uv.sources` entries for indexes defined in `pyproject.toml`. Move the index definition into `pyproject.toml` or use `--raw`.
     ");
 
     // Check that the project was left unchanged.
