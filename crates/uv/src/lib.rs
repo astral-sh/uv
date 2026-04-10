@@ -50,7 +50,7 @@ use uv_scripts::{Pep723Error, Pep723Item, Pep723Script};
 use uv_settings::{Combine, EnvironmentOptions, FilesystemOptions, Options};
 use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
-use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
+use uv_workspace::{DiscoveryOptions, ProjectWorkspace, Workspace, WorkspaceCache};
 
 use crate::commands::{ExitStatus, ParsedRunCommand, RunCommand, ScriptPath, ToolRunCommand};
 use crate::printer::Printer;
@@ -253,8 +253,8 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         // Extract the `--package` argument from commands that support it, to load indexes
         // from the workspace member's `pyproject.toml` for named index resolution.
         if let Commands::Project(command) = &*cli.command {
-            if let Some(package) = command.package() {
-                package_indexes = workspace
+            package_indexes = if let Some(package) = command.package() {
+                workspace
                     .packages()
                     .get(package)
                     .map(|member| {
@@ -269,8 +269,31 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                             .map(|index| index.relative_to(member.root()))
                             .collect::<Result<Vec<_>, _>>()
                     })
-                    .transpose()?;
-            }
+                    .transpose()?
+            } else if let Ok(project_workspace) = ProjectWorkspace::discover(
+                &project_dir,
+                &DiscoveryOptions::default(),
+                &workspace_cache,
+            )
+            .await
+            {
+                let member = project_workspace.current_project();
+                member
+                    .pyproject_toml()
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|uv| uv.index.clone())
+                    .map(|indexes| {
+                        indexes
+                            .into_iter()
+                            .map(|index| index.relative_to(member.root()))
+                            .collect::<Result<Vec<_>, _>>()
+                    })
+                    .transpose()?
+            } else {
+                None
+            };
         }
 
         let project =
