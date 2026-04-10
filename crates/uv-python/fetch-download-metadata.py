@@ -525,6 +525,12 @@ class PyodideFinder(Finder):
 
         results = {}
         for release in releases:
+            # Skip Pyodide prereleases. The xbuildenv's `python_version` field
+            # carries no prerelease marker, so an alpha Pyodide release (e.g.
+            # `314.0.0a1`) would otherwise be emitted as if it targeted a
+            # stable CPython patch version.
+            if release.get("prerelease"):
+                continue
             pyodide_version = release["tag_name"]
             meta = metadata.get(pyodide_version, None)
             if meta is None:
