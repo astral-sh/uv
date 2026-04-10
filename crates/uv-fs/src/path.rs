@@ -217,57 +217,51 @@ fn path_equals_components(path: &Path) -> bool {
     // We count the length in bytes; the encoding scheme doesn't matter as we count bytes in
     // both expected and the input path
     let mut expected_len = 0;
-    let mut prev_ends_with_separator = false;
-    for (idx, component) in path.components().enumerate() {
+    let mut next_needs_separator = false;
+    for component in path.components() {
         let bytes = component.as_os_str().as_encoded_bytes();
         // `PathBuf::push` inserts a separator between components unless the previous one
         // already ends in one, or the new component is itself the root (which embeds it).
-        if idx > 0 && !prev_ends_with_separator && !matches!(component, Component::RootDir) {
+        if next_needs_separator && !matches!(component, Component::RootDir) {
             // Assumption: forward and backwards slashes encode with the same length.
             expected_len += Path::new("/").as_os_str().as_encoded_bytes().len();
         }
         expected_len += bytes.len();
-        prev_ends_with_separator = match component {
-            Component::RootDir => true,
-            // A `Prefix` like `\\?\C:` or `\\server\share` may already end in a separator.
-            Component::Prefix(_) => bytes.last().is_some_and(|&b| b == b'\\' || b == b'/'),
-            _ => false,
+        next_needs_separator = match component {
+            Component::RootDir => false,
+            Component::Prefix(_) => {
+                debug_assert!(bytes.last().is_some_and(|&b| b == b'\\' || b == b'/'));
+                false
+            }
+            _ => true,
         };
     }
     expected_len == path.as_os_str().as_encoded_bytes().len()
 }
-
-/// Normalize a [`Path`], removing `.`, `..`, repeated separators (`//`) and trailing slashes.
-pub fn normalize_path(path: &Path) -> Cow<'_, Path> {
-    // A path with `.` or `..` is not normalized.
+be possible to occur at this point,
+/// Normalize a [`Cow`] path, removing `.`, `..`, repeated separators (`//`), and trailing slashes.
+///
+/// Paths that point to the current directory (`.` or `.\.`) are normalized to the empty path.
+///
+/// When the path is already normalized, returns it as-is without allocating.
+pub fn normalize_path<'path>(path: impl Into<Cow<'path, Path>>) -> Cow<'path, Path> {
+    let path = path.into();
+    // A path with leading `.` or `..` is not normalized.
     if path
         .components()
         .any(|component| matches!(component, Component::ParentDir | Component::CurDir))
     {
-        return Cow::Owned(normalized(path));
+        return Cow::Owned(normalized(&path));
     }
 
-    // A path with `..`, repeated separators (`//`), or trailing slashes is not normalized.
-    if !path_equals_components(path) {
-        return Cow::Owned(normalized(path));
+    // A path with non-leading `.`, repeated separators (`//`) or trailing slashes is not
+    // normalized.
+    if !path_equals_components(&path) {
+        return Cow::Owned(normalized(&path));
     }
 
-    // Fast path: if the path is already normalized, return it as-is.
-    Cow::Borrowed(path)
-}
-
-/// Normalize a [`PathBuf`], removing things like `.` and `..`.
-pub fn normalize_path_buf(path: PathBuf) -> PathBuf {
-    // Fast path: if the path is already normalized, return it as-is.
-    if path
-        .components()
-        .any(|component| matches!(component, Component::ParentDir | Component::CurDir))
-        || !path_equals_components(&path)
-    {
-        normalized(&path)
-    } else {
-        path
-    }
+    // Fast path: already normalized, return as-is.
+    path
 }
 
 /// Normalize a [`Path`].
@@ -722,11 +716,6 @@ mod tests {
                 Path::new(expected),
                 "input: {input:?}"
             );
-            assert_eq!(
-                normalize_path_buf(PathBuf::from(input)),
-                PathBuf::from(expected),
-                "input: {input:?}"
-            );
         }
 
         // Verify the fast path: already-normalized inputs are returned borrowed.
@@ -758,7 +747,7 @@ mod tests {
 
     #[test]
     #[cfg(windows)]
-    fn test_normalize_trailing_path_separator_windows() {
+    fn test_normalize_windows() {
         let cases = [
             (
                 r"C:\Users\Ferris\projects\python\",
@@ -768,6 +757,13 @@ mod tests {
             (r"C:\foo\\bar", r"C:\foo\bar"),
             (r"C:\foo\bar\..\baz", r"C:\foo\baz"),
             (r"foo\.\bar", r"foo\bar"),
+            (r"C:foo", r"C:foo"),
+            (r"C:\foo", r"C:\foo"),
+            (r"C:\\foo", r"C:\foo"),
+            (r"\\?\C:foo", r"\\?\C:foo"),
+            (r"\\?\C:\foo", r"\\?\C:\foo"),
+            (r"\\?\C:\\foo", r"\\?\C:\foo"),
+            (r"\\server\share\foo", r"\\server\share\foo"),
         ];
         for (input, expected) in cases {
             assert_eq!(normalize_path(Path::new(input)), Path::new(expected));

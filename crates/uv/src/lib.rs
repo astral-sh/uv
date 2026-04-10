@@ -36,7 +36,7 @@ use uv_cli::{
 use uv_client::BaseClientBuilder;
 use uv_configuration::min_stack_size;
 use uv_flags::EnvironmentFlags;
-use uv_fs::{CWD, Simplified};
+use uv_fs::{CWD, Simplified, normalize_path};
 #[cfg(feature = "self-update")]
 use uv_pep440::release_specifiers_to_ranges;
 use uv_pep508::VersionOrUrl;
@@ -118,8 +118,8 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     //
     // If `--project` points to a `pyproject.toml` file, resolve to its parent directory,
     // since downstream code (e.g., `FilesystemOptions::find`) expects a directory.
-    let project_dir = if let Some(project) = &cli.top_level.global_args.project {
-        let path = uv_fs::normalize_path_buf(std::path::absolute(project)?);
+    let project_dir: Cow<'_, Path> = if let Some(project) = &cli.top_level.global_args.project {
+        let path = normalize_path(std::path::absolute(project)?);
         if let Some(name) = path.file_name()
             && name == "pyproject.toml"
             && path.is_file()
@@ -127,7 +127,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         {
             Cow::Owned(parent.to_path_buf())
         } else {
-            Cow::Owned(path)
+            path
         }
     } else if let Some(run_command) = &parsed_run_command
         && early_preview.is_enabled(PreviewFeature::TargetWorkspaceDiscovery)

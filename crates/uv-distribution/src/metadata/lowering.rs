@@ -10,6 +10,7 @@ use uv_distribution_filename::DistExtension;
 use uv_distribution_types::{
     Index, IndexLocations, IndexMetadata, IndexName, Origin, Requirement, RequirementSource,
 };
+use uv_fs::normalize_path;
 use uv_git_types::{GitLfs, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
@@ -301,13 +302,13 @@ impl LoweredRequirement {
                                 let subdirectory =
                                     uv_fs::relative_to(member.root(), git_member.fetch_root)
                                         .expect("Workspace member must be relative");
-                                let subdirectory = uv_fs::normalize_path_buf(subdirectory);
+                                let subdirectory = normalize_path(subdirectory);
                                 RequirementSource::Git {
                                     git: git_member.git_source.git.clone(),
                                     subdirectory: if subdirectory == PathBuf::new() {
                                         None
                                     } else {
-                                        Some(subdirectory.into_boxed_path())
+                                        Some(subdirectory.to_path_buf().into_boxed_path())
                                     },
                                     url,
                                 }
@@ -758,11 +759,11 @@ fn path_source(
             let git = git_member.git_source.git.clone();
             let subdirectory = uv_fs::relative_to(install_path, git_member.fetch_root)
                 .expect("Workspace member must be relative");
-            let subdirectory = uv_fs::normalize_path_buf(subdirectory);
+            let subdirectory = normalize_path(subdirectory);
             let subdirectory = if subdirectory == PathBuf::new() {
                 None
             } else {
-                Some(subdirectory.into_boxed_path())
+                Some(subdirectory.to_path_buf().into_boxed_path())
             };
             let url = DisplaySafeUrl::from(ParsedGitUrl {
                 url: git.clone(),

@@ -27,7 +27,7 @@ use uv_distribution_types::{
     RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource, RequiresPython,
     Resolution, ResolvedDist, SourceDist, ToUrlError, UrlString,
 };
-use uv_fs::{PortablePathBuf, try_relative_to_if};
+use uv_fs::{PortablePathBuf, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -1440,12 +1440,12 @@ impl PylockTomlDirectory {
         } else {
             install_path.join(&self.path)
         };
-        let path = uv_fs::normalize_path_buf(path);
+        let path = normalize_path(path);
         let url =
             VerbatimUrl::from_normalized_path(&path).map_err(|_| PylockTomlErrorKind::PathToUrl)?;
         Ok(DirectorySourceDist {
             name: name.clone(),
-            install_path: path.into_boxed_path(),
+            install_path: path.into_owned().into_boxed_path(),
             editable: self.editable,
             r#virtual: Some(false),
             url,
