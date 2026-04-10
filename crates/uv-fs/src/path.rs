@@ -228,17 +228,16 @@ fn path_equals_components(path: &Path) -> bool {
         }
         expected_len += bytes.len();
         next_needs_separator = match component {
+            // The root dir is the slash.
             Component::RootDir => false,
-            Component::Prefix(_) => {
-                debug_assert!(bytes.last().is_some_and(|&b| b == b'\\' || b == b'/'));
-                false
-            }
+            // Prefix has `RootDir` after it if it requires a slash.
+            Component::Prefix(_) => false,
             _ => true,
         };
     }
     expected_len == path.as_os_str().as_encoded_bytes().len()
 }
-be possible to occur at this point,
+
 /// Normalize a [`Cow`] path, removing `.`, `..`, repeated separators (`//`), and trailing slashes.
 ///
 /// Paths that point to the current directory (`.` or `.\.`) are normalized to the empty path.
