@@ -308,7 +308,7 @@ impl LoweredRequirement {
                                     subdirectory: if subdirectory == PathBuf::new() {
                                         None
                                     } else {
-                                        Some(subdirectory.to_path_buf().into_boxed_path())
+                                        Some(subdirectory.into_owned().into_boxed_path())
                                     },
                                     url,
                                 }
