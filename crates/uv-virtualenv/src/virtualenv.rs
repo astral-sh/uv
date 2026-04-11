@@ -471,7 +471,7 @@ pub(crate) fn create(
             }
             (true, "activate.bat") => r"%~dp0..".to_string(),
             (true, "activate.fish") => {
-                r#"'"$(dirname -- "$(cd "$(dirname -- "$(status -f)")"; and pwd)")"'"#.to_string()
+                r#""$(dirname -- "$(dirname -- "$(realpath -- "$(status filename)")")")""#.to_string()
             }
             (true, "activate.nu") => r"(path self | path dirname | path dirname)".to_string(),
             (false, "activate.nu") => {
