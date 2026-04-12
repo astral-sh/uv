@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
@@ -333,14 +334,14 @@ impl TextCredentialStore {
         Ok(())
     }
 
-    /// Get credentials for a given URL and username.
+    /// Get the credential entry for a given URL and username.
     ///
     /// The most specific URL prefix match in the same [`Realm`] is returned, if any.
-    pub fn get_credentials(
+    pub fn get_credential_entry(
         &self,
         url: &DisplaySafeUrl,
         username: Option<&str>,
-    ) -> Result<Option<&Credentials>, LookupError> {
+    ) -> Result<Option<(Cow<'_, Service>, &Credentials)>, LookupError> {
         let request_realm = Realm::from(url);
 
         // Perform an exact lookup first
@@ -351,7 +352,7 @@ impl TextCredentialStore {
                 url_service.clone(),
                 Username::from(username.map(str::to_string)),
             )) {
-                return Ok(Some(credential));
+                return Ok(Some((Cow::Owned(url_service), credential)));
             }
         }
 
@@ -388,11 +389,24 @@ impl TextCredentialStore {
         }
 
         // Return the most specific match
-        if let Some((_, _, credential)) = best {
-            return Ok(Some(credential));
+        if let Some((_, service, credential)) = best {
+            return Ok(Some((Cow::Borrowed(service), credential)));
         }
 
         Ok(None)
+    }
+
+    /// Get credentials for a given URL and username.
+    ///
+    /// The most specific URL prefix match in the same [`Realm`] is returned, if any.
+    pub fn get_credentials(
+        &self,
+        url: &DisplaySafeUrl,
+        username: Option<&str>,
+    ) -> Result<Option<&Credentials>, LookupError> {
+        Ok(self
+            .get_credential_entry(url, username)?
+            .map(|(.., credential)| credential))
     }
 
     /// Store credentials for a given service.
