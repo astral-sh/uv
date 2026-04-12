@@ -87,14 +87,17 @@ impl FilesystemOptions {
     ///
     /// The search starts at the given path and goes up the directory tree until a `uv.toml` file or
     /// `pyproject.toml` file is found.
-    pub fn find(path: &Path) -> Result<Option<Self>, Error> {
+    pub fn find(path: &Path, active_root: Option<&Path>) -> Result<Option<Self>, Error> {
         for ancestor in path.ancestors() {
-            match Self::from_directory(ancestor) {
+            match Self::from_directory(ancestor, active_root == Some(ancestor)) {
                 Ok(Some(options)) => {
                     return Ok(Some(options));
                 }
                 Ok(None) => {
                     // Continue traversing the directory tree.
+                }
+                Err(Error::ActivePyprojectToml(path, err)) => {
+                    return Err(Error::PyprojectToml(path, err));
                 }
                 Err(Error::PyprojectToml(path, err)) => {
                     // If we see an invalid `pyproject.toml`, warn but continue.
@@ -115,7 +118,10 @@ impl FilesystemOptions {
 
     /// Load a [`FilesystemOptions`] from a directory, preferring a `uv.toml` file over a
     /// `pyproject.toml` file.
-    pub fn from_directory(dir: &Path) -> Result<Option<Self>, Error> {
+    pub fn from_directory(
+        dir: &Path,
+        validate_active_project: bool,
+    ) -> Result<Option<Self>, Error> {
         // Read a `uv.toml` file in the current directory.
         let path = dir.join("uv.toml");
         match fs_err::read_to_string(&path) {
@@ -151,6 +157,18 @@ impl FilesystemOptions {
         let path = dir.join("pyproject.toml");
         match fs_err::read_to_string(&path) {
             Ok(content) => {
+                if validate_active_project {
+                    let parsed = info_span!(
+                        "toml::from_str filesystem options pyproject.toml",
+                        path = %path.display()
+                    )
+                    .in_scope(|| toml::from_str::<PyProjectTomlExcludeNewer>(&content))
+                    .map_err(|err| Error::ActivePyprojectToml(path.clone(), Box::new(err)))?;
+                    let _ = parsed
+                        .tool
+                        .and_then(|tool| tool.uv)
+                        .map(|uv| (uv.exclude_newer, uv.exclude_newer_package));
+                }
                 // Parse, but skip any `pyproject.toml` that doesn't have a `[tool.uv]` section.
                 let pyproject =
                     info_span!("toml::from_str filesystem options pyproject.toml", path = %path.display())
@@ -198,6 +216,25 @@ impl From<Options> for FilesystemOptions {
     fn from(options: Options) -> Self {
         Self(options)
     }
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct PyProjectTomlExcludeNewer {
+    tool: Option<ToolExcludeNewer>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct ToolExcludeNewer {
+    uv: Option<OptionsExcludeNewer>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct OptionsExcludeNewer {
+    exclude_newer: Option<uv_distribution_types::ExcludeNewerValue>,
+    exclude_newer_package: Option<uv_resolver::ExcludeNewerPackage>,
 }
 
 /// Load [`Options`] from a `uv.toml` file.
@@ -592,6 +629,9 @@ pub enum Error {
 
     #[error("Failed to parse: `{}`", _0.user_display())]
     PyprojectToml(PathBuf, #[source] Box<toml::de::Error>),
+
+    #[error("Failed to parse: `{}`", _0.user_display())]
+    ActivePyprojectToml(PathBuf, #[source] Box<toml::de::Error>),
 
     #[error("Failed to parse: `{}`", _0.user_display())]
     UvToml(PathBuf, #[source] Box<toml::de::Error>),
