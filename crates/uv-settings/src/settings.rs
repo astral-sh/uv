@@ -40,6 +40,32 @@ pub(crate) struct Tools {
     pub(crate) uv: Option<Options>,
 }
 
+/// A `pyproject.toml` with an (optional) `[tool.uv.required-version]`.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub(crate) struct PyProjectRequiredVersionToml {
+    pub(crate) tool: Option<RequiredVersionTools>,
+}
+
+/// A `[tool]` section containing only the fields required for `required-version` discovery.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub(crate) struct RequiredVersionTools {
+    pub(crate) uv: Option<RequiredVersionOptions>,
+}
+
+/// The minimal `[tool.uv]` subset required to enforce `required-version` before full parsing.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) struct RequiredVersionOptions {
+    pub(crate) required_version: Option<RequiredVersion>,
+}
+
+/// A `uv.toml` containing only the fields required for `required-version` discovery.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) struct UvRequiredVersionToml {
+    pub(crate) required_version: Option<RequiredVersion>,
+}
+
 /// A `[tool.uv]` section.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Default, Deserialize, CombineOptions, OptionsMetadata)]
