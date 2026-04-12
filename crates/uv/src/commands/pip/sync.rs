@@ -8,7 +8,7 @@ use tracing::{debug, info_span, warn};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, ExtrasSpecification,
+    BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, Excludes, ExtrasSpecification,
     HashCheckingMode, IndexStrategy, NoSources, Reinstall, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
@@ -363,6 +363,8 @@ pub(crate) async fn pip_sync(
             .iter()
             .map(|constraint| constraint.requirement.clone()),
     );
+
+    let excludes = Excludes::from_requirements(excludes)?;
 
     // Initialize any shared state.
     let state = SharedState::default();

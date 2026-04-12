@@ -7747,12 +7747,11 @@ fn install_with_excludes_from_stdin() -> Result<()> {
         .arg("-")
         .stdin(std::fs::File::open(excludes_txt)?), @"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of anyio==4.0.1 and you require anyio==4.0.1, we can conclude that your requirements are unsatisfiable.
+    error: `exclude-dependencies` entry `anyio>4.0.0` must be a package name with optional environment markers; version specifiers, extras, and direct URLs are not allowed
     "
     );
 

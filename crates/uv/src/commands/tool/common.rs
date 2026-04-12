@@ -180,7 +180,7 @@ pub(crate) fn finalize_tool_install(
     requirements: Vec<Requirement>,
     constraints: Vec<Requirement>,
     overrides: Vec<Requirement>,
-    excludes: Vec<PackageName>,
+    excludes: Vec<Requirement>,
     build_constraints: Vec<Requirement>,
     printer: Printer,
 ) -> anyhow::Result<()> {

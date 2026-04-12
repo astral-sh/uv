@@ -1915,9 +1915,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     env,
                     python_requirement,
                 );
+                let python_marker = python_requirement.to_marker_tree();
 
                 requirements
-                    .filter(|requirement| !self.excludes.contains(&requirement.name))
+                    .filter_map(|requirement| self.excludes.apply(requirement))
+                    .filter(move |requirement| {
+                        Self::is_requirement_applicable(
+                            requirement.as_ref(),
+                            extra.as_ref(),
+                            env,
+                            python_marker,
+                            python_requirement,
+                        )
+                    })
                     .flat_map(|requirement| {
                         PubGrubDependency::from_requirement(
                             &self.conflicts,

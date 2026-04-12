@@ -12,8 +12,8 @@ use tracing::debug;
 use uv_cache::{Cache, Refresh};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Reinstall,
-    Upgrade,
+    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, Excludes, ExtrasSpecification,
+    Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
@@ -498,7 +498,11 @@ async fn do_lock(
     let required_members = target.required_members();
     let requirements = target.requirements();
     let overrides = target.overrides();
-    let excludes = target.exclude_dependencies();
+    let excludes = target
+        .exclude_dependencies()
+        .into_iter()
+        .map(Requirement::from)
+        .collect::<Vec<_>>();
     let constraints = target.constraints();
     let build_constraints = target.build_constraints();
     let dependency_groups = target.dependency_groups()?;
@@ -942,7 +946,7 @@ async fn do_lock(
                     .cloned()
                     .map(UnresolvedRequirementSpecification::from)
                     .collect(),
-                excludes.clone(),
+                Excludes::from_requirements(excludes.clone())?,
                 source_trees,
                 // The root is always null in workspaces, it "depends on" the projects
                 None,
@@ -981,7 +985,7 @@ async fn do_lock(
                 requirements,
                 constraints,
                 overrides,
-                excludes.clone(),
+                excludes,
                 build_constraints,
                 dependency_groups,
                 dependency_metadata.values().cloned(),
@@ -1033,7 +1037,7 @@ impl ValidatedLock {
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         constraints: &[Requirement],
         overrides: &[Requirement],
-        excludes: &[PackageName],
+        excludes: &[Requirement],
         build_constraints: &[Requirement],
         conflicts: &Conflicts,
         environments: Option<&SupportedEnvironments>,

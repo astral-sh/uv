@@ -128,7 +128,7 @@ impl Manifest {
                     .flat_map(move |lookahead| {
                         self.overrides
                             .apply(lookahead.requirements())
-                            .filter(|requirement| !self.excludes.contains(&requirement.name))
+                            .filter_map(move |requirement| self.excludes.apply(requirement))
                             .filter(move |requirement| {
                                 requirement
                                     .evaluate_markers(env.marker_environment(), lookahead.extras())
@@ -137,7 +137,7 @@ impl Manifest {
                     .chain(
                         self.overrides
                             .apply(&self.requirements)
-                            .filter(|requirement| !self.excludes.contains(&requirement.name))
+                            .filter_map(move |requirement| self.excludes.apply(requirement))
                             .filter(move |requirement| {
                                 requirement.evaluate_markers(env.marker_environment(), &[])
                             }),
@@ -145,11 +145,11 @@ impl Manifest {
                     .chain(
                         self.constraints
                             .requirements()
-                            .filter(|requirement| !self.excludes.contains(&requirement.name))
+                            .map(Cow::Borrowed)
+                            .filter_map(move |requirement| self.excludes.apply(requirement))
                             .filter(move |requirement| {
                                 requirement.evaluate_markers(env.marker_environment(), &[])
-                            })
-                            .map(Cow::Borrowed),
+                            }),
                     ),
             ),
             // Include direct requirements, with constraints and overrides applied.
@@ -157,7 +157,7 @@ impl Manifest {
                 self.overrides
                     .apply(&self.requirements)
                     .chain(self.constraints.requirements().map(Cow::Borrowed))
-                    .filter(|requirement| !self.excludes.contains(&requirement.name))
+                    .filter_map(move |requirement| self.excludes.apply(requirement))
                     .filter(move |requirement| {
                         requirement.evaluate_markers(env.marker_environment(), &[])
                     }),
@@ -176,21 +176,21 @@ impl Manifest {
             DependencyMode::Transitive => Either::Left(
                 self.overrides
                     .requirements()
-                    .filter(|requirement| !self.excludes.contains(&requirement.name))
+                    .map(Cow::Borrowed)
+                    .filter_map(move |requirement| self.excludes.apply(requirement))
                     .filter(move |requirement| {
                         requirement.evaluate_markers(env.marker_environment(), &[])
-                    })
-                    .map(Cow::Borrowed),
+                    }),
             ),
             // Include direct requirements, with constraints and overrides applied.
             DependencyMode::Direct => Either::Right(
                 self.overrides
                     .requirements()
-                    .filter(|requirement| !self.excludes.contains(&requirement.name))
+                    .map(Cow::Borrowed)
+                    .filter_map(move |requirement| self.excludes.apply(requirement))
                     .filter(move |requirement| {
                         requirement.evaluate_markers(env.marker_environment(), &[])
-                    })
-                    .map(Cow::Borrowed),
+                    }),
             ),
         }
     }

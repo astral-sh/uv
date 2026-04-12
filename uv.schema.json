@@ -178,7 +178,7 @@
       }
     },
     "exclude-dependencies": {
-      "description": "Package names to exclude, e.g., `werkzeug`, `numpy`.",
+      "description": "PEP 508-style requirements to exclude, e.g., `werkzeug`, `gdal ; sys_platform == 'win32'`.",
       "type": ["array", "null"],
       "items": {
         "type": "string"

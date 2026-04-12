@@ -108,7 +108,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     requirements: Vec<UnresolvedRequirementSpecification>,
     constraints: Vec<NameRequirementSpecification>,
     overrides: Vec<UnresolvedRequirementSpecification>,
-    excludes: Vec<PackageName>,
+    excludes: Excludes,
     source_trees: Vec<SourceTree>,
     mut project: Option<PackageName>,
     workspace_members: BTreeSet<PackageName>,
@@ -314,7 +314,6 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             .chain(upgrade.constraints().cloned()),
     );
     let overrides = Overrides::from_requirements(overrides);
-    let excludes = excludes.into_iter().collect::<Excludes>();
     let preferences = Preferences::from_iter(preferences, &resolver_env);
 
     // Determine any lookahead requirements.

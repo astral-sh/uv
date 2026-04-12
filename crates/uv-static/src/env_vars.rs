@@ -148,7 +148,8 @@ impl EnvVars {
     pub const UV_OVERRIDE: &'static str = "UV_OVERRIDE";
 
     /// Equivalent to the `--excludes` command-line argument. If set, uv will use this
-    /// as the excludes file. Uses space-separated list of files.
+    /// space-separated list of excludes files, whose entries must be package names with
+    /// optional environment markers.
     #[attr_added_in("0.9.8")]
     pub const UV_EXCLUDE: &'static str = "UV_EXCLUDE";
 

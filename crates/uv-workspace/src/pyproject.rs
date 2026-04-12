@@ -30,7 +30,7 @@ use uv_macros::OptionsMetadata;
 use uv_normalize::{DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_options_metadata::{OptionSet, OptionsMetadata, Visit};
 use uv_pep440::{Version, VersionSpecifiers};
-use uv_pep508::MarkerTree;
+use uv_pep508::{MarkerTree, Requirement};
 use uv_pypi_types::{
     Conflicts, DependencyGroups, SchemaConflicts, SupportedEnvironments, VerbatimParsedUrl,
 };
@@ -514,18 +514,18 @@ pub struct ToolUv {
         feature = "schemars",
         schemars(
             with = "Option<Vec<String>>",
-            description = "Package names to exclude, e.g., `werkzeug`, `numpy`."
+            description = "PEP 508-style requirements to exclude, e.g., `werkzeug`, `gdal ; sys_platform == 'win32'`."
         )
     )]
     #[option(
         default = "[]",
         value_type = "list[str]",
         example = r#"
-            # Exclude Werkzeug from being installed, even if transitive dependencies request it.
-            exclude-dependencies = ["werkzeug"]
+            # Exclude GDAL on Windows, even if transitive dependencies request it.
+            exclude-dependencies = ["gdal ; sys_platform == 'win32'"]
         "#
     )]
-    pub exclude_dependencies: Option<Vec<PackageName>>,
+    pub exclude_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
 
     /// Constraints to apply when resolving the project's dependencies.
     ///

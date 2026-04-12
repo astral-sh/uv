@@ -2674,7 +2674,7 @@ pub(crate) struct PipCompileSettings {
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
-    pub(crate) excludes_from_workspace: Vec<PackageName>,
+    pub(crate) excludes_from_workspace: Vec<Requirement>,
     pub(crate) build_constraints_from_workspace: Vec<Requirement>,
     pub(crate) environments: SupportedEnvironments,
     pub(crate) refresh: Refresh,
@@ -2775,6 +2775,11 @@ impl PipCompileSettings {
                 .exclude_dependencies
                 .clone()
                 .unwrap_or_default()
+                .into_iter()
+                .map(|requirement| {
+                    Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+                })
+                .collect()
         } else {
             Vec::new()
         };
@@ -2990,7 +2995,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) dry_run: DryRun,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
-    pub(crate) excludes_from_workspace: Vec<PackageName>,
+    pub(crate) excludes_from_workspace: Vec<Requirement>,
     pub(crate) build_constraints_from_workspace: Vec<Requirement>,
     pub(crate) modifications: Modifications,
     pub(crate) refresh: Refresh,
@@ -3079,6 +3084,11 @@ impl PipInstallSettings {
                 .exclude_dependencies
                 .clone()
                 .unwrap_or_default()
+                .into_iter()
+                .map(|requirement| {
+                    Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+                })
+                .collect()
         } else {
             Vec::new()
         };

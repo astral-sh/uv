@@ -38,7 +38,7 @@ use uv_fs::{PortablePath, PortablePathBuf, Simplified, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep440::Version;
+use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{
     MarkerEnvironment, MarkerTree, Scheme, VerbatimUrl, VerbatimUrlError, split_scheme,
 };
@@ -1286,13 +1286,16 @@ impl Lock {
                     .manifest
                     .excludes
                     .iter()
-                    .map(|name| {
-                        serde::Serialize::serialize(&name, toml_edit::ser::ValueSerializer::new())
+                    .map(|requirement| {
+                        serde::Serialize::serialize(
+                            &requirement,
+                            toml_edit::ser::ValueSerializer::new(),
+                        )
                     })
                     .collect::<Result<Vec<_>, _>>()?;
                 let excludes = match excludes.as_slice() {
                     [] => Array::new(),
-                    [name] => Array::from_iter([name]),
+                    [requirement] => Array::from_iter([requirement]),
                     excludes => each_element_on_its_line_array(excludes.iter()),
                 };
                 manifest_table.insert("excludes", value(excludes));
@@ -1582,7 +1585,7 @@ impl Lock {
         requirements: &[Requirement],
         constraints: &[Requirement],
         overrides: &[Requirement],
-        excludes: &[PackageName],
+        excludes: &[Requirement],
         build_constraints: &[Requirement],
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         dependency_metadata: &DependencyMetadata,
@@ -1701,8 +1704,18 @@ impl Lock {
 
         // Validate that the lockfile was generated with the same excludes.
         {
-            let expected: BTreeSet<_> = excludes.iter().cloned().collect();
-            let actual: BTreeSet<_> = self.manifest.excludes.iter().cloned().collect();
+            let expected: BTreeSet<_> = excludes
+                .iter()
+                .cloned()
+                .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
+                .collect::<Result<_, _>>()?;
+            let actual: BTreeSet<_> = self
+                .manifest
+                .excludes
+                .iter()
+                .cloned()
+                .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
+                .collect::<Result<_, _>>()?;
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedExcludes(expected, actual));
             }
@@ -2278,7 +2291,7 @@ pub enum SatisfiesResult<'lock> {
     /// The lockfile uses a different set of overrides.
     MismatchedOverrides(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of excludes.
-    MismatchedExcludes(BTreeSet<PackageName>, BTreeSet<PackageName>),
+    MismatchedExcludes(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of build constraints.
     MismatchedBuildConstraints(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of dependency groups.
@@ -2372,7 +2385,35 @@ impl From<ExcludeNewer> for ExcludeNewerWire {
     }
 }
 
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(untagged)]
+enum ExcludeWire {
+    Package(PackageName),
+    Requirement(Box<Requirement>),
+}
+
+impl From<ExcludeWire> for Requirement {
+    fn from(exclude: ExcludeWire) -> Self {
+        match exclude {
+            ExcludeWire::Package(name) => Self {
+                name,
+                extras: Vec::new().into_boxed_slice(),
+                groups: Vec::new().into_boxed_slice(),
+                marker: MarkerTree::TRUE,
+                source: RequirementSource::Registry {
+                    specifier: VersionSpecifiers::empty(),
+                    index: None,
+                    conflict: None,
+                },
+                origin: None,
+            },
+            ExcludeWire::Requirement(requirement) => *requirement,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, serde::Deserialize, PartialEq, Eq)]
+#[serde(from = "ResolverManifestWire")]
 #[serde(rename_all = "kebab-case")]
 pub struct ResolverManifest {
     /// The workspace members included in the lockfile.
@@ -2398,14 +2439,50 @@ pub struct ResolverManifest {
     #[serde(default)]
     overrides: BTreeSet<Requirement>,
     /// The excludes provided to the resolver.
-    #[serde(default)]
-    excludes: BTreeSet<PackageName>,
+    #[serde(default, deserialize_with = "deserialize_excludes")]
+    excludes: BTreeSet<Requirement>,
     /// The build constraints provided to the resolver.
     #[serde(default)]
     build_constraints: BTreeSet<Requirement>,
     /// The static metadata provided to the resolver.
     #[serde(default)]
     dependency_metadata: BTreeSet<StaticMetadata>,
+}
+
+#[derive(Clone, Debug, Default, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct ResolverManifestWire {
+    #[serde(default)]
+    members: BTreeSet<PackageName>,
+    #[serde(default)]
+    requirements: BTreeSet<Requirement>,
+    #[serde(default)]
+    dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
+    #[serde(default)]
+    constraints: BTreeSet<Requirement>,
+    #[serde(default)]
+    overrides: BTreeSet<Requirement>,
+    #[serde(default)]
+    excludes: Vec<ExcludeWire>,
+    #[serde(default)]
+    build_constraints: BTreeSet<Requirement>,
+    #[serde(default)]
+    dependency_metadata: BTreeSet<StaticMetadata>,
+}
+
+impl From<ResolverManifestWire> for ResolverManifest {
+    fn from(wire: ResolverManifestWire) -> Self {
+        Self {
+            members: wire.members,
+            requirements: wire.requirements,
+            dependency_groups: wire.dependency_groups,
+            constraints: wire.constraints,
+            overrides: wire.overrides,
+            excludes: wire.excludes.into_iter().map(Requirement::from).collect(),
+            build_constraints: wire.build_constraints,
+            dependency_metadata: wire.dependency_metadata,
+        }
+    }
 }
 
 impl ResolverManifest {
@@ -2416,7 +2493,7 @@ impl ResolverManifest {
         requirements: impl IntoIterator<Item = Requirement>,
         constraints: impl IntoIterator<Item = Requirement>,
         overrides: impl IntoIterator<Item = Requirement>,
-        excludes: impl IntoIterator<Item = PackageName>,
+        excludes: impl IntoIterator<Item = Requirement>,
         build_constraints: impl IntoIterator<Item = Requirement>,
         dependency_groups: impl IntoIterator<Item = (GroupName, Vec<Requirement>)>,
         dependency_metadata: impl IntoIterator<Item = StaticMetadata>,
@@ -2455,7 +2532,11 @@ impl ResolverManifest {
                 .into_iter()
                 .map(|requirement| requirement.relative_to(root))
                 .collect::<Result<BTreeSet<_>, _>>()?,
-            excludes: self.excludes,
+            excludes: self
+                .excludes
+                .into_iter()
+                .map(|requirement| requirement.relative_to(root))
+                .collect::<Result<BTreeSet<_>, _>>()?,
             build_constraints: self
                 .build_constraints
                 .into_iter()

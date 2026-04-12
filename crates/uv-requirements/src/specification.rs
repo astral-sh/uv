@@ -64,7 +64,7 @@ pub struct RequirementsSpecification {
     /// The overrides for the project.
     pub overrides: Vec<UnresolvedRequirementSpecification>,
     /// The excludes for the project.
-    pub excludes: Vec<PackageName>,
+    pub excludes: Vec<Requirement>,
     /// The `pylock.toml` file from which to extract the resolution.
     pub pylock: Option<PathBuf>,
     /// The source trees from which to extract requirements.
@@ -649,7 +649,7 @@ impl RequirementsSpecification {
             for req_spec in source.requirements {
                 match req_spec.requirement {
                     UnresolvedRequirement::Named(requirement) => {
-                        spec.excludes.push(requirement.name);
+                        spec.excludes.push(requirement);
                     }
                     UnresolvedRequirement::Unnamed(requirement) => {
                         return Err(anyhow::anyhow!(
@@ -736,7 +736,7 @@ impl RequirementsSpecification {
         requirements: Vec<Requirement>,
         constraints: Vec<Requirement>,
         overrides: Vec<Requirement>,
-        excludes: Vec<PackageName>,
+        excludes: Vec<Requirement>,
     ) -> Self {
         Self {
             requirements: requirements

@@ -218,6 +218,61 @@ fn tool_install_relative_exclude_newer_receipt_preserves_span() {
 }
 
 #[test]
+fn tool_install_marker_excludes_receipt() {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let excludes_txt = context.temp_dir.child("excludes.txt");
+    excludes_txt
+        .write_str("werkzeug ; python_version < '3.12'")
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("flask")
+        .arg("--excludes")
+        .arg("excludes.txt")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.1
+    Installed 1 executable: flask
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("flask").join("uv-receipt.toml")).unwrap(), @r#"
+        [tool]
+        requirements = [{ name = "flask" }]
+        excludes = [{ name = "werkzeug", marker = "python_full_version < '3.12'" }]
+        entrypoints = [
+            { name = "flask", install-path = "[TEMP_DIR]/bin/flask", from = "flask" },
+        ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "#);
+    });
+}
+
+#[test]
 fn tool_install_python_from_global_version_file() {
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12", "3.13"])
         .with_filtered_counts()

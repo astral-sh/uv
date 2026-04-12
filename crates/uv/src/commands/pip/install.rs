@@ -8,7 +8,7 @@ use tracing::{Level, debug, enabled, info_span, warn};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, ExtrasSpecification,
+    BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, Excludes, ExtrasSpecification,
     HashCheckingMode, IndexStrategy, NoSources, Reinstall, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
@@ -22,7 +22,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
-use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
+use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::Conflicts;
 use uv_python::{
@@ -59,7 +59,7 @@ pub(crate) async fn pip_install(
     build_constraints: &[RequirementsSource],
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Requirement>,
-    excludes_from_workspace: Vec<uv_normalize::PackageName>,
+    excludes_from_workspace: Vec<Requirement>,
     build_constraints_from_workspace: Vec<Requirement>,
     extras: &ExtrasSpecification,
     groups: &GroupsSpecification,
@@ -166,10 +166,12 @@ pub(crate) async fn pip_install(
         )
         .collect();
 
-    let excludes: Vec<PackageName> = excludes
-        .into_iter()
-        .chain(excludes_from_workspace)
-        .collect();
+    let excludes = Excludes::from_requirements(
+        excludes
+            .into_iter()
+            .chain(excludes_from_workspace)
+            .collect::<Vec<_>>(),
+    )?;
 
     // Read build constraints.
     let build_constraints: Vec<NameRequirementSpecification> =

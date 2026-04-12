@@ -12,8 +12,8 @@ use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
-    GitLfsSetting, Reinstall, TargetTriple, Upgrade,
+    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, Excludes, ExcludesError,
+    ExtrasSpecification, GitLfsSetting, Reinstall, TargetTriple, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
@@ -313,6 +313,9 @@ pub(crate) enum ProjectError {
 
     #[error(transparent)]
     Requirements(#[from] uv_requirements::Error),
+
+    #[error(transparent)]
+    Excludes(#[from] ExcludesError),
 
     #[error(transparent)]
     Metadata(#[from] uv_distribution::MetadataError),
@@ -2042,6 +2045,7 @@ pub(crate) async fn resolve_environment(
     } = spec.requirements;
 
     let client_builder = client_builder.clone().keyring(*keyring_provider);
+    let excludes = Excludes::from_requirements(excludes)?;
 
     // Determine the tags, markers, and interpreter to use for resolution.
     let tags = pip::resolution_tags(None, python_platform, interpreter)?;
@@ -2573,7 +2577,7 @@ pub(crate) async fn update_environment(
         requirements,
         constraints,
         overrides,
-        excludes,
+        Excludes::from_requirements(excludes)?,
         source_trees,
         project,
         BTreeSet::default(),
@@ -2842,6 +2846,7 @@ pub(crate) fn script_specification(
         .into_iter()
         .flatten()
         .cloned()
+        .map(Requirement::from)
         .collect::<Vec<_>>();
 
     Ok(Some(RequirementsSpecification::from_excludes(

@@ -1424,11 +1424,12 @@ pub struct PipCompileArgs {
 
     /// Exclude packages from resolution using the given requirements files.
     ///
-    /// Excludes files are `requirements.txt`-like files that specify packages to exclude
-    /// from the resolution. When a package is excluded, it will be omitted from the
+    /// Excludes files are `requirements.txt`-like files whose entries must be package names
+    /// with optional environment markers. Version specifiers, extras, and direct URLs are not
+    /// allowed.
+    /// When an exclude applies in the current environment, the package will be omitted from the
     /// dependency list entirely and its own dependencies will be ignored during the resolution
-    /// phase. Excludes are unconditional in that requirement specifiers and markers are ignored;
-    /// any package listed in the provided file will be omitted from all resolved environments.
+    /// phase.
     #[arg(
         long,
         alias = "exclude",
@@ -2150,11 +2151,12 @@ pub struct PipInstallArgs {
 
     /// Exclude packages from resolution using the given requirements files.
     ///
-    /// Excludes files are `requirements.txt`-like files that specify packages to exclude
-    /// from the resolution. When a package is excluded, it will be omitted from the
+    /// Excludes files are `requirements.txt`-like files whose entries must be package names
+    /// with optional environment markers. Version specifiers, extras, and direct URLs are not
+    /// allowed.
+    /// When an exclude applies in the current environment, the package will be omitted from the
     /// dependency list entirely and its own dependencies will be ignored during the resolution
-    /// phase. Excludes are unconditional in that requirement specifiers and markers are ignored;
-    /// any package listed in the provided file will be omitted from all resolved environments.
+    /// phase.
     #[arg(
         long,
         alias = "exclude",
@@ -5668,11 +5670,12 @@ pub struct ToolInstallArgs {
 
     /// Exclude packages from resolution using the given requirements files.
     ///
-    /// Excludes files are `requirements.txt`-like files that specify packages to exclude
-    /// from the resolution. When a package is excluded, it will be omitted from the
+    /// Excludes files are `requirements.txt`-like files whose entries must be package names
+    /// with optional environment markers. Version specifiers, extras, and direct URLs are not
+    /// allowed.
+    /// When an exclude applies in the current environment, the package will be omitted from the
     /// dependency list entirely and its own dependencies will be ignored during the resolution
-    /// phase. Excludes are unconditional in that requirement specifiers and markers are ignored;
-    /// any package listed in the provided file will be omitted from all resolved environments.
+    /// phase.
     #[arg(
         long,
         alias = "exclude",

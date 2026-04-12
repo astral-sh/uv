@@ -4,9 +4,10 @@ use std::path::PathBuf;
 use serde::Deserialize;
 use toml_edit::{Array, Item, Table, Value, value};
 
-use uv_distribution_types::Requirement;
+use uv_distribution_types::{Requirement, RequirementSource};
 use uv_fs::{PortablePath, Simplified};
 use uv_normalize::PackageName;
+use uv_pep440::VersionSpecifiers;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::PythonRequest;
 use uv_settings::{ToolOptions, ToolOptionsWire};
@@ -22,7 +23,7 @@ pub struct Tool {
     /// The overrides requested by the user during installation.
     overrides: Vec<Requirement>,
     /// The excludes requested by the user during installation.
-    excludes: Vec<PackageName>,
+    excludes: Vec<Requirement>,
     /// The build constraints requested by the user during installation.
     build_constraints: Vec<Requirement>,
     /// The Python requested by the user during installation.
@@ -43,7 +44,7 @@ struct ToolWire {
     #[serde(default)]
     overrides: Vec<Requirement>,
     #[serde(default)]
-    excludes: Vec<PackageName>,
+    excludes: Vec<ExcludeWire>,
     #[serde(default)]
     build_constraint_dependencies: Vec<Requirement>,
     python: Option<PythonRequest>,
@@ -62,6 +63,44 @@ enum RequirementWire {
     Deprecated(uv_pep508::Requirement<VerbatimParsedUrl>),
 }
 
+/// Wire format for tool receipt excludes.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(untagged)]
+enum ExcludeWire {
+    /// A legacy plain package-name exclude.
+    ///
+    /// ```toml
+    /// // Ex) "werkzeug"
+    /// ```
+    PackageName(PackageName),
+    /// A canonical requirement-shaped exclude.
+    ///
+    /// ```toml
+    /// // Ex) { name = "werkzeug", marker = "python_full_version < '3.12'" }
+    /// ```
+    Requirement(Box<Requirement>),
+}
+
+impl From<ExcludeWire> for Requirement {
+    fn from(exclude: ExcludeWire) -> Self {
+        match exclude {
+            ExcludeWire::PackageName(name) => Self {
+                name,
+                extras: Vec::new().into_boxed_slice(),
+                groups: Vec::new().into_boxed_slice(),
+                marker: uv_pep508::MarkerTree::TRUE,
+                source: RequirementSource::Registry {
+                    specifier: VersionSpecifiers::empty(),
+                    index: None,
+                    conflict: None,
+                },
+                origin: None,
+            },
+            ExcludeWire::Requirement(requirement) => *requirement,
+        }
+    }
+}
+
 impl From<Tool> for ToolWire {
     fn from(tool: Tool) -> Self {
         Self {
@@ -72,7 +111,12 @@ impl From<Tool> for ToolWire {
                 .collect(),
             constraints: tool.constraints,
             overrides: tool.overrides,
-            excludes: tool.excludes,
+            excludes: tool
+                .excludes
+                .into_iter()
+                .map(Box::new)
+                .map(ExcludeWire::Requirement)
+                .collect(),
             build_constraint_dependencies: tool.build_constraints,
             python: tool.python,
             entrypoints: tool.entrypoints,
@@ -96,7 +140,7 @@ impl TryFrom<ToolWire> for Tool {
                 .collect(),
             constraints: tool.constraints,
             overrides: tool.overrides,
-            excludes: tool.excludes,
+            excludes: tool.excludes.into_iter().map(Requirement::from).collect(),
             build_constraints: tool.build_constraint_dependencies,
             python: tool.python,
             entrypoints: tool.entrypoints,
@@ -172,7 +216,7 @@ impl Tool {
         requirements: Vec<Requirement>,
         constraints: Vec<Requirement>,
         overrides: Vec<Requirement>,
-        excludes: Vec<PackageName>,
+        excludes: Vec<Requirement>,
         build_constraints: Vec<Requirement>,
         python: Option<PythonRequest>,
         entrypoints: impl IntoIterator<Item = ToolEntrypoint>,
@@ -364,7 +408,7 @@ impl Tool {
         &self.overrides
     }
 
-    pub fn excludes(&self) -> &[PackageName] {
+    pub fn excludes(&self) -> &[Requirement] {
         &self.excludes
     }
 
