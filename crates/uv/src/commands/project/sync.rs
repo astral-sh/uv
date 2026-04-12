@@ -285,25 +285,33 @@ pub(crate) async fn sync(
             .await
             {
                 Ok(EnvironmentUpdate { changelog, .. }) => {
-                    // Generate a report for the script without a lockfile
-                    let report = Report {
-                        schema: SchemaReport::default(),
-                        target: TargetName::from(&target),
-                        project: None,
-                        script: Some(ScriptReport::from(script)),
-                        sync: SyncReport {
-                            changes: PackageChangesReport::from_changelog(&changelog),
-                            ..sync_report
-                        },
-                        lock: None,
-                        dry_run: dry_run.enabled(),
-                    };
-                    if let Some(output) = report.format(output_format) {
-                        writeln!(printer.stdout_important(), "{output}")?;
-                    }
+                    write_sync_report(
+                        &target,
+                        &environment,
+                        &changelog,
+                        None,
+                        dry_run,
+                        output_format,
+                        printer,
+                    )?;
                     return Ok(ExitStatus::Success);
                 }
-                // TODO(zanieb): We should respect `--output-format json` for the error case
+                Err(ProjectError::Operation(operations::Error::OutdatedEnvironment(changelog))) => {
+                    write_sync_report(
+                        &target,
+                        &environment,
+                        &changelog,
+                        None,
+                        dry_run,
+                        output_format,
+                        printer,
+                    )?;
+                    return diagnostics::OperationDiagnostic::with_system_certs(
+                        client_builder.system_certs(),
+                    )
+                    .report(operations::Error::OutdatedEnvironment(changelog))
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                }
                 Err(ProjectError::Operation(err)) => {
                     return diagnostics::OperationDiagnostic::with_system_certs(
                         client_builder.system_certs(),
@@ -431,6 +439,22 @@ pub(crate) async fn sync(
     .await
     {
         Ok(changelog) => changelog,
+        Err(ProjectError::Operation(operations::Error::OutdatedEnvironment(changelog))) => {
+            write_sync_report(
+                &target,
+                &environment,
+                &changelog,
+                Some(lock_report),
+                dry_run,
+                output_format,
+                printer,
+            )?;
+            return diagnostics::OperationDiagnostic::with_system_certs(
+                client_builder.system_certs(),
+            )
+            .report(operations::Error::OutdatedEnvironment(changelog))
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+        }
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::with_system_certs(
                 client_builder.system_certs(),
@@ -441,22 +465,15 @@ pub(crate) async fn sync(
         Err(err) => return Err(err.into()),
     };
 
-    let report = Report {
-        schema: SchemaReport::default(),
-        target: TargetName::from(&target),
-        project: target.project().map(ProjectReport::from),
-        script: target.script().map(ScriptReport::from),
-        sync: SyncReport {
-            changes: PackageChangesReport::from_changelog(&changelog),
-            ..sync_report
-        },
-        lock: Some(lock_report),
-        dry_run: dry_run.enabled(),
-    };
-
-    if let Some(output) = report.format(output_format) {
-        writeln!(printer.stdout_important(), "{output}")?;
-    }
+    write_sync_report(
+        &target,
+        &environment,
+        &changelog,
+        Some(lock_report),
+        dry_run,
+        output_format,
+        printer,
+    )?;
 
     match outcome {
         Outcome::Success(..) => Ok(ExitStatus::Success),
@@ -1444,4 +1461,36 @@ impl Report {
             SyncFormat::Text => None,
         }
     }
+}
+
+fn write_sync_report(
+    target: &SyncTarget,
+    environment: &SyncEnvironment,
+    changelog: &Changelog,
+    lock: Option<LockReport>,
+    dry_run: DryRun,
+    output_format: SyncFormat,
+    printer: Printer,
+) -> Result<()> {
+    let report = Report {
+        schema: SchemaReport::default(),
+        target: TargetName::from(target),
+        project: target.project().map(ProjectReport::from),
+        script: target.script().map(ScriptReport::from),
+        sync: SyncReport {
+            environment: EnvironmentReport::from(environment),
+            action: SyncAction::from(environment),
+            changes: PackageChangesReport::from_changelog(changelog),
+            dry_run: dry_run.enabled(),
+            target: TargetName::from(target),
+        },
+        lock,
+        dry_run: dry_run.enabled(),
+    };
+
+    if let Some(output) = report.format(output_format) {
+        writeln!(printer.stdout_important(), "{output}")?;
+    }
+
+    Ok(())
 }
