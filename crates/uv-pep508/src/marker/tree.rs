@@ -2304,11 +2304,15 @@ mod test {
             .evaluate(&env37, &[]);
         assert!(!result);
 
-        // Meaningless expressions are ignored, so this is always true.
-        let result = MarkerTree::from_str("'3.*' == python_version")
+        let result = MarkerTree::from_str("'3.7.*' == python_version")
             .unwrap()
             .evaluate(&env37, &[]);
         assert!(result);
+
+        let result = MarkerTree::from_str("'3.8.*' == python_version")
+            .unwrap()
+            .evaluate(&env37, &[]);
+        assert!(!result);
     }
 
     #[test]
@@ -2393,6 +2397,18 @@ mod test {
             .unwrap()
             .to_string(),
             "python_full_version == '3.7.*' and 'nt' in os_name",
+        );
+    }
+
+    #[test]
+    fn test_marker_expression_inverted_wildcard() {
+        assert_eq!(
+            MarkerTree::from_str(r"'3.7.*' == python_full_version")
+                .unwrap()
+                .contents()
+                .unwrap()
+                .to_string(),
+            "python_full_version == '3.7.*'",
         );
     }
 
