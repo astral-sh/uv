@@ -873,6 +873,11 @@ impl Lock {
                 if seen.insert((&package.id, None)) {
                     queue.push_back((package, None));
                 }
+                for extra in &*requirement.extras {
+                    if seen.insert((&package.id, Some(extra))) {
+                        queue.push_back((package, Some(extra)));
+                    }
+                }
             }
         }
 
@@ -890,6 +895,11 @@ impl Lock {
                 {
                     if seen.insert((&package.id, None)) {
                         queue.push_back((package, None));
+                    }
+                    for extra in &*requirement.extras {
+                        if seen.insert((&package.id, Some(extra))) {
+                            queue.push_back((package, Some(extra)));
+                        }
                     }
                 }
             }

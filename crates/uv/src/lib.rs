@@ -304,6 +304,10 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             | ProjectCommand::Export(uv_cli::ExportArgs {
                 script: Some(script),
                 ..
+            })
+            | ProjectCommand::Audit(uv_cli::AuditArgs {
+                script: Some(script),
+                ..
             }) => match Pep723Script::read(script).await {
                 Ok(Some(script)) => Some(Pep723Item::Script(script)),
                 Ok(None) => {
