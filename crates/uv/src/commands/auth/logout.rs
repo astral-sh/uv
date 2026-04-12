@@ -2,9 +2,10 @@ use std::fmt::Write;
 
 use anyhow::{Context, Result, bail};
 use owo_colors::OwoColorize;
+use url::Url;
 
 use uv_auth::{
-    AuthBackend, Credentials, PyxTokenStore, Service, TextCredentialStore, Username,
+    AuthBackend, Credentials, LookupError, PyxTokenStore, Service, TextCredentialStore, Username,
     is_default_pyx_domain,
 };
 use uv_client::BaseClientBuilder;
@@ -16,7 +17,7 @@ use crate::{commands::ExitStatus, printer::Printer};
 
 /// Logout from a service.
 ///
-/// If no username is provided, defaults to `__token__`.
+/// If no username is provided, uv tries the default token entry first.
 pub(crate) async fn logout(
     service: Service,
     username: Option<String>,
@@ -48,40 +49,85 @@ pub(crate) async fn logout(
                 "Cannot specify a username both via the URL and CLI; found `--username {cli}` and `{url}`"
             );
         }
-        (Some(cli), None) => cli,
-        (None, Some(url)) => url.to_string(),
-        (None, None) => "__token__".to_string(),
+        (Some(cli), None) => Some(cli),
+        (None, Some(url)) => Some(url.to_string()),
+        (None, None) => None,
     };
-    if username.is_empty() {
+    if username.as_ref().is_some_and(String::is_empty) {
         bail!("Username cannot be empty");
     }
 
-    let display_url = if username == "__token__" {
-        url.without_credentials().to_string()
-    } else {
-        format!("{username}@{}", url.without_credentials())
-    };
+    let url_without_credentials = url.without_credentials();
 
     // TODO(zanieb): Consider exhaustively logging out from all backends
-    match backend {
+    let display_url = match backend {
         AuthBackend::System(provider) => {
-            provider
-                .remove(&url, &username)
-                .await
-                .with_context(|| format!("Unable to remove credentials for {display_url}"))?;
+            if let Some(username) = username.as_deref() {
+                let display_url = format_display_url(&url_without_credentials, Some(username));
+                provider
+                    .remove(&url, username)
+                    .await
+                    .with_context(|| format!("Unable to remove credentials for {display_url}"))?;
+                display_url
+            } else if provider.fetch(&url, Some("__token__")).await.is_some() {
+                provider.remove(&url, "__token__").await.with_context(|| {
+                    format!("Unable to remove credentials for {url_without_credentials}")
+                })?;
+                url_without_credentials.to_string()
+            } else {
+                bail!("{}", missing_username_hint(&url_without_credentials));
+            }
         }
         AuthBackend::TextStore(mut store, _lock) => {
-            if store
-                .remove(&service, Username::from(Some(username.clone())))
-                .is_none()
+            let display_url = if let Some(username) = username {
+                let display_url = format_display_url(&url_without_credentials, Some(&username));
+                if store
+                    .remove(&service, Username::from(Some(username)))
+                    .is_none()
+                {
+                    bail!("No matching entry found for {display_url}");
+                }
+                display_url
+            } else if store
+                .remove(&service, Username::from(Some("__token__".to_string())))
+                .is_some()
             {
-                bail!("No matching entry found for {display_url}");
-            }
+                url_without_credentials.to_string()
+            } else {
+                let lookup = store.get_credential_entry(&url, None).map(|entry| {
+                    entry.map(|(matched_service, credentials)| {
+                        (
+                            matched_service.into_owned(),
+                            credentials.username().map(ToString::to_string),
+                        )
+                    })
+                });
+                match lookup {
+                    Ok(Some((matched_service, matched_username))) => {
+                        let display_url = format_display_url(
+                            &url_without_credentials,
+                            matched_username.as_deref(),
+                        );
+                        if store
+                            .remove(&matched_service, Username::from(matched_username))
+                            .is_none()
+                        {
+                            bail!("No matching entry found for {display_url}");
+                        }
+                        display_url
+                    }
+                    Ok(None) => bail!("{}", missing_username_hint(&url_without_credentials)),
+                    Err(LookupError::AmbiguousUsername(..)) => {
+                        bail!("{}", ambiguous_username_hint(&url_without_credentials))
+                    }
+                }
+            };
             store
                 .write(TextCredentialStore::default_file()?, _lock)
                 .with_context(|| "Failed to persist changes to credentials after removal")?;
+            display_url
         }
-    }
+    };
 
     writeln!(
         printer.stderr(),
@@ -90,6 +136,28 @@ pub(crate) async fn logout(
     )?;
 
     Ok(ExitStatus::Success)
+}
+
+/// Format a URL for display, including the username if it's present (and not the default token
+/// entry).
+fn format_display_url(url: &Url, username: Option<&str>) -> String {
+    if let Some(username) = username.filter(|username| *username != "__token__") {
+        format!("{username}@{url}")
+    } else {
+        url.to_string()
+    }
+}
+
+fn missing_username_hint(display_url: &Url) -> String {
+    format!(
+        "No matching entry found for {display_url}. If the credentials were stored with a username, pass `--username` to `uv auth logout`."
+    )
+}
+
+fn ambiguous_username_hint(display_url: &Url) -> String {
+    format!(
+        "Multiple credentials found for {display_url}. Pass `--username` to `uv auth logout` to select which credentials to remove."
+    )
 }
 
 /// Log out via the [`PyxTokenStore`], invalidating the existing tokens.

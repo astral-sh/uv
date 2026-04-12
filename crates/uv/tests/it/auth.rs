@@ -742,8 +742,7 @@ async fn logout_native_auth() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Unable to remove credentials for http://[LOCALHOST]/basic-auth
-      Caused by: No matching entry found in secure storage
+    error: No matching entry found for http://[LOCALHOST]/basic-auth. If the credentials were stored with a username, pass `--username` to `uv auth logout`.
     ");
 
     // Logout before logging in (with a username)
@@ -779,7 +778,6 @@ async fn logout_native_auth() -> Result<()> {
     );
 
     // Logout without a username
-    // TODO(zanieb): Add a hint here if we can?
     uv_snapshot!(context.filters(), context.auth_logout()
         .arg(proxy.url("/basic-auth/simple"))
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
@@ -788,8 +786,7 @@ async fn logout_native_auth() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Unable to remove credentials for http://[LOCALHOST]/basic-auth
-      Caused by: No matching entry found in secure storage
+    error: No matching entry found for http://[LOCALHOST]/basic-auth. If the credentials were stored with a username, pass `--username` to `uv auth logout`.
     ");
 
     // Logout with a username
@@ -1605,6 +1602,103 @@ fn logout_text_store_strips_simple_suffix() {
 }
 
 #[test]
+fn logout_text_store_without_username_uses_unique_match() {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    context
+        .auth_login()
+        .arg("example.com")
+        .arg("--username")
+        .arg("testuser")
+        .arg("--password")
+        .arg("testpass")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.auth_logout()
+        .arg("example.com"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Removed credentials for testuser@https://example.com/
+    "
+    );
+
+    uv_snapshot!(context.auth_token()
+        .arg("example.com")
+        .arg("--username")
+        .arg("testuser"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for testuser@https://example.com/
+    "
+    );
+}
+
+#[test]
+fn logout_text_store_without_username_prefers_token() {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    context
+        .auth_login()
+        .arg("https://example.com/simple")
+        .arg("--username")
+        .arg("testuser")
+        .arg("--password")
+        .arg("testpass")
+        .assert()
+        .success();
+
+    context
+        .auth_login()
+        .arg("https://example.com/simple")
+        .arg("--token")
+        .arg("test-token")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.auth_logout()
+        .arg("https://example.com/simple"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Removed credentials for https://example.com/
+    "
+    );
+
+    uv_snapshot!(context.auth_token()
+        .arg("https://example.com/simple"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for https://example.com/simple
+    "
+    );
+
+    uv_snapshot!(context.auth_token()
+        .arg("https://example.com/simple")
+        .arg("--username")
+        .arg("testuser"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    testpass
+
+    ----- stderr -----
+    "
+    );
+}
+
+#[test]
 fn token_text_store_strips_simple_suffix() {
     let context = uv_test::test_context_with_versions!(&[]);
 
@@ -1821,7 +1915,56 @@ fn logout_text_store_multiple_usernames() {
     "
     );
 
-    // Try to logout without specifying username (defaults to `__token__`)
+    // With only one matching credential remaining, logout without a username should remove it.
+    uv_snapshot!(context.auth_logout()
+        .arg("https://example.com/simple"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Removed credentials for user2@https://example.com/
+    "
+    );
+
+    uv_snapshot!(context.auth_token()
+        .arg("https://example.com/simple")
+        .arg("--username")
+        .arg("user2"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for user2@https://example.com/simple
+    "
+    );
+}
+
+#[test]
+fn logout_text_store_without_username_requires_username_on_ambiguity() {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    context
+        .auth_login()
+        .arg("https://example.com/simple")
+        .arg("--username")
+        .arg("user1")
+        .arg("--password")
+        .arg("pass1")
+        .assert()
+        .success();
+
+    context
+        .auth_login()
+        .arg("https://example.com/simple")
+        .arg("--username")
+        .arg("user2")
+        .arg("--password")
+        .arg("pass2")
+        .assert()
+        .success();
+
     uv_snapshot!(context.auth_logout()
         .arg("https://example.com/simple"), @"
     success: false
@@ -1829,7 +1972,7 @@ fn logout_text_store_multiple_usernames() {
     ----- stdout -----
 
     ----- stderr -----
-    error: No matching entry found for https://example.com/
+    error: Multiple credentials found for https://example.com/. Pass `--username` to `uv auth logout` to select which credentials to remove.
     "
     );
 }
