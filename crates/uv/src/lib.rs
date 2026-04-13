@@ -114,6 +114,9 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         &cli.top_level.global_args.preview_features,
     );
 
+    // Make the early preview flags globally available.
+    uv_preview::set(early_preview)?;
+
     // Determine the project directory.
     //
     // If `--project` points to a `pyproject.toml` file, resolve to its parent directory,
@@ -427,8 +430,9 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     // Resolve the cache settings.
     let cache_settings = CacheSettings::resolve(*cli.top_level.cache_args, filesystem.as_ref());
 
-    // Set the global preview configuration.
-    uv_preview::init(globals.preview)?;
+    // Set and finalize the global preview configuration.
+    uv_preview::set(globals.preview)?;
+    uv_preview::finalize()?;
 
     // Enforce the required version.
     if let Some(required_version) = globals.required_version.as_ref() {
