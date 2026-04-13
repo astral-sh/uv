@@ -1,12 +1,12 @@
 use std::path::{Path, PathBuf};
-use std::sync::{LazyLock, Mutex};
+use std::sync::Mutex;
 
 use crate::vendor::CloneableSeekableReader;
 use crate::{CompressionMethod, Error, insecure_no_validate, validate_archive_member_name};
 use rayon::prelude::*;
 use rustc_hash::FxHashSet;
 use tracing::warn;
-use uv_configuration::RAYON_INITIALIZE;
+use uv_configuration::initialize_rayon_once;
 use uv_warnings::warn_user_once;
 use zip::ZipArchive;
 
@@ -22,7 +22,7 @@ pub fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf, u64)>,
     let directories = Mutex::new(FxHashSet::default());
     let skip_validation = insecure_no_validate();
     // Initialize the threadpool with the user settings.
-    LazyLock::force(&RAYON_INITIALIZE);
+    initialize_rayon_once();
     (0..archive.len())
         .into_par_iter()
         .map(|file_number| {
