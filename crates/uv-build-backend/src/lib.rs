@@ -20,7 +20,7 @@ use thiserror::Error;
 use tracing::debug;
 use walkdir::DirEntry;
 
-use uv_fs::Simplified;
+use uv_fs::{Simplified, normalize_path};
 use uv_globfilter::PortableGlobError;
 use uv_normalize::PackageName;
 use uv_pypi_types::{Identifier, IdentifierParseError};
@@ -276,14 +276,12 @@ fn find_roots(
     namespace: bool,
     show_warnings: bool,
 ) -> Result<(PathBuf, Vec<PathBuf>), Error> {
-    let relative_module_root = uv_fs::normalize_path(relative_module_root);
+    let relative_module_root = normalize_path(relative_module_root);
     // Check that even if a path contains `..`, we only include files below the module root.
-    if !uv_fs::normalize_path(&source_tree.join(&relative_module_root))
-        .starts_with(uv_fs::normalize_path(source_tree))
-    {
+    let src_root = source_tree.join(&relative_module_root);
+    if !normalize_path(&src_root).starts_with(normalize_path(source_tree)) {
         return Err(Error::InvalidModuleRoot(relative_module_root.to_path_buf()));
     }
-    let src_root = source_tree.join(&relative_module_root);
     debug!("Source root: {}", src_root.user_display());
 
     if namespace {

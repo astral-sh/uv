@@ -34,7 +34,7 @@ use uv_distribution_types::{
     RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
     SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString,
 };
-use uv_fs::{PortablePath, PortablePathBuf, Simplified, try_relative_to_if};
+use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -5413,8 +5413,8 @@ fn normalize_requirement(
             ext,
             url: _,
         } => {
-            let install_path =
-                uv_fs::normalize_path_buf(root.join(&install_path)).into_boxed_path();
+            let path = root.join(&install_path);
+            let install_path = normalize_path(path).into_owned().into_boxed_path();
             let url = VerbatimUrl::from_normalized_path(&install_path)
                 .map_err(LockErrorKind::RequirementVerbatimUrl)?;
 
@@ -5437,8 +5437,8 @@ fn normalize_requirement(
             r#virtual,
             url: _,
         } => {
-            let install_path =
-                uv_fs::normalize_path_buf(root.join(&install_path)).into_boxed_path();
+            let path = root.join(&install_path);
+            let install_path = normalize_path(path).into_owned().into_boxed_path();
             let url = VerbatimUrl::from_normalized_path(&install_path)
                 .map_err(LockErrorKind::RequirementVerbatimUrl)?;
 

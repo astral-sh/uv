@@ -11,7 +11,7 @@ use tracing::{debug, trace, warn};
 
 use uv_configuration::DependencyGroupsWithDefaults;
 use uv_distribution_types::{Index, Requirement, RequirementSource};
-use uv_fs::{CWD, Simplified};
+use uv_fs::{CWD, Simplified, normalize_path};
 use uv_normalize::{DEV_DEPENDENCIES, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerTree, VerbatimUrl};
@@ -193,7 +193,7 @@ impl Workspace {
         let path = std::path::absolute(path)
             .map_err(WorkspaceError::Normalize)?
             .clone();
-        let path = uv_fs::normalize_path(&path);
+        let path = normalize_path(&path);
 
         let project_path = path
             .ancestors()
@@ -984,7 +984,7 @@ impl Workspace {
         // Add all other workspace members.
         for member_glob in workspace_definition.clone().members.unwrap_or_default() {
             // Normalize the member glob to remove leading `./` and other relative path components
-            let normalized_glob = uv_fs::normalize_path(Path::new(member_glob.as_str()));
+            let normalized_glob = normalize_path(Path::new(member_glob.as_str()));
             let absolute_glob = PathBuf::from(glob::Pattern::escape(
                 workspace_root.simplified().to_string_lossy().as_ref(),
             ))
@@ -1397,7 +1397,7 @@ impl ProjectWorkspace {
         let project_path = std::path::absolute(install_path)
             .map_err(WorkspaceError::Normalize)?
             .clone();
-        let project_path = uv_fs::normalize_path(&project_path);
+        let project_path = normalize_path(&project_path);
 
         // Check if workspaces are explicitly disabled for the project.
         if project_pyproject_toml
@@ -1631,7 +1631,7 @@ fn is_excluded_from_workspace(
 ) -> Result<bool, WorkspaceError> {
     for exclude_glob in workspace.exclude.iter().flatten() {
         // Normalize the exclude glob to remove leading `./` and other relative path components
-        let normalized_glob = uv_fs::normalize_path(Path::new(exclude_glob.as_str()));
+        let normalized_glob = normalize_path(Path::new(exclude_glob.as_str()));
         let absolute_glob = PathBuf::from(glob::Pattern::escape(
             workspace_root.simplified().to_string_lossy().as_ref(),
         ))
@@ -1654,11 +1654,11 @@ fn is_included_in_workspace(
 ) -> Result<bool, WorkspaceError> {
     for member_glob in workspace.members.iter().flatten() {
         // Normalize the member glob to remove leading `./` and other relative path components
-        let normalized_glob = uv_fs::normalize_path(Path::new(member_glob.as_str()));
+        let normalized_glob = normalize_path(Path::new(member_glob.as_str()));
         let absolute_glob = PathBuf::from(glob::Pattern::escape(
             workspace_root.simplified().to_string_lossy().as_ref(),
         ))
-        .join(normalized_glob.as_ref());
+        .join(normalized_glob);
         let absolute_glob = absolute_glob.to_string_lossy();
         let include_pattern = glob::Pattern::new(&absolute_glob)
             .map_err(|err| WorkspaceError::Pattern(absolute_glob.to_string(), err))?;
