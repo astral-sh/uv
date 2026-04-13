@@ -278,11 +278,10 @@ fn find_roots(
 ) -> Result<(PathBuf, Vec<PathBuf>), Error> {
     let relative_module_root = normalize_path(relative_module_root);
     // Check that even if a path contains `..`, we only include files below the module root.
-    let path = &source_tree.join(&relative_module_root);
-    if !normalize_path(path).starts_with(normalize_path(source_tree)) {
+    let src_root = source_tree.join(&relative_module_root);
+    if !normalize_path(&src_root).starts_with(normalize_path(source_tree)) {
         return Err(Error::InvalidModuleRoot(relative_module_root.to_path_buf()));
     }
-    let src_root = source_tree.join(&relative_module_root);
     debug!("Source root: {}", src_root.user_display());
 
     if namespace {
