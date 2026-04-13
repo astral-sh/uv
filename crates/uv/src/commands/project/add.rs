@@ -453,6 +453,7 @@ pub(crate) async fn add(
                 &settings.resolver.build_options,
                 &build_hasher,
                 settings.resolver.exclude_newer.clone(),
+                settings.resolver.exclude_newer_last_modified,
                 sources,
                 // No workspace caching since `uv add` changes the workspace definition.
                 WorkspaceCache::default(),

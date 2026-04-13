@@ -80,6 +80,7 @@ pub(crate) async fn pip_sync(
     install_mirrors: PythonInstallMirrors,
     strict: bool,
     exclude_newer: ExcludeNewer,
+    exclude_newer_last_modified: bool,
     python: Option<String>,
     system: bool,
     break_system_packages: bool,
@@ -392,6 +393,7 @@ pub(crate) async fn pip_sync(
         &build_options,
         &build_hasher,
         exclude_newer.clone(),
+        exclude_newer_last_modified,
         sources.clone(),
         workspace_cache.clone(),
         concurrency.clone(),
@@ -460,6 +462,7 @@ pub(crate) async fn pip_sync(
             .prerelease_mode(prerelease_mode)
             .dependency_mode(dependency_mode)
             .exclude_newer(exclude_newer.clone())
+            .exclude_newer_last_modified(exclude_newer_last_modified)
             .index_strategy(index_strategy)
             .torch_backend(torch_backend)
             .build_options(build_options.clone())
@@ -532,6 +535,7 @@ pub(crate) async fn pip_sync(
         &build_options,
         &build_hasher,
         exclude_newer.clone(),
+        exclude_newer_last_modified,
         sources,
         workspace_cache,
         concurrency.clone(),

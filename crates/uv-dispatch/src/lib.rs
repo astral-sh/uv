@@ -95,6 +95,7 @@ pub struct BuildDispatch<'a> {
     config_settings_package: &'a PackageConfigSettings,
     hasher: &'a HashStrategy,
     exclude_newer: ExcludeNewer,
+    exclude_newer_last_modified: bool,
     source_build_context: SourceBuildContext,
     build_extra_env_vars: FxHashMap<OsString, OsString>,
     sources: NoSources,
@@ -123,6 +124,7 @@ impl<'a> BuildDispatch<'a> {
         build_options: &'a BuildOptions,
         hasher: &'a HashStrategy,
         exclude_newer: ExcludeNewer,
+        exclude_newer_last_modified: bool,
         sources: NoSources,
         workspace_cache: WorkspaceCache,
         concurrency: Concurrency,
@@ -147,6 +149,7 @@ impl<'a> BuildDispatch<'a> {
             build_options,
             hasher,
             exclude_newer,
+            exclude_newer_last_modified,
             source_build_context: SourceBuildContext::new(concurrency.builds_semaphore.clone()),
             build_extra_env_vars: FxHashMap::default(),
             sources,
@@ -249,6 +252,7 @@ impl BuildContext for BuildDispatch<'_> {
             Manifest::simple(requirements.to_vec()).with_constraints(self.constraints.clone()),
             OptionsBuilder::new()
                 .exclude_newer(self.exclude_newer.clone())
+                .exclude_newer_last_modified(self.exclude_newer_last_modified)
                 .index_strategy(self.index_strategy)
                 .build_options(self.build_options.clone())
                 .flexibility(Flexibility::Fixed)

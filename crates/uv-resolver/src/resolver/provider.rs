@@ -4,7 +4,7 @@ use uv_client::MetadataFormat;
 use uv_configuration::BuildOptions;
 use uv_distribution::{ArchiveMetadata, DistributionDatabase, Reporter};
 use uv_distribution_types::{
-    Dist, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef, InstalledDist,
+    Dist, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef, InstalledDist, Name,
     RequestedDist, RequiresPython,
 };
 use uv_normalize::PackageName;
@@ -60,6 +60,9 @@ pub enum MetadataUnavailable {
     /// The source distribution has a `requires-python` requirement that is not met by the installed
     /// Python version (and static metadata is not available).
     RequiresPython(VersionSpecifiers, Version),
+    /// The distribution was excluded because its upload time (from the `Last-Modified` HTTP header)
+    /// is newer than the `--exclude-newer` cutoff.
+    ExcludedByExcludeNewer,
 }
 
 impl MetadataUnavailable {
@@ -72,6 +75,7 @@ impl MetadataUnavailable {
             Self::InconsistentMetadata(err) => Some(err),
             Self::InvalidStructure(err) => Some(err),
             Self::RequiresPython(_, _) => None,
+            Self::ExcludedByExcludeNewer => None,
         }
     }
 }
@@ -117,6 +121,7 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext> {
     allowed_yanks: AllowedYanks,
     hasher: HashStrategy,
     exclude_newer: ExcludeNewer,
+    exclude_newer_last_modified: bool,
     index_locations: &'a IndexLocations,
     build_options: &'a BuildOptions,
     capabilities: &'a IndexCapabilities,
@@ -132,6 +137,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
         allowed_yanks: AllowedYanks,
         hasher: &'a HashStrategy,
         exclude_newer: ExcludeNewer,
+        exclude_newer_last_modified: bool,
         index_locations: &'a IndexLocations,
         build_options: &'a BuildOptions,
         capabilities: &'a IndexCapabilities,
@@ -144,6 +150,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
             allowed_yanks,
             hasher: hasher.clone(),
             exclude_newer,
+            exclude_newer_last_modified,
             index_locations,
             build_options,
             capabilities,
@@ -159,6 +166,47 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
             package_name,
             self.index_locations.exclude_newer_for(index),
         )
+    }
+
+    /// Check whether a file's `Last-Modified` header indicates it was uploaded after the
+    /// `--exclude-newer` cutoff.
+    ///
+    /// Returns `Ok(true)` if the file should be excluded (too new or no header),
+    /// `Ok(false)` if the file is old enough.
+    async fn check_last_modified(
+        &self,
+        file: &uv_distribution_types::File,
+        exclude_newer: &crate::ExcludeNewerValue,
+    ) -> Result<bool, uv_client::Error> {
+        let url = file
+            .url
+            .to_url()
+            .map_err(|err| uv_client::Error::from(uv_client::ErrorKind::from(err)))?;
+
+        let last_modified_ms = self
+            .fetcher
+            .client()
+            .unmanaged
+            .head_file_last_modified(&url)
+            .await?;
+
+        if let Some(last_modified_ms) = last_modified_ms {
+            if last_modified_ms >= exclude_newer.timestamp_millis() {
+                tracing::trace!(
+                    "Excluding `{}` (Last-Modified {last_modified_ms}) due to exclude-newer ({exclude_newer})",
+                    file.filename,
+                );
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        } else {
+            tracing::warn!(
+                "{} has no Last-Modified header; excluding due to exclude-newer ({exclude_newer})",
+                file.filename,
+            );
+            Ok(true)
+        }
     }
 }
 
@@ -199,6 +247,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                             &self.allowed_yanks,
                             &self.hasher,
                             self.effective_exclude_newer(package_name, index),
+                            self.exclude_newer_last_modified,
                             flat_index
                                 .and_then(|flat_index| flat_index.get(package_name))
                                 .cloned(),
@@ -253,6 +302,42 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
 
     /// Fetch the metadata for a distribution, building it if necessary.
     async fn get_or_build_wheel_metadata<'io>(&'io self, dist: &'io Dist) -> WheelMetadataResult {
+        // If the file is missing an upload time and the Last-Modified fallback is enabled,
+        // make a HEAD request to check the file's Last-Modified header before proceeding.
+        if self.exclude_newer_last_modified {
+            let exclude_newer = dist
+                .index()
+                .and_then(|index| self.effective_exclude_newer(dist.name(), index));
+            if let Some(exclude_newer) = exclude_newer {
+                if let Some(file) = dist.file() {
+                    if file.upload_time_utc_ms.is_none() {
+                        match self.check_last_modified(file, &exclude_newer).await {
+                            Ok(true) => {
+                                // File is too new; mark as unavailable so the resolver
+                                // backtracks to an older version.
+                                return Ok(MetadataResponse::Unavailable(
+                                    MetadataUnavailable::ExcludedByExcludeNewer,
+                                ));
+                            }
+                            Ok(false) => {
+                                // File is old enough; proceed with metadata fetch.
+                            }
+                            Err(err) => {
+                                // HEAD request failed; treat as unavailable.
+                                tracing::warn!(
+                                    "Failed to fetch Last-Modified for {}: {err}",
+                                    file.filename,
+                                );
+                                return Ok(MetadataResponse::Unavailable(
+                                    MetadataUnavailable::ExcludedByExcludeNewer,
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         match self
             .fetcher
             .get_or_build_wheel_metadata(dist, self.hasher.get(dist))

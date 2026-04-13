@@ -1835,6 +1835,7 @@ pub(crate) async fn resolve_names(
                 config_settings_package,
                 dependency_metadata,
                 exclude_newer,
+                exclude_newer_last_modified,
                 fork_strategy: _,
                 index_locations,
                 index_strategy,
@@ -1927,6 +1928,7 @@ pub(crate) async fn resolve_names(
         build_options,
         &build_hasher,
         exclude_newer.clone(),
+        *exclude_newer_last_modified,
         sources.clone(),
         workspace_cache.clone(),
         concurrency.clone(),
@@ -2023,6 +2025,7 @@ pub(crate) async fn resolve_environment(
         extra_build_dependencies,
         extra_build_variables,
         exclude_newer,
+        exclude_newer_last_modified,
         link_mode,
         upgrade: _,
         build_options,
@@ -2098,6 +2101,7 @@ pub(crate) async fn resolve_environment(
         .prerelease_mode(*prerelease)
         .fork_strategy(*fork_strategy)
         .exclude_newer(exclude_newer.clone())
+        .exclude_newer_last_modified(*exclude_newer_last_modified)
         .index_strategy(*index_strategy)
         .build_options(build_options.clone())
         .build();
@@ -2166,6 +2170,7 @@ pub(crate) async fn resolve_environment(
         build_options,
         &build_hasher,
         exclude_newer.clone(),
+        *exclude_newer_last_modified,
         sources.clone(),
         workspace_cache.clone(),
         concurrency.clone(),
@@ -2233,6 +2238,7 @@ pub(crate) async fn sync_environment(
         extra_build_dependencies,
         extra_build_variables,
         exclude_newer,
+        exclude_newer_last_modified,
         link_mode,
         compile_bytecode,
         reinstall,
@@ -2306,6 +2312,7 @@ pub(crate) async fn sync_environment(
         build_options,
         &build_hasher,
         exclude_newer.clone(),
+        exclude_newer_last_modified,
         sources,
         workspace_cache,
         concurrency.clone(),
@@ -2391,6 +2398,7 @@ pub(crate) async fn update_environment(
                 config_settings_package,
                 dependency_metadata,
                 exclude_newer,
+                exclude_newer_last_modified,
                 fork_strategy,
                 index_locations,
                 index_strategy,
@@ -2518,6 +2526,7 @@ pub(crate) async fn update_environment(
         .prerelease_mode(*prerelease)
         .fork_strategy(*fork_strategy)
         .exclude_newer(exclude_newer.clone())
+        .exclude_newer_last_modified(*exclude_newer_last_modified)
         .index_strategy(*index_strategy)
         .build_options(build_options.clone())
         .build();
@@ -2562,6 +2571,7 @@ pub(crate) async fn update_environment(
         build_options,
         &build_hasher,
         exclude_newer.clone(),
+        *exclude_newer_last_modified,
         sources.clone(),
         workspace_cache.clone(),
         concurrency.clone(),

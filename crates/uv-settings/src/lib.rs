@@ -344,6 +344,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
                 extra_build_variables,
                 exclude_newer,
                 exclude_newer_package,
+                exclude_newer_last_modified: _,
                 link_mode,
                 compile_bytecode,
                 no_sources,

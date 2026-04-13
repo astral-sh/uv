@@ -421,6 +421,7 @@ pub struct InstallerOptions {
     pub keyring_provider: Option<KeyringProviderType>,
     pub config_settings: Option<ConfigSettings>,
     pub exclude_newer: Option<ExcludeNewerValue>,
+    pub exclude_newer_last_modified: Option<bool>,
     pub link_mode: Option<LinkMode>,
     pub compile_bytecode: Option<bool>,
     pub reinstall: Option<Reinstall>,
@@ -450,6 +451,7 @@ pub struct ResolverOptions {
     pub config_settings: Option<ConfigSettings>,
     pub config_settings_package: Option<PackageConfigSettings>,
     pub exclude_newer: ExcludeNewer,
+    pub exclude_newer_last_modified: Option<bool>,
     pub link_mode: Option<LinkMode>,
     pub torch_backend: Option<TorchMode>,
     pub upgrade: Option<Upgrade>,
@@ -486,6 +488,7 @@ pub struct ResolverInstallerOptions {
     pub extra_build_variables: Option<ExtraBuildVariables>,
     pub exclude_newer: Option<ExcludeNewerValue>,
     pub exclude_newer_package: Option<ExcludeNewerPackage>,
+    pub exclude_newer_last_modified: Option<bool>,
     pub link_mode: Option<LinkMode>,
     pub torch_backend: Option<TorchMode>,
     pub compile_bytecode: Option<bool>,
@@ -540,6 +543,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             extra_build_variables,
             exclude_newer,
             exclude_newer_package,
+            exclude_newer_last_modified,
             link_mode,
             torch_backend,
             compile_bytecode,
@@ -576,6 +580,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             extra_build_variables,
             exclude_newer,
             exclude_newer_package,
+            exclude_newer_last_modified,
             link_mode,
             torch_backend,
             compile_bytecode,
@@ -953,6 +958,21 @@ pub struct ResolverInstallerSchema {
         "#
     )]
     pub exclude_newer_package: Option<ExcludeNewerPackage>,
+    /// Use the `Last-Modified` HTTP header as a fallback for missing upload times when using
+    /// `--exclude-newer`.
+    ///
+    /// When enabled, if a package file from an index lacks an `upload-time` field (e.g., on
+    /// Artifactory or other non-PyPI indexes), uv will make a HEAD request to the file URL and
+    /// use the `Last-Modified` header to determine the upload date. HEAD requests are only made
+    /// for files the resolver actually selects as candidates, not for all files on the index page.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = r#"
+            exclude-newer-last-modified = true
+        "#
+    )]
+    pub exclude_newer_last_modified: Option<bool>,
     /// The method to use when installing packages from the global cache.
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS and Linux, and `hardlink` on
@@ -1753,6 +1773,21 @@ pub struct PipOptions {
         "#
     )]
     pub exclude_newer_package: Option<ExcludeNewerPackage>,
+    /// Use the `Last-Modified` HTTP header as a fallback for missing upload times when using
+    /// `--exclude-newer`.
+    ///
+    /// When enabled, if a package file from an index lacks an `upload-time` field (e.g., on
+    /// Artifactory or other non-PyPI indexes), uv will make a HEAD request to the file URL and
+    /// use the `Last-Modified` header to determine the upload date. HEAD requests are only made
+    /// for files the resolver actually selects as candidates, not for all files on the index page.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = r#"
+            exclude-newer-last-modified = true
+        "#
+    )]
+    pub exclude_newer_last_modified: Option<bool>,
     /// Specify a package to omit from the output resolution. Its dependencies will still be
     /// included in the resolution. Equivalent to pip-compile's `--unsafe-package` option.
     #[option(
@@ -2043,6 +2078,7 @@ impl From<ResolverInstallerSchema> for ResolverOptions {
                     .map(Into::into)
                     .collect(),
             ),
+            exclude_newer_last_modified: value.exclude_newer_last_modified,
             link_mode: value.link_mode,
             upgrade: Upgrade::from_args(
                 value.upgrade,
@@ -2092,6 +2128,7 @@ impl From<ResolverInstallerSchema> for InstallerOptions {
                     .collect(),
             )
             .global,
+            exclude_newer_last_modified: value.exclude_newer_last_modified,
             link_mode: value.link_mode,
             compile_bytecode: value.compile_bytecode,
             reinstall: Reinstall::from_args(
@@ -2140,6 +2177,7 @@ pub struct ToolOptions {
     pub extra_build_variables: Option<ExtraBuildVariables>,
     pub exclude_newer: Option<ExcludeNewerValue>,
     pub exclude_newer_package: Option<ExcludeNewerPackage>,
+    pub exclude_newer_last_modified: Option<bool>,
     pub link_mode: Option<LinkMode>,
     pub compile_bytecode: Option<bool>,
     pub no_sources: Option<bool>,
@@ -2175,6 +2213,7 @@ pub struct ToolOptionsWire {
     pub exclude_newer_span: Option<ExcludeNewerSpan>,
     #[serde(serialize_with = "serialize_exclude_newer_package_with_spans")]
     pub exclude_newer_package: Option<ExcludeNewerPackage>,
+    pub exclude_newer_last_modified: Option<bool>,
     pub link_mode: Option<LinkMode>,
     pub compile_bytecode: Option<bool>,
     pub no_sources: Option<bool>,
@@ -2212,6 +2251,7 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             extra_build_variables: value.extra_build_variables,
             exclude_newer: value.exclude_newer,
             exclude_newer_package: value.exclude_newer_package,
+            exclude_newer_last_modified: value.exclude_newer_last_modified,
             link_mode: value.link_mode,
             compile_bytecode: value.compile_bytecode,
             no_sources: value.no_sources,
@@ -2254,6 +2294,7 @@ impl From<ToolOptionsWire> for ToolOptions {
             extra_build_variables: value.extra_build_variables,
             exclude_newer,
             exclude_newer_package: value.exclude_newer_package,
+            exclude_newer_last_modified: value.exclude_newer_last_modified,
             link_mode: value.link_mode,
             compile_bytecode: value.compile_bytecode,
             no_sources: value.no_sources,
@@ -2296,6 +2337,7 @@ impl From<ToolOptions> for ToolOptionsWire {
             exclude_newer,
             exclude_newer_span,
             exclude_newer_package: value.exclude_newer_package,
+            exclude_newer_last_modified: value.exclude_newer_last_modified,
             link_mode: value.link_mode,
             compile_bytecode: value.compile_bytecode,
             no_sources: value.no_sources,
@@ -2330,6 +2372,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             extra_build_variables: value.extra_build_variables,
             exclude_newer: value.exclude_newer,
             exclude_newer_package: value.exclude_newer_package,
+            exclude_newer_last_modified: value.exclude_newer_last_modified,
             link_mode: value.link_mode,
             compile_bytecode: value.compile_bytecode,
             no_sources: value.no_sources,
@@ -2390,6 +2433,7 @@ pub struct OptionsWire {
     extra_build_variables: Option<ExtraBuildVariables>,
     exclude_newer: Option<ExcludeNewerValue>,
     exclude_newer_package: Option<ExcludeNewerPackage>,
+    exclude_newer_last_modified: Option<bool>,
     link_mode: Option<LinkMode>,
     compile_bytecode: Option<bool>,
     no_sources: Option<bool>,
@@ -2490,6 +2534,7 @@ impl From<OptionsWire> for Options {
             no_build_isolation_package,
             exclude_newer,
             exclude_newer_package,
+            exclude_newer_last_modified,
             link_mode,
             compile_bytecode,
             no_sources,
@@ -2570,6 +2615,7 @@ impl From<OptionsWire> for Options {
                 extra_build_variables,
                 exclude_newer,
                 exclude_newer_package,
+                exclude_newer_last_modified,
                 link_mode,
                 compile_bytecode,
                 no_sources,

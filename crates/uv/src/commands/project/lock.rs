@@ -485,6 +485,7 @@ async fn do_lock(
         extra_build_dependencies,
         extra_build_variables,
         exclude_newer,
+        exclude_newer_last_modified,
         link_mode,
         upgrade,
         build_options,
@@ -734,6 +735,7 @@ async fn do_lock(
         .prerelease_mode(*prerelease)
         .fork_strategy(*fork_strategy)
         .exclude_newer(exclude_newer.clone())
+        .exclude_newer_last_modified(*exclude_newer_last_modified)
         .index_strategy(*index_strategy)
         .build_options(build_options.clone())
         .artifact_environments(artifact_environments.clone())
@@ -794,6 +796,7 @@ async fn do_lock(
         build_options,
         &build_hasher,
         exclude_newer.clone(),
+        *exclude_newer_last_modified,
         sources.clone(),
         workspace_cache.clone(),
         concurrency.clone(),

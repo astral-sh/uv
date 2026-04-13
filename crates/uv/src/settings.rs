@@ -1038,6 +1038,8 @@ impl ToolUpgradeSettings {
             no_sources,
             no_sources_package,
             exclude_newer_package,
+            exclude_newer_last_modified,
+            no_exclude_newer_last_modified,
             build,
         } = args;
 
@@ -1071,6 +1073,8 @@ impl ToolUpgradeSettings {
             build_isolation,
             exclude_newer,
             exclude_newer_package,
+            exclude_newer_last_modified,
+            no_exclude_newer_last_modified,
             link_mode,
             compile_bytecode,
             no_compile_bytecode,
@@ -3611,6 +3615,8 @@ impl VenvSettings {
             refresh,
             compat_args: _,
             exclude_newer_package,
+            exclude_newer_last_modified,
+            no_exclude_newer_last_modified,
         } = args;
 
         // Resolve flags from CLI and environment variables.
@@ -3639,6 +3645,11 @@ impl VenvSettings {
                     exclude_newer,
                     exclude_newer_package: exclude_newer_package
                         .map(ExcludeNewerPackage::from_iter),
+                    exclude_newer_last_modified: flag(
+                        exclude_newer_last_modified,
+                        no_exclude_newer_last_modified,
+                        "no-exclude-newer-last-modified",
+                    ),
                     link_mode,
                     ..PipOptions::from(index_args)
                 },
@@ -3665,6 +3676,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) extra_build_dependencies: &'a ExtraBuildDependencies,
     pub(crate) extra_build_variables: &'a ExtraBuildVariables,
     pub(crate) exclude_newer: &'a ExcludeNewer,
+    pub(crate) exclude_newer_last_modified: bool,
     pub(crate) link_mode: LinkMode,
     pub(crate) compile_bytecode: bool,
     pub(crate) reinstall: &'a Reinstall,
@@ -3683,6 +3695,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) config_settings_package: PackageConfigSettings,
     pub(crate) dependency_metadata: DependencyMetadata,
     pub(crate) exclude_newer: ExcludeNewer,
+    pub(crate) exclude_newer_last_modified: bool,
     pub(crate) fork_strategy: ForkStrategy,
     pub(crate) index_locations: IndexLocations,
     pub(crate) index_strategy: IndexStrategy,
@@ -3748,6 +3761,7 @@ impl From<ResolverOptions> for ResolverSettings {
             extra_build_dependencies: value.extra_build_dependencies.unwrap_or_default(),
             extra_build_variables: value.extra_build_variables.unwrap_or_default(),
             exclude_newer: value.exclude_newer,
+            exclude_newer_last_modified: value.exclude_newer_last_modified.unwrap_or_default(),
             link_mode: value.link_mode.unwrap_or_default(),
             torch_backend: value.torch_backend,
             sources: NoSources::from_args(
@@ -3833,6 +3847,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                         .map(Into::into)
                         .collect(),
                 ),
+                exclude_newer_last_modified: value.exclude_newer_last_modified.unwrap_or_default(),
                 fork_strategy: value.fork_strategy.unwrap_or_default(),
                 index_locations,
                 index_strategy: value.index_strategy.unwrap_or_default(),
@@ -3898,6 +3913,7 @@ pub(crate) struct PipSettings {
     pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) universal: bool,
     pub(crate) exclude_newer: ExcludeNewer,
+    pub(crate) exclude_newer_last_modified: bool,
     pub(crate) no_emit_package: Vec<PackageName>,
     pub(crate) emit_index_url: bool,
     pub(crate) emit_find_links: bool,
@@ -3992,6 +4008,7 @@ impl PipSettings {
             reinstall,
             reinstall_package,
             exclude_newer_package,
+            exclude_newer_last_modified: pip_exclude_newer_last_modified,
         } = pip.unwrap_or_default();
 
         let ResolverInstallerSchema {
@@ -4026,6 +4043,7 @@ impl PipSettings {
             no_binary: top_level_no_binary,
             no_binary_package: top_level_no_binary_package,
             exclude_newer_package: top_level_exclude_newer_package,
+            exclude_newer_last_modified: top_level_exclude_newer_last_modified,
             torch_backend: top_level_torch_backend,
         } = top_level;
 
@@ -4061,6 +4079,11 @@ impl PipSettings {
             .exclude_newer_package
             .combine(exclude_newer_package)
             .combine(top_level_exclude_newer_package)
+            .unwrap_or_default();
+        let exclude_newer_last_modified = args
+            .exclude_newer_last_modified
+            .combine(pip_exclude_newer_last_modified)
+            .combine(top_level_exclude_newer_last_modified)
             .unwrap_or_default();
         let link_mode = link_mode.combine(top_level_link_mode);
         let compile_bytecode = compile_bytecode.combine(top_level_compile_bytecode);
@@ -4183,6 +4206,7 @@ impl PipSettings {
                 exclude_newer,
                 exclude_newer_package.into_iter().map(Into::into).collect(),
             ),
+            exclude_newer_last_modified,
             no_emit_package: args
                 .no_emit_package
                 .combine(no_emit_package)
@@ -4294,6 +4318,7 @@ impl<'a> From<&'a ResolverInstallerSettings> for InstallerSettingsRef<'a> {
             extra_build_dependencies: &settings.resolver.extra_build_dependencies,
             extra_build_variables: &settings.resolver.extra_build_variables,
             exclude_newer: &settings.resolver.exclude_newer,
+            exclude_newer_last_modified: settings.resolver.exclude_newer_last_modified,
             link_mode: settings.resolver.link_mode,
             compile_bytecode: settings.compile_bytecode,
             reinstall: &settings.reinstall,

@@ -203,6 +203,7 @@ mod resolver {
         let installed_packages = EmptyInstalledPackages;
         let options = OptionsBuilder::new()
             .exclude_newer(exclude_newer.clone())
+            .exclude_newer_last_modified(false)
             .build();
         let sources = NoSources::default();
         let dependency_metadata = DependencyMetadata::default();
@@ -237,6 +238,7 @@ mod resolver {
             &build_options,
             &hashes,
             exclude_newer,
+            false,
             sources,
             workspace_cache,
             concurrency.clone(),

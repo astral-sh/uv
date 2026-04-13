@@ -46,6 +46,9 @@ pub enum UnavailableVersion {
     /// The source distribution has a `requires-python` requirement that is not met by the installed
     /// Python version (and static metadata is not available).
     RequiresPython(VersionSpecifiers),
+    /// The distribution was excluded because its upload time (from the `Last-Modified` HTTP header)
+    /// is newer than the `--exclude-newer` cutoff.
+    ExcludedByExcludeNewer,
 }
 
 impl UnavailableVersion {
@@ -59,6 +62,9 @@ impl UnavailableVersion {
             Self::RequiresPython(requires_python) => {
                 format!("Python {requires_python}")
             }
+            Self::ExcludedByExcludeNewer => {
+                "excluded by --exclude-newer (via Last-Modified header)".into()
+            }
         }
     }
 
@@ -70,6 +76,7 @@ impl UnavailableVersion {
             Self::InvalidStructure => format!("has {self}"),
             Self::Offline => format!("needs {self}"),
             Self::RequiresPython(..) => format!("requires {self}"),
+            Self::ExcludedByExcludeNewer => format!("was {self}"),
         }
     }
 
@@ -81,6 +88,7 @@ impl UnavailableVersion {
             Self::InvalidStructure => format!("have {self}"),
             Self::Offline => format!("need {self}"),
             Self::RequiresPython(..) => format!("require {self}"),
+            Self::ExcludedByExcludeNewer => format!("were {self}"),
         }
     }
 
@@ -98,6 +106,7 @@ impl UnavailableVersion {
             Self::InvalidStructure => None,
             Self::Offline => None,
             Self::RequiresPython(..) => None,
+            Self::ExcludedByExcludeNewer => None,
         }
     }
 }
@@ -118,6 +127,7 @@ impl From<&MetadataUnavailable> for UnavailableVersion {
             MetadataUnavailable::RequiresPython(requires_python, _python_version) => {
                 Self::RequiresPython(requires_python.clone())
             }
+            MetadataUnavailable::ExcludedByExcludeNewer => Self::ExcludedByExcludeNewer,
         }
     }
 }
@@ -203,6 +213,9 @@ impl From<&MetadataUnavailable> for UnavailablePackage {
             }
             MetadataUnavailable::RequiresPython(..) => {
                 unreachable!("`requires-python` is only known upfront for registry distributions")
+            }
+            MetadataUnavailable::ExcludedByExcludeNewer => {
+                unreachable!("`exclude-newer` is only known upfront for registry distributions")
             }
         }
     }

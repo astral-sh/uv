@@ -1242,6 +1242,40 @@ impl RegistryClient {
             .map_err(crate::Error::from)
     }
 
+    /// Send a HEAD request to a file URL and return its `Last-Modified` timestamp in milliseconds.
+    ///
+    /// Returns `Ok(Some(millis))` if the header is present and parsable, `Ok(None)` if the header
+    /// is missing or unparsable, and `Err` on network errors.
+    pub async fn head_file_last_modified(
+        &self,
+        url: &DisplaySafeUrl,
+    ) -> Result<Option<i64>, crate::Error> {
+        let response = self
+            .uncached_client(url)
+            .head(Url::from(url.clone()))
+            .send()
+            .await
+            .map_err(|err| {
+                crate::Error::from(ErrorKind::WrappedReqwestError(
+                    url.clone(),
+                    crate::WrappedReqwestError::from(err),
+                ))
+            })?;
+
+        let last_modified = response
+            .headers()
+            .get("last-modified")
+            .and_then(|value| value.to_str().ok())
+            .and_then(|s| {
+                jiff::fmt::rfc2822::DateTimeParser::new()
+                    .parse_timestamp(s)
+                    .ok()
+            })
+            .map(jiff::Timestamp::as_millisecond);
+
+        Ok(last_modified)
+    }
+
     /// Handle a specific `reqwest` error, and convert it to [`io::Error`].
     fn handle_response_errors(&self, err: reqwest::Error) -> std::io::Error {
         if err.is_timeout() {

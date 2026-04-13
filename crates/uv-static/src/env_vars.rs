@@ -196,6 +196,12 @@ impl EnvVars {
     #[attr_added_in("0.2.12")]
     pub const UV_EXCLUDE_NEWER: &'static str = "UV_EXCLUDE_NEWER";
 
+    /// Equivalent to the `--exclude-newer-last-modified` command-line argument. If set, uv will
+    /// use the `Last-Modified` HTTP header as a fallback for missing upload times when using
+    /// `--exclude-newer`.
+    #[attr_added_in("0.11.4")]
+    pub const UV_EXCLUDE_NEWER_LAST_MODIFIED: &'static str = "UV_EXCLUDE_NEWER_LAST_MODIFIED";
+
     /// Whether uv should prefer system or managed Python versions.
     #[attr_added_in("0.3.2")]
     pub const UV_PYTHON_PREFERENCE: &'static str = "UV_PYTHON_PREFERENCE";

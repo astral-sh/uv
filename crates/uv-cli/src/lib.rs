@@ -3264,6 +3264,24 @@ pub struct VenvArgs {
     #[arg(long)]
     pub exclude_newer_package: Option<Vec<ExcludeNewerPackageEntry>>,
 
+    /// Use the `Last-Modified` HTTP header as a fallback for missing upload times when using
+    /// `--exclude-newer`.
+    ///
+    /// When enabled, if a package file from an index lacks an `upload-time` field (e.g., on
+    /// Artifactory or other non-PyPI indexes), uv will make a HEAD request to the file URL and
+    /// use the `Last-Modified` header to determine the upload date. HEAD requests are only made
+    /// for files the resolver actually selects as candidates, not for all files on the index page.
+    #[arg(
+        long,
+        env = EnvVars::UV_EXCLUDE_NEWER_LAST_MODIFIED,
+        overrides_with("no_exclude_newer_last_modified"),
+    )]
+    pub exclude_newer_last_modified: bool,
+
+    /// Disable the `Last-Modified` HTTP header fallback for `--exclude-newer`.
+    #[arg(long, overrides_with("exclude_newer_last_modified"), hide = true)]
+    pub no_exclude_newer_last_modified: bool,
+
     /// The method to use when installing packages from the global cache.
     ///
     /// This option is only used for installing seed packages.
@@ -6098,6 +6116,25 @@ pub struct ToolUpgradeArgs {
     #[arg(long, help_heading = "Resolver options")]
     pub exclude_newer_package: Option<Vec<ExcludeNewerPackageEntry>>,
 
+    /// Use the `Last-Modified` HTTP header as a fallback for missing upload times when using
+    /// `--exclude-newer`.
+    ///
+    /// When enabled, if a package file from an index lacks an `upload-time` field (e.g., on
+    /// Artifactory or other non-PyPI indexes), uv will make a HEAD request to the file URL and
+    /// use the `Last-Modified` header to determine the upload date. HEAD requests are only made
+    /// for files the resolver actually selects as candidates, not for all files on the index page.
+    #[arg(
+        long,
+        env = EnvVars::UV_EXCLUDE_NEWER_LAST_MODIFIED,
+        overrides_with("no_exclude_newer_last_modified"),
+        help_heading = "Resolver options"
+    )]
+    pub exclude_newer_last_modified: bool,
+
+    /// Disable the `Last-Modified` HTTP header fallback for `--exclude-newer`.
+    #[arg(long, overrides_with("exclude_newer_last_modified"), hide = true)]
+    pub no_exclude_newer_last_modified: bool,
+
     /// The method to use when installing packages from the global cache.
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS and Linux, and `hardlink` on
@@ -7157,6 +7194,25 @@ pub struct InstallerArgs {
     #[arg(long, help_heading = "Resolver options")]
     pub exclude_newer_package: Option<Vec<ExcludeNewerPackageEntry>>,
 
+    /// Use the `Last-Modified` HTTP header as a fallback for missing upload times when using
+    /// `--exclude-newer`.
+    ///
+    /// When enabled, if a package file from an index lacks an `upload-time` field (e.g., on
+    /// Artifactory or other non-PyPI indexes), uv will make a HEAD request to the file URL and
+    /// use the `Last-Modified` header to determine the upload date. HEAD requests are only made
+    /// for files the resolver actually selects as candidates, not for all files on the index page.
+    #[arg(
+        long,
+        env = EnvVars::UV_EXCLUDE_NEWER_LAST_MODIFIED,
+        overrides_with("no_exclude_newer_last_modified"),
+        help_heading = "Resolver options"
+    )]
+    pub exclude_newer_last_modified: bool,
+
+    /// Disable the `Last-Modified` HTTP header fallback for `--exclude-newer`.
+    #[arg(long, overrides_with("exclude_newer_last_modified"), hide = true)]
+    pub no_exclude_newer_last_modified: bool,
+
     /// The method to use when installing packages from the global cache.
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS and Linux, and `hardlink` on
@@ -7403,6 +7459,25 @@ pub struct ResolverArgs {
     /// Can be provided multiple times for different packages.
     #[arg(long, help_heading = "Resolver options")]
     pub exclude_newer_package: Option<Vec<ExcludeNewerPackageEntry>>,
+
+    /// Use the `Last-Modified` HTTP header as a fallback for missing upload times when using
+    /// `--exclude-newer`.
+    ///
+    /// When enabled, if a package file from an index lacks an `upload-time` field (e.g., on
+    /// Artifactory or other non-PyPI indexes), uv will make a HEAD request to the file URL and
+    /// use the `Last-Modified` header to determine the upload date. HEAD requests are only made
+    /// for files the resolver actually selects as candidates, not for all files on the index page.
+    #[arg(
+        long,
+        env = EnvVars::UV_EXCLUDE_NEWER_LAST_MODIFIED,
+        overrides_with("no_exclude_newer_last_modified"),
+        help_heading = "Resolver options"
+    )]
+    pub exclude_newer_last_modified: bool,
+
+    /// Disable the `Last-Modified` HTTP header fallback for `--exclude-newer`.
+    #[arg(long, overrides_with("exclude_newer_last_modified"), hide = true)]
+    pub no_exclude_newer_last_modified: bool,
 
     /// The method to use when installing packages from the global cache.
     ///
@@ -7653,6 +7728,25 @@ pub struct ResolverInstallerArgs {
     /// Can be provided multiple times for different packages.
     #[arg(long, help_heading = "Resolver options", value_hint = ValueHint::Other)]
     pub exclude_newer_package: Option<Vec<ExcludeNewerPackageEntry>>,
+
+    /// Use the `Last-Modified` HTTP header as a fallback for missing upload times when using
+    /// `--exclude-newer`.
+    ///
+    /// When enabled, if a package file from an index lacks an `upload-time` field (e.g., on
+    /// Artifactory or other non-PyPI indexes), uv will make a HEAD request to the file URL and
+    /// use the `Last-Modified` header to determine the upload date. HEAD requests are only made
+    /// for files the resolver actually selects as candidates, not for all files on the index page.
+    #[arg(
+        long,
+        env = EnvVars::UV_EXCLUDE_NEWER_LAST_MODIFIED,
+        overrides_with("no_exclude_newer_last_modified"),
+        help_heading = "Resolver options"
+    )]
+    pub exclude_newer_last_modified: bool,
+
+    /// Disable the `Last-Modified` HTTP header fallback for `--exclude-newer`.
+    #[arg(long, overrides_with("exclude_newer_last_modified"), hide = true)]
+    pub no_exclude_newer_last_modified: bool,
 
     /// The method to use when installing packages from the global cache.
     ///

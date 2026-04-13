@@ -13,6 +13,7 @@ pub struct Options {
     pub dependency_mode: DependencyMode,
     pub fork_strategy: ForkStrategy,
     pub exclude_newer: ExcludeNewer,
+    pub exclude_newer_last_modified: bool,
     pub index_strategy: IndexStrategy,
     pub artifact_environments: SupportedEnvironments,
     pub flexibility: Flexibility,
@@ -28,6 +29,7 @@ pub struct OptionsBuilder {
     dependency_mode: DependencyMode,
     fork_strategy: ForkStrategy,
     exclude_newer: ExcludeNewer,
+    exclude_newer_last_modified: bool,
     index_strategy: IndexStrategy,
     artifact_environments: SupportedEnvironments,
     flexibility: Flexibility,
@@ -76,6 +78,13 @@ impl OptionsBuilder {
         self
     }
 
+    /// Sets whether to use `Last-Modified` headers as a fallback for `--exclude-newer`.
+    #[must_use]
+    pub fn exclude_newer_last_modified(mut self, exclude_newer_last_modified: bool) -> Self {
+        self.exclude_newer_last_modified = exclude_newer_last_modified;
+        self
+    }
+
     /// Sets the index strategy.
     #[must_use]
     pub fn index_strategy(mut self, index_strategy: IndexStrategy) -> Self {
@@ -119,6 +128,7 @@ impl OptionsBuilder {
             dependency_mode: self.dependency_mode,
             fork_strategy: self.fork_strategy,
             exclude_newer: self.exclude_newer,
+            exclude_newer_last_modified: self.exclude_newer_last_modified,
             index_strategy: self.index_strategy,
             artifact_environments: self.artifact_environments,
             flexibility: self.flexibility,

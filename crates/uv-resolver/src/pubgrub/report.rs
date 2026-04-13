@@ -944,6 +944,10 @@ impl PubGrubReportFormatter<'_> {
                                 python_version: python_version.clone(),
                             });
                         }
+                        MetadataUnavailable::ExcludedByExcludeNewer => {
+                            // No additional hint needed; the resolver will surface
+                            // the exclude-newer constraint in the error message.
+                        }
                     }
                     break;
                 }

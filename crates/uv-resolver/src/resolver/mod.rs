@@ -182,6 +182,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             AllowedYanks::from_manifest(&manifest, &env, options.dependency_mode),
             hasher,
             options.exclude_newer.clone(),
+            options.exclude_newer_last_modified,
             build_context.locations(),
             build_context.build_options(),
             build_context.capabilities(),

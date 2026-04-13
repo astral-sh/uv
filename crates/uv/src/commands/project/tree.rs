@@ -210,6 +210,7 @@ pub(crate) async fn tree(
                 extra_build_dependencies: _,
                 extra_build_variables: _,
                 exclude_newer: _,
+                exclude_newer_last_modified: _,
                 link_mode: _,
                 upgrade: _,
                 build_options: _,

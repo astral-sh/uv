@@ -52,6 +52,7 @@ impl VersionMap {
         allowed_yanks: &AllowedYanks,
         hasher: &HashStrategy,
         exclude_newer: Option<ExcludeNewerValue>,
+        exclude_newer_last_modified: bool,
         flat_index: Option<FlatDistributions>,
         build_options: &BuildOptions,
     ) -> Self {
@@ -128,6 +129,7 @@ impl VersionMap {
                 hasher: hasher.clone(),
                 requires_python: requires_python.clone(),
                 exclude_newer,
+                exclude_newer_last_modified,
             }),
         }
     }
@@ -399,6 +401,8 @@ struct VersionMapLazy {
     tags: Option<Tags>,
     /// Whether files newer than this timestamp should be excluded or not.
     exclude_newer: Option<ExcludeNewerValue>,
+    /// Whether to use `Last-Modified` HTTP headers as a fallback for files missing upload time.
+    exclude_newer_last_modified: bool,
     /// Which yanked versions are allowed
     allowed_yanks: AllowedYanks,
     /// The hashes of allowed distributions.
@@ -463,11 +467,17 @@ impl VersionMapLazy {
                             (true, Some(upload_time))
                         }
                         None => {
-                            warn_user_once!(
-                                "{} is missing an upload date, but user provided: {exclude_newer}",
-                                file.filename,
-                            );
-                            (true, None)
+                            if self.exclude_newer_last_modified {
+                                // Include tentatively; the provider will verify
+                                // via a HEAD request before fetching metadata.
+                                (false, None)
+                            } else {
+                                warn_user_once!(
+                                    "{} is missing an upload date, but user provided: {exclude_newer}",
+                                    file.filename,
+                                );
+                                (true, None)
+                            }
                         }
                         _ => (false, None),
                     }
