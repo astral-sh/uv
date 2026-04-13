@@ -642,7 +642,7 @@ async fn build_package(
         &hasher,
         exclude_newer,
         sources.clone(),
-        SourceTreeEditablePolicy::Ignore,
+        SourceTreeEditablePolicy::Project,
         workspace_cache.clone(),
         concurrency.clone(),
         preview,

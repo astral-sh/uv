@@ -43,8 +43,7 @@ use crate::commands::project::{
     sync_environment, update_environment,
 };
 use crate::commands::tool::common::{
-    finalize_tool_install, normalize_tool_local_requirements, refine_interpreter,
-    remove_entrypoints,
+    finalize_tool_install, refine_interpreter, remove_entrypoints,
 };
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
@@ -373,46 +372,42 @@ pub(crate) async fn install(
             )
             .await?,
         );
-        normalize_tool_local_requirements(requirements)
+        requirements
     };
 
     // Resolve the constraints.
-    let constraints = normalize_tool_local_requirements(
-        spec.constraints
-            .into_iter()
-            .map(|constraint| constraint.requirement)
-            .collect::<Vec<_>>(),
-    );
+    let constraints: Vec<_> = spec
+        .constraints
+        .into_iter()
+        .map(|constraint| constraint.requirement)
+        .collect();
 
     // Resolve the overrides.
-    let overrides = normalize_tool_local_requirements(
-        resolve_names(
-            spec.overrides,
-            &interpreter,
-            &settings,
-            &client_builder,
-            &state,
-            &concurrency,
-            &cache,
-            workspace_cache,
-            printer,
-            preview,
-            lfs,
-        )
-        .await?,
-    );
+    let overrides = resolve_names(
+        spec.overrides,
+        &interpreter,
+        &settings,
+        &client_builder,
+        &state,
+        &concurrency,
+        &cache,
+        workspace_cache,
+        printer,
+        preview,
+        lfs,
+    )
+    .await?;
 
     // Resolve the excludes.
     let excludes = spec.excludes.clone();
 
     // Resolve the build constraints.
-    let build_constraints = normalize_tool_local_requirements(
+    let build_constraints: Vec<Requirement> =
         operations::read_constraints(build_constraints, &client_builder)
             .await?
             .into_iter()
             .map(|constraint| constraint.requirement)
-            .collect::<Vec<_>>(),
-    );
+            .collect();
 
     // Convert to tool options.
     let options = ToolOptions::from(options);
@@ -584,7 +579,7 @@ pub(crate) async fn install(
             spec,
             Modifications::Exact,
             python_platform.as_ref(),
-            SourceTreeEditablePolicy::Respect,
+            SourceTreeEditablePolicy::Tool,
             Constraints::from_requirements(build_constraints.iter().cloned()),
             ExtraBuildRequires::default(),
             &settings,
@@ -629,7 +624,7 @@ pub(crate) async fn install(
             spec.clone(),
             &interpreter,
             python_platform.as_ref(),
-            SourceTreeEditablePolicy::Respect,
+            SourceTreeEditablePolicy::Tool,
             Constraints::from_requirements(build_constraints.iter().cloned()),
             &settings.resolver,
             &client_builder,
@@ -686,7 +681,7 @@ pub(crate) async fn install(
                         spec,
                         &interpreter,
                         python_platform.as_ref(),
-                        SourceTreeEditablePolicy::Respect,
+                        SourceTreeEditablePolicy::Tool,
                         Constraints::from_requirements(build_constraints.iter().cloned()),
                         &settings.resolver,
                         &client_builder,

@@ -1281,9 +1281,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Err(Error::HashesNotSupportedSourceTree(source.to_string()));
         }
 
-        // Project resolution intentionally keeps workspace-member lowering independent from the
-        // root package's editable install mode. Tool resolution opts in to respecting each local
-        // requirement's explicit editable choice instead.
+        // Project-style resolution intentionally keeps workspace-member lowering independent from
+        // the root package's editable install mode. Tool-style resolution opts in to preserving
+        // each local requirement's explicit editable choice instead.
         let editable = self
             .build_context
             .source_tree_editable_policy()

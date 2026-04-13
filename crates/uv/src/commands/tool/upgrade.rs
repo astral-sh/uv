@@ -33,7 +33,7 @@ use crate::commands::project::{
     EnvironmentUpdate, PlatformState, resolve_environment, sync_environment, update_environment,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::tool::common::{normalize_tool_local_requirements, remove_entrypoints};
+use crate::commands::tool::common::remove_entrypoints;
 use crate::commands::{ExitStatus, conjunction, tool::common::finalize_tool_install};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -324,26 +324,19 @@ async fn upgrade_tool(
     );
     let settings = ResolverInstallerSettings::from(options.clone());
 
-    let build_constraints = Constraints::from_requirements(
-        normalize_tool_local_requirements(
-            existing_tool_receipt.build_constraints().iter().cloned(),
-        )
-        .into_iter(),
-    );
+    let build_constraints =
+        Constraints::from_requirements(existing_tool_receipt.build_constraints().iter().cloned());
 
     // Resolve the requirements.
-    let constraints = normalize_tool_local_requirements(
+    let spec = RequirementsSpecification::from_excludes(
+        existing_tool_receipt.requirements().to_vec(),
         existing_tool_receipt
             .constraints()
             .iter()
             .chain(constraints)
             .cloned()
-            .collect::<Vec<_>>(),
-    );
-    let spec = RequirementsSpecification::from_excludes(
-        normalize_tool_local_requirements(existing_tool_receipt.requirements().to_vec()),
-        constraints,
-        normalize_tool_local_requirements(existing_tool_receipt.overrides().to_vec()),
+            .collect(),
+        existing_tool_receipt.overrides().to_vec(),
         existing_tool_receipt.excludes().to_vec(),
     );
     // Initialize any shared state.
@@ -359,7 +352,7 @@ async fn upgrade_tool(
             spec.into(),
             interpreter,
             python_platform,
-            SourceTreeEditablePolicy::Respect,
+            SourceTreeEditablePolicy::Tool,
             build_constraints.clone(),
             &settings.resolver,
             client_builder,
@@ -405,7 +398,7 @@ async fn upgrade_tool(
             spec,
             Modifications::Exact,
             python_platform,
-            SourceTreeEditablePolicy::Respect,
+            SourceTreeEditablePolicy::Tool,
             build_constraints,
             ExtraBuildRequires::default(),
             &settings,

@@ -267,7 +267,7 @@ pub(crate) async fn sync(
                 spec,
                 modifications,
                 python_platform.as_ref(),
-                SourceTreeEditablePolicy::Ignore,
+                SourceTreeEditablePolicy::Project,
                 build_constraints.unwrap_or_default(),
                 script_extra_build_requires,
                 &settings,
@@ -845,7 +845,7 @@ pub(super) async fn do_sync(
         &build_hasher,
         exclude_newer.clone(),
         sources.clone(),
-        SourceTreeEditablePolicy::Ignore,
+        SourceTreeEditablePolicy::Project,
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
@@ -885,7 +885,10 @@ pub(super) async fn do_sync(
 /// If necessary, convert any editable requirements to non-editable.
 fn apply_editable_mode(resolution: Resolution, editable: Option<EditableMode>) -> Resolution {
     match editable {
+        // No modifications are necessary for editable mode; retain any editable distributions.
         None => resolution,
+
+        // Filter out any non-editable distributions.
         Some(EditableMode::Editable) => resolution.map(|dist| {
             let ResolvedDist::Installable { dist, version } = dist else {
                 return None;
@@ -912,6 +915,8 @@ fn apply_editable_mode(resolution: Resolution, editable: Option<EditableMode>) -
                 version: version.clone(),
             })
         }),
+
+        // If a package is editable, map it to a non-editable distribution.
         Some(EditableMode::NonEditable) => resolution.map(|dist| {
             let ResolvedDist::Installable { dist, version } = dist else {
                 return None;

@@ -546,7 +546,7 @@ pub(crate) async fn pip_compile(
         &build_hashes,
         exclude_newer.clone(),
         sources,
-        SourceTreeEditablePolicy::Ignore,
+        SourceTreeEditablePolicy::Project,
         workspace_cache,
         concurrency.clone(),
         preview,
