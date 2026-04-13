@@ -1847,6 +1847,8 @@ pub(crate) async fn resolve_names(
                 resolution: _,
                 sources,
                 torch_backend,
+                cuda_driver_version,
+                amd_gpu_architecture,
                 upgrade: _,
             },
         compile_bytecode: _,
@@ -1865,7 +1867,13 @@ pub(crate) async fn resolve_names(
             } else {
                 TorchSource::default()
             };
-            TorchStrategy::from_mode(mode, source, interpreter.platform().os())
+            TorchStrategy::from_mode(
+                mode,
+                source,
+                interpreter.platform().os(),
+                cuda_driver_version.clone(),
+                amd_gpu_architecture.clone(),
+            )
         })
         .transpose()
         .ok()
@@ -2028,6 +2036,8 @@ pub(crate) async fn resolve_environment(
         build_options,
         sources,
         torch_backend,
+        cuda_driver_version,
+        amd_gpu_architecture,
     } = settings;
 
     // Respect all requirements from the provided sources.
@@ -2066,6 +2076,8 @@ pub(crate) async fn resolve_environment(
                     .as_ref()
                     .unwrap_or(interpreter.platform())
                     .os(),
+                cuda_driver_version.clone(),
+                amd_gpu_architecture.clone(),
             )
         })
         .transpose()?;
@@ -2403,6 +2415,8 @@ pub(crate) async fn update_environment(
                 resolution,
                 sources,
                 torch_backend,
+                cuda_driver_version,
+                amd_gpu_architecture,
                 upgrade,
             },
         compile_bytecode,
@@ -2491,6 +2505,8 @@ pub(crate) async fn update_environment(
                     .as_ref()
                     .unwrap_or(interpreter.platform())
                     .os(),
+                cuda_driver_version.clone(),
+                amd_gpu_architecture.clone(),
             )
         })
         .transpose()?;

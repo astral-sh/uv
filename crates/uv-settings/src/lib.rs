@@ -12,6 +12,7 @@ use uv_flags::EnvironmentFlags;
 use uv_fs::Simplified;
 use uv_pep440::Version;
 use uv_static::{EnvVars, InvalidEnvironmentVariable, parse_boolish_environment_variable};
+use uv_torch::AmdGpuArchitecture;
 use uv_warnings::warn_user;
 
 pub use crate::combine::*;
@@ -720,6 +721,8 @@ pub struct EnvironmentOptions {
     pub install_mirrors: PythonInstallMirrors,
     pub log_context: Option<bool>,
     pub lfs: Option<bool>,
+    pub cuda_driver_version: Option<Version>,
+    pub amd_gpu_architecture: Option<AmdGpuArchitecture>,
     pub http_connect_timeout: Duration,
     pub http_read_timeout: Duration,
     /// There's no upload timeout in reqwest, instead we have to use a read timeout as upload
@@ -804,6 +807,14 @@ impl EnvironmentOptions {
             },
             log_context: parse_boolish_environment_variable(EnvVars::UV_LOG_CONTEXT)?,
             lfs: parse_boolish_environment_variable(EnvVars::UV_GIT_LFS)?,
+            cuda_driver_version: parse_typed_environment_variable(
+                EnvVars::UV_CUDA_DRIVER_VERSION,
+                None,
+            )?,
+            amd_gpu_architecture: parse_typed_environment_variable(
+                EnvVars::UV_AMD_GPU_ARCHITECTURE,
+                None,
+            )?,
             http_read_timeout_upload: parse_integer_environment_variable(
                 EnvVars::UV_UPLOAD_HTTP_TIMEOUT,
                 Some("value should be an integer number of seconds"),
@@ -869,6 +880,49 @@ fn parse_string_environment_variable(name: &'static str) -> Result<Option<String
                 },
             )),
         },
+    }
+}
+
+fn parse_typed_environment_variable<T>(
+    name: &'static str,
+    help: Option<&str>,
+) -> Result<Option<T>, Error>
+where
+    T: std::str::FromStr,
+    <T as std::str::FromStr>::Err: std::fmt::Display,
+{
+    let value = match std::env::var(name) {
+        Ok(v) => v,
+        Err(e) => {
+            return match e {
+                std::env::VarError::NotPresent => Ok(None),
+                std::env::VarError::NotUnicode(err) => Err(Error::InvalidEnvironmentVariable(
+                    InvalidEnvironmentVariable {
+                        name: name.to_string(),
+                        value: err.to_string_lossy().to_string(),
+                        err: "expected a valid UTF-8 string".to_string(),
+                    },
+                )),
+            };
+        }
+    };
+    if value.is_empty() {
+        return Ok(None);
+    }
+
+    match value.parse::<T>() {
+        Ok(v) => Ok(Some(v)),
+        Err(err) => Err(Error::InvalidEnvironmentVariable(
+            InvalidEnvironmentVariable {
+                name: name.to_string(),
+                value,
+                err: if let Some(help) = help {
+                    format!("{err}; {help}")
+                } else {
+                    err.to_string()
+                },
+            },
+        )),
     }
 }
 

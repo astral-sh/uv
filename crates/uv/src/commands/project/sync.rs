@@ -703,6 +703,8 @@ pub(super) async fn do_sync(
                 resolution: ResolutionMode::default(),
                 sources: sources.clone(),
                 torch_backend: None,
+                cuda_driver_version: None,
+                amd_gpu_architecture: None,
                 upgrade: Upgrade::default(),
             };
             script_extra_build_requires(

@@ -228,6 +228,8 @@ async fn build_impl(
         build_options,
         sources,
         torch_backend: _,
+        cuda_driver_version: _,
+        amd_gpu_architecture: _,
     } = settings;
 
     // Determine the source to build.

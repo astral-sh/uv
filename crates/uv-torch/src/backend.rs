@@ -232,35 +232,43 @@ pub enum TorchStrategy {
 
 impl TorchStrategy {
     /// Determine the [`TorchStrategy`] from the given [`TorchMode`], [`Os`], and [`Accelerator`].
+    ///
+    /// The `cuda_driver_version` and `amd_gpu_architecture` overrides, if provided, take
+    /// precedence over system detection and correspond to the `UV_CUDA_DRIVER_VERSION` and
+    /// `UV_AMD_GPU_ARCHITECTURE` environment variables respectively.
     pub fn from_mode(
         mode: TorchMode,
         source: TorchSource,
         os: &Os,
+        cuda_driver_version: Option<Version>,
+        amd_gpu_architecture: Option<AmdGpuArchitecture>,
     ) -> Result<Self, AcceleratorError> {
         let backend = match mode {
-            TorchMode::Auto => match Accelerator::detect()? {
-                Some(Accelerator::Cuda { driver_version }) => {
-                    return Ok(Self::Cuda {
-                        os: os.clone(),
-                        driver_version: driver_version.clone(),
-                        source,
-                    });
+            TorchMode::Auto => {
+                match Accelerator::detect(cuda_driver_version, amd_gpu_architecture)? {
+                    Some(Accelerator::Cuda { driver_version }) => {
+                        return Ok(Self::Cuda {
+                            os: os.clone(),
+                            driver_version: driver_version.clone(),
+                            source,
+                        });
+                    }
+                    Some(Accelerator::Amd { gpu_architecture }) => {
+                        return Ok(Self::Amd {
+                            os: os.clone(),
+                            gpu_architecture,
+                            source,
+                        });
+                    }
+                    Some(Accelerator::Xpu) => {
+                        return Ok(Self::Xpu {
+                            os: os.clone(),
+                            source,
+                        });
+                    }
+                    None => TorchBackend::Cpu,
                 }
-                Some(Accelerator::Amd { gpu_architecture }) => {
-                    return Ok(Self::Amd {
-                        os: os.clone(),
-                        gpu_architecture,
-                        source,
-                    });
-                }
-                Some(Accelerator::Xpu) => {
-                    return Ok(Self::Xpu {
-                        os: os.clone(),
-                        source,
-                    });
-                }
-                None => TorchBackend::Cpu,
-            },
+            }
             TorchMode::Cpu => TorchBackend::Cpu,
             TorchMode::Cu130 => TorchBackend::Cu130,
             TorchMode::Cu129 => TorchBackend::Cu129,
