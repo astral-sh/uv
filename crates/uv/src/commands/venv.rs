@@ -274,7 +274,7 @@ pub(crate) async fn venv(
             &build_hasher,
             exclude_newer,
             sources,
-            SourceTreeEditablePolicy::Ignore,
+            SourceTreeEditablePolicy::Project,
             workspace_cache.clone(),
             concurrency,
             preview,

@@ -10,8 +10,7 @@ use std::{
 use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_distribution_types::{InstalledDist, Name};
-use uv_distribution_types::{Requirement, RequirementSource};
+use uv_distribution_types::{InstalledDist, Name, Requirement};
 use uv_fs::Simplified;
 #[cfg(unix)]
 use uv_fs::replace_symlink;
@@ -70,37 +69,6 @@ pub(crate) fn remove_entrypoints(tool: &Tool) {
             );
         }
     }
-}
-
-/// Normalize tool-local directory requirements so non-editable inputs are represented explicitly.
-///
-/// The CLI parser distinguishes editable local directories with `editable = Some(true)`, but
-/// leaves non-editable directories as `editable = None`. Tools need to preserve each local
-/// requirement's chosen mode while lowering implicit workspace members, so convert the implicit
-/// non-editable case into `Some(false)` before resolution.
-pub(crate) fn normalize_tool_local_requirements(
-    requirements: impl IntoIterator<Item = Requirement>,
-) -> Vec<Requirement> {
-    requirements
-        .into_iter()
-        .map(|requirement| Requirement {
-            source: match requirement.source {
-                RequirementSource::Directory {
-                    install_path,
-                    editable: None,
-                    r#virtual,
-                    url,
-                } => RequirementSource::Directory {
-                    install_path,
-                    editable: Some(false),
-                    r#virtual,
-                    url,
-                },
-                source => source,
-            },
-            ..requirement
-        })
-        .collect()
 }
 
 /// Given a no-solution error and the [`Interpreter`] that was used during the solve, attempt to
