@@ -811,7 +811,7 @@ async fn rfc9457_problem_details_license_violation() {
 #[tokio::test]
 async fn direct_wheel_metadata_uses_get_probe_when_head_is_inconclusive() {
     let context = uv_test::test_context!("3.12");
-    let (_server_drop_guard, server) = wheel_range_probe_server();
+    let (server, _server_drop_guard) = wheel_range_probe_server();
     let wheel_url = format!("{server}/packages/validation-1.0.0-py3-none-any.whl");
 
     uv_snapshot!(context.filters(), context
