@@ -308,11 +308,10 @@ fn read_timeout_server() -> (String, impl Drop) {
 }
 
 fn wheel_range_probe_server() -> (String, impl Drop) {
-    const WHEEL: &[u8] =
-        include_bytes!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../test/links/validation-1.0.0-py3-none-any.whl"
-        ));
+    const WHEEL: &[u8] = include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../test/links/validation-1.0.0-py3-none-any.whl"
+    ));
 
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
