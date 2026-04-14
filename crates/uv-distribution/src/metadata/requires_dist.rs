@@ -48,7 +48,7 @@ impl RequiresDist {
         git_member: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         sources: NoSources,
-        editable: Option<bool>,
+        editable: bool,
         cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
@@ -90,7 +90,7 @@ impl RequiresDist {
         git_member: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         no_sources: &NoSources,
-        editable: Option<bool>,
+        editable: bool,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
@@ -482,7 +482,7 @@ mod test {
             None,
             &IndexLocations::default(),
             &NoSources::default(),
-            None,
+            true,
             &CredentialsCache::new(),
         )?)
     }

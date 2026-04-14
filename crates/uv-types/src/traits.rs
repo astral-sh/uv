@@ -39,19 +39,14 @@ pub enum SourceTreeEditablePolicy {
 }
 
 impl SourceTreeEditablePolicy {
-    /// Return the default editable mode for implicit workspace members under this policy.
-    pub fn default_editable(self) -> Option<bool> {
+    /// Return the default editable mode for workspace members lowered under this policy.
+    ///
+    /// `explicit` is the explicit editable choice on the source tree being lowered, if any. In
+    /// `Tool` mode it propagates to workspace siblings; in `Project` mode it is ignored.
+    pub fn workspace_member_editable(self, explicit: Option<bool>) -> bool {
         match self {
-            Self::Project => None,
-            Self::Tool => Some(false),
-        }
-    }
-
-    /// Return the editable mode for a specific source requirement under this policy.
-    pub fn effective_editable(self, explicit: Option<bool>) -> Option<bool> {
-        match self {
-            Self::Project => None,
-            Self::Tool => Some(explicit.unwrap_or(false)),
+            Self::Project => true,
+            Self::Tool => explicit.unwrap_or(false),
         }
     }
 }
