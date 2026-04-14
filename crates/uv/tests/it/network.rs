@@ -127,46 +127,47 @@ fn connection_reset(_request: &wiremock::Request) -> io::Error {
 fn range_probe_response(
     req: hyper::Request<hyper::body::Incoming>,
     wheel: Bytes,
-) -> Result<hyper::Response<BoxBody<Bytes, Infallible>>, Infallible> {
+) -> hyper::Response<BoxBody<Bytes, Infallible>> {
     const WHEEL_PATH: &str = "/packages/validation-1.0.0-py3-none-any.whl";
+    let (parts, _body) = req.into_parts();
 
-    if req.uri().path() != WHEEL_PATH {
-        return Ok(hyper::Response::builder()
+    if parts.uri.path() != WHEEL_PATH {
+        return hyper::Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(Full::new(Bytes::new()).boxed())
-            .unwrap());
+            .unwrap();
     }
 
     let len = wheel.len() as u64;
 
-    if req.method() == hyper::Method::HEAD {
-        return Ok(hyper::Response::builder()
+    if parts.method == hyper::Method::HEAD {
+        return hyper::Response::builder()
             .status(StatusCode::OK)
             .header("Content-Length", len)
             .header("Content-Type", "application/octet-stream")
             .body(Full::new(Bytes::new()).boxed())
-            .unwrap());
+            .unwrap();
     }
 
-    if req.method() != hyper::Method::GET {
-        return Ok(hyper::Response::builder()
+    if parts.method != hyper::Method::GET {
+        return hyper::Response::builder()
             .status(StatusCode::METHOD_NOT_ALLOWED)
             .body(Full::new(Bytes::new()).boxed())
-            .unwrap());
+            .unwrap();
     }
 
-    let range = req
-        .headers()
+    let range = parts
+        .headers
         .get(hyper::header::RANGE)
         .and_then(|value| value.to_str().ok());
 
     let Some(range) = range.and_then(|value| value.strip_prefix("bytes=")) else {
-        return Ok(hyper::Response::builder()
+        return hyper::Response::builder()
             .status(StatusCode::OK)
             .header("Content-Length", len)
             .header("Content-Type", "application/octet-stream")
             .body(Full::new(wheel).boxed())
-            .unwrap());
+            .unwrap();
     };
 
     let (start, end) = if let Some(suffix) = range.strip_prefix('-') {
@@ -190,14 +191,14 @@ fn range_probe_response(
     let end = usize::try_from(end).unwrap();
     let body = wheel.slice(start..=end);
 
-    Ok(hyper::Response::builder()
+    hyper::Response::builder()
         .status(StatusCode::PARTIAL_CONTENT)
         .header("Accept-Ranges", "bytes")
         .header("Content-Type", "application/octet-stream")
         .header("Content-Length", body.len())
         .header("Content-Range", format!("bytes {start}-{end}/{len}"))
         .body(Full::new(body).boxed())
-        .unwrap())
+        .unwrap()
 }
 
 /// Returns true if the mock server has received any requests.
@@ -344,7 +345,10 @@ fn wheel_range_probe_server() -> (String, impl Drop) {
                             .serve_connection(
                                 io,
                                 service_fn(move |req| {
-                                    future::ready(range_probe_response(req, wheel.clone()))
+                                    future::ready(Ok::<_, Infallible>(range_probe_response(
+                                        req,
+                                        wheel.clone(),
+                                    )))
                                 }),
                             )
                             .await;
