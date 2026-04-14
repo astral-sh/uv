@@ -1,4 +1,4 @@
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 use std::{
     fmt::{Debug, Display, Formatter},
     ops::BitOr,
@@ -9,11 +9,17 @@ use enumflags2::{BitFlags, bitflags};
 use thiserror::Error;
 use uv_warnings::warn_user_once;
 
+/// Indicates if the preview state has been finalized yet or not.
+enum PreviewState {
+    Provisional(Preview),
+    Final(Preview),
+}
+
 /// Indicates how the preview was initialised, to distinguish between normal
 /// code and unit tests.
 enum PreviewMode {
     /// Initialised by a call to [`init`].
-    Normal(Preview),
+    Normal(Mutex<PreviewState>),
     /// Initialised by a call to [`test::with_features`].
     #[cfg(feature = "testing")]
     Test(std::sync::RwLock<Option<Preview>>),
@@ -21,19 +27,71 @@ enum PreviewMode {
 
 static PREVIEW: OnceLock<PreviewMode> = OnceLock::new();
 
-/// Error returned when [`init`] is called more than once.
+/// Error type for global preview state initialization related errors
 #[derive(Debug, Error)]
-#[error("The preview configuration has already been initialized")]
-pub struct InitError;
+pub enum PreviewError {
+    /// Returned when [`set`] or [`finalize`] are called on a finalized state.
+    #[error("The preview configuration has already been finalized")]
+    AlreadyFinalized,
+
+    /// Returned when [`finalize`] is called on an uninitialized state.
+    #[error("The preview configuration has not been initialized yet")]
+    NotInitialized,
+
+    /// Returned when [`set`] or [`finalize`] are called on a test state.
+    #[cfg(feature = "testing")]
+    #[error("The preview configuration is in test mode and {}::{} cannot be used", module_path!(), .0)]
+    InTest(&'static str),
+}
 
 /// Initialize the global preview configuration.
 ///
 /// This should be called once at startup with the resolved preview settings.
-pub fn init(preview: Preview) -> Result<(), InitError> {
-    PREVIEW
-        .set(PreviewMode::Normal(preview))
-        .map_err(|_| InitError)
+pub fn set(preview: Preview) -> Result<(), PreviewError> {
+    let mode = PREVIEW.get_or_init(|| {
+        PreviewMode::Normal(Mutex::new(PreviewState::Provisional(Preview::default())))
+    });
+    match mode {
+        PreviewMode::Normal(mutex) => {
+            // Calling `set` in a test context is already disallowed, so a panic if
+            // the mutex is poisoned is fine.
+            let mut state = mutex.lock().unwrap();
+            match &*state {
+                PreviewState::Provisional(_) => {
+                    *state = PreviewState::Provisional(preview);
+                    Ok(())
+                }
+                PreviewState::Final(_) => Err(PreviewError::AlreadyFinalized),
+            }
+        }
+        #[cfg(feature = "testing")]
+        PreviewMode::Test(_) => Err(PreviewError::InTest("set")),
+    }
 }
+
+pub fn finalize() -> Result<(), PreviewError> {
+    match PREVIEW.get().ok_or(PreviewError::NotInitialized)? {
+        PreviewMode::Normal(mutex) => {
+            // Calling `set` in a test context is already disallowed, so a panic if
+            // the mutex is poisoned is fine.
+            let mut state = mutex.lock().unwrap();
+            match &*state {
+                PreviewState::Provisional(preview) => {
+                    *state = PreviewState::Final(*preview);
+                    Ok(())
+                }
+                PreviewState::Final(_) => Err(PreviewError::AlreadyFinalized),
+            }
+        }
+        #[cfg(feature = "testing")]
+        PreviewMode::Test(_) => Err(PreviewError::InTest("finalize")),
+    }
+}
+
+/// Error returned when [`finalize`] is called on an uninitialized state.
+#[derive(Debug, Error)]
+#[error("The preview configuration has already been finalized")]
+pub struct SetError;
 
 /// Get the current global preview configuration.
 ///
@@ -43,7 +101,10 @@ pub fn init(preview: Preview) -> Result<(), InitError> {
 /// current thread does not hold a [`test::with_features`] guard.
 pub fn get() -> Preview {
     match PREVIEW.get() {
-        Some(PreviewMode::Normal(preview)) => *preview,
+        Some(PreviewMode::Normal(mutex)) => match *mutex.lock().unwrap() {
+            PreviewState::Provisional(preview) => preview,
+            PreviewState::Final(preview) => preview,
+        },
         #[cfg(feature = "testing")]
         Some(PreviewMode::Test(rwlock)) => {
             assert!(
