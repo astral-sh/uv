@@ -1126,7 +1126,11 @@ impl RegistryClient {
         if index.is_none_or(|index| capabilities.supports_range_requests(index)) {
             let req = self
                 .uncached_client(url)
-                .head(Url::from(url.clone()))
+                .get(Url::from(url.clone()))
+                .header(
+                    reqwest::header::RANGE,
+                    reqwest::header::HeaderValue::from_static("bytes=0-0"),
+                )
                 .header(
                     "accept-encoding",
                     http::HeaderValue::from_static("identity"),
@@ -1134,7 +1138,7 @@ impl RegistryClient {
                 .build()
                 .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
 
-            // Copy authorization headers from the HEAD request to subsequent requests
+            // Copy authorization headers from the initial range probe to subsequent requests.
             let mut headers = HeaderMap::default();
             if let Some(authorization) = req.headers().get("authorization") {
                 headers.append("authorization", authorization.clone());
@@ -1155,7 +1159,7 @@ impl RegistryClient {
             // fetch the file from the remote zip.
             let read_metadata_range_request = |response: Response| {
                 async {
-                    let mut reader = AsyncHttpRangeReader::from_head_response(
+                    let mut reader = AsyncHttpRangeReader::from_range_response(
                         self.uncached_client(url).clone(),
                         response,
                         Url::from(url.clone()),

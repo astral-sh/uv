@@ -6,7 +6,7 @@ use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild};
 use bytes::Bytes;
 use http::StatusCode;
 use http_body_util::combinators::BoxBody;
-use http_body_util::{BodyExt, StreamBody};
+use http_body_util::{BodyExt, Full, StreamBody};
 use hyper::body::Frame;
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
@@ -123,6 +123,80 @@ fn connection_reset(_request: &wiremock::Request) -> io::Error {
     io::Error::new(io::ErrorKind::ConnectionReset, "Connection reset by peer")
 }
 
+async fn range_probe_response(
+    req: hyper::Request<hyper::body::Incoming>,
+    wheel: Bytes,
+) -> Result<hyper::Response<BoxBody<Bytes, Infallible>>, Infallible> {
+    const WHEEL_PATH: &str = "/packages/validation-1.0.0-py3-none-any.whl";
+
+    if req.uri().path() != WHEEL_PATH {
+        return Ok(hyper::Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Full::new(Bytes::new()).boxed())
+            .unwrap());
+    }
+
+    let len = wheel.len() as u64;
+
+    if req.method() == hyper::Method::HEAD {
+        return Ok(hyper::Response::builder()
+            .status(StatusCode::OK)
+            .header("Content-Length", len)
+            .header("Content-Type", "application/octet-stream")
+            .body(Full::new(Bytes::new()).boxed())
+            .unwrap());
+    }
+
+    if req.method() != hyper::Method::GET {
+        return Ok(hyper::Response::builder()
+            .status(StatusCode::METHOD_NOT_ALLOWED)
+            .body(Full::new(Bytes::new()).boxed())
+            .unwrap());
+    }
+
+    let range = req
+        .headers()
+        .get(hyper::header::RANGE)
+        .and_then(|value| value.to_str().ok());
+
+    let Some(range) = range.and_then(|value| value.strip_prefix("bytes=")) else {
+        return Ok(hyper::Response::builder()
+            .status(StatusCode::OK)
+            .header("Content-Length", len)
+            .header("Content-Type", "application/octet-stream")
+            .body(Full::new(wheel).boxed())
+            .unwrap());
+    };
+
+    let (start, end) = if let Some(suffix) = range.strip_prefix('-') {
+        let suffix: u64 = suffix.parse().unwrap();
+        let start = len.saturating_sub(suffix.min(len));
+        (start, len.saturating_sub(1))
+    } else {
+        let (start, end) = range.split_once('-').unwrap();
+        let start: u64 = start.parse().unwrap();
+        let end = if end.is_empty() {
+            len.saturating_sub(1)
+        } else {
+            end.parse().unwrap()
+        };
+        (start, end.min(len.saturating_sub(1)))
+    };
+
+    let start = start.min(len.saturating_sub(1));
+    let end = end.max(start).min(len.saturating_sub(1));
+    let body = wheel.slice(start as usize..=end as usize);
+
+    Ok(hyper::Response::builder()
+        .status(StatusCode::PARTIAL_CONTENT)
+        .header("Accept-Ranges", "bytes")
+        .header("Content-Type", "application/octet-stream")
+        .header("Content-Length", body.len())
+        .header("Content-Range", format!("bytes {start}-{end}/{len}"))
+        .body(Full::new(body).boxed())
+        .unwrap())
+}
+
 /// Returns true if the mock server has received any requests.
 async fn has_received_requests(server: &MockServer) -> bool {
     !server.received_requests().await.unwrap().is_empty()
@@ -221,6 +295,51 @@ fn read_timeout_server() -> (String, impl Drop) {
                                 hyper_util::rt::TokioExecutor::new(),
                             )
                             .serve_connection(io, service_fn(time_out_response))
+                            .await;
+                        });
+                    }
+                } => {}
+                _ = shutdown_rx => {}
+            }
+        });
+    });
+
+    (server, shutdown_tx)
+}
+
+fn wheel_range_probe_server() -> (String, impl Drop) {
+    const WHEEL: &[u8] =
+        include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../test/links/validation-1.0.0-py3-none-any.whl"
+        ));
+
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let server = format!("http://{}", listener.local_addr().unwrap());
+    let wheel = Bytes::from_static(WHEEL);
+
+    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+
+    std::thread::spawn(move || {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async move {
+            let listener = tokio::net::TcpListener::from_std(listener).unwrap();
+            tokio::select! {
+                _ = async {
+                    loop {
+                        let (stream, _) = listener.accept().await.unwrap();
+                        let io = TokioIo::new(stream);
+                        let wheel = wheel.clone();
+
+                        tokio::spawn(async move {
+                           let _ = hyper_util::server::conn::auto::Builder::new(
+                                hyper_util::rt::TokioExecutor::new(),
+                            )
+                            .serve_connection(io, service_fn(move |req| range_probe_response(req, wheel.clone())))
                             .await;
                         });
                     }
@@ -686,6 +805,27 @@ async fn rfc9457_problem_details_license_violation() {
       ├─▶ Failed to fetch: `http://[LOCALHOST]/packages/tqdm-4.67.1-py3-none-any.whl`
       ├─▶ Server message: License Compliance Issue, This package version has a license that violates organizational policy.
       ╰─▶ HTTP status client error (403 Forbidden) for url (http://[LOCALHOST]/packages/tqdm-4.67.1-py3-none-any.whl)
+    ");
+}
+
+#[tokio::test]
+async fn direct_wheel_metadata_uses_get_probe_when_head_is_inconclusive() {
+    let context = uv_test::test_context!("3.12");
+    let (_server_drop_guard, server) = wheel_range_probe_server();
+    let wheel_url = format!("{server}/packages/validation-1.0.0-py3-none-any.whl");
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg(format!("validation @ {wheel_url}")), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + validation==1.0.0 (from http://[LOCALHOST]/packages/validation-1.0.0-py3-none-any.whl)
     ");
 }
 
