@@ -61,6 +61,7 @@ pub(crate) async fn list(
     all_versions: bool,
     all_platforms: bool,
     all_arches: bool,
+    all_variants: bool,
     show_urls: bool,
     output_format: PythonListFormat,
     python_downloads_json_url: Option<String>,
@@ -118,8 +119,7 @@ pub(crate) async fn list(
             .map(|request| download_list.iter_matching(request))
             .into_iter()
             .flatten()
-            // TODO(zanieb): Add a way to show debug downloads, we just hide them for now
-            .filter(|download| !download.key().variant().is_debug());
+            .filter(|download| all_variants || !download.key().variant().is_debug());
 
         for download in downloads {
             output.insert((

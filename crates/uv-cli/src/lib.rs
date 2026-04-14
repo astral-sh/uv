@@ -4171,6 +4171,10 @@ pub struct LockArgs {
     #[arg(long, alias = "frozen", conflicts_with_all = ["check", "locked"])]
     pub check_exists: bool,
 
+    /// Always refresh the lockfile, forcing regeneration of lock file metadata like hashes.
+    #[arg(long, short)]
+    pub force: bool,
+
     /// Perform a dry run, without writing the lockfile.
     ///
     /// In dry-run mode, uv will resolve the project's dependencies and report on the resulting
@@ -6298,6 +6302,12 @@ pub struct PythonListArgs {
     /// By default, only downloads for the current architecture are shown.
     #[arg(long, alias = "all_architectures")]
     pub all_arches: bool,
+
+    /// List all variants of Python downloads, including debug builds.
+    ///
+    /// By default, debug builds are not shown.
+    #[arg(long)]
+    pub all_variants: bool,
 
     /// Only show installed Python versions.
     ///
