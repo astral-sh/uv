@@ -4172,7 +4172,7 @@ pub struct LockArgs {
     pub check_exists: bool,
 
     /// Always refresh the lockfile, forcing regeneration of lock file metadata like hashes.
-    #[arg(long, short)]
+    #[arg(long)]
     pub force: bool,
 
     /// Perform a dry run, without writing the lockfile.

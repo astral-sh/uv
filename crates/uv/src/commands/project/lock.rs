@@ -21,6 +21,7 @@ use uv_distribution_types::{
     DependencyMetadata, HashGeneration, Index, IndexLocations, NameRequirementSpecification,
     Requirement, RequiresPython, UnresolvedRequirementSpecification,
 };
+use uv_fs::Simplified;
 use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
 use uv_normalize::{GroupName, PackageName};
@@ -83,6 +84,7 @@ pub(crate) async fn lock(
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
     dry_run: DryRun,
+    force: bool,
     refresh: Refresh,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
@@ -98,6 +100,19 @@ pub(crate) async fn lock(
     printer: Printer,
     preview: Preview,
 ) -> anyhow::Result<ExitStatus> {
+    // If `--force` is set, remove the existing lockfile
+    if force {
+        let lock_path = project_dir.join("uv.lock");
+        if lock_path.is_file() {
+            fs_err::remove_file(&lock_path)?;
+            writeln!(
+                printer.stderr(),
+                "Removed lockfile due to `--force`: {}",
+                lock_path.user_display()
+            )?;
+        }
+    }
+
     // If necessary, initialize the PEP 723 script.
     let script = match script {
         Some(ScriptPath::Path(path)) => {
