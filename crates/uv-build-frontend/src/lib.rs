@@ -650,7 +650,7 @@ impl SourceBuild {
                     install_path,
                     locations,
                     no_sources,
-                    None,
+                    true,
                     workspace_cache,
                     credentials_cache,
                 )
@@ -1098,7 +1098,7 @@ async fn create_pep517_build_environment(
             &no_sources,
             build_context
                 .source_tree_editable_policy()
-                .default_editable(),
+                .workspace_member_editable(None),
             workspace_cache,
             credentials_cache,
         )

@@ -1287,7 +1287,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let editable = self
             .build_context
             .source_tree_editable_policy()
-            .effective_editable(resource.editable);
+            .workspace_member_editable(resource.editable);
 
         // If the metadata is static, return it.
         let dynamic = match StaticMetadata::read(source, resource.install_path, None).await? {
@@ -1547,7 +1547,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     self.build_context.sources().clone(),
                     self.build_context
                         .source_tree_editable_policy()
-                        .default_editable(),
+                        .workspace_member_editable(None),
                     self.build_context.workspace_cache(),
                     credentials_cache,
                 )
@@ -1872,7 +1872,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             self.build_context.sources().clone(),
                             self.build_context
                                 .source_tree_editable_policy()
-                                .default_editable(),
+                                .workspace_member_editable(None),
                             self.build_context.workspace_cache(),
                             credentials_cache,
                         )
@@ -1909,7 +1909,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                                 self.build_context.sources().clone(),
                                 self.build_context
                                     .source_tree_editable_policy()
-                                    .default_editable(),
+                                    .workspace_member_editable(None),
                                 self.build_context.workspace_cache(),
                                 credentials_cache,
                             )
@@ -1965,7 +1965,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     self.build_context.sources().clone(),
                     self.build_context
                         .source_tree_editable_policy()
-                        .default_editable(),
+                        .workspace_member_editable(None),
                     self.build_context.workspace_cache(),
                     credentials_cache,
                 )
@@ -2030,7 +2030,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 self.build_context.sources().clone(),
                 self.build_context
                     .source_tree_editable_policy()
-                    .default_editable(),
+                    .workspace_member_editable(None),
                 self.build_context.workspace_cache(),
                 credentials_cache,
             )
