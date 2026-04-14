@@ -1206,18 +1206,20 @@ impl RegistryClient {
                             .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
 
                         let metadata_for_cache = metadata.clone();
-                        if let Err(err) = self
-                            .cached_client()
-                            .skip_cache_with_retry(
-                                req,
-                                &cache_entry,
-                                cache_control.clone(),
-                                move |_response| {
-                                    let metadata_for_cache = metadata_for_cache.clone();
-                                    async move { Ok::<ResolutionMetadata, Error>(metadata_for_cache) }
-                                },
-                            )
-                            .await
+                        if let Err(err) =
+                            self.cached_client()
+                                .skip_cache_with_retry(
+                                    req,
+                                    &cache_entry,
+                                    cache_control.clone(),
+                                    move |_response| {
+                                        let metadata_for_cache = metadata_for_cache.clone();
+                                        async move {
+                                            Ok::<ResolutionMetadata, Error>(metadata_for_cache)
+                                        }
+                                    },
+                                )
+                                .await
                         {
                             warn!(
                                 "Failed to cache wheel metadata for {filename} after a successful \
