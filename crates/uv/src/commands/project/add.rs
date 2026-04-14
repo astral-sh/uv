@@ -36,7 +36,7 @@ use uv_requirements::{NamedRequirementsResolver, RequirementsSource, Requirement
 use uv_resolver::FlatIndex;
 use uv_scripts::{Pep723Metadata, Pep723Script};
 use uv_settings::PythonInstallMirrors;
-use uv_types::{BuildIsolation, HashStrategy};
+use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{DependencyType, Source, SourceError, Sources, ToolUvSources};
 use uv_workspace::pyproject_mut::{AddBoundsKind, ArrayEdit, DependencyTarget, PyProjectTomlMut};
@@ -454,6 +454,7 @@ pub(crate) async fn add(
                 &build_hasher,
                 settings.resolver.exclude_newer.clone(),
                 sources,
+                SourceTreeEditablePolicy::Project,
                 // No workspace caching since `uv add` changes the workspace definition.
                 WorkspaceCache::default(),
                 concurrency.clone(),

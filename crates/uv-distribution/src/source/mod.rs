@@ -1281,6 +1281,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Err(Error::HashesNotSupportedSourceTree(source.to_string()));
         }
 
+        // Project-style resolution always lowers workspace members as editable. Tool-style
+        // resolution preserves an explicit local requirement choice instead, defaulting implicit
+        // workspace siblings to non-editable.
+        let editable = self
+            .build_context
+            .source_tree_editable_policy()
+            .workspace_member_editable(resource.editable);
+
         // If the metadata is static, return it.
         let dynamic = match StaticMetadata::read(source, resource.install_path, None).await? {
             StaticMetadata::Some(metadata) => {
@@ -1291,6 +1299,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         None,
                         self.build_context.locations(),
                         self.build_context.sources().clone(),
+                        editable,
                         self.build_context.workspace_cache(),
                         credentials_cache,
                     )
@@ -1345,6 +1354,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             None,
                             self.build_context.locations(),
                             self.build_context.sources().clone(),
+                            editable,
                             self.build_context.workspace_cache(),
                             credentials_cache,
                         )
@@ -1395,6 +1405,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     None,
                     self.build_context.locations(),
                     self.build_context.sources().clone(),
+                    editable,
                     self.build_context.workspace_cache(),
                     credentials_cache,
                 )
@@ -1457,6 +1468,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 None,
                 self.build_context.locations(),
                 self.build_context.sources().clone(),
+                editable,
                 self.build_context.workspace_cache(),
                 credentials_cache,
             )
@@ -1533,6 +1545,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     None,
                     self.build_context.locations(),
                     self.build_context.sources().clone(),
+                    self.build_context
+                        .source_tree_editable_policy()
+                        .workspace_member_editable(None),
                     self.build_context.workspace_cache(),
                     credentials_cache,
                 )
@@ -1855,6 +1870,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             Some(&git_member),
                             self.build_context.locations(),
                             self.build_context.sources().clone(),
+                            self.build_context
+                                .source_tree_editable_policy()
+                                .workspace_member_editable(None),
                             self.build_context.workspace_cache(),
                             credentials_cache,
                         )
@@ -1889,6 +1907,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                                 Some(&git_member),
                                 self.build_context.locations(),
                                 self.build_context.sources().clone(),
+                                self.build_context
+                                    .source_tree_editable_policy()
+                                    .workspace_member_editable(None),
                                 self.build_context.workspace_cache(),
                                 credentials_cache,
                             )
@@ -1942,6 +1963,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     Some(&git_member),
                     self.build_context.locations(),
                     self.build_context.sources().clone(),
+                    self.build_context
+                        .source_tree_editable_policy()
+                        .workspace_member_editable(None),
                     self.build_context.workspace_cache(),
                     credentials_cache,
                 )
@@ -2004,6 +2028,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Some(&git_member),
                 self.build_context.locations(),
                 self.build_context.sources().clone(),
+                self.build_context
+                    .source_tree_editable_policy()
+                    .workspace_member_editable(None),
                 self.build_context.workspace_cache(),
                 credentials_cache,
             )

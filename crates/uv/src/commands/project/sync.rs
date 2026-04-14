@@ -32,7 +32,7 @@ use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequ
 use uv_resolver::{FlatIndex, ForkStrategy, Installable, Lock, PrereleaseMode, ResolutionMode};
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
-use uv_types::{BuildIsolation, HashStrategy};
+use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user;
 use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
@@ -267,6 +267,7 @@ pub(crate) async fn sync(
                 spec,
                 modifications,
                 python_platform.as_ref(),
+                SourceTreeEditablePolicy::Project,
                 build_constraints.unwrap_or_default(),
                 script_extra_build_requires,
                 &settings,
@@ -844,6 +845,7 @@ pub(super) async fn do_sync(
         &build_hasher,
         exclude_newer.clone(),
         sources.clone(),
+        SourceTreeEditablePolicy::Project,
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
@@ -880,25 +882,6 @@ pub(super) async fn do_sync(
     Ok(changelog)
 }
 
-/// Filter out any virtual workspace members.
-fn apply_no_virtual_project(resolution: Resolution) -> Resolution {
-    resolution.filter(|dist| {
-        let ResolvedDist::Installable { dist, .. } = dist else {
-            return true;
-        };
-
-        let Dist::Source(dist) = dist.as_ref() else {
-            return true;
-        };
-
-        let SourceDist::Directory(dist) = dist else {
-            return true;
-        };
-
-        !dist.r#virtual.unwrap_or(false)
-    })
-}
-
 /// If necessary, convert any editable requirements to non-editable.
 fn apply_editable_mode(resolution: Resolution, editable: Option<EditableMode>) -> Resolution {
     match editable {
@@ -933,7 +916,7 @@ fn apply_editable_mode(resolution: Resolution, editable: Option<EditableMode>) -
             })
         }),
 
-        // Filter out any editable distributions.
+        // If a package is editable, map it to a non-editable distribution.
         Some(EditableMode::NonEditable) => resolution.map(|dist| {
             let ResolvedDist::Installable { dist, version } = dist else {
                 return None;
@@ -961,6 +944,25 @@ fn apply_editable_mode(resolution: Resolution, editable: Option<EditableMode>) -
             })
         }),
     }
+}
+
+/// Filter out any virtual workspace members.
+fn apply_no_virtual_project(resolution: Resolution) -> Resolution {
+    resolution.filter(|dist| {
+        let ResolvedDist::Installable { dist, .. } = dist else {
+            return true;
+        };
+
+        let Dist::Source(dist) = dist.as_ref() else {
+            return true;
+        };
+
+        let SourceDist::Directory(dist) = dist else {
+            return true;
+        };
+
+        !dist.r#virtual.unwrap_or(false)
+    })
 }
 
 /// Extract any credentials that are defined on the workspace dependencies themselves. While we

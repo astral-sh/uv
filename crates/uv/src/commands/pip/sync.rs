@@ -35,7 +35,7 @@ use uv_resolver::{
 };
 use uv_settings::PythonInstallMirrors;
 use uv_torch::{TorchMode, TorchSource, TorchStrategy};
-use uv_types::HashStrategy;
+use uv_types::{HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
@@ -393,6 +393,7 @@ pub(crate) async fn pip_sync(
         &build_hasher,
         exclude_newer.clone(),
         sources.clone(),
+        SourceTreeEditablePolicy::Project,
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
@@ -533,6 +534,7 @@ pub(crate) async fn pip_sync(
         &build_hasher,
         exclude_newer.clone(),
         sources,
+        SourceTreeEditablePolicy::Project,
         workspace_cache,
         concurrency.clone(),
         preview,

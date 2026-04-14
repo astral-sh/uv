@@ -48,7 +48,7 @@ use uv_resolver::{
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_torch::{TorchMode, TorchSource, TorchStrategy};
-use uv_types::{EmptyInstalledPackages, HashStrategy};
+use uv_types::{EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
@@ -546,6 +546,7 @@ pub(crate) async fn pip_compile(
         &build_hashes,
         exclude_newer.clone(),
         sources,
+        SourceTreeEditablePolicy::Project,
         workspace_cache,
         concurrency.clone(),
         preview,

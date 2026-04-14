@@ -44,7 +44,7 @@ use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_torch::{TorchSource, TorchStrategy};
-use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
+use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy};
 use uv_virtualenv::remove_virtualenv;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
@@ -1928,6 +1928,7 @@ pub(crate) async fn resolve_names(
         &build_hasher,
         exclude_newer.clone(),
         sources.clone(),
+        SourceTreeEditablePolicy::Project,
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
@@ -1996,6 +1997,7 @@ pub(crate) async fn resolve_environment(
     spec: EnvironmentSpecification<'_>,
     interpreter: &Interpreter,
     python_platform: Option<&TargetTriple>,
+    source_tree_editable_policy: SourceTreeEditablePolicy,
     build_constraints: Constraints,
     settings: &ResolverSettings,
     client_builder: &BaseClientBuilder<'_>,
@@ -2167,6 +2169,7 @@ pub(crate) async fn resolve_environment(
         &build_hasher,
         exclude_newer.clone(),
         sources.clone(),
+        source_tree_editable_policy,
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
@@ -2307,6 +2310,7 @@ pub(crate) async fn sync_environment(
         &build_hasher,
         exclude_newer.clone(),
         sources,
+        SourceTreeEditablePolicy::Project,
         workspace_cache,
         concurrency.clone(),
         preview,
@@ -2366,6 +2370,7 @@ pub(crate) async fn update_environment(
     spec: RequirementsSpecification,
     modifications: Modifications,
     python_platform: Option<&TargetTriple>,
+    source_tree_editable_policy: SourceTreeEditablePolicy,
     build_constraints: Constraints,
     extra_build_requires: ExtraBuildRequires,
     settings: &ResolverInstallerSettings,
@@ -2563,6 +2568,7 @@ pub(crate) async fn update_environment(
         &build_hasher,
         exclude_newer.clone(),
         sources.clone(),
+        source_tree_editable_policy,
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
@@ -2603,7 +2609,6 @@ pub(crate) async fn update_environment(
         Ok((resolution, hasher)) => (Resolution::from(resolution), hasher),
         Err(err) => return Err(err.into()),
     };
-
     // Sync the environment.
     let changelog = pip::operations::install(
         &resolution,

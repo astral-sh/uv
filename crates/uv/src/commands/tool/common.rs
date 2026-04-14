@@ -10,8 +10,7 @@ use std::{
 use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_distribution_types::Requirement;
-use uv_distribution_types::{InstalledDist, Name};
+use uv_distribution_types::{InstalledDist, Name, Requirement};
 use uv_fs::Simplified;
 #[cfg(unix)]
 use uv_fs::replace_symlink;

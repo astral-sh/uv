@@ -41,6 +41,7 @@ use uv_scripts::{Pep723Error, Pep723Item, Pep723Metadata, Pep723Script};
 use uv_settings::{EnvironmentOptions, FilesystemOptions, PythonInstallMirrors};
 use uv_shell::runnable::WindowsRunnable;
 use uv_static::EnvVars;
+use uv_types::SourceTreeEditablePolicy;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
 
@@ -456,6 +457,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     spec,
                     modifications,
                     python_platform.as_ref(),
+                    SourceTreeEditablePolicy::Project,
                     build_constraints.unwrap_or_default(),
                     script_extra_build_requires,
                     &settings,

@@ -36,7 +36,7 @@ use uv_resolver::{
 };
 use uv_types::{
     AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages,
-    HashStrategy, InFlight,
+    HashStrategy, InFlight, SourceTreeEditablePolicy,
 };
 use uv_workspace::WorkspaceCache;
 
@@ -98,6 +98,7 @@ pub struct BuildDispatch<'a> {
     source_build_context: SourceBuildContext,
     build_extra_env_vars: FxHashMap<OsString, OsString>,
     sources: NoSources,
+    source_tree_editable_policy: SourceTreeEditablePolicy,
     workspace_cache: WorkspaceCache,
     concurrency: Concurrency,
     preview: Preview,
@@ -124,6 +125,7 @@ impl<'a> BuildDispatch<'a> {
         hasher: &'a HashStrategy,
         exclude_newer: ExcludeNewer,
         sources: NoSources,
+        source_tree_editable_policy: SourceTreeEditablePolicy,
         workspace_cache: WorkspaceCache,
         concurrency: Concurrency,
         preview: Preview,
@@ -150,6 +152,7 @@ impl<'a> BuildDispatch<'a> {
             source_build_context: SourceBuildContext::new(concurrency.builds_semaphore.clone()),
             build_extra_env_vars: FxHashMap::default(),
             sources,
+            source_tree_editable_policy,
             workspace_cache,
             concurrency,
             preview,
@@ -218,6 +221,10 @@ impl BuildContext for BuildDispatch<'_> {
 
     fn sources(&self) -> &NoSources {
         &self.sources
+    }
+
+    fn source_tree_editable_policy(&self) -> SourceTreeEditablePolicy {
+        self.source_tree_editable_policy
     }
 
     fn locations(&self) -> &IndexLocations {

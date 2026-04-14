@@ -16,6 +16,9 @@ use uv_settings::{ToolOptions, ToolOptionsWire};
 #[serde(try_from = "ToolWire", into = "ToolWire")]
 pub struct Tool {
     /// The requirements requested by the user during installation.
+    ///
+    /// The first requirement is the tool target itself; any remaining requirements come from
+    /// `--with`.
     requirements: Vec<Requirement>,
     /// The constraints requested by the user during installation.
     constraints: Vec<Requirement>,
@@ -354,6 +357,11 @@ impl Tool {
 
     pub fn requirements(&self) -> &[Requirement] {
         &self.requirements
+    }
+
+    /// Return the primary requirement for the tool itself.
+    pub fn target_requirement(&self) -> Option<&Requirement> {
+        self.requirements.first()
     }
 
     pub fn constraints(&self) -> &[Requirement] {

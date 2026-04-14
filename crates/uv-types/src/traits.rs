@@ -21,6 +21,36 @@ use uv_workspace::WorkspaceCache;
 
 use crate::{BuildArena, BuildIsolation};
 
+/// Controls how source tree requirements influence workspace-member editability during lowering.
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
+pub enum SourceTreeEditablePolicy {
+    /// Use project-style semantics when lowering workspace members.
+    ///
+    /// Explicit source-tree editable settings are ignored, preserving the existing implicit
+    /// editable default for workspace members.
+    #[default]
+    Project,
+
+    /// Use tool-style semantics when lowering workspace members.
+    ///
+    /// Explicit source-tree editable settings are preserved, while implicit workspace members
+    /// default to non-editable.
+    Tool,
+}
+
+impl SourceTreeEditablePolicy {
+    /// Return the default editable mode for workspace members lowered under this policy.
+    ///
+    /// `explicit` is the explicit editable choice on the source tree being lowered, if any. In
+    /// `Tool` mode it propagates to workspace siblings; in `Project` mode it is ignored.
+    pub fn workspace_member_editable(self, explicit: Option<bool>) -> bool {
+        match self {
+            Self::Project => true,
+            Self::Tool => explicit.unwrap_or(false),
+        }
+    }
+}
+
 ///  Avoids cyclic crate dependencies between resolver, installer and builder.
 ///
 /// To resolve the dependencies of a packages, we may need to build one or more source
@@ -98,6 +128,11 @@ pub trait BuildContext {
 
     /// Whether to incorporate `tool.uv.sources` when resolving requirements.
     fn sources(&self) -> &NoSources;
+
+    /// How source tree requirements should influence workspace-member editability.
+    fn source_tree_editable_policy(&self) -> SourceTreeEditablePolicy {
+        SourceTreeEditablePolicy::Project
+    }
 
     /// The index locations being searched.
     fn locations(&self) -> &IndexLocations;
