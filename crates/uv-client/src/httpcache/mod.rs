@@ -138,6 +138,7 @@ actually need to make an HTTP request).
 use std::time::{Duration, SystemTime};
 
 use http::header::HeaderValue;
+use http::{HeaderMap, StatusCode};
 
 use crate::rkyvutil::OwnedArchive;
 
@@ -222,6 +223,22 @@ impl CachePolicyBuilder {
             config: self.config,
             request: self.request,
             response: Response::from(response),
+            vary,
+        }
+    }
+
+    /// Return a new policy given explicit response parts.
+    ///
+    /// This is used for caches that store derived data rather than the origin
+    /// response body itself, where the originating response shape (for example
+    /// `206 Partial Content`) should not dictate whether the derived cache
+    /// entry is reusable.
+    pub(crate) fn build_with_parts(self, status: StatusCode, headers: &HeaderMap) -> CachePolicy {
+        let vary = Vary::from_request_response_headers(&self.request_headers, headers);
+        CachePolicy {
+            config: self.config,
+            request: self.request,
+            response: Response::from_parts(status, headers),
             vary,
         }
     }
@@ -1138,6 +1155,16 @@ impl<'a> From<&'a reqwest::Response> for Response {
         Self {
             status: from.status().as_u16(),
             headers: ResponseHeaders::from(from.headers()),
+            unix_timestamp: unix_timestamp(SystemTime::now()),
+        }
+    }
+}
+
+impl Response {
+    fn from_parts(status: StatusCode, headers: &HeaderMap) -> Self {
+        Self {
+            status: status.as_u16(),
+            headers: ResponseHeaders::from(headers),
             unix_timestamp: unix_timestamp(SystemTime::now()),
         }
     }

@@ -243,9 +243,33 @@ impl CachedClient {
         response_callback: Callback,
     ) -> Result<Payload, CachedClientError<CallBackError>> {
         let payload = self
-            .get_cacheable(req, cache_entry, cache_control, async |resp| {
+            .get_cacheable_with_policy_override(req, cache_entry, cache_control, async |resp| {
                 let payload = response_callback(resp).await?;
-                Ok(SerdeCacheable { inner: payload })
+                Ok((SerdeCacheable { inner: payload }, None))
+            })
+            .await?;
+        Ok(payload)
+    }
+
+    /// Make a cached request with a custom response transformation and an
+    /// optional cache policy override while using serde to (de)serialize
+    /// cached responses.
+    #[instrument(skip_all)]
+    pub async fn get_serde_with_cache_policy<
+        Payload: Serialize + DeserializeOwned + Send + 'static,
+        CallBackError: std::error::Error + 'static,
+        Callback: AsyncFn(Response) -> Result<(Payload, Option<CachePolicy>), CallBackError>,
+    >(
+        &self,
+        req: Request,
+        cache_entry: &CacheEntry,
+        cache_control: CacheControl,
+        response_callback: Callback,
+    ) -> Result<Payload, CachedClientError<CallBackError>> {
+        let payload = self
+            .get_cacheable_with_policy_override(req, cache_entry, cache_control, async |resp| {
+                let (payload, cache_policy) = response_callback(resp).await?;
+                Ok((SerdeCacheable { inner: payload }, cache_policy))
             })
             .await?;
         Ok(payload)
@@ -268,6 +292,24 @@ impl CachedClient {
         Payload: Cacheable,
         CallBackError: std::error::Error + 'static,
         Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,
+    >(
+        &self,
+        req: Request,
+        cache_entry: &CacheEntry,
+        cache_control: CacheControl,
+        response_callback: Callback,
+    ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
+        self.get_cacheable_with_policy_override(req, cache_entry, cache_control, async |resp| {
+            let payload = response_callback(resp).await?;
+            Ok((payload, None))
+        })
+        .await
+    }
+
+    async fn get_cacheable_with_policy_override<
+        Payload: Cacheable,
+        CallBackError: std::error::Error + 'static,
+        Callback: AsyncFn(Response) -> Result<(Payload, Option<CachePolicy>), CallBackError>,
     >(
         &self,
         req: Request,
@@ -300,7 +342,7 @@ impl CachedClient {
                         "Broken fresh cache entry (for payload) at {}, removing: {err}",
                         cache_entry.path().display()
                     );
-                    self.resend_and_heal_cache(
+                    self.resend_and_heal_cache_with_policy_override(
                         fresh_req,
                         cache_entry,
                         cache_control.clone(),
@@ -326,7 +368,7 @@ impl CachedClient {
                                  (for payload) at {}, removing: {err}",
                                 cache_entry.path().display()
                             );
-                            self.resend_and_heal_cache(
+                            self.resend_and_heal_cache_with_policy_override(
                                 fresh_req,
                                 cache_entry,
                                 cache_control.clone(),
@@ -350,7 +392,7 @@ impl CachedClient {
                         "Server returned unusable 304 for: {}",
                         DisplaySafeUrl::from_url(fresh_req.url().clone())
                     );
-                    self.resend_and_heal_cache(
+                    self.resend_and_heal_cache_with_policy_override(
                         fresh_req,
                         cache_entry,
                         cache_control,
@@ -358,7 +400,7 @@ impl CachedClient {
                     )
                     .await
                 } else {
-                    self.run_response_callback(
+                    self.run_response_callback_with_policy_override(
                         cache_entry,
                         cache_policy,
                         start,
@@ -396,10 +438,10 @@ impl CachedClient {
         Ok(payload)
     }
 
-    async fn resend_and_heal_cache<
+    async fn resend_and_heal_cache_with_policy_override<
         Payload: Cacheable,
         CallBackError: std::error::Error + 'static,
-        Callback: AsyncFnOnce(Response) -> Result<Payload, CallBackError>,
+        Callback: AsyncFnOnce(Response) -> Result<(Payload, Option<CachePolicy>), CallBackError>,
     >(
         &self,
         req: Request,
@@ -410,7 +452,7 @@ impl CachedClient {
         let _ = fs_err::tokio::remove_file(&cache_entry.path()).await;
         let start = Instant::now();
         let (response, cache_policy) = self.fresh_request(req, cache_control).await?;
-        self.run_response_callback(
+        self.run_response_callback_with_policy_override(
             cache_entry,
             cache_policy,
             start,
@@ -432,6 +474,31 @@ impl CachedClient {
         response: Response,
         response_callback: Callback,
     ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
+        self.run_response_callback_with_policy_override(
+            cache_entry,
+            cache_policy,
+            start,
+            response,
+            async |response| {
+                let payload = response_callback(response).await?;
+                Ok((payload, None))
+            },
+        )
+        .await
+    }
+
+    async fn run_response_callback_with_policy_override<
+        Payload: Cacheable,
+        CallBackError: std::error::Error + 'static,
+        Callback: AsyncFnOnce(Response) -> Result<(Payload, Option<CachePolicy>), CallBackError>,
+    >(
+        &self,
+        cache_entry: &CacheEntry,
+        cache_policy: Option<Box<CachePolicy>>,
+        start: Instant,
+        response: Response,
+        response_callback: Callback,
+    ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
         let new_cache = info_span!("new_cache", file = %cache_entry.path().display());
         // Capture retries from the retry middleware
         let retries = response
@@ -439,7 +506,7 @@ impl CachedClient {
             .get::<reqwest_retry::RetryCount>()
             .map(|retries| retries.value())
             .unwrap_or_default();
-        let data = response_callback(response)
+        let (data, cache_policy_override) = response_callback(response)
             .boxed_local()
             .await
             .map_err(|err| CachedClientError::Callback {
@@ -447,6 +514,7 @@ impl CachedClient {
                 err,
                 duration: start.elapsed(),
             })?;
+        let cache_policy = cache_policy_override.map(Box::new).or(cache_policy);
         let Some(cache_policy) = cache_policy else {
             return Ok(data.into_target());
         };
@@ -667,10 +735,43 @@ impl CachedClient {
         response_callback: Callback,
     ) -> Result<Payload, CachedClientError<CallBackError>> {
         let payload = self
-            .get_cacheable_with_retry(req, cache_entry, cache_control, async |resp| {
-                let payload = response_callback(resp).await?;
-                Ok(SerdeCacheable { inner: payload })
-            })
+            .get_cacheable_with_retry_and_policy_override(
+                req,
+                cache_entry,
+                cache_control,
+                async |resp| {
+                    let payload = response_callback(resp).await?;
+                    Ok((SerdeCacheable { inner: payload }, None))
+                },
+            )
+            .await?;
+        Ok(payload)
+    }
+
+    /// Perform a [`CachedClient::get_serde`] request with a default retry
+    /// strategy and an optional cache policy override.
+    #[instrument(skip_all)]
+    pub async fn get_serde_with_retry_and_cache_policy<
+        Payload: Serialize + DeserializeOwned + Send + 'static,
+        CallBackError: std::error::Error + 'static,
+        Callback: AsyncFn(Response) -> Result<(Payload, Option<CachePolicy>), CallBackError>,
+    >(
+        &self,
+        req: Request,
+        cache_entry: &CacheEntry,
+        cache_control: CacheControl,
+        response_callback: Callback,
+    ) -> Result<Payload, CachedClientError<CallBackError>> {
+        let payload = self
+            .get_cacheable_with_retry_and_policy_override(
+                req,
+                cache_entry,
+                cache_control,
+                async |resp| {
+                    let (payload, cache_policy) = response_callback(resp).await?;
+                    Ok((SerdeCacheable { inner: payload }, cache_policy))
+                },
+            )
             .await?;
         Ok(payload)
     }
@@ -690,11 +791,35 @@ impl CachedClient {
         cache_control: CacheControl,
         response_callback: Callback,
     ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
+        self.get_cacheable_with_retry_and_policy_override(
+            req,
+            cache_entry,
+            cache_control,
+            async |resp| {
+                let payload = response_callback(resp).await?;
+                Ok((payload, None))
+            },
+        )
+        .await
+    }
+
+    #[instrument(skip_all)]
+    pub async fn get_cacheable_with_retry_and_policy_override<
+        Payload: Cacheable,
+        CallBackError: std::error::Error + 'static,
+        Callback: AsyncFn(Response) -> Result<(Payload, Option<CachePolicy>), CallBackError>,
+    >(
+        &self,
+        req: Request,
+        cache_entry: &CacheEntry,
+        cache_control: CacheControl,
+        response_callback: Callback,
+    ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
         let mut retry_state = RetryState::start(self.uncached().retry_policy(), req.url().clone());
         loop {
             let fresh_req = req.try_clone().expect("HTTP request must be cloneable");
             let result = self
-                .get_cacheable(
+                .get_cacheable_with_policy_override(
                     fresh_req,
                     cache_entry,
                     cache_control.clone(),

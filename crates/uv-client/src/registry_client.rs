@@ -41,6 +41,7 @@ use crate::base_client::{BaseClientBuilder, ClientBuildError, ExtraMiddleware, R
 use crate::cached_client::CacheControl;
 use crate::flat_index::FlatIndexEntry;
 use crate::html::SimpleDetailHTML;
+use crate::httpcache::CachePolicyBuilder;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
 use crate::{
@@ -1181,55 +1182,27 @@ impl RegistryClient {
                 .instrument(info_span!("read_metadata_range_request", wheel = %filename))
             };
 
+            let req_for_cache_policy = req
+                .try_clone()
+                .expect("wheel metadata request must be cloneable");
             let result = self
                 .cached_client()
-                .skip_cache_with_retry(
+                .get_serde_with_retry_and_cache_policy(
                     req,
                     &cache_entry,
                     cache_control.clone(),
-                    read_metadata_range_request,
+                    async move |response| -> Result<(_, Option<_>), Error> {
+                        let cache_policy = CachePolicyBuilder::new(&req_for_cache_policy)
+                            .build_with_parts(StatusCode::OK, response.headers());
+                        let metadata = read_metadata_range_request(response).await?;
+                        Ok((metadata, Some(cache_policy)))
+                    },
                 )
                 .await
                 .map_err(crate::Error::from);
 
             match result {
-                Ok(metadata) => {
-                    if matches!(self.connectivity, Connectivity::Online) {
-                        let req = self
-                            .uncached_client(url)
-                            .head(Url::from(url.clone()))
-                            .header(
-                                "accept-encoding",
-                                reqwest::header::HeaderValue::from_static("identity"),
-                            )
-                            .build()
-                            .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
-
-                        let metadata_for_cache = metadata.clone();
-                        if let Err(err) =
-                            self.cached_client()
-                                .skip_cache_with_retry(
-                                    req,
-                                    &cache_entry,
-                                    cache_control.clone(),
-                                    move |_response| {
-                                        let metadata_for_cache = metadata_for_cache.clone();
-                                        async move {
-                                            Ok::<ResolutionMetadata, Error>(metadata_for_cache)
-                                        }
-                                    },
-                                )
-                                .await
-                        {
-                            warn!(
-                                "Failed to cache wheel metadata for {filename} after a successful \
-                                 range probe: {err}"
-                            );
-                        }
-                    }
-
-                    return Ok(metadata);
-                }
+                Ok(metadata) => return Ok(metadata),
                 Err(err) => {
                     if err.is_http_range_requests_unsupported(url, index) {
                         // The range request version failed. Fall back to streaming the file to search
