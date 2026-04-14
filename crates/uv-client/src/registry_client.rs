@@ -24,6 +24,7 @@ use uv_distribution_types::{
     BuiltDist, File, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
     IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, IndexUrls, Name,
 };
+use uv_fs::write_atomic;
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -1185,17 +1186,28 @@ impl RegistryClient {
             let req_for_cache_policy = req
                 .try_clone()
                 .expect("wheel metadata request must be cloneable");
+            let cache_entry_for_write = cache_entry.clone();
             let result = self
                 .cached_client()
-                .get_serde_with_retry_and_cache_policy(
+                .get_serde_with_retry(
                     req,
                     &cache_entry,
                     cache_control.clone(),
-                    async move |response| -> Result<(_, Option<_>), Error> {
+                    async move |response| -> Result<ResolutionMetadata, Error> {
                         let cache_policy = CachePolicyBuilder::new(&req_for_cache_policy)
                             .build_with_parts(StatusCode::OK, response.headers());
                         let metadata = read_metadata_range_request(response).await?;
-                        Ok((metadata, Some(cache_policy)))
+                        let metadata_bytes =
+                            rmp_serde::to_vec(&metadata).map_err(ErrorKind::Encode)?;
+                        fs_err::tokio::create_dir_all(cache_entry_for_write.dir())
+                            .await
+                            .map_err(ErrorKind::CacheWrite)?;
+                        let cache_bytes =
+                            crate::DataWithCachePolicy::serialize(&cache_policy, &metadata_bytes)?;
+                        write_atomic(cache_entry_for_write.path(), cache_bytes)
+                            .await
+                            .map_err(ErrorKind::CacheWrite)?;
+                        Ok(metadata)
                     },
                 )
                 .await
