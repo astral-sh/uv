@@ -39,8 +39,11 @@ will not yet be used for Git requests.
 To remove credentials, use the `uv auth logout` command:
 
 ```console
-$ uv auth logout example.com
+$ uv auth logout example.com --username foo
 ```
+
+If the credentials were stored with a username, you should provide that same username when logging
+out. For token-based credentials, you can omit `--username`.
 
 !!! note
 
