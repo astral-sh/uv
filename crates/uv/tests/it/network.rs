@@ -1,4 +1,5 @@
 use std::convert::Infallible;
+use std::future;
 use std::io;
 use std::time::{Duration, Instant};
 
@@ -123,7 +124,7 @@ fn connection_reset(_request: &wiremock::Request) -> io::Error {
     io::Error::new(io::ErrorKind::ConnectionReset, "Connection reset by peer")
 }
 
-async fn range_probe_response(
+fn range_probe_response(
     req: hyper::Request<hyper::body::Incoming>,
     wheel: Bytes,
 ) -> Result<hyper::Response<BoxBody<Bytes, Infallible>>, Infallible> {
@@ -185,7 +186,9 @@ async fn range_probe_response(
 
     let start = start.min(len.saturating_sub(1));
     let end = end.max(start).min(len.saturating_sub(1));
-    let body = wheel.slice(start as usize..=end as usize);
+    let start = usize::try_from(start).unwrap();
+    let end = usize::try_from(end).unwrap();
+    let body = wheel.slice(start..=end);
 
     Ok(hyper::Response::builder()
         .status(StatusCode::PARTIAL_CONTENT)
@@ -338,7 +341,12 @@ fn wheel_range_probe_server() -> (String, impl Drop) {
                            let _ = hyper_util::server::conn::auto::Builder::new(
                                 hyper_util::rt::TokioExecutor::new(),
                             )
-                            .serve_connection(io, service_fn(move |req| range_probe_response(req, wheel.clone())))
+                            .serve_connection(
+                                io,
+                                service_fn(move |req| {
+                                    future::ready(range_probe_response(req, wheel.clone()))
+                                }),
+                            )
                             .await;
                         });
                     }
