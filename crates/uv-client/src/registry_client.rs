@@ -1183,7 +1183,7 @@ impl RegistryClient {
 
             let result = self
                 .cached_client()
-                .get_serde_with_retry(
+                .skip_cache_with_retry(
                     req,
                     &cache_entry,
                     cache_control.clone(),
@@ -1193,7 +1193,41 @@ impl RegistryClient {
                 .map_err(crate::Error::from);
 
             match result {
-                Ok(metadata) => return Ok(metadata),
+                Ok(metadata) => {
+                    if matches!(self.connectivity, Connectivity::Online) {
+                        let req = self
+                            .uncached_client(url)
+                            .head(Url::from(url.clone()))
+                            .header(
+                                "accept-encoding",
+                                reqwest::header::HeaderValue::from_static("identity"),
+                            )
+                            .build()
+                            .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
+
+                        let metadata_for_cache = metadata.clone();
+                        if let Err(err) = self
+                            .cached_client()
+                            .skip_cache_with_retry(
+                                req,
+                                &cache_entry,
+                                cache_control.clone(),
+                                move |_response| {
+                                    let metadata_for_cache = metadata_for_cache.clone();
+                                    async move { Ok::<ResolutionMetadata, Error>(metadata_for_cache) }
+                                },
+                            )
+                            .await
+                        {
+                            warn!(
+                                "Failed to cache wheel metadata for {filename} after a successful \
+                                 range probe: {err}"
+                            );
+                        }
+                    }
+
+                    return Ok(metadata);
+                }
                 Err(err) => {
                     if err.is_http_range_requests_unsupported(url, index) {
                         // The range request version failed. Fall back to streaming the file to search
