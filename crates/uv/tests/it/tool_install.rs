@@ -415,7 +415,7 @@ fn tool_install_relative_exclude_newer_receipt_preserves_span() {
         requires-python = ">=3.12.[X]"
 
         [options]
-        exclude-newer = "2024-04-10T00:00:00Z"
+        exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
         exclude-newer-span = "P3W"
 
         [manifest]
