@@ -48,9 +48,10 @@ pub enum PreviewError {
 ///
 /// This should be called once at startup with the resolved preview settings.
 pub fn set(preview: Preview) -> Result<(), PreviewError> {
-    match PREVIEW.get_or_init(|| {
+    let mode = PREVIEW.get_or_init(|| {
         PreviewMode::Normal(Mutex::new(PreviewState::Provisional(Preview::default())))
-    }) {
+    });
+    match mode {
         PreviewMode::Normal(mutex) => {
             // Calling `set` in a test context is already disallowed, so a panic if
             // the mutex is poisoned is fine.
