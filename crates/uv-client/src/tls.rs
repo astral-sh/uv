@@ -355,13 +355,12 @@ impl Certificates {
         }
 
         if certs.0.is_empty() {
-            warn_user_once!(
+            warn!(
                 "Ignoring `SSL_CERT_DIR`. No valid certificates found in: {}.",
                 existing
                     .iter()
                     .map(Simplified::simplified_display)
                     .join(", ")
-                    .cyan()
             );
             return None;
         }
