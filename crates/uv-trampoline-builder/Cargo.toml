@@ -1,6 +1,6 @@
 [package]
 name = "uv-trampoline-builder"
-version = "0.0.39"
+version = "0.0.40"
 description = "This is an internal component crate of uv"
 
 edition = { workspace = true }
