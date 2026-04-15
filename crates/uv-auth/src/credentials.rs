@@ -157,7 +157,7 @@ impl Credentials {
         }
     }
 
-    fn to_username(&self) -> Username {
+    pub(crate) fn to_username(&self) -> Username {
         match self {
             Self::Basic { username, .. } => username.clone(),
             Self::Bearer { .. } => Username::none(),
