@@ -200,6 +200,12 @@ impl EnvVars {
     #[attr_added_in("0.3.2")]
     pub const UV_PYTHON_PREFERENCE: &'static str = "UV_PYTHON_PREFERENCE";
 
+    /// Equivalent to the `--python-platform` argument. Select the target platform used
+    /// when resolving and installing distributions, e.g. `x86_64-unknown-linux-gnu` or
+    /// `aarch64-apple-darwin`.
+    #[attr_added_in("0.12.0")]
+    pub const UV_PYTHON_PLATFORM: &'static str = "UV_PYTHON_PLATFORM";
+
     /// Require use of uv-managed Python versions.
     #[attr_added_in("0.6.8")]
     pub const UV_MANAGED_PYTHON: &'static str = "UV_MANAGED_PYTHON";
