@@ -22,6 +22,24 @@ $ # Running a `bash` script that requires the project to be available
 $ uv run bash scripts/foo.sh
 ```
 
+## Running the Python interpreter
+
+To start an interactive Python REPL with access to the project's packages, use:
+
+```console
+$ uv run python
+```
+
+This launches the standard Python interpreter in the project environment, which is useful for
+interactively exploring project dependencies and testing code. Any packages defined in the project
+are available to import in the REPL.
+
+You can also use alternative interactive shells, such as `ipython`:
+
+```console
+$ uv run --with ipython ipython
+```
+
 ## Requesting additional dependencies
 
 Additional dependencies or different versions of dependencies can be requested per invocation.

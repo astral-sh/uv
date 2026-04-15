@@ -33,6 +33,12 @@ Hello world
 
 <!-- TODO(zanieb): Once we have a `python` shim, note you can execute it with `python` here -->
 
+If you need an interactive session, `uv run python` will start a Python REPL:
+
+```console
+$ uv run python
+```
+
 Similarly, if your script depends on a module in the standard library, there's nothing more to do:
 
 ```python title="example.py"
