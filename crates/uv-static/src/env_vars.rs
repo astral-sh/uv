@@ -1184,7 +1184,7 @@ impl EnvVars {
     ///
     /// Should be set to an RFC 3339 timestamp (e.g., `2024-03-25T00:00:00Z`).
     #[attr_hidden]
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.11.7")]
     pub const UV_TEST_AVAILABLE_VERSION_CUTOFF: &'static str = "UV_TEST_AVAILABLE_VERSION_CUTOFF";
 
     /// `.env` files from which to load environment variables when executing `uv run` commands.
