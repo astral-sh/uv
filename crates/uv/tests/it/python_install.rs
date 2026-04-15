@@ -1226,6 +1226,94 @@ fn python_install_freethreaded() {
     ");
 }
 
+/// Test that installing both GIL and free-threaded variants of the same Python version
+/// doesn't cause managed installation entries to disappear from `uv python list`
+/// on Windows when registry discovery is enabled.
+///
+/// Regression test for <https://github.com/astral-sh/uv/issues/18795>.
+///
+/// IMPORTANT: this test writes to the shared `HKCU` registry. The trailing uninstall is
+/// best-effort cleanup; panics will leak entries. This is fine for now since this is the only
+/// test exercising the registry pathway, but adding more will probably require isolation.
+#[cfg(windows)]
+#[test]
+fn python_install_freethreaded_and_gil_list() {
+    use assert_cmd::assert::OutputAssertExt;
+
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_latest_python_versions()
+        .with_managed_python_dirs()
+        .with_python_download_cache()
+        .with_filtered_python_install_bin()
+        .with_filtered_python_names()
+        .with_filtered_exe_suffix()
+        .with_collapsed_whitespace();
+
+    // Install both the GIL and free-threaded versions, with registry enabled
+    context
+        .python_install()
+        .arg("3.13")
+        .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "1")
+        .assert()
+        .success();
+    context
+        .python_install()
+        .arg("--preview")
+        .arg("3.13t")
+        .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "1")
+        .assert()
+        .success();
+
+    // List installed versions with registry discovery enabled.
+    // We remove UV_TEST_PYTHON_PATH to enable registry discovery (it's skipped when set),
+    // and use `--managed-python --only-installed` to exclude unrelated system Pythons.
+    //
+    // Both the GIL and freethreaded variants should show entries from:
+    // - The registry (patch-versioned managed directory path)
+    // - The search path (bin trampoline)
+    // - Managed discovery (minor-version junction path)
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("3.13")
+        .arg("--only-installed")
+        .arg("--managed-python")
+        .env_remove(EnvVars::UV_TEST_PYTHON_PATH)
+        .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.13.[LATEST]-[PLATFORM] managed/cpython-3.13.[LATEST]-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    cpython-3.13.[LATEST]-[PLATFORM] [BIN]/[INSTALL-BIN]/[PYTHON]
+    cpython-3.13.[LATEST]-[PLATFORM] managed/cpython-3.13-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+
+    ----- stderr -----
+    ");
+
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("3.13t")
+        .arg("--only-installed")
+        .arg("--managed-python")
+        .env_remove(EnvVars::UV_TEST_PYTHON_PATH)
+        .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.13.[LATEST]+freethreaded-[PLATFORM] managed/cpython-3.13.[LATEST]+freethreaded-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    cpython-3.13.[LATEST]+freethreaded-[PLATFORM] [BIN]/python3.13t
+    cpython-3.13.[LATEST]+freethreaded-[PLATFORM] managed/cpython-3.13+freethreaded-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+
+    ----- stderr -----
+    ");
+
+    // Clean up registry entries
+    context
+        .python_uninstall()
+        .arg("--all")
+        .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "1")
+        .assert()
+        .success();
+}
+
 #[test]
 fn python_upgrade_not_allowed() {
     let context = uv_test::test_context_with_versions!(&[])
