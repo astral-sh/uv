@@ -355,6 +355,8 @@ impl Certificates {
         }
 
         if certs.0.is_empty() {
+            // Unlike `SSL_CERT_FILE`, it's plausible for this to be intentionally set to an
+            // empty directory that a user _could_ put certificates in.
             warn!(
                 "Ignoring `SSL_CERT_DIR`. No valid certificates found in: {}.",
                 existing
