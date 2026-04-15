@@ -38,7 +38,7 @@ use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relat
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep440::Version;
+use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{
     MarkerEnvironment, MarkerTree, Scheme, VerbatimUrl, VerbatimUrlError, split_scheme,
 };
@@ -1784,6 +1784,48 @@ impl Lock {
             }
         }
 
+        // Validate that locked versions satisfy the requirements and constraints specifiers.
+        //
+        // Requirements and constraints are global — they apply across all forks.
+        // Every locked version that is applicable (i.e. whose fork markers overlap
+        // with the requirement's markers) must satisfy the specifier.
+        //
+        // Build a name-based index to avoid O(requirements × packages) scanning.
+        let packages_by_name: FxHashMap<&PackageName, Vec<&Package>> = self.packages.iter().fold(
+            FxHashMap::with_capacity_and_hasher(self.packages.len(), FxBuildHasher),
+            |mut map, package| {
+                map.entry(&package.id.name).or_default().push(package);
+                map
+            },
+        );
+        for requirement in requirements.iter().chain(constraints.iter()) {
+            let RequirementSource::Registry { specifier, .. } = &requirement.source else {
+                continue;
+            };
+            if specifier.is_empty() {
+                continue;
+            }
+            for package in packages_by_name
+                .get(&requirement.name)
+                .into_iter()
+                .flatten()
+            {
+                let Some(version) = &package.id.version else {
+                    continue;
+                };
+                if requirement_marker_for_package(requirement, package).is_false() {
+                    continue;
+                }
+                if !specifier.contains(version) {
+                    return Ok(SatisfiesResult::LockedVersionViolatesSpecifier(
+                        &package.id.name,
+                        version,
+                        specifier.clone(),
+                    ));
+                }
+            }
+        }
+
         // Collect the set of available indexes (both `--index-url` and `--find-links` entries).
         let mut remotes = indexes.map(|locations| {
             locations
@@ -1886,16 +1928,7 @@ impl Lock {
                         continue;
                     }
 
-                    let marker = if package.fork_markers.is_empty() {
-                        requirement.marker
-                    } else {
-                        let mut combined = MarkerTree::FALSE;
-                        for fork_marker in &package.fork_markers {
-                            combined.or(fork_marker.pep508());
-                        }
-                        combined.and(requirement.marker);
-                        combined
-                    };
+                    let marker = requirement_marker_for_package(requirement, package);
                     if marker.is_false() {
                         continue;
                     }
@@ -2234,8 +2267,146 @@ impl Lock {
             }
         }
 
+        // Validate that locked dependency versions satisfy the specifiers in each package's
+        // `requires-dist` and `dependency-groups` metadata.
+        //
+        // Instead of checking requirements against *all* locked packages by name, we walk
+        // each package's resolved dependency edges — which already encode the correct
+        // version per fork/extra/group — and verify them against the specifiers from the
+        // corresponding metadata context.
+        for package in &self.packages {
+            // Check resolved dependency-group edges against their group's specifiers.
+            for (group, deps) in &package.dependency_groups {
+                if let Some(group_reqs) = package.metadata.dependency_groups.get(group) {
+                    for dep in deps {
+                        if let Some(result) =
+                            check_dep_against_requirements(dep, group_reqs.iter(), &[])
+                        {
+                            return Ok(result);
+                        }
+                    }
+                }
+            }
+
+            // Check resolved optional-dependency edges against the `requires-dist`
+            // entries that are active for the selected extra and overlap with the
+            // dependency edge's marker.
+            for (extra, deps) in &package.optional_dependencies {
+                for dep in deps {
+                    if let Some(result) = check_dep_against_requirements(
+                        dep,
+                        package.metadata.requires_dist.iter(),
+                        std::slice::from_ref(extra),
+                    ) {
+                        return Ok(result);
+                    }
+                }
+            }
+
+            // Check resolved unconditional dependency edges against the
+            // `requires-dist` entries that are active without any extras and
+            // overlap with the dependency edge's marker.
+            for dep in &package.dependencies {
+                if let Some(result) =
+                    check_dep_against_requirements(dep, package.metadata.requires_dist.iter(), &[])
+                {
+                    return Ok(result);
+                }
+            }
+        }
+
         Ok(SatisfiesResult::Satisfied)
     }
+}
+
+/// Determine the marker under which a top-level requirement applies to a locked package.
+///
+/// In forked resolutions, the same package name may appear multiple times under different fork
+/// markers. We intersect the requirement marker with the package's fork markers to determine
+/// whether this particular locked package is relevant to the requirement.
+fn requirement_marker_for_package(requirement: &Requirement, package: &Package) -> MarkerTree {
+    if package.fork_markers.is_empty() {
+        requirement.marker
+    } else {
+        // When any fork marker involves conflict extras/groups, the multiple
+        // versions are separated by the conflict mechanism rather than by
+        // environment markers alone. We cannot reliably intersect
+        // user-facing markers with the internal conflict encoding, so skip
+        // the specifier check for this package entirely.
+        if package
+            .fork_markers
+            .iter()
+            .any(|fm| !fm.conflict().is_true())
+        {
+            return MarkerTree::FALSE;
+        }
+        let mut combined = MarkerTree::FALSE;
+        for fork_marker in &package.fork_markers {
+            combined.or(fork_marker.pep508());
+        }
+        combined.and(requirement.marker);
+        combined
+    }
+}
+
+/// Returns `true` if the given requirement applies to the resolved dependency edge.
+///
+/// We first check whether the requirement could be activated by the selected extras, then
+/// intersect its remaining marker with the dependency edge marker. This mirrors the marker-aware
+/// traversal used elsewhere when walking lockfile edges.
+fn requirement_applies_to_dependency(
+    requirement: &Requirement,
+    dep: &Dependency,
+    active_extras: &[ExtraName],
+) -> bool {
+    if requirement.name != dep.package_id.name {
+        return false;
+    }
+    // When the dependency edge involves conflict extras/groups, the multiple
+    // versions are separated by the conflict mechanism rather than by
+    // environment markers alone. The pep508 projection strips the conflict
+    // encoding, so marker disjointness cannot be reliably determined. Skip
+    // these edges — correctness is guaranteed by the resolver.
+    if !dep.complexified_marker.conflict().is_true() {
+        return false;
+    }
+    if !requirement.marker.evaluate_extras(active_extras) {
+        return false;
+    }
+    let marker = requirement.marker.simplify_extras(active_extras);
+    !marker.is_disjoint(dep.complexified_marker.pep508())
+}
+
+/// Check whether a resolved dependency edge violates any of the given requirement specifiers.
+///
+/// Returns `Some(SatisfiesResult)` if a violation is found, `None` otherwise.
+fn check_dep_against_requirements<'lock, 'a>(
+    dep: &'lock Dependency,
+    requirements: impl Iterator<Item = &'a Requirement>,
+    active_extras: &[ExtraName],
+) -> Option<SatisfiesResult<'lock>> {
+    let Some(version) = &dep.package_id.version else {
+        return None;
+    };
+    for requirement in requirements {
+        if !requirement_applies_to_dependency(requirement, dep, active_extras) {
+            continue;
+        }
+        let RequirementSource::Registry { specifier, .. } = &requirement.source else {
+            continue;
+        };
+        if specifier.is_empty() {
+            continue;
+        }
+        if !specifier.contains(version) {
+            return Some(SatisfiesResult::LockedVersionViolatesSpecifier(
+                &dep.package_id.name,
+                version,
+                specifier.clone(),
+            ));
+        }
+    }
+    None
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -2315,6 +2486,8 @@ pub enum SatisfiesResult<'lock> {
         BTreeMap<GroupName, BTreeSet<Requirement>>,
         BTreeMap<GroupName, BTreeSet<Requirement>>,
     ),
+    /// A locked version violates a requirement or constraint specifier.
+    LockedVersionViolatesSpecifier(&'lock PackageName, &'lock Version, VersionSpecifiers),
     /// The lockfile is missing a version.
     MissingVersion(&'lock PackageName),
 }

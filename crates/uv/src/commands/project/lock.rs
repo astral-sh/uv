@@ -1420,6 +1420,12 @@ impl ValidatedLock {
                 }
                 Ok(Self::Preferable(lock))
             }
+            SatisfiesResult::LockedVersionViolatesSpecifier(name, version, specifier) => {
+                debug!(
+                    "Resolving despite existing lockfile due to locked version violating specifier: `{name}=={version}` does not satisfy `{specifier}`"
+                );
+                Ok(Self::Preferable(lock))
+            }
             SatisfiesResult::MissingVersion(name) => {
                 debug!("Resolving despite existing lockfile due to missing version: `{name}`");
                 Ok(Self::Preferable(lock))
