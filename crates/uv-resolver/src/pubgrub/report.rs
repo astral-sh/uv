@@ -36,13 +36,10 @@ use crate::{
 
 #[derive(Debug)]
 pub(crate) struct PubGrubReportFormatter<'a> {
-    /// The versions that were included for each package after `exclude-newer` filtering.
-    /// Used in error messages to display version ranges and availability.
+    /// See [`crate::error::NoSolutionError::included_versions`].
     pub(crate) included_versions: &'a FxHashMap<PackageName, BTreeSet<Version>>,
 
-    /// Versions available for resolver error reporting (optionally filtered by
-    /// [`EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF`] for deterministic test output).
-    /// Used to identify versions excluded by the effective `exclude-newer` cutoff.
+    /// See [`crate::error::NoSolutionError::available_versions`].
     pub(crate) available_versions: &'a FxHashMap<PackageName, BTreeSet<Version>>,
 
     /// The Python requirement for the resolution.
@@ -97,7 +94,7 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                 } else {
                     let complement = set.complement();
                     let range =
-                        // Note that sometimes we do not have a range of available versions, e.g.,
+                        // Note that sometimes we do not have a range of included versions, e.g.,
                         // when a package is from a non-registry source. In that case, we cannot
                         // perform further simplification of the range.
                         if let Some(included_versions) = package.name().and_then(|name| self.included_versions.get(name)) {

@@ -162,12 +162,17 @@ pub type ErrorTree = DerivationTree<PubGrubPackage, Range<Version>, UnavailableR
 pub struct NoSolutionError {
     error: pubgrub::NoSolutionError<UvDependencyProvider>,
     index: InMemoryIndex,
-    /// The versions that were included for each package after `exclude-newer` filtering.
-    /// Used in error messages to display version ranges and availability.
+    /// The versions that were available for each package after `exclude-newer` filtering.
+    ///
+    /// For versions available before filtering, see [`NoSolutionError::available_versions`].
     included_versions: FxHashMap<PackageName, BTreeSet<Version>>,
-    /// Versions available for resolver error reporting (optionally filtered by
-    /// [`EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF`] for deterministic test output).
-    /// Used to identify versions excluded by the effective `exclude-newer` cutoff.
+    /// The versions available for each package.
+    ///
+    /// These version sets are not filtered by `exclude-newer`. See
+    /// [`NoSolutionError::included_versions`] instead if filtered versions are needed.
+    ///
+    /// These versions are filtered by [`EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF`] for
+    /// deterministic output in tests.
     available_versions: FxHashMap<PackageName, BTreeSet<Version>>,
     available_indexes: FxHashMap<PackageName, BTreeSet<IndexUrl>>,
     selector: CandidateSelector,

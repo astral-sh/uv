@@ -2725,9 +2725,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let mut included_versions = FxHashMap::default();
         let mut available_versions = FxHashMap::default();
 
-        // If set, apply an `exclude-newer` filter to versions used in resolver
-        // error reporting. This is used in the test suite to keep snapshots
-        // deterministic.
         let available_version_cutoff: Option<ExcludeNewerValue> =
             std::env::var(EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF)
                 .ok()
@@ -2736,10 +2733,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         for package in err.packages() {
             let Some(name) = package.name() else { continue };
             if !visited.contains(name) {
-                // Avoid including available versions for packages that exist in the derivation
+                // Avoid including version data for packages that exist in the derivation
                 // tree, but were never visited during resolution. We _may_ have metadata for
                 // these packages, but it's non-deterministic, and omitting them ensures that
-                // we represent the self of the resolver at the time of failure.
+                // we represent the state of the resolver at the time of failure.
                 continue;
             }
             let versions_response = if let Some(index) = fork_indexes.get(name) {
@@ -2785,9 +2782,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                             // Available versions are used in resolver error reporting,
                             // and can be bounded by a test-only cutoff for deterministic
-                            // snapshots. Files with missing upload times are treated as
-                            // *not* excluded, since we only filter versions we can
-                            // confirm were published after the cutoff.
+                            // snapshots. Files with missing upload times are *not*
+                            // excluded, since we only filter versions we can confirm
+                            // were published after the cutoff.
                             let excluded_from_available = || {
                                 let Some(ref exclude_newer) = available_version_cutoff else {
                                     return false;
