@@ -525,8 +525,8 @@ class PyodideFinder(Finder):
 
         results = {}
         for release in releases:
-            # Skip prereleases — Pyodide's maintainers do not intend for
-            # prerelease xbuildenvs to be installed via uv.
+            # Skip prereleases
+            # https://github.com/astral-sh/uv/pull/18958#discussion_r3082735525
             if release.get("prerelease"):
                 continue
 
