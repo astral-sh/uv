@@ -525,6 +525,11 @@ class PyodideFinder(Finder):
 
         results = {}
         for release in releases:
+            # Skip prereleases
+            # https://github.com/astral-sh/uv/pull/18958#discussion_r3082735525
+            if release.get("prerelease"):
+                continue
+
             pyodide_version = release["tag_name"]
             meta = metadata.get(pyodide_version, None)
             if meta is None:
