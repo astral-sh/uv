@@ -525,18 +525,14 @@ class PyodideFinder(Finder):
 
         results = {}
         for release in releases:
+            # Skip prereleases
+            # https://github.com/astral-sh/uv/pull/18958#discussion_r3082735525
+            if release.get("prerelease"):
+                continue
+
             pyodide_version = release["tag_name"]
             meta = metadata.get(pyodide_version, None)
             if meta is None:
-                continue
-
-            # Skip prereleases — Pyodide's maintainers do not intend for
-            # prerelease xbuildenvs to be installed via uv.  We detect this
-            # from the tag name itself (e.g. `314.0.0a1`) rather than from
-            # the GitHub `prerelease` flag so we don't depend on it being
-            # set correctly.
-            pyodide_parsed = Version.from_str(pyodide_version)
-            if pyodide_parsed.prerelease:
                 continue
 
             python_version = Version.from_str(meta["python_version"])
