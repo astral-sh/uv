@@ -952,7 +952,17 @@ mod tests {
         server
     }
 
+    fn init_preview() {
+        static INIT: std::sync::OnceLock<()> = std::sync::OnceLock::new();
+        INIT.get_or_init(|| {
+            uv_preview::set(uv_preview::Preview::default())
+                .expect("preview state should initialize once for tests");
+            uv_preview::finalize().expect("preview state should finalize once for tests");
+        });
+    }
+
     fn test_client_builder() -> reqwest_middleware::ClientBuilder {
+        init_preview();
         reqwest_middleware::ClientBuilder::new(
             Client::builder()
                 .build()
@@ -962,7 +972,6 @@ mod tests {
 
     #[test(tokio::test)]
     async fn test_no_credentials() -> Result<(), Error> {
-        let _preview = uv_preview::test::with_features(&[]);
         let server = start_test_server("user", "password").await;
         let client = test_client_builder()
             .with(AuthMiddleware::new().with_cache(CredentialsCache::new()))
@@ -992,7 +1001,6 @@ mod tests {
     /// Without seeding the cache, authenticated requests are not cached
     #[test(tokio::test)]
     async fn test_credentials_in_url_no_seed() -> Result<(), Error> {
-        let _preview = uv_preview::test::with_features(&[]);
         let username = "user";
         let password = "password";
 
@@ -1039,7 +1047,6 @@ mod tests {
 
     #[test(tokio::test)]
     async fn test_credentials_in_url_seed() -> Result<(), Error> {
-        let _preview = uv_preview::test::with_features(&[]);
         let username = "user";
         let password = "password";
 
@@ -1094,7 +1101,6 @@ mod tests {
 
     #[test(tokio::test)]
     async fn test_credentials_in_url_username_only() -> Result<(), Error> {
-        let _preview = uv_preview::test::with_features(&[]);
         let username = "user";
         let password = "";
 
@@ -1155,7 +1161,6 @@ mod tests {
 
     #[test(tokio::test)]
     async fn test_netrc_file_default_host() -> Result<(), Error> {
-        let _preview = uv_preview::test::with_features(&[]);
         let username = "user";
         let password = "password";
 
@@ -1197,7 +1202,6 @@ mod tests {
 
     #[test(tokio::test)]
     async fn test_netrc_file_matching_host() -> Result<(), Error> {
-        let _preview = uv_preview::test::with_features(&[]);
         let username = "user";
         let password = "password";
         let server = start_test_server(username, password).await;
@@ -1246,7 +1250,6 @@ mod tests {
 
     #[test(tokio::test)]
     async fn test_netrc_file_mismatched_host() -> Result<(), Error> {
-        let _preview = uv_preview::test::with_features(&[]);
         let username = "user";
         let password = "password";
         let server = start_test_server(username, password).await;
@@ -1287,7 +1290,6 @@ mod tests {
 
     #[test(tokio::test)]
     async fn test_netrc_file_mismatched_username() -> Result<(), Error> {
-        let _preview = uv_preview::test::with_features(&[]);
         let username = "user";
         let password = "password";
         let server = start_test_server(username, password).await;
@@ -1331,7 +1333,6 @@ mod tests {
 
     #[test(tokio::test)]
     async fn test_keyring() -> Result<(), Error> {
-        let _preview = uv_preview::test::with_features(&[]);
         let username = "user";
         let password = "password";
         let server = start_test_server(username, password).await;
@@ -1397,7 +1398,6 @@ mod tests {
 
     #[test(tokio::test)]
     async fn test_keyring_always_authenticate() -> Result<(), Error> {
-        let _preview = uv_preview::test::with_features(&[]);
         let username = "user";
         let password = "password";
         let server = start_test_server(username, password).await;
@@ -1463,7 +1463,6 @@ mod tests {
     /// actually running.
     #[test(tokio::test)]
     async fn test_keyring_includes_non_standard_port() -> Result<(), Error> {
-        let _preview = uv_preview::test::with_features(&[]);
         let username = "user";
         let password = "password";
         let server = start_test_server(username, password).await;
@@ -1495,7 +1494,6 @@ mod tests {
 
     #[test(tokio::test)]
     async fn test_credentials_in_keyring_seed() -> Result<(), Error> {
-        let _preview = uv_preview::test::with_features(&[]);
         let username = "user";
         let password = "password";
 
@@ -1545,7 +1543,6 @@ mod tests {
 
     #[test(tokio::test)]
     async fn test_credentials_in_url_multiple_realms() -> Result<(), Error> {
-        let _preview = uv_preview::test::with_features(&[]);
         let username_1 = "user1";
         let password_1 = "password1";
         let server_1 = start_test_server(username_1, password_1).await;
@@ -1613,7 +1610,6 @@ mod tests {
 
     #[test(tokio::test)]
     async fn test_credentials_from_keyring_multiple_realms() -> Result<(), Error> {
-        let _preview = uv_preview::test::with_features(&[]);
         let username_1 = "user1";
         let password_1 = "password1";
         let server_1 = start_test_server(username_1, password_1).await;
@@ -1700,7 +1696,6 @@ mod tests {
 
     #[test(tokio::test)]
     async fn test_credentials_in_url_mixed_authentication_in_realm() -> Result<(), Error> {
-        let _preview = uv_preview::test::with_features(&[]);
         let username_1 = "user1";
         let password_1 = "password1";
         let username_2 = "user2";
@@ -1824,7 +1819,6 @@ mod tests {
 
     #[test(tokio::test)]
     async fn test_credentials_from_keyring_mixed_authentication_in_realm() -> Result<(), Error> {
-        let _preview = uv_preview::test::with_features(&[]);
         let username_1 = "user1";
         let password_1 = "password1";
         let username_2 = "user2";
@@ -1978,7 +1972,6 @@ mod tests {
     #[test(tokio::test)]
     async fn test_credentials_from_keyring_mixed_authentication_in_realm_same_username()
     -> Result<(), Error> {
-        let _preview = uv_preview::test::with_features(&[]);
         let username = "user";
         let password_1 = "password1";
         let password_2 = "password2";
@@ -2079,7 +2072,6 @@ mod tests {
     #[test(tokio::test)]
     async fn test_credentials_from_keyring_mixed_authentication_different_indexes_same_realm()
     -> Result<(), Error> {
-        let _preview = uv_preview::test::with_features(&[]);
         let username = "user";
         let password_1 = "password1";
         let password_2 = "password2";
@@ -2192,7 +2184,6 @@ mod tests {
     #[test(tokio::test)]
     async fn test_credentials_from_keyring_shared_authentication_different_indexes_same_realm()
     -> Result<(), Error> {
-        let _preview = uv_preview::test::with_features(&[]);
         let username = "user";
         let password = "password";
 
@@ -2288,7 +2279,6 @@ mod tests {
     /// authenticated requests with the correct credentials.
     #[test(tokio::test)]
     async fn test_auth_policy_always_with_credentials() -> Result<(), Error> {
-        let _preview = uv_preview::test::with_features(&[]);
         let username = "user";
         let password = "password";
 
@@ -2348,7 +2338,6 @@ mod tests {
     /// unauthenticated requests are supported.
     #[test(tokio::test)]
     async fn test_auth_policy_always_unauthenticated() -> Result<(), Error> {
-        let _preview = uv_preview::test::with_features(&[]);
         let server = MockServer::start().await;
 
         Mock::given(method("GET"))
@@ -2386,7 +2375,6 @@ mod tests {
     /// an endpoint requires authentication.
     #[test(tokio::test)]
     async fn test_auth_policy_never_with_credentials() -> Result<(), Error> {
-        let _preview = uv_preview::test::with_features(&[]);
         let username = "user";
         let password = "password";
 
@@ -2435,7 +2423,6 @@ mod tests {
     /// unauthenticated requests succeed.
     #[test(tokio::test)]
     async fn test_auth_policy_never_unauthenticated() -> Result<(), Error> {
-        let _preview = uv_preview::test::with_features(&[]);
         let server = MockServer::start().await;
 
         Mock::given(method("GET"))
@@ -2502,7 +2489,6 @@ mod tests {
 
     #[test(tokio::test)]
     async fn test_text_store_basic_auth() -> Result<(), Error> {
-        let _preview = uv_preview::test::with_features(&[]);
         let username = "user";
         let password = "password";
 
@@ -2535,7 +2521,6 @@ mod tests {
 
     #[test(tokio::test)]
     async fn test_text_store_disabled() -> Result<(), Error> {
-        let _preview = uv_preview::test::with_features(&[]);
         let username = "user";
         let password = "password";
         let server = start_test_server(username, password).await;
@@ -2559,7 +2544,6 @@ mod tests {
 
     #[test(tokio::test)]
     async fn test_text_store_by_username() -> Result<(), Error> {
-        let _preview = uv_preview::test::with_features(&[]);
         let username = "testuser";
         let password = "testpass";
         let wrong_username = "wronguser";
@@ -2639,7 +2623,6 @@ mod tests {
     /// should be recognized as having credentials and authenticate successfully.
     #[test(tokio::test)]
     async fn test_credentials_in_url_empty_username() -> Result<(), Error> {
-        let _preview = uv_preview::test::with_features(&[]);
         let username = "";
         let password = "token";
 

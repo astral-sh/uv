@@ -9431,7 +9431,7 @@ fn system_certs_config_aliases() -> anyhow::Result<()> {
     windows,
     ignore = "Configuration tests are not yet supported on Windows"
 )]
-fn system_certs_default_preview_feature() {
+fn system_certs_default_preview_feature() -> anyhow::Result<()> {
     let context = uv_test::test_context!("3.12");
 
     // With the preview feature enabled, system_certs defaults to true.
@@ -9688,6 +9688,30 @@ fn system_certs_default_preview_feature() {
     ----- stderr -----
     "#
     );
+
+    // Environment variables should still be able to disable system certificates.
+    let output = add_shared_args(context.version())
+        .arg("--show-settings")
+        .arg("--preview-features")
+        .arg("system-certs-default")
+        .env(EnvVars::UV_SYSTEM_CERTS, "false")
+        .output()?;
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout)?;
+    assert!(stdout.contains("system_certs: false,"));
+
+    // The deprecated alias should behave the same way.
+    let output = add_shared_args(context.version())
+        .arg("--show-settings")
+        .arg("--preview-features")
+        .arg("system-certs-default")
+        .env(EnvVars::UV_NATIVE_TLS, "false")
+        .output()?;
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout)?;
+    assert!(stdout.contains("system_certs: false,"));
+
+    Ok(())
 }
 
 /// Track the interactions between `upgrade` and `upgrade-package` across the `uv pip` CLI and a

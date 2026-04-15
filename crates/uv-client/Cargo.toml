@@ -86,5 +86,5 @@ temp-env = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-rustls = { workspace = true }
-uv-preview = { workspace = true, features = ["testing"] }
+uv-preview = { workspace = true }
 wiremock = { workspace = true }

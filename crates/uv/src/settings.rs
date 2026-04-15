@@ -300,10 +300,10 @@ impl NetworkSettings {
                 value
             } else if let Some(value) = flag(args.native_tls, args.no_native_tls, "native-tls") {
                 value
-            } else if let Some(true) = environment.system_certs.value {
-                true
-            } else if let Some(true) = environment.native_tls.value {
-                true
+            } else if let Some(value) = environment.system_certs.value {
+                value
+            } else if let Some(value) = environment.native_tls.value {
+                value
             } else {
                 workspace
                     .and_then(|workspace| {

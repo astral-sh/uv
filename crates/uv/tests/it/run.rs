@@ -5,11 +5,13 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::{fixture::ChildPath, prelude::*};
 use indoc::indoc;
 use insta::assert_snapshot;
-use predicates::{prelude::predicate, str::contains};
+use predicates::{prelude::PredicateBooleanExt, prelude::predicate, str::contains};
 use std::path::Path;
 use uv_fs::copy_dir_all;
 use uv_python::PYTHON_VERSION_FILENAME;
 use uv_static::EnvVars;
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_test::{TestContext, uv_snapshot};
 
@@ -4775,6 +4777,40 @@ fn run_gui_script_explicit_stdin_unix() -> Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+async fn run_remote_script_auth_does_not_panic_before_preview_finalize() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/script.py"))
+        .respond_with(
+            ResponseTemplate::new(401)
+                .insert_header("WWW-Authenticate", "Basic realm=\"test\"")
+                .set_body_string("!\n"),
+        )
+        .mount(&server)
+        .await;
+
+    let url = format!(
+        "http://user@{}/script.py",
+        server.uri().trim_start_matches("http://")
+    );
+
+    context
+        .run()
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
+        .arg(url)
+        .assert()
+        .failure()
+        .stderr(contains("SyntaxError"))
+        .stderr(
+            predicate::str::contains("The preview configuration has not been initialized").not(),
+        );
+
+    Ok(())
+}
+
 #[test]
 fn run_remote_pep723_script() {
     let context = uv_test::test_context!("3.12").with_filtered_python_names();
@@ -6613,6 +6649,34 @@ fn run_target_workspace_discovery_uv_preview_env() -> Result<()> {
      + foo==1.0.0 (from file://[TEMP_DIR]/project)
      + iniconfig==2.0.0
     ");
+
+    Ok(())
+}
+
+/// Test that script metadata can finalize the global preview state after bootstrap initialization.
+#[test]
+fn run_show_settings_uses_preview_from_script_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("script.py").write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # [tool.uv]
+        # preview = true
+        # ///
+        print('success')
+        "#
+    })?;
+
+    let output = context
+        .run()
+        .arg("--show-settings")
+        .arg("script.py")
+        .output()?;
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout)?;
+    assert!(stdout.contains("TargetWorkspaceDiscovery"));
+    assert!(stdout.contains("SystemCertsDefault"));
 
     Ok(())
 }
