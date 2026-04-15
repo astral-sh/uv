@@ -23,10 +23,10 @@ use tracing::{Level, debug, info, instrument, trace, warn};
 use uv_configuration::{Constraints, Excludes, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
-    BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier, IncompatibleDist,
-    IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations, IndexMetadata,
-    IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement, ResolvedDist,
-    ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
+    BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, ExcludeNewerValue, Identifier,
+    IncompatibleDist, IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations,
+    IndexMetadata, IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement,
+    ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -36,6 +36,7 @@ use uv_pep508::{
 };
 use uv_platform_tags::{IncompatibleTag, Tags};
 use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKindRef, Conflicts, VerbatimParsedUrl};
+use uv_static::EnvVars;
 use uv_torch::TorchStrategy;
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
 use uv_warnings::warn_user_once;
@@ -2721,14 +2722,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         }
 
         let mut available_indexes = FxHashMap::default();
+        let mut included_versions = FxHashMap::default();
         let mut available_versions = FxHashMap::default();
+
+        let available_version_cutoff: Option<ExcludeNewerValue> =
+            std::env::var(EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF)
+                .ok()
+                .and_then(|s| s.parse().ok());
+
         for package in err.packages() {
             let Some(name) = package.name() else { continue };
             if !visited.contains(name) {
-                // Avoid including available versions for packages that exist in the derivation
+                // Avoid including version data for packages that exist in the derivation
                 // tree, but were never visited during resolution. We _may_ have metadata for
                 // these packages, but it's non-deterministic, and omitting them ensures that
-                // we represent the self of the resolver at the time of failure.
+                // we represent the state of the resolver at the time of failure.
                 continue;
             }
             let versions_response = if let Some(index) = fork_indexes.get(name) {
@@ -2740,28 +2748,60 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             };
             if let Some(response) = versions_response {
                 if let VersionsResponse::Found(ref version_maps) = *response {
-                    // Track the available versions, across all indexes.
+                    // Track included and available versions, across all indexes.
                     for version_map in version_maps {
-                        let package_versions = available_versions
+                        let package_included_versions = included_versions
+                            .entry(name.clone())
+                            .or_insert_with(BTreeSet::new);
+                        let package_available_versions = available_versions
                             .entry(name.clone())
                             .or_insert_with(BTreeSet::new);
 
                         for (version, dists) in version_map.iter(&Ranges::full()) {
-                            // Don't show versions removed by excluded-newer in hints.
-                            if let Some(exclude_newer) = version_map.exclude_newer() {
-                                let Some(prioritized_dist) = dists.prioritized_dist() else {
-                                    continue;
+                            // Included versions are those that survive the effective
+                            // `exclude-newer` filter used during resolution. Files with
+                            // missing upload times are treated as excluded (matching
+                            // the resolution behavior in `version_map.rs`).
+                            let excluded_from_included = || {
+                                let Some(exclude_newer) = version_map.exclude_newer() else {
+                                    return false;
                                 };
-                                if prioritized_dist.files().all(|file| {
+                                let Some(prioritized_dist) = dists.prioritized_dist() else {
+                                    return true;
+                                };
+                                prioritized_dist.files().all(|file| {
                                     file.upload_time_utc_ms.is_none_or(|upload_time| {
                                         upload_time >= exclude_newer.timestamp_millis()
                                     })
-                                }) {
-                                    continue;
-                                }
+                                })
+                            };
+
+                            if !excluded_from_included() {
+                                package_included_versions.insert(version.clone());
                             }
 
-                            package_versions.insert(version.clone());
+                            // Available versions are used in resolver error reporting,
+                            // and can be bounded by a test-only cutoff for deterministic
+                            // snapshots. Files with missing upload times are *not*
+                            // excluded, since we only filter versions we can confirm
+                            // were published after the cutoff.
+                            let excluded_from_available = || {
+                                let Some(ref exclude_newer) = available_version_cutoff else {
+                                    return false;
+                                };
+                                let Some(prioritized_dist) = dists.prioritized_dist() else {
+                                    return false;
+                                };
+                                prioritized_dist.files().all(|file| {
+                                    file.upload_time_utc_ms.is_some_and(|upload_time| {
+                                        upload_time >= exclude_newer.timestamp_millis()
+                                    })
+                                })
+                            };
+
+                            if !excluded_from_available() {
+                                package_available_versions.insert(version.clone());
+                            }
                         }
                     }
 
@@ -2781,6 +2821,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         ResolveError::NoSolution(Box::new(NoSolutionError::new(
             err,
             self.index.clone(),
+            included_versions,
             available_versions,
             available_indexes,
             self.selector.clone(),

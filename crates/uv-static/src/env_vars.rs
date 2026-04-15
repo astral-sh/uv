@@ -1174,6 +1174,19 @@ impl EnvVars {
     #[attr_added_in("0.9.8")]
     pub const UV_TEST_CURRENT_TIMESTAMP: &'static str = "UV_TEST_CURRENT_TIMESTAMP";
 
+    /// When set to a timestamp, applies an `exclude-newer` filter to the versions
+    /// considered available from indexes.
+    ///
+    /// This is used for reproducible resolver error messages. When `exclude-newer`
+    /// is used, we retain information about the available versions to improve error
+    /// messages. In contrast, versions published after this cutoff are considered
+    /// non-existent.
+    ///
+    /// Should be set to an RFC 3339 timestamp (e.g., `2024-03-25T00:00:00Z`).
+    #[attr_hidden]
+    #[attr_added_in("next release")]
+    pub const UV_TEST_AVAILABLE_VERSION_CUTOFF: &'static str = "UV_TEST_AVAILABLE_VERSION_CUTOFF";
+
     /// `.env` files from which to load environment variables when executing `uv run` commands.
     #[attr_added_in("0.4.30")]
     pub const UV_ENV_FILE: &'static str = "UV_ENV_FILE";
