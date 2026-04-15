@@ -162,13 +162,13 @@ pub type ErrorTree = DerivationTree<PubGrubPackage, Range<Version>, UnavailableR
 pub struct NoSolutionError {
     error: pubgrub::NoSolutionError<UvDependencyProvider>,
     index: InMemoryIndex,
-    /// The versions that were available for each package after `exclude-newer` filtering.
+    /// The versions that were included for each package after `exclude-newer` filtering.
     /// Used in error messages to display version ranges and availability.
+    included_versions: FxHashMap<PackageName, BTreeSet<Version>>,
+    /// Versions available for resolver error reporting (optionally filtered by
+    /// [`EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF`] for deterministic test output).
+    /// Used to identify versions excluded by the effective `exclude-newer` cutoff.
     available_versions: FxHashMap<PackageName, BTreeSet<Version>>,
-    /// All versions present in the index, without `exclude-newer` filtering (optionally
-    /// filtered by [`EnvVars::UV_INTERNAL__EXCLUDE_NEWER_REPRODUCIBLE`] for deterministic
-    /// test output). Used by the `exclude-newer` hint to detect versions that were filtered.
-    index_versions: FxHashMap<PackageName, BTreeSet<Version>>,
     available_indexes: FxHashMap<PackageName, BTreeSet<IndexUrl>>,
     selector: CandidateSelector,
     python_requirement: PythonRequirement,
@@ -190,8 +190,8 @@ impl NoSolutionError {
     pub(crate) fn new(
         error: pubgrub::NoSolutionError<UvDependencyProvider>,
         index: InMemoryIndex,
+        included_versions: FxHashMap<PackageName, BTreeSet<Version>>,
         available_versions: FxHashMap<PackageName, BTreeSet<Version>>,
-        index_versions: FxHashMap<PackageName, BTreeSet<Version>>,
         available_indexes: FxHashMap<PackageName, BTreeSet<IndexUrl>>,
         selector: CandidateSelector,
         python_requirement: PythonRequirement,
@@ -210,8 +210,8 @@ impl NoSolutionError {
         Self {
             error,
             index,
+            included_versions,
             available_versions,
-            index_versions,
             available_indexes,
             selector,
             python_requirement,
@@ -396,8 +396,8 @@ impl std::fmt::Debug for NoSolutionError {
         let Self {
             error,
             index: _,
+            included_versions,
             available_versions,
-            index_versions,
             available_indexes,
             selector,
             python_requirement,
@@ -415,8 +415,8 @@ impl std::fmt::Debug for NoSolutionError {
         } = self;
         f.debug_struct("NoSolutionError")
             .field("error", error)
+            .field("included_versions", included_versions)
             .field("available_versions", available_versions)
-            .field("index_versions", index_versions)
             .field("available_indexes", available_indexes)
             .field("selector", selector)
             .field("python_requirement", python_requirement)
@@ -441,8 +441,8 @@ impl std::fmt::Display for NoSolutionError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         // Write the derivation report.
         let formatter = PubGrubReportFormatter {
+            included_versions: &self.included_versions,
             available_versions: &self.available_versions,
-            index_versions: &self.index_versions,
             python_requirement: &self.python_requirement,
             workspace_members: &self.workspace_members,
             tags: self.tags.as_ref(),
@@ -471,7 +471,7 @@ impl std::fmt::Display for NoSolutionError {
 
         simplify_derivation_tree_ranges(
             &mut tree,
-            &self.available_versions,
+            &self.included_versions,
             &self.selector,
             &self.env,
         );
@@ -1314,11 +1314,11 @@ impl std::fmt::Display for NoSolutionHeader {
     }
 }
 
-/// Given a [`DerivationTree`], simplify version ranges using the available versions for each
+/// Given a [`DerivationTree`], simplify version ranges using the included versions for each
 /// package.
 fn simplify_derivation_tree_ranges(
     tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
-    available_versions: &FxHashMap<PackageName, BTreeSet<Version>>,
+    included_versions: &FxHashMap<PackageName, BTreeSet<Version>>,
     candidate_selector: &CandidateSelector,
     resolver_environment: &ResolverEnvironment,
 ) {
@@ -1328,7 +1328,7 @@ fn simplify_derivation_tree_ranges(
                 if let Some(simplified) = simplify_range(
                     versions1,
                     package1,
-                    available_versions,
+                    included_versions,
                     candidate_selector,
                     resolver_environment,
                 ) {
@@ -1337,7 +1337,7 @@ fn simplify_derivation_tree_ranges(
                 if let Some(simplified) = simplify_range(
                     versions2,
                     package2,
-                    available_versions,
+                    included_versions,
                     candidate_selector,
                     resolver_environment,
                 ) {
@@ -1348,7 +1348,7 @@ fn simplify_derivation_tree_ranges(
                 if let Some(simplified) = simplify_range(
                     versions,
                     package,
-                    available_versions,
+                    included_versions,
                     candidate_selector,
                     resolver_environment,
                 ) {
@@ -1359,7 +1359,7 @@ fn simplify_derivation_tree_ranges(
                 if let Some(simplified) = simplify_range(
                     versions,
                     package,
-                    available_versions,
+                    included_versions,
                     candidate_selector,
                     resolver_environment,
                 ) {
@@ -1372,13 +1372,13 @@ fn simplify_derivation_tree_ranges(
             // Recursively simplify both sides of the tree
             simplify_derivation_tree_ranges(
                 Arc::make_mut(&mut derived.cause1),
-                available_versions,
+                included_versions,
                 candidate_selector,
                 resolver_environment,
             );
             simplify_derivation_tree_ranges(
                 Arc::make_mut(&mut derived.cause2),
-                available_versions,
+                included_versions,
                 candidate_selector,
                 resolver_environment,
             );
@@ -1386,13 +1386,13 @@ fn simplify_derivation_tree_ranges(
             // Simplify the terms
             derived.terms = std::mem::take(&mut derived.terms)
                 .into_iter()
-                .map(|(pkg, term)| {
+                .map(|(package, term)| {
                     let term = match term {
                         Term::Positive(versions) => Term::Positive(
                             simplify_range(
                                 &versions,
-                                &pkg,
-                                available_versions,
+                                &package,
+                                included_versions,
                                 candidate_selector,
                                 resolver_environment,
                             )
@@ -1401,34 +1401,34 @@ fn simplify_derivation_tree_ranges(
                         Term::Negative(versions) => Term::Negative(
                             simplify_range(
                                 &versions,
-                                &pkg,
-                                available_versions,
+                                &package,
+                                included_versions,
                                 candidate_selector,
                                 resolver_environment,
                             )
                             .unwrap_or(versions),
                         ),
                     };
-                    (pkg, term)
+                    (package, term)
                 })
                 .collect();
         }
     }
 }
 
-/// Helper function to simplify a version range using available versions for a package.
+/// Helper function to simplify a version range using included versions for a package.
 ///
 /// If the range cannot be simplified, `None` is returned.
 fn simplify_range(
     range: &Range<Version>,
     package: &PubGrubPackage,
-    available_versions: &FxHashMap<PackageName, BTreeSet<Version>>,
+    included_versions: &FxHashMap<PackageName, BTreeSet<Version>>,
     candidate_selector: &CandidateSelector,
     resolver_environment: &ResolverEnvironment,
 ) -> Option<Range<Version>> {
-    // If there's not a package name or available versions, we can't simplify anything
+    // If there's not a package name or included versions, we can't simplify anything
     let name = package.name()?;
-    let versions = available_versions.get(name)?;
+    let versions = included_versions.get(name)?;
 
     // If this is a full range, there's nothing to simplify
     if range == &Range::full() {

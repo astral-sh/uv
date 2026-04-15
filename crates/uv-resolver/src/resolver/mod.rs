@@ -2722,14 +2722,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         }
 
         let mut available_indexes = FxHashMap::default();
+        let mut included_versions = FxHashMap::default();
         let mut available_versions = FxHashMap::default();
-        let mut index_versions = FxHashMap::default();
 
-        // If set, apply an `exclude-newer` filter to the versions visible to the
-        // `exclude-newer` resolver hint. This is used in the test suite to keep
-        // snapshots deterministic.
-        let hint_exclude_newer: Option<ExcludeNewerValue> =
-            std::env::var(EnvVars::UV_INTERNAL__EXCLUDE_NEWER_REPRODUCIBLE)
+        // If set, apply an `exclude-newer` filter to versions used in resolver
+        // error reporting. This is used in the test suite to keep snapshots
+        // deterministic.
+        let available_version_cutoff: Option<ExcludeNewerValue> =
+            std::env::var(EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF)
                 .ok()
                 .and_then(|s| s.parse().ok());
 
@@ -2751,20 +2751,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             };
             if let Some(response) = versions_response {
                 if let VersionsResponse::Found(ref version_maps) = *response {
-                    // Track the available versions, across all indexes.
+                    // Track included and available versions, across all indexes.
                     for version_map in version_maps {
-                        let package_versions = available_versions
+                        let package_included_versions = included_versions
                             .entry(name.clone())
                             .or_insert_with(BTreeSet::new);
-                        let package_index_versions = index_versions
+                        let package_available_versions = available_versions
                             .entry(name.clone())
                             .or_insert_with(BTreeSet::new);
 
                         for (version, dists) in version_map.iter(&Ranges::full()) {
-                            // Don't show versions removed by excluded-newer in hints.
-                            // Files with missing upload times are treated as excluded
-                            // (matching the resolution behavior in `version_map.rs`).
-                            let excluded_from_available = || {
+                            // Included versions are those that survive the effective
+                            // `exclude-newer` filter used during resolution. Files with
+                            // missing upload times are treated as excluded (matching
+                            // the resolution behavior in `version_map.rs`).
+                            let excluded_from_included = || {
                                 let Some(exclude_newer) = version_map.exclude_newer() else {
                                     return false;
                                 };
@@ -2778,17 +2779,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 })
                             };
 
-                            if !excluded_from_available() {
-                                package_versions.insert(version.clone());
+                            if !excluded_from_included() {
+                                package_included_versions.insert(version.clone());
                             }
 
-                            // Track all versions visible to the exclude-newer hint,
-                            // optionally filtered by the hint-specific exclude-newer.
-                            // Files with missing upload times are treated as *not*
-                            // excluded, since we only want to filter versions we can
+                            // Available versions are used in resolver error reporting,
+                            // and can be bounded by a test-only cutoff for deterministic
+                            // snapshots. Files with missing upload times are treated as
+                            // *not* excluded, since we only filter versions we can
                             // confirm were published after the cutoff.
-                            let excluded_from_index = || {
-                                let Some(ref exclude_newer) = hint_exclude_newer else {
+                            let excluded_from_available = || {
+                                let Some(ref exclude_newer) = available_version_cutoff else {
                                     return false;
                                 };
                                 let Some(prioritized_dist) = dists.prioritized_dist() else {
@@ -2801,8 +2802,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 })
                             };
 
-                            if !excluded_from_index() {
-                                package_index_versions.insert(version.clone());
+                            if !excluded_from_available() {
+                                package_available_versions.insert(version.clone());
                             }
                         }
                     }
@@ -2823,8 +2824,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         ResolveError::NoSolution(Box::new(NoSolutionError::new(
             err,
             self.index.clone(),
+            included_versions,
             available_versions,
-            index_versions,
             available_indexes,
             self.selector.clone(),
             self.python_requirement.clone(),

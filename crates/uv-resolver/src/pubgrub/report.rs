@@ -36,15 +36,14 @@ use crate::{
 
 #[derive(Debug)]
 pub(crate) struct PubGrubReportFormatter<'a> {
-    /// The versions that were available for each package after `exclude-newer` filtering.
+    /// The versions that were included for each package after `exclude-newer` filtering.
     /// Used in error messages to display version ranges and availability.
-    pub(crate) available_versions: &'a FxHashMap<PackageName, BTreeSet<Version>>,
+    pub(crate) included_versions: &'a FxHashMap<PackageName, BTreeSet<Version>>,
 
-    /// All versions present in the index for each package, without `exclude-newer` filtering
-    /// (optionally filtered by [`EnvVars::UV_INTERNAL__EXCLUDE_NEWER_REPRODUCIBLE`] for
-    /// deterministic test output). Used by the `exclude-newer` hint to detect versions that
-    /// were filtered.
-    pub(crate) index_versions: &'a FxHashMap<PackageName, BTreeSet<Version>>,
+    /// Versions available for resolver error reporting (optionally filtered by
+    /// [`EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF`] for deterministic test output).
+    /// Used to identify versions excluded by the effective `exclude-newer` cutoff.
+    pub(crate) available_versions: &'a FxHashMap<PackageName, BTreeSet<Version>>,
 
     /// The Python requirement for the resolution.
     pub(crate) python_requirement: &'a PythonRequirement,
@@ -101,8 +100,8 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                         // Note that sometimes we do not have a range of available versions, e.g.,
                         // when a package is from a non-registry source. In that case, we cannot
                         // perform further simplification of the range.
-                        if let Some(available_versions) = package.name().and_then(|name| self.available_versions.get(name)) {
-                            update_availability_range(&complement, available_versions)
+                        if let Some(included_versions) = package.name().and_then(|name| self.included_versions.get(name)) {
+                            update_availability_range(&complement, included_versions)
                         } else {
                             complement
                         };
@@ -672,18 +671,18 @@ impl PubGrubReportFormatter<'_> {
                     };
 
                     if let Some((exclude_newer, source)) = exclude_newer {
-                        // Check if there are no available versions in the requested
-                        // range, but the index does have versions in that range (i.e.,
-                        // they were filtered out by `exclude-newer`).
-                        let no_available_in_set = self
-                            .available_versions
+                        // Check if there are no included versions in the requested
+                        // range, but there are still available versions in that range
+                        // (i.e., they were filtered out by `exclude-newer`).
+                        let no_included_in_set = self
+                            .included_versions
                             .get(name)
                             .is_none_or(|versions| !versions.iter().any(|v| set.contains(v)));
-                        let index_has_versions_in_set = self
-                            .index_versions
+                        let available_has_versions_in_set = self
+                            .available_versions
                             .get(name)
                             .is_some_and(|versions| versions.iter().any(|v| set.contains(v)));
-                        if no_available_in_set && index_has_versions_in_set {
+                        if no_included_in_set && available_has_versions_in_set {
                             let version_hint_set =
                                 inherited_exclude_newer_ranges.get(name).map_or_else(
                                     || set.clone(),
@@ -860,8 +859,8 @@ impl PubGrubReportFormatter<'_> {
         exclude_newer_ranges
     }
 
-    /// Return the latest version in `set` that is visible without the hint-specific
-    /// `exclude-newer` filtering, along with the earliest known publish date for that version.
+    /// Return the latest version in `set` that is available for resolver error reporting,
+    /// along with the earliest known publish date for that version.
     fn exclude_newer_version_hint(
         &self,
         name: &PackageName,
@@ -869,7 +868,7 @@ impl PubGrubReportFormatter<'_> {
         index: &InMemoryIndex,
         fork_indexes: &ForkIndexes,
     ) -> Option<ExcludeNewerVersionDetail> {
-        let version = self.index_versions.get(name).and_then(|versions| {
+        let version = self.available_versions.get(name).and_then(|versions| {
             versions
                 .iter()
                 .rfind(|version| set.contains(version))
@@ -1193,7 +1192,7 @@ impl PubGrubReportFormatter<'_> {
                     });
                 }
             }
-        } else if let Some(version) = self.available_versions.get(name).and_then(|versions| {
+        } else if let Some(version) = self.included_versions.get(name).and_then(|versions| {
             versions
                 .iter()
                 .rev()
