@@ -431,6 +431,7 @@ impl GitCheckout {
             .env_remove(EnvVars::GIT_INDEX_FILE)
             .env_remove(EnvVars::GIT_OBJECT_DIRECTORY)
             .env_remove(EnvVars::GIT_ALTERNATE_OBJECT_DIRECTORIES)
+            .env_remove(EnvVars::GIT_COMMON_DIR)
             .exec_with_output();
 
         if let Err(e) = res {
@@ -447,6 +448,7 @@ impl GitCheckout {
                 .env_remove(EnvVars::GIT_INDEX_FILE)
                 .env_remove(EnvVars::GIT_OBJECT_DIRECTORY)
                 .env_remove(EnvVars::GIT_ALTERNATE_OBJECT_DIRECTORIES)
+                .env_remove(EnvVars::GIT_COMMON_DIR)
                 .exec_with_output()?;
         }
 
@@ -525,6 +527,7 @@ impl GitCheckout {
             .env_remove(EnvVars::GIT_INDEX_FILE)
             .env_remove(EnvVars::GIT_OBJECT_DIRECTORY)
             .env_remove(EnvVars::GIT_ALTERNATE_OBJECT_DIRECTORIES)
+            .env_remove(EnvVars::GIT_COMMON_DIR)
             .cwd(&self.repo.path)
             .exec_with_output()
             .map(drop)?;
