@@ -2058,8 +2058,6 @@ fn update_availability_range(
         versions.contains(&version)
     }
 
-    let mut new_range = Range::empty();
-
     // Construct an available range to help guide simplification. Note this is not strictly correct,
     // as the available range should have many holes in it. However, for this use-case it should be
     // okay — we just may avoid simplifying some segments _inside_ the available range.
@@ -2084,61 +2082,53 @@ fn update_availability_range(
             (None, None) => return Range::empty(),
         };
 
-    for segment in range.iter() {
-        let (lower, upper) = segment;
-        let segment_range = Range::from_range_bounds((lower.clone(), upper.clone()));
+    range
+        .iter()
+        .filter_map(|(lower, upper)| {
+            let segment_range = Range::from_range_bounds((lower.clone(), upper.clone()));
 
-        // Drop the segment if it's disjoint with the available range, e.g., if the segment is
-        // `foo>999`, and the available versions are all `<10` it's useless to show.
-        if segment_range.is_disjoint(&available_range) {
-            continue;
-        }
+            // Drop the segment if it's disjoint with the available range, e.g., if the segment is
+            // `foo>999`, and the available versions are all `<10` it's useless to show.
+            if segment_range.is_disjoint(&available_range) {
+                return None;
+            }
 
-        // Replace the segment if it's captured by the available range, e.g., if the segment is
-        // `foo<1000` and the available versions are all `<10` we can simplify to `foo<10`.
-        if available_range.subset_of(&segment_range) {
-            // If the segment only has a lower or upper bound, only take the relevant part of the
-            // available range. This avoids replacing `foo<100` with `foo>1,<2`, instead using
-            // `foo<2` to avoid extra noise.
-            if matches!(lower, Bound::Unbounded) {
-                new_range = new_range.union(&Range::from_range_bounds((
-                    Bound::Unbounded,
-                    Bound::Included(last_available.clone()),
-                )));
-            } else if matches!(upper, Bound::Unbounded) {
-                new_range = new_range.union(&Range::from_range_bounds((
+            // Replace the segment if it's captured by the available range, e.g., if the segment is
+            // `foo<1000` and the available versions are all `<10` we can simplify to `foo<10`.
+            if available_range.subset_of(&segment_range) {
+                // If the segment only has a lower or upper bound, only take the relevant part of
+                // the available range. This avoids replacing `foo<100` with `foo>1,<2`, instead
+                // using `foo<2` to avoid extra noise.
+                if matches!(lower, Bound::Unbounded) {
+                    return Some((Bound::Unbounded, Bound::Included(last_available.clone())));
+                } else if matches!(upper, Bound::Unbounded) {
+                    return Some((Bound::Included(first_available.clone()), Bound::Unbounded));
+                }
+                return Some((
                     Bound::Included(first_available.clone()),
-                    Bound::Unbounded,
-                )));
-            } else {
-                new_range = new_range.union(&available_range);
+                    Bound::Included(last_available.clone()),
+                ));
             }
-            continue;
-        }
 
-        // If the bound is inclusive, and the version is _not_ available, change it to an exclusive
-        // bound to avoid confusion, e.g., if the segment is `foo<=10` and the available versions
-        // do not include `foo 10`, we should instead say `foo<10`.
-        let lower = match lower {
-            Bound::Included(version) if !version_contained_in(version, available_versions) => {
-                Bound::Excluded(version.clone())
-            }
-            _ => (*lower).clone(),
-        };
-        let upper = match upper {
-            Bound::Included(version) if !version_contained_in(version, available_versions) => {
-                Bound::Excluded(version.clone())
-            }
-            _ => (*upper).clone(),
-        };
+            // If the bound is inclusive, and the version is _not_ available, change it to an
+            // exclusive bound to avoid confusion, e.g., if the segment is `foo<=10` and the
+            // available versions do not include `foo 10`, we should instead say `foo<10`.
+            let lower = match lower {
+                Bound::Included(version) if !version_contained_in(version, available_versions) => {
+                    Bound::Excluded(version.clone())
+                }
+                _ => (*lower).clone(),
+            };
+            let upper = match upper {
+                Bound::Included(version) if !version_contained_in(version, available_versions) => {
+                    Bound::Excluded(version.clone())
+                }
+                _ => (*upper).clone(),
+            };
 
-        // Note this repeated-union construction is not particularly efficient, but there's not
-        // better API exposed by PubGrub. Since we're just generating an error message, it's
-        // probably okay, but we should investigate a better upstream API.
-        new_range = new_range.union(&Range::from_range_bounds((lower, upper)));
-    }
-
-    new_range
+            Some((lower, upper))
+        })
+        .collect()
 }
 
 impl std::fmt::Display for PackageRange<'_> {
