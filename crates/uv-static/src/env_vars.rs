@@ -792,6 +792,17 @@ impl EnvVars {
     #[attr_added_in("0.10.0")]
     pub const PS_MODULE_PATH: &'static str = "PSModulePath";
 
+    /// Equivalent to the `--python-platform` command-line argument. If set,
+    /// uv will target the specified platform (e.g., `linux`, `macos`,
+    /// `windows`, or a full triple like `aarch64-unknown-linux-gnu`) when
+    /// resolving and installing. The command-line argument takes precedence.
+    ///
+    /// Useful when uv is invoked through another tool that doesn't expose
+    /// passing `--python-platform` (e.g., `pulumi up` for IaC stacks whose
+    /// target runtime differs from the developer's machine).
+    #[attr_added_in("0.9.10")]
+    pub const UV_PYTHON_PLATFORM: &'static str = "UV_PYTHON_PLATFORM";
+
     /// Used with `--python-platform macos` and related variants to set the
     /// deployment target (i.e., the minimum supported macOS version).
     ///
