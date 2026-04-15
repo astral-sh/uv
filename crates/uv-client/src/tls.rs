@@ -355,13 +355,14 @@ impl Certificates {
         }
 
         if certs.0.is_empty() {
-            warn_user_once!(
+            // Unlike `SSL_CERT_FILE`, it's plausible for this to be intentionally set to an
+            // empty directory that a user _could_ put certificates in.
+            warn!(
                 "Ignoring `SSL_CERT_DIR`. No valid certificates found in: {}.",
                 existing
                     .iter()
                     .map(Simplified::simplified_display)
                     .join(", ")
-                    .cyan()
             );
             return None;
         }
