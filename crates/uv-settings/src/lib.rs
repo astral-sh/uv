@@ -438,6 +438,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
                 publish_url,
                 trusted_publishing,
                 check_url,
+                on_failure,
             },
         add: AddOptions { add_bounds },
         audit: _,
@@ -620,6 +621,9 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     }
     if check_url.is_some() {
         masked_fields.push("check-url");
+    }
+    if on_failure.is_some() {
+        masked_fields.push("on-failure");
     }
     if add_bounds.is_some() {
         masked_fields.push("add-bounds");
