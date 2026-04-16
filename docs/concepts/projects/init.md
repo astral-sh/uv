@@ -2,6 +2,16 @@
 
 uv supports creating a project with `uv init`.
 
+By default, uv creates uses a packaged layout in which the source files are under
+`src/<module_name>/`. Packaged layouts are suitable for both applications (`--app`, the default) and
+libraries (`--lib`). You can use `--no-package` for a flat, unpackaged layout instead.
+
+!!! note
+
+    Prior to v0.12.0, uv would use a flat layout for applications and packaged layout for libraries.
+    By using the packaged layout for both, the differences between the library and application
+    layout are now small.
+
 When creating projects, uv supports two basic templates: [**applications**](#applications) and
 [**libraries**](#libraries). By default, uv will create a project for an application. The `--lib`
 flag can be used to create a project for a library instead.
@@ -24,67 +34,7 @@ Applications are the default target for `uv init`, but can also be specified wit
 $ uv init example-app
 ```
 
-The project includes a `pyproject.toml`, a sample file (`main.py`), a readme, and a Python version
-pin file (`.python-version`).
-
-```console
-$ tree example-app
-example-app/
-├── .python-version
-├── README.md
-├── main.py
-└── pyproject.toml
-```
-
-!!! note
-
-    Prior to v0.6.0, uv created a file named `hello.py` instead of `main.py`.
-
-The `pyproject.toml` includes basic metadata. It does not include a build system, it is not a
-[package](./config.md#project-packaging) and will not be installed into the environment:
-
-```toml title="pyproject.toml"
-[project]
-name = "example-app"
-version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
-requires-python = ">=3.11"
-dependencies = []
-```
-
-The sample file defines a `main` function with some standard boilerplate:
-
-```python title="main.py"
-def main():
-    print("Hello from example-app!")
-
-
-if __name__ == "__main__":
-    main()
-```
-
-Python files can be executed with `uv run`:
-
-```console
-$ cd example-app
-$ uv run main.py
-Hello from example-project!
-```
-
-## Packaged applications
-
-Many use-cases require a [package](./config.md#project-packaging). For example, if you are creating
-a command-line interface that will be published to PyPI or if you want to define tests in a
-dedicated directory.
-
-The `--package` flag can be used to create a packaged application:
-
-```console
-$ uv init --package example-pkg
-```
-
-The source code is moved into a `src` directory with a module directory and an `__init__.py` file:
+The source code lives in a `src` directory with a module directory and an `__init__.py` file:
 
 ```console
 $ tree example-pkg
@@ -161,10 +111,9 @@ $ uv init --lib example-lib
 
 !!! note
 
-    Using `--lib` implies `--package`. Libraries always require a packaged project.
+    Libraries always require a packaged project.
 
-As with a [packaged application](#packaged-applications), a `src` layout is used. A `py.typed`
-marker is included to indicate to consumers that types can be read from the library:
+A `py.typed` marker is included to indicate to consumers that types can be read from the library:
 
 ```console
 $ tree example-lib
@@ -180,9 +129,9 @@ example-lib/
 
 !!! note
 
-    A `src` layout is particularly valuable when developing libraries. It ensures that the library is
-    isolated from any `python` invocations in the project root and that distributed library code is
-    well separated from the rest of the project source.
+    A `src` layout is particularly valuable when developing libraries. It ensures that the library
+    is isolated from any `python` invocations in the project root and that distributed library code
+    is well separated from the rest of the project source.
 
 A [build system](./config.md#build-systems) is defined, so the project will be installed into the
 environment:
@@ -220,6 +169,66 @@ And you can import and execute it using `uv run`:
 $ cd example-lib
 $ uv run python -c "import example_lib; print(example_lib.hello())"
 Hello from example-lib!
+```
+
+## Unpackaged applications
+
+Many use-cases require a [package](./config.md#project-packaging). For example, if you are creating
+a command-line interface that will be published to PyPI or if you want to define tests in a
+dedicated directory. In other cases, a flat directory of Python files is simpler.
+
+The `--no-package` flag can be used to create a packaged application:
+
+```console
+$ uv init --no-package example-app
+```
+
+The project includes a `pyproject.toml`, a sample file (`main.py`), a readme, and a Python version
+pin file (`.python-version`).
+
+```console
+$ tree example-app
+example-app
+├── .python-version
+├── README.md
+├── main.py
+└── pyproject.toml
+```
+
+!!! note
+
+    Prior to v0.6.0, uv created a file named `hello.py` instead of `main.py`.
+
+The `pyproject.toml` includes basic metadata. It does not include a build system, it is not a
+[package](./config.md#project-packaging) and will not be installed into the environment:
+
+```toml title="pyproject.toml"
+[project]
+name = "example-app"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+```
+
+The sample file defines a `main` function with some standard boilerplate:
+
+```python title="main.py"
+def main():
+    print("Hello from example-app!")
+
+
+if __name__ == "__main__":
+    main()
+```
+
+Python files can be executed with `uv run`:
+
+```console
+$ cd example-app
+$ uv run main.py
+Hello from example-project!
 ```
 
 ## Projects with extension modules
