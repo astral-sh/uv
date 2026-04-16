@@ -1198,11 +1198,13 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     Ok(())
 }
 
-/// Test that manually removing exclude-newer from the lockfile triggers a re-resolution.
+/// Test that manually removing the exclude-newer timestamp from the lockfile triggers a
+/// re-resolution.
 ///
-/// When a lockfile has `exclude-newer` and `exclude-newer-span` set and these are manually
-/// removed, the next `uv lock` should detect this as an addition of global exclude-newer
-/// and trigger a fresh resolution.
+/// When a lockfile has `exclude-newer` (timestamp) and `exclude-newer-span` set and the
+/// timestamp is manually removed, the span alone is not enough to constitute a global
+/// exclude-newer value, so the next `uv lock` should detect this as an addition of global
+/// exclude-newer and trigger a fresh resolution.
 ///
 /// Uses idna which has releases at:
 /// - 3.6: 2023-11-25
@@ -1269,10 +1271,8 @@ fn lock_exclude_newer_relative_remove_from_lockfile() -> Result<()> {
     requires-dist = [{ name = "idna" }]
     "#);
 
-    // Manually remove exclude-newer from the lockfile by stripping the lines.
-    let lock = lock
-        .replace("exclude-newer = \"2024-04-10T00:00:00Z\"\n", "")
-        .replace("exclude-newer-span = \"P3W\"\n", "");
+    // Manually remove the exclude-newer timestamp from the lockfile, leaving the span.
+    let lock = lock.replace("exclude-newer = \"2024-04-10T00:00:00Z\"\n", "");
     context.temp_dir.child("uv.lock").write_str(&lock)?;
 
     // The lockfile now has no exclude-newer, but `pyproject.toml` still configures one,
