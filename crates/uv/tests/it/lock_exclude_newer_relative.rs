@@ -1201,8 +1201,8 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
 /// Test that manually removing exclude-newer from the lockfile triggers a re-resolution.
 ///
 /// When a lockfile has `exclude-newer` and `exclude-newer-span` set and these are manually
-/// removed, the next `uv lock` with a relative `--exclude-newer` should detect this as an
-/// addition of global exclude-newer and trigger a fresh resolution.
+/// removed, the next `uv lock` should detect this as an addition of global exclude-newer
+/// and trigger a fresh resolution.
 ///
 /// Uses idna which has releases at:
 /// - 3.6: 2023-11-25
@@ -1218,6 +1218,9 @@ fn lock_exclude_newer_relative_remove_from_lockfile() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["idna"]
+
+        [tool.uv]
+        exclude-newer = "3 weeks"
         "#,
     )?;
 
@@ -1226,9 +1229,7 @@ fn lock_exclude_newer_relative_remove_from_lockfile() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
-        .arg("--exclude-newer")
-        .arg("3 weeks"), @"
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1237,46 +1238,6 @@ fn lock_exclude_newer_relative_remove_from_lockfile() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    let lock = context.read("uv.lock");
-    // Verify the lockfile has exclude-newer fields
-    assert!(
-        lock.contains("exclude-newer = \"2024-04-10T00:00:00Z\""),
-        "Expected exclude-newer timestamp in lockfile"
-    );
-    assert!(
-        lock.contains("exclude-newer-span = \"P3W\""),
-        "Expected exclude-newer-span in lockfile"
-    );
-    assert!(
-        lock.contains("version = \"3.6\""),
-        "Expected idna 3.6 in lockfile"
-    );
-
-    // Manually remove exclude-newer from the lockfile by stripping the lines
-    let lock = lock
-        .replace("exclude-newer = \"2024-04-10T00:00:00Z\"\n", "")
-        .replace("exclude-newer-span = \"P3W\"\n", "");
-    context.temp_dir.child("uv.lock").write_str(&lock)?;
-
-    // Running with the same --exclude-newer should detect the removal and re-resolve.
-    // The lockfile now has no exclude-newer, but the CLI provides one, so it's treated as
-    // "addition of global exclude newer".
-    uv_snapshot!(context.filters(), context
-        .lock()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
-        .arg("--exclude-newer")
-        .arg("3 weeks"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolving despite existing lockfile due to addition of global exclude newer 2024-04-10T00:00:00Z
-    Resolved 2 packages in [TIME]
-    ");
-
-    // The lockfile should have exclude-newer restored
     let lock = context.read("uv.lock");
     assert_snapshot!(lock, @r#"
     version = 1
@@ -1308,14 +1269,14 @@ fn lock_exclude_newer_relative_remove_from_lockfile() -> Result<()> {
     requires-dist = [{ name = "idna" }]
     "#);
 
-    // Also test: remove exclude-newer and run WITHOUT --exclude-newer.
-    // This should be a no-op since neither lockfile nor CLI has exclude-newer.
-    let lock = context.read("uv.lock");
+    // Manually remove exclude-newer from the lockfile by stripping the lines.
     let lock = lock
         .replace("exclude-newer = \"2024-04-10T00:00:00Z\"\n", "")
         .replace("exclude-newer-span = \"P3W\"\n", "");
     context.temp_dir.child("uv.lock").write_str(&lock)?;
 
+    // The lockfile now has no exclude-newer, but `pyproject.toml` still configures one,
+    // so the resolver detects "addition of global exclude newer" and re-resolves.
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
@@ -1325,20 +1286,41 @@ fn lock_exclude_newer_relative_remove_from_lockfile() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolving despite existing lockfile due to addition of global exclude newer 2024-04-10T00:00:00Z
     Resolved 2 packages in [TIME]
     ");
 
-    // Without exclude-newer, the lockfile should not have it and idna should stay at 3.6
-    // (no upgrade unless --upgrade is passed)
+    // The lockfile should have exclude-newer restored.
     let lock = context.read("uv.lock");
-    assert!(
-        !lock.contains("exclude-newer"),
-        "Expected no exclude-newer in lockfile"
-    );
-    assert!(
-        lock.contains("version = \"3.6\""),
-        "Expected idna 3.6 to remain stable without --upgrade"
-    );
+    assert_snapshot!(lock, @r#"
+    version = 1
+    revision = 3
+    requires-python = ">=3.12"
+
+    [options]
+    exclude-newer = "2024-04-10T00:00:00Z"
+    exclude-newer-span = "P3W"
+
+    [[package]]
+    name = "idna"
+    version = "3.6"
+    source = { registry = "https://pypi.org/simple" }
+    sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
+    wheels = [
+        { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
+    ]
+
+    [[package]]
+    name = "project"
+    version = "0.1.0"
+    source = { virtual = "." }
+    dependencies = [
+        { name = "idna" },
+    ]
+
+    [package.metadata]
+    requires-dist = [{ name = "idna" }]
+    "#);
 
     Ok(())
 }
