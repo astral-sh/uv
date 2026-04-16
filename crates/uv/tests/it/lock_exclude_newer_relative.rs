@@ -1198,19 +1198,8 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     Ok(())
 }
 
-/// Test that manually removing the exclude-newer timestamp from the lockfile triggers a
-/// re-resolution.
-///
-/// When a lockfile has `exclude-newer` (timestamp) and `exclude-newer-span` set and the
-/// timestamp is manually removed, the span alone is not enough to constitute a global
-/// exclude-newer value, so the next `uv lock` should detect this as an addition of global
-/// exclude-newer and trigger a fresh resolution.
-///
-/// Uses idna which has releases at:
-/// - 3.6: 2023-11-25
-/// - 3.7: 2024-04-11
 #[test]
-fn lock_exclude_newer_relative_remove_from_lockfile() -> Result<()> {
+fn lock_exclude_newer_relative_no_timestamp_in_lockfile() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1226,7 +1215,6 @@ fn lock_exclude_newer_relative_remove_from_lockfile() -> Result<()> {
         "#,
     )?;
 
-    // 3 weeks before 2024-05-01 is 2024-04-10, which is before idna 3.7 (released 2024-04-11).
     let current_timestamp = "2024-05-01T00:00:00Z";
     uv_snapshot!(context.filters(), context
         .lock()
