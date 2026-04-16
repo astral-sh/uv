@@ -184,7 +184,8 @@ test-defaults = [
   "test-python-managed",
   "test-python-eol",
   "test-slow",
-  "test-ecosystem"
+  "test-ecosystem",
+  "test-windows-registry"
 ]
 # Introduces a testing dependency on crates.io.
 test-crates-io = []
@@ -208,6 +209,9 @@ test-python-managed = []
 test-slow = []
 # Includes test cases that require ecosystem packages
 test-ecosystem = []
+# Includes test cases that write to the Windows registry. These tests mutate
+# global state (the Windows registry).
+test-windows-registry = []
 # Build uvw binary on Windows
 windows-gui-bin = []
 

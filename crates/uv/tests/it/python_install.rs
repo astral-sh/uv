@@ -1235,7 +1235,7 @@ fn python_install_freethreaded() {
 /// IMPORTANT: this test writes to the shared `HKCU` registry. The trailing uninstall is
 /// best-effort cleanup; panics will leak entries. This is fine for now since this is the only
 /// test exercising the registry pathway, but adding more will probably require isolation.
-#[cfg(windows)]
+#[cfg(all(windows, feature = "test-windows-registry"))]
 #[test]
 fn python_install_freethreaded_and_gil_list() {
     use assert_cmd::assert::OutputAssertExt;
