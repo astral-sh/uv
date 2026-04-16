@@ -5,6 +5,8 @@ use std::str::Utf8Error;
 use fs_err::File;
 use thiserror::Error;
 
+use uv_fs::Simplified;
+
 #[cfg(all(windows, target_arch = "x86"))]
 const LAUNCHER_I686_GUI: &[u8] = include_bytes!("../trampolines/uv-trampoline-i686-gui.exe");
 
@@ -230,6 +232,12 @@ pub enum Error {
     UnprocessableMetadata,
     #[error("Resources over 2^32 bytes are not supported")]
     ResourceTooLarge,
+    #[error("Failed to update Windows PE resources: {}", path.user_display())]
+    WriteResources {
+        path: PathBuf,
+        #[source]
+        err: io::Error,
+    },
 }
 
 #[allow(clippy::unnecessary_wraps, unused_variables)]
@@ -278,13 +286,18 @@ fn write_resources(path: &Path, resources: &[(windows::core::PCWSTR, &[u8])]) ->
             BeginUpdateResourceW, EndUpdateResourceW, UpdateResourceW,
         };
 
+        let map_err = |err: windows::core::Error| Error::WriteResources {
+            path: path.to_path_buf(),
+            err: io::Error::from_raw_os_error(err.code().0),
+        };
+
         let path_str = path
             .as_os_str()
             .encode_wide()
             .chain(std::iter::once(0))
             .collect::<Vec<_>>();
         let handle = BeginUpdateResourceW(windows::core::PCWSTR(path_str.as_ptr()), false)
-            .map_err(|err| Error::Io(io::Error::from_raw_os_error(err.code().0)))?;
+            .map_err(map_err)?;
 
         for (name, data) in resources {
             UpdateResourceW(
@@ -295,11 +308,10 @@ fn write_resources(path: &Path, resources: &[(windows::core::PCWSTR, &[u8])]) ->
                 Some(data.as_ptr().cast()),
                 u32::try_from(data.len()).map_err(|_| Error::ResourceTooLarge)?,
             )
-            .map_err(|err| Error::Io(io::Error::from_raw_os_error(err.code().0)))?;
+            .map_err(&map_err)?;
         }
 
-        EndUpdateResourceW(handle, false)
-            .map_err(|err| Error::Io(io::Error::from_raw_os_error(err.code().0)))?;
+        EndUpdateResourceW(handle, false).map_err(map_err)?;
     }
 
     Ok(())

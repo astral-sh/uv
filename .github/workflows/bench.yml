@@ -17,6 +17,7 @@ env:
 jobs:
   benchmarks-walltime-build:
     name: "walltime build"
+    # codspeed-macro doesn't support Ubuntu 24.04 yet
     runs-on: depot-ubuntu-22.04-arm-4
     if: ${{ github.repository == 'astral-sh/uv' }}
     timeout-minutes: 20
@@ -26,7 +27,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
@@ -34,7 +35,7 @@ jobs:
         run: rustup show
 
       - name: "Install codspeed"
-        uses: taiki-e/install-action@542cebaaed782771e619bd5609d97659d109c492 # v2.66.7
+        uses: taiki-e/install-action@7a562dfa955aa2e4d5b0fd6ebd57ff9715c07b0b # v2.73.0
         with:
           tool: cargo-codspeed
 
@@ -53,7 +54,7 @@ jobs:
         run: tar -cvf benchmarks-walltime.tar target/codspeed target/debug/uv .cache
 
       - name: "Upload benchmark artifacts"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: benchmarks-walltime
           path: benchmarks-walltime.tar
@@ -71,12 +72,12 @@ jobs:
           persist-credentials: false
 
       - name: "Install codspeed"
-        uses: taiki-e/install-action@542cebaaed782771e619bd5609d97659d109c492 # v2.66.7
+        uses: taiki-e/install-action@7a562dfa955aa2e4d5b0fd6ebd57ff9715c07b0b # v2.73.0
         with:
           tool: cargo-codspeed
 
       - name: "Download benchmark artifacts"
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: benchmarks-walltime
 
@@ -87,7 +88,7 @@ jobs:
         run: ./target/debug/uv venv --cache-dir .cache
 
       - name: "Run benchmarks"
-        uses: CodSpeedHQ/action@0700edb451d0e9f2426f99bd6977027e550fb2a6 # v4.7.0
+        uses: CodSpeedHQ/action@d872884a306dd4853acf0f584f4b706cf0cc72a2 # v4.13.0
         with:
           run: cargo codspeed run
           mode: walltime
@@ -95,7 +96,7 @@ jobs:
 
   benchmarks-simulated:
     name: "simulated"
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04-4
     if: ${{ github.repository == 'astral-sh/uv' }}
     timeout-minutes: 20
     steps:
@@ -104,7 +105,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
@@ -112,7 +113,7 @@ jobs:
         run: rustup show
 
       - name: "Install codspeed"
-        uses: taiki-e/install-action@542cebaaed782771e619bd5609d97659d109c492 # v2.66.7
+        uses: taiki-e/install-action@7a562dfa955aa2e4d5b0fd6ebd57ff9715c07b0b # v2.73.0
         with:
           tool: cargo-codspeed
 
@@ -128,7 +129,7 @@ jobs:
         run: cargo codspeed build --profile profiling -p uv-bench
 
       - name: "Run benchmarks"
-        uses: CodSpeedHQ/action@0700edb451d0e9f2426f99bd6977027e550fb2a6 # v4.7.0
+        uses: CodSpeedHQ/action@d872884a306dd4853acf0f584f4b706cf0cc72a2 # v4.13.0
         with:
           run: cargo codspeed run
           mode: simulation

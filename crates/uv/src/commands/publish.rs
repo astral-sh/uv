@@ -6,9 +6,8 @@ use anyhow::{Context, Result, bail};
 use console::Term;
 use futures::StreamExt;
 use owo_colors::{AnsiColors, OwoColorize};
-use tokio::sync::Semaphore;
 use tracing::{debug, info, trace};
-use uv_auth::{Credentials, DEFAULT_TOLERANCE_SECS, PyxTokenStore};
+use uv_auth::{Credentials, PyxTokenStore};
 use uv_cache::Cache;
 use uv_client::{
     AuthIntegration, BaseClient, BaseClientBuilder, RedirectPolicy, RegistryClientBuilder,
@@ -142,21 +141,26 @@ pub(crate) async fn publish(
         // Disable automatic redirect, as the streaming publish request is not cloneable.
         // Rely on custom redirect logic instead.
         .redirect(RedirectPolicy::NoRedirect)
-        .timeout(environment.upload_http_timeout)
-        .build();
+        .read_timeout(environment.http_read_timeout_upload)
+        .connect_timeout(environment.http_connect_timeout)
+        .client_name("upload")
+        .build()?;
     // For OIDC (trusted publishing), we need retries (GitHub's networking is unreliable)
     // and default timeouts.
     let oidc_client = client_builder
         .clone()
         .auth_integration(AuthIntegration::NoAuthMiddleware)
-        .build();
+        .client_name("oidc")
+        .build()?;
     // For S3 uploads, we roll our own retry loop, use upload timeouts, and no auth middleware.
     let s3_client = client_builder
         .clone()
         .retries(0)
         .auth_integration(AuthIntegration::NoAuthMiddleware)
-        .timeout(environment.upload_http_timeout)
-        .build();
+        .read_timeout(environment.http_read_timeout_upload)
+        .connect_timeout(environment.http_connect_timeout)
+        .client_name("s3")
+        .build()?;
 
     let retry_policy = client_builder.retry_policy();
     let publish_concurrency = if dry_run && token_store.is_known_url(&publish_url) {
@@ -166,8 +170,8 @@ pub(crate) async fn publish(
     };
     debug!("Using publish concurrency of {publish_concurrency}");
     // The check-url step fetches the Simple API page, same as resolution, so
-    // use the standard download concurrency rather than the upload limit.
-    let download_concurrency = Arc::new(Semaphore::new(concurrency.downloads));
+    // use the standard global download concurrency rather than the upload limit.
+    let download_concurrency = concurrency.downloads_semaphore.clone();
 
     // Load credentials.
     let (publish_url, credentials) = gather_credentials(
@@ -178,7 +182,6 @@ pub(crate) async fn publish(
         keyring_provider,
         &token_store,
         &oidc_client,
-        &upload_client,
         check_url.as_ref(),
         Prompt::Enabled,
         printer,
@@ -219,14 +222,34 @@ pub(crate) async fn publish(
         let s3_client = &s3_client;
         let credentials = &credentials;
         let error_count = &error_count;
+        let preview = &preview;
         let reporter = &reporter;
         async move {
+            // Check if the filename is normalized (e.g., version `2025.09.4` should be `2025.9.4`).
+            let normalized_filename = group.filename.to_string();
+            if group.raw_filename != normalized_filename {
+                if preview.is_enabled(PreviewFeature::PublishRequireNormalized) {
+                    warn_user_once!(
+                        "`{}` has a non-normalized filename (expected `{normalized_filename}`), skipping",
+                        group.raw_filename
+                    );
+                    return Ok(());
+                }
+                warn_user_once!(
+                    "`{}` has a non-normalized filename (expected `{normalized_filename}`). \
+                    Pass `--preview-features {}` to skip such files.",
+                    group.raw_filename,
+                    PreviewFeature::PublishRequireNormalized
+                );
+            }
+
             if let Some(check_url_client) = check_url_client {
                 match uv_publish::check_url(
                     check_url_client,
                     &group.file,
                     &group.filename,
                     download_concurrency,
+                    Arc::clone(reporter),
                 )
                 .await
                 {
@@ -263,19 +286,23 @@ pub(crate) async fn publish(
                     format!("({bytes:.1}{unit})").dimmed()
                 ))?;
             } else if publish_concurrency == 1 {
-                // With concurrent uploads, the progress bar already indicates
-                // which file is being uploaded, so skip the per-file message.
+                // With concurrent uploads, the progress bars already indicate which file is being
+                // hashed and uploaded, so skip the per-file messages.
                 reporter.println(format!(
                     "{} {} {}",
-                    "Uploading".bold().green(),
+                    "Hashing".bold().green(),
                     group.filename,
                     format!("({bytes:.1}{unit})").dimmed()
                 ))?;
             }
 
             // Collect the metadata for the file.
-            let form_metadata = match FormMetadata::read_from_file(&group.file, &group.filename)
-                .await
+            let form_metadata = match FormMetadata::read_from_file(
+                &group.file,
+                &group.filename,
+                Arc::clone(reporter),
+            )
+            .await
             {
                 Ok(metadata) => metadata,
                 Err(err) => {
@@ -291,6 +318,15 @@ pub(crate) async fn publish(
                     return Err(err);
                 }
             };
+
+            if !dry_run && publish_concurrency == 1 {
+                reporter.println(format!(
+                    "{} {} {}",
+                    "Uploading".bold().green(),
+                    group.filename,
+                    format!("({bytes:.1}{unit})").dimmed()
+                ))?;
+            }
 
             let uploaded = if direct {
                 if dry_run {
@@ -339,7 +375,6 @@ pub(crate) async fn publish(
                     s3_client,
                     retry_policy,
                     credentials,
-                    // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
                     Arc::clone(reporter),
                 )
                 .await?
@@ -374,7 +409,6 @@ pub(crate) async fn publish(
                                 credentials,
                                 check_url_client.as_ref(),
                                 download_concurrency,
-                                // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
                                 Arc::clone(reporter),
                             )
                             .await? // Filename and/or URL are already attached, if applicable.
@@ -473,7 +507,6 @@ async fn gather_credentials(
     keyring_provider: KeyringProviderType,
     token_store: &PyxTokenStore,
     oidc_client: &BaseClient,
-    base_client: &BaseClient,
     check_url: Option<&IndexUrl>,
     prompt: Prompt,
     printer: Printer,
@@ -499,22 +532,6 @@ async fn gather_credentials(
             .expect("Failed to clear publish URL username");
     }
 
-    // If the user is publishing to pyx, load the credentials from the store.
-    if username.is_none() && password.is_none() {
-        if token_store.is_known_url(&publish_url) {
-            if let Some(token) = token_store
-                .access_token(
-                    base_client.for_host(token_store.api()).raw_client(),
-                    DEFAULT_TOLERANCE_SECS,
-                )
-                .await?
-            {
-                debug!("Using authentication token from the store");
-                return Ok((publish_url, Credentials::from(token)));
-            }
-        }
-    }
-
     // If applicable, attempt obtaining a token for trusted publishing.
     let trusted_publishing_token = check_trusted_publishing(
         username.as_deref(),
@@ -532,9 +549,14 @@ async fn gather_credentials(
             (Some("__token__".to_string()), Some(password.to_string()))
         } else {
             if username.is_none() && password.is_none() {
-                match prompt {
-                    Prompt::Enabled => prompt_username_and_password()?,
-                    Prompt::Disabled => (None, None),
+                // Skip prompting for pyx URLs; the auth middleware will handle authentication.
+                if token_store.is_known_url(&publish_url) {
+                    (None, None)
+                } else {
+                    match prompt {
+                        Prompt::Enabled => prompt_username_and_password()?,
+                        Prompt::Disabled => (None, None),
+                    }
                 }
             } else {
                 (username, password)
@@ -549,7 +571,10 @@ async fn gather_credentials(
         );
     }
 
-    if username.is_none() && password.is_none() && keyring_provider == KeyringProviderType::Disabled
+    if username.is_none()
+        && password.is_none()
+        && keyring_provider == KeyringProviderType::Disabled
+        && !token_store.is_known_url(&publish_url)
     {
         if let TrustedPublishResult::Ignored(err) = trusted_publishing_token {
             // The user has configured something incorrectly:
@@ -636,7 +661,7 @@ mod tests {
         username: Option<String>,
         password: Option<String>,
     ) -> Result<(DisplaySafeUrl, Credentials)> {
-        let client = BaseClientBuilder::default().build();
+        let client = BaseClientBuilder::default().build()?;
         let token_store = PyxTokenStore::from_settings()?;
         gather_credentials(
             url,
@@ -645,7 +670,6 @@ mod tests {
             TrustedPublishing::Never,
             KeyringProviderType::Disabled,
             &token_store,
-            &client,
             &client,
             None,
             Prompt::Disabled,

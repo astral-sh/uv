@@ -1,4 +1,4 @@
-#![allow(clippy::single_match_else)]
+#![expect(clippy::single_match_else)]
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
@@ -36,7 +36,9 @@ use uv_resolver::{
 };
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
-use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
+use uv_types::{
+    BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy,
+};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Editability, Workspace, WorkspaceCache, WorkspaceMember};
 
@@ -94,6 +96,7 @@ pub(crate) async fn lock(
     concurrency: Concurrency,
     no_config: bool,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
 ) -> anyhow::Result<ExitStatus> {
@@ -122,14 +125,12 @@ pub(crate) async fn lock(
     };
 
     // Find the project requirements.
-    let workspace_cache = WorkspaceCache::default();
     let workspace;
     let target = if let Some(script) = script.as_ref() {
         LockTarget::Script(script)
     } else {
         workspace =
-            Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
-                .await?;
+            Workspace::discover(project_dir, &DiscoveryOptions::default(), workspace_cache).await?;
         LockTarget::Workspace(&workspace)
     };
 
@@ -196,9 +197,9 @@ pub(crate) async fn lock(
             &client_builder,
             &state,
             Box::new(DefaultResolveLogger),
-            concurrency,
+            &concurrency,
             cache,
-            &workspace_cache,
+            workspace_cache,
             printer,
             preview,
         )
@@ -208,6 +209,22 @@ pub(crate) async fn lock(
     .await
     {
         Ok(lock) => {
+            if let Some(frozen_source) = frozen {
+                match frozen_source {
+                    FrozenSource::Cli => {
+                        warn_user!(
+                            "The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because `--frozen` was provided; use `--check` instead"
+                        );
+                    }
+                    FrozenSource::Env | FrozenSource::Configuration => {
+                        warn_user!(
+                            "The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because {} was provided; use `--no-frozen` or `--check` instead",
+                            MissingLockfileSource::from(frozen_source)
+                        );
+                    }
+                }
+            }
+
             if dry_run.enabled() {
                 // In `--dry-run` mode, show all changes.
                 if let LockResult::Changed(previous, lock) = &lock {
@@ -238,12 +255,14 @@ pub(crate) async fn lock(
 
             Ok(ExitStatus::Success)
         }
+        // Lock mismatches from `--check`/`--locked` are expected validation failures.
+        // Handle them here so we return exit code 1 instead of bubbling up as an error (exit code 2).
         Err(err @ ProjectError::LockMismatch(..)) => {
             writeln!(printer.stderr(), "{}", err.to_string().bold())?;
             Ok(ExitStatus::Failure)
         }
         Err(ProjectError::Operation(err)) => {
-            diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
+            diagnostics::OperationDiagnostic::with_system_certs(client_builder.system_certs())
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
@@ -252,7 +271,7 @@ pub(crate) async fn lock(
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(super) enum LockMode<'env> {
+pub(crate) enum LockMode<'env> {
     /// Write the lockfile to disk.
     Write(&'env Interpreter),
     /// Perform a resolution, but don't write the lockfile to disk.
@@ -264,7 +283,7 @@ pub(super) enum LockMode<'env> {
 }
 
 /// A lock operation.
-pub(super) struct LockOperation<'env> {
+pub(crate) struct LockOperation<'env> {
     mode: LockMode<'env>,
     constraints: Vec<NameRequirementSpecification>,
     refresh: Option<&'env Refresh>,
@@ -272,7 +291,7 @@ pub(super) struct LockOperation<'env> {
     client_builder: &'env BaseClientBuilder<'env>,
     state: &'env UniversalState,
     logger: Box<dyn ResolveLogger>,
-    concurrency: Concurrency,
+    concurrency: &'env Concurrency,
     cache: &'env Cache,
     workspace_cache: &'env WorkspaceCache,
     printer: Printer,
@@ -281,13 +300,13 @@ pub(super) struct LockOperation<'env> {
 
 impl<'env> LockOperation<'env> {
     /// Initialize a [`LockOperation`].
-    pub(super) fn new(
+    pub(crate) fn new(
         mode: LockMode<'env>,
         settings: &'env ResolverSettings,
         client_builder: &'env BaseClientBuilder<'env>,
         state: &'env UniversalState,
         logger: Box<dyn ResolveLogger>,
-        concurrency: Concurrency,
+        concurrency: &'env Concurrency,
         cache: &'env Cache,
         workspace_cache: &'env WorkspaceCache,
         printer: Printer,
@@ -311,7 +330,7 @@ impl<'env> LockOperation<'env> {
 
     /// Set the external constraints for the [`LockOperation`].
     #[must_use]
-    pub(super) fn with_constraints(
+    pub(crate) fn with_constraints(
         mut self,
         constraints: Vec<NameRequirementSpecification>,
     ) -> Self {
@@ -321,20 +340,22 @@ impl<'env> LockOperation<'env> {
 
     /// Set the refresh strategy for the [`LockOperation`].
     #[must_use]
-    pub(super) fn with_refresh(mut self, refresh: &'env Refresh) -> Self {
+    pub(crate) fn with_refresh(mut self, refresh: &'env Refresh) -> Self {
         self.refresh = Some(refresh);
         self
     }
 
     /// Perform a [`LockOperation`].
-    pub(super) async fn execute(self, target: LockTarget<'_>) -> Result<LockResult, ProjectError> {
+    pub(crate) async fn execute(self, target: LockTarget<'_>) -> Result<LockResult, ProjectError> {
         match self.mode {
             LockMode::Frozen(source) => {
                 // Read the existing lockfile, but don't attempt to lock the project.
+                let lock_filename = target.lock_filename();
                 let existing = target
                     .read()
                     .await?
-                    .ok_or(ProjectError::MissingLockfile(source))?;
+                    .ok_or(ProjectError::MissingLockfile(source, lock_filename))?;
+
                 // Check if the discovered workspace members match the locked workspace members.
                 if let LockTarget::Workspace(workspace) = target {
                     for package_name in workspace.packages().keys() {
@@ -350,10 +371,11 @@ impl<'env> LockOperation<'env> {
             }
             LockMode::Locked(interpreter, lock_source) => {
                 // Read the existing lockfile.
-                let existing = target
-                    .read()
-                    .await?
-                    .ok_or(ProjectError::MissingLockfile(lock_source.into()))?;
+                let lock_filename = target.lock_filename();
+                let existing = target.read().await?.ok_or(ProjectError::MissingLockfile(
+                    lock_source.into(),
+                    lock_filename,
+                ))?;
 
                 // Perform the lock operation, but don't write the lockfile to disk.
                 let result = Box::pin(do_lock(
@@ -442,7 +464,7 @@ async fn do_lock(
     client_builder: &BaseClientBuilder<'_>,
     state: &UniversalState,
     logger: Box<dyn ResolveLogger>,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
@@ -471,15 +493,6 @@ async fn do_lock(
         sources,
         torch_backend: _,
     } = settings;
-
-    if !preview.is_enabled(PreviewFeature::ExtraBuildDependencies)
-        && !extra_build_dependencies.is_empty()
-    {
-        warn_user_once!(
-            "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeature::ExtraBuildDependencies
-        );
-    }
 
     // Collect the requirements, etc.
     let members = target.members();
@@ -532,7 +545,7 @@ async fn do_lock(
         .collect::<Result<BTreeMap<_, _>, ProjectError>>()?;
 
     // Collect the conflicts.
-    let mut conflicts = target.conflicts();
+    let mut conflicts = target.conflicts()?;
     if let LockTarget::Workspace(workspace) = target {
         if let Some(groups) = &workspace.pyproject_toml().dependency_groups {
             if let Some(project) = &workspace.pyproject_toml().project {
@@ -692,7 +705,7 @@ async fn do_lock(
         .index_strategy(*index_strategy)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
-        .build();
+        .build()?;
 
     // Determine whether to enable build isolation.
     let environment;
@@ -708,6 +721,16 @@ async fn do_lock(
         }
     };
 
+    let lock_supported_environments = environments.cloned().unwrap_or_default();
+    let lock_required_environments = required_environments.cloned().unwrap_or_default();
+    let artifact_environments = SupportedEnvironments::from_markers(
+        lock_supported_environments
+            .iter()
+            .copied()
+            .chain(lock_required_environments.iter().copied())
+            .collect(),
+    );
+
     let options = OptionsBuilder::new()
         .resolution_mode(*resolution)
         .prerelease_mode(*prerelease)
@@ -715,7 +738,7 @@ async fn do_lock(
         .exclude_newer(exclude_newer.clone())
         .index_strategy(*index_strategy)
         .build_options(build_options.clone())
-        .required_environments(required_environments.cloned().unwrap_or_default())
+        .artifact_environments(artifact_environments.clone())
         .build();
     let hasher = HashStrategy::Generate(HashGeneration::Url);
 
@@ -774,12 +797,17 @@ async fn do_lock(
         &build_hasher,
         exclude_newer.clone(),
         sources.clone(),
+        SourceTreeEditablePolicy::Project,
         workspace_cache.clone(),
-        concurrency,
+        concurrency.clone(),
         preview,
     );
 
-    let database = DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads);
+    let database = DistributionDatabase::new(
+        &client,
+        &build_dispatch,
+        concurrency.downloads_semaphore.clone(),
+    );
 
     // If any of the resolution-determining settings changed, invalidate the lock.
     let existing_lock = if let Some(existing_lock) = existing_lock {
@@ -890,7 +918,7 @@ async fn do_lock(
             );
 
             // Resolve the requirements.
-            let resolution = pip::operations::resolve(
+            let (resolution, _) = pip::operations::resolve(
                 ExtrasResolver::new(&hasher, state.index(), database)
                     .with_reporter(Arc::new(ResolverReporter::from(printer)))
                     .resolve(target.members_requirements())
@@ -964,21 +992,14 @@ async fn do_lock(
             .relative_to(target.install_path())?;
 
             let previous = existing_lock.map(ValidatedLock::into_lock);
-            let lock = Lock::from_resolution(&resolution, target.install_path())?
-                .with_manifest(manifest)
-                .with_conflicts(conflicts)
-                .with_supported_environments(
-                    environments
-                        .cloned()
-                        .map(SupportedEnvironments::into_markers)
-                        .unwrap_or_default(),
-                )
-                .with_required_environments(
-                    required_environments
-                        .cloned()
-                        .map(SupportedEnvironments::into_markers)
-                        .unwrap_or_default(),
-                );
+            let lock = Lock::from_resolution(
+                &resolution,
+                target.install_path(),
+                lock_supported_environments.clone().into_markers(),
+            )?
+            .with_manifest(manifest)
+            .with_conflicts(conflicts)
+            .with_required_environments(lock_required_environments.into_markers());
 
             if previous.as_ref().is_some_and(|previous| *previous == lock) {
                 Ok(LockResult::Unchanged(lock))
@@ -1060,25 +1081,20 @@ impl ValidatedLock {
             if !change.is_relative_timestamp_change() {
                 let _ = writeln!(
                     printer.stderr(),
-                    "Ignoring existing lockfile due to {change}",
+                    "Resolving despite existing lockfile due to {change}",
                 );
-                return Ok(Self::Unusable(lock));
+                return Ok(Self::Preferable(lock));
             }
         }
 
-        match upgrade {
-            Upgrade::None => {}
-            Upgrade::All => {
-                // If the user specified `--upgrade`, then we can't use the existing lockfile.
-                debug!("Ignoring existing lockfile due to `--upgrade`");
-                return Ok(Self::Unusable(lock));
-            }
-            Upgrade::Packages(_) => {
-                // This is handled below, after some checks regarding fork
-                // markers. In particular, we'd like to return `Preferable`
-                // here, but we shouldn't if the fork markers cannot be
-                // reused.
-            }
+        if upgrade.is_all() {
+            // If the user specified `--upgrade`, then we can't use the existing lockfile.
+            //
+            // If the user is upgrading a subset of packages, we handle it below, after some checks
+            // regarding fork markers. In particular, we'd like to return `Preferable` here, but we
+            // shouldn't if the fork markers cannot be reused.
+            debug!("Ignoring existing lockfile due to `--upgrade`");
+            return Ok(Self::Unusable(lock));
         }
 
         // NOTE: It's important that this appears before any possible path that
@@ -1186,10 +1202,12 @@ impl ValidatedLock {
             return Ok(Self::Preferable(lock));
         }
 
-        // If the user specified `--upgrade-package`, then at best we can prefer some of
-        // the existing versions.
-        if let Upgrade::Packages(_) = upgrade {
-            debug!("Resolving despite existing lockfile due to `--upgrade-package`");
+        // If the user specified `--upgrade-package` or `--upgrade-group`, then at best we can
+        // prefer some of the existing versions.
+        if !(upgrade.is_none() || upgrade.is_all()) {
+            debug!(
+                "Resolving despite existing lockfile due to `--upgrade-package` or `--upgrade-group`"
+            );
             return Ok(Self::Preferable(lock));
         }
 

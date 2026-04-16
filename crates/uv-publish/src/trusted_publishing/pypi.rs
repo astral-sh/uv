@@ -83,7 +83,7 @@ impl TrustedPublishingService for PyPIPublishingService<'_> {
         let response = self
             .client
             .post(Url::from(mint_token_url.clone()))
-            .body(serde_json::to_vec(&mint_token_payload)?)
+            .json(&mint_token_payload)
             .send()
             .await
             .map_err(|err| {

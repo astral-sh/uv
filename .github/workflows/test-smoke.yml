@@ -25,7 +25,7 @@ jobs:
           persist-credentials: false
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -36,7 +36,7 @@ jobs:
 
       - name: "Smoke test"
         run: |
-          ./uv run scripts/smoke-test
+          ./uv run --no-project scripts/smoke-test
 
       - name: "Test shell completions"
         run: |
@@ -53,7 +53,7 @@ jobs:
           persist-credentials: false
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-linux-aarch64-${{ inputs.sha }}
 
@@ -64,7 +64,7 @@ jobs:
 
       - name: "Smoke test"
         run: |
-          ./uv run scripts/smoke-test
+          ./uv run --no-project scripts/smoke-test
 
       - name: "Test shell completions"
         run: |
@@ -82,7 +82,7 @@ jobs:
           persist-credentials: false
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-linux-musl-${{ inputs.sha }}
 
@@ -93,7 +93,7 @@ jobs:
 
       - name: "Smoke test"
         run: |
-          ./uv run scripts/smoke-test
+          ./uv run --no-project scripts/smoke-test
 
   smoke-test-macos:
     name: "macos"
@@ -105,7 +105,7 @@ jobs:
           persist-credentials: false
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-macos-x86_64-${{ inputs.sha }}
 
@@ -116,7 +116,7 @@ jobs:
 
       - name: "Smoke test"
         run: |
-          ./uv run scripts/smoke-test
+          ./uv run --no-project scripts/smoke-test
 
       - name: "Test shell completions"
         run: |
@@ -133,14 +133,14 @@ jobs:
           persist-credentials: false
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-windows-x86_64-${{ inputs.sha }}
 
       - name: "Smoke test"
         working-directory: ${{ env.UV_WORKSPACE }}
         run: |
-          ./uv run scripts/smoke-test
+          ./uv run --no-project scripts/smoke-test
 
       - name: "Test uv shell completions"
         working-directory: ${{ env.UV_WORKSPACE }}
@@ -162,14 +162,14 @@ jobs:
           persist-credentials: false
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-windows-aarch64-${{ inputs.sha }}
 
       - name: "Smoke test"
         working-directory: ${{ env.UV_WORKSPACE }}
         run: |
-          ./uv run scripts/smoke-test
+          ./uv run --no-project scripts/smoke-test
 
       - name: "Test uv shell completions"
         working-directory: ${{ env.UV_WORKSPACE }}

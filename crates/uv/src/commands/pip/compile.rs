@@ -29,7 +29,7 @@ use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
-use uv_preview::{Preview, PreviewFeature};
+use uv_preview::Preview;
 use uv_pypi_types::{Conflicts, SupportedEnvironments};
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
@@ -48,8 +48,8 @@ use uv_resolver::{
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_torch::{TorchMode, TorchSource, TorchStrategy};
-use uv_types::{EmptyInstalledPackages, HashStrategy};
-use uv_warnings::{warn_user, warn_user_once};
+use uv_types::{EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy};
+use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
@@ -120,18 +120,10 @@ pub(crate) async fn pip_compile(
     concurrency: Concurrency,
     quiet: bool,
     cache: Cache,
+    workspace_cache: WorkspaceCache,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    if !preview.is_enabled(PreviewFeature::ExtraBuildDependencies)
-        && !extra_build_dependencies.is_empty()
-    {
-        warn_user_once!(
-            "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeature::ExtraBuildDependencies
-        );
-    }
-
     // If the user provides a `pyproject.toml` or other TOML file as the output file, raise an
     // error.
     if output_file
@@ -392,6 +384,12 @@ pub(crate) async fn pip_compile(
         PythonRequirement::from_interpreter(&interpreter)
     };
 
+    let artifact_environments = if universal {
+        environments.clone()
+    } else {
+        SupportedEnvironments::default()
+    };
+
     // Determine the environment for the resolution.
     let (tags, resolver_env) = if universal {
         (
@@ -465,7 +463,7 @@ pub(crate) async fn pip_compile(
         .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
-        .build();
+        .build()?;
 
     // Read the lockfile, if present.
     let LockedRequirements { preferences, git } =
@@ -548,8 +546,9 @@ pub(crate) async fn pip_compile(
         &build_hashes,
         exclude_newer.clone(),
         sources,
-        WorkspaceCache::default(),
-        concurrency,
+        SourceTreeEditablePolicy::Project,
+        workspace_cache,
+        concurrency.clone(),
         preview,
     );
 
@@ -562,6 +561,7 @@ pub(crate) async fn pip_compile(
         .index_strategy(index_strategy)
         .torch_backend(torch_backend)
         .build_options(build_options.clone())
+        .artifact_environments(artifact_environments)
         .build();
 
     // Resolve the requirements.
@@ -589,18 +589,20 @@ pub(crate) async fn pip_compile(
         &flat_index,
         &top_level_index,
         &build_dispatch,
-        concurrency,
+        &concurrency,
         options,
         Box::new(DefaultResolveLogger),
         printer,
     )
     .await
     {
-        Ok(resolution) => resolution,
+        Ok((resolution, _)) => resolution,
         Err(err) => {
-            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::with_system_certs(
+                client_builder.system_certs(),
+            )
+            .report(err)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
     };
 

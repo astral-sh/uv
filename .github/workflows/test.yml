@@ -26,25 +26,26 @@ jobs:
 
   cargo-test-linux:
     timeout-minutes: 10
-    runs-on: depot-ubuntu-22.04-16
+    runs-on: depot-ubuntu-24.04-16
     name: "cargo test on linux"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
-      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+      - name: "Install mold"
+        run: ./scripts/install-mold.sh
 
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Install Rust toolchain"
         run: rustup show
 
-      - uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # v7.2.0
+      - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
         with:
-          version: "0.9.26"
+          version: "0.11.6"
 
       - name: "Install required Python versions"
         run: uv python install
@@ -60,8 +61,31 @@ jobs:
         # the login password doesn't matter, but the keyring must be unlocked for the tests to work
         run: gnome-keyring-daemon --components=secrets --daemonize --unlock <<< 'foobar'
 
+      - name: "Create btrfs filesystem"
+        run: |
+          sudo apt-get install -y btrfs-progs
+          truncate -s 1G /tmp/btrfs.img
+          mkfs.btrfs /tmp/btrfs.img
+          sudo mkdir /btrfs
+          sudo mount -o loop /tmp/btrfs.img /btrfs
+          sudo chown "$(id -u):$(id -g)" /btrfs
+
+      - name: "Create tmpfs filesystem"
+        run: |
+          sudo mkdir /tmpfs
+          sudo mount -t tmpfs -o size=256m tmpfs /tmpfs
+          sudo chown "$(id -u):$(id -g)" /tmpfs
+
+      - name: "Create minix filesystem (low hardlink limit)"
+        run: |
+          truncate -s 16M /tmp/minix.img
+          mkfs.minix /tmp/minix.img
+          sudo mkdir /minix
+          sudo mount -o loop /tmp/minix.img /minix
+          sudo chown "$(id -u):$(id -g)" /minix
+
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@542cebaaed782771e619bd5609d97659d109c492 # v2.66.7
+        uses: taiki-e/install-action@7a562dfa955aa2e4d5b0fd6ebd57ff9715c07b0b # v2.73.0
         with:
           tool: cargo-nextest
 
@@ -70,12 +94,29 @@ jobs:
           # Retry more than default to reduce flakes in CI
           UV_HTTP_RETRIES: 5
           RUST_BACKTRACE: 1
+          UV_INTERNAL__TEST_COW_FS: /btrfs
+          UV_INTERNAL__TEST_NOCOW_FS: /tmpfs
+          UV_INTERNAL__TEST_ALT_FS: /tmpfs
+          UV_INTERNAL__TEST_LOWLINKS_FS: /minix
+          # Write pending snapshots to a separate directory for artifact upload
+          INSTA_UPDATE: new
+          INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
           cargo nextest run \
             --cargo-profile fast-build \
-            --features python-patch,native-auth,secret-service \
+            --features test-python-patch,native-auth,secret-service \
             --workspace \
             --profile ci-linux
+
+      - name: "Upload pending snapshots"
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: pending-snapshots-linux
+          path: pending-snapshots/
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 14
 
   cargo-test-macos:
     timeout-minutes: 20
@@ -88,24 +129,28 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
-
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Install Rust toolchain"
         run: rustup show
 
-      - uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # v7.2.0
+      - name: "Create HFS+ disk image (no reflink support)"
+        run: |
+          hdiutil create -size 256m -fs HFS+ -volname NoReflink /tmp/noreflink.dmg
+          hdiutil attach /tmp/noreflink.dmg
+          echo "HFS_MOUNT=/Volumes/NoReflink" >> "$GITHUB_ENV"
+
+      - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
         with:
-          version: "0.9.26"
+          version: "0.11.6"
 
       - name: "Install required Python versions"
         run: uv python install
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@542cebaaed782771e619bd5609d97659d109c492 # v2.66.7
+        uses: taiki-e/install-action@7a562dfa955aa2e4d5b0fd6ebd57ff9715c07b0b # v2.73.0
         with:
           tool: cargo-nextest
 
@@ -114,13 +159,31 @@ jobs:
           # Retry more than default to reduce flakes in CI
           UV_HTTP_RETRIES: 5
           RUST_BACKTRACE: 1
+          # macOS tmpdir is on APFS which supports reflink
+          UV_INTERNAL__TEST_COW_FS: ${{ runner.temp }}
+          # HFS+ RAM disk does not support copy-on-write and is on a different device
+          UV_INTERNAL__TEST_NOCOW_FS: ${{ env.HFS_MOUNT }}
+          UV_INTERNAL__TEST_ALT_FS: ${{ env.HFS_MOUNT }}
+          # Write pending snapshots to a separate directory for artifact upload
+          INSTA_UPDATE: new
+          INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
           cargo nextest run \
             --cargo-profile fast-build \
             --no-default-features \
-            --features python,python-managed,pypi,git,git-lfs,performance,crates-io,native-auth,apple-native \
+            --features test-python,test-python-managed,test-pypi,test-git,test-git-lfs,performance,test-crates-io,native-auth,apple-native \
             --workspace \
             --profile ci-macos
+
+      - name: "Upload pending snapshots"
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: pending-snapshots-macos
+          path: pending-snapshots/
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 14
 
   cargo-test-windows:
     timeout-minutes: 15
@@ -143,14 +206,14 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
 
-      - uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # v7.2.0
+      - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
         with:
-          version: "0.9.26"
+          version: "0.11.6"
 
       - name: "Install required Python versions"
         run: uv python install
 
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           workspaces: ${{ env.UV_WORKSPACE }}
           # Use the same cache entry across the partitions
@@ -161,8 +224,11 @@ jobs:
         working-directory: ${{ env.UV_WORKSPACE }}
         run: rustup show
 
+      - name: "Create NTFS test directory (low hardlink limit)"
+        run: New-Item -Path "C:\uv" -ItemType Directory -Force
+
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@542cebaaed782771e619bd5609d97659d109c492 # v2.66.7
+        uses: taiki-e/install-action@7a562dfa955aa2e4d5b0fd6ebd57ff9715c07b0b # v2.73.0
         with:
           tool: cargo-nextest
 
@@ -175,12 +241,26 @@ jobs:
           # See https://github.com/astral-sh/uv/issues/6940
           UV_LINK_MODE: copy
           RUST_BACKTRACE: 1
+          UV_INTERNAL__TEST_LOWLINKS_FS: "C:\\uv"
+          # Write pending snapshots to a separate directory for artifact upload
+          INSTA_UPDATE: new
+          INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         shell: bash
         run: |
           cargo nextest run \
             --cargo-profile fast-build \
             --no-default-features \
-            --features python,pypi,python-managed,native-auth,windows-native \
+            --features test-python,test-pypi,test-python-managed,native-auth,windows-native \
             --workspace \
             --profile ci-windows \
             --partition hash:${{ matrix.partition }}/3
+
+      - name: "Upload pending snapshots"
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: pending-snapshots-windows-${{ matrix.partition }}
+          path: pending-snapshots/
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 14

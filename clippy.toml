@@ -9,12 +9,16 @@ doc-valid-idents = [
   "ROCm",
   "XPU",
   "PowerShell",
+  "CycloneDX",
+  "SemVer",
+  "AArch64",
   "UV_DEV",
   "UV_FROZEN",
   "UV_ISOLATED",
   "UV_LOCKED",
   "UV_MANAGED_PYTHON",
   "UV_NATIVE_TLS",
+  "UV_SYSTEM_CERTS",
   "UV_NO_DEV",
   "UV_NO_EDITABLE",
   "UV_NO_ENV_FILE",
@@ -27,7 +31,7 @@ doc-valid-idents = [
   "UV_SHOW_RESOLUTION",
   "UV_VENV_CLEAR",
   "UV_VENV_SEED",
-  ".." # Include the defaults
+  "..",                       # Include the defaults
 ]
 
 disallowed-types = [

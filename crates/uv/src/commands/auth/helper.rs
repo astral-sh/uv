@@ -6,7 +6,9 @@ use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
-use uv_auth::{AuthBackend, Credentials, DEFAULT_TOLERANCE_SECS, PyxTokenStore};
+use uv_auth::{
+    AuthBackend, Credentials, DEFAULT_TOLERANCE_SECS, PyxTokenStore, is_default_pyx_domain,
+};
 use uv_client::BaseClientBuilder;
 use uv_preview::{Preview, PreviewFeature};
 use uv_redacted::DisplaySafeUrl;
@@ -76,7 +78,7 @@ async fn credentials_for_url(
         debug!("URL '{url}' contain a password; ignoring");
     }
 
-    if pyx_store.is_known_domain(url) {
+    if pyx_store.is_known_domain(url) || is_default_pyx_domain(url) {
         if username.is_some() {
             bail!(
                 "Cannot specify a username for URLs under {}",
@@ -87,7 +89,7 @@ async fn credentials_for_url(
         }
         let client = client_builder
             .auth_integration(uv_client::AuthIntegration::NoAuthMiddleware)
-            .build();
+            .build()?;
         let token = pyx_store
             .access_token(
                 client.for_host(pyx_store.api()).raw_client(),
@@ -101,7 +103,7 @@ async fn credentials_for_url(
     let backend = AuthBackend::from_settings(preview).await?;
     let credentials = match &backend {
         AuthBackend::System(provider) => provider.fetch(url, username).await,
-        AuthBackend::TextStore(store, _lock) => store.get_credentials(url, username).cloned(),
+        AuthBackend::TextStore(store, _lock) => store.get_credentials(url, username)?.cloned(),
     };
     Ok(credentials)
 }

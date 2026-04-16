@@ -4,20 +4,20 @@ build-backend = "maturin"
 
 [project]
 name = "uv"
-version = "0.9.28"
+version = "0.11.6"
 description = "An extremely fast Python package and project manager, written in Rust."
 authors = [{ name = "Astral Software Inc.", email = "hey@astral.sh" }]
 requires-python = ">=3.8"
 keywords = [
   "uv", "requirements", "packaging"
 ]
+license="MIT OR Apache-2.0"
+license-files = ["LICENSE-APACHE", "LICENSE-MIT"]
 classifiers = [
   "Development Status :: 5 - Production/Stable",
   "Environment :: Console",
   "Intended Audience :: Developers",
   "Operating System :: OS Independent",
-  "License :: OSI Approved :: MIT License",
-  "License :: OSI Approved :: Apache Software License",
   "Programming Language :: Python",
   "Programming Language :: Python :: 3.8",
   "Programming Language :: Python :: 3.9",
@@ -49,10 +49,11 @@ module-name = "uv"
 python-source = "python"
 strip = true
 include = [
-    { path = "rust-toolchain.toml", format = ["sdist", "wheel"] },
+    { path = "rust-toolchain.toml", format = "sdist" },
     # this one isn't discovered by maturin because it's behind a feature flag
-    { path = "crates/uv-performance-memory-allocator/**/*", format = ["sdist", "wheel"] },
+    { path = "crates/uv-performance-memory-allocator/**/*", format = "sdist" },
     { path = "crates/uv-trampoline-builder/trampolines/*", format = "sdist" },
+    # https://github.com/rust-lang/cargo/issues/5933
     { path = "LICENSE-APACHE", format = "sdist" },
     { path = "LICENSE-MIT", format = "sdist" },
 ]
@@ -93,5 +94,22 @@ version_files = [
 "Documentation" = ["documentation"]
 "Other changes" = ["__unknown__"]
 
-[tool.uv]
-managed = false
+[dependency-groups]
+docs = [
+  "black>=23.10.0",
+  "mkdocs>=1.5.0",
+  "mkdocs-material>=9.1.18",
+  "mkdocs-redirects>=1.2.2",
+  "mkdocs-git-revision-date-localized-plugin>=1.3.0",
+  "mkdocs-llmstxt>=0.2.0",
+  "mdformat>=0.7.17",
+  "mdformat-mkdocs>=2.0.4",
+  "mdformat-admon>=2.0.2",
+]
+docker = [
+  "cargo-zigbuild>=0.19.8",
+]
+
+[tool.uv.dependency-groups]
+docs = { requires-python = ">=3.12" }
+docker = { requires-python = ">=3.12" }

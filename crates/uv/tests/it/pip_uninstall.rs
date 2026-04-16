@@ -3,11 +3,11 @@ use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 
-use crate::common::{TestContext, uv_snapshot};
+use uv_test::uv_snapshot;
 
 #[test]
 fn no_arguments() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.pip_uninstall(), @"
     success: false
@@ -27,7 +27,7 @@ fn no_arguments() {
 
 #[test]
 fn invalid_requirement() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.pip_uninstall()
         .arg("flask==1.0.x"), @"
@@ -45,7 +45,7 @@ fn invalid_requirement() {
 
 #[test]
 fn missing_requirements_txt() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.pip_uninstall()
         .arg("-r")
@@ -62,7 +62,7 @@ fn missing_requirements_txt() {
 
 #[test]
 fn invalid_requirements_txt_requirement() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("flask==1.0.x")?;
@@ -85,9 +85,9 @@ fn invalid_requirements_txt_requirement() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn uninstall() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
@@ -118,9 +118,9 @@ fn uninstall() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn missing_record() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
@@ -152,9 +152,9 @@ fn missing_record() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn uninstall_editable_by_name() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
@@ -193,9 +193,9 @@ fn uninstall_editable_by_name() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn uninstall_by_path() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(
@@ -234,9 +234,9 @@ fn uninstall_by_path() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn uninstall_duplicate_by_path() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(
@@ -277,12 +277,12 @@ fn uninstall_duplicate_by_path() -> Result<()> {
 
 /// Uninstall a duplicate package in a virtual environment.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn uninstall_duplicate() -> Result<()> {
     use uv_fs::copy_dir_all;
 
     // Sync a version of `pip` into a virtual environment.
-    let context1 = TestContext::new("3.12");
+    let context1 = uv_test::test_context!("3.12");
     let requirements_txt = context1.temp_dir.child("requirements.txt");
     requirements_txt.write_str("pip==21.3.1")?;
 
@@ -294,7 +294,7 @@ fn uninstall_duplicate() -> Result<()> {
         .success();
 
     // Sync a different version of `pip` into a virtual environment.
-    let context2 = TestContext::new("3.12");
+    let context2 = uv_test::test_context!("3.12");
     let requirements_txt = context2.temp_dir.child("requirements.txt");
     requirements_txt.write_str("pip==22.1.1")?;
 
@@ -331,7 +331,7 @@ fn uninstall_duplicate() -> Result<()> {
 /// Uninstall a `.egg-info` package in a virtual environment.
 #[test]
 fn uninstall_egg_info() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let site_packages = ChildPath::new(context.site_packages());
 
@@ -393,7 +393,7 @@ fn normcase(s: &str) -> String {
 /// Uninstall a legacy editable package in a virtual environment.
 #[test]
 fn uninstall_legacy_editable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let site_packages = ChildPath::new(context.site_packages());
 
@@ -449,7 +449,7 @@ Version: 0.22.0
 
 #[test]
 fn dry_run_uninstall_egg_info() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let site_packages = ChildPath::new(context.site_packages());
 
@@ -506,6 +506,76 @@ fn dry_run_uninstall_egg_info() -> Result<()> {
     );
     // The package directory should still exist.
     assert!(site_packages.child("zstd").child("__init__.py").exists());
+
+    Ok(())
+}
+
+/// Uninstall must not remove files outside the install scheme.
+///
+/// A malformed or malicious wheel can include path-traversal entries
+/// (e.g. `../../../../../etc/passwd`) in its RECORD file. During uninstall those entries are joined
+/// with the site-packages directory and could cause deletion of files outside the installation
+/// scheme.
+#[test]
+fn uninstall_record_path_traversal() -> Result<()> {
+    // The traversal-depth count differs between Unix (`.venv/lib/pythonX.Y/site-packages`)
+    // and Windows (`.venv/Lib/site-packages`), so normalize the `../` sequence in the warning.
+    let context = uv_test::test_context!("3.12").with_filter((
+        r"(\.\./)+traversal_target\.txt",
+        "[..]/traversal_target.txt",
+    ));
+
+    context
+        .init()
+        .arg("--lib")
+        .arg("evilpkg")
+        .assert()
+        .success();
+    context.pip_install().arg("./evilpkg").assert().success();
+
+    // Build the relative traversal path from site-packages to a target file outside
+    // site-packages but inside the test temp dir. RECORD uses forward slashes, even on
+    // Windows, and the venv layout (and thus the traversal depth) differs by platform,
+    // so we construct the path manually and filter the leading `../` sequence out of the
+    // snapshot above.
+    let target_file = context.temp_dir.child("traversal_target.txt");
+    target_file.write_str("I should not be deleted")?;
+    // Canonicalize the temp dir, since `site_packages` is built from a canonicalized path
+    // (with `\\?\`), which would otherwise make `strip_prefix` fail.
+    let canonical_temp_dir = context.temp_dir.canonicalize()?;
+    let depth = context
+        .site_packages()
+        .strip_prefix(&canonical_temp_dir)?
+        .components()
+        .count();
+    let traversal_record = format!("{}traversal_target.txt", "../".repeat(depth));
+
+    let record_file = context
+        .site_packages()
+        .join("evilpkg-0.1.0.dist-info/RECORD");
+    let record = fs_err::read_to_string(&record_file)?;
+    let record = format!("{}\n{},,0\n", record.trim(), traversal_record);
+    fs_err::write(record_file, &record)?;
+
+    let init_py = context.site_packages().join("evilpkg/__init__.py");
+    assert!(context.site_packages().join(&traversal_record).exists());
+    assert!(init_py.exists());
+
+    uv_snapshot!(context.filters(), context.pip_uninstall()
+        .arg("evilpkg"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Invalid RECORD entry in evilpkg==0.1.0 (from file://[TEMP_DIR]/evilpkg) that escapes the Python environment, skipping: [..]/traversal_target.txt
+    Uninstalled 1 package in [TIME]
+     - evilpkg==0.1.0 (from file://[TEMP_DIR]/evilpkg)
+    ");
+
+    // The regular package files have been removed, while the file outside the scheme still exists.
+    assert!(target_file.exists());
+    assert!(!init_py.exists());
 
     Ok(())
 }

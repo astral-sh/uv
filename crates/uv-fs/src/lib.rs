@@ -1,5 +1,10 @@
 use std::path::{Path, PathBuf};
 
+#[cfg(feature = "tokio")]
+use std::io::Read;
+
+#[cfg(feature = "tokio")]
+use encoding_rs_io::DecodeReaderBytes;
 use tempfile::NamedTempFile;
 use tracing::warn;
 
@@ -7,6 +12,7 @@ pub use crate::locked_file::*;
 pub use crate::path::*;
 
 pub mod cachedir;
+pub mod link;
 mod locked_file;
 mod path;
 pub mod which;
@@ -45,19 +51,15 @@ pub fn is_same_file_allow_missing(left: &Path, right: &Path) -> Option<bool> {
 
 /// Reads data from the path and requires that it be valid UTF-8 or UTF-16.
 ///
-/// This uses BOM sniffing to determine if the data should be transcoded
-/// from UTF-16 to Rust's `String` type (which uses UTF-8).
+/// This uses BOM sniffing to determine if the data should be transcoded from UTF-16 to Rust's
+/// `String` type (which uses UTF-8).
 ///
-/// This should generally only be used when one specifically wants to support
-/// reading UTF-16 transparently.
+/// This should generally only be used when one specifically wants to support reading UTF-16
+/// transparently.
 ///
 /// If the file path is `-`, then contents are read from stdin instead.
 #[cfg(feature = "tokio")]
 pub async fn read_to_string_transcode(path: impl AsRef<Path>) -> std::io::Result<String> {
-    use std::io::Read;
-
-    use encoding_rs_io::DecodeReaderBytes;
-
     let path = path.as_ref();
     let raw = if path == Path::new("-") {
         let mut buf = Vec::with_capacity(1024);
@@ -262,12 +264,13 @@ pub fn copy_atomic_sync(from: impl AsRef<Path>, to: impl AsRef<Path>) -> std::io
 fn backoff_file_move() -> backon::ExponentialBackoff {
     use backon::BackoffBuilder;
     // This amounts to 10 total seconds of trying the operation.
-    // We start at 10 milliseconds and try 9 times, doubling each time, so the last try will take
-    // about 10*(2^9) milliseconds ~= 5 seconds. All other attempts combined should equal
-    // the length of the last attempt (because it's a sum of powers of 2), so 10 seconds overall.
+    // We retry 10 times, starting at 10*(2^0) milliseconds for the first retry, doubling with each
+    // retry, so the last (10th) one will take about 10*(2^9) milliseconds ~= 5 seconds. All other
+    // attempts combined should equal the length of the last attempt (because it's a sum of powers
+    // of 2), so 10 seconds overall.
     backon::ExponentialBuilder::default()
         .with_min_delay(std::time::Duration::from_millis(10))
-        .with_max_times(9)
+        .with_max_times(10)
         .build()
 }
 
@@ -310,8 +313,9 @@ pub async fn rename_with_retry(
     }
 }
 
-/// Rename or copy a file, retrying (on Windows) if it fails due to transient operating system
-/// errors, in a synchronous context.
+// TODO(zanieb): Look into reusing this code?
+/// Wrap an arbitrary operation on two files, e.g., copying, with retries on transient operating
+/// system errors.
 #[cfg_attr(not(windows), allow(unused_variables))]
 pub fn with_retry_sync(
     from: impl AsRef<Path>,
@@ -369,7 +373,9 @@ enum PersistRetryError {
     LostState,
 }
 
-/// Persist a `NamedTempFile`, retrying (on Windows) if it fails due to transient operating system errors, in a synchronous context.
+/// Persist a `NamedTempFile`, retrying (on Windows) if it fails due to transient operating system
+/// errors.
+#[cfg(feature = "tokio")]
 pub async fn persist_with_retry(
     from: NamedTempFile,
     to: impl AsRef<Path>,
@@ -464,7 +470,10 @@ pub async fn persist_with_retry(
     }
 }
 
-/// Persist a `NamedTempFile`, retrying (on Windows) if it fails due to transient operating system errors, in a synchronous context.
+/// Persist a `NamedTempFile`, retrying (on Windows) if it fails due to transient operating system
+/// errors.
+///
+/// This is a synchronous implementation of [`persist_with_retry`].
 pub fn persist_with_retry_sync(
     from: NamedTempFile,
     to: impl AsRef<Path>,

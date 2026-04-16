@@ -142,8 +142,11 @@ password (or access token).
 
 !!! tip
 
-    See the [alternative index guide](../guides/integration/alternative-indexes.md) for details on
-    authenticating with specific private index providers, e.g., from AWS, Azure, or GCP.
+    See the dedicated guides for authenticating with specific private index providers:
+    [Azure Artifacts](../guides/integration/azure.md),
+    [Google Artifact Registry](../guides/integration/google.md),
+    [AWS CodeArtifact](../guides/integration/aws.md), and
+    [JFrog Artifactory](../guides/integration/jfrog.md).
 
 ### Providing credentials directly
 
@@ -280,6 +283,31 @@ This setting is most commonly used to override the default cache control headers
 that otherwise disable caching, often unintentionally. We typically recommend following PyPI's
 approach to caching headers, i.e., setting `api = "max-age=600"` and
 `files = "max-age=365000000, immutable"`.
+
+### Configuring `exclude-newer` for an index
+
+If you're using [`exclude-newer`](./resolution.md#reproducible-resolutions), you can configure a
+different cutoff for a specific index:
+
+```toml
+[[tool.uv.index]]
+name = "internal"
+url = "https://internal.example.com/simple"
+exclude-newer = "7 days"
+```
+
+Index-specific values only affect packages served from that index. Package-specific
+`exclude-newer-package` overrides still take precedence.
+
+If an index does not provide `upload-time` metadata, you can disable the cutoff for that index
+entirely:
+
+```toml
+[[tool.uv.index]]
+name = "internal"
+url = "https://internal.example.com/simple"
+exclude-newer = false
+```
 
 ## "Flat" indexes
 

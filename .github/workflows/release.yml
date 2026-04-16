@@ -47,7 +47,27 @@ on:
         default: dry-run
         type: string
 
+env:
+  CARGO_DIST_VERSION: "0.31.0"
+  CARGO_DIST_CHECKSUM: "cd355dab0b4c02fb59038fef87655550021d07f45f1d82f947a34ef98560abb8"
+
 jobs:
+  release-gate:
+    # N.B. This name should not change, it is used for downstream checks.
+    name: release-gate
+    if: ${{ inputs.tag != 'dry-run' }}
+    runs-on: ubuntu-latest
+    # This environment requires a 2-factor approval, i.e., the workflow must be approved by another
+    # team member. GitHub fires approval events on every job that deploys to an environment, so we
+    # have a dedicated environment for this purpose instead of using the `release` environment.
+    # We use a GitHub App with a deployment protection rule webhook to ensure that the `release`
+    # environment is only approved when the `release-gate` job succeeds.
+    environment:
+      name: release-gate
+      deployment: true
+    steps:
+      - run: echo "Release approved"
+
   # Run 'dist plan' (or host) to determine what tasks we need to do
   plan:
     runs-on: "depot-ubuntu-latest-4"
@@ -59,17 +79,19 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           persist-credentials: false
           submodules: recursive
       - name: Install dist
-        # we specify bash to get pipefail; it guards against the `curl` command
-        # failing. otherwise `sh` won't catch that `curl` returned non-0
         shell: bash
-        run: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.30.2/cargo-dist-installer.sh | sh"
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf "https://github.com/axodotdev/cargo-dist/releases/download/v${CARGO_DIST_VERSION}/cargo-dist-x86_64-unknown-linux-gnu.tar.xz" -o /tmp/cargo-dist.tar.xz
+          echo "${CARGO_DIST_CHECKSUM}  /tmp/cargo-dist.tar.xz" | sha256sum -c -
+          tar -xf /tmp/cargo-dist.tar.xz -C /tmp
+          install /tmp/cargo-dist-x86_64-unknown-linux-gnu/dist ~/.cargo/bin/
       - name: Cache dist
-        uses: actions/upload-artifact@6027e3dd177782cd8ab9af838c04fd81a07f1d47
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: cargo-dist-cache
           path: ~/.cargo/bin/dist
@@ -85,12 +107,12 @@ jobs:
           cat plan-dist-manifest.json
           echo "manifest=$(jq -c "." plan-dist-manifest.json)" >> "$GITHUB_OUTPUT"
       - name: "Upload dist-manifest.json"
-        uses: actions/upload-artifact@6027e3dd177782cd8ab9af838c04fd81a07f1d47
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: artifacts-plan-dist-manifest
           path: plan-dist-manifest.json
 
-  custom-build-binaries:
+  custom-build-release-binaries:
     needs:
       - plan
     if: ${{ needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload' || inputs.tag == 'dry-run' }}
@@ -102,7 +124,8 @@ jobs:
   custom-build-docker:
     needs:
       - plan
-    if: ${{ needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload' || inputs.tag == 'dry-run' }}
+      - release-gate
+    if: ${{ always() && needs.plan.result == 'success' && (needs.release-gate.result == 'success' || needs.release-gate.result == 'skipped') && (needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload' || inputs.tag == 'dry-run') }}
     uses: ./.github/workflows/build-docker.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
@@ -113,30 +136,69 @@ jobs:
       "id-token": "write"
       "packages": "write"
 
+  synthesize-local-dist-manifest:
+    needs:
+      - plan
+      - custom-build-release-binaries
+    if: ${{ needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload' || inputs.tag == 'dry-run' }}
+    runs-on: "depot-ubuntu-latest-4"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - name: Install cached dist
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: cargo-dist-cache
+          path: ~/.cargo/bin/
+      - run: chmod +x ~/.cargo/bin/dist
+      - name: Fetch local artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: artifacts-*
+          path: target/distrib/
+          merge-multiple: true
+      - name: Generate local dist manifest
+        shell: bash
+        env:
+          TAG: ${{ needs.plan.outputs.tag-flag }}
+        run: |
+          temp_manifest=target/local-dist-manifest.json.tmp
+          dist manifest "$TAG" --output-format=json --no-local-paths --artifacts=local > "$temp_manifest"
+          python3 scripts/patch-dist-manifest-checksums.py --manifest "$temp_manifest" --artifacts-dir target/distrib
+          mv "$temp_manifest" target/distrib/local-dist-manifest.json
+      - name: Upload synthesized local dist manifest
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: artifacts-build-local-manifest
+          path: target/distrib/local-dist-manifest.json
+
   # Build and package all the platform-agnostic(ish) things
   build-global-artifacts:
     needs:
       - plan
-      - custom-build-binaries
+      - custom-build-release-binaries
       - custom-build-docker
+      - synthesize-local-dist-manifest
     runs-on: "depot-ubuntu-latest-4"
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BUILD_MANIFEST_NAME: target/distrib/global-dist-manifest.json
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           persist-credentials: false
           submodules: recursive
       - name: Install cached dist
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: cargo-dist-cache
           path: ~/.cargo/bin/
       - run: chmod +x ~/.cargo/bin/dist
       # Get all the local artifacts for the global tasks to use (for e.g. checksums)
       - name: Fetch local artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: artifacts-*
           path: target/distrib/
@@ -154,7 +216,7 @@ jobs:
 
           cp dist-manifest.json "$BUILD_MANIFEST_NAME"
       - name: "Upload artifacts"
-        uses: actions/upload-artifact@6027e3dd177782cd8ab9af838c04fd81a07f1d47
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: artifacts-build-global
           path: |
@@ -164,30 +226,30 @@ jobs:
   host:
     needs:
       - plan
-      - custom-build-binaries
+      - custom-build-release-binaries
       - custom-build-docker
       - build-global-artifacts
     # Only run if we're "publishing", and only if plan, local and global didn't fail (skipped is fine)
-    if: ${{ always() && needs.plan.result == 'success' && needs.plan.outputs.publishing == 'true' && (needs.build-global-artifacts.result == 'skipped' || needs.build-global-artifacts.result == 'success') && (needs.custom-build-binaries.result == 'skipped' || needs.custom-build-binaries.result == 'success') && (needs.custom-build-docker.result == 'skipped' || needs.custom-build-docker.result == 'success') }}
+    if: ${{ always() && needs.plan.result == 'success' && needs.plan.outputs.publishing == 'true' && (needs.build-global-artifacts.result == 'skipped' || needs.build-global-artifacts.result == 'success') && (needs.custom-build-release-binaries.result == 'skipped' || needs.custom-build-release-binaries.result == 'success') && (needs.custom-build-docker.result == 'skipped' || needs.custom-build-docker.result == 'success') }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     runs-on: "depot-ubuntu-latest-4"
     outputs:
       val: ${{ steps.host.outputs.manifest }}
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           persist-credentials: false
           submodules: recursive
       - name: Install cached dist
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: cargo-dist-cache
           path: ~/.cargo/bin/
       - run: chmod +x ~/.cargo/bin/dist
       # Fetch artifacts from scratch-storage
       - name: Fetch artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: artifacts-*
           path: target/distrib/
@@ -201,7 +263,7 @@ jobs:
           cat dist-manifest.json
           echo "manifest=$(jq -c "." dist-manifest.json)" >> "$GITHUB_OUTPUT"
       - name: "Upload dist-manifest.json"
-        uses: actions/upload-artifact@6027e3dd177782cd8ab9af838c04fd81a07f1d47
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           # Overwrite the previous copy
           name: artifacts-dist-manifest
@@ -211,6 +273,7 @@ jobs:
     needs:
       - plan
       - host
+      - release-gate
     if: ${{ !fromJson(needs.plan.outputs.val).announcement_is_prerelease || fromJson(needs.plan.outputs.val).publish_prereleases }}
     uses: ./.github/workflows/publish-pypi.yml
     with:
@@ -225,6 +288,7 @@ jobs:
     needs:
       - plan
       - host
+      - release-gate
       - custom-publish-pypi # DIRTY: see #16989
     if: ${{ !fromJson(needs.plan.outputs.val).announcement_is_prerelease || fromJson(needs.plan.outputs.val).publish_prereleases }}
     uses: ./.github/workflows/publish-crates.yml
@@ -234,19 +298,23 @@ jobs:
     # publish jobs get escalated permissions
     permissions:
       "contents": "read"
+      "id-token": "write"
 
   # Create a GitHub Release while uploading all files to it
   announce:
     needs:
       - plan
       - host
+      - release-gate
       - custom-publish-pypi
       - custom-publish-crates
     # use "always() && ..." to allow us to wait for all publish jobs while
     # still allowing individual publish jobs to skip themselves (for prereleases).
     # "host" however must run to completion, no skipping allowed!
-    if: ${{ always() && needs.host.result == 'success' && (needs.custom-publish-pypi.result == 'skipped' || needs.custom-publish-pypi.result == 'success') && (needs.custom-publish-crates.result == 'skipped' || needs.custom-publish-crates.result == 'success') }}
+    if: ${{ always() && needs.host.result == 'success' && needs.release-gate.result == 'success' && (needs.custom-publish-pypi.result == 'skipped' || needs.custom-publish-pypi.result == 'success') && (needs.custom-publish-crates.result == 'skipped' || needs.custom-publish-crates.result == 'success') }}
     runs-on: "depot-ubuntu-latest-4"
+    environment:
+      name: release
     permissions:
       "attestations": "write"
       "contents": "write"
@@ -254,13 +322,13 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           persist-credentials: false
           submodules: recursive
       # Create a GitHub Release while uploading all files to it
       - name: "Download GitHub Artifacts"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: artifacts-*
           path: artifacts
@@ -307,3 +375,14 @@ jobs:
     with:
       plan: ${{ needs.plan.outputs.val }}
     secrets: inherit
+
+  custom-publish-mirror:
+    needs:
+      - plan
+      - announce
+    uses: ./.github/workflows/publish-mirror.yml
+    with:
+      plan: ${{ needs.plan.outputs.val }}
+    secrets: inherit
+    permissions:
+      "contents": "read"

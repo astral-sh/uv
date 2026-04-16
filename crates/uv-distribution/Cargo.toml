@@ -1,6 +1,6 @@
 [package]
 name = "uv-distribution"
-version = "0.0.17"
+version = "0.0.39"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -28,14 +28,17 @@ uv-flags = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio"] }
 uv-git = { workspace = true }
 uv-git-types = { workspace = true }
+uv-install-wheel = { workspace = true }
 uv-metadata = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
+uv-python = { workspace = true }
 uv-redacted = { workspace = true }
 uv-types = { workspace = true }
+uv-warnings = { workspace = true }
 uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }

@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![allow(clippy::cast_sign_loss)]
+#![expect(clippy::cast_sign_loss)]
 
 use std::{
     io::{BufReader, Cursor, Read, Seek, SeekFrom},
@@ -16,7 +16,7 @@ use std::{
 /// A trait to represent some reader which has a total length known in
 /// advance. This is roughly equivalent to the nightly
 /// [`Seek::stream_len`] API.
-pub trait HasLength {
+pub(crate) trait HasLength {
     /// Return the current total length of this stream.
     fn len(&self) -> u64;
 }

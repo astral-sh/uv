@@ -7,7 +7,6 @@ use std::fmt::{Display, Formatter};
 use std::io::{BufReader, Read, Seek, Write};
 use std::path::{Component, Path, PathBuf};
 use std::{io, mem};
-use tempfile::NamedTempFile;
 use tracing::{debug, trace};
 use walkdir::WalkDir;
 use zip::{CompressionMethod, ZipWriter};
@@ -16,7 +15,7 @@ use uv_distribution_filename::WheelFilename;
 use uv_fs::Simplified;
 use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag};
-use uv_preview::{Preview, PreviewFeature};
+use uv_preview::PreviewFeature;
 use uv_warnings::warn_user_once;
 
 use crate::metadata::DEFAULT_EXCLUDES;
@@ -32,7 +31,6 @@ pub fn build_wheel(
     metadata_directory: Option<&Path>,
     uv_version: &str,
     show_warnings: bool,
-    preview: Preview,
 ) -> Result<WheelFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     for warning in pyproject_toml.check_build_system(uv_version) {
@@ -58,7 +56,7 @@ pub fn build_wheel(
         fs_err::remove_file(&wheel_path)?;
     }
 
-    let temp_file = NamedTempFile::new_in(wheel_dir)?;
+    let temp_file = uv_fs::tempfile_in(wheel_dir)?;
     let wheel_writer = ZipDirectoryWriter::new_wheel(temp_file.as_file());
 
     write_wheel(
@@ -68,7 +66,6 @@ pub fn build_wheel(
         uv_version,
         wheel_writer,
         show_warnings,
-        preview,
     )?;
 
     temp_file
@@ -83,7 +80,6 @@ pub fn list_wheel(
     source_tree: &Path,
     uv_version: &str,
     show_warnings: bool,
-    preview: Preview,
 ) -> Result<(WheelFilename, FileList), Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     for warning in pyproject_toml.check_build_system(uv_version) {
@@ -110,7 +106,6 @@ pub fn list_wheel(
         uv_version,
         writer,
         show_warnings,
-        preview,
     )?;
     Ok((filename, files))
 }
@@ -122,7 +117,6 @@ fn write_wheel(
     uv_version: &str,
     mut wheel_writer: impl DirectoryWriter,
     show_warnings: bool,
-    preview: Preview,
 ) -> Result<(), Error> {
     let settings = pyproject_toml
         .settings()
@@ -274,7 +268,6 @@ fn write_wheel(
         filename,
         source_tree,
         uv_version,
-        preview,
     )?;
     wheel_writer.close(&dist_info_dir)?;
 
@@ -288,7 +281,6 @@ pub fn build_editable(
     metadata_directory: Option<&Path>,
     uv_version: &str,
     show_warnings: bool,
-    preview: Preview,
 ) -> Result<WheelFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     for warning in pyproject_toml.check_build_system(uv_version) {
@@ -319,7 +311,7 @@ pub fn build_editable(
         fs_err::remove_file(&wheel_path)?;
     }
 
-    let temp_file = NamedTempFile::new_in(wheel_dir)?;
+    let temp_file = uv_fs::tempfile_in(wheel_dir)?;
     let mut wheel_writer = ZipDirectoryWriter::new_wheel(temp_file.as_file());
 
     debug!("Adding pth file to {}", wheel_path.user_display());
@@ -345,7 +337,6 @@ pub fn build_editable(
         &filename,
         source_tree,
         uv_version,
-        preview,
     )?;
     wheel_writer.close(&dist_info_dir)?;
 
@@ -361,7 +352,6 @@ pub fn metadata(
     source_tree: &Path,
     metadata_directory: &Path,
     uv_version: &str,
-    preview: Preview,
 ) -> Result<String, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     for warning in pyproject_toml.check_build_system(uv_version) {
@@ -390,7 +380,6 @@ pub fn metadata(
         &filename,
         source_tree,
         uv_version,
-        preview,
     )?;
     wheel_writer.close(&dist_info_dir)?;
 
@@ -408,7 +397,7 @@ struct RecordEntry {
     /// The urlsafe-base64-nopad encoded SHA256 of the files.
     hash: String,
     /// The size of the file in bytes.
-    size: usize,
+    size: u64,
 }
 
 /// Read the input file and write it both to the hasher and the target file.
@@ -421,7 +410,7 @@ fn write_hashed(
     writer: &mut dyn Write,
 ) -> Result<RecordEntry, io::Error> {
     let mut hasher = Sha256::new();
-    let mut size = 0;
+    let mut size: u64 = 0;
     // 8KB is the default defined in `std::sys_common::io`.
     let mut buffer = vec![0; 8 * 1024];
     loop {
@@ -436,7 +425,7 @@ fn write_hashed(
         }
         hasher.update(&buffer[..read]);
         writer.write_all(&buffer[..read])?;
-        size += read;
+        size += read as u64;
     }
     Ok(RecordEntry {
         path: path.to_string(),
@@ -595,7 +584,6 @@ fn write_dist_info(
     filename: &WheelFilename,
     root: &Path,
     uv_version: &str,
-    preview: Preview,
 ) -> Result<String, Error> {
     let dist_info_dir = format!(
         "{}-{}.dist-info",
@@ -611,7 +599,7 @@ fn write_dist_info(
         &format!("{dist_info_dir}/WHEEL"),
         wheel_info.to_string().as_bytes(),
     )?;
-    if preview.is_enabled(PreviewFeature::MetadataJson) {
+    if uv_preview::is_enabled(PreviewFeature::MetadataJson) {
         writer.write_bytes(
             &format!("{dist_info_dir}/WHEEL.json"),
             &serde_json::to_vec(&wheel_info).map_err(Error::Json)?,
@@ -632,7 +620,7 @@ fn write_dist_info(
         &format!("{dist_info_dir}/METADATA"),
         metadata.core_metadata_format().as_bytes(),
     )?;
-    if preview.is_enabled(PreviewFeature::MetadataJson) {
+    if uv_preview::is_enabled(PreviewFeature::MetadataJson) {
         writer.write_bytes(
             &format!("{dist_info_dir}/METADATA.json"),
             &serde_json::to_vec(&metadata).map_err(Error::Json)?,
@@ -725,6 +713,7 @@ impl<W: Write + Seek> ZipDirectoryWriter<W> {
         // Set file permissions: 644 (rw-r--r--) for regular files, 755 (rwxr-xr-x) for executables
         let permissions = if executable_bit { 0o755 } else { 0o644 };
         let options = zip::write::SimpleFileOptions::default()
+            .system(zip::System::Unix)
             .unix_permissions(permissions)
             .compression_method(self.compression);
         self.writer.start_file(path, options)?;
@@ -737,6 +726,7 @@ impl<W: Write + Seek> DirectoryWriter for ZipDirectoryWriter<W> {
         trace!("Adding {}", path);
         // Set appropriate permissions for metadata files (644 = rw-r--r--)
         let options = zip::write::SimpleFileOptions::default()
+            .system(zip::System::Unix)
             .unix_permissions(0o644)
             .compression_method(self.compression);
         self.writer.start_file(path, options)?;
@@ -746,7 +736,7 @@ impl<W: Write + Seek> DirectoryWriter for ZipDirectoryWriter<W> {
         self.record.push(RecordEntry {
             path: path.to_string(),
             hash,
-            size: bytes.len(),
+            size: bytes.len() as u64,
         });
 
         Ok(())
@@ -773,7 +763,9 @@ impl<W: Write + Seek> DirectoryWriter for ZipDirectoryWriter<W> {
 
     fn write_directory(&mut self, directory: &str) -> Result<(), Error> {
         trace!("Adding directory {}", directory);
-        let options = zip::write::SimpleFileOptions::default().compression_method(self.compression);
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(self.compression)
+            .system(zip::System::Unix);
         Ok(self.writer.add_directory(directory, options)?)
     }
 
@@ -824,7 +816,7 @@ impl DirectoryWriter for FilesystemWriter {
         self.record.push(RecordEntry {
             path: path.to_string(),
             hash,
-            size: bytes.len(),
+            size: bytes.len() as u64,
         });
 
         Ok(fs_err::write(self.root.join(path), bytes)?)
@@ -911,15 +903,10 @@ mod test {
     /// Snapshot all files from the prepare metadata hook.
     #[test]
     fn test_prepare_metadata() {
+        let _preview = uv_preview::test::with_features(&[]);
         let metadata_dir = TempDir::new().unwrap();
         let built_by_uv = Path::new("../../test/packages/built-by-uv");
-        metadata(
-            built_by_uv,
-            metadata_dir.path(),
-            "1.0.0+test",
-            Preview::default(),
-        )
-        .unwrap();
+        metadata(built_by_uv, metadata_dir.path(), "1.0.0+test").unwrap();
 
         let mut files: Vec<_> = WalkDir::new(metadata_dir.path())
             .sort_by_file_name()

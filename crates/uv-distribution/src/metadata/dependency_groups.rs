@@ -164,6 +164,7 @@ impl SourcedDependencyGroups {
                                 locations,
                                 project.workspace(),
                                 git_member,
+                                true,
                                 credentials_cache,
                             )
                             .map(move |requirement| match requirement {

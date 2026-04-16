@@ -20,10 +20,33 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # v7.2.0
+      - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
 
       - name: "Check windows crate versions match"
-        run: uv run scripts/check-trampoline-version-consistency.py
+        run: uv run --no-project scripts/check-trampoline-version-consistency.py
+
+  # Verify committed trampolines match a reproducible Docker build
+  windows-trampoline-reproducible:
+    # uv version bumps (e.g., https://github.com/astral-sh/uv/pull/18805) cause the reproducible
+    # check to fail and these are not regenerated as a part of the release process so we temporarily
+    # disable this job
+    if: false
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    name: "check reproducible build"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: "Set up Docker Buildx"
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: "Build trampolines in Docker"
+        run: scripts/build-trampolines.sh --cache-from type=gha --cache-to type=gha
+
+      - name: "Check committed trampolines match build"
+        run: git diff --exit-code crates/uv-trampoline-builder/trampolines/
 
   # Separate jobs for the nightly crate
   windows-trampoline-check:
@@ -47,7 +70,7 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
 
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           workspaces: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
 
@@ -58,7 +81,7 @@ jobs:
           rustup component add rust-src --target ${{ matrix.target-arch }}-pc-windows-msvc
 
       - name: "Install cargo-bloat"
-        uses: taiki-e/install-action@542cebaaed782771e619bd5609d97659d109c492 # v2.66.7
+        uses: taiki-e/install-action@7a562dfa955aa2e4d5b0fd6ebd57ff9715c07b0b # v2.73.0
         with:
           tool: cargo-bloat
 
@@ -105,7 +128,7 @@ jobs:
       - name: Copy Git Repo to Dev Drive
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           workspaces: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
       - name: "Install Rust toolchain"

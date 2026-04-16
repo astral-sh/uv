@@ -12,31 +12,36 @@ use jiff::Timestamp;
 use owo_colors::OwoColorize;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use serde::Serializer;
 use toml_edit::{Array, ArrayOfTables, InlineTable, Item, Table, Value, value};
-use tracing::debug;
+use tracing::{debug, instrument, trace};
 use url::Url;
 
 use uv_cache_key::RepositoryUrl;
-use uv_configuration::{BuildOptions, Constraints, InstallTarget};
+use uv_configuration::{
+    BuildOptions, Constraints, DependencyGroupsWithDefaults, ExtrasSpecificationWithDefaults,
+    InstallTarget,
+};
 use uv_distribution::{DistributionDatabase, FlatRequiresDist};
 use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, WheelFilename,
 };
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
-    Dist, DistributionMetadata, FileLocation, GitSourceDist, IndexLocations, IndexMetadata,
-    IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
+    Dist, FileLocation, GitSourceDist, Identifier, IndexLocations, IndexMetadata, IndexUrl, Name,
+    PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
+    RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
     SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString,
 };
-use uv_fs::{PortablePath, PortablePathBuf, relative_to};
+use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
-use uv_pep508::{MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError, split_scheme};
+use uv_pep508::{
+    MarkerEnvironment, MarkerTree, Scheme, VerbatimUrl, VerbatimUrlError, split_scheme,
+};
 use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
 };
@@ -49,19 +54,18 @@ use uv_small_str::SmallString;
 use uv_types::{BuildContext, HashStrategy};
 use uv_workspace::{Editability, WorkspaceMember};
 
-use crate::exclude_newer::ExcludeNewerSpan;
 use crate::fork_strategy::ForkStrategy;
 pub(crate) use crate::lock::export::PylockTomlPackage;
 pub use crate::lock::export::RequirementsTxtExport;
-pub use crate::lock::export::{PylockToml, PylockTomlErrorKind, cyclonedx_json};
+pub use crate::lock::export::{Metadata, PylockToml, PylockTomlErrorKind, cyclonedx_json};
 pub use crate::lock::installable::Installable;
 pub use crate::lock::map::PackageMap;
 pub use crate::lock::tree::TreeDisplay;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{
-    ExcludeNewer, ExcludeNewerPackage, ExcludeNewerValue, InMemoryIndex, MetadataResponse,
-    PackageExcludeNewer, PrereleaseMode, ResolutionMode, ResolverOutput,
+    ExcludeNewer, ExcludeNewerOverride, ExcludeNewerPackage, ExcludeNewerSpan, ExcludeNewerValue,
+    InMemoryIndex, MetadataResponse, PrereleaseMode, ResolutionMode, ResolverOutput,
 };
 
 mod export;
@@ -296,9 +300,26 @@ pub struct Lock {
 
 impl Lock {
     /// Initialize a [`Lock`] from a [`ResolverOutput`].
-    pub fn from_resolution(resolution: &ResolverOutput, root: &Path) -> Result<Self, LockError> {
+    pub fn from_resolution(
+        resolution: &ResolverOutput,
+        root: &Path,
+        supported_environments: Vec<MarkerTree>,
+    ) -> Result<Self, LockError> {
         let mut packages = BTreeMap::new();
         let requires_python = resolution.requires_python.clone();
+        let supported_environments = supported_environments
+            .into_iter()
+            .map(|marker| requires_python.complexify_markers(marker))
+            .collect::<Vec<_>>();
+        let supported_environments_marker = if supported_environments.is_empty() {
+            None
+        } else {
+            let mut combined = MarkerTree::FALSE;
+            for marker in &supported_environments {
+                combined.or(*marker);
+            }
+            Some(UniversalMarker::new(combined, ConflictMarker::TRUE))
+        };
 
         // Determine the set of packages included at multiple versions.
         let mut seen = FxHashSet::default();
@@ -326,19 +347,35 @@ impl Lock {
 
             // If there are multiple distributions for the same package, include the markers of all
             // forks that included the current distribution.
+            //
+            // Canonicalize the subset of fork markers that selected this distribution to
+            // match the form persisted in `uv.lock`.
             let fork_markers = if duplicates.contains(dist.name()) {
-                resolution
+                let fork_markers = resolution
                     .fork_markers
                     .iter()
                     .filter(|fork_markers| !fork_markers.is_disjoint(dist.marker))
                     .copied()
-                    .collect()
+                    .collect::<Vec<_>>();
+                canonicalize_universal_markers(&fork_markers, &requires_python)
             } else {
                 vec![]
             };
 
             let mut package = Package::from_annotated_dist(dist, fork_markers, root)?;
-            Self::remove_unreachable_wheels(resolution, &requires_python, node_index, &mut package);
+            let mut wheel_marker = dist.marker;
+            if let Some(supported_environments_marker) = supported_environments_marker {
+                wheel_marker.and(supported_environments_marker);
+            }
+            let wheels = &mut package.wheels;
+            wheels.retain(|wheel| {
+                !is_wheel_unreachable_for_marker(
+                    &wheel.filename,
+                    &requires_python,
+                    &wheel_marker,
+                    None,
+                )
+            });
 
             // Add all dependencies
             for edge in resolution.graph.edges(node_index) {
@@ -424,6 +461,12 @@ impl Lock {
             fork_strategy: resolution.options.fork_strategy,
             exclude_newer: resolution.options.exclude_newer.clone().into(),
         };
+        // Canonicalize the top-level fork markers to match what is persisted in
+        // `uv.lock`. In particular, conflict-only fork markers can serialize to
+        // nothing at the top level, and `uv lock --check` should compare against
+        // that canonical form rather than the raw resolver output.
+        let fork_markers =
+            canonicalize_universal_markers(&resolution.fork_markers, &requires_python);
         let lock = Self::new(
             VERSION,
             REVISION,
@@ -432,285 +475,11 @@ impl Lock {
             options,
             ResolverManifest::default(),
             Conflicts::empty(),
+            supported_environments,
             vec![],
-            vec![],
-            resolution.fork_markers.clone(),
+            fork_markers,
         )?;
         Ok(lock)
-    }
-
-    /// Remove wheels that can't be selected for installation due to environment markers.
-    ///
-    /// For example, a package included under `sys_platform == 'win32'` does not need Linux
-    /// wheels.
-    fn remove_unreachable_wheels(
-        graph: &ResolverOutput,
-        requires_python: &RequiresPython,
-        node_index: NodeIndex,
-        locked_dist: &mut Package,
-    ) {
-        // Remove wheels that don't match `requires-python` and can't be selected for installation.
-        locked_dist
-            .wheels
-            .retain(|wheel| requires_python.matches_wheel_tag(&wheel.filename));
-
-        // Filter by platform tags.
-        locked_dist.wheels.retain(|wheel| {
-            // Naively, we'd check whether `platform_system == 'Linux'` is disjoint, or
-            // `os_name == 'posix'` is disjoint, or `sys_platform == 'linux'` is disjoint (each on its
-            // own sufficient to exclude linux wheels), but due to
-            // `(A ∩ (B ∩ C) = ∅) => ((A ∩ B = ∅) or (A ∩ C = ∅))`
-            // a single disjointness check with the intersection is sufficient, so we have one
-            // constant per platform.
-            let platform_tags = wheel.filename.platform_tags();
-
-            if platform_tags.iter().all(PlatformTag::is_any) {
-                return true;
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_linux) {
-                if platform_tags.iter().all(PlatformTag::is_arm) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*LINUX_ARM_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*LINUX_X86_64_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_x86) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*LINUX_X86_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_ppc64le) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*LINUX_PPC64LE_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_ppc64) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*LINUX_PPC64_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_s390x) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*LINUX_S390X_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_riscv64) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*LINUX_RISCV64_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_loongarch64) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*LINUX_LOONGARCH64_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_armv7l) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*LINUX_ARMV7L_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_armv6l) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*LINUX_ARMV6L_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if graph.graph[node_index].marker().is_disjoint(*LINUX_MARKERS) {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_windows) {
-                if platform_tags.iter().all(PlatformTag::is_arm) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*WINDOWS_ARM_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*WINDOWS_X86_64_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_x86) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*WINDOWS_X86_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if graph.graph[node_index]
-                    .marker()
-                    .is_disjoint(*WINDOWS_MARKERS)
-                {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_macos) {
-                if platform_tags.iter().all(PlatformTag::is_arm) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*MAC_ARM_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*MAC_X86_64_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_x86) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*MAC_X86_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if graph.graph[node_index].marker().is_disjoint(*MAC_MARKERS) {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_android) {
-                if platform_tags.iter().all(PlatformTag::is_arm) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*ANDROID_ARM_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*ANDROID_X86_64_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_x86) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*ANDROID_X86_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if graph.graph[node_index]
-                    .marker()
-                    .is_disjoint(*ANDROID_MARKERS)
-                {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_arm) {
-                if graph.graph[node_index].marker().is_disjoint(*ARM_MARKERS) {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_x86_64) {
-                if graph.graph[node_index]
-                    .marker()
-                    .is_disjoint(*X86_64_MARKERS)
-                {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_x86) {
-                if graph.graph[node_index].marker().is_disjoint(*X86_MARKERS) {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_ppc64le) {
-                if graph.graph[node_index]
-                    .marker()
-                    .is_disjoint(*PPC64LE_MARKERS)
-                {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_ppc64) {
-                if graph.graph[node_index].marker().is_disjoint(*PPC64_MARKERS) {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_s390x) {
-                if graph.graph[node_index].marker().is_disjoint(*S390X_MARKERS) {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_riscv64) {
-                if graph.graph[node_index]
-                    .marker()
-                    .is_disjoint(*RISCV64_MARKERS)
-                {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_loongarch64) {
-                if graph.graph[node_index]
-                    .marker()
-                    .is_disjoint(*LOONGARCH64_MARKERS)
-                {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_armv7l) {
-                if graph.graph[node_index]
-                    .marker()
-                    .is_disjoint(*ARMV7L_MARKERS)
-                {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_armv6l) {
-                if graph.graph[node_index]
-                    .marker()
-                    .is_disjoint(*ARMV6L_MARKERS)
-                {
-                    return false;
-                }
-            }
-
-            true
-        });
     }
 
     /// Initialize a [`Lock`] from a list of [`Package`] entries.
@@ -1034,6 +803,157 @@ impl Lock {
         )
     }
 
+    /// Returns the set of packages that should be audited, respecting the given
+    /// extras and dependency groups filters.
+    ///
+    /// Workspace members and packages without version information are excluded
+    /// unconditionally, since neither can be meaningfully looked up in a
+    /// vulnerability database.
+    pub fn packages_for_audit<'lock>(
+        &'lock self,
+        extras: &'lock ExtrasSpecificationWithDefaults,
+        groups: &'lock DependencyGroupsWithDefaults,
+    ) -> Vec<(&'lock PackageName, &'lock Version)> {
+        // Enqueue a dependency for auditability checks: base package (no extra) first, then each activated extra.
+        fn enqueue_dep<'lock>(
+            lock: &'lock Lock,
+            seen: &mut FxHashSet<(&'lock PackageId, Option<&'lock ExtraName>)>,
+            queue: &mut VecDeque<(&'lock Package, Option<&'lock ExtraName>)>,
+            dep: &'lock Dependency,
+        ) {
+            let dep_pkg = lock.find_by_id(&dep.package_id);
+            for maybe_extra in std::iter::once(None).chain(dep.extra.iter().map(Some)) {
+                if seen.insert((&dep.package_id, maybe_extra)) {
+                    queue.push_back((dep_pkg, maybe_extra));
+                }
+            }
+        }
+
+        // Identify workspace members (the implicit root counts for single-member workspaces).
+        let workspace_member_ids: FxHashSet<&PackageId> = if self.members().is_empty() {
+            self.root().into_iter().map(|package| &package.id).collect()
+        } else {
+            self.packages
+                .iter()
+                .filter(|package| self.members().contains(&package.id.name))
+                .map(|package| &package.id)
+                .collect()
+        };
+
+        // Lockfile traversal state: (package, optional extra to activate on that package).
+        let mut queue: VecDeque<(&Package, Option<&ExtraName>)> = VecDeque::new();
+        let mut seen: FxHashSet<(&PackageId, Option<&ExtraName>)> = FxHashSet::default();
+
+        // Seed from workspace members. Always queue with `None` so that we can traverse
+        // their dependency groups; only queue extras when prod mode is active.
+        for package in self
+            .packages
+            .iter()
+            .filter(|p| workspace_member_ids.contains(&p.id))
+        {
+            if seen.insert((&package.id, None)) {
+                queue.push_back((package, None));
+            }
+            if groups.prod() {
+                for extra in extras.extra_names(package.optional_dependencies.keys()) {
+                    if seen.insert((&package.id, Some(extra))) {
+                        queue.push_back((package, Some(extra)));
+                    }
+                }
+            }
+        }
+
+        // Seed from requirements attached directly to the lock (e.g., PEP 723 scripts).
+        for requirement in self.requirements() {
+            for package in self
+                .packages
+                .iter()
+                .filter(|p| p.id.name == requirement.name)
+            {
+                if seen.insert((&package.id, None)) {
+                    queue.push_back((package, None));
+                }
+                for extra in &*requirement.extras {
+                    if seen.insert((&package.id, Some(extra))) {
+                        queue.push_back((package, Some(extra)));
+                    }
+                }
+            }
+        }
+
+        // Seed from dependency groups attached directly to the lock (e.g., project-less
+        // workspace roots).
+        for (group, requirements) in self.dependency_groups() {
+            if !groups.contains(group) {
+                continue;
+            }
+            for requirement in requirements {
+                for package in self
+                    .packages
+                    .iter()
+                    .filter(|p| p.id.name == requirement.name)
+                {
+                    if seen.insert((&package.id, None)) {
+                        queue.push_back((package, None));
+                    }
+                    for extra in &*requirement.extras {
+                        if seen.insert((&package.id, Some(extra))) {
+                            queue.push_back((package, Some(extra)));
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut auditable: BTreeSet<(&PackageName, &Version)> = BTreeSet::default();
+
+        while let Some((package, extra)) = queue.pop_front() {
+            let is_member = workspace_member_ids.contains(&package.id);
+
+            // Collect non-workspace packages that have version information.
+            if !is_member {
+                if let Some(version) = package.version() {
+                    auditable.insert((package.name(), version));
+                } else {
+                    trace!(
+                        "Skipping audit for `{}` because it has no version information",
+                        package.name()
+                    );
+                }
+            }
+
+            // Follow allowed dependency groups.
+            if is_member && extra.is_none() {
+                for dep in package
+                    .dependency_groups
+                    .iter()
+                    .filter(|(group, _)| groups.contains(group))
+                    .flat_map(|(_, deps)| deps)
+                {
+                    enqueue_dep(self, &mut seen, &mut queue, dep);
+                }
+            }
+
+            // Follow the regular/extra dependencies for this (package, extra) pair.
+            // For workspace members in only-group mode, skip regular dependencies.
+            let dependencies: &[Dependency] = match extra {
+                Some(extra) => package
+                    .optional_dependencies
+                    .get(extra)
+                    .map(Vec::as_slice)
+                    .unwrap_or_default(),
+                None if is_member && !groups.prod() => &[],
+                None => &package.dependencies,
+            };
+
+            for dep in dependencies {
+                enqueue_dep(self, &mut seen, &mut queue, dep);
+            }
+        }
+
+        auditable.into_iter().collect()
+    }
+
     /// Return the workspace root used to generate this lock.
     pub fn root(&self) -> Option<&Package> {
         self.packages.iter().find(|package| {
@@ -1253,7 +1173,7 @@ impl Lock {
                     let mut package_table = toml_edit::Table::new();
                     for (name, setting) in &exclude_newer.package {
                         match setting {
-                            PackageExcludeNewer::Enabled(exclude_newer_value) => {
+                            ExcludeNewerOverride::Enabled(exclude_newer_value) => {
                                 if let Some(span) = exclude_newer_value.span() {
                                     // Serialize as inline table with timestamp and span
                                     let mut inline = toml_edit::InlineTable::new();
@@ -1271,7 +1191,7 @@ impl Lock {
                                     );
                                 }
                             }
-                            PackageExcludeNewer::Disabled => {
+                            ExcludeNewerOverride::Disabled => {
                                 package_table.insert(name.as_ref(), value(false));
                             }
                         }
@@ -1652,6 +1572,7 @@ impl Lock {
     }
 
     /// Check whether the lock matches the project structure, requirements and configuration.
+    #[instrument(skip_all)]
     pub async fn satisfies<Context: BuildContext>(
         &self,
         root: &Path,
@@ -1885,8 +1806,7 @@ impl Lock {
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => None,
                     IndexUrl::Path(url) => {
                         let path = url.to_file_path().ok()?;
-                        let path = relative_to(&path, root)
-                            .or_else(|_| std::path::absolute(path))
+                        let path = try_relative_to_if(&path, root, !url.was_given_absolute())
                             .ok()?
                             .into_boxed_path();
                         Some(path)
@@ -1906,8 +1826,88 @@ impl Lock {
                 return Ok(SatisfiesResult::MissingRoot(root_name.clone()));
             };
 
-            // Add the base package.
-            queue.push_back(root);
+            if seen.insert(&root.id) {
+                queue.push_back(root);
+            }
+        }
+
+        // Add requirements attached directly to the target root (e.g., PEP 723 requirements or
+        // dependency groups in workspaces without a `[project]` table).
+        let root_requirements = requirements
+            .iter()
+            .chain(dependency_groups.values().flatten())
+            .collect::<Vec<_>>();
+
+        for requirement in &root_requirements {
+            if let RequirementSource::Registry {
+                index: Some(index), ..
+            } = &requirement.source
+            {
+                match &index.url {
+                    IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
+                        if let Some(remotes) = remotes.as_mut() {
+                            remotes.insert(UrlString::from(
+                                index.url().without_credentials().as_ref(),
+                            ));
+                        }
+                    }
+                    IndexUrl::Path(url) => {
+                        if let Some(locals) = locals.as_mut() {
+                            if let Some(path) = url.to_file_path().ok().and_then(|path| {
+                                try_relative_to_if(&path, root, !url.was_given_absolute()).ok()
+                            }) {
+                                locals.insert(path.into_boxed_path());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if !root_requirements.is_empty() {
+            let names = root_requirements
+                .iter()
+                .map(|requirement| &requirement.name)
+                .collect::<FxHashSet<_>>();
+
+            let by_name: FxHashMap<_, Vec<_>> = self.packages.iter().fold(
+                FxHashMap::with_capacity_and_hasher(self.packages.len(), FxBuildHasher),
+                |mut by_name, package| {
+                    if names.contains(&package.id.name) {
+                        by_name.entry(&package.id.name).or_default().push(package);
+                    }
+                    by_name
+                },
+            );
+
+            for requirement in root_requirements {
+                for package in by_name.get(&requirement.name).into_iter().flatten() {
+                    if !package.id.source.is_source_tree() {
+                        continue;
+                    }
+
+                    let marker = if package.fork_markers.is_empty() {
+                        requirement.marker
+                    } else {
+                        let mut combined = MarkerTree::FALSE;
+                        for fork_marker in &package.fork_markers {
+                            combined.or(fork_marker.pep508());
+                        }
+                        combined.and(requirement.marker);
+                        combined
+                    };
+                    if marker.is_false() {
+                        continue;
+                    }
+                    if !marker.evaluate(markers, &[]) {
+                        continue;
+                    }
+
+                    if seen.insert(&package.id) {
+                        queue.push_back(package);
+                    }
+                }
+            }
         }
 
         while let Some(package) = queue.pop_front() {
@@ -1957,7 +1957,7 @@ impl Lock {
                 )?;
 
                 let metadata = {
-                    let id = dist.version_id();
+                    let id = dist.distribution_id();
                     if let Some(archive) =
                         index
                             .distributions()
@@ -2039,27 +2039,28 @@ impl Lock {
                 // metadata object.
                 let parent = root.join(source_tree);
                 let path = parent.join("pyproject.toml");
-                let metadata =
-                    match fs_err::tokio::read_to_string(&path).await {
-                        Ok(contents) => {
-                            let pyproject_toml = toml::from_str::<PyProjectToml>(&contents)
-                                .map_err(|err| LockErrorKind::InvalidPyprojectToml {
+                let metadata = match fs_err::tokio::read_to_string(&path).await {
+                    Ok(contents) => {
+                        let pyproject_toml =
+                            PyProjectToml::from_toml(&contents, path.user_display()).map_err(
+                                |err| LockErrorKind::InvalidPyprojectToml {
                                     path: path.clone(),
                                     err,
-                                })?;
-                            database
-                                .requires_dist(&parent, &pyproject_toml)
-                                .await
-                                .map_err(|err| LockErrorKind::Resolution {
-                                    id: package.id.clone(),
-                                    err,
-                                })?
-                        }
-                        Err(err) if err.kind() == io::ErrorKind::NotFound => None,
-                        Err(err) => {
-                            return Err(LockErrorKind::UnreadablePyprojectToml { path, err }.into());
-                        }
-                    };
+                                },
+                            )?;
+                        database
+                            .requires_dist(&parent, &pyproject_toml)
+                            .await
+                            .map_err(|err| LockErrorKind::Resolution {
+                                id: package.id.clone(),
+                                err,
+                            })?
+                    }
+                    Err(err) if err.kind() == io::ErrorKind::NotFound => None,
+                    Err(err) => {
+                        return Err(LockErrorKind::UnreadablePyprojectToml { path, err }.into());
+                    }
+                };
 
                 let satisfied = metadata.is_some_and(|metadata| {
                     // Validate that the package is still dynamic.
@@ -2108,7 +2109,7 @@ impl Lock {
                     )?;
 
                     let metadata = {
-                        let id = dist.version_id();
+                        let id = dist.distribution_id();
                         if let Some(archive) =
                             index
                                 .distributions()
@@ -2196,9 +2197,7 @@ impl Lock {
                         IndexUrl::Path(url) => {
                             if let Some(locals) = locals.as_mut() {
                                 if let Some(path) = url.to_file_path().ok().and_then(|path| {
-                                    relative_to(&path, root)
-                                        .or_else(|_| std::path::absolute(path))
-                                        .ok()
+                                    try_relative_to_if(&path, root, !url.was_given_absolute()).ok()
                                 }) {
                                     locals.insert(path.into_boxed_path());
                                 }
@@ -2959,10 +2958,11 @@ impl Package {
                     return Ok(None);
                 };
                 let install_path = absolute_path(workspace_root, path)?;
+                let given = path.to_str().expect("lock file paths must be UTF-8");
                 let path_dist = PathSourceDist {
                     name: self.id.name.clone(),
                     version: self.id.version.clone(),
-                    url: verbatim_url(&install_path, &self.id)?,
+                    url: verbatim_url(&install_path, &self.id)?.with_given(given),
                     install_path: install_path.into_boxed_path(),
                     ext,
                 };
@@ -2970,9 +2970,10 @@ impl Package {
             }
             Source::Directory(path) => {
                 let install_path = absolute_path(workspace_root, path)?;
+                let given = path.to_str().expect("lock file paths must be UTF-8");
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
-                    url: verbatim_url(&install_path, &self.id)?,
+                    url: verbatim_url(&install_path, &self.id)?.with_given(given),
                     install_path: install_path.into_boxed_path(),
                     editable: Some(false),
                     r#virtual: Some(false),
@@ -2981,9 +2982,10 @@ impl Package {
             }
             Source::Editable(path) => {
                 let install_path = absolute_path(workspace_root, path)?;
+                let given = path.to_str().expect("lock file paths must be UTF-8");
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
-                    url: verbatim_url(&install_path, &self.id)?,
+                    url: verbatim_url(&install_path, &self.id)?.with_given(given),
                     install_path: install_path.into_boxed_path(),
                     editable: Some(true),
                     r#virtual: Some(false),
@@ -2992,9 +2994,10 @@ impl Package {
             }
             Source::Virtual(path) => {
                 let install_path = absolute_path(workspace_root, path)?;
+                let given = path.to_str().expect("lock file paths must be UTF-8");
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
-                    url: verbatim_url(&install_path, &self.id)?,
+                    url: verbatim_url(&install_path, &self.id)?.with_given(given),
                     install_path: install_path.into_boxed_path(),
                     editable: Some(false),
                     r#virtual: Some(true),
@@ -3817,16 +3820,22 @@ impl Source {
     }
 
     fn from_path_built_dist(path_dist: &PathBuiltDist, root: &Path) -> Result<Self, LockError> {
-        let path = relative_to(&path_dist.install_path, root)
-            .or_else(|_| std::path::absolute(&path_dist.install_path))
-            .map_err(LockErrorKind::DistributionRelativePath)?;
+        let path = try_relative_to_if(
+            &path_dist.install_path,
+            root,
+            !path_dist.url.was_given_absolute(),
+        )
+        .map_err(LockErrorKind::DistributionRelativePath)?;
         Ok(Self::Path(path.into_boxed_path()))
     }
 
     fn from_path_source_dist(path_dist: &PathSourceDist, root: &Path) -> Result<Self, LockError> {
-        let path = relative_to(&path_dist.install_path, root)
-            .or_else(|_| std::path::absolute(&path_dist.install_path))
-            .map_err(LockErrorKind::DistributionRelativePath)?;
+        let path = try_relative_to_if(
+            &path_dist.install_path,
+            root,
+            !path_dist.url.was_given_absolute(),
+        )
+        .map_err(LockErrorKind::DistributionRelativePath)?;
         Ok(Self::Path(path.into_boxed_path()))
     }
 
@@ -3834,9 +3843,12 @@ impl Source {
         directory_dist: &DirectorySourceDist,
         root: &Path,
     ) -> Result<Self, LockError> {
-        let path = relative_to(&directory_dist.install_path, root)
-            .or_else(|_| std::path::absolute(&directory_dist.install_path))
-            .map_err(LockErrorKind::DistributionRelativePath)?;
+        let path = try_relative_to_if(
+            &directory_dist.install_path,
+            root,
+            !directory_dist.url.was_given_absolute(),
+        )
+        .map_err(LockErrorKind::DistributionRelativePath)?;
         if directory_dist.editable.unwrap_or(false) {
             Ok(Self::Editable(path.into_boxed_path()))
         } else if directory_dist.r#virtual.unwrap_or(false) {
@@ -3858,8 +3870,7 @@ impl Source {
                 let path = url
                     .to_file_path()
                     .map_err(|()| LockErrorKind::UrlToPath { url: url.to_url() })?;
-                let path = relative_to(&path, root)
-                    .or_else(|_| std::path::absolute(&path))
+                let path = try_relative_to_if(&path, root, !url.was_given_absolute())
                     .map_err(LockErrorKind::IndexRelativePath)?;
                 let source = RegistrySource::Path(path.into_boxed_path());
                 Ok(Self::Registry(source))
@@ -4066,8 +4077,7 @@ impl TryFrom<SourceWire> for Source {
     type Error = LockError;
 
     fn try_from(wire: SourceWire) -> Result<Self, LockError> {
-        #[allow(clippy::enum_glob_use)]
-        use self::SourceWire::*;
+        use self::SourceWire::{Direct, Directory, Editable, Git, Path, Registry, Virtual};
 
         match wire {
             Registry { registry } => Ok(Self::Registry(registry.into())),
@@ -4146,7 +4156,7 @@ impl<'de> serde::de::Deserialize<'de> for RegistrySourceWire {
             where
                 E: serde::de::Error,
             {
-                if split_scheme(value).is_some() {
+                if split_scheme(value).is_some_and(|(scheme, _)| Scheme::parse(scheme).is_some()) {
                     Ok(
                         serde::Deserialize::deserialize(serde::de::value::StrDeserializer::new(
                             value,
@@ -4426,10 +4436,10 @@ impl SourceDist {
                     let reg_dist_path = url
                         .to_file_path()
                         .map_err(|()| LockErrorKind::UrlToPath { url })?;
-                    let path = relative_to(&reg_dist_path, index_path)
-                        .or_else(|_| std::path::absolute(&reg_dist_path))
-                        .map_err(LockErrorKind::DistributionRelativePath)?
-                        .into_boxed_path();
+                    let path =
+                        try_relative_to_if(&reg_dist_path, index_path, !path.was_given_absolute())
+                            .map_err(LockErrorKind::DistributionRelativePath)?
+                            .into_boxed_path();
                     let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
                     let size = reg_dist.file.size;
                     let upload_time = reg_dist
@@ -4595,7 +4605,7 @@ impl From<GitSourceKind> for GitReference {
 
 /// Construct the lockfile-compatible [`DisplaySafeUrl`] for a [`GitSourceDist`].
 fn locked_git_url(git_dist: &GitSourceDist) -> DisplaySafeUrl {
-    let mut url = git_dist.git.repository().clone();
+    let mut url = git_dist.git.url().clone();
 
     // Remove the credentials.
     url.remove_credentials();
@@ -4774,10 +4784,10 @@ impl Wheel {
                     let wheel_path = wheel_url
                         .to_file_path()
                         .map_err(|()| LockErrorKind::UrlToPath { url: wheel_url })?;
-                    let path = relative_to(&wheel_path, index_path)
-                        .or_else(|_| std::path::absolute(&wheel_path))
-                        .map_err(LockErrorKind::DistributionRelativePath)?
-                        .into_boxed_path();
+                    let path =
+                        try_relative_to_if(&wheel_path, index_path, !path.was_given_absolute())
+                            .map_err(LockErrorKind::DistributionRelativePath)?
+                            .into_boxed_path();
                     WheelWireSource::Path { path }
                 } else {
                     let url = normalize_file_location(&wheel.file.url)
@@ -5362,7 +5372,7 @@ fn normalize_requirement(
         } => {
             // Reconstruct the Git URL.
             let git = {
-                let mut repository = git.repository().clone();
+                let mut repository = git.url().clone();
 
                 // Remove the credentials.
                 repository.remove_credentials();
@@ -5403,8 +5413,8 @@ fn normalize_requirement(
             ext,
             url: _,
         } => {
-            let install_path =
-                uv_fs::normalize_path_buf(root.join(&install_path)).into_boxed_path();
+            let path = root.join(&install_path);
+            let install_path = normalize_path(path).into_owned().into_boxed_path();
             let url = VerbatimUrl::from_normalized_path(&install_path)
                 .map_err(LockErrorKind::RequirementVerbatimUrl)?;
 
@@ -5427,8 +5437,8 @@ fn normalize_requirement(
             r#virtual,
             url: _,
         } => {
-            let install_path =
-                uv_fs::normalize_path_buf(root.join(&install_path)).into_boxed_path();
+            let path = root.join(&install_path);
+            let install_path = normalize_path(path).into_owned().into_boxed_path();
             let url = VerbatimUrl::from_normalized_path(&install_path)
                 .map_err(LockErrorKind::RequirementVerbatimUrl)?;
 
@@ -6232,7 +6242,7 @@ enum LockErrorKind {
     InvalidPyprojectToml {
         path: PathBuf,
         #[source]
-        err: toml::de::Error,
+        err: uv_pypi_types::MetadataError,
     },
     /// An error that occurs when a workspace member has a non-local source.
     #[error("Workspace member `{id}` has non-local source", id = id.cyan())]
@@ -6315,6 +6325,36 @@ fn simplified_universal_markers(
     markers: &[UniversalMarker],
     requires_python: &RequiresPython,
 ) -> Vec<String> {
+    canonical_marker_trees(markers, requires_python)
+        .into_iter()
+        .filter_map(MarkerTree::try_to_string)
+        .collect()
+}
+
+/// Canonicalize universal markers to match the form persisted in `uv.lock`.
+///
+/// When the PEP 508 portions of the markers are disjoint, the lockfile stores
+/// only those simplified PEP 508 markers. Otherwise, it stores the simplified
+/// combined markers (including conflict markers). Markers that serialize to
+/// `true` are omitted.
+fn canonicalize_universal_markers(
+    markers: &[UniversalMarker],
+    requires_python: &RequiresPython,
+) -> Vec<UniversalMarker> {
+    canonical_marker_trees(markers, requires_python)
+        .into_iter()
+        .map(|marker| {
+            let simplified = SimplifiedMarkerTree::new(requires_python, marker);
+            UniversalMarker::from_combined(simplified.into_marker(requires_python))
+        })
+        .collect()
+}
+
+/// Return the simplified marker trees that would be persisted in `uv.lock`.
+fn canonical_marker_trees(
+    markers: &[UniversalMarker],
+    requires_python: &RequiresPython,
+) -> Vec<MarkerTree> {
     let mut pep508_only = vec![];
     let mut seen = FxHashSet::default();
     for marker in markers {
@@ -6341,8 +6381,223 @@ fn simplified_universal_markers(
     };
     markers
         .into_iter()
-        .filter_map(MarkerTree::try_to_string)
+        .filter(|marker| !marker.is_true())
         .collect()
+}
+
+/// Filter out wheels that can't be selected for installation due to environment markers.
+///
+/// For example, a package included under `sys_platform == 'win32'` does not need Linux
+/// wheels.
+///
+/// Returns `true` if the wheel is definitely unreachable, and `false` if it may be reachable,
+/// including if the wheel tag isn't recognized.
+fn is_wheel_unreachable_for_marker(
+    filename: &WheelFilename,
+    requires_python: &RequiresPython,
+    marker: &UniversalMarker,
+    tags: Option<&Tags>,
+) -> bool {
+    if let Some(tags) = tags
+        && !filename.compatibility(tags).is_compatible()
+    {
+        return true;
+    }
+    // Remove wheels that don't match `requires-python` and can't be selected for installation.
+    if !requires_python.matches_wheel_tag(filename) {
+        return true;
+    }
+
+    // Filter by platform tags.
+
+    // Naively, we'd check whether `platform_system == 'Linux'` is disjoint, or
+    // `os_name == 'posix'` is disjoint, or `sys_platform == 'linux'` is disjoint (each on its
+    // own sufficient to exclude linux wheels), but due to
+    // `(A ∩ (B ∩ C) = ∅) => ((A ∩ B = ∅) or (A ∩ C = ∅))`
+    // a single disjointness check with the intersection is sufficient, so we have one
+    // constant per platform.
+    let platform_tags = filename.platform_tags();
+
+    if platform_tags.iter().all(PlatformTag::is_any) {
+        return false;
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_linux) {
+        if platform_tags.iter().all(PlatformTag::is_arm) {
+            if marker.is_disjoint(*LINUX_ARM_MARKERS) {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
+            if marker.is_disjoint(*LINUX_X86_64_MARKERS) {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_x86) {
+            if marker.is_disjoint(*LINUX_X86_MARKERS) {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_ppc64le) {
+            if marker.is_disjoint(*LINUX_PPC64LE_MARKERS) {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_ppc64) {
+            if marker.is_disjoint(*LINUX_PPC64_MARKERS) {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_s390x) {
+            if marker.is_disjoint(*LINUX_S390X_MARKERS) {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_riscv64) {
+            if marker.is_disjoint(*LINUX_RISCV64_MARKERS) {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_loongarch64) {
+            if marker.is_disjoint(*LINUX_LOONGARCH64_MARKERS) {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_armv7l) {
+            if marker.is_disjoint(*LINUX_ARMV7L_MARKERS) {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_armv6l) {
+            if marker.is_disjoint(*LINUX_ARMV6L_MARKERS) {
+                return true;
+            }
+        } else if marker.is_disjoint(*LINUX_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_windows) {
+        if platform_tags.iter().all(PlatformTag::is_arm) {
+            if marker.is_disjoint(*WINDOWS_ARM_MARKERS) {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
+            if marker.is_disjoint(*WINDOWS_X86_64_MARKERS) {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_x86) {
+            if marker.is_disjoint(*WINDOWS_X86_MARKERS) {
+                return true;
+            }
+        } else if marker.is_disjoint(*WINDOWS_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_macos) {
+        if platform_tags.iter().all(PlatformTag::is_arm) {
+            if marker.is_disjoint(*MAC_ARM_MARKERS) {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
+            if marker.is_disjoint(*MAC_X86_64_MARKERS) {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_x86) {
+            if marker.is_disjoint(*MAC_X86_MARKERS) {
+                return true;
+            }
+        } else if marker.is_disjoint(*MAC_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_android) {
+        if platform_tags.iter().all(PlatformTag::is_arm) {
+            if marker.is_disjoint(*ANDROID_ARM_MARKERS) {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
+            if marker.is_disjoint(*ANDROID_X86_64_MARKERS) {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_x86) {
+            if marker.is_disjoint(*ANDROID_X86_MARKERS) {
+                return true;
+            }
+        } else if marker.is_disjoint(*ANDROID_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_arm) {
+        if marker.is_disjoint(*ARM_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_x86_64) {
+        if marker.is_disjoint(*X86_64_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_x86) {
+        if marker.is_disjoint(*X86_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_ppc64le) {
+        if marker.is_disjoint(*PPC64LE_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_ppc64) {
+        if marker.is_disjoint(*PPC64_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_s390x) {
+        if marker.is_disjoint(*S390X_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_riscv64) {
+        if marker.is_disjoint(*RISCV64_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_loongarch64) {
+        if marker.is_disjoint(*LOONGARCH64_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_armv7l) {
+        if marker.is_disjoint(*ARMV7L_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_armv6l) {
+        if marker.is_disjoint(*ARMV6L_MARKERS) {
+            return true;
+        }
+    }
+
+    false
+}
+
+pub(crate) fn is_wheel_unreachable(
+    filename: &WheelFilename,
+    graph: &ResolverOutput,
+    requires_python: &RequiresPython,
+    node_index: NodeIndex,
+    tags: Option<&Tags>,
+) -> bool {
+    is_wheel_unreachable_for_marker(
+        filename,
+        requires_python,
+        graph.graph[node_index].marker(),
+        tags,
+    )
 }
 
 #[cfg(test)]
@@ -6668,5 +6923,30 @@ source = { editable = "path/to/dir" }
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
         insta::assert_debug_snapshot!(result);
+    }
+
+    /// Windows drive letter paths like `C:/...` should be deserialized as local path registry
+    /// sources, not as URLs. The `C:` prefix must not be misinterpreted as a URL scheme.
+    #[test]
+    fn registry_source_windows_drive_letter() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[package]]
+name = "tqdm"
+version = "1000.0.0"
+source = { registry = "C:/Users/user/links" }
+wheels = [
+    { path = "C:/Users/user/links/tqdm-1000.0.0-py3-none-any.whl" },
+]
+"#;
+        let lock: Lock = toml::from_str(data).unwrap();
+        assert_eq!(
+            lock.packages[0].id.source,
+            Source::Registry(RegistrySource::Path(
+                Path::new("C:/Users/user/links").into()
+            ))
+        );
     }
 }

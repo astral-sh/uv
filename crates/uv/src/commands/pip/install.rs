@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use anyhow::Context;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use tracing::{Level, debug, enabled, warn};
+use tracing::{Level, debug, enabled, info_span, warn};
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -36,8 +36,8 @@ use uv_resolver::{
 };
 use uv_settings::PythonInstallMirrors;
 use uv_torch::{TorchMode, TorchSource, TorchStrategy};
-use uv_types::HashStrategy;
-use uv_warnings::{warn_user, warn_user_once};
+use uv_types::{HashStrategy, SourceTreeEditablePolicy};
+use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
@@ -100,20 +100,12 @@ pub(crate) async fn pip_install(
     python_preference: PythonPreference,
     concurrency: Concurrency,
     cache: Cache,
+    workspace_cache: WorkspaceCache,
     dry_run: DryRun,
     printer: Printer,
     preview: Preview,
 ) -> anyhow::Result<ExitStatus> {
     let start = std::time::Instant::now();
-
-    if !preview.is_enabled(PreviewFeature::ExtraBuildDependencies)
-        && !extra_build_dependencies.is_empty()
-    {
-        warn_user_once!(
-            "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeature::ExtraBuildDependencies
-        );
-    }
 
     let client_builder = client_builder.clone().keyring(keyring_provider);
 
@@ -348,7 +340,7 @@ pub(crate) async fn pip_install(
                         debug!("Requirement satisfied: {requirement}");
                     }
                 }
-                DefaultInstallLogger.on_audit(requirements.len(), start, printer, dry_run)?;
+                DefaultInstallLogger.on_check(requirements.len(), start, printer, dry_run)?;
 
                 return Ok(ExitStatus::Success);
             }
@@ -427,7 +419,7 @@ pub(crate) async fn pip_install(
         .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
-        .build();
+        .build()?;
 
     // Combine the `--no-binary` and `--no-build` flags from the requirements files.
     let build_options = build_options.combine(no_binary, no_build);
@@ -494,8 +486,9 @@ pub(crate) async fn pip_install(
         &build_hasher,
         exclude_newer.clone(),
         sources.clone(),
-        WorkspaceCache::default(),
-        concurrency,
+        SourceTreeEditablePolicy::Project,
+        workspace_cache.clone(),
+        concurrency.clone(),
         preview,
     );
 
@@ -505,7 +498,7 @@ pub(crate) async fn pip_install(
             if pylock.starts_with("http://") || pylock.starts_with("https://") {
                 // Fetch the `pylock.toml` over HTTP(S).
                 let url = uv_redacted::DisplaySafeUrl::parse(&pylock.to_string_lossy())?;
-                let client = client_builder.build();
+                let client = client_builder.build()?;
                 let response = client
                     .for_host(&url)
                     .get(url::Url::from(url.clone()))
@@ -522,9 +515,11 @@ pub(crate) async fn pip_install(
                 let content = fs_err::tokio::read_to_string(&pylock).await?;
                 (install_path, content)
             };
-        let lock = toml::from_str::<PylockToml>(&content).with_context(|| {
-            format!("Not a valid `pylock.toml` file: {}", pylock.user_display())
-        })?;
+        let lock = info_span!("toml::from_str pip install", path = %pylock.display())
+            .in_scope(|| toml::from_str::<PylockToml>(&content))
+            .with_context(|| {
+                format!("Not a valid `pylock.toml` file: {}", pylock.user_display())
+            })?;
 
         // Verify that the Python version is compatible with the lock file.
         if let Some(requires_python) = lock.requires_python.as_ref() {
@@ -580,7 +575,7 @@ pub(crate) async fn pip_install(
             .build();
 
         // Resolve the requirements.
-        let resolution = match operations::resolve(
+        let (resolution, hasher) = match operations::resolve(
             requirements,
             constraints,
             overrides,
@@ -604,17 +599,17 @@ pub(crate) async fn pip_install(
             &flat_index,
             state.index(),
             &build_dispatch,
-            concurrency,
+            &concurrency,
             options,
             Box::new(DefaultResolveLogger),
             printer,
         )
         .await
         {
-            Ok(graph) => Resolution::from(graph),
+            Ok((graph, hasher)) => (Resolution::from(graph), hasher),
             Err(err) => {
-                return diagnostics::OperationDiagnostic::native_tls(
-                    client_builder.is_native_tls(),
+                return diagnostics::OperationDiagnostic::with_system_certs(
+                    client_builder.system_certs(),
                 )
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
@@ -648,8 +643,9 @@ pub(crate) async fn pip_install(
         &build_hasher,
         exclude_newer.clone(),
         sources,
-        WorkspaceCache::default(),
-        concurrency,
+        SourceTreeEditablePolicy::Project,
+        workspace_cache,
+        concurrency.clone(),
         preview,
     );
 
@@ -667,7 +663,7 @@ pub(crate) async fn pip_install(
         &tags,
         &client,
         state.in_flight(),
-        concurrency,
+        &concurrency,
         &build_dispatch,
         &cache,
         &environment,
@@ -681,9 +677,11 @@ pub(crate) async fn pip_install(
     {
         Ok(..) => {}
         Err(err) => {
-            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::with_system_certs(
+                client_builder.system_certs(),
+            )
+            .report(err)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
     }
 
@@ -692,7 +690,14 @@ pub(crate) async fn pip_install(
 
     // Notify the user of any environment diagnostics.
     if strict && !dry_run.enabled() {
-        operations::diagnose_environment(&resolution, &environment, &marker_env, &tags, printer)?;
+        operations::diagnose_environment(
+            &resolution,
+            &environment,
+            &marker_env,
+            &tags,
+            &dependency_metadata,
+            printer,
+        )?;
     }
 
     Ok(ExitStatus::Success)

@@ -79,6 +79,9 @@ pub enum PlatformTag {
     Ios {
         major: u16,
         minor: u16,
+        /// iOS architecture and whether it is a simulator or a real device.
+        ///
+        /// Not to be confused with the Linux mulitarch concept.
         multiarch: IosMultiarch,
     },
 }
@@ -843,21 +846,20 @@ impl FromStr for PlatformTag {
                     tag: s.to_string(),
                 })?;
 
-            let multiarch_str = &rest[second_underscore + 1..];
-            if multiarch_str.is_empty() {
+            let multiarch = &rest[second_underscore + 1..];
+            if multiarch.is_empty() {
                 return Err(ParsePlatformTagError::InvalidFormat {
                     platform: "ios",
                     tag: s.to_string(),
                 });
             }
 
-            let multiarch =
-                multiarch_str
-                    .parse()
-                    .map_err(|_| ParsePlatformTagError::InvalidArch {
-                        platform: "ios",
-                        tag: s.to_string(),
-                    })?;
+            let multiarch = multiarch
+                .parse()
+                .map_err(|_| ParsePlatformTagError::InvalidArch {
+                    platform: "ios",
+                    tag: s.to_string(),
+                })?;
 
             return Ok(Self::Ios {
                 major,

@@ -588,12 +588,6 @@ fn generate_wheel_compatibility_hint(filename: &WheelFilename, tags: &Tags) -> O
                 .abi_tags()
                 .iter()
                 .map(|tag| match tag {
-                    AbiTag::CPython {
-                        gil_disabled: false,
-                        python_version: (major, minor),
-                    } => {
-                        format!("the CPython {}.{} ABI (`{}`)", major, minor, tag.cyan())
-                    }
                     AbiTag::Abi3 => format!("the stable ABI (`{}`)", tag.cyan()),
                     _ => {
                         if let Some(pretty) = tag.pretty() {
@@ -793,7 +787,7 @@ impl Plan {
 mod tests {
     use super::*;
     use std::str::FromStr;
-    use uv_platform_tags::{Arch, Os, Platform};
+    use uv_platform_tags::{Arch, Os, Platform, TagsOptions};
 
     #[test]
     fn test_abi3_on_free_threaded_python_hint() {
@@ -810,9 +804,12 @@ mod tests {
             (3, 14),   // python_version
             "cpython", // implementation_name
             (3, 14),   // implementation_version
-            true,      // manylinux_compatible
-            true,      // gil_disabled (free-threaded)
-            false,     // is_cross
+            TagsOptions {
+                manylinux_compatible: true,
+                gil_disabled: true,
+                debug_enabled: false,
+                is_cross: false,
+            },
         )
         .unwrap();
 
@@ -842,9 +839,12 @@ mod tests {
             (3, 14),   // python_version
             "cpython", // implementation_name
             (3, 14),   // implementation_version
-            true,      // manylinux_compatible
-            true,      // gil_disabled (free-threaded)
-            false,     // is_cross
+            TagsOptions {
+                manylinux_compatible: true,
+                gil_disabled: true,
+                debug_enabled: false,
+                is_cross: false,
+            },
         )
         .unwrap();
 
@@ -874,9 +874,12 @@ mod tests {
             (3, 14),   // python_version
             "cpython", // implementation_name
             (3, 14),   // implementation_version
-            true,      // manylinux_compatible
-            false,     // gil_disabled (regular Python)
-            false,     // is_cross
+            TagsOptions {
+                manylinux_compatible: true,
+                gil_disabled: false,
+                debug_enabled: false,
+                is_cross: false,
+            },
         )
         .unwrap();
 

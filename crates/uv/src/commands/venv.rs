@@ -21,14 +21,16 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_normalize::DefaultGroups;
-use uv_preview::{Preview, PreviewFeature};
+use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
 use uv_shell::{Shell, shlex_posix, shlex_windows};
-use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
+use uv_types::{
+    AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy, SourceTreeEditablePolicy,
+};
 use uv_virtualenv::OnExisting;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
@@ -81,15 +83,15 @@ pub(crate) async fn venv(
     no_config: bool,
     no_project: bool,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     relocatable: bool,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    let workspace_cache = WorkspaceCache::default();
     let project = if no_project {
         None
     } else {
-        match VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
+        match VirtualProject::discover(project_dir, &DiscoveryOptions::default(), workspace_cache)
             .await
         {
             Ok(project) => Some(project),
@@ -190,10 +192,9 @@ pub(crate) async fn venv(
         path.user_display().cyan()
     )?;
 
-    let upgradeable = preview.is_enabled(PreviewFeature::PythonUpgrade)
-        && python_request
-            .as_ref()
-            .is_none_or(|request| !request.includes_patch());
+    let upgradeable = python_request
+        .as_ref()
+        .is_none_or(|request| !request.includes_patch());
 
     // Create the virtual environment.
     let venv = uv_virtualenv::create_venv(
@@ -205,7 +206,6 @@ pub(crate) async fn venv(
         relocatable,
         seed,
         upgradeable,
-        preview,
     )
     .map_err(VenvError::Creation)?;
 
@@ -221,7 +221,7 @@ pub(crate) async fn venv(
             .keyring(keyring_provider)
             .markers(interpreter.markers())
             .platform(interpreter.platform())
-            .build();
+            .build()?;
 
         // Resolve the flat indexes from `--find-links`.
         let flat_index = {
@@ -241,7 +241,6 @@ pub(crate) async fn venv(
 
         // Initialize any shared state.
         let state = SharedState::default();
-        let workspace_cache = WorkspaceCache::default();
 
         // For seed packages, assume a bunch of default settings are sufficient.
         let build_constraints = Constraints::default();
@@ -275,7 +274,8 @@ pub(crate) async fn venv(
             &build_hasher,
             exclude_newer,
             sources,
-            workspace_cache,
+            SourceTreeEditablePolicy::Project,
+            workspace_cache.clone(),
             concurrency,
             preview,
         );

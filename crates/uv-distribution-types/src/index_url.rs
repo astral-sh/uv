@@ -15,7 +15,7 @@ use uv_pep508::{Scheme, VerbatimUrl, VerbatimUrlError, split_scheme};
 use uv_redacted::DisplaySafeUrl;
 use uv_warnings::warn_user;
 
-use crate::{Index, IndexStatusCodeStrategy, Verbatim};
+use crate::{ExcludeNewerOverride, Index, IndexStatusCodeStrategy, Verbatim};
 
 static PYPI_URL: LazyLock<DisplaySafeUrl> =
     LazyLock::new(|| DisplaySafeUrl::parse("https://pypi.org/simple").unwrap());
@@ -440,7 +440,7 @@ impl<'a> IndexLocations {
     }
 
     /// Return the Simple API cache control header for an [`IndexUrl`], if configured.
-    pub fn simple_api_cache_control_for(&self, url: &IndexUrl) -> Option<&str> {
+    pub fn simple_api_cache_control_for(&self, url: &IndexUrl) -> Option<http::HeaderValue> {
         for index in &self.indexes {
             if is_same_index(index.url(), url) {
                 return index.simple_api_cache_control();
@@ -450,10 +450,20 @@ impl<'a> IndexLocations {
     }
 
     /// Return the artifact cache control header for an [`IndexUrl`], if configured.
-    pub fn artifact_cache_control_for(&self, url: &IndexUrl) -> Option<&str> {
+    pub fn artifact_cache_control_for(&self, url: &IndexUrl) -> Option<http::HeaderValue> {
         for index in &self.indexes {
             if is_same_index(index.url(), url) {
                 return index.artifact_cache_control();
+            }
+        }
+        None
+    }
+
+    /// Return the `exclude-newer` setting for a given index, if the index is configured.
+    pub fn exclude_newer_for(&self, url: &IndexUrl) -> Option<&ExcludeNewerOverride> {
+        for index in &self.indexes {
+            if is_same_index(index.url(), url) {
+                return index.exclude_newer();
             }
         }
         None
@@ -593,7 +603,7 @@ impl<'a> IndexUrls {
     }
 
     /// Return the Simple API cache control header for an [`IndexUrl`], if configured.
-    pub fn simple_api_cache_control_for(&self, url: &IndexUrl) -> Option<&str> {
+    pub fn simple_api_cache_control_for(&self, url: &IndexUrl) -> Option<http::HeaderValue> {
         for index in &self.indexes {
             if is_same_index(index.url(), url) {
                 return index.simple_api_cache_control();
@@ -603,7 +613,7 @@ impl<'a> IndexUrls {
     }
 
     /// Return the artifact cache control header for an [`IndexUrl`], if configured.
-    pub fn artifact_cache_control_for(&self, url: &IndexUrl) -> Option<&str> {
+    pub fn artifact_cache_control_for(&self, url: &IndexUrl) -> Option<http::HeaderValue> {
         for index in &self.indexes {
             if is_same_index(index.url(), url) {
                 return index.artifact_cache_control();
@@ -697,7 +707,7 @@ impl IndexCapabilities {
 mod tests {
     use super::*;
     use crate::{IndexCacheControl, IndexFormat, IndexName};
-    use uv_small_str::SmallString;
+    use http::HeaderValue;
 
     #[test]
     fn test_index_url_parse_valid_paths() {
@@ -736,8 +746,6 @@ mod tests {
     fn test_cache_control_lookup() {
         use std::str::FromStr;
 
-        use uv_small_str::SmallString;
-
         use crate::IndexFormat;
         use crate::index_name::IndexName;
 
@@ -746,8 +754,8 @@ mod tests {
                 name: Some(IndexName::from_str("index1").unwrap()),
                 url: IndexUrl::from_str("https://index1.example.com/simple").unwrap(),
                 cache_control: Some(crate::IndexCacheControl {
-                    api: Some(SmallString::from("max-age=300")),
-                    files: Some(SmallString::from("max-age=1800")),
+                    api: Some(HeaderValue::from_static("max-age=300")),
+                    files: Some(HeaderValue::from_static("max-age=1800")),
                 }),
                 explicit: false,
                 default: false,
@@ -756,6 +764,7 @@ mod tests {
                 publish_url: None,
                 authenticate: uv_auth::AuthPolicy::default(),
                 ignore_error_codes: None,
+                exclude_newer: None,
             },
             Index {
                 name: Some(IndexName::from_str("index2").unwrap()),
@@ -768,6 +777,7 @@ mod tests {
                 publish_url: None,
                 authenticate: uv_auth::AuthPolicy::default(),
                 ignore_error_codes: None,
+                exclude_newer: None,
             },
         ];
 
@@ -776,11 +786,11 @@ mod tests {
         let url1 = IndexUrl::from_str("https://index1.example.com/simple").unwrap();
         assert_eq!(
             index_urls.simple_api_cache_control_for(&url1),
-            Some("max-age=300")
+            Some(HeaderValue::from_static("max-age=300"))
         );
         assert_eq!(
             index_urls.artifact_cache_control_for(&url1),
-            Some("max-age=1800")
+            Some(HeaderValue::from_static("max-age=1800"))
         );
 
         let url2 = IndexUrl::from_str("https://index2.example.com/simple").unwrap();
@@ -806,6 +816,7 @@ mod tests {
             publish_url: None,
             authenticate: uv_auth::AuthPolicy::default(),
             ignore_error_codes: None,
+            exclude_newer: None,
         }];
 
         let index_urls = IndexUrls::from_indexes(indexes.clone());
@@ -817,7 +828,9 @@ mod tests {
         assert_eq!(index_urls.simple_api_cache_control_for(&pytorch_url), None);
         assert_eq!(
             index_urls.artifact_cache_control_for(&pytorch_url),
-            Some("max-age=365000000, immutable, public")
+            Some(HeaderValue::from_static(
+                "max-age=365000000, immutable, public",
+            ))
         );
 
         // IndexLocations should also return the default for PyTorch
@@ -827,7 +840,9 @@ mod tests {
         );
         assert_eq!(
             index_locations.artifact_cache_control_for(&pytorch_url),
-            Some("max-age=365000000, immutable, public")
+            Some(HeaderValue::from_static(
+                "max-age=365000000, immutable, public",
+            ))
         );
     }
 
@@ -838,8 +853,8 @@ mod tests {
             name: Some(IndexName::from_str("pytorch").unwrap()),
             url: IndexUrl::from_str("https://download.pytorch.org/whl/cu118").unwrap(),
             cache_control: Some(IndexCacheControl {
-                api: Some(SmallString::from("no-cache")),
-                files: Some(SmallString::from("max-age=3600")),
+                api: Some(HeaderValue::from_static("no-cache")),
+                files: Some(HeaderValue::from_static("max-age=3600")),
             }),
             explicit: false,
             default: false,
@@ -848,6 +863,7 @@ mod tests {
             publish_url: None,
             authenticate: uv_auth::AuthPolicy::default(),
             ignore_error_codes: None,
+            exclude_newer: None,
         }];
 
         let index_urls = IndexUrls::from_indexes(indexes.clone());
@@ -858,21 +874,21 @@ mod tests {
         // User settings should override defaults
         assert_eq!(
             index_urls.simple_api_cache_control_for(&pytorch_url),
-            Some("no-cache")
+            Some(HeaderValue::from_static("no-cache"))
         );
         assert_eq!(
             index_urls.artifact_cache_control_for(&pytorch_url),
-            Some("max-age=3600")
+            Some(HeaderValue::from_static("max-age=3600"))
         );
 
         // Same for IndexLocations
         assert_eq!(
             index_locations.simple_api_cache_control_for(&pytorch_url),
-            Some("no-cache")
+            Some(HeaderValue::from_static("no-cache"))
         );
         assert_eq!(
             index_locations.artifact_cache_control_for(&pytorch_url),
-            Some("max-age=3600")
+            Some(HeaderValue::from_static("max-age=3600"))
         );
     }
 
@@ -890,6 +906,7 @@ mod tests {
             publish_url: None,
             authenticate: uv_auth::AuthPolicy::default(),
             ignore_error_codes: None,
+            exclude_newer: None,
         }];
 
         let index_urls = IndexUrls::from_indexes(indexes.clone());
@@ -901,7 +918,9 @@ mod tests {
         assert_eq!(index_urls.simple_api_cache_control_for(&nvidia_url), None);
         assert_eq!(
             index_urls.artifact_cache_control_for(&nvidia_url),
-            Some("max-age=365000000, immutable, public")
+            Some(HeaderValue::from_static(
+                "max-age=365000000, immutable, public",
+            ))
         );
 
         // IndexLocations should also return the default for NVIDIA
@@ -911,7 +930,9 @@ mod tests {
         );
         assert_eq!(
             index_locations.artifact_cache_control_for(&nvidia_url),
-            Some("max-age=365000000, immutable, public")
+            Some(HeaderValue::from_static(
+                "max-age=365000000, immutable, public",
+            ))
         );
     }
 }

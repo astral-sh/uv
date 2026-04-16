@@ -147,7 +147,7 @@ impl LockedFile {
         let try_lock_exclusive = tokio::task::spawn_blocking(move || (mode.try_lock(&file), file));
         let file = match try_lock_exclusive.await? {
             (Ok(()), file) => {
-                debug!("Acquired {mode} lock for `{resource}`");
+                trace!("Acquired {mode} lock for `{resource}`");
                 return Ok(Self(file));
             }
             (Err(err), file) => {
@@ -180,7 +180,7 @@ impl LockedFile {
             source: err,
         })?;
 
-        debug!("Acquired {mode} lock for `{resource}`");
+        trace!("Acquired {mode} lock for `{resource}`");
         Ok(Self(file))
     }
 
@@ -192,7 +192,7 @@ impl LockedFile {
         );
         match mode.try_lock(&file) {
             Ok(()) => {
-                debug!("Acquired {mode} lock for `{resource}`");
+                trace!("Acquired {mode} lock for `{resource}`");
                 Some(Self(file))
             }
             Err(err) => {
@@ -347,7 +347,7 @@ impl Drop for LockedFile {
                 self.0.path().display()
             );
         } else {
-            debug!("Released lock at `{}`", self.0.path().display());
+            trace!("Released lock at `{}`", self.0.path().display());
         }
     }
 }

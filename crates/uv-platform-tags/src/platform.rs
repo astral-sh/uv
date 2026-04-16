@@ -11,8 +11,12 @@ pub enum PlatformError {
     IOError(#[from] io::Error),
     #[error("Failed to detect the operating system version: {0}")]
     OsVersionDetectionError(String),
-    #[error("Failed to detect the arch: {0}")]
-    ArchDetectionError(String),
+    #[error("Invalid Android architecture: {0}")]
+    InvalidAndroidArch(Arch),
+    #[error("Invalid iOS simulator architecture: {0}")]
+    InvalidIosSimulatorArch(Arch),
+    #[error("Invalid iOS device architecture: {0}")]
+    InvalidIosDeviceArch(Arch),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
@@ -35,6 +39,25 @@ impl Platform {
     /// Return the platform's architecture.
     pub fn arch(&self) -> Arch {
         self.arch
+    }
+
+    /// Return a human-readable representation of the platform.
+    pub fn pretty(&self) -> String {
+        let os = match self.os() {
+            Os::Manylinux { .. } | Os::Musllinux { .. } => "Linux",
+            Os::Windows => "Windows",
+            Os::Pyodide { .. } => "Pyodide",
+            Os::Macos { .. } => "macOS",
+            Os::FreeBsd { .. } => "FreeBSD",
+            Os::NetBsd { .. } => "NetBSD",
+            Os::OpenBsd { .. } => "OpenBSD",
+            Os::Dragonfly { .. } => "DragonFly",
+            Os::Illumos { .. } => "Illumos",
+            Os::Haiku { .. } => "Haiku",
+            Os::Android { .. } => "Android",
+            Os::Ios { .. } => "iOS",
+        };
+        format!("{os} {}", self.arch())
     }
 }
 
@@ -234,5 +257,36 @@ impl Arch {
             Self::S390X => "s390x",
             Self::LoongArch64 => "loongarch64",
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Arch, Os, Platform};
+
+    #[test]
+    fn platform_pretty_macos() {
+        let platform = Platform::new(
+            Os::Macos {
+                major: 11,
+                minor: 0,
+            },
+            Arch::Aarch64,
+        );
+
+        assert_eq!(platform.pretty(), "macOS aarch64");
+    }
+
+    #[test]
+    fn platform_pretty_manylinux() {
+        let platform = Platform::new(
+            Os::Manylinux {
+                major: 2,
+                minor: 28,
+            },
+            Arch::X86_64,
+        );
+
+        assert_eq!(platform.pretty(), "Linux x86_64");
     }
 }

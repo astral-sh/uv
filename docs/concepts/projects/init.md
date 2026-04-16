@@ -113,7 +113,7 @@ dependencies = []
 example-pkg = "example_pkg:main"
 
 [build-system]
-requires = ["uv_build>=0.9.28,<0.10.0"]
+requires = ["uv_build>=0.11.6,<0.12"]
 build-backend = "uv_build"
 ```
 
@@ -136,7 +136,7 @@ dependencies = []
 example-pkg = "example_pkg:main"
 
 [build-system]
-requires = ["uv_build>=0.9.28,<0.10.0"]
+requires = ["uv_build>=0.11.6,<0.12"]
 build-backend = "uv_build"
 ```
 
@@ -197,7 +197,7 @@ requires-python = ">=3.11"
 dependencies = []
 
 [build-system]
-requires = ["uv_build>=0.9.28,<0.10.0"]
+requires = ["uv_build>=0.11.6,<0.12"]
 build-backend = "uv_build"
 ```
 
@@ -311,7 +311,7 @@ Hello from example-ext!
 If you only want to create a `pyproject.toml`, use the `--bare` option:
 
 ```console
-$ uv init example --bare
+$ uv init example-bare --bare
 ```
 
 uv will skip creating a Python version pin file, a README, and any source directories or files.
@@ -327,7 +327,7 @@ uv will also not add extra metadata to the `pyproject.toml`, such as the `descri
 
 ```toml
 [project]
-name = "example"
+name = "example-bare"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = []
@@ -339,5 +339,5 @@ cases uv will still configure a build system but will not create the expected fi
 When `--bare` is used, additional features can still be used opt-in:
 
 ```console
-$ uv init example --bare --description "Hello world" --author-from git --vcs git --python-pin
+$ uv init example-bare --bare --description "Hello world" --author-from git --vcs git --python-pin
 ```

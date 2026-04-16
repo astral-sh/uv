@@ -10,8 +10,7 @@ use std::{
 use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_distribution_types::Requirement;
-use uv_distribution_types::{InstalledDist, Name};
+use uv_distribution_types::{InstalledDist, Name, Requirement};
 use uv_fs::Simplified;
 #[cfg(unix)]
 use uv_fs::replace_symlink;
@@ -180,6 +179,7 @@ pub(crate) fn finalize_tool_install(
     requirements: Vec<Requirement>,
     constraints: Vec<Requirement>,
     overrides: Vec<Requirement>,
+    excludes: Vec<PackageName>,
     build_constraints: Vec<Requirement>,
     printer: Printer,
 ) -> anyhow::Result<()> {
@@ -334,6 +334,7 @@ pub(crate) fn finalize_tool_install(
         requirements,
         constraints,
         overrides,
+        excludes,
         build_constraints,
         python,
         installed_entrypoints,

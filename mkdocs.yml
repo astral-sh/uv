@@ -83,6 +83,8 @@ plugins:
         "configuration/indexes.md": "concepts/indexes.md"
         "configuration/environment.md": "reference/environment.md"
         "guides/export.md": "concepts/projects/export.md"
+        "guides/integration/dependency-bots.md": "guides/integration/renovate.md"
+        "guides/integration/alternative-indexes.md": "concepts/authentication/third-party.md"
   - llmstxt:
       markdown_description: |
         You can use uv to install Python dependencies, run scripts, manage virtual environments,
@@ -116,8 +118,12 @@ plugins:
           - guides/integration/pre-commit.md
           - guides/integration/pytorch.md
           - guides/integration/fastapi.md
-          - guides/integration/alternative-indexes.md
-          - guides/integration/dependency-bots.md
+          - guides/integration/azure.md
+          - guides/integration/google.md
+          - guides/integration/aws.md
+          - guides/integration/jfrog.md
+          - guides/integration/renovate.md
+          - guides/integration/dependabot.md
           - guides/integration/aws-lambda.md
           - guides/integration/coiled.md
         Projects:
@@ -197,8 +203,12 @@ nav:
           - Pre-commit: guides/integration/pre-commit.md
           - PyTorch: guides/integration/pytorch.md
           - FastAPI: guides/integration/fastapi.md
-          - Alternative indexes: guides/integration/alternative-indexes.md
-          - Dependency bots: guides/integration/dependency-bots.md
+          - Azure Artifacts: guides/integration/azure.md
+          - Google Artifact Registry: guides/integration/google.md
+          - AWS CodeArtifact: guides/integration/aws.md
+          - JFrog Artifactory: guides/integration/jfrog.md
+          - Renovate: guides/integration/renovate.md
+          - Dependabot: guides/integration/dependabot.md
           - AWS Lambda: guides/integration/aws-lambda.md
           - Coiled: guides/integration/coiled.md
   - Concepts:
@@ -253,11 +263,14 @@ nav:
       - Internals:
           - reference/internals/index.md
           - Resolver: reference/internals/resolver.md
+          - Workspace Metadata: reference/internals/metadata.md
       - Benchmarks: reference/benchmarks.md
       - Policies:
           - reference/policies/index.md
           - Versioning: reference/policies/versioning.md
           - Platform support: reference/policies/platforms.md
+          - Python support: reference/policies/python.md
+          - Rust support: reference/policies/rust.md
           - License: reference/policies/license.md
 validation:
   omitted_files: warn

@@ -318,15 +318,6 @@ async fn perform_install(
         );
     }
 
-    if let PythonUpgrade::Enabled(source @ PythonUpgradeSource::Upgrade) = upgrade {
-        if !preview.is_enabled(PreviewFeature::PythonUpgrade) {
-            warn_user!(
-                "`{source}` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning",
-                PreviewFeature::PythonUpgrade
-            );
-        }
-    }
-
     if default && targets.len() > 1 {
         anyhow::bail!("The `--default` flag cannot be used with multiple targets");
     }
@@ -347,7 +338,7 @@ async fn perform_install(
     let retry_policy = client_builder.retry_policy();
     // Python downloads are performing their own retries to catch stream errors, disable the
     // default retries to avoid the middleware from performing uncontrolled retries.
-    let client = client_builder.retries(0).build();
+    let client = client_builder.retries(0).build()?;
     let download_list =
         ManagedPythonDownloadList::new(&client, python_downloads_json_url.as_deref()).await?;
     // TODO(zanieb): We use this variable to special-case .python-version files, but it'd be nice to
@@ -574,7 +565,11 @@ async fn perform_install(
             .iter()
             .copied()
             .cloned()
-            .try_for_each(|installation| sender.send(installation))?;
+            .try_for_each(|installation| {
+                sender
+                    .send(installation)
+                    .map_err(|err| anyhow::anyhow!(err))
+            })?;
     }
 
     // Check if Python downloads are banned
@@ -637,7 +632,9 @@ async fn perform_install(
 
                 let installation = ManagedPythonInstallation::new(path, download);
                 if let Some(ref sender) = bytecode_compilation_sender {
-                    sender.send(installation.clone())?;
+                    sender
+                        .send(installation.clone())
+                        .map_err(|err| anyhow::anyhow!(err))?;
                 }
                 changelog.installed.insert(installation.key().clone());
                 for request in &requests {
@@ -733,16 +730,7 @@ async fn perform_install(
         );
 
     for installation in minor_versions.values() {
-        if matches!(
-            upgrade,
-            PythonUpgrade::Enabled(PythonUpgradeSource::Upgrade)
-        ) {
-            // During an upgrade, update existing symlinks but avoid
-            // creating new ones.
-            installation.update_minor_version_link(preview)?;
-        } else {
-            installation.ensure_minor_version_link(preview)?;
-        }
+        installation.ensure_minor_version_link()?;
     }
 
     if changelog.installed.is_empty() && errors.is_empty() {
@@ -1015,7 +1003,7 @@ fn create_bin_links(
         }
         let executable = if upgradeable {
             if let Some(minor_version_link) =
-                PythonMinorVersionLink::from_installation(installation, preview)
+                PythonMinorVersionLink::from_installation(installation)
             {
                 minor_version_link.symlink_executable.clone()
             } else {
@@ -1039,7 +1027,7 @@ fn create_bin_links(
                     .or_default()
                     .insert(target.clone());
             }
-            Err(uv_python::managed::Error::LinkExecutable { from: _, to, err })
+            Err(uv_python::managed::Error::LinkExecutable(err))
                 if err.kind() == ErrorKind::AlreadyExists =>
             {
                 debug!(
@@ -1077,7 +1065,7 @@ fn create_bin_links(
                                 if upgrade {
                                     warn_user!(
                                         "Executable already exists at `{}` but is not managed by uv; use `uv python install {}.{}{} --force` to replace it",
-                                        to.simplified_display(),
+                                        target.simplified_display(),
                                         installation.key().major(),
                                         installation.key().minor(),
                                         installation.key().variant().display_suffix()
@@ -1088,7 +1076,7 @@ fn create_bin_links(
                                         installation.key().clone(),
                                         anyhow::anyhow!(
                                             "Executable already exists at `{}` but is not managed by uv; use `--force` to replace it",
-                                            to.simplified_display()
+                                            target.simplified_display()
                                         ),
                                     ));
                                 }
@@ -1151,7 +1139,7 @@ fn create_bin_links(
                                 debug!(
                                     "Executable already exists for `{}` at `{}`. Use `--force` to replace it",
                                     existing.key(),
-                                    to.simplified_display()
+                                    target.simplified_display()
                                 );
                                 continue;
                             }
@@ -1160,13 +1148,13 @@ fn create_bin_links(
                 }
 
                 // Replace the existing link
-                if let Err(err) = fs_err::remove_file(&to) {
+                if let Err(err) = fs_err::remove_file(&target) {
                     errors.push((
                         InstallErrorKind::Bin,
                         installation.key().clone(),
                         anyhow::anyhow!(
                             "Executable already exists at `{}` but could not be removed: {err}",
-                            to.simplified_display()
+                            target.simplified_display()
                         ),
                     ));
                     continue;

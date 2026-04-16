@@ -1,6 +1,6 @@
 [package]
 name = "uv-trampoline-builder"
-version = "0.0.17"
+version = "0.0.39"
 description = "This is an internal component crate of uv"
 
 edition = { workspace = true }
@@ -20,9 +20,15 @@ production = []
 [lints]
 workspace = true
 
+[[bin]]
+name = "normalize-pe-timestamps"
+
 [dependencies]
 uv-fs = { workspace = true }
+
+anyhow = {workspace = true }
 fs-err = {workspace = true }
+goblin = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 zip = { workspace = true }
@@ -37,3 +43,6 @@ anyhow = { workspace = true }
 fs-err = { workspace = true }
 rcgen = { workspace = true }
 which = { workspace = true }
+
+[lib]
+doctest = false

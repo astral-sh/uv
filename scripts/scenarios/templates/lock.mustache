@@ -3,10 +3,9 @@
 //! Generated with `{{generated_with}}`
 //! Scenarios from <{{generated_from}}>
 //!
-#![cfg(all(feature = "python", feature = "pypi"))]
-#![allow(clippy::needless_raw_string_hashes)]
-#![allow(clippy::doc_markdown)]
-#![allow(clippy::doc_lazy_continuation)]
+#![cfg(all(feature = "test-python", feature = "test-pypi"))]
+#![expect(clippy::needless_raw_string_hashes)]
+#![expect(clippy::doc_markdown)]
 
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
@@ -15,7 +14,7 @@ use insta::assert_snapshot;
 
 use uv_static::EnvVars;
 
-use crate::common::{TestContext, packse_index_url, uv_snapshot};
+use uv_test::{packse_index_url, uv_snapshot};
 
 {{#scenarios}}
 
@@ -29,7 +28,7 @@ use crate::common::{TestContext, packse_index_url, uv_snapshot};
 /// ```
 #[test]
 fn {{module_name}}() -> Result<()> {
-    let context = TestContext::new("{{environment.python}}");
+    let context = uv_test::test_context!("{{environment.python}}");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();

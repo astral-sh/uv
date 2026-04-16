@@ -3,7 +3,7 @@ use std::fmt::Write;
 
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
-use tracing::{debug, warn};
+use tracing::{debug, info_span, warn};
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -35,8 +35,8 @@ use uv_resolver::{
 };
 use uv_settings::PythonInstallMirrors;
 use uv_torch::{TorchMode, TorchSource, TorchStrategy};
-use uv_types::HashStrategy;
-use uv_warnings::{warn_user, warn_user_once};
+use uv_types::{HashStrategy, SourceTreeEditablePolicy};
+use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
@@ -89,19 +89,11 @@ pub(crate) async fn pip_sync(
     python_preference: PythonPreference,
     concurrency: Concurrency,
     cache: Cache,
+    workspace_cache: WorkspaceCache,
     dry_run: DryRun,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    if !preview.is_enabled(PreviewFeature::ExtraBuildDependencies)
-        && !extra_build_dependencies.is_empty()
-    {
-        warn_user_once!(
-            "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeature::ExtraBuildDependencies
-        );
-    }
-
     let client_builder = client_builder.clone().keyring(keyring_provider);
 
     // Initialize a few defaults.
@@ -329,7 +321,7 @@ pub(crate) async fn pip_sync(
         .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
-        .build();
+        .build()?;
 
     // Combine the `--no-binary` and `--no-build` flags from the requirements files.
     let build_options = build_options.combine(no_binary, no_build);
@@ -401,8 +393,9 @@ pub(crate) async fn pip_sync(
         &build_hasher,
         exclude_newer.clone(),
         sources.clone(),
-        WorkspaceCache::default(),
-        concurrency,
+        SourceTreeEditablePolicy::Project,
+        workspace_cache.clone(),
+        concurrency.clone(),
         preview,
     );
 
@@ -414,9 +407,11 @@ pub(crate) async fn pip_sync(
         let install_path = std::path::absolute(&pylock)?;
         let install_path = install_path.parent().unwrap();
         let content = fs_err::tokio::read_to_string(&pylock).await?;
-        let lock = toml::from_str::<PylockToml>(&content).with_context(|| {
-            format!("Not a valid `pylock.toml` file: {}", pylock.user_display())
-        })?;
+        let lock = info_span!("toml::from_str pip sync", path = %pylock.display())
+            .in_scope(|| toml::from_str::<PylockToml>(&content))
+            .with_context(|| {
+                format!("Not a valid `pylock.toml` file: {}", pylock.user_display())
+            })?;
 
         // Verify that the Python version is compatible with the lock file.
         if let Some(requires_python) = lock.requires_python.as_ref() {
@@ -471,7 +466,7 @@ pub(crate) async fn pip_sync(
             .build_options(build_options.clone())
             .build();
 
-        let resolution = match operations::resolve(
+        let (resolution, hasher) = match operations::resolve(
             requirements,
             constraints,
             overrides,
@@ -495,17 +490,17 @@ pub(crate) async fn pip_sync(
             &flat_index,
             state.index(),
             &build_dispatch,
-            concurrency,
+            &concurrency,
             options,
             Box::new(DefaultResolveLogger),
             printer,
         )
         .await
         {
-            Ok(resolution) => Resolution::from(resolution),
+            Ok((resolution, hasher)) => (Resolution::from(resolution), hasher),
             Err(err) => {
-                return diagnostics::OperationDiagnostic::native_tls(
-                    client_builder.is_native_tls(),
+                return diagnostics::OperationDiagnostic::with_system_certs(
+                    client_builder.system_certs(),
                 )
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
@@ -539,8 +534,9 @@ pub(crate) async fn pip_sync(
         &build_hasher,
         exclude_newer.clone(),
         sources,
-        WorkspaceCache::default(),
-        concurrency,
+        SourceTreeEditablePolicy::Project,
+        workspace_cache,
+        concurrency.clone(),
         preview,
     );
 
@@ -558,7 +554,7 @@ pub(crate) async fn pip_sync(
         &tags,
         &client,
         state.in_flight(),
-        concurrency,
+        &concurrency,
         &build_dispatch,
         &cache,
         &environment,
@@ -572,9 +568,11 @@ pub(crate) async fn pip_sync(
     {
         Ok(_) => {}
         Err(err) => {
-            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::with_system_certs(
+                client_builder.system_certs(),
+            )
+            .report(err)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
     }
 
@@ -583,7 +581,14 @@ pub(crate) async fn pip_sync(
 
     // Notify the user of any environment diagnostics.
     if strict && !dry_run.enabled() {
-        operations::diagnose_environment(&resolution, &environment, &marker_env, &tags, printer)?;
+        operations::diagnose_environment(
+            &resolution,
+            &environment,
+            &marker_env,
+            &tags,
+            &dependency_metadata,
+            printer,
+        )?;
     }
 
     Ok(ExitStatus::Success)

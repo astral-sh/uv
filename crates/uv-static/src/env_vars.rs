@@ -108,9 +108,16 @@ impl EnvVars {
     pub const UV_BREAK_SYSTEM_PACKAGES: &'static str = "UV_BREAK_SYSTEM_PACKAGES";
 
     /// Equivalent to the `--native-tls` command-line argument. If set to `true`, uv will
-    /// use the system's trust store instead of the bundled `webpki-roots` crate.
+    /// load TLS certificates from the platform's native certificate store instead of the
+    /// bundled Mozilla root certificates.
     #[attr_added_in("0.1.19")]
     pub const UV_NATIVE_TLS: &'static str = "UV_NATIVE_TLS";
+
+    /// Equivalent to the `--system-certs` command-line argument. If set to `true`, uv will
+    /// load TLS certificates from the platform's native certificate store instead of the
+    /// bundled Mozilla root certificates.
+    #[attr_added_in("0.11.0")]
+    pub const UV_SYSTEM_CERTS: &'static str = "UV_SYSTEM_CERTS";
 
     /// Equivalent to the `--index-strategy` command-line argument.
     ///
@@ -391,6 +398,11 @@ impl EnvVars {
     #[attr_added_in("0.3.0")]
     pub const UV_TOOL_BIN_DIR: &'static str = "UV_TOOL_BIN_DIR";
 
+    /// Equivalent to the `--bare` argument for `uv init`. If set, uv will only create a
+    /// `pyproject.toml`.
+    #[attr_added_in("0.10.7")]
+    pub const UV_INIT_BARE: &'static str = "UV_INIT_BARE";
+
     /// Equivalent to the `--build-backend` argument for `uv init`. Determines the default backend
     /// to use when creating a new project.
     #[attr_added_in("0.8.2")]
@@ -483,6 +495,11 @@ impl EnvVars {
     #[attr_added_in("0.8.0")]
     pub const UV_VENV_CLEAR: &'static str = "UV_VENV_CLEAR";
 
+    /// Equivalent to the `--relocatable` command-line argument. If set, the virtual
+    /// environment will be relocatable.
+    #[attr_added_in("0.10.8")]
+    pub const UV_VENV_RELOCATABLE: &'static str = "UV_VENV_RELOCATABLE";
+
     /// Install seed packages (one or more of: `pip`, `setuptools`, and `wheel`) into the virtual environment
     /// created by `uv venv`.
     ///
@@ -569,6 +586,37 @@ impl EnvVars {
     #[attr_added_in("0.3.4")]
     pub const UV_INTERNAL__TEST_DIR: &'static str = "UV_INTERNAL__TEST_DIR";
 
+    /// Path to a directory on a filesystem that supports copy-on-write, e.g., btrfs or APFS.
+    ///
+    /// When populated, uv will run additional tests that require this functionality.
+    #[attr_hidden]
+    #[attr_added_in("0.10.5")]
+    pub const UV_INTERNAL__TEST_COW_FS: &'static str = "UV_INTERNAL__TEST_COW_FS";
+
+    /// Path to a directory on a filesystem that does **not** support copy-on-write.
+    ///
+    /// When populated, uv will run additional tests that verify fallback behavior
+    /// when copy-on-write is unavailable.
+    #[attr_hidden]
+    #[attr_added_in("0.10.5")]
+    pub const UV_INTERNAL__TEST_NOCOW_FS: &'static str = "UV_INTERNAL__TEST_NOCOW_FS";
+
+    /// Path to a directory on an alternative filesystem for testing.
+    ///
+    /// This filesystem must be a different device than the default for the test suite.
+    ///
+    /// When populated, uv will run additional tests that cover cross-filesystem linking.
+    #[attr_hidden]
+    #[attr_added_in("0.10.5")]
+    pub const UV_INTERNAL__TEST_ALT_FS: &'static str = "UV_INTERNAL__TEST_ALT_FS";
+
+    /// Path to a directory on a filesystem with a low hardlink limit (e.g., minix with ~250).
+    ///
+    /// When populated, uv will run additional tests that exercise EMLINK recovery.
+    #[attr_hidden]
+    #[attr_added_in("0.10.9")]
+    pub const UV_INTERNAL__TEST_LOWLINKS_FS: &'static str = "UV_INTERNAL__TEST_LOWLINKS_FS";
+
     /// Used to force treating an interpreter as "managed" during tests.
     #[attr_hidden]
     #[attr_added_in("0.8.0")]
@@ -578,6 +626,12 @@ impl EnvVars {
     #[attr_hidden]
     #[attr_added_in("0.9.15")]
     pub const UV_INTERNAL__TEST_LFS_DISABLED: &'static str = "UV_INTERNAL__TEST_LFS_DISABLED";
+
+    /// Marker variable to track whether `PYTHONHOME` was set by uv.
+    /// Used by the Windows trampoline to distinguish uv-set values from user-set values.
+    #[attr_hidden]
+    #[attr_added_in("0.9.29")]
+    pub const UV_INTERNAL__PYTHONHOME: &'static str = "UV_INTERNAL__PYTHONHOME";
 
     /// Path to system-level configuration directory on Unix systems.
     #[attr_added_in("0.4.26")]
@@ -611,17 +665,31 @@ impl EnvVars {
     #[attr_added_in("0.2.16")]
     pub const XDG_BIN_HOME: &'static str = "XDG_BIN_HOME";
 
-    /// Custom certificate bundle file path for SSL connections.
+    /// Path to a CA certificate bundle file for TLS connections.
     ///
-    /// Takes precedence over `UV_NATIVE_TLS` when set.
+    /// Requires a PEM-encoded certificate file (e.g., `certs.pem`, `ca-bundle.crt`). DER-encoded
+    /// files are not supported.
+    ///
+    /// When set, this overrides the default certificate source (bundled Mozilla roots or system
+    /// certificates). Only the certificates in this file will be trusted.
     #[attr_added_in("0.1.14")]
     pub const SSL_CERT_FILE: &'static str = "SSL_CERT_FILE";
 
-    /// Custom path for certificate bundles for SSL connections.
-    /// Multiple entries are supported separated using a platform-specific
-    /// delimiter (`:` on Unix, `;` on Windows).
+    /// Path to a directory containing PEM-encoded CA certificate files for TLS connections.
     ///
-    /// Takes precedence over `UV_NATIVE_TLS` when set.
+    /// Multiple entries are supported, separated using a platform-specific delimiter (`:` on Unix,
+    /// `;` on Windows).
+    ///
+    /// Certificates are usually stored with `.pem`, `.crt`, or `.cer` extensions, but uv will
+    /// attempt to read a certificate from any regular file in the provided `SSL_CERT_DIR`.
+    ///
+    /// Files that cannot be parsed as PEM certificates are ignored. uv resolves symlinks and
+    /// ignores dangling symlinks.
+    ///
+    /// Only PEM-encoded files are supported, i.e., DER-encoded files are not supported.
+    ///
+    /// When set, this overrides the default certificate source (bundled Mozilla roots or system
+    /// certificates). Only the certificates in this directory will be trusted.
     #[attr_added_in("0.9.10")]
     pub const SSL_CERT_DIR: &'static str = "SSL_CERT_DIR";
 
@@ -650,9 +718,15 @@ impl EnvVars {
     #[attr_added_in("0.9.1")]
     pub const UV_UPLOAD_HTTP_TIMEOUT: &'static str = "UV_UPLOAD_HTTP_TIMEOUT";
 
-    /// Timeout (in seconds) for HTTP requests. (default: 30 s)
+    /// Timeout (in seconds) for HTTP reads. (default: 30 s)
     #[attr_added_in("0.1.7")]
     pub const UV_HTTP_TIMEOUT: &'static str = "UV_HTTP_TIMEOUT";
+
+    /// Timeout (in seconds) to connect to a server. (default: 10 s)
+    ///
+    /// If `UV_HTTP_TIMEOUT` is lower than this value, `UV_HTTP_TIMEOUT` will be used instead.
+    #[attr_added_in("0.10.0")]
+    pub const UV_HTTP_CONNECT_TIMEOUT: &'static str = "UV_HTTP_CONNECT_TIMEOUT";
 
     /// The number of retries for HTTP requests. (default: 3)
     #[attr_added_in("0.7.21")]
@@ -724,6 +798,10 @@ impl EnvVars {
     /// Used to detect Ksh shell usage.
     #[attr_added_in("0.2.33")]
     pub const KSH_VERSION: &'static str = "KSH_VERSION";
+
+    /// Used to detect PowerShell usage (set by PowerShell on all platforms).
+    #[attr_added_in("0.10.0")]
+    pub const PS_MODULE_PATH: &'static str = "PSModulePath";
 
     /// Used with `--python-platform macos` and related variants to set the
     /// deployment target (i.e., the minimum supported macOS version).
@@ -1107,6 +1185,19 @@ impl EnvVars {
     #[attr_added_in("0.9.8")]
     pub const UV_TEST_CURRENT_TIMESTAMP: &'static str = "UV_TEST_CURRENT_TIMESTAMP";
 
+    /// When set to a timestamp, applies an `exclude-newer` filter to the versions
+    /// considered available from indexes.
+    ///
+    /// This is used for reproducible resolver error messages. When `exclude-newer`
+    /// is used, we retain information about the available versions to improve error
+    /// messages. In contrast, versions published after this cutoff are considered
+    /// non-existent.
+    ///
+    /// Should be set to an RFC 3339 timestamp (e.g., `2024-03-25T00:00:00Z`).
+    #[attr_hidden]
+    #[attr_added_in("next release")]
+    pub const UV_TEST_AVAILABLE_VERSION_CUTOFF: &'static str = "UV_TEST_AVAILABLE_VERSION_CUTOFF";
+
     /// `.env` files from which to load environment variables when executing `uv run` commands.
     #[attr_added_in("0.4.30")]
     pub const UV_ENV_FILE: &'static str = "UV_ENV_FILE";
@@ -1193,7 +1284,7 @@ impl EnvVars {
 
     /// Equivalent to the `--directory` command-line argument. `UV_WORKING_DIRECTORY` (added in
     /// v0.9.1) is also supported for backwards compatibility.
-    #[attr_added_in("next version")]
+    #[attr_added_in("0.9.14")]
     pub const UV_WORKING_DIR: &'static str = "UV_WORKING_DIR";
 
     /// Equivalent to the `--directory` command-line argument.

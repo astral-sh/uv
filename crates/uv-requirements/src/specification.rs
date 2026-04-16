@@ -284,7 +284,7 @@ impl RequirementsSpecification {
                         ));
                     }
                 };
-                let pyproject_toml = toml::from_str::<PyProjectToml>(&content)
+                let pyproject_toml = PyProjectToml::from_toml(&content, path.user_display())
                     .with_context(|| format!("Failed to parse: `{}`", path.user_display()))?;
 
                 Self {
@@ -730,6 +730,32 @@ impl RequirementsSpecification {
         }
     }
 
+    /// Initialize a [`RequirementsSpecification`] from a list of [`Requirement`], including
+    /// constraints, overrides, and excludes.
+    pub fn from_excludes(
+        requirements: Vec<Requirement>,
+        constraints: Vec<Requirement>,
+        overrides: Vec<Requirement>,
+        excludes: Vec<PackageName>,
+    ) -> Self {
+        Self {
+            requirements: requirements
+                .into_iter()
+                .map(UnresolvedRequirementSpecification::from)
+                .collect(),
+            constraints: constraints
+                .into_iter()
+                .map(NameRequirementSpecification::from)
+                .collect(),
+            overrides: overrides
+                .into_iter()
+                .map(UnresolvedRequirementSpecification::from)
+                .collect(),
+            excludes,
+            ..Self::default()
+        }
+    }
+
     /// Return true if the specification does not include any requirements to install.
     pub fn is_empty(&self) -> bool {
         self.requirements.is_empty() && self.source_trees.is_empty() && self.overrides.is_empty()
@@ -756,7 +782,7 @@ async fn read_file(path: &Path, client_builder: &BaseClientBuilder<'_>) -> Resul
         if !cfg!(unix) || matches!(path.try_exists(), Ok(false)) {
             let url = DisplaySafeUrl::parse(&path.to_string_lossy())?;
 
-            let client = client_builder.build();
+            let client = client_builder.build()?;
             let response = client
                 .for_host(&url)
                 .get(Url::from(url.clone()))

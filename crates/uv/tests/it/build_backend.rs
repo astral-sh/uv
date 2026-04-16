@@ -1,4 +1,3 @@
-use crate::common::{TestContext, uv_snapshot, venv_bin_path};
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileTouch, FileWriteBin, FileWriteStr, PathChild, PathCreateDir};
@@ -11,6 +10,7 @@ use std::path::Path;
 use std::process::Command;
 use tempfile::TempDir;
 use uv_static::EnvVars;
+use uv_test::{uv_snapshot, venv_bin_path};
 
 const BUILT_BY_UV_TEST_SCRIPT: &str = indoc! {r#"
     from built_by_uv import greet
@@ -24,9 +24,9 @@ const BUILT_BY_UV_TEST_SCRIPT: &str = indoc! {r#"
 ///
 /// We can't test end-to-end here including the PEP 517 bridge code since we don't have a uv wheel.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn built_by_uv_direct_wheel() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let built_by_uv = Path::new("../../test/packages/built-by-uv");
 
     let temp_dir = TempDir::new()?;
@@ -80,9 +80,9 @@ fn built_by_uv_direct_wheel() -> Result<()> {
 /// We can't test end-to-end here including the PEP 517 bridge code since we don't have a uv wheel,
 /// so we call the build backend directly.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn built_by_uv_direct() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let built_by_uv = Path::new("../../test/packages/built-by-uv");
 
     let sdist_dir = TempDir::new()?;
@@ -154,9 +154,9 @@ fn built_by_uv_direct() -> Result<()> {
 /// We can't test end-to-end here including the PEP 517 bridge code since we don't have a uv wheel,
 /// so we call the build backend directly.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn built_by_uv_editable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let built_by_uv = Path::new("../../test/packages/built-by-uv");
 
     // Without the editable, pytest fails.
@@ -212,12 +212,12 @@ fn built_by_uv_editable() -> Result<()> {
     Ok(())
 }
 
-#[cfg(all(unix, feature = "git"))]
+#[cfg(all(unix, feature = "test-git"))]
 #[test]
 fn preserve_executable_bit() -> Result<()> {
     use std::io::Write;
 
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let project_dir = context.temp_dir.path().join("preserve_executable_bit");
     context
@@ -280,7 +280,7 @@ fn preserve_executable_bit() -> Result<()> {
 /// potential modules.
 #[test]
 fn rename_module() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let temp_dir = TempDir::new()?;
 
     context
@@ -361,7 +361,7 @@ fn rename_module() -> Result<()> {
 /// Test `tool.uv.build-backend.module-name` for editable builds.
 #[test]
 fn rename_module_editable_build() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let temp_dir = TempDir::new()?;
 
     context
@@ -421,7 +421,7 @@ fn rename_module_editable_build() -> Result<()> {
 /// Check that the build succeeds even if the module name mismatches by case.
 #[test]
 fn build_module_name_normalization() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let wheel_dir = context.temp_dir.path().join("dist");
     fs_err::create_dir(&wheel_dir)?;
@@ -535,7 +535,7 @@ fn build_module_name_normalization() -> Result<()> {
 
 #[test]
 fn build_sdist_with_long_path() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let temp_dir = TempDir::new()?;
 
     context
@@ -578,7 +578,7 @@ fn build_sdist_with_long_path() -> Result<()> {
 
 #[test]
 fn sdist_error_without_module() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let temp_dir = TempDir::new()?;
 
     context
@@ -625,7 +625,7 @@ fn sdist_error_without_module() -> Result<()> {
 
 #[test]
 fn complex_namespace_packages() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let dist = context.temp_dir.child("dist");
     dist.create_dir_all()?;
 
@@ -762,7 +762,7 @@ fn complex_namespace_packages() -> Result<()> {
 
 #[test]
 fn license_glob_without_matches_errors() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let project = context.temp_dir.child("missing-license");
     context
@@ -807,7 +807,7 @@ fn license_glob_without_matches_errors() -> Result<()> {
 
 #[test]
 fn license_file_must_be_utf8() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let project = context.temp_dir.child("license-utf8");
     context
@@ -852,7 +852,7 @@ fn license_file_must_be_utf8() -> Result<()> {
 #[test]
 #[cfg(unix)]
 fn symlinked_file() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let project = context.temp_dir.child("project");
     context
@@ -941,7 +941,7 @@ fn symlinked_file() -> Result<()> {
 /// They may be from another `uv_build` version that has a different schema.
 #[test]
 fn invalid_build_backend_settings_are_ignored() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -977,7 +977,7 @@ fn invalid_build_backend_settings_are_ignored() -> Result<()> {
 /// `tool.uv.build-backend.module-root = ".."`.
 #[test]
 fn error_on_relative_module_root_outside_project_root() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -1025,7 +1025,7 @@ fn error_on_relative_module_root_outside_project_root() -> Result<()> {
 /// `tool.uv.build-backend.data.headers = "../headers"`.
 #[test]
 fn error_on_relative_data_dir_outside_project_root() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let project = context.temp_dir.child("project");
     project.create_dir_all()?;
@@ -1079,7 +1079,7 @@ fn error_on_relative_data_dir_outside_project_root() -> Result<()> {
 /// Show an explicit error when there is a venv in source tree.
 #[test]
 fn venv_in_source_tree() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     context
         .init()
@@ -1121,7 +1121,7 @@ fn venv_in_source_tree() {
 /// Show a warning when the build backend is passed redundant module names
 #[test]
 fn warn_on_redundant_module_names() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -1188,7 +1188,7 @@ fn warn_on_redundant_module_names() -> Result<()> {
 
 #[test]
 fn invalid_pyproject_toml() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     context
         .temp_dir
@@ -1223,10 +1223,10 @@ fn invalid_pyproject_toml() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 #[test]
 fn build_with_all_metadata() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let temp_dir = TempDir::new()?;
 
     context
@@ -1442,6 +1442,161 @@ fn build_with_all_metadata() -> Result<()> {
       "wheel-version": "1.0"
     }
     "#);
+
+    Ok(())
+}
+
+/// Warn for cases where `tool.uv.build-backend` is used without the corresponding build backend
+/// entry.
+#[test]
+#[cfg(feature = "test-pypi")]
+fn tool_uv_build_backend_without_build_backend() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+
+        [tool.uv]
+        package = true
+
+        [tool.uv.build-backend.data]
+        data = "assets"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.build().arg("--no-build-logs"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    warning: `project` defines settings for `uv_build` in `tool.uv.build-backend`, but the `build-system` table is missing
+    Building wheel from source distribution...
+    Successfully built dist/project-0.1.0.tar.gz
+    Successfully built dist/project-0.1.0-py3-none-any.whl
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_install().arg("."), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    warning: `project` defines settings for `uv_build` in `tool.uv.build-backend`, but the `build-system` table is missing
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    // Ensure that the warning isn't shown for registry dependencies.
+    uv_snapshot!(context.filters(), context.pip_install().arg("--find-links").arg("dist").arg("--reinstall").arg("project"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0
+    ");
+
+    Ok(())
+}
+
+/// Warn for cases where `tool.uv.build-backend` is used without the corresponding build backend
+/// entry.
+#[test]
+#[cfg(feature = "test-pypi")]
+fn tool_uv_build_backend_wrong_build_backend() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let project = context.temp_dir.child("project");
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+
+        [tool.uv]
+        package = true
+
+        [tool.uv.build-backend.data]
+        data = "assets"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    project.child("src/project/__init__.py").touch()?;
+
+    uv_snapshot!(context.filters(), context.build().arg("--no-build-logs").arg(project.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    warning: `project` defines settings for `uv_build` in `tool.uv.build-backend`, but uses `hatchling.build` as build backend instead
+    Building wheel from source distribution...
+    Successfully built project/dist/project-0.1.0.tar.gz
+    Successfully built project/dist/project-0.1.0-py2.py3-none-any.whl
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_install().arg(project.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    warning: `project` defines settings for `uv_build` in `tool.uv.build-backend`, but uses `hatchling.build` as build backend instead
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/project)
+    ");
+
+    Ok(())
+}
+
+/// Show a warning when the project uses deprecated `License ::` classifiers.
+#[test]
+fn warn_on_license_classifier() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        classifiers = ["License :: OSI Approved :: MIT License"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    context.temp_dir.child("src/foo/__init__.py").touch()?;
+
+    uv_snapshot!(context.filters(), context.build(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+    warning: Found license classifier `License :: OSI Approved :: MIT License`. License classifiers are ambiguous and deprecated per PEP 639; projects should use `project.license` and `project.license-files` instead.
+    Building wheel from source distribution (uv build backend)...
+    Successfully built dist/foo-1.0.0.tar.gz
+    Successfully built dist/foo-1.0.0-py3-none-any.whl
+    ");
 
     Ok(())
 }

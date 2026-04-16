@@ -84,6 +84,6 @@ pub fn spawn_child(cmd: &mut Command, hide_console: bool) -> std::io::Result<Inf
     unsafe { GetExitCodeProcess(supervised.raw_handle(), &raw mut exit_code) }
         .map_err(|e| std::io::Error::other(format!("Failed to get exit code: {e}")))?;
 
-    #[allow(clippy::exit, clippy::cast_possible_wrap)]
+    #[expect(clippy::exit, clippy::cast_possible_wrap)]
     std::process::exit(exit_code as i32)
 }

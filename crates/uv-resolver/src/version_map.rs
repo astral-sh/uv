@@ -5,7 +5,7 @@ use std::sync::OnceLock;
 
 use pubgrub::Ranges;
 use rustc_hash::FxHashMap;
-use tracing::instrument;
+use tracing::{instrument, trace};
 
 use uv_client::{FlatIndexEntry, OwnedArchive, SimpleDetailMetadata, VersionFiles};
 use uv_configuration::BuildOptions;
@@ -23,7 +23,7 @@ use uv_types::HashStrategy;
 use uv_warnings::warn_user_once;
 
 use crate::flat_index::FlatDistributions;
-use crate::{ExcludeNewer, ExcludeNewerValue, yanks::AllowedYanks};
+use crate::{ExcludeNewerValue, yanks::AllowedYanks};
 
 /// A map from versions to distributions.
 #[derive(Debug)]
@@ -51,7 +51,7 @@ impl VersionMap {
         requires_python: &RequiresPython,
         allowed_yanks: &AllowedYanks,
         hasher: &HashStrategy,
-        exclude_newer: Option<&ExcludeNewer>,
+        exclude_newer: Option<ExcludeNewerValue>,
         flat_index: Option<FlatDistributions>,
         build_options: &BuildOptions,
     ) -> Self {
@@ -127,7 +127,7 @@ impl VersionMap {
                 allowed_yanks: allowed_yanks.clone(),
                 hasher: hasher.clone(),
                 requires_python: requires_python.clone(),
-                exclude_newer: exclude_newer.and_then(|en| en.exclude_newer_package(package_name)),
+                exclude_newer,
             }),
         }
     }
@@ -185,6 +185,14 @@ impl VersionMap {
         match &self.inner {
             VersionMapInner::Eager(_) => None,
             VersionMapInner::Lazy(lazy) => Some(&lazy.index),
+        }
+    }
+
+    /// Return the effective `exclude-newer` cutoff for this version map, if any.
+    pub(crate) fn exclude_newer(&self) -> Option<&ExcludeNewerValue> {
+        match &self.inner {
+            VersionMapInner::Eager(_) => None,
+            VersionMapInner::Lazy(lazy) => lazy.exclude_newer.as_ref(),
         }
     }
 
@@ -448,6 +456,10 @@ impl VersionMapLazy {
                 let (excluded, upload_time) = if let Some(exclude_newer) = &self.exclude_newer {
                     match file.upload_time_utc_ms.as_ref() {
                         Some(&upload_time) if upload_time >= exclude_newer.timestamp_millis() => {
+                            trace!(
+                                "Excluding `{}` (uploaded {upload_time}) due to exclude-newer ({exclude_newer})",
+                                file.filename
+                            );
                             (true, Some(upload_time))
                         }
                         None => {
@@ -552,7 +564,7 @@ impl VersionMapLazy {
         } else {
             if hashes.is_empty() {
                 HashComparison::Missing
-            } else if hashes.iter().any(|hash| required_hashes.contains(hash)) {
+            } else if hash_policy.matches(hashes) {
                 HashComparison::Matched
             } else {
                 HashComparison::Mismatched
@@ -616,7 +628,7 @@ impl VersionMapLazy {
         } else {
             if hashes.is_empty() {
                 HashComparison::Missing
-            } else if hashes.iter().any(|hash| required_hashes.contains(hash)) {
+            } else if hash_policy.matches(hashes) {
                 HashComparison::Matched
             } else {
                 HashComparison::Mismatched

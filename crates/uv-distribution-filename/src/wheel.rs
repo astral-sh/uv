@@ -470,4 +470,35 @@ mod tests {
         ).unwrap();
         insta::assert_snapshot!(filename.cache_key(), @"1.2.3.4.5.6.7.8.9.0.1.2.3.4.5.6.7.8.9.0.1.2.1.2-80bf8598e9647cf7");
     }
+
+    /// Don't drop the freethreading tag when there is a debug tag.
+    #[test]
+    fn freethreading_debug() {
+        let filename = "correctionlib-2.8.0-cp314-cp314t-macosx_26_0_arm64.whl";
+        let parsed = WheelFilename::from_str(filename).unwrap();
+        assert_eq!(filename, parsed.to_string());
+
+        let filename = "correctionlib-2.8.0-cp314-cp314d-macosx_26_0_arm64.whl";
+        let parsed = WheelFilename::from_str(filename).unwrap();
+        assert_eq!(filename, parsed.to_string());
+
+        let filename = "correctionlib-2.8.0-cp314-cp314td-macosx_26_0_arm64.whl";
+        let parsed = WheelFilename::from_str(filename).unwrap();
+        assert_eq!(filename, parsed.to_string());
+    }
+
+    #[test]
+    fn abi3t_tags() {
+        let filename =
+            WheelFilename::from_str("foo-1.2.3-cp315-abi3t-manylinux_2_17_x86_64.whl").unwrap();
+        assert_eq!(filename.abi_tags(), &[AbiTag::Abi3T]);
+    }
+
+    #[test]
+    fn compressed_abi3_abi3t_tags() {
+        let filename =
+            WheelFilename::from_str("foo-1.2.3-cp315-abi3.abi3t-manylinux_2_17_x86_64.whl")
+                .unwrap();
+        assert_eq!(filename.abi_tags(), &[AbiTag::Abi3, AbiTag::Abi3T]);
+    }
 }

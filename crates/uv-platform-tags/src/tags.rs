@@ -8,6 +8,7 @@ use rustc_hash::FxHashMap;
 
 use uv_small_str::SmallString;
 
+use crate::abi_tag::CPythonAbiVariants;
 use crate::{AbiTag, Arch, LanguageTag, Os, Platform, PlatformError, PlatformTag};
 
 #[derive(Debug, thiserror::Error)]
@@ -22,6 +23,16 @@ pub enum TagsError {
     InvalidPriority(usize, #[source] std::num::TryFromIntError),
     #[error("Only CPython can be freethreading, not: {0}")]
     GilIsACPythonProblem(String),
+    #[error("Only CPython can be debug-enabled, not: {0}")]
+    DebugIsACPythonProblem(String),
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct TagsOptions {
+    pub manylinux_compatible: bool,
+    pub gil_disabled: bool,
+    pub debug_enabled: bool,
+    pub is_cross: bool,
 }
 
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd, Copy, Clone)]
@@ -40,6 +51,10 @@ pub enum IncompatibleTag {
     Platform,
 }
 
+/// Whether a wheel is compatible or incompatible with a set of tags, and which priority it has
+/// compared to other wheels.
+///
+/// A higher tag compatibility means higher priority.
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
 pub enum TagCompatibility {
     Incompatible(IncompatibleTag),
@@ -135,16 +150,39 @@ impl Tags {
         python_version: (u8, u8),
         implementation_name: &str,
         implementation_version: (u8, u8),
-        manylinux_compatible: bool,
-        gil_disabled: bool,
-        is_cross: bool,
+        options: TagsOptions,
     ) -> Result<Self, TagsError> {
-        let implementation = Implementation::parse(implementation_name, gil_disabled)?;
+        let mut variant = CPythonAbiVariants::default();
+        if options.gil_disabled {
+            if implementation_name != "cpython" {
+                return Err(TagsError::GilIsACPythonProblem(
+                    implementation_name.to_string(),
+                ));
+            }
+            variant.insert(CPythonAbiVariants::Freethreading);
+        }
+        if options.debug_enabled {
+            if implementation_name != "cpython" {
+                return Err(TagsError::DebugIsACPythonProblem(
+                    implementation_name.to_string(),
+                ));
+            }
+            variant.insert(CPythonAbiVariants::Debug);
+        }
+        // Sufficiently correct assumption, pre-3.8 Pythons were generally built with pymalloc.
+        // https://docs.python.org/dev/whatsnew/3.8.html#build-and-c-api-changes
+        // > the m flag for pymalloc became useless (builds with and without pymalloc are ABI
+        // > compatible) and so has been removed.
+        if python_version <= (3, 7) && implementation_name == "cpython" {
+            variant.insert(CPythonAbiVariants::Pymalloc);
+        }
+
+        let implementation = Implementation::parse(implementation_name, variant)?;
 
         // Determine the compatible tags for the current platform.
         let platform_tags = {
             let mut platform_tags = compatible_tags(platform)?;
-            if matches!(platform.os(), Os::Manylinux { .. }) && !manylinux_compatible {
+            if matches!(platform.os(), Os::Manylinux { .. }) && !options.manylinux_compatible {
                 platform_tags.retain(|tag| !tag.is_manylinux());
             }
             platform_tags
@@ -160,12 +198,39 @@ impl Tags {
                 platform_tag.clone(),
             ));
         }
-        // 2. abi3 and no abi (e.g. executable binary)
-        if let Implementation::CPython { gil_disabled } = implementation {
-            // For some reason 3.2 is the minimum python for the cp abi
+        // 1a. For CPython 3.8+, debug builds are ABI-compatible with release builds, so a debug
+        // interpreter also accept non-debug wheels.
+        if python_version >= (3, 8)
+            && let Implementation::CPython { variant } = implementation
+            && variant.contains(CPythonAbiVariants::Debug)
+        {
+            let mut non_debug_variant = variant;
+            non_debug_variant.remove(CPythonAbiVariants::Debug);
+            let debug_abi = AbiTag::CPython {
+                variant: non_debug_variant,
+                python_version,
+            };
+            for platform_tag in &platform_tags {
+                tags.push((
+                    implementation.language_tag(python_version),
+                    debug_abi,
+                    platform_tag.clone(),
+                ));
+            }
+        }
+        // 2. abi3/abi3t and no abi (e.g. executable binary)
+        if let Implementation::CPython { variant } = implementation {
+            // Emit `abi3t` everywhere we'd emit `abi3` for non-free-threaded builds.
             for minor in (2..=python_version.1).rev() {
-                // No abi3 for free-threading python
-                if !gil_disabled {
+                if variant.contains(CPythonAbiVariants::Freethreading) {
+                    for platform_tag in &platform_tags {
+                        tags.push((
+                            implementation.language_tag((python_version.0, minor)),
+                            AbiTag::Abi3T,
+                            platform_tag.clone(),
+                        ));
+                    }
+                } else {
                     for platform_tag in &platform_tags {
                         tags.push((
                             implementation.language_tag((python_version.0, minor)),
@@ -245,8 +310,8 @@ impl Tags {
             tags,
             platform.clone(),
             python_version,
-            is_cross,
-            gil_disabled,
+            options.is_cross,
+            options.gil_disabled,
         ))
     }
 
@@ -297,11 +362,15 @@ impl Tags {
         wheel_platform_tags: &[PlatformTag],
     ) -> TagCompatibility {
         // On free-threaded Python, check if any wheel ABI tag is compatible.
-        // Only `none` (pure Python) and free-threaded CPython ABIs (e.g., `cp313t`) are compatible.
+        // Only `none` (pure Python), `abi3t`, and free-threaded CPython ABIs
+        // (e.g., `cp313t`) are compatible.
         if self.is_freethreaded {
             let has_compatible_abi = wheel_abi_tags.iter().any(|abi| match abi {
                 AbiTag::None => true,
-                AbiTag::CPython { gil_disabled, .. } => *gil_disabled,
+                AbiTag::Abi3T => true,
+                AbiTag::CPython { variant, .. } => {
+                    variant.contains(CPythonAbiVariants::Freethreading)
+                }
                 _ => false,
             });
             if !has_compatible_abi {
@@ -370,6 +439,10 @@ impl Tags {
         self.python_version
     }
 
+    pub fn is_freethreaded(&self) -> bool {
+        self.is_freethreaded
+    }
+
     pub fn is_cross(&self) -> bool {
         self.is_cross
     }
@@ -414,7 +487,7 @@ impl std::fmt::Display for Tags {
 
 #[derive(Debug, Clone, Copy)]
 enum Implementation {
-    CPython { gil_disabled: bool },
+    CPython { variant: CPythonAbiVariants },
     PyPy,
     GraalPy,
     Pyston,
@@ -439,8 +512,8 @@ impl Implementation {
     fn abi_tag(self, python_version: (u8, u8), implementation_version: (u8, u8)) -> AbiTag {
         match self {
             // Ex) `cp39`
-            Self::CPython { gil_disabled } => AbiTag::CPython {
-                gil_disabled,
+            Self::CPython { variant } => AbiTag::CPython {
+                variant,
                 python_version,
             },
             // Ex) `pypy39_pp73`
@@ -460,13 +533,10 @@ impl Implementation {
         }
     }
 
-    fn parse(name: &str, gil_disabled: bool) -> Result<Self, TagsError> {
-        if gil_disabled && name != "cpython" {
-            return Err(TagsError::GilIsACPythonProblem(name.to_string()));
-        }
+    fn parse(name: &str, variant: CPythonAbiVariants) -> Result<Self, TagsError> {
         match name {
             // Known and supported implementations.
-            "cpython" => Ok(Self::CPython { gil_disabled }),
+            "cpython" => Ok(Self::CPython { variant }),
             "pypy" => Ok(Self::PyPy),
             "graalpy" => Ok(Self::GraalPy),
             "pyston" => Ok(Self::Pyston),
@@ -677,7 +747,7 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
             for ver in (16..=*api_level).rev() {
                 platform_tags.push(PlatformTag::Android {
                     api_level: ver,
-                    abi: AndroidAbi::from_arch(arch).map_err(PlatformError::ArchDetectionError)?,
+                    abi: AndroidAbi::from_arch(arch)?,
                 });
             }
 
@@ -699,8 +769,7 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
         ) => {
             // Source: https://github.com/pypa/packaging/blob/e9b9d09ebc5992ecad1799da22ee5faefb9cc7cb/src/packaging/tags.py#L484
             let mut platform_tags = vec![];
-            let multiarch = IosMultiarch::from_arch(arch, *simulator)
-                .map_err(PlatformError::ArchDetectionError)?;
+            let multiarch = IosMultiarch::from_arch(arch, *simulator)?;
 
             // Consider any iOS major.minor version from the version requested, down to
             // 12.0. 12.0 is the first iOS version that is known to have enough features
@@ -923,13 +992,13 @@ impl FromStr for AndroidAbi {
 
 impl AndroidAbi {
     /// Determine the appropriate Android arch.
-    pub fn from_arch(arch: Arch) -> Result<Self, String> {
+    pub fn from_arch(arch: Arch) -> Result<Self, PlatformError> {
         match arch {
             Arch::Aarch64 => Ok(Self::Arm64V8a),
             Arch::Armv7L => Ok(Self::ArmeabiV7a),
             Arch::X86 => Ok(Self::X86),
             Arch::X86_64 => Ok(Self::X86_64),
-            _ => Err(format!("Invalid Android arch format: {arch}")),
+            _ => Err(PlatformError::InvalidAndroidArch(arch)),
         }
     }
 
@@ -944,6 +1013,9 @@ impl AndroidAbi {
     }
 }
 
+/// iOS architecture and whether it is a simulator or a real device.
+///
+/// Not to be confused with the Linux mulitarch concept.
 #[derive(
     Debug,
     Copy,
@@ -986,17 +1058,17 @@ impl FromStr for IosMultiarch {
 
 impl IosMultiarch {
     /// Determine the appropriate multiarch for a iOS version.
-    pub fn from_arch(arch: Arch, simulator: bool) -> Result<Self, String> {
+    pub fn from_arch(arch: Arch, simulator: bool) -> Result<Self, PlatformError> {
         if simulator {
             match arch {
                 Arch::Aarch64 => Ok(Self::Arm64Simulator),
                 Arch::X86_64 => Ok(Self::X86_64Simulator),
-                _ => Err(format!("Invalid iOS simulator arch: {arch}")),
+                _ => Err(PlatformError::InvalidIosSimulatorArch(arch)),
             }
         } else {
             match arch {
                 Arch::Aarch64 => Ok(Self::Arm64Device),
-                _ => Err(format!("Invalid iOS device arch: {arch}")),
+                _ => Err(PlatformError::InvalidIosDeviceArch(arch)),
             }
         }
     }
@@ -1514,9 +1586,7 @@ mod tests {
             (3, 9),
             "cpython",
             (3, 9),
-            false,
-            false,
-            false,
+            TagsOptions::default(),
         )
         .unwrap();
         assert_snapshot!(
@@ -1578,9 +1648,10 @@ mod tests {
             (3, 9),
             "cpython",
             (3, 9),
-            true,
-            false,
-            false,
+            TagsOptions {
+                manylinux_compatible: true,
+                ..TagsOptions::default()
+            },
         )
         .unwrap();
         assert_snapshot!(
@@ -2203,9 +2274,7 @@ mod tests {
             (3, 9),
             "cpython",
             (3, 9),
-            false,
-            false,
-            false,
+            TagsOptions::default(),
         )
         .unwrap();
         assert_snapshot!(
@@ -2666,5 +2735,132 @@ mod tests {
         py30-none-any
         "
         );
+    }
+
+    #[test]
+    fn test_system_tags_freethreaded_include_abi3t() {
+        let tags = Tags::from_env(
+            &Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 28,
+                },
+                Arch::X86_64,
+            ),
+            (3, 15),
+            "cpython",
+            (3, 15),
+            TagsOptions {
+                manylinux_compatible: false,
+                gil_disabled: true,
+                ..TagsOptions::default()
+            },
+        )
+        .unwrap();
+
+        assert_snapshot!(
+            tags,
+            @"
+        cp315-cp315t-linux_x86_64
+        cp315-abi3t-linux_x86_64
+        cp315-none-linux_x86_64
+        cp314-abi3t-linux_x86_64
+        cp313-abi3t-linux_x86_64
+        cp312-abi3t-linux_x86_64
+        cp311-abi3t-linux_x86_64
+        cp310-abi3t-linux_x86_64
+        cp39-abi3t-linux_x86_64
+        cp38-abi3t-linux_x86_64
+        cp37-abi3t-linux_x86_64
+        cp36-abi3t-linux_x86_64
+        cp35-abi3t-linux_x86_64
+        cp34-abi3t-linux_x86_64
+        cp33-abi3t-linux_x86_64
+        cp32-abi3t-linux_x86_64
+        py315-none-linux_x86_64
+        py3-none-linux_x86_64
+        py314-none-linux_x86_64
+        py313-none-linux_x86_64
+        py312-none-linux_x86_64
+        py311-none-linux_x86_64
+        py310-none-linux_x86_64
+        py39-none-linux_x86_64
+        py38-none-linux_x86_64
+        py37-none-linux_x86_64
+        py36-none-linux_x86_64
+        py35-none-linux_x86_64
+        py34-none-linux_x86_64
+        py33-none-linux_x86_64
+        py32-none-linux_x86_64
+        py31-none-linux_x86_64
+        py30-none-linux_x86_64
+        cp315-none-any
+        py315-none-any
+        py3-none-any
+        py314-none-any
+        py313-none-any
+        py312-none-any
+        py311-none-any
+        py310-none-any
+        py39-none-any
+        py38-none-any
+        py37-none-any
+        py36-none-any
+        py35-none-any
+        py34-none-any
+        py33-none-any
+        py32-none-any
+        py31-none-any
+        py30-none-any
+        "
+        );
+    }
+
+    #[test]
+    fn test_system_tags_debug_cpython() {
+        fn debug_compatibilities(debug_enabled: bool) -> (TagCompatibility, TagCompatibility) {
+            let tags = Tags::from_env(
+                &Platform::new(
+                    Os::Manylinux {
+                        major: 2,
+                        minor: 28,
+                    },
+                    Arch::X86_64,
+                ),
+                (3, 14),
+                "cpython",
+                (3, 14),
+                TagsOptions {
+                    manylinux_compatible: true,
+                    debug_enabled,
+                    ..TagsOptions::default()
+                },
+            )
+            .unwrap();
+
+            let debug_compatibility = tags.compatibility(
+                &[LanguageTag::from_str("cp314").unwrap()],
+                &[AbiTag::from_str("cp314d").unwrap()],
+                &[PlatformTag::from_str("manylinux_2_28_x86_64").unwrap()],
+            );
+            let non_debug_compatibility = tags.compatibility(
+                &[LanguageTag::from_str("cp314").unwrap()],
+                &[AbiTag::from_str("cp314").unwrap()],
+                &[PlatformTag::from_str("manylinux_2_28_x86_64").unwrap()],
+            );
+            (debug_compatibility, non_debug_compatibility)
+        }
+
+        // A regular CPython build is not compatible with debug wheels.
+        let (debug_compatibility, non_debug_compatibility) = debug_compatibilities(false);
+        assert!(!debug_compatibility.is_compatible());
+        assert!(non_debug_compatibility.is_compatible());
+
+        // A debug CPython build is compatible with debug and non-debug wheels, preferring debug
+        // wheels.
+        let (debug_compatibility, non_debug_compatibility) = debug_compatibilities(true);
+        assert!(debug_compatibility.is_compatible());
+        assert!(non_debug_compatibility.is_compatible());
+        assert!(debug_compatibility > non_debug_compatibility);
     }
 }

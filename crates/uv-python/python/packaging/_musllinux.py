@@ -4,8 +4,6 @@ This module implements logic to detect if the currently running Python is
 linked against musl, and what musl version is used.
 """
 
-from __future__ import annotations
-
 import functools
 import re
 import subprocess
@@ -20,7 +18,7 @@ class _MuslVersion(NamedTuple):
     minor: int
 
 
-def _parse_musl_version(output: str) -> _MuslVersion | None:
+def _parse_musl_version(output: str) -> "_MuslVersion | None":
     lines = [n for n in (n.strip() for n in output.splitlines()) if n]
     if len(lines) < 2 or lines[0][:4] != "musl":
         return None
@@ -31,7 +29,7 @@ def _parse_musl_version(output: str) -> _MuslVersion | None:
 
 
 @functools.lru_cache()
-def _get_musl_version(executable: str) -> _MuslVersion | None:
+def _get_musl_version(executable: str) -> "_MuslVersion | None":
     """Detect currently-running musl runtime version.
 
     This is done by checking the specified executable's dynamic linking

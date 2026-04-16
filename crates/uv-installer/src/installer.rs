@@ -1,5 +1,5 @@
 use std::convert;
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 
 use anyhow::{Context, Error, Result};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -7,7 +7,7 @@ use tokio::sync::oneshot;
 use tracing::{instrument, warn};
 
 use uv_cache::Cache;
-use uv_configuration::RAYON_INITIALIZE;
+use uv_configuration::initialize_rayon_once;
 use uv_distribution_types::CachedDist;
 use uv_install_wheel::{Layout, LinkMode};
 use uv_preview::Preview;
@@ -108,7 +108,7 @@ impl<'a> Installer<'a> {
         let layout = venv.interpreter().layout();
         let relocatable = venv.relocatable();
         // Initialize the threadpool with the user settings.
-        LazyLock::force(&RAYON_INITIALIZE);
+        initialize_rayon_once();
         rayon::spawn(move || {
             let result = install(
                 wheels,
@@ -167,8 +167,8 @@ fn install(
     preview: Preview,
 ) -> Result<Vec<CachedDist>> {
     // Initialize the threadpool with the user settings.
-    LazyLock::force(&RAYON_INITIALIZE);
-    let locks = uv_install_wheel::Locks::new(preview);
+    initialize_rayon_once();
+    let state = uv_install_wheel::InstallState::new(preview);
     wheels.par_iter().try_for_each(|wheel| {
         uv_install_wheel::install_wheel(
             layout,
@@ -188,7 +188,7 @@ fn install(
             installer_name,
             installer_metadata,
             link_mode,
-            &locks,
+            &state,
         )
         .with_context(|| format!("Failed to install: {} ({wheel})", wheel.filename()))?;
 
@@ -198,7 +198,7 @@ fn install(
 
         Ok::<(), Error>(())
     })?;
-    if let Err(err) = locks.warn_package_conflicts() {
+    if let Err(err) = state.warn_package_conflicts() {
         warn!("Checking for conflicts between packages failed: {err}");
     }
 

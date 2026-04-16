@@ -5,6 +5,7 @@ use petgraph::{
 use rustc_hash::{FxHashMap, FxHashSet};
 #[cfg(feature = "schemars")]
 use std::borrow::Cow;
+use std::fmt;
 use std::{collections::BTreeSet, hash::Hash, rc::Rc};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 
@@ -542,6 +543,33 @@ impl hashbrown::Equivalent<ConflictKind> for ConflictKindRef<'_> {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct ConflictEntry {
+    package: Option<PackageName>,
+    extra: Option<ExtraName>,
+    group: Option<GroupName>,
+}
+
+impl fmt::Display for ConflictEntry {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut parts = vec![];
+        if let Some(package) = &self.package {
+            parts.push(format!("package = \"{package}\""));
+        }
+        if let Some(extra) = &self.extra {
+            parts.push(format!("extra = \"{extra}\""));
+        }
+        if let Some(group) = &self.group {
+            parts.push(format!("group = \"{group}\""));
+        }
+        if parts.is_empty() {
+            write!(f, "{{}}")
+        } else {
+            write!(f, "{{ {} }}", parts.join(", "))
+        }
+    }
+}
+
 /// An error that occurs when the given conflicting set is invalid somehow.
 #[derive(Debug, thiserror::Error)]
 pub enum ConflictError {
@@ -556,8 +584,8 @@ pub enum ConflictError {
     /// (This is only applicable when deserializing from the lock file.
     /// When deserializing from `pyproject.toml`, the `package` field is
     /// optional.)
-    #[error("Expected `package` field in conflicting entry")]
-    MissingPackage,
+    #[error("Expected `package` field in conflicting entry: {0}")]
+    MissingPackage(ConflictEntry),
     /// An error that occurs when all of `package`, `extra` and `group` are missing.
     #[error("Expected `package`, `extra` or `group` field in conflicting entry")]
     MissingPackageAndExtraAndGroup,
@@ -582,6 +610,41 @@ pub enum ConflictError {
 pub struct SchemaConflicts(Vec<SchemaConflictSet>);
 
 impl SchemaConflicts {
+    fn to_conflicts_with_default_package(
+        &self,
+        package: Option<&PackageName>,
+    ) -> Result<Conflicts, ConflictError> {
+        let mut conflicting = Conflicts::empty();
+        for tool_uv_set in &self.0 {
+            let mut set = vec![];
+            for item in &tool_uv_set.0 {
+                let package = item
+                    .package
+                    .as_ref()
+                    .or(package)
+                    .ok_or_else(|| ConflictError::MissingPackage(ConflictEntry::from(item)))?
+                    .clone();
+                set.push(ConflictItem {
+                    package,
+                    kind: item.kind.clone(),
+                });
+            }
+            // OK because we guarantee that `SchemaConflictSet` is valid and
+            // there aren't any new errors that can occur here.
+            let set = ConflictSet::try_from(set).unwrap();
+            conflicting.push(set);
+        }
+        Ok(conflicting)
+    }
+
+    /// Convert the public schema "conflicting" type to our internal fully
+    /// resolved type.
+    ///
+    /// Every conflict item must define `package` explicitly.
+    pub fn to_conflicts(&self) -> Result<Conflicts, ConflictError> {
+        self.to_conflicts_with_default_package(None)
+    }
+
     /// Convert the public schema "conflicting" type to our internal fully
     /// resolved type. Effectively, this pairs the corresponding package name
     /// with each conflict.
@@ -590,23 +653,8 @@ impl SchemaConflicts {
     /// then that takes precedence over the given package name, which is only
     /// used when there is no explicit package name written.
     pub fn to_conflicts_with_package_name(&self, package: &PackageName) -> Conflicts {
-        let mut conflicting = Conflicts::empty();
-        for tool_uv_set in &self.0 {
-            let mut set = vec![];
-            for item in &tool_uv_set.0 {
-                let package = item.package.clone().unwrap_or_else(|| package.clone());
-                set.push(ConflictItem {
-                    package: package.clone(),
-                    kind: item.kind.clone(),
-                });
-            }
-            // OK because we guarantee that
-            // `SchemaConflictingGroupList` is valid and there aren't
-            // any new errors that can occur here.
-            let set = ConflictSet::try_from(set).unwrap();
-            conflicting.push(set);
-        }
-        conflicting
+        self.to_conflicts_with_default_package(Some(package))
+            .expect("default package name should satisfy schema conflicts")
     }
 }
 
@@ -689,12 +737,44 @@ struct ConflictItemWire {
     group: Option<GroupName>,
 }
 
+impl From<&SchemaConflictItem> for ConflictEntry {
+    fn from(item: &SchemaConflictItem) -> Self {
+        match &item.kind {
+            ConflictKind::Project => Self {
+                package: item.package.clone(),
+                extra: None,
+                group: None,
+            },
+            ConflictKind::Extra(extra) => Self {
+                package: item.package.clone(),
+                extra: Some(extra.clone()),
+                group: None,
+            },
+            ConflictKind::Group(group) => Self {
+                package: item.package.clone(),
+                extra: None,
+                group: Some(group.clone()),
+            },
+        }
+    }
+}
+
+impl From<&ConflictItemWire> for ConflictEntry {
+    fn from(item: &ConflictItemWire) -> Self {
+        Self {
+            package: item.package.clone(),
+            extra: item.extra.clone(),
+            group: item.group.clone(),
+        }
+    }
+}
+
 impl TryFrom<ConflictItemWire> for ConflictItem {
     type Error = ConflictError;
 
     fn try_from(wire: ConflictItemWire) -> Result<Self, ConflictError> {
         let Some(package) = wire.package else {
-            return Err(ConflictError::MissingPackage);
+            return Err(ConflictError::MissingPackage(ConflictEntry::from(&wire)));
         };
         match (wire.extra, wire.group) {
             (Some(_), Some(_)) => Err(ConflictError::FoundExtraAndGroup),

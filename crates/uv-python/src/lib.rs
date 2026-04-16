@@ -8,7 +8,7 @@ use uv_static::EnvVars;
 pub use crate::discovery::{
     EnvironmentPreference, Error as DiscoveryError, PythonDownloads, PythonNotFound,
     PythonPreference, PythonRequest, PythonSource, PythonVariant, VersionRequest,
-    find_python_installations, satisfies_python_preference,
+    find_python_installations,
 };
 pub use crate::downloads::PlatformRequest;
 pub use crate::environment::{InvalidEnvironmentKind, PythonEnvironment};
@@ -17,7 +17,7 @@ pub use crate::installation::{
     PythonInstallation, PythonInstallationKey, PythonInstallationMinorVersionKey,
 };
 pub use crate::interpreter::{
-    BrokenSymlink, Error as InterpreterError, Interpreter, canonicalize_executable,
+    BrokenLink, Error as InterpreterError, Interpreter, canonicalize_executable,
 };
 pub use crate::pointer_size::PointerSize;
 pub use crate::prefix::Prefix;
@@ -87,6 +87,9 @@ pub enum Error {
     #[error(transparent)]
     Download(#[from] downloads::Error),
 
+    #[error(transparent)]
+    ClientBuild(#[from] uv_client::ClientBuildError),
+
     // TODO(zanieb) We might want to ensure this is always wrapped in another type
     #[error(transparent)]
     KeyError(#[from] installation::PythonInstallationKeyError),
@@ -136,7 +139,7 @@ mod tests {
     use temp_env::with_vars;
     use test_log::test;
     use uv_client::BaseClientBuilder;
-    use uv_preview::Preview;
+    use uv_preview::{Preview, PreviewFeature};
     use uv_static::EnvVars;
 
     use uv_cache::Cache;
@@ -1000,6 +1003,11 @@ mod tests {
     ) -> Result<PythonInstallation, crate::Error> {
         let client_builder = BaseClientBuilder::default();
         let download_list = ManagedPythonDownloadList::new_only_embedded()?;
+        let client = client_builder
+            .clone()
+            .retries(0)
+            .build()
+            .expect("failed to build base client");
         tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -1010,7 +1018,7 @@ mod tests {
                 preference,
                 false,
                 &download_list,
-                &client_builder.clone().retries(0).build(),
+                &client,
                 &client_builder.retry_policy(),
                 cache,
                 None,
@@ -1333,6 +1341,36 @@ mod tests {
         assert!(
             matches!(result, Err(PythonNotFound { .. })),
             "We should not allow the base environment when looking for virtual environments"
+        );
+
+        // With the `special-conda-env-names` preview feature, "base" is not special-cased
+        // and uses path-based heuristics instead. When the directory name matches the env name,
+        // it should be treated as a child environment.
+        let base_dir = context.tempdir.child("base");
+        TestContext::mock_conda_prefix(&base_dir, "3.12.6")?;
+        let python = context
+            .run_with_vars(
+                &[
+                    (EnvVars::CONDA_PREFIX, Some(base_dir.as_os_str())),
+                    (EnvVars::CONDA_DEFAULT_ENV, Some(&OsString::from("base"))),
+                    (EnvVars::CONDA_ROOT, None),
+                ],
+                || {
+                    find_python_installation(
+                        &PythonRequest::Default,
+                        EnvironmentPreference::OnlyVirtual,
+                        PythonPreference::OnlySystem,
+                        &context.cache,
+                        Preview::new(&[PreviewFeature::SpecialCondaEnvNames]),
+                    )
+                },
+            )?
+            .unwrap();
+
+        assert_eq!(
+            python.interpreter().python_full_version().to_string(),
+            "3.12.6",
+            "With special-conda-env-names preview, 'base' named env in matching dir should be treated as child"
         );
 
         // When environment name matches directory name, it should be treated as a child environment

@@ -9,7 +9,7 @@ use uv_static::EnvVars;
 #[cfg(windows)]
 use serde::Deserialize;
 #[cfg(windows)]
-use wmi::{COMLibrary, WMIConnection};
+use wmi::WMIConnection;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AcceleratorError {
@@ -208,34 +208,28 @@ impl Accelerator {
                 name: Option<String>,
             }
 
-            match COMLibrary::new() {
-                Ok(com_library) => match WMIConnection::new(com_library) {
-                    Ok(wmi_connection) => match wmi_connection.query::<VideoController>() {
-                        Ok(gpu_controllers) => {
-                            for gpu_controller in gpu_controllers {
-                                if let Some(pnp_device_id) = &gpu_controller.pnp_device_id {
-                                    if pnp_device_id
-                                        .contains(&format!("VEN_{PCI_VENDOR_ID_INTEL:04X}"))
-                                    {
-                                        debug!(
-                                            "Detected Intel GPU from WMI: PNPDeviceID={}, Name={:?}",
-                                            pnp_device_id, gpu_controller.name
-                                        );
-                                        return Ok(Some(Self::Xpu));
-                                    }
+            match WMIConnection::new() {
+                Ok(wmi_connection) => match wmi_connection.query::<VideoController>() {
+                    Ok(gpu_controllers) => {
+                        for gpu_controller in gpu_controllers {
+                            if let Some(pnp_device_id) = &gpu_controller.pnp_device_id {
+                                if pnp_device_id.contains(&format!("VEN_{PCI_VENDOR_ID_INTEL:04X}"))
+                                {
+                                    debug!(
+                                        "Detected Intel GPU from WMI: PNPDeviceID={}, Name={:?}",
+                                        pnp_device_id, gpu_controller.name
+                                    );
+                                    return Ok(Some(Self::Xpu));
                                 }
                             }
                         }
-                        Err(e) => {
-                            debug!("Failed to query WMI for video controllers: {e}");
-                        }
-                    },
+                    }
                     Err(e) => {
-                        debug!("Failed to create WMI connection: {e}");
+                        debug!("Failed to query WMI for video controllers: {e}");
                     }
                 },
                 Err(e) => {
-                    debug!("Failed to initialize COM library: {e}");
+                    debug!("Failed to create WMI connection: {e}");
                 }
             }
         }
@@ -301,6 +295,8 @@ pub enum AmdGpuArchitecture {
     Gfx1100,
     Gfx1101,
     Gfx1102,
+    Gfx1150,
+    Gfx1151,
     Gfx1200,
     Gfx1201,
 }
@@ -320,6 +316,8 @@ impl FromStr for AmdGpuArchitecture {
             "gfx1100" => Ok(Self::Gfx1100),
             "gfx1101" => Ok(Self::Gfx1101),
             "gfx1102" => Ok(Self::Gfx1102),
+            "gfx1150" => Ok(Self::Gfx1150),
+            "gfx1151" => Ok(Self::Gfx1151),
             "gfx1200" => Ok(Self::Gfx1200),
             "gfx1201" => Ok(Self::Gfx1201),
             _ => Err(AcceleratorError::UnknownAmdGpuArchitecture(s.to_string())),
@@ -340,6 +338,8 @@ impl std::fmt::Display for AmdGpuArchitecture {
             Self::Gfx1100 => write!(f, "gfx1100"),
             Self::Gfx1101 => write!(f, "gfx1101"),
             Self::Gfx1102 => write!(f, "gfx1102"),
+            Self::Gfx1150 => write!(f, "gfx1150"),
+            Self::Gfx1151 => write!(f, "gfx1151"),
             Self::Gfx1200 => write!(f, "gfx1200"),
             Self::Gfx1201 => write!(f, "gfx1201"),
         }

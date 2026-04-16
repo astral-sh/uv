@@ -12,10 +12,9 @@ use std::io;
 use std::io::{BufReader, Cursor, Write};
 use std::path::{Component, Path, PathBuf};
 use tar::{EntryType, Header};
-use tempfile::NamedTempFile;
 use tracing::{debug, trace};
 use uv_distribution_filename::{SourceDistExtension, SourceDistFilename};
-use uv_fs::Simplified;
+use uv_fs::{Simplified, normalize_path};
 use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_warnings::warn_user_once;
 use walkdir::WalkDir;
@@ -39,7 +38,7 @@ pub fn build_source_dist(
         fs_err::remove_file(&source_dist_path)?;
     }
 
-    let temp_file = NamedTempFile::new_in(source_dist_directory)?;
+    let temp_file = uv_fs::tempfile_in(source_dist_directory)?;
     let writer = TarGzWriter::new(temp_file.as_file(), &source_dist_path);
     write_source_dist(source_tree, writer, uv_version, show_warnings)?;
     temp_file
@@ -92,12 +91,9 @@ fn source_dist_matcher(
     for module_relative in modules_relative {
         // The wheel must not include any files included by the source distribution (at least until we
         // have files generated in the source dist -> wheel build step).
-        let import_path = uv_fs::normalize_path(
-            &uv_fs::relative_to(src_root.join(module_relative), source_tree)
-                .expect("module root is inside source tree"),
-        )
-        .portable_display()
-        .to_string();
+        let path = &uv_fs::relative_to(src_root.join(module_relative), source_tree)
+            .expect("module root is inside source tree");
+        let import_path = normalize_path(path).portable_display().to_string();
         includes.push(format!("{}/**", globset::escape(&import_path)));
     }
     for include in includes {
@@ -116,7 +112,7 @@ fn source_dist_matcher(
         .as_ref()
         .and_then(|readme| readme.path())
     {
-        let readme = uv_fs::normalize_path(readme);
+        let readme = normalize_path(readme);
         trace!("Including readme at: {}", readme.user_display());
         let readme = readme.portable_display().to_string();
         let glob = Glob::new(&globset::escape(&readme)).expect("escaped globset is parseable");
@@ -137,7 +133,7 @@ fn source_dist_matcher(
 
     // Include the data files
     for (name, directory) in settings.data.iter() {
-        let directory = uv_fs::normalize_path(directory);
+        let directory = normalize_path(directory);
         trace!("Including data ({}) at: {}", name, directory.user_display());
         if directory
             .components()

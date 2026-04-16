@@ -3,11 +3,11 @@ use assert_fs::prelude::*;
 use indoc::indoc;
 use insta::assert_snapshot;
 
-use crate::common::{TestContext, uv_snapshot};
+use uv_test::uv_snapshot;
 
 #[test]
 fn format_project() -> Result<()> {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -43,7 +43,7 @@ fn format_project() -> Result<()> {
 
 #[test]
 fn format_missing_pyproject_toml() -> Result<()> {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     // Create an unformatted Python file
     let main_py = context.temp_dir.child("main.py");
@@ -70,7 +70,7 @@ fn format_missing_pyproject_toml() -> Result<()> {
 
 #[test]
 fn format_missing_project_in_pyproject_toml() -> Result<()> {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     // Create an empty pyproject.toml with no [project] section
     context.temp_dir.child("pyproject.toml");
@@ -100,7 +100,7 @@ fn format_missing_project_in_pyproject_toml() -> Result<()> {
 
 #[test]
 fn format_unmanaged_project() -> Result<()> {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -139,7 +139,7 @@ fn format_unmanaged_project() -> Result<()> {
 
 #[test]
 fn format_from_project_root() -> Result<()> {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -179,7 +179,7 @@ fn format_from_project_root() -> Result<()> {
 
 #[test]
 fn format_no_project() -> Result<()> {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     let main_py = context.temp_dir.child("main.py");
     main_py.write_str(indoc! {r"
@@ -205,7 +205,7 @@ fn format_no_project() -> Result<()> {
 
 #[test]
 fn format_relative_project() -> Result<()> {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     let pyproject_toml = context.temp_dir.child("project").child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -251,7 +251,7 @@ fn format_relative_project() -> Result<()> {
 
 #[test]
 fn format_fails_malformed_pyproject() -> Result<()> {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str("malformed pyproject.toml")?;
@@ -293,7 +293,7 @@ fn format_fails_malformed_pyproject() -> Result<()> {
 
 #[test]
 fn format_check() -> Result<()> {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -330,7 +330,7 @@ fn format_check() -> Result<()> {
 
 #[test]
 fn format_diff() -> Result<()> {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -372,7 +372,7 @@ fn format_diff() -> Result<()> {
 
 #[test]
 fn format_with_ruff_args() -> Result<()> {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -413,7 +413,7 @@ fn format_with_ruff_args() -> Result<()> {
 
 #[test]
 fn format_specific_files() -> Result<()> {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -457,7 +457,7 @@ fn format_specific_files() -> Result<()> {
 
 #[test]
 fn format_version_option() -> Result<()> {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -485,6 +485,143 @@ fn format_version_option() -> Result<()> {
 
     ----- stderr -----
     warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn format_version_constraints() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = []
+    "#})?;
+
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r"
+        x    = 1
+    "})?;
+
+    // Run format with version constraints - should find the latest version matching >=0.8.0
+    uv_snapshot!(context.filters(), context.format().arg("--version").arg(">=0.8.0").arg("--show-version"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    1 file reformatted
+
+    ----- stderr -----
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    ruff 0.15.1
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn format_version_latest() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = []
+    "#})?;
+
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r"
+        x    = 1
+    "})?;
+
+    // Run format with --version latest - should fetch the latest version from the manifest
+    uv_snapshot!(context.filters(), context.format().arg("--version").arg("latest").arg("--show-version"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    1 file reformatted
+
+    ----- stderr -----
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    ruff 0.15.1
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn format_exclude_newer() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = []
+    "#})?;
+
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r"
+        x    = 1
+    "})?;
+
+    // Run format with a different --exclude-newer value than the default (2025-01-01)
+    // This verifies that the flag is respected for version resolution
+    uv_snapshot!(context.filters(), context.format().arg("--exclude-newer").arg("2026-01-01").arg("--version").arg("latest").arg("--show-version"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    1 file reformatted
+
+    ----- stderr -----
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    ruff 0.14.10
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn format_no_matching_version() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = []
+    "#})?;
+
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r"
+        x    = 1
+    "})?;
+
+    // Run format with impossible version constraints - should fail
+    let context = context.with_filter((
+        r"\b[a-z0-9_]+-(?:apple|pc|unknown)-[a-z0-9_]+(?:-[a-z0-9_]+)?\b",
+        "[PLATFORM]",
+    ));
+    uv_snapshot!(context.filters(), context.format().arg("--version").arg(">=999.0.0"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    error: Failed to find ruff version matching: >=999.0.0
+      Caused by: No version of ruff found matching `>=999.0.0` for platform `[PLATFORM]`
     ");
 
     Ok(())

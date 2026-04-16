@@ -6,7 +6,7 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
@@ -22,25 +22,25 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
-    Index, IndexName, IndexUrl, IndexUrls, NameRequirementSpecification, Requirement,
-    RequirementSource, UnresolvedRequirement, VersionId,
+    Identifier, Index, IndexName, IndexUrl, IndexUrls, NameRequirementSpecification, Requirement,
+    RequirementSource, UnresolvedRequirement,
 };
 use uv_fs::{LockedFile, LockedFileError, Simplified};
 use uv_git::GIT_STORE;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, ExtraName, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
-use uv_preview::{Preview, PreviewFeature};
+use uv_preview::Preview;
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::FlatIndex;
 use uv_scripts::{Pep723Metadata, Pep723Script};
 use uv_settings::PythonInstallMirrors;
-use uv_types::{BuildIsolation, HashStrategy};
+use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{DependencyType, Source, SourceError, Sources, ToolUvSources};
 use uv_workspace::pyproject_mut::{AddBoundsKind, ArrayEdit, DependencyTarget, PyProjectTomlMut};
-use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceCache};
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryResolveLogger,
@@ -103,22 +103,6 @@ pub(crate) async fn add(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    if bounds.is_some() && !preview.is_enabled(PreviewFeature::AddBounds) {
-        warn_user_once!(
-            "The `bounds` option is in preview and may change in any future release. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeature::AddBounds
-        );
-    }
-
-    if !preview.is_enabled(PreviewFeature::ExtraBuildDependencies)
-        && !settings.resolver.extra_build_dependencies.is_empty()
-    {
-        warn_user_once!(
-            "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeature::ExtraBuildDependencies
-        );
-    }
-
     for source in &requirements {
         match source {
             RequirementsSource::PyprojectToml(_) => {
@@ -246,16 +230,13 @@ pub(crate) async fn add(
         // Find the project in the workspace.
         // No workspace caching since `uv add` changes the workspace definition.
         let project = if let Some(package) = package {
-            VirtualProject::Project(
-                Workspace::discover(
-                    project_dir,
-                    &DiscoveryOptions::default(),
-                    &WorkspaceCache::default(),
-                )
-                .await?
-                .with_current_project(package.clone())
-                .with_context(|| format!("Package `{package}` not found in workspace"))?,
+            VirtualProject::discover_with_package(
+                project_dir,
+                &DiscoveryOptions::default(),
+                &WorkspaceCache::default(),
+                package,
             )
+            .await?
         } else {
             VirtualProject::discover(
                 project_dir,
@@ -403,7 +384,7 @@ pub(crate) async fn add(
                 .index_strategy(settings.resolver.index_strategy)
                 .markers(target.interpreter().markers())
                 .platform(target.interpreter().platform())
-                .build();
+                .build()?;
 
             // Determine whether to enable build isolation.
             let environment;
@@ -473,9 +454,10 @@ pub(crate) async fn add(
                 &build_hasher,
                 settings.resolver.exclude_newer.clone(),
                 sources,
+                SourceTreeEditablePolicy::Project,
                 // No workspace caching since `uv add` changes the workspace definition.
                 WorkspaceCache::default(),
-                concurrency,
+                concurrency.clone(),
                 preview,
             );
 
@@ -483,7 +465,11 @@ pub(crate) async fn add(
                 NamedRequirementsResolver::new(
                     &hasher,
                     state.index(),
-                    DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
+                    DistributionDatabase::new(
+                        &client,
+                        &build_dispatch,
+                        concurrency.downloads_semaphore.clone(),
+                    ),
                 )
                 .with_reporter(Arc::new(ResolverReporter::from(printer)))
                 .resolve(unnamed.into_iter())
@@ -766,7 +752,7 @@ pub(crate) async fn add(
         &settings,
         &client_builder,
         installer_metadata,
-        concurrency,
+        &concurrency,
         cache,
         printer,
         preview,
@@ -779,7 +765,7 @@ pub(crate) async fn add(
                 let _ = snapshot.revert();
             }
             match err {
-                ProjectError::Operation(err) => diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls()).with_hint(format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing.", "--frozen".green()))
+                ProjectError::Operation(err) => diagnostics::OperationDiagnostic::with_system_certs(client_builder.system_certs()).with_hint(format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing.", "--frozen".green()))
                     .report(err)
                     .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
                 err => Err(err.into()),
@@ -1008,7 +994,7 @@ async fn lock_and_sync(
     settings: &ResolverInstallerSettings,
     client_builder: &BaseClientBuilder<'_>,
     installer_metadata: bool,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     cache: &Cache,
     printer: Printer,
     preview: Preview,
@@ -1131,8 +1117,8 @@ async fn lock_and_sync(
             if let AddTarget::Project(VirtualProject::Project(ref project), _) = target {
                 let url = DisplaySafeUrl::from_file_path(project.project_root())
                     .expect("project root is a valid URL");
-                let version_id = VersionId::from_url(&url);
-                let existing = lock_state.index().distributions().remove(&version_id);
+                let distribution_id = url.distribution_id();
+                let existing = lock_state.index().distributions().remove(&distribution_id);
                 debug_assert!(existing.is_some(), "distribution should exist");
             }
 
@@ -1212,7 +1198,7 @@ async fn lock_and_sync(
         installer_metadata,
         concurrency,
         cache,
-        WorkspaceCache::default(),
+        &WorkspaceCache::default(),
         DryRun::Disabled,
         printer,
         preview,
@@ -1351,7 +1337,6 @@ impl AddTarget {
     }
 
     /// Update the target in-memory to incorporate the new content.
-    #[expect(clippy::result_large_err)]
     fn update(self, content: &str) -> Result<Self, ProjectError> {
         match self {
             Self::Script(mut script, interpreter) => {
@@ -1361,7 +1346,7 @@ impl AddTarget {
             }
             Self::Project(project, venv) => {
                 let project = project
-                    .with_pyproject_toml(
+                    .update_member(
                         toml::from_str(content).map_err(ProjectError::PyprojectTomlParse)?,
                     )?
                     .ok_or(ProjectError::PyprojectTomlUpdate)?;

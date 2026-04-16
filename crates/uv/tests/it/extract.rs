@@ -1,4 +1,4 @@
-#![cfg(feature = "r2")]
+#![cfg(feature = "test-r2")]
 
 use backon::{BackoffBuilder, Retryable};
 use futures::TryStreamExt;
@@ -23,7 +23,8 @@ async fn unzip(url: &str) -> anyhow::Result<(), uv_extract::Error> {
         .into_async_read();
 
     let target = tempfile::TempDir::new().map_err(uv_extract::Error::Io)?;
-    uv_extract::stream::unzip(reader.compat(), target.path()).await
+    uv_extract::stream::unzip(url, reader.compat(), target.path()).await?;
+    Ok(())
 }
 
 #[tokio::test]

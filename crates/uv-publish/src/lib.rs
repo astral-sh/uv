@@ -66,7 +66,7 @@ pub enum PublishError {
         Box<DisplaySafeUrl>,
         #[source] Box<PublishSendError>,
     ),
-    #[error("Unable to publish `{}` to {}", _0.user_display(), _1)]
+    #[error("Validation failed for `{}` on {}", _0.user_display(), _1)]
     Validate(
         PathBuf,
         Box<DisplaySafeUrl>,
@@ -126,10 +126,12 @@ pub enum PublishPrepareError {
 pub enum PublishSendError {
     #[error("Failed to send POST request")]
     ReqwestMiddleware(#[source] reqwest_middleware::Error),
-    #[error("Upload failed with status {0}")]
+    #[error("Server returned status code {0}")]
     StatusNoBody(StatusCode, #[source] reqwest::Error),
-    #[error("Upload failed with status code {0}. Server says: {1}")]
+    #[error("Server returned status code {0}. Server says: {1}")]
     Status(StatusCode, String),
+    #[error("Server returned status code {0}. {1}")]
+    StatusProblemDetails(StatusCode, String),
     #[error(
         "POST requests are not supported by the endpoint, are you using the simple index URL instead of the upload URL?"
     )]
@@ -158,6 +160,9 @@ pub trait Reporter: Send + Sync + 'static {
     fn on_upload_start(&self, name: &str, size: Option<u64>) -> usize;
     fn on_upload_progress(&self, id: usize, inc: u64);
     fn on_upload_complete(&self, id: usize);
+    fn on_hash_start(&self, name: &DistFilename, size: Option<u64>) -> usize;
+    fn on_hash_progress(&self, id: usize, inc: u64);
+    fn on_hash_complete(&self, id: usize);
 }
 
 /// Context for using a fresh registry client for check URL requests.
@@ -620,6 +625,7 @@ pub async fn upload(
                             &group.file,
                             &group.filename,
                             download_concurrency,
+                            reporter.clone(),
                         )
                         .await?
                         {
@@ -939,6 +945,7 @@ pub async fn check_url(
     file: &Path,
     filename: &DistFilename,
     download_concurrency: &Semaphore,
+    reporter: Arc<impl Reporter>,
 ) -> Result<bool, PublishError> {
     let CheckUrlClient {
         index_url,
@@ -1014,14 +1021,16 @@ pub async fn check_url(
     if let Some(remote_hash) = archived_file.hashes.first() {
         // We accept the risk for TOCTOU errors here, since we already read the file once before the
         // streaming upload to compute the hash for the form metadata.
-        let local_hash = &hash_file(file, vec![Hasher::from(remote_hash.algorithm)])
-            .await
-            .map_err(|err| {
-                PublishError::PublishPrepare(
-                    file.to_path_buf(),
-                    Box::new(PublishPrepareError::Io(err)),
-                )
-            })?[0];
+        let local_hash = &hash_file(
+            file,
+            filename,
+            vec![Hasher::from(remote_hash.algorithm)],
+            reporter,
+        )
+        .await
+        .map_err(|err| {
+            PublishError::PublishPrepare(file.to_path_buf(), Box::new(PublishPrepareError::Io(err)))
+        })?[0];
         if local_hash.digest == remote_hash.digest {
             debug!(
                 "Found {filename} in the registry with matching hash {}",
@@ -1044,12 +1053,30 @@ pub async fn check_url(
 /// Calculate the requested hashes of a file.
 async fn hash_file(
     path: impl AsRef<Path>,
+    filename: &DistFilename,
     hashers: Vec<Hasher>,
+    reporter: Arc<impl Reporter>,
 ) -> Result<Vec<HashDigest>, io::Error> {
-    debug!("Hashing {}", path.as_ref().display());
-    let file = BufReader::new(File::open(path.as_ref()).await?);
+    let path = path.as_ref();
+    debug!("Hashing {}", path.user_display());
+
+    let file = File::open(path).await?;
+    let file_size = file.metadata().await?.len();
+    let idx = reporter.on_hash_start(filename, Some(file_size));
+
+    let reader = BufReader::new(file);
     let mut hashers = hashers;
-    HashReader::new(file, &mut hashers).finish().await?;
+    let reporter_clone = reporter.clone();
+    let mut reader = HashReader::new(
+        ProgressReader::new(reader, move |read| {
+            reporter_clone.on_hash_progress(idx, read as u64);
+        }),
+        &mut hashers,
+    );
+
+    let result = reader.finish().await;
+    reporter.on_hash_complete(idx);
+    result?;
 
     Ok(hashers
         .into_iter()
@@ -1129,13 +1156,16 @@ impl FormMetadata {
     pub async fn read_from_file(
         file: &Path,
         filename: &DistFilename,
+        reporter: Arc<impl Reporter>,
     ) -> Result<Self, PublishPrepareError> {
         let hashes = hash_file(
             file,
+            filename,
             vec![
                 Hasher::from(HashAlgorithm::Sha256),
                 Hasher::from(HashAlgorithm::Blake2b),
             ],
+            reporter,
         )
         .await?;
 
@@ -1403,7 +1433,10 @@ fn build_metadata_request<'a>(
 }
 
 /// Log response information and map response to an error variant if not successful.
-async fn handle_response(registry: &Url, response: Response) -> Result<(), PublishSendError> {
+async fn handle_response(
+    registry: &DisplaySafeUrl,
+    response: Response,
+) -> Result<(), PublishSendError> {
     let status_code = response.status();
     debug!("Response code for {registry}: {status_code}");
     trace!("Response headers for {registry}: {response:?}");
@@ -1450,6 +1483,18 @@ async fn handle_response(registry: &Url, response: Response) -> Result<(), Publi
         ));
     }
 
+    // Try to parse as RFC 9457 Problem Details (e.g., from pyx).
+    if content_type.as_deref() == Some(uv_client::ProblemDetails::CONTENT_TYPE)
+        && let Some(problem) =
+            uv_client::ProblemDetails::try_from_response_body(upload_error.as_bytes())
+        && let Some(description) = problem.description()
+    {
+        return Err(PublishSendError::StatusProblemDetails(
+            status_code,
+            description,
+        ));
+    }
+
     // Raced uploads of the same file are handled by the caller.
     Err(PublishSendError::Status(
         status_code,
@@ -1488,6 +1533,11 @@ mod tests {
         }
         fn on_upload_progress(&self, _id: usize, _inc: u64) {}
         fn on_upload_complete(&self, _id: usize) {}
+        fn on_hash_start(&self, _name: &DistFilename, _size: Option<u64>) -> usize {
+            0
+        }
+        fn on_hash_progress(&self, _id: usize, _inc: u64) {}
+        fn on_hash_complete(&self, _id: usize) {}
     }
 
     async fn mock_server_upload(mock_server: &MockServer) -> Result<bool, PublishError> {
@@ -1502,15 +1552,17 @@ mod tests {
             attestations: vec![],
         };
 
-        let form_metadata = FormMetadata::read_from_file(&group.file, &group.filename)
-            .await
-            .unwrap();
+        let form_metadata =
+            FormMetadata::read_from_file(&group.file, &group.filename, Arc::new(DummyReporter))
+                .await
+                .unwrap();
 
         let client = BaseClientBuilder::default()
             .redirect(RedirectPolicy::NoRedirect)
             .retries(0)
             .auth_integration(AuthIntegration::NoAuthMiddleware)
-            .build();
+            .build()
+            .expect("failed to build base client");
 
         let download_concurrency = Arc::new(Semaphore::new(1));
         let registry = DisplaySafeUrl::parse(&format!("{}/final", &mock_server.uri())).unwrap();
@@ -1823,9 +1875,10 @@ mod tests {
             }
         };
 
-        let form_metadata = FormMetadata::read_from_file(&group.file, &group.filename)
-            .await
-            .unwrap();
+        let form_metadata =
+            FormMetadata::read_from_file(&group.file, &group.filename, Arc::new(DummyReporter))
+                .await
+                .unwrap();
 
         let formatted_metadata = form_metadata
             .iter()
@@ -1882,7 +1935,9 @@ mod tests {
         project_urls: Source, https://github.com/unknown/tqdm
         ");
 
-        let client = BaseClientBuilder::default().build();
+        let client = BaseClientBuilder::default()
+            .build()
+            .expect("failed to build base client");
         let (request, _) = build_upload_request(
             &group,
             &DisplaySafeUrl::parse("https://example.org/upload").unwrap(),
@@ -1945,9 +2000,10 @@ mod tests {
             }
         };
 
-        let form_metadata = FormMetadata::read_from_file(&group.file, &group.filename)
-            .await
-            .unwrap();
+        let form_metadata =
+            FormMetadata::read_from_file(&group.file, &group.filename, Arc::new(DummyReporter))
+                .await
+                .unwrap();
 
         let formatted_metadata = form_metadata
             .iter()
@@ -2042,7 +2098,9 @@ mod tests {
         requires_dist: requests ; extra == 'telegram'
         "#);
 
-        let client = BaseClientBuilder::default().build();
+        let client = BaseClientBuilder::default()
+            .build()
+            .expect("failed to build base client");
         let (request, _) = build_upload_request(
             &group,
             &DisplaySafeUrl::parse("https://example.org/upload").unwrap(),
@@ -2169,6 +2227,75 @@ mod tests {
             @"
         error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to https://different.auth.tld/final/
           Caused by: Redirected URL is not in the same realm. Redirected to: https://different.auth.tld/final/
+        "
+        );
+    }
+
+    /// PyPI returns `application/json` with a `code` field.
+    #[tokio::test]
+    async fn upload_error_pypi_json() {
+        let mock_server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/final"))
+            .respond_with(
+                ResponseTemplate::new(400)
+                    .insert_header("content-type", "application/json")
+                    .set_body_raw(
+                        r#"{"message": "The server could not comply with the request since it is either malformed or otherwise incorrect.\n\n\nError: Use 'source' as Python version for an sdist.\n\n", "code": "400 Error: Use 'source' as Python version for an sdist.", "title": "Bad Request"}"#,
+                        "application/json",
+                    ),
+            )
+            .mount(&mock_server)
+            .await;
+
+        let err = mock_server_upload(&mock_server).await.unwrap_err();
+
+        let mut capture = String::new();
+        write_error_chain(&err, &mut capture, "error", AnsiColors::Red).unwrap();
+
+        let capture = capture.replace(&mock_server.uri(), "[SERVER]");
+        let capture = anstream::adapter::strip_str(&capture);
+        assert_snapshot!(
+            &capture,
+            @"
+        error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
+          Caused by: Server returned status code 400 Bad Request. Server says: 400 Error: Use 'source' as Python version for an sdist.
+        "
+        );
+    }
+
+    /// pyx returns `application/problem+json` with RFC 9457 Problem Details.
+    #[tokio::test]
+    async fn upload_error_problem_details() {
+        let mock_server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/final"))
+            .respond_with(
+                ResponseTemplate::new(400)
+                    .insert_header(
+                        "content-type",
+                        uv_client::ProblemDetails::CONTENT_TYPE,
+                    )
+                    .set_body_raw(
+                        r#"{"type": "about:blank", "status": 400, "title": "Bad Request", "detail": "Missing required field `name`"}"#,
+                        uv_client::ProblemDetails::CONTENT_TYPE,
+                    ),
+            )
+            .mount(&mock_server)
+            .await;
+
+        let err = mock_server_upload(&mock_server).await.unwrap_err();
+
+        let mut capture = String::new();
+        write_error_chain(&err, &mut capture, "error", AnsiColors::Red).unwrap();
+
+        let capture = capture.replace(&mock_server.uri(), "[SERVER]");
+        let capture = anstream::adapter::strip_str(&capture);
+        assert_snapshot!(
+            &capture,
+            @"
+        error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
+          Caused by: Server returned status code 400 Bad Request. Server message: Bad Request, Missing required field `name`
         "
         );
     }

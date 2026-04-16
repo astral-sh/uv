@@ -12,6 +12,7 @@ use rustc_hash::FxHashMap;
 use crate::commands::human_readable_bytes;
 use crate::printer::Printer;
 use uv_cache::Removal;
+use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     BuildableSource, CachedDist, DistributionMetadata, Name, SourceDist, VersionOrUrlRef,
 };
@@ -108,6 +109,7 @@ enum Direction {
     Upload,
     Download,
     Extract,
+    Hash,
 }
 
 impl Direction {
@@ -116,6 +118,7 @@ impl Direction {
             Self::Download => "Downloading",
             Self::Upload => "Uploading",
             Self::Extract => "Extracting",
+            Self::Hash => "Hashing",
         }
     }
 }
@@ -328,6 +331,7 @@ impl ProgressReporter {
                         Direction::Download => "Downloaded",
                         Direction::Upload => "Uploaded",
                         Direction::Extract => "Extracted",
+                        Direction::Hash => "Hashed",
                     }
                     .bold()
                     .cyan(),
@@ -362,6 +366,18 @@ impl ProgressReporter {
 
     fn on_upload_start(&self, name: String, size: Option<u64>) -> usize {
         self.on_request_start(Direction::Upload, name, size)
+    }
+
+    fn on_hash_progress(&self, id: usize, bytes: u64) {
+        self.on_request_progress(id, bytes);
+    }
+
+    fn on_hash_complete(&self, id: usize) {
+        self.on_request_complete(Direction::Hash, id);
+    }
+
+    fn on_hash_start(&self, name: String, size: Option<u64>) -> usize {
+        self.on_request_start(Direction::Hash, name, size)
     }
 
     fn on_checkout_start(&self, url: &DisplaySafeUrl, rev: &str) -> usize {
@@ -730,6 +746,18 @@ impl uv_publish::Reporter for PublishReporter {
     fn on_upload_complete(&self, id: usize) {
         self.reporter.on_upload_complete(id);
     }
+
+    fn on_hash_start(&self, name: &DistFilename, size: Option<u64>) -> usize {
+        self.reporter.on_hash_start(name.to_string(), size)
+    }
+
+    fn on_hash_progress(&self, id: usize, inc: u64) {
+        self.reporter.on_hash_progress(id, inc);
+    }
+
+    fn on_hash_complete(&self, id: usize) {
+        self.reporter.on_hash_complete(id);
+    }
 }
 
 #[derive(Debug)]
@@ -765,6 +793,32 @@ impl LatestVersionReporter {
     }
 
     pub(crate) fn on_fetch_complete(&self) {
+        self.progress.set_message("");
+        self.progress.finish_and_clear();
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct AuditReporter {
+    progress: ProgressBar,
+}
+
+impl From<Printer> for AuditReporter {
+    fn from(printer: Printer) -> Self {
+        let progress = ProgressBar::with_draw_target(None, printer.target());
+        progress.enable_steady_tick(Duration::from_millis(200));
+        progress.set_style(
+            ProgressStyle::with_template("{spinner:.white} {wide_msg:.dim}")
+                .unwrap()
+                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
+        );
+        progress.set_message("Auditing dependencies...");
+        Self { progress }
+    }
+}
+
+impl AuditReporter {
+    pub(crate) fn on_audit_complete(&self) {
         self.progress.set_message("");
         self.progress.finish_and_clear();
     }

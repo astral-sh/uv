@@ -1,4 +1,3 @@
-#![allow(clippy::disallowed_types)]
 use std::ffi::CString;
 use std::path::{Path, PathBuf};
 use std::vec::Vec;
@@ -89,19 +88,23 @@ fn load_resource(resource_id: windows::core::PCWSTR) -> Option<Vec<u8>> {
 /// depending on the [`TrampolineKind`].
 fn make_child_cmdline() -> CString {
     let executable_name = std::env::current_exe().unwrap_or_else(|_| {
-        error_and_exit("Failed to get executable name");
+        error_and_exit("uv trampoline failed to determine executable path");
     });
 
     // Load trampoline kind
     let trampoline_kind = load_resource(RESOURCE_TRAMPOLINE_KIND)
         .and_then(|data| TrampolineKind::from_resource(&data))
-        .unwrap_or_else(|| error_and_exit("Failed to load trampoline kind from resources"));
+        .unwrap_or_else(|| {
+            error_and_exit("uv trampoline failed to load trampoline kind from resources")
+        });
 
     // Load Python path
     let python_path = load_resource(RESOURCE_PYTHON_PATH)
         .and_then(|data| String::from_utf8(data).ok())
         .map(PathBuf::from)
-        .unwrap_or_else(|| error_and_exit("Failed to load Python path from resources"));
+        .unwrap_or_else(|| {
+            error_and_exit("uv trampoline failed to load Python path from resources")
+        });
 
     let python_exe = if python_path.is_absolute() {
         python_path
@@ -109,7 +112,7 @@ fn make_child_cmdline() -> CString {
         let parent_dir = match executable_name.parent() {
             Some(parent) => parent,
             None => {
-                error_and_exit("Executable path has no parent directory");
+                error_and_exit("uv trampoline executable path has no parent directory");
             }
         };
         parent_dir.join(python_path)
@@ -121,7 +124,7 @@ fn make_child_cmdline() -> CString {
             // TODO(john): In order to avoid resolving junctions and symlinks for relative paths and
             // scripts, we can consider reverting https://github.com/astral-sh/uv/pull/5750/files#diff-969979506be03e89476feade2edebb4689a9c261f325988d3c7efc5e51de26d1L273-L277.
             dunce::canonicalize(python_exe.as_path()).unwrap_or_else(|_| {
-                error_and_exit("Failed to canonicalize script path");
+                error_and_exit("uv trampoline failed to canonicalize script path");
             })
         } else {
             // For Python trampolines with absolute paths, we skip `dunce::canonicalize` to
@@ -146,20 +149,35 @@ fn make_child_cmdline() -> CString {
                 // be correctly detected when using trampolines.
                 std::env::set_var(EnvVars::PYVENV_LAUNCHER, &executable_name);
 
-                // If this is not a virtual environment and `PYTHONHOME` has
-                // not been set, then set `PYTHONHOME` to the parent directory of
-                // the executable. This ensures that the correct installation
-                // directories are added to `sys.path` when running with a junction
-                // trampoline.
-                let python_home_set =
-                    std::env::var(EnvVars::PYTHONHOME).is_ok_and(|home| !home.is_empty());
-                if !is_virtualenv(python_exe.as_path()) && !python_home_set {
-                    std::env::set_var(
-                        EnvVars::PYTHONHOME,
-                        python_exe
+                // If this is not a virtual environment, set `PYTHONHOME` to
+                // the parent directory of the executable. This ensures that
+                // the correct installation directories are added to `sys.path`
+                // when running with a junction trampoline.
+                //
+                // We use a marker variable (`UV_INTERNAL__PYTHONHOME`) to track
+                // whether `PYTHONHOME` was set by uv. This allows us to:
+                // - Override inherited `PYTHONHOME` from parent Python processes
+                // - Preserve user-defined `PYTHONHOME` values
+                if !is_virtualenv(python_exe.as_path()) {
+                    let python_home = std::env::var(EnvVars::PYTHONHOME).ok();
+                    let marker = std::env::var(EnvVars::UV_INTERNAL__PYTHONHOME).ok();
+
+                    // Only set `PYTHONHOME` if:
+                    // - It's not set, OR
+                    // - It was set by uv (marker matches current `PYTHONHOME`)
+                    let should_override = match (&python_home, &marker) {
+                        (None, _) => true,
+                        (Some(home), Some(m)) if home == m => true,
+                        _ => false,
+                    };
+
+                    if should_override {
+                        let home = python_exe
                             .parent()
-                            .expect("Python executable should have a parent directory"),
-                    );
+                            .expect("Python executable should have a parent directory");
+                        std::env::set_var(EnvVars::PYTHONHOME, home);
+                        std::env::set_var(EnvVars::UV_INTERNAL__PYTHONHOME, home);
+                    }
                 }
             }
         }
@@ -184,7 +202,7 @@ fn make_child_cmdline() -> CString {
     // );
 
     CString::from_vec_with_nul(child_cmdline).unwrap_or_else(|_| {
-        error_and_exit("Child command line is not correctly null terminated");
+        error_and_exit("uv trampoline child command line is not correctly null terminated");
     })
 }
 
@@ -259,23 +277,23 @@ fn skip_one_argument(arguments: &[u8]) -> &[u8] {
 }
 
 #[cold]
-fn print_job_error_and_exit(context: &str, err: uv_windows::JobError) -> ! {
-    let message = format!(
-        "(uv internal error) {}: {} (os error {})",
-        context,
+fn print_job_error_and_exit(message: &str, err: uv_windows::JobError) -> ! {
+    error!(
+        "{}\n  Caused by: {} (os error {})",
+        message,
         err.message(),
         err.code()
     );
-    error_and_exit(&message);
+    exit_with_status(1);
 }
 
 #[cold]
 fn print_ctrl_handler_error_and_exit(err: uv_windows::CtrlHandlerError) -> ! {
-    let message = format!(
-        "(uv internal error) Control handler setting failed (os error {})",
+    error!(
+        "uv trampoline failed to set control handler\n  Caused by: os error {}",
         err.code()
     );
-    error_and_exit(&message);
+    exit_with_status(1);
 }
 
 fn spawn_child(si: &STARTUPINFOA, child_cmdline: CString) -> HANDLE {
@@ -307,10 +325,12 @@ fn spawn_child(si: &STARTUPINFOA, child_cmdline: CString) -> HANDLE {
         )
     }
     .unwrap_or_else(|_| {
-        print_last_error_and_exit("Failed to spawn the python child process");
+        print_last_error_and_exit("uv trampoline failed to spawn Python child process");
     });
     unsafe { CloseHandle(child_process_info.hThread) }.unwrap_or_else(|_| {
-        print_last_error_and_exit("Failed to close handle to python child process main thread");
+        print_last_error_and_exit(
+            "uv trampoline failed to close Python child process thread handle",
+        );
     });
     // Return handle to child process.
     child_process_info.hProcess
@@ -414,7 +434,7 @@ fn clear_app_starting_state(child_handle: HANDLE) {
             // Process all sent messages and signal input idle.
             let _ = PeekMessageA(&mut msg, Some(hwnd), 0, 0, PEEK_MESSAGE_REMOVE_TYPE(0));
             DestroyWindow(hwnd).unwrap_or_else(|_| {
-                print_last_error_and_exit("Failed to destroy temporary window");
+                print_last_error_and_exit("uv trampoline failed to destroy temporary window");
             });
         }
     }
@@ -428,12 +448,29 @@ pub fn bounce(is_gui: bool) -> ! {
 
     let child_handle = spawn_child(&si, child_cmdline);
     let job = Job::new().unwrap_or_else(|e| {
-        print_job_error_and_exit("Job object setup failed", e);
+        print_job_error_and_exit("uv trampoline failed to create job object", e);
     });
 
+    // Assign the child to the job object so it gets terminated if the trampoline is killed.
+    //
+    // If the assignment fails, the child may outlive the trampoline on forced kill, but normal
+    // execution (child exits naturally) is unaffected so we ignore the failure. This matches
+    // `distlib`'s approach where `AssignProcessToJobObject` failure is non-fatal [1]. There are
+    // various plausible scenarios where we may fail to assign the child, including simple race
+    // conditions like the child process exiting before assignment.
+    //
+    // See also <https://github.com/astral-sh/uv/pull/18170> which explores a more robust solution
+    // at the cost of increased complexity.
+    //
+    // [1]: https://github.com/pypa/distlib/blob/37df85a61ead2ea2dc48d0e06f7bfe2f209a982c/PC/launcher.c#L835
+    //
     // SAFETY: child_handle is a valid process handle returned by spawn_child.
     if let Err(e) = unsafe { job.assign_process(child_handle) } {
-        print_job_error_and_exit("Failed to assign child process to the job", e);
+        warn!(
+            "uv trampoline failed to assign child process to job object\n  Caused by: {} (os error {})",
+            e.message(),
+            e.code(),
+        );
     }
 
     // (best effort) Close all the handles that we can
@@ -458,7 +495,7 @@ pub fn bounce(is_gui: bool) -> ! {
     let _ = unsafe { WaitForSingleObject(child_handle, INFINITE) };
     let mut exit_code = 0u32;
     if unsafe { GetExitCodeProcess(child_handle, &mut exit_code) }.is_err() {
-        print_last_error_and_exit("Failed to get exit code of child process");
+        print_last_error_and_exit("uv trampoline failed to get exit code of child process");
     }
     exit_with_status(exit_code);
 }
@@ -478,13 +515,13 @@ fn print_last_error_and_exit(message: &str) -> ! {
         .unwrap_or_default();
     // we can't access sys::os::error_string directly so err.kind().to_string()
     // is the closest we can get to while avoiding bringing in a large chunk of core::fmt
-    let message = format!(
-        "(uv internal error) {}: {}.{}",
+    error!(
+        "{}\n  Caused by: {}{}",
         message,
         err.kind().to_string(),
         err_no_str
     );
-    error_and_exit(&message);
+    exit_with_status(1);
 }
 
 #[cold]

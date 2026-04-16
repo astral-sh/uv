@@ -1,8 +1,8 @@
 use uv_platform::{Arch, Os};
 use uv_static::EnvVars;
 
-use crate::common::{TestContext, uv_snapshot};
 use anyhow::Result;
+use uv_test::uv_snapshot;
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{method, path},
@@ -10,7 +10,7 @@ use wiremock::{
 
 #[test]
 fn python_list() {
-    let mut context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"])
+    let mut context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_python_symlinks()
         .with_filtered_python_keys()
         .with_collapsed_whitespace();
@@ -133,7 +133,7 @@ fn python_list() {
 
 #[test]
 fn python_list_pin() {
-    let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"])
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_python_symlinks()
         .with_filtered_python_keys()
         .with_collapsed_whitespace();
@@ -173,7 +173,7 @@ fn python_list_pin() {
 
 #[test]
 fn python_list_venv() {
-    let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"])
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_python_symlinks()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
@@ -216,28 +216,28 @@ fn python_list_venv() {
 #[cfg(unix)]
 #[test]
 fn python_list_unsupported_version() {
-    let context: TestContext = TestContext::new_with_versions(&["3.12"])
+    let context = uv_test::test_context_with_versions!(&["3.12"])
         .with_filtered_python_symlinks()
         .with_filtered_python_keys();
 
     // Request a low version
-    uv_snapshot!(context.filters(), context.python_list().arg("3.6"), @"
+    uv_snapshot!(context.filters(), context.python_list().arg("3.5"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Invalid version request: Python <3.7 is not supported but 3.6 was requested.
+    error: Invalid version request: Python <3.6 is not supported but 3.5 was requested.
     ");
 
     // Request a low version with a patch
-    uv_snapshot!(context.filters(), context.python_list().arg("3.6.9"), @"
+    uv_snapshot!(context.filters(), context.python_list().arg("3.5.9"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Invalid version request: Python <3.7 is not supported but 3.6.9 was requested.
+    error: Invalid version request: Python <3.6 is not supported but 3.5.9 was requested.
     ");
 
     // Request a really low version
@@ -247,7 +247,7 @@ fn python_list_unsupported_version() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Invalid version request: Python <3.7 is not supported but 2.6 was requested.
+    error: Invalid version request: Python <3.6 is not supported but 2.6 was requested.
     ");
 
     // Request a really low version with a patch
@@ -257,7 +257,7 @@ fn python_list_unsupported_version() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Invalid version request: Python <3.7 is not supported but 2.6.8 was requested.
+    error: Invalid version request: Python <3.6 is not supported but 2.6.8 was requested.
     ");
 
     // Request a future version
@@ -291,7 +291,7 @@ fn python_list_unsupported_version() {
 
 #[test]
 fn python_list_duplicate_path_entries() {
-    let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"])
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_python_symlinks()
         .with_filtered_python_keys()
         .with_collapsed_whitespace();
@@ -360,17 +360,19 @@ fn python_list_duplicate_path_entries() {
 
 #[test]
 fn python_list_downloads() {
-    let context: TestContext = TestContext::new_with_versions(&[]).with_filtered_python_keys();
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_latest_python_versions();
 
     // We do not test showing all interpreters — as it differs per platform
-    // Instead, we choose a Python version where our available distributions are stable
+    // Instead, we choose a Python version where our available distributions are stable
 
     // Test the default display, which requires reverting the test context disabling Python downloads
     uv_snapshot!(context.filters(), context.python_list().arg("3.10").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @"
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.10.19-[PLATFORM]    <download available>
+    cpython-3.10.[LATEST]-[PLATFORM]    <download available>
     pypy-3.10.16-[PLATFORM]       <download available>
     graalpy-3.10.0-[PLATFORM]     <download available>
 
@@ -382,6 +384,7 @@ fn python_list_downloads() {
     success: true
     exit_code: 0
     ----- stdout -----
+    cpython-3.10.[LATEST]-[PLATFORM]    <download available>
     cpython-3.10.19-[PLATFORM]    <download available>
     cpython-3.10.18-[PLATFORM]    <download available>
     cpython-3.10.17-[PLATFORM]    <download available>
@@ -411,25 +414,26 @@ fn python_list_downloads() {
 }
 
 #[test]
-#[cfg(feature = "python-managed")]
+#[cfg(feature = "test-python-managed")]
 fn python_list_downloads_installed() {
     use assert_cmd::assert::OutputAssertExt;
 
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_python_install_bin()
         .with_filtered_python_names()
-        .with_managed_python_dirs();
+        .with_managed_python_dirs()
+        .with_filtered_latest_python_versions();
 
-    // We do not test showing all interpreters — as it differs per platform
-    // Instead, we choose a Python version where our available distributions are stable
+    // We do not test showing all interpreters - as it differs per platform
+    // Instead, we choose a Python version where our available distributions are stable
 
     // First, the download is shown as available
     uv_snapshot!(context.filters(), context.python_list().arg("3.10").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @"
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.10.19-[PLATFORM]    <download available>
+    cpython-3.10.[LATEST]-[PLATFORM]    <download available>
     pypy-3.10.16-[PLATFORM]       <download available>
     graalpy-3.10.0-[PLATFORM]     <download available>
 
@@ -456,7 +460,7 @@ fn python_list_downloads_installed() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.10.19-[PLATFORM]    managed/cpython-3.10.19-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    cpython-3.10.[LATEST]-[PLATFORM]    managed/cpython-3.10-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
     pypy-3.10.16-[PLATFORM]       <download available>
     graalpy-3.10.0-[PLATFORM]     <download available>
 
@@ -468,7 +472,7 @@ fn python_list_downloads_installed() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.10.19-[PLATFORM]    <download available>
+    cpython-3.10.[LATEST]-[PLATFORM]    <download available>
     pypy-3.10.16-[PLATFORM]       <download available>
     graalpy-3.10.0-[PLATFORM]     <download available>
 
@@ -483,11 +487,73 @@ fn python_list_downloads_installed() {
 
     ----- stderr -----
     ");
+
+    // When `--managed-python` is used, managed installations should still be shown
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--managed-python").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.10.[LATEST]-[PLATFORM]    managed/cpython-3.10-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    pypy-3.10.16-[PLATFORM]       <download available>
+    graalpy-3.10.0-[PLATFORM]     <download available>
+
+    ----- stderr -----
+    ");
+}
+
+/// Test that symlinks installed by `python install` on the search path are correctly
+/// filtered by `--managed-python` and `--no-managed-python`.
+#[test]
+#[cfg(all(unix, feature = "test-python-managed"))]
+fn python_list_managed_symlinks() {
+    use assert_cmd::assert::OutputAssertExt;
+
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_python_install_bin()
+        .with_filtered_python_names()
+        .with_managed_python_dirs()
+        .with_filtered_latest_python_versions();
+
+    // Install a Python version; this creates a symlink in `bin_dir` (on the search path)
+    context.python_install().arg("3.10").assert().success();
+
+    // Include `bin_dir` in the test search path so the symlink is discoverable
+    let bin_dir = context.bin_dir.to_path_buf();
+
+    // With `--no-managed-python`, the symlink should be excluded since it points to a
+    // managed installation
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("3.10")
+        .arg("--only-installed")
+        .arg("--no-managed-python")
+        .env(EnvVars::UV_TEST_PYTHON_PATH, &bin_dir), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    // With `--managed-python`, both the managed installation and the symlink are shown
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("3.10")
+        .arg("--only-installed")
+        .arg("--managed-python")
+        .env(EnvVars::UV_TEST_PYTHON_PATH, &bin_dir), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.10.[LATEST]-[PLATFORM]    [BIN]/[PYTHON] -> managed/cpython-3.10-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    cpython-3.10.[LATEST]-[PLATFORM]    managed/cpython-3.10-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+
+    ----- stderr -----
+    ");
 }
 
 #[tokio::test]
 async fn python_list_remote_python_downloads_json_url() -> Result<()> {
-    let context: TestContext = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
     let server = MockServer::start().await;
 
     let remote_json = r#"
@@ -592,9 +658,10 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
 
 #[test]
 fn python_list_with_mirrors() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_collapsed_whitespace()
+        .with_filtered_latest_python_versions()
         // Add filters to normalize file paths in URLs
         .with_filter((
             r"(https://mirror\.example\.com/).*".to_string(),
@@ -610,6 +677,11 @@ fn python_list_with_mirrors() {
         ))
         .with_filter((
             r"(https://github\.com/astral-sh/python-build-standalone/releases/download/).*"
+                .to_string(),
+            "$1[FILE-PATH]".to_string(),
+        ))
+        .with_filter((
+            r"(https://releases\.astral\.sh/github/python-build-standalone/releases/download/).*"
                 .to_string(),
             "$1[FILE-PATH]".to_string(),
         ))
@@ -660,14 +732,14 @@ fn python_list_with_mirrors() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.10.19-[PLATFORM] https://python-mirror.example.com/[FILE-PATH]
+    cpython-3.10.[LATEST]-[PLATFORM] https://python-mirror.example.com/[FILE-PATH]
     pypy-3.10.16-[PLATFORM] https://pypy-mirror.example.com/[FILE-PATH]
     graalpy-3.10.0-[PLATFORM] https://github.com/oracle/graalpython/releases/download/[FILE-PATH]
 
     ----- stderr -----
     ");
 
-    // Test without mirrors - verify default URLs are used
+    // Test without mirrors - verify the default Astral mirror URL is used for CPython
     uv_snapshot!(context.filters(), context.python_list()
         .arg("3.10")
         .arg("--show-urls")
@@ -675,7 +747,7 @@ fn python_list_with_mirrors() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.10.19-[PLATFORM] https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
+    cpython-3.10.[LATEST]-[PLATFORM] https://releases.astral.sh/github/python-build-standalone/releases/download/[FILE-PATH]
     pypy-3.10.16-[PLATFORM] https://downloads.python.org/pypy/[FILE-PATH]
     graalpy-3.10.0-[PLATFORM] https://github.com/oracle/graalpython/releases/download/[FILE-PATH]
 

@@ -23,7 +23,7 @@ use tracing::{Level, debug, info, instrument, trace, warn};
 use uv_configuration::{Constraints, Excludes, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
-    BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, DistributionMetadata,
+    BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, ExcludeNewerValue, Identifier,
     IncompatibleDist, IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations,
     IndexMetadata, IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement,
     ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
@@ -36,6 +36,7 @@ use uv_pep508::{
 };
 use uv_platform_tags::{IncompatibleTag, Tags};
 use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKindRef, Conflicts, VerbatimParsedUrl};
+use uv_static::EnvVars;
 use uv_torch::TorchStrategy;
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
 use uv_warnings::warn_user_once;
@@ -50,7 +51,7 @@ use crate::manifest::Manifest;
 use crate::pins::FilePins;
 use crate::preferences::{PreferenceSource, Preferences};
 use crate::pubgrub::{
-    PubGrubDependency, PubGrubDistribution, PubGrubPackage, PubGrubPackageInner, PubGrubPriorities,
+    DependencySource, PubGrubDependency, PubGrubPackage, PubGrubPackageInner, PubGrubPriorities,
     PubGrubPython,
 };
 use crate::python_requirement::PythonRequirement;
@@ -78,10 +79,7 @@ use crate::resolver::system::SystemDependency;
 pub(crate) use crate::resolver::urls::Urls;
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::yanks::AllowedYanks;
-use crate::{
-    DependencyMode, ExcludeNewer, Exclusions, FlatIndex, Options, ResolutionMode, VersionMap,
-    marker,
-};
+use crate::{DependencyMode, Exclusions, FlatIndex, Options, ResolutionMode, VersionMap, marker};
 pub(crate) use provider::MetadataUnavailable;
 
 mod availability;
@@ -185,6 +183,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             AllowedYanks::from_manifest(&manifest, &env, options.dependency_mode),
             hasher,
             options.exclude_newer.clone(),
+            build_context.locations(),
             build_context.build_options(),
             build_context.capabilities(),
         );
@@ -324,6 +323,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             "Solving with target Python version: {}",
             self.python_requirement.target()
         );
+        if !self.options.exclude_newer.is_empty() {
+            debug!("Solving with exclude-newer: {}", self.options.exclude_newer);
+        }
 
         let mut visited = FxHashSet::default();
 
@@ -369,7 +371,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     state.fork_indexes,
                                     state.env,
                                     self.current_environment.clone(),
-                                    Some(&self.options.exclude_newer),
                                     &visited,
                                 ));
                             }
@@ -950,7 +951,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 package,
                 version: _,
                 parent: _,
-                url: _,
+                source: _,
             } = dependency;
             let url = package.name().and_then(|name| state.fork_urls.get(name));
             let index = package.name().and_then(|name| state.fork_indexes.get(name));
@@ -1001,7 +1002,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
             // Emit a request to fetch the metadata for this distribution.
             let dist = Dist::from_url(name.clone(), url.clone())?;
-            if self.index.distributions().register(dist.version_id()) {
+            if self.index.distributions().register(dist.distribution_id()) {
                 request_sink.blocking_send(Request::Dist(dist))?;
             }
         } else if let Some(index) = index {
@@ -1147,12 +1148,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             url.verbatim
         );
 
-        let dist = PubGrubDistribution::from_url(name, url);
+        let dist = Dist::from_url(name.clone(), url.clone())?;
+        let distribution_id = dist.distribution_id();
         let response = self
             .index
             .distributions()
-            .wait_blocking(&dist.version_id())
-            .ok_or_else(|| ResolveError::UnregisteredTask(dist.version_id().to_string()))?;
+            .wait_blocking(&distribution_id)
+            .ok_or_else(|| ResolveError::UnregisteredTask(dist.to_string()))?;
 
         // If we failed to fetch the metadata for a URL, we can't proceed.
         let metadata = match &*response {
@@ -1183,20 +1185,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         // If the URL points to a pre-built wheel, and the wheel's supported Python versions don't
         // match our `Requires-Python`, mark it as incompatible.
-        let dist = Dist::from_url(name.clone(), url.clone())?;
-        if let Dist::Built(dist) = dist {
+        if let Dist::Built(dist) = &dist {
             let filename = match &dist {
                 BuiltDist::Registry(dist) => &dist.best_wheel().filename,
                 BuiltDist::DirectUrl(dist) => &dist.filename,
                 BuiltDist::Path(dist) => &dist.filename,
             };
 
-            // If the wheel does _not_ cover a required platform, it's incompatible.
-            if env.marker_environment().is_none() && !self.options.required_environments.is_empty()
+            // If the wheel does _not_ cover an environment that requires artifact coverage, it's
+            // incompatible.
+            if env.marker_environment().is_none() && !self.options.artifact_environments.is_empty()
             {
                 let wheel_marker = implied_markers(filename);
-                // If the user explicitly marked a platform as required, ensure it has coverage.
-                for environment_marker in self.options.required_environments.iter().copied() {
+                // If the caller marked an environment as requiring artifact coverage, ensure it
+                // has coverage.
+                for environment_marker in self.options.artifact_environments.iter().copied() {
                     // If the platform is part of the current environment...
                     if env.included_by_marker(environment_marker)
                         && !find_environments(id, pubgrub).is_disjoint(environment_marker)
@@ -1227,35 +1230,20 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         // The version is incompatible due to its `Requires-Python` requirement.
         if let Some(requires_python) = metadata.requires_python.as_ref() {
-            // TODO(charlie): We only care about this for source distributions.
-            if !python_requirement
-                .installed()
-                .is_contained_by(requires_python)
-            {
-                return Ok(Some(ResolverVersion::Unavailable(
-                    version.clone(),
-                    UnavailableVersion::IncompatibleDist(IncompatibleDist::Source(
-                        IncompatibleSource::RequiresPython(
-                            requires_python.clone(),
-                            PythonRequirementKind::Installed,
-                        ),
-                    )),
-                )));
-            }
             if !python_requirement.target().is_contained_by(requires_python) {
+                let kind = if python_requirement.installed() == python_requirement.target() {
+                    PythonRequirementKind::Installed
+                } else {
+                    PythonRequirementKind::Target
+                };
                 return Ok(Some(ResolverVersion::Unavailable(
                     version.clone(),
                     UnavailableVersion::IncompatibleDist(IncompatibleDist::Source(
-                        IncompatibleSource::RequiresPython(
-                            requires_python.clone(),
-                            PythonRequirementKind::Target,
-                        ),
+                        IncompatibleSource::RequiresPython(requires_python.clone(), kind),
                     )),
                 )));
             }
         }
-
-        // If this is a wheel, and the implied Python version doesn't overlap, raise an error.
 
         Ok(Some(ResolverVersion::Unforked(version.clone())))
     }
@@ -1468,8 +1456,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Ok(None);
         }
 
-        // If the user explicitly marked a platform as required, ensure it has coverage.
-        for marker in self.options.required_environments.iter().copied() {
+        // If the caller marked an environment as requiring artifact coverage, ensure it has
+        // coverage.
+        for marker in self.options.artifact_environments.iter().copied() {
             // If the platform is part of the current environment...
             if env.included_by_marker(marker) {
                 // But isn't supported by the distribution...
@@ -1680,7 +1669,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // Emit a request to fetch the metadata for this version.
         if matches!(&**package, PubGrubPackageInner::Package { .. }) {
             if self.dependency_mode.is_transitive() {
-                if self.index.distributions().register(candidate.version_id()) {
+                let dist = dist.for_resolution();
+                if self.index.distributions().register(dist.distribution_id()) {
                     if name != dist.name() {
                         return Err(ResolveError::MismatchedPackageName {
                             request: "distribution",
@@ -1696,7 +1686,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         return Err(ResolveError::UnhashedPackage(candidate.name().clone()));
                     }
 
-                    let request = Request::from(dist.for_resolution());
+                    let request = Request::from(dist);
                     request_sink.blocking_send(request)?;
                 }
             }
@@ -1786,7 +1776,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
     ) -> Result<Dependencies, ResolveError> {
-        let url = package.name().and_then(|name| fork_urls.get(name));
         let dependencies = match &**package {
             PubGrubPackageInner::Root(_) => {
                 let no_dev_deps = BTreeMap::default();
@@ -1823,12 +1812,23 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     return Ok(Dependencies::Unforkable(Vec::default()));
                 }
 
-                // Determine the distribution to lookup.
-                let dist = match url {
-                    Some(url) => PubGrubDistribution::from_url(name, url),
-                    None => PubGrubDistribution::from_registry(name, version),
+                // Look up the distribution ID from the pins (common case) or fork URLs.
+                let owned_id;
+                let distribution_id = if let Some((_, metadata_id)) =
+                    pins.dist_and_id(name, version)
+                {
+                    metadata_id
+                } else if let Some(url) = fork_urls.get(name) {
+                    let dist = Dist::from_url(name.clone(), url.clone())?;
+                    owned_id = dist.distribution_id();
+                    &owned_id
+                } else {
+                    debug_assert!(
+                        false,
+                        "Dependencies were requested for a package without a pinned distribution"
+                    );
+                    return Err(ResolveError::UnregisteredTask(format!("{name}=={version}")));
                 };
-                let version_id = dist.version_id();
 
                 // If the package does not exist in the registry or locally, we cannot fetch its dependencies
                 if self.dependency_mode.is_transitive()
@@ -1846,8 +1846,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let response = self
                     .index
                     .distributions()
-                    .wait_blocking(&version_id)
-                    .ok_or_else(|| ResolveError::UnregisteredTask(version_id.to_string()))?;
+                    .wait_blocking(distribution_id)
+                    .ok_or_else(|| ResolveError::UnregisteredTask(format!("{name}=={version}")))?;
 
                 let metadata = match &*response {
                     MetadataResponse::Found(archive) => &archive.metadata,
@@ -1949,7 +1949,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             }),
                             version: Range::singleton(version.clone()),
                             parent: None,
-                            url: None,
+                            source: DependencySource::Unspecified,
                         })
                         .collect(),
                 ));
@@ -1977,7 +1977,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     }),
                                     version: Range::singleton(version.clone()),
                                     parent: None,
-                                    url: None,
+                                    source: DependencySource::Unspecified,
                                 })
                         })
                         .collect(),
@@ -2003,7 +2003,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             }),
                             version: Range::singleton(version.clone()),
                             parent: None,
-                            url: None,
+                            source: DependencySource::Unspecified,
                         })
                         .collect(),
                 ));
@@ -2373,7 +2373,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     trace!("Received installed distribution metadata for: {dist}");
                     self.index
                         .distributions()
-                        .done(dist.version_id(), Arc::new(metadata));
+                        .done(dist.distribution_id(), Arc::new(metadata));
                 }
                 Some(Response::Dist { dist, metadata }) => {
                     let dist_kind = match dist {
@@ -2392,7 +2392,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                     self.index
                         .distributions()
-                        .done(dist.version_id(), Arc::new(metadata));
+                        .done(dist.distribution_id(), Arc::new(metadata));
                 }
                 None => {}
             }
@@ -2642,8 +2642,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
 
                 // Emit a request to fetch the metadata for this version.
-                if self.index.distributions().register(candidate.version_id()) {
-                    let dist = dist.for_resolution().to_owned();
+                let dist = dist.for_resolution();
+                if self.index.distributions().register(dist.distribution_id()) {
+                    let dist = dist.to_owned();
                     if &package_name != dist.name() {
                         return Err(ResolveError::MismatchedPackageName {
                             request: "distribution",
@@ -2690,7 +2691,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         fork_indexes: ForkIndexes,
         env: ResolverEnvironment,
         current_environment: MarkerEnvironment,
-        exclude_newer: Option<&ExcludeNewer>,
         visited: &FxHashSet<PackageName>,
     ) -> ResolveError {
         err = NoSolutionError::collapse_local_version_segments(NoSolutionError::collapse_proxies(
@@ -2722,14 +2722,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         }
 
         let mut available_indexes = FxHashMap::default();
+        let mut included_versions = FxHashMap::default();
         let mut available_versions = FxHashMap::default();
+
+        let available_version_cutoff: Option<ExcludeNewerValue> =
+            std::env::var(EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF)
+                .ok()
+                .and_then(|s| s.parse().ok());
+
         for package in err.packages() {
             let Some(name) = package.name() else { continue };
             if !visited.contains(name) {
-                // Avoid including available versions for packages that exist in the derivation
+                // Avoid including version data for packages that exist in the derivation
                 // tree, but were never visited during resolution. We _may_ have metadata for
                 // these packages, but it's non-deterministic, and omitting them ensures that
-                // we represent the self of the resolver at the time of failure.
+                // we represent the state of the resolver at the time of failure.
                 continue;
             }
             let versions_response = if let Some(index) = fork_indexes.get(name) {
@@ -2741,30 +2748,60 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             };
             if let Some(response) = versions_response {
                 if let VersionsResponse::Found(ref version_maps) = *response {
-                    // Track the available versions, across all indexes.
+                    // Track included and available versions, across all indexes.
                     for version_map in version_maps {
-                        let package_versions = available_versions
+                        let package_included_versions = included_versions
+                            .entry(name.clone())
+                            .or_insert_with(BTreeSet::new);
+                        let package_available_versions = available_versions
                             .entry(name.clone())
                             .or_insert_with(BTreeSet::new);
 
                         for (version, dists) in version_map.iter(&Ranges::full()) {
-                            // Don't show versions removed by excluded-newer in hints.
-                            if let Some(exclude_newer) =
-                                exclude_newer.and_then(|en| en.exclude_newer_package(name))
-                            {
-                                let Some(prioritized_dist) = dists.prioritized_dist() else {
-                                    continue;
+                            // Included versions are those that survive the effective
+                            // `exclude-newer` filter used during resolution. Files with
+                            // missing upload times are treated as excluded (matching
+                            // the resolution behavior in `version_map.rs`).
+                            let excluded_from_included = || {
+                                let Some(exclude_newer) = version_map.exclude_newer() else {
+                                    return false;
                                 };
-                                if prioritized_dist.files().all(|file| {
+                                let Some(prioritized_dist) = dists.prioritized_dist() else {
+                                    return true;
+                                };
+                                prioritized_dist.files().all(|file| {
                                     file.upload_time_utc_ms.is_none_or(|upload_time| {
                                         upload_time >= exclude_newer.timestamp_millis()
                                     })
-                                }) {
-                                    continue;
-                                }
+                                })
+                            };
+
+                            if !excluded_from_included() {
+                                package_included_versions.insert(version.clone());
                             }
 
-                            package_versions.insert(version.clone());
+                            // Available versions are used in resolver error reporting,
+                            // and can be bounded by a test-only cutoff for deterministic
+                            // snapshots. Files with missing upload times are *not*
+                            // excluded, since we only filter versions we can confirm
+                            // were published after the cutoff.
+                            let excluded_from_available = || {
+                                let Some(ref exclude_newer) = available_version_cutoff else {
+                                    return false;
+                                };
+                                let Some(prioritized_dist) = dists.prioritized_dist() else {
+                                    return false;
+                                };
+                                prioritized_dist.files().all(|file| {
+                                    file.upload_time_utc_ms.is_some_and(|upload_time| {
+                                        upload_time >= exclude_newer.timestamp_millis()
+                                    })
+                                })
+                            };
+
+                            if !excluded_from_available() {
+                                package_available_versions.insert(version.clone());
+                            }
                         }
                     }
 
@@ -2784,6 +2821,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         ResolveError::NoSolution(Box::new(NoSolutionError::new(
             err,
             self.index.clone(),
+            included_versions,
             available_versions,
             available_indexes,
             self.selector.clone(),
@@ -2848,11 +2886,10 @@ pub(crate) struct ForkState {
     ///
     /// The key of this map is a package name, and each package name maps to
     /// a set of versions for that package. Each version in turn is mapped
-    /// to a single [`ResolvedDist`]. That [`ResolvedDist`] represents, at time
-    /// of writing (2024/05/09), at most one wheel. The idea here is that
-    /// [`FilePins`] tracks precisely which wheel was selected during resolution.
-    /// After resolution is finished, this maps is consulted in order to select
-    /// the wheel chosen during resolution.
+    /// to the concrete distribution selected for installation, along with the
+    /// concrete distribution whose metadata was used during resolution.
+    /// After resolution is finished, this map is consulted to recover both the
+    /// locked artifact and the metadata backing the resolved dependency edges.
     pins: FilePins,
     /// Ensure we don't have duplicate URLs in any branch.
     ///
@@ -2951,7 +2988,7 @@ impl ForkState {
                 package,
                 version,
                 parent: _,
-                url,
+                source,
             } = dependency;
 
             let mut has_url = false;
@@ -2960,9 +2997,13 @@ impl ForkState {
                 // requirement was a URL requirement. `Urls` applies canonicalization to this and
                 // override URLs to both URL and registry requirements, which we then check for
                 // conflicts using [`ForkUrl`].
-                for url in urls.get_url(&self.env, name, url.as_ref(), git)? {
+                for url in urls.get_url(&self.env, name, source.verbatim_url(), git)? {
                     self.fork_urls.insert(name, url, &self.env)?;
                     has_url = true;
+                }
+
+                if let Some(index) = source.explicit_index() {
+                    self.fork_indexes.insert(name, index, &self.env)?;
                 }
 
                 // If the package is pinned to an exact index, add it to the fork.
@@ -3044,7 +3085,7 @@ impl ForkState {
                 package,
                 version,
                 parent: _,
-                url: _,
+                source: _,
             } = dependency;
 
             let Some(base_package) = package.base_package() else {
@@ -3065,7 +3106,7 @@ impl ForkState {
                     package,
                     version,
                     parent: _,
-                    url: _,
+                    source: _,
                 } = dependency;
                 (package, version)
             }),
@@ -3834,6 +3875,13 @@ impl Forks {
         for set in conflicts.iter() {
             let mut new = vec![];
             for fork in std::mem::take(&mut forks) {
+                // Check if this conflict set is relevant to this fork. We need two conditions:
+                //
+                // 1. At least one item has dependencies in this fork (otherwise there's nothing to
+                //    fork on).
+                // 2. At least two items are not already excluded in this fork's environment
+                //    (otherwise the conflict constraint is already satisfied and no fork is
+                //    needed).
                 let mut has_conflicting_dependency = false;
                 for item in set.iter() {
                     if fork.contains_conflicting_item(item.as_ref()) {
@@ -3845,6 +3893,53 @@ impl Forks {
                 if !has_conflicting_dependency {
                     new.push(fork);
                     continue;
+                }
+
+                // If fewer than two items in this conflict set are still possible (not already
+                // excluded) in this fork, the conflict constraint is already satisfied by prior
+                // forking. We can skip the full N+1 fork split if the single remaining non-excluded
+                // item doesn't appear in any other conflict set (since it would never need its own
+                // "excluded" variant).
+                let non_excluded: Vec<_> = set
+                    .iter()
+                    .filter(|item| fork.env.included_by_group(item.as_ref()))
+                    .collect();
+                if non_excluded.len() < 2 {
+                    // Check if any non-excluded item still has a live conflict in another set —
+                    // i.e., another set where this item AND at least one other non-excluded item
+                    // both appear. If so, we still need to fork to create the "excluded" variant
+                    // for that item.
+                    let dominated = non_excluded.iter().all(|item| {
+                        !conflicts.iter().any(|other_set| {
+                            !std::ptr::eq(set, other_set)
+                                && other_set.contains(item.package(), item.kind().as_ref())
+                                && other_set
+                                    .iter()
+                                    .filter(|other_item| {
+                                        other_item.package() != item.package()
+                                            || other_item.kind() != item.kind()
+                                    })
+                                    .any(|other_item| {
+                                        fork.env.included_by_group(other_item.as_ref())
+                                    })
+                        })
+                    });
+                    if dominated {
+                        // When dependencies are added to forks, we check `included_by_marker` but
+                        // not on whether the dependency's conflict item is included by the fork's
+                        // environment so there may be extraneous dependencies and we need to filter
+                        // the fork to clean up dependencies gated on already-excluded extras.
+                        let rules: Vec<_> = set
+                            .iter()
+                            .filter(|item| !fork.env.included_by_group(item.as_ref()))
+                            .cloned()
+                            .map(Err)
+                            .collect();
+                        if let Some(filtered) = fork.filter(rules) {
+                            new.push(filtered);
+                        }
+                        continue;
+                    }
                 }
 
                 // Create a fork that excludes ALL conflicts.
@@ -4082,26 +4177,75 @@ fn find_environments(id: Id<PubGrubPackage>, state: &State<UvDependencyProvider>
         return MarkerTree::TRUE;
     }
 
-    // Retrieve the incompatibilities for the current package.
-    let Some(incompatibilities) = state.incompatibilities.get(&id) else {
-        return MarkerTree::FALSE;
-    };
+    // First, collect the reverse-dependency closure for the package. We limit the propagation
+    // below to this subgraph so cycles in unrelated packages don't matter here.
+    let mut ancestors = FxHashSet::default();
+    let mut stack = vec![id];
+    let mut root = None;
+    ancestors.insert(id);
 
-    // Find all dependencies on the current package.
-    let mut marker = MarkerTree::FALSE;
-    for index in incompatibilities {
-        let incompat = &state.incompatibility_store[*index];
-        if let Kind::FromDependencyOf(id1, _, id2, _) = &incompat.kind {
-            if id == *id2 {
-                marker.or({
-                    let mut marker = package.marker();
-                    marker.and(find_environments(*id1, state));
-                    marker
-                });
+    while let Some(current) = stack.pop() {
+        let Some(incompatibilities) = state.incompatibilities.get(&current) else {
+            continue;
+        };
+
+        for index in incompatibilities {
+            let incompat = &state.incompatibility_store[*index];
+            if let Kind::FromDependencyOf(parent, _, child, _) = &incompat.kind {
+                if current != *child {
+                    continue;
+                }
+                if ancestors.insert(*parent) {
+                    if state.package_store[*parent].is_root() {
+                        root = Some(*parent);
+                    }
+                    stack.push(*parent);
+                }
             }
         }
     }
-    marker
+
+    let Some(root) = root else {
+        return MarkerTree::FALSE;
+    };
+
+    // Propagate markers forward from the root through the collected subgraph. This reaches a
+    // fixpoint even in the presence of cycles, unlike the recursive reverse walk above.
+    let mut environments = FxHashMap::default();
+    let mut queue = VecDeque::from([root]);
+    environments.insert(root, MarkerTree::TRUE);
+
+    while let Some(current) = queue.pop_front() {
+        let Some(current_environment) = environments.get(&current).copied() else {
+            continue;
+        };
+        let Some(incompatibilities) = state.incompatibilities.get(&current) else {
+            continue;
+        };
+
+        for index in incompatibilities {
+            let incompat = &state.incompatibility_store[*index];
+            let Kind::FromDependencyOf(parent, _, child, _) = &incompat.kind else {
+                continue;
+            };
+            if current != *parent || !ancestors.contains(child) {
+                continue;
+            }
+
+            let mut next_environment = state.package_store[*child].marker();
+            next_environment.and(current_environment);
+
+            let entry = environments.entry(*child).or_insert(MarkerTree::FALSE);
+            let mut combined = *entry;
+            combined.or(next_environment);
+            if combined != *entry {
+                *entry = combined;
+                queue.push_back(*child);
+            }
+        }
+    }
+
+    environments.remove(&id).unwrap_or(MarkerTree::FALSE)
 }
 
 #[derive(Debug, Default, Clone)]

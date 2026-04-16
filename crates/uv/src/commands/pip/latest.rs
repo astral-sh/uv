@@ -3,7 +3,9 @@ use tracing::debug;
 
 use uv_client::{MetadataFormat, RegistryClient, VersionFiles};
 use uv_distribution_filename::DistFilename;
-use uv_distribution_types::{IndexCapabilities, IndexMetadataRef, IndexUrl, RequiresPython};
+use uv_distribution_types::{
+    IndexCapabilities, IndexLocations, IndexMetadataRef, IndexUrl, RequiresPython,
+};
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
 use uv_resolver::{ExcludeNewer, PrereleaseMode};
@@ -19,11 +21,21 @@ pub(crate) struct LatestClient<'env> {
     pub(crate) capabilities: &'env IndexCapabilities,
     pub(crate) prerelease: PrereleaseMode,
     pub(crate) exclude_newer: &'env ExcludeNewer,
+    pub(crate) index_locations: &'env IndexLocations,
     pub(crate) tags: Option<&'env Tags>,
     pub(crate) requires_python: Option<&'env RequiresPython>,
 }
 
 impl LatestClient<'_> {
+    fn effective_exclude_newer(
+        &self,
+        package: &PackageName,
+        index: &IndexUrl,
+    ) -> Option<uv_resolver::ExcludeNewerValue> {
+        self.exclude_newer
+            .exclude_newer_package_for_index(package, self.index_locations.exclude_newer_for(index))
+    }
+
     /// Find the latest version of a package from an index.
     pub(crate) async fn find_latest(
         &self,
@@ -55,10 +67,11 @@ impl LatestClient<'_> {
         };
 
         let mut latest: Option<DistFilename> = None;
-        for (_, archive) in archives {
+        for (index, archive) in archives {
             let MetadataFormat::Simple(archive) = archive else {
                 continue;
             };
+            let exclude_newer = self.effective_exclude_newer(package, index);
 
             for datum in archive.iter().rev() {
                 // Find the first compatible distribution.
@@ -70,7 +83,7 @@ impl LatestClient<'_> {
 
                 for (filename, file) in files.all() {
                     // Skip distributions uploaded after the cutoff.
-                    if let Some(exclude_newer) = self.exclude_newer.exclude_newer_package(package) {
+                    if let Some(exclude_newer) = &exclude_newer {
                         match file.upload_time_utc_ms.as_ref() {
                             Some(&upload_time)
                                 if upload_time >= exclude_newer.timestamp_millis() =>
@@ -81,7 +94,7 @@ impl LatestClient<'_> {
                                 warn_user_once!(
                                     "{} is missing an upload date, but user provided: {}",
                                     file.filename,
-                                    self.exclude_newer
+                                    exclude_newer
                                 );
                             }
                             _ => {}

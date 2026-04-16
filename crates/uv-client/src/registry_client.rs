@@ -37,7 +37,7 @@ use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 use uv_torch::TorchStrategy;
 
-use crate::base_client::{BaseClientBuilder, ExtraMiddleware, RedirectPolicy};
+use crate::base_client::{BaseClientBuilder, ClientBuildError, ExtraMiddleware, RedirectPolicy};
 use crate::cached_client::CacheControl;
 use crate::flat_index::FlatIndexEntry;
 use crate::html::SimpleDetailHTML;
@@ -96,14 +96,6 @@ impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
     pub fn keyring(mut self, keyring_type: KeyringProviderType) -> Self {
         self.base_client_builder = self.base_client_builder.keyring(keyring_type);
-        self
-    }
-
-    #[must_use]
-    pub fn built_in_root_certs(mut self, built_in_root_certs: bool) -> Self {
-        self.base_client_builder = self
-            .base_client_builder
-            .built_in_root_certs(built_in_root_certs);
         self
     }
 
@@ -171,7 +163,7 @@ impl<'a> RegistryClientBuilder<'a> {
         }
     }
 
-    pub fn build(mut self) -> RegistryClient {
+    pub fn build(mut self) -> Result<RegistryClient, ClientBuildError> {
         self.cache_index_credentials();
         let index_urls = self.index_locations.index_urls();
 
@@ -181,25 +173,25 @@ impl<'a> RegistryClientBuilder<'a> {
             .indexes(Indexes::from(&self.index_locations))
             .redirect(RedirectPolicy::RetriggerMiddleware);
 
-        let client = builder.build();
+        let client = builder.build()?;
 
-        let timeout = client.timeout();
+        let read_timeout = client.read_timeout();
         let connectivity = client.connectivity();
 
         // Wrap in the cache middleware.
         let client = CachedClient::new(client);
 
-        RegistryClient {
+        Ok(RegistryClient {
             index_urls,
             index_strategy: self.index_strategy,
             torch_backend: self.torch_backend,
             cache: self.cache,
             connectivity,
             client,
-            timeout,
+            read_timeout,
             flat_indexes: Arc::default(),
             pyx_token_store: PyxTokenStore::from_settings().ok(),
-        }
+        })
     }
 
     /// Share the underlying client between two different middleware configurations.
@@ -213,7 +205,7 @@ impl<'a> RegistryClientBuilder<'a> {
             .indexes(Indexes::from(&self.index_locations))
             .wrap_existing(existing);
 
-        let timeout = client.timeout();
+        let read_timeout = client.read_timeout();
         let connectivity = client.connectivity();
 
         // Wrap in the cache middleware.
@@ -226,7 +218,7 @@ impl<'a> RegistryClientBuilder<'a> {
             cache: self.cache,
             connectivity,
             client,
-            timeout,
+            read_timeout,
             flat_indexes: Arc::default(),
             pyx_token_store: PyxTokenStore::from_settings().ok(),
         }
@@ -248,9 +240,9 @@ pub struct RegistryClient {
     cache: Cache,
     /// The connectivity mode to use.
     connectivity: Connectivity,
-    /// Configured client timeout, in seconds.
-    timeout: Duration,
-    /// The flat index entries for each `--find-links`-style index URL.
+    /// Client HTTP read timeout.
+    read_timeout: Duration,
+    /// The flat index entries for each `--find-links`-style index URL, with one slot per index.
     flat_indexes: Arc<Mutex<FlatIndexCache>>,
     /// The pyx token store to use for persistent credentials.
     // TODO(charlie): The token store is only needed for `is_known_url`; can we avoid storing it here?
@@ -288,8 +280,8 @@ impl RegistryClient {
     }
 
     /// Return the timeout this client is configured with, in seconds.
-    pub fn timeout(&self) -> Duration {
-        self.timeout
+    pub fn read_timeout(&self) -> Duration {
+        self.read_timeout
     }
 
     pub fn credentials_cache(&self) -> &CredentialsCache {
@@ -459,11 +451,15 @@ impl RegistryClient {
         package_name: &PackageName,
         index: &IndexUrl,
     ) -> Result<Vec<FlatIndexEntry>, Error> {
-        // Store the flat index entries in a cache, to avoid redundant fetches. A flat index will
-        // typically contain entries for multiple packages; as such, it's more efficient to cache
-        // the entire index rather than re-fetching it for each package.
-        let mut cache = self.flat_indexes.lock().await;
-        if let Some(entries) = cache.get(index) {
+        // Each flat index gets its own slot, so lookups for the same index share a fetch while
+        // unrelated indexes can proceed concurrently.
+        let flat_index_slot = {
+            let mut cache = self.flat_indexes.lock().await;
+            cache.get_or_insert(index)
+        };
+        let mut flat_index = flat_index_slot.lock().await;
+
+        if let Some(entries) = flat_index.as_ref() {
             return Ok(entries.get(package_name).cloned().unwrap_or_default());
         }
 
@@ -488,7 +484,7 @@ impl RegistryClient {
             .unwrap_or_default();
 
         // Write to the cache.
-        cache.insert(index.clone(), entries_by_package);
+        *flat_index = Some(entries_by_package);
 
         Ok(package_entries)
     }
@@ -589,7 +585,7 @@ impl RegistryClient {
         url: &DisplaySafeUrl,
         index: &IndexUrl,
         cache_entry: &CacheEntry,
-        cache_control: CacheControl<'_>,
+        cache_control: CacheControl,
     ) -> Result<OwnedArchive<SimpleDetailMetadata>, Error> {
         // In theory, we should be able to pass `MediaType::all()` to all registries, and as
         // unsupported media types should be ignored by the server. For now, we implement this
@@ -1143,7 +1139,18 @@ impl RegistryClient {
             if let Some(authorization) = req.headers().get("authorization") {
                 headers.append("authorization", authorization.clone());
             }
-
+            // These range requests need the bytes from the wheel archive itself.
+            // After `reqwest` moved decompression to tower-http[1], this path could receive
+            // transparently decompressed responses. That breaks the byte offsets used by
+            // `AsyncHttpRangeReader` and results in us incorrectly trying to double-decompress gzip streams[2].
+            // We request with `Accept: identity` so that the range reader always sees the compressed wheel bytes.
+            //
+            // [1]: https://github.com/seanmonstar/reqwest/pull/2840
+            // [2]: https://github.com/astral-sh/async_http_range_reader/pull/3#discussion_r2700194798
+            headers.insert(
+                reqwest::header::ACCEPT_ENCODING,
+                reqwest::header::HeaderValue::from_static("identity"),
+            );
             // This response callback is special, we actually make a number of subsequent requests to
             // fetch the file from the remote zip.
             let read_metadata_range_request = |response: Response| {
@@ -1175,7 +1182,7 @@ impl RegistryClient {
                 .get_serde_with_retry(
                     req,
                     &cache_entry,
-                    cache_control,
+                    cache_control.clone(),
                     read_metadata_range_request,
                 )
                 .await
@@ -1184,7 +1191,7 @@ impl RegistryClient {
             match result {
                 Ok(metadata) => return Ok(metadata),
                 Err(err) => {
-                    if err.is_http_range_requests_unsupported() {
+                    if err.is_http_range_requests_unsupported(url, index) {
                         // The range request version failed. Fall back to streaming the file to search
                         // for the METADATA file.
                         warn!("Range requests not supported for {filename}; streaming wheel");
@@ -1238,11 +1245,12 @@ impl RegistryClient {
     /// Handle a specific `reqwest` error, and convert it to [`io::Error`].
     fn handle_response_errors(&self, err: reqwest::Error) -> std::io::Error {
         if err.is_timeout() {
+            // Assumption: The connect timeout with the 10s default is not the culprit.
             std::io::Error::new(
                 std::io::ErrorKind::TimedOut,
                 format!(
                     "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).",
-                    self.timeout().as_secs()
+                    self.read_timeout().as_secs()
                 ),
             )
         } else {
@@ -1273,24 +1281,21 @@ impl From<IndexStatusCodeDecision> for SimpleMetadataSearchOutcome {
 
 /// A map from [`IndexUrl`] to [`FlatIndexEntry`] entries found at the given URL, indexed by
 /// [`PackageName`].
-#[derive(Default, Debug, Clone)]
-struct FlatIndexCache(FxHashMap<IndexUrl, FxHashMap<PackageName, Vec<FlatIndexEntry>>>);
+#[derive(Default, Debug)]
+struct FlatIndexCache(FxHashMap<IndexUrl, FlatIndexSlot>);
 
 impl FlatIndexCache {
-    /// Get the entries for a given index URL.
-    fn get(&self, index: &IndexUrl) -> Option<&FxHashMap<PackageName, Vec<FlatIndexEntry>>> {
-        self.0.get(index)
-    }
-
-    /// Insert the entries for a given index URL.
-    fn insert(
-        &mut self,
-        index: IndexUrl,
-        entries: FxHashMap<PackageName, Vec<FlatIndexEntry>>,
-    ) -> Option<FxHashMap<PackageName, Vec<FlatIndexEntry>>> {
-        self.0.insert(index, entries)
+    /// Return the per-index slot for this flat index, creating it on first access.
+    fn get_or_insert(&mut self, index: &IndexUrl) -> FlatIndexSlot {
+        self.0
+            .entry(index.clone())
+            .or_insert_with(|| Arc::new(Mutex::new(None)))
+            .clone()
     }
 }
+
+type FlatIndexEntriesByPackage = FxHashMap<PackageName, Vec<FlatIndexEntry>>;
+type FlatIndexSlot = Arc<Mutex<Option<FlatIndexEntriesByPackage>>>;
 
 #[derive(Default, Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
@@ -1415,14 +1420,14 @@ impl SimpleDetailMetadata {
         for file in files {
             let Some(filename) = DistFilename::try_from_filename(&file.filename, package_name)
             else {
-                warn!("Skipping file for {package_name}: {}", file.filename);
+                debug!("Skipping file for {package_name}: {}", file.filename);
                 continue;
             };
             let file = match File::try_from_pypi(file, &base) {
                 Ok(file) => file,
                 Err(err) => {
                     // Ignore files with unparsable version specifiers.
-                    warn!("Skipping file for {package_name}: {err}");
+                    debug!("Skipping file for {package_name}: {err}");
                     continue;
                 }
             };
@@ -1469,13 +1474,13 @@ impl SimpleDetailMetadata {
                 Ok(file) => file,
                 Err(err) => {
                     // Ignore files with unparsable version specifiers.
-                    warn!("Skipping file for {package_name}: {err}");
+                    debug!("Skipping file for {package_name}: {err}");
                     continue;
                 }
             };
             let Some(filename) = DistFilename::try_from_filename(&file.filename, package_name)
             else {
-                warn!("Skipping file for {package_name}: {}", file.filename);
+                debug!("Skipping file for {package_name}: {}", file.filename);
                 continue;
             };
             match version_map.entry(filename.version().clone()) {
@@ -1688,7 +1693,8 @@ mod tests {
         let cache = Cache::temp()?;
         let registry_client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache)
             .allow_cross_origin_credentials()
-            .build();
+            .build()
+            .expect("failed to build registry client");
         let client = registry_client.cached_client().uncached();
 
         assert_eq!(
@@ -1748,7 +1754,8 @@ mod tests {
         let cache = Cache::temp()?;
         let registry_client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache)
             .allow_cross_origin_credentials()
-            .build();
+            .build()
+            .expect("failed to build registry client");
         let client = registry_client.cached_client().uncached();
 
         let mut url = redirect_server_url.clone();
@@ -1796,7 +1803,8 @@ mod tests {
         let cache = Cache::temp()?;
         let registry_client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache)
             .allow_cross_origin_credentials()
-            .build();
+            .build()
+            .expect("failed to build registry client");
         let client = registry_client.cached_client().uncached();
 
         let redirect_server_url = DisplaySafeUrl::parse(&redirect_server.uri())?.join("foo/")?;

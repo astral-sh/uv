@@ -32,13 +32,13 @@ permissions: {}
 jobs:
   sdist:
     name: sdist
-    runs-on: depot-ubuntu-22.04-4
+    runs-on: depot-ubuntu-24.04-4
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -46,9 +46,9 @@ jobs:
       - name: "Prep README.md"
         run: python scripts/transform_readme.py --target pypi
       - name: "Build sdist"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.6
           command: sdist
           args: --out dist
       - name: "Test sdist"
@@ -60,25 +60,27 @@ jobs:
           python -m ${MODULE_NAME} --help
           uvx --help
       - name: "Upload sdist"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: wheels_uv-sdist
           path: dist
 
       # uv-build
       - name: "Build sdist uv-build"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.6
           command: sdist
           args: --out crates/uv-build/dist -m crates/uv-build/Cargo.toml
+      - name: "Fix Cargo.lock in sdist uv-build"
+        run: python scripts/repair-sdist-cargo-lock.py crates/uv-build/dist/${PACKAGE_NAME}_build-*.tar.gz
       - name: "Test sdist uv-build"
         run: |
           pip install crates/uv-build/dist/${PACKAGE_NAME}_build-*.tar.gz --force-reinstall
           ${MODULE_NAME}-build --help
           python -m ${MODULE_NAME}_build --help
       - name: "Upload sdist uv-build"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: wheels_uv_build-sdist
           path: crates/uv-build/dist
@@ -91,22 +93,27 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
       - name: "Prep README.md"
         run: python scripts/transform_readme.py --target pypi
+      - name: "Install cargo extensions"
+        shell: bash
+        run: scripts/install-cargo-extensions.sh
 
       # uv
       - name: "Build wheels - x86_64"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.6
           target: x86_64
           args: --release --locked --out dist --features self-update --compatibility pypi
+        env:
+          CARGO: ${{ github.workspace }}/scripts/cargo.sh
       - name: "Upload wheels"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: wheels_uv-macos-x86_64
           path: dist
@@ -122,7 +129,7 @@ jobs:
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: artifacts-macos-x86_64
           path: |
@@ -131,13 +138,15 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build - x86_64"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.6
           target: x86_64
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
+        env:
+          CARGO: ${{ github.workspace }}/scripts/cargo.sh
       - name: "Upload wheels uv-build"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: wheels_uv_build-macos-x86_64
           path: crates/uv-build/dist
@@ -150,21 +159,26 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: arm64
       - name: "Prep README.md"
         run: python scripts/transform_readme.py --target pypi
+      - name: "Install cargo extensions"
+        shell: bash
+        run: scripts/install-cargo-extensions.sh
 
       # uv
       - name: "Build wheels - aarch64"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.6
           target: aarch64
           manylinux: 2_17
           args: --release --locked --out dist --features self-update --compatibility pypi
+        env:
+          CARGO: ${{ github.workspace }}/scripts/cargo.sh
       - name: "Test wheel - aarch64"
         run: |
           pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
@@ -172,7 +186,7 @@ jobs:
           python -m ${MODULE_NAME} --help
           uvx --help
       - name: "Upload wheels"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: wheels_uv-aarch64-apple-darwin
           path: dist
@@ -188,7 +202,7 @@ jobs:
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: artifacts-aarch64-apple-darwin
           path: |
@@ -197,55 +211,73 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build - aarch64"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.6
           target: aarch64
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
+        env:
+          CARGO: ${{ github.workspace }}/scripts/cargo.sh
       - name: "Test wheel - aarch64"
         run: |
           pip install ${PACKAGE_NAME}_build --no-index --find-links crates/uv-build/dist --force-reinstall
           ${MODULE_NAME}-build --help
           python -m ${MODULE_NAME}_build --help
       - name: "Upload wheels uv-build"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: wheels_uv_build-aarch64-apple-darwin
           path: crates/uv-build/dist
 
   windows:
     name: ${{ matrix.platform.target }}
-    runs-on: github-windows-2022-x86_64-8
+    runs-on: ${{ matrix.platform.runner }}
     strategy:
       matrix:
         platform:
           - target: x86_64-pc-windows-msvc
             arch: x64
+            runner: github-windows-2025-x86_64-8
           - target: i686-pc-windows-msvc
             arch: x86
+            runner: github-windows-2025-x86_64-8
           - target: aarch64-pc-windows-msvc
-            arch: x64 # not relevant here
+            arch: arm64
+            runner: github-windows-11-aarch64-8
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: ${{ matrix.platform.arch }}
       - name: "Prep README.md"
         run: python scripts/transform_readme.py --target pypi
-
+      - name: "Install cargo extensions"
+        shell: bash
+        run: scripts/install-cargo-extensions.sh
+      - name: "Install NASM"
+        # NASM is required for x86/x86-64 Windows targets by aws-lc-sys.
+        # On aarch64-pc-windows-msvc, it uses clang-cl instead.
+        # See: https://aws.github.io/aws-lc-rs/requirements/windows.html#build-requirements
+        if: contains(matrix.platform.target, 'x86') || contains(matrix.platform.target, 'i686')
+        run: |
+          winget install NASM.NASM --accept-source-agreements --accept-package-agreements
+          echo "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append
       # uv
       - name: "Build wheels"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.6
           target: ${{ matrix.platform.target }}
           args: --release --locked --out dist --features self-update,windows-gui-bin --compatibility pypi
+        env:
+          CARGO: ${{ github.workspace }}/scripts/cargo.cmd
+          # Disable prebuilt NASM objects so we always compile assembly from source.
+          AWS_LC_SYS_PREBUILT_NASM: "0"
       - name: "Test wheel"
-        if: ${{ !startsWith(matrix.platform.target, 'aarch64') }}
         shell: bash
         run: |
           pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
@@ -254,7 +286,7 @@ jobs:
           uvx --help
           uvw --help
       - name: "Upload wheels"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: wheels_uv-${{ matrix.platform.target }}
           path: dist
@@ -269,7 +301,7 @@ jobs:
         env:
           PLATFORM_TARGET: ${{ matrix.platform.target }}
       - name: "Upload binary"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: artifacts-${{ matrix.platform.target }}
           path: |
@@ -278,20 +310,21 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.6
           target: ${{ matrix.platform.target }}
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
+        env:
+          CARGO: ${{ github.workspace }}/scripts/cargo.cmd
       - name: "Test wheel uv-build"
-        if: ${{ !startsWith(matrix.platform.target, 'aarch64') }}
         shell: bash
         run: |
           pip install ${PACKAGE_NAME}_build --no-index --find-links crates/uv-build/dist --force-reinstall
           ${MODULE_NAME}-build --help
           python -m ${MODULE_NAME}_build --help
       - name: "Upload wheels uv-build"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: wheels_uv_build-${{ matrix.platform.target }}
           path: crates/uv-build/dist
@@ -309,7 +342,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
@@ -318,38 +351,42 @@ jobs:
 
       # uv
       - name: "Build wheels"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.6
           target: ${{ matrix.target }}
           # Generally, we try to build in a target docker container. In this case however, a
           # 32-bit compiler runs out of memory (4GB memory limit for 32-bit), so we cross compile
           # from 64-bit version of the container, breaking the pattern from other builds.
           container: quay.io/pypa/manylinux2014
           manylinux: 2_17
+          docker-options: -e CARGO
           args: --release --locked --out dist --features self-update --compatibility pypi
-          # See: https://github.com/sfackler/rust-openssl/issues/2036#issuecomment-1724324145
           before-script-linux: |
             # Install the 32-bit cross target on 64-bit (noop if we're already on 64-bit)
             rustup target add ${{ matrix.target }}
             # If we're running on rhel centos, install needed packages.
             if command -v yum &> /dev/null; then
-                yum update -y && yum install -y perl-core openssl openssl-devel pkgconfig libatomic
+                yum update -y && yum install -y pkgconfig libatomic
 
-                # If we're running on i686 we need to symlink libatomic
-                # in order to build openssl with -latomic flag.
-                if [[ ! -d "/usr/lib64" ]]; then
+                # Install cross build requirements
+                if [[ "${{ matrix.target }}" == "i686-unknown-linux-gnu" ]]; then
+                  yum install -y glibc-devel.i686 libstdc++-devel.i686 libatomic.i686
+                fi
+
+                # Symlink libatomic so the linker can find it with -latomic.
+                if [[ -f "/usr/lib/libatomic.so.1" && ! -f "/usr/lib/libatomic.so" ]]; then
                     ln -s /usr/lib/libatomic.so.1 /usr/lib/libatomic.so
-                else
-                    # Support cross-compiling from 64-bit to 32-bit
-                    yum install -y glibc-devel.i686 libstdc++-devel.i686
                 fi
             else
                 # If we're running on debian-based system.
-                apt update -y && apt-get install -y libssl-dev openssl pkg-config
+                apt update -y && apt-get install -y pkg-config
             fi
+            # Install cargo extensions as a static musl binary so it runs in any container.
+            scripts/install-cargo-extensions.sh
         env:
           CC: ${{ matrix.cc }}
+          CARGO: ${{ github.workspace }}/scripts/cargo.sh
       - name: "Test wheel"
         if: ${{ startsWith(matrix.target, 'x86_64') }}
         run: |
@@ -358,7 +395,7 @@ jobs:
           python -m ${MODULE_NAME} --help
           uvx --help
       - name: "Upload wheels"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: wheels_uv-${{ matrix.target }}
           path: dist
@@ -376,7 +413,7 @@ jobs:
         env:
           TARGET: ${{ matrix.target }}
       - name: "Upload binary"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: artifacts-${{ matrix.target }}
           path: |
@@ -385,12 +422,17 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.6
           target: ${{ matrix.target }}
           manylinux: 2_17
+          docker-options: -e CARGO
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
+          before-script-linux: |
+            scripts/install-cargo-extensions.sh
+        env:
+          CARGO: ${{ github.workspace }}/scripts/cargo.sh
       - name: "Test wheel uv-build"
         if: ${{ startsWith(matrix.target, 'x86_64') }}
         run: |
@@ -398,14 +440,14 @@ jobs:
           ${MODULE_NAME}-build --help
           python -m ${MODULE_NAME}_build --help
       - name: "Upload wheels uv-build"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: wheels_uv_build-${{ matrix.target }}
           path: crates/uv-build/dist
 
   linux-arm:
     name: ${{ matrix.platform.target }}
-    runs-on: depot-ubuntu-22.04-8
+    runs-on: depot-ubuntu-24.04-8
     timeout-minutes: 30
     strategy:
       matrix:
@@ -431,7 +473,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
@@ -439,13 +481,18 @@ jobs:
 
       # uv
       - name: "Build wheels"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.6
           target: ${{ matrix.platform.target }}
           manylinux: ${{ matrix.platform.manylinux }}
-          docker-options: ${{ matrix.platform.maturin_docker_options }}
+          docker-options: -e CARGO ${{ matrix.platform.maturin_docker_options }}
           args: --release --locked --out dist --features self-update --compatibility pypi
+          before-script-linux: |
+            scripts/install-cargo-extensions.sh
+        env:
+          CARGO: ${{ github.workspace }}/scripts/cargo.sh
+      # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         name: "Test wheel"
         with:
@@ -465,7 +512,7 @@ jobs:
             PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
             MODULE_NAME: ${{ env.MODULE_NAME }}
       - name: "Upload wheels"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: wheels_uv-${{ matrix.platform.target }}
           path: dist
@@ -483,7 +530,7 @@ jobs:
         env:
           TARGET: ${{ matrix.platform.target }}
       - name: "Upload binary"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: artifacts-${{ matrix.platform.target }}
           path: |
@@ -492,13 +539,18 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.6
           target: ${{ matrix.platform.target }}
           manylinux: ${{ matrix.platform.manylinux }}
-          docker-options: ${{ matrix.platform.maturin_docker_options }}
+          docker-options: -e CARGO ${{ matrix.platform.maturin_docker_options }}
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
+          before-script-linux: |
+            scripts/install-cargo-extensions.sh
+        env:
+          CARGO: ${{ github.workspace }}/scripts/cargo.sh
+      # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         name: "Test wheel uv-build"
         with:
@@ -517,7 +569,7 @@ jobs:
             PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
             MODULE_NAME: ${{ env.MODULE_NAME }}
       - name: "Upload wheels uv-build"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: wheels_uv_build-${{ matrix.platform.target }}
           path: crates/uv-build/dist
@@ -538,7 +590,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
@@ -546,16 +598,24 @@ jobs:
 
       # uv
       - name: "Build wheels"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.6
           target: ${{ matrix.platform.target }}
           manylinux: 2_17
-          docker-options: ${{ matrix.platform.maturin_docker_options }}
+          docker-options: -e CARGO ${{ matrix.platform.maturin_docker_options }}
           args: --release --locked --out dist --features self-update --compatibility pypi
           rust-toolchain: ${{ matrix.platform.toolchain || null }}
+          before-script-linux: |
+            scripts/install-cargo-extensions.sh
+            # Install the s390x cross target on x86_64
+            rustup target add ${{ matrix.platform.target }}
+            apt-get update && apt-get install -y gcc-s390x-linux-gnu binutils-s390x-linux-gnu
+        env:
+          CARGO: ${{ github.workspace }}/scripts/cargo.sh
+
+      # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
-        if: matrix.platform.arch != 'ppc64'
         name: "Test wheel"
         with:
           arch: ${{ matrix.platform.arch }}
@@ -574,7 +634,7 @@ jobs:
             PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
             MODULE_NAME: ${{ env.MODULE_NAME }}
       - name: "Upload wheels"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: wheels_uv-${{ matrix.platform.target }}
           path: dist
@@ -592,7 +652,7 @@ jobs:
         env:
           TARGET: ${{ matrix.platform.target }}
       - name: "Upload binary"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: artifacts-${{ matrix.platform.target }}
           path: |
@@ -601,15 +661,19 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.6
           target: ${{ matrix.platform.target }}
           manylinux: 2_17
-          docker-options: ${{ matrix.platform.maturin_docker_options }}
+          docker-options: -e CARGO ${{ matrix.platform.maturin_docker_options }}
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
+          before-script-linux: |
+            scripts/install-cargo-extensions.sh
+        env:
+          CARGO: ${{ github.workspace }}/scripts/cargo.sh
+      # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
-        if: matrix.platform.arch != 'ppc64'
         name: "Test wheel uv-build"
         with:
           arch: ${{ matrix.platform.arch }}
@@ -627,7 +691,7 @@ jobs:
             PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
             MODULE_NAME: ${{ env.MODULE_NAME }}
       - name: "Upload wheels uv-build"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: wheels_uv_build-${{ matrix.platform.target }}
           path: crates/uv-build/dist
@@ -635,16 +699,12 @@ jobs:
   # Like `linux-arm`, but install the `gcc-powerpc64-linux-gnu` package.
   linux-powerpc:
     name: ${{ matrix.platform.target }}
-    runs-on: depot-ubuntu-22.04-4
+    runs-on: depot-ubuntu-24.04-4
     strategy:
       matrix:
         platform:
           - target: powerpc64le-unknown-linux-gnu
             arch: ppc64le
-            # see https://github.com/astral-sh/uv/issues/6528
-            maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
-          - target: powerpc64-unknown-linux-gnu
-            arch: ppc64
             # see https://github.com/astral-sh/uv/issues/6528
             maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
 
@@ -653,7 +713,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
@@ -661,12 +721,12 @@ jobs:
 
       # uv
       - name: "Build wheels"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.6
           target: ${{ matrix.platform.target }}
           manylinux: 2_17
-          docker-options: ${{ matrix.platform.maturin_docker_options }}
+          docker-options: -e CARGO ${{ matrix.platform.maturin_docker_options }}
           args: --release --locked --out dist --features self-update --compatibility pypi
           before-script-linux: |
             if command -v yum &> /dev/null; then
@@ -675,9 +735,11 @@ jobs:
                 yum repolist
                 yum install -y gcc-powerpc64-linux-gnu
             fi
+            scripts/install-cargo-extensions.sh
+        env:
+          CARGO: ${{ github.workspace }}/scripts/cargo.sh
       # TODO(charlie): Re-enable testing for PPC wheels.
       # - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
-      #   if: matrix.platform.arch != 'ppc64'
       #   name: "Test wheel"
       #   with:
       #     arch: ${{ matrix.platform.arch }}
@@ -693,7 +755,7 @@ jobs:
       #       # python -m ${MODULE_NAME} --helppython -m ${MODULE_NAME} --help
       #       uvx --help
       - name: "Upload wheels"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: wheels_uv-${{ matrix.platform.target }}
           path: dist
@@ -711,7 +773,7 @@ jobs:
         env:
           TARGET: ${{ matrix.platform.target }}
       - name: "Upload binary"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: artifacts-${{ matrix.platform.target }}
           path: |
@@ -720,12 +782,12 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.6
           target: ${{ matrix.platform.target }}
           manylinux: 2_17
-          docker-options: ${{ matrix.platform.maturin_docker_options }}
+          docker-options: -e CARGO ${{ matrix.platform.maturin_docker_options }}
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
           before-script-linux: |
             if command -v yum &> /dev/null; then
@@ -734,9 +796,12 @@ jobs:
                 yum repolist
                 yum install -y gcc-powerpc64-linux-gnu
             fi
+            scripts/install-cargo-extensions.sh
+        env:
+          CARGO: ${{ github.workspace }}/scripts/cargo.sh
       # TODO(charlie): Re-enable testing for PPC wheels.
       - name: "Upload wheels uv-build"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: wheels_uv_build-${{ matrix.platform.target }}
           path: crates/uv-build/dist
@@ -757,7 +822,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
@@ -765,13 +830,18 @@ jobs:
 
       # uv
       - name: "Build wheels"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.6
           target: ${{ matrix.platform.target }}
           manylinux: 2_31
-          docker-options: ${{ matrix.platform.maturin_docker_options }}
+          docker-options: -e CARGO ${{ matrix.platform.maturin_docker_options }}
           args: --release --locked --out dist --features self-update --compatibility pypi
+          before-script-linux: |
+            scripts/install-cargo-extensions.sh
+        env:
+          CARGO: ${{ github.workspace }}/scripts/cargo.sh
+      # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         name: "Test wheel"
         with:
@@ -792,7 +862,7 @@ jobs:
             PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
             MODULE_NAME: ${{ env.MODULE_NAME }}
       - name: "Upload wheels"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: wheels_uv-${{ matrix.platform.target }}
           path: dist
@@ -810,7 +880,7 @@ jobs:
         env:
           TARGET: ${{ matrix.platform.target }}
       - name: "Upload binary"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: artifacts-${{ matrix.platform.target }}
           path: |
@@ -819,13 +889,18 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.6
           target: ${{ matrix.platform.target }}
           manylinux: 2_31
-          docker-options: ${{ matrix.platform.maturin_docker_options }}
+          docker-options: -e CARGO ${{ matrix.platform.maturin_docker_options }}
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
+          before-script-linux: |
+            scripts/install-cargo-extensions.sh
+        env:
+          CARGO: ${{ github.workspace }}/scripts/cargo.sh
+      # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         name: "Test wheel uv-build"
         with:
@@ -845,14 +920,14 @@ jobs:
             PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
             MODULE_NAME: ${{ env.MODULE_NAME }}
       - name: "Upload wheels uv-build"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: wheels_uv_build-${{ matrix.platform.target }}
           path: crates/uv-build/dist
 
   musllinux:
     name: ${{ matrix.target }}
-    runs-on: depot-ubuntu-22.04-4
+    runs-on: depot-ubuntu-24.04-4
     strategy:
       matrix:
         target:
@@ -863,7 +938,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
@@ -872,29 +947,32 @@ jobs:
 
       # uv
       - name: "Build wheels"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.6
           target: ${{ matrix.target }}
           manylinux: musllinux_1_1
+          docker-options: -e CARGO
           args: --release --locked --out dist --features self-update --compatibility pypi
+          before-script-linux: |
+            scripts/install-cargo-extensions.sh
+        env:
+          CARGO: ${{ github.workspace }}/scripts/cargo.sh
       - name: "Test wheel"
         if: matrix.target == 'x86_64-unknown-linux-musl'
-        uses: addnab/docker-run-action@4f65fabd2431ebc8d299f8e5a018d79a769ae185 # v3
-        with:
-          image: alpine:3.12
-          options: -v ${{ github.workspace }}:/io -w /io --env MODULE_NAME --env PACKAGE_NAME
-          run: |
-            apk add python3
-            python3 -m venv .venv
-            .venv/bin/pip install --upgrade pip
-            .venv/bin/pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
-            .venv/bin/${MODULE_NAME} --help
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/io -w /io --env MODULE_NAME --env PACKAGE_NAME alpine:3.12 sh -c "
+            apk add python3 py3-pip;
+            python3 -m venv .venv;
+            .venv/bin/pip install --upgrade pip;
+            .venv/bin/pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall;
+            .venv/bin/${MODULE_NAME} --help;
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
-            # .venv/bin/python -m ${MODULE_NAME} --help
-            .venv/bin/uvx --help
+            # .venv/bin/python -m ${MODULE_NAME} --help;
+            .venv/bin/uvx --help;
+          "
       - name: "Upload wheels"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: wheels_uv-${{ matrix.target }}
           path: dist
@@ -912,7 +990,7 @@ jobs:
         env:
           TARGET: ${{ matrix.target }}
       - name: "Upload binary"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: artifacts-${{ matrix.target }}
           path: |
@@ -921,34 +999,40 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.6
           target: ${{ matrix.target }}
           manylinux: musllinux_1_1
+          docker-options: -e CARGO
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
+          before-script-linux: |
+            scripts/install-cargo-extensions.sh
+        env:
+          CARGO: ${{ github.workspace }}/scripts/cargo.sh
       - name: "Test wheel uv-build"
         if: matrix.target == 'x86_64-unknown-linux-musl'
-        uses: addnab/docker-run-action@4f65fabd2431ebc8d299f8e5a018d79a769ae185 # v3
-        with:
-          image: alpine:3.12
-          options: -v ${{ github.workspace }}:/io -w /io --env MODULE_NAME --env PACKAGE_NAME
-          run: |
-            apk add python3
-            python3 -m venv .venv
-            .venv/bin/pip install --upgrade pip
-            .venv/bin/pip install ${PACKAGE_NAME}-build --no-index --find-links crates/uv-build/dist --force-reinstall
-            .venv/bin/${MODULE_NAME}-build --help
-            .venv/bin/python -m ${MODULE_NAME}_build --help
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/io -w /io --env MODULE_NAME --env PACKAGE_NAME alpine:3.12 sh -c "
+            apk add python3 py3-pip;
+            python3 -m venv .venv;
+            .venv/bin/pip install --upgrade pip;
+            .venv/bin/pip install ${PACKAGE_NAME}-build --no-index --find-links crates/uv-build/dist --force-reinstall;
+            .venv/bin/${MODULE_NAME}-build --help;
+            # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
+            # .venv/bin/python -m ${MODULE_NAME}_build --help;
+          "
       - name: "Upload wheels uv-build"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: wheels_uv_build-${{ matrix.target }}
           path: crates/uv-build/dist
 
   musllinux-cross:
     name: ${{ matrix.platform.target }}
-    runs-on: depot-ubuntu-22.04-8
+    runs-on: depot-ubuntu-24.04-8
+    env:
+      CARGO_TARGET_RISCV64GC_UNKNOWN_LINUX_MUSL_RUSTFLAGS: "-C target-feature=+crt-static"
     strategy:
       matrix:
         platform:
@@ -957,6 +1041,8 @@ jobs:
             maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
           - target: armv7-unknown-linux-musleabihf
             arch: armv7
+          - target: riscv64gc-unknown-linux-musl
+            arch: riscv64
       fail-fast: false
 
     steps:
@@ -964,7 +1050,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
@@ -972,15 +1058,20 @@ jobs:
 
       # uv
       - name: "Build wheels"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.6
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_1
           # Tag the musl builds as manylinux 2_17 fallback cause the aarch64 build only support 2_28
-          args: --release --locked --out dist --features self-update --compatibility 2_17 --compatibility pypi
-          docker-options: ${{ matrix.platform.maturin_docker_options }}
+          args: --release --locked --out dist --features self-update --compatibility ${{ matrix.platform.arch == 'riscv64' && '2_31' || '2_17'}} --compatibility pypi
+          docker-options: -e CARGO ${{ matrix.platform.maturin_docker_options }}
           rust-toolchain: ${{ matrix.platform.toolchain || null }}
+          before-script-linux: |
+            scripts/install-cargo-extensions.sh
+        env:
+          CARGO: ${{ github.workspace }}/scripts/cargo.sh
+      # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         name: "Test wheel"
         with:
@@ -998,6 +1089,7 @@ jobs:
           env: |
             PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
             MODULE_NAME: ${{ env.MODULE_NAME }}
+      # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         name: "Test wheel (manylinux)"
         if: matrix.platform.arch == 'aarch64'
@@ -1018,7 +1110,7 @@ jobs:
             PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
             MODULE_NAME: ${{ env.MODULE_NAME }}
       - name: "Upload wheels"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: wheels_uv-${{ matrix.platform.target }}
           path: dist
@@ -1037,7 +1129,7 @@ jobs:
           TARGET: ${{ matrix.platform.target }}
           PROFILE: ${{ matrix.platform.arch == 'ppc64le' && 'release-no-lto' || 'release' }}
       - name: "Upload binary"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: artifacts-${{ matrix.platform.target }}
           path: |
@@ -1046,14 +1138,19 @@ jobs:
 
       # uv-build
       - name: "Build wheels"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.6
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_1
           args: --profile minimal-size --locked ${{ matrix.platform.arch == 'aarch64' && '--compatibility 2_17' || ''}} --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
-          docker-options: ${{ matrix.platform.maturin_docker_options }}
+          docker-options: -e CARGO ${{ matrix.platform.maturin_docker_options }}
           rust-toolchain: ${{ matrix.platform.toolchain || null }}
+          before-script-linux: |
+            scripts/install-cargo-extensions.sh
+        env:
+          CARGO: ${{ github.workspace }}/scripts/cargo.sh
+      # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         name: "Test wheel"
         with:
@@ -1070,6 +1167,7 @@ jobs:
           env: |
             PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
             MODULE_NAME: ${{ env.MODULE_NAME }}
+      # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         name: "Test wheel (manylinux)"
         if: matrix.platform.arch == 'aarch64'
@@ -1089,7 +1187,35 @@ jobs:
             PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
             MODULE_NAME: ${{ env.MODULE_NAME }}
       - name: "Upload wheels"
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: wheels_uv_build-${{ matrix.platform.target }}
           path: crates/uv-build/dist
+
+  check-wheels:
+    name: "Check wheel contents"
+    runs-on: ubuntu-slim
+    needs:
+      - macos-x86_64
+      - macos-aarch64
+      - windows
+      - linux
+      - linux-arm
+      - linux-s390x
+      - linux-powerpc
+      - linux-riscv64
+      - musllinux
+      - musllinux-cross
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: wheels_*-*
+          path: wheels
+          merge-multiple: true
+      - name: "Check wheel contents"
+        run: uv run --no-project scripts/check_uv_wheel_contents.py wheels/*

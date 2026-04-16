@@ -10,7 +10,6 @@ use console::Term;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tokio::process::Command;
-use tokio::sync::Semaphore;
 use tracing::{debug, warn};
 
 use uv_cache::{Cache, Refresh};
@@ -24,12 +23,15 @@ use uv_distribution_types::{
     IndexCapabilities, IndexUrl, Name, NameRequirementSpecification, Requirement,
     RequirementSource, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
+use uv_fs::CWD;
 use uv_fs::Simplified;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
 use uv_preview::Preview;
+use uv_python::PythonVersionFile;
+use uv_python::VersionFileDiscoveryOptions;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest,
@@ -118,6 +120,7 @@ pub(crate) async fn run(
     installer_metadata: bool,
     concurrency: Concurrency,
     cache: Cache,
+    workspace_cache: WorkspaceCache,
     printer: Printer,
     env_file: Vec<PathBuf>,
     no_env_file: bool,
@@ -301,8 +304,9 @@ pub(crate) async fn run(
         python_preference,
         python_downloads,
         installer_metadata,
-        concurrency,
+        &concurrency,
         &cache,
+        &workspace_cache,
         printer,
         preview,
     ))
@@ -315,8 +319,8 @@ pub(crate) async fn run(
             // If the user ran `uvx run ...`, the `run` is likely a mistake. Show a dedicated hint.
             if from.is_none() && invocation_source == ToolRunCommand::Uvx && target == "run" {
                 let rest = args.iter().map(|s| s.to_string_lossy()).join(" ");
-                return diagnostics::OperationDiagnostic::native_tls(
-                    client_builder.is_native_tls(),
+                return diagnostics::OperationDiagnostic::with_system_certs(
+                    client_builder.system_certs(),
                 )
                 .with_hint(format!(
                     "`{}` invokes the `{}` package. Did you mean `{}`?",
@@ -330,7 +334,7 @@ pub(crate) async fn run(
             }
 
             let diagnostic =
-                diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls());
+                diagnostics::OperationDiagnostic::with_system_certs(client_builder.system_certs());
             let diagnostic = if let Some(verbose_flag) = find_verbose_flag(args) {
                 diagnostic.with_hint(format!(
                     "You provided `{}` to `{}`. Did you mean to provide it to `{}`? e.g., `{}`",
@@ -733,50 +737,46 @@ async fn get_or_create_environment(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
 ) -> Result<(ToolRequirement, PythonEnvironment), ProjectError> {
     let reporter = PythonDownloadReporter::single(printer);
 
-    // Figure out what Python we're targeting, either explicitly like `uvx python@3`, or via the
-    // -p/--python flag.
-    let python_request = match request {
-        ToolRequest::Python {
-            request: tool_python_request,
-            ..
-        } => {
-            match python {
-                None => Some(tool_python_request.clone()),
+    // Determine explicit Python version requests
+    let explicit_python_request = python.map(PythonRequest::parse);
+    let tool_python_request = match request {
+        ToolRequest::Python { request, .. } => Some(request.clone()),
+        ToolRequest::Package { .. } => None,
+    };
 
-                // The user is both invoking a python interpreter directly and also supplying the
-                // -p/--python flag. Cases like `uvx -p pypy python` are allowed, for two reasons:
-                // 1) Previously this was the only way to invoke e.g. PyPy via `uvx`, and it's nice
-                // to remain compatible with that. 2) A script might define an alias like `uvx
-                // --python $MY_PYTHON ...`, and it's nice to be able to run the interpreter
-                // directly while sticking to that alias.
-                //
-                // However, we want to error out if we see conflicting or redundant versions like
-                // `uvx -p python38 python39`.
-                //
-                // Note that a command like `uvx default` doesn't bring us here. ToolRequest::parse
-                // returns ToolRequest::Package rather than ToolRequest::Python in that case. See
-                // PythonRequest::try_from_tool_name.
-                Some(python_flag) => {
-                    if tool_python_request != &PythonRequest::Default {
-                        return Err(anyhow::anyhow!(
-                            "Received multiple Python version requests: `{}` and `{}`",
-                            python_flag.to_string().cyan(),
-                            tool_python_request.to_canonical_string().cyan()
-                        )
-                        .into());
-                    }
-                    Some(PythonRequest::parse(python_flag))
-                }
-            }
+    // Resolve Python request with version file lookup when no explicit request
+    let python_request = match (explicit_python_request, tool_python_request) {
+        // e.g., `uvx --python 3.10 python3.12`
+        (Some(explicit), Some(tool_request)) if tool_request != PythonRequest::Default => {
+            // Conflict: both --python flag and versioned tool name
+            return Err(anyhow::anyhow!(
+                "Received multiple Python version requests: `{}` and `{}`",
+                explicit.to_canonical_string().cyan(),
+                tool_request.to_canonical_string().cyan()
+            )
+            .into());
         }
-        ToolRequest::Package { .. } => python.map(PythonRequest::parse),
+        // e.g, `uvx --python 3.10 ...`
+        (Some(explicit), _) => Some(explicit),
+        // e.g., `uvx python` or `uvx <tool>`
+        (None, Some(PythonRequest::Default) | None) => PythonVersionFile::discover(
+            &*CWD,
+            &VersionFileDiscoveryOptions::default()
+                .with_no_config(false)
+                .with_no_local(true),
+        )
+        .await?
+        .and_then(PythonVersionFile::into_version),
+        // e.g., `uvx python3.12`
+        (None, Some(tool_request)) => Some(tool_request),
     };
 
     // Discover an interpreter.
@@ -798,7 +798,6 @@ async fn get_or_create_environment(
 
     // Initialize any shared state.
     let state = PlatformState::default();
-    let workspace_cache = WorkspaceCache::default();
 
     let from = match request {
         ToolRequest::Python {
@@ -839,7 +838,7 @@ async fn get_or_create_environment(
                         &state,
                         concurrency,
                         cache,
-                        &workspace_cache,
+                        workspace_cache,
                         printer,
                         preview,
                         lfs,
@@ -927,11 +926,11 @@ async fn get_or_create_environment(
         .index_strategy(settings.resolver.index_strategy)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
-        .build();
+        .build()?;
 
         // Initialize the capabilities.
         let capabilities = IndexCapabilities::default();
-        let download_concurrency = Semaphore::new(concurrency.downloads);
+        let download_concurrency = concurrency.downloads_semaphore.clone();
 
         // Initialize the client to fetch the latest version.
         let latest_client = LatestClient {
@@ -939,6 +938,7 @@ async fn get_or_create_environment(
             capabilities: &capabilities,
             prerelease: settings.resolver.prerelease,
             exclude_newer: &settings.resolver.exclude_newer,
+            index_locations: &settings.resolver.index_locations,
             tags: None,
             requires_python: None,
         };
@@ -998,7 +998,7 @@ async fn get_or_create_environment(
                 &state,
                 concurrency,
                 cache,
-                &workspace_cache,
+                workspace_cache,
                 printer,
                 preview,
                 lfs,
@@ -1025,7 +1025,7 @@ async fn get_or_create_environment(
         &state,
         concurrency,
         cache,
-        &workspace_cache,
+        workspace_cache,
         printer,
         preview,
         lfs,
@@ -1152,6 +1152,7 @@ async fn get_or_create_environment(
         installer_metadata,
         concurrency,
         cache,
+        workspace_cache,
         printer,
         preview,
     )
@@ -1212,6 +1213,7 @@ async fn get_or_create_environment(
                     installer_metadata,
                     concurrency,
                     cache,
+                    workspace_cache,
                     printer,
                     preview,
                 )

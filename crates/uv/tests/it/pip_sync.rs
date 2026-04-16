@@ -9,13 +9,13 @@ use indoc::indoc;
 use predicates::Predicate;
 use url::Url;
 
-use crate::common::{TestContext, download_to_disk, site_packages_path, uv_snapshot};
 use uv_fs::{Simplified, copy_dir_all};
 use uv_static::EnvVars;
+use uv_test::{download_to_disk, site_packages_path, uv_snapshot};
 
 #[test]
 fn missing_requirements_txt() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
 
@@ -35,7 +35,7 @@ fn missing_requirements_txt() {
 
 #[test]
 fn missing_venv() -> Result<()> {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_virtualenv_bin()
         .with_filtered_python_names();
 
@@ -72,7 +72,7 @@ fn missing_venv() -> Result<()> {
 
 #[test]
 fn missing_system() -> Result<()> {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
     let requirements = context.temp_dir.child("requirements.txt");
     requirements.write_str("anyio")?;
 
@@ -92,7 +92,7 @@ fn missing_system() -> Result<()> {
 /// this using `clone` semantics.)
 #[test]
 fn install() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
@@ -139,7 +139,7 @@ fn install() -> Result<()> {
 /// Install a package into a virtual environment using copy semantics.
 #[test]
 fn install_copy() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
@@ -178,7 +178,7 @@ fn install_copy() -> Result<()> {
 /// Install a package into a virtual environment using hardlink semantics.
 #[test]
 fn install_hardlink() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
@@ -214,11 +214,103 @@ fn install_hardlink() -> Result<()> {
     Ok(())
 }
 
+/// Test that EMLINK (too many hardlinks) is handled gracefully.
+///
+/// This test exhausts the hardlink limit on a cached file, then verifies that
+/// a subsequent install still succeeds by resetting the file's inode.
+///
+/// Requires `UV_INTERNAL__TEST_LOWLINKS_FS` pointing to a filesystem with a
+/// low hardlink limit (e.g., minix with ~250).
+#[test]
+fn install_hardlink_after_emlink() -> anyhow::Result<()> {
+    use walkdir::WalkDir;
+
+    let Some(context) = uv_test::test_context!("3.12").with_cache_on_lowlinks_fs()? else {
+        return Ok(());
+    };
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("iniconfig==2.0.0")?;
+
+    // First install to populate the cache.
+    context
+        .pip_sync()
+        .arg("requirements.txt")
+        .arg("--link-mode")
+        .arg("hardlink")
+        .assert()
+        .success();
+
+    // Find a cached .py file from the package.
+    let cached_file = WalkDir::new(context.cache_dir.path())
+        .into_iter()
+        .filter_map(Result::ok)
+        .find(|e| e.file_type().is_file() && e.path().extension().is_some_and(|ext| ext == "py"))
+        .expect("should find a cached file")
+        .into_path();
+
+    // Create a temp directory to hold hardlinks on the same filesystem but outside the
+    // cache tree (so the installer doesn't try to install the link files).
+    let hardlink_dir = tempfile::tempdir_in(
+        context
+            .cache_dir
+            .parent()
+            .expect("cache dir should have a parent"),
+    )?;
+
+    // Create hardlinks until we hit EMLINK or reach 66000 (minix limit is 250, ext4 is 65000).
+    let mut hit_emlink = false;
+    for i in 0..66000 {
+        let link_path = hardlink_dir.path().join(format!("link_{i}"));
+        match fs::hard_link(&cached_file, &link_path) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::TooManyLinks => {
+                hit_emlink = true;
+                break;
+            }
+            Err(err) => {
+                return Err(err.into());
+            }
+        }
+    }
+
+    assert!(
+        hit_emlink,
+        "Expected to hit TooManyLinks while creating hardlinks"
+    );
+
+    // Now try to install into a new venv on the same filesystem so the
+    // hardlink stays same-device and actually hits EMLINK (then recovers).
+    let venv2_dir = tempfile::tempdir_in(
+        context
+            .cache_dir
+            .parent()
+            .expect("cache dir should have a parent"),
+    )?;
+    let venv2 = venv2_dir.path().join("venv2");
+    context.venv().arg(&venv2).assert().success();
+
+    context
+        .pip_sync()
+        .arg("requirements.txt")
+        .arg("--link-mode")
+        .arg("hardlink")
+        .env(EnvVars::VIRTUAL_ENV, &venv2)
+        .assert()
+        .success();
+
+    // Verify that another hardlink can be created after recovery.
+    let extra_link = hardlink_dir.path().join("post_recovery_link");
+    fs::hard_link(&cached_file, &extra_link)?;
+
+    Ok(())
+}
+
 /// Install a package into a virtual environment using symlink semantics.
 #[test]
 #[cfg(unix)] // Windows does not allow symlinks by default
 fn install_symlink() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
@@ -257,7 +349,7 @@ fn install_symlink() -> Result<()> {
 /// Reject attempts to use symlink semantics with `--no-cache`.
 #[test]
 fn install_symlink_no_cache() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
@@ -285,7 +377,7 @@ fn install_symlink_no_cache() -> Result<()> {
 /// Install multiple packages into a virtual environment.
 #[test]
 fn install_many() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
@@ -316,7 +408,7 @@ fn install_many() -> Result<()> {
 /// Attempt to install an already-installed package into a virtual environment.
 #[test]
 fn noop() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
@@ -337,7 +429,7 @@ fn noop() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -351,7 +443,7 @@ fn noop() -> Result<()> {
 /// Attempt to sync an empty set of requirements.
 #[test]
 fn pip_sync_empty() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
@@ -378,7 +470,7 @@ fn pip_sync_empty() -> Result<()> {
     ----- stderr -----
     warning: Requirements file `requirements.txt` does not contain any dependencies
     Resolved in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     "
     );
 
@@ -415,7 +507,7 @@ fn pip_sync_empty() -> Result<()> {
 #[test]
 fn link() -> Result<()> {
     // Sync `anyio` into the first virtual environment.
-    let context1 = TestContext::new("3.12");
+    let context1 = uv_test::test_context!("3.12");
 
     let requirements_txt = context1.temp_dir.child("requirements.txt");
     requirements_txt.write_str("iniconfig==2.0.0")?;
@@ -428,7 +520,7 @@ fn link() -> Result<()> {
         .success();
 
     // Create a separate virtual environment, but reuse the same cache.
-    let context2 = TestContext::new("3.12");
+    let context2 = uv_test::test_context!("3.12");
     let mut cmd = context1.pip_sync();
     cmd.env(EnvVars::VIRTUAL_ENV, context2.venv.as_os_str())
         .current_dir(&context2.temp_dir);
@@ -462,7 +554,7 @@ fn link() -> Result<()> {
 /// different requirements file.
 #[test]
 fn add_remove() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("iniconfig==2.0.0")?;
@@ -504,7 +596,7 @@ fn add_remove() -> Result<()> {
 /// virtual environment.
 #[test]
 fn install_sequential() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("iniconfig==2.0.0")?;
@@ -545,7 +637,7 @@ fn install_sequential() -> Result<()> {
 /// virtual environment.
 #[test]
 fn upgrade() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("tomli==2.0.0")?;
@@ -585,7 +677,7 @@ fn upgrade() -> Result<()> {
 /// Install a package into a virtual environment from a URL.
 #[test]
 fn install_url() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("werkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
@@ -612,9 +704,9 @@ fn install_url() -> Result<()> {
 
 /// Install a package into a virtual environment from a Git repository.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn install_git_commit() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389")?;
@@ -643,9 +735,9 @@ fn install_git_commit() -> Result<()> {
 
 /// Install a package into a virtual environment from a Git repository.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn install_git_tag() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(
@@ -676,9 +768,9 @@ fn install_git_tag() -> Result<()> {
 
 /// Install two packages from the same Git repository.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn install_git_subdirectories() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("example-pkg-a @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a\nexample-pkg-b @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_b")?;
@@ -709,7 +801,7 @@ fn install_git_subdirectories() -> Result<()> {
 /// Install a source distribution into a virtual environment.
 #[test]
 fn install_sdist() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("source-distribution==0.0.1")?;
@@ -739,7 +831,7 @@ fn install_sdist() -> Result<()> {
 /// Install a source distribution into a virtual environment.
 #[test]
 fn install_sdist_url() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz")?;
@@ -769,7 +861,7 @@ fn install_sdist_url() -> Result<()> {
 /// Install a package with source archive format `.tar.bz2`.
 #[test]
 fn install_sdist_archive_type_bz2() -> Result<()> {
-    let context = TestContext::new("3.9");
+    let context = uv_test::test_context!("3.9");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
@@ -789,6 +881,7 @@ fn install_sdist_archive_type_bz2() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    warning: bz2 @ file://[WORKSPACE]/test/links/bz2-1.0.0.tar.bz2 is not a standards-compliant source distribution: expected '.tar.gz' but found '.tar.bz2'. A future version of uv will reject source distributions that do not meet the requirements specified in PEP 625
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + bz2==1.0.0 (from file://[WORKSPACE]/test/links/bz2-1.0.0.tar.bz2)
@@ -802,7 +895,7 @@ fn install_sdist_archive_type_bz2() -> Result<()> {
 /// should be a no-op.
 #[test]
 fn install_url_then_install_url() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("werkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
@@ -823,7 +916,7 @@ fn install_url_then_install_url() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -836,7 +929,7 @@ fn install_url_then_install_url() -> Result<()> {
 /// URL-based version, but doesn't right now.
 #[test]
 fn install_url_then_install_version() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("werkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
@@ -860,7 +953,7 @@ fn install_url_then_install_version() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -873,7 +966,7 @@ fn install_url_then_install_version() -> Result<()> {
 /// should remove the registry-based version.
 #[test]
 fn install_version_then_install_url() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("werkzeug==2.0.0")?;
@@ -912,10 +1005,10 @@ fn install_version_then_install_url() -> Result<()> {
 
 /// Test that we select the last 3.8 compatible numpy version instead of trying to compile an
 /// incompatible sdist <https://github.com/astral-sh/uv/issues/388>
-#[cfg(feature = "python-eol")]
+#[cfg(feature = "test-python-eol")]
 #[test]
 fn install_numpy_py38() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = uv_test::test_context!("3.8");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("numpy")?;
@@ -943,7 +1036,7 @@ fn install_numpy_py38() -> Result<()> {
 /// Attempt to install a package without using a remote index.
 #[test]
 fn install_no_index() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("iniconfig==2.0.0")?;
@@ -973,7 +1066,7 @@ fn install_no_index() -> Result<()> {
 /// after a previous successful installation.
 #[test]
 fn install_no_index_cached() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("iniconfig==2.0.0")?;
@@ -1020,7 +1113,7 @@ fn install_no_index_cached() -> Result<()> {
 
 #[test]
 fn warn_on_yanked() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // This version is yanked.
     let requirements_in = context.temp_dir.child("requirements.txt");
@@ -1047,7 +1140,7 @@ fn warn_on_yanked() -> Result<()> {
 
 #[test]
 fn warn_on_yanked_dry_run() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // This version is yanked.
     let requirements_in = context.temp_dir.child("requirements.txt");
@@ -1076,7 +1169,7 @@ fn warn_on_yanked_dry_run() -> Result<()> {
 /// Resolve a local wheel.
 #[test]
 fn install_local_wheel() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Download a wheel.
     let archive = context.temp_dir.child("tomli-2.0.1-py3-none-any.whl");
@@ -1185,7 +1278,7 @@ fn install_local_wheel() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -1204,7 +1297,7 @@ fn install_local_wheel() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -1216,7 +1309,7 @@ fn install_local_wheel() -> Result<()> {
 /// Install a wheel whose actual version doesn't match the version encoded in the filename.
 #[test]
 fn mismatched_version() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Download a wheel.
     let archive = context.temp_dir.child("tomli-3.7.2-py3-none-any.whl");
@@ -1267,7 +1360,7 @@ fn mismatched_version() -> Result<()> {
 /// Install a wheel whose actual name doesn't match the name encoded in the filename.
 #[test]
 fn mismatched_name() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Download a wheel.
     let archive = context.temp_dir.child("foo-2.0.1-py3-none-any.whl");
@@ -1304,7 +1397,7 @@ fn mismatched_name() -> Result<()> {
 /// Install a local source distribution.
 #[test]
 fn install_local_source_distribution() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Download a source distribution.
     let archive = context.temp_dir.child("wheel-0.42.0.tar.gz");
@@ -1353,7 +1446,7 @@ fn install_local_source_distribution() -> Result<()> {
 /// The example is based `DTLSSocket==0.1.16`
 #[test]
 fn install_build_system_no_backend() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("build-system-no-backend @ https://files.pythonhosted.org/packages/ec/25/1e531108ca027dc3a3b37d351f4b86d811df4884c6a81cd99e73b8b589f5/build-system-no-backend-0.1.0.tar.gz")?;
@@ -1383,7 +1476,7 @@ fn install_build_system_no_backend() -> Result<()> {
 /// Check that we show the right messages on cached, direct URL source distribution installs.
 #[test]
 fn install_url_source_dist_cached() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("source_distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz")?;
@@ -1472,9 +1565,9 @@ fn install_url_source_dist_cached() -> Result<()> {
 
 /// Check that we show the right messages on cached, Git source distribution installs.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn install_git_source_dist_cached() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389")?;
@@ -1567,7 +1660,7 @@ fn install_git_source_dist_cached() -> Result<()> {
 /// Check that we show the right messages on cached, registry source distribution installs.
 #[test]
 fn install_registry_source_dist_cached() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("source_distribution==0.0.1")?;
@@ -1656,7 +1749,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
 /// Check that we show the right messages on cached, local source distribution installs.
 #[test]
 fn install_path_source_dist_cached() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Download a source distribution.
     let archive = context.temp_dir.child("source_distribution-0.0.1.tar.gz");
@@ -1756,7 +1849,7 @@ fn install_path_source_dist_cached() -> Result<()> {
 /// Check that we show the right messages on cached, local source distribution installs.
 #[test]
 fn install_path_built_dist_cached() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Download a wheel.
     let archive = context.temp_dir.child("tomli-2.0.1-py3-none-any.whl");
@@ -1848,7 +1941,7 @@ fn install_path_built_dist_cached() -> Result<()> {
 /// Check that we show the right messages on cached, direct URL built distribution installs.
 #[test]
 fn install_url_built_dist_cached() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("tqdm @ https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl")?;
@@ -1940,7 +2033,7 @@ fn install_url_built_dist_cached() -> Result<()> {
 /// Verify that fail with an appropriate error when a package is repeated.
 #[test]
 fn duplicate_package_overlap() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3\nMarkupSafe==2.1.2")?;
@@ -1964,7 +2057,7 @@ fn duplicate_package_overlap() -> Result<()> {
 /// Verify that allow duplicate packages when they are disjoint.
 #[test]
 fn duplicate_package_disjoint() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3\nMarkupSafe==2.1.2 ; python_version < '3.6'")?;
@@ -1990,7 +2083,7 @@ fn duplicate_package_disjoint() -> Result<()> {
 /// Verify that we can force reinstall of packages.
 #[test]
 fn reinstall() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
@@ -2042,7 +2135,7 @@ fn reinstall() -> Result<()> {
 /// Verify that we can force reinstall of selective packages.
 #[test]
 fn reinstall_package() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
@@ -2093,9 +2186,9 @@ fn reinstall_package() -> Result<()> {
 
 /// Verify that we can force reinstall of Git dependencies.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn reinstall_git() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389")?;
@@ -2148,7 +2241,7 @@ fn reinstall_git() -> Result<()> {
 /// Verify that we can force refresh of cached data.
 #[test]
 fn refresh() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
@@ -2203,7 +2296,7 @@ fn refresh() -> Result<()> {
 /// Verify that we can force refresh of selective packages.
 #[test]
 fn refresh_package() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
@@ -2258,7 +2351,7 @@ fn refresh_package() -> Result<()> {
 
 #[test]
 fn sync_editable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let poetry_editable = context.temp_dir.child("poetry_editable");
 
     // Copy into the temporary directory so we can mutate it.
@@ -2300,7 +2393,7 @@ fn sync_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 2 packages in [TIME]
+    Checked 2 packages in [TIME]
     "
     );
 
@@ -2365,7 +2458,7 @@ fn sync_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 2 packages in [TIME]
+    Checked 2 packages in [TIME]
     "
     );
 
@@ -2423,7 +2516,7 @@ fn sync_editable() -> Result<()> {
 
 #[test]
 fn sync_editable_and_registry() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Copy the black test editable into the "current" directory
     copy_dir_all(
@@ -2498,7 +2591,7 @@ fn sync_editable_and_registry() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -2536,7 +2629,7 @@ fn sync_editable_and_registry() -> Result<()> {
 
 #[test]
 fn sync_editable_and_local() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Copy the black test editable into the "current" directory
     copy_dir_all(
@@ -2613,7 +2706,7 @@ fn sync_editable_and_local() -> Result<()> {
 
 #[test]
 fn incompatible_wheel() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let wheel = context.temp_dir.child("foo-1.2.3-py3-none-any.whl");
     wheel.touch()?;
 
@@ -2643,7 +2736,7 @@ fn incompatible_wheel() -> Result<()> {
 /// Install a project without a `pyproject.toml`, using the PEP 517 build backend.
 #[test]
 fn sync_legacy_sdist_pep_517() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flake8 @ https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz")?;
@@ -2668,7 +2761,7 @@ fn sync_legacy_sdist_pep_517() -> Result<()> {
 /// Sync using `--find-links` with a local directory.
 #[test]
 fn find_links() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc! {r"
@@ -2703,7 +2796,7 @@ fn find_links() -> Result<()> {
 /// Sync using `--find-links` with `--no-index`, which should accept the local wheel.
 #[test]
 fn find_links_no_index_match() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc! {r"
@@ -2733,7 +2826,7 @@ fn find_links_no_index_match() -> Result<()> {
 /// Sync using `--find-links` with `--offline`, which should accept the local wheel.
 #[test]
 fn find_links_offline_match() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc! {r"
@@ -2763,7 +2856,7 @@ fn find_links_offline_match() -> Result<()> {
 /// Sync using `--find-links` with `--offline`, which should fail to find `numpy`.
 #[test]
 fn find_links_offline_no_match() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc! {r"
@@ -2794,7 +2887,7 @@ fn find_links_offline_no_match() -> Result<()> {
 /// Sync using `--find-links` with a local directory. Ensure that cached wheels are reused.
 #[test]
 fn find_links_wheel_cache() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc! {r"
@@ -2844,7 +2937,7 @@ fn find_links_wheel_cache() -> Result<()> {
 /// reused.
 #[test]
 fn find_links_source_cache() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc! {r"
@@ -2893,7 +2986,7 @@ fn find_links_source_cache() -> Result<()> {
 /// Install without network access via the `--offline` flag.
 #[test]
 fn offline() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("black==23.10.1")?;
 
@@ -2952,7 +3045,7 @@ fn offline() -> Result<()> {
 /// Include a `constraints.txt` file with a compatible constraint.
 #[test]
 fn compatible_constraint() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("anyio==3.7.0")?;
 
@@ -2981,7 +3074,7 @@ fn compatible_constraint() -> Result<()> {
 /// Include a `constraints.txt` file with an incompatible constraint.
 #[test]
 fn incompatible_constraint() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("anyio==3.7.0")?;
 
@@ -3008,7 +3101,7 @@ fn incompatible_constraint() -> Result<()> {
 /// Include a `constraints.txt` file with an irrelevant constraint.
 #[test]
 fn irrelevant_constraint() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("anyio==3.7.0")?;
 
@@ -3037,7 +3130,7 @@ fn irrelevant_constraint() -> Result<()> {
 /// Sync with a repeated `anyio` requirement.
 #[test]
 fn repeat_requirement_identical() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio\nanyio")?;
 
@@ -3060,7 +3153,7 @@ fn repeat_requirement_identical() -> Result<()> {
 /// Sync with a repeated `anyio` requirement, with compatible versions.
 #[test]
 fn repeat_requirement_compatible() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio\nanyio==4.0.0")?;
 
@@ -3083,7 +3176,7 @@ fn repeat_requirement_compatible() -> Result<()> {
 /// Sync with a repeated, but conflicting `anyio` requirement.
 #[test]
 fn repeat_requirement_incompatible() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio<4.0.0\nanyio==4.0.0")?;
 
@@ -3106,7 +3199,7 @@ fn repeat_requirement_incompatible() -> Result<()> {
 /// See also <https://github.com/alexcrichton/tar-rs/issues/349>.
 #[test]
 fn tar_dont_preserve_mtime() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("tomli @ https://files.pythonhosted.org/packages/c0/3f/d7af728f075fb08564c5949a9c95e44352e23dee646869fa104a3b2060a3/tomli-2.0.1.tar.gz")?;
 
@@ -3129,7 +3222,7 @@ fn tar_dont_preserve_mtime() -> Result<()> {
 /// Avoid creating a file with 000 permissions
 #[test]
 fn set_read_permissions() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("databricks==0.2")?;
 
@@ -3154,7 +3247,7 @@ fn set_read_permissions() -> Result<()> {
 /// <https://github.com/astral-sh/uv/issues/1593>
 #[test]
 fn pip_entrypoints() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     for pip_requirement in [
         // Test compatibility with launchers in 24.0
@@ -3192,7 +3285,7 @@ fn pip_entrypoints() -> Result<()> {
 
 #[test]
 fn invalidate_on_change() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create an editable package.
     let editable_dir = context.temp_dir.child("editable");
@@ -3236,7 +3329,7 @@ requires-python = ">=3.8"
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
@@ -3274,7 +3367,7 @@ requires-python = ">=3.8"
 /// Install with bytecode compilation.
 #[test]
 fn compile() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
@@ -3313,7 +3406,7 @@ fn compile() -> Result<()> {
 /// Re-install with bytecode compilation.
 #[test]
 fn recompile() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
@@ -3364,7 +3457,7 @@ fn recompile() -> Result<()> {
 /// Raise an error when an editable's `Requires-Python` constraint is not met.
 #[test]
 fn requires_python_editable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create an editable package with a `Requires-Python` constraint that is not met.
     let editable_dir = context.temp_dir.child("editable");
@@ -3404,7 +3497,7 @@ requires-python = ">=3.13"
 /// Raise an error when a direct URL dependency's `Requires-Python` constraint is not met.
 #[test]
 fn requires_python_direct_url() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create an editable package with a `Requires-Python` constraint that is not met.
     let editable_dir = context.temp_dir.child("editable");
@@ -3444,7 +3537,7 @@ requires-python = ">=3.13"
 /// Use an unknown hash algorithm with `--require-hashes`.
 #[test]
 fn require_hashes_unknown_algorithm() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(
@@ -3469,7 +3562,7 @@ fn require_hashes_unknown_algorithm() -> Result<()> {
 /// Omit the hash with `--require-hashes`.
 #[test]
 fn require_hashes_missing_hash() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("anyio==4.0.0")?;
@@ -3508,7 +3601,7 @@ fn require_hashes_missing_hash() -> Result<()> {
 /// Omit the version with `--require-hashes`.
 #[test]
 fn require_hashes_missing_version() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(
@@ -3549,7 +3642,7 @@ fn require_hashes_missing_version() -> Result<()> {
 /// Use a non-`==` operator with `--require-hashes`.
 #[test]
 fn require_hashes_invalid_operator() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(
@@ -3590,7 +3683,7 @@ fn require_hashes_invalid_operator() -> Result<()> {
 /// Include the hash for _just_ the wheel with `--no-binary`.
 #[test]
 fn require_hashes_wheel_no_binary() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
@@ -3624,7 +3717,7 @@ fn require_hashes_wheel_no_binary() -> Result<()> {
 /// Include the hash for _just_ the wheel with `--only-binary`.
 #[test]
 fn require_hashes_wheel_only_binary() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
@@ -3653,7 +3746,7 @@ fn require_hashes_wheel_only_binary() -> Result<()> {
 /// Include the hash for _just_ the source distribution with `--no-binary`.
 #[test]
 fn require_hashes_source_no_binary() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
@@ -3682,7 +3775,7 @@ fn require_hashes_source_no_binary() -> Result<()> {
 /// Include the hash for _just_ the source distribution, with `--binary-only`.
 #[test]
 fn require_hashes_source_only_binary() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
@@ -3716,7 +3809,7 @@ fn require_hashes_source_only_binary() -> Result<()> {
 /// Include the correct hash algorithm, but the wrong digest.
 #[test]
 fn require_hashes_wrong_digest() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
@@ -3748,7 +3841,7 @@ fn require_hashes_wrong_digest() -> Result<()> {
 /// Include the correct hash, but the wrong algorithm.
 #[test]
 fn require_hashes_wrong_algorithm() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
@@ -3780,7 +3873,7 @@ fn require_hashes_wrong_algorithm() -> Result<()> {
 /// Include the hash for a source distribution specified as a direct URL dependency.
 #[test]
 fn require_hashes_source_url() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
@@ -3850,7 +3943,7 @@ fn require_hashes_source_url() -> Result<()> {
 /// Include the _wrong_ hash for a source distribution specified as a direct URL dependency.
 #[test]
 fn require_hashes_source_url_mismatch() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
@@ -3881,7 +3974,7 @@ fn require_hashes_source_url_mismatch() -> Result<()> {
 /// Include the hash for a built distribution specified as a direct URL dependency.
 #[test]
 fn require_hashes_wheel_url() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
@@ -3974,7 +4067,7 @@ fn require_hashes_wheel_url() -> Result<()> {
 /// Include the _wrong_ hash for a built distribution specified as a direct URL dependency.
 #[test]
 fn require_hashes_wheel_url_mismatch() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
@@ -4005,9 +4098,9 @@ fn require_hashes_wheel_url_mismatch() -> Result<()> {
 
 /// Reject Git dependencies when `--require-hashes` is provided.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn require_hashes_git() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
@@ -4032,7 +4125,7 @@ fn require_hashes_git() -> Result<()> {
 /// Reject local directory dependencies when `--require-hashes` is provided.
 #[test]
 fn require_hashes_source_tree() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
@@ -4062,7 +4155,7 @@ fn require_hashes_source_tree() -> Result<()> {
 /// Include the hash for _just_ the wheel with `--only-binary`.
 #[test]
 fn require_hashes_re_download() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("anyio==4.0.0")?;
@@ -4136,7 +4229,7 @@ fn require_hashes_re_download() -> Result<()> {
 /// Include the hash for a built distribution specified as a local path dependency.
 #[test]
 fn require_hashes_wheel_path() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
@@ -4168,7 +4261,7 @@ fn require_hashes_wheel_path() -> Result<()> {
 /// Include the _wrong_ hash for a built distribution specified as a local path dependency.
 #[test]
 fn require_hashes_wheel_path_mismatch() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
@@ -4205,7 +4298,7 @@ fn require_hashes_wheel_path_mismatch() -> Result<()> {
 /// Include the hash for a source distribution specified as a local path dependency.
 #[test]
 fn require_hashes_source_path() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
@@ -4237,7 +4330,7 @@ fn require_hashes_source_path() -> Result<()> {
 /// Include the _wrong_ hash for a source distribution specified as a local path dependency.
 #[test]
 fn require_hashes_source_path_mismatch() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
@@ -4273,7 +4366,7 @@ fn require_hashes_source_path_mismatch() -> Result<()> {
 /// We allow `--require-hashes` for direct URL dependencies.
 #[test]
 fn require_hashes_unnamed() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
@@ -4302,7 +4395,7 @@ fn require_hashes_unnamed() -> Result<()> {
 /// We disallow `--require-hashes` for editables.
 #[test]
 fn require_hashes_editable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&indoc::formatdoc! {r"
@@ -4330,7 +4423,7 @@ fn require_hashes_editable() -> Result<()> {
 /// If a dependency is repeated, the hash should be required for both instances.
 #[test]
 fn require_hashes_repeated_dependency() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
@@ -4368,10 +4461,10 @@ fn require_hashes_repeated_dependency() -> Result<()> {
     Ok(())
 }
 
-/// If a dependency is repeated, use the last hash provided. pip seems to use the _first_ hash.
+/// Repeated direct URL requirements merge compatible hashes instead of overwriting them.
 #[test]
 fn require_hashes_repeated_hash() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Use the same hash in both cases.
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -4421,37 +4514,13 @@ fn require_hashes_repeated_hash() -> Result<()> {
     "
     );
 
-    // Use a different hash. The first hash is wrong, but that's fine, since we use the last hash.
+    // Use a different hash. The `sha512` is wrong, so validation should fail even though the
+    // `sha256` is still correct.
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str(indoc::indoc! { r"
-            anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
-            anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=md5:420d85e19168705cdf0223621b18831a
-    " })?;
-
-    uv_snapshot!(context.pip_sync()
-        .arg("requirements.txt")
-        .arg("--require-hashes")
-        .arg("--reinstall"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Uninstalled 1 package in [TIME]
-    Installed 1 package in [TIME]
-     ~ anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
-    "
-    );
-
-    // Use a different hash. The second hash is wrong. This should fail, since we use the last hash.
-    let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt
-        .write_str(indoc::indoc! { r"
-            anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
-            anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=md5:520d85e19168705cdf0223621b18831a
+            anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+            anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha512:e30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
     " })?;
 
     uv_snapshot!(context.pip_sync()
@@ -4468,10 +4537,83 @@ fn require_hashes_repeated_hash() -> Result<()> {
       ╰─▶ Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
 
           Expected:
-            md5:520d85e19168705cdf0223621b18831a
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+            sha512:e30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
 
           Computed:
-            md5:420d85e19168705cdf0223621b18831a
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+            sha512:f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
+    "
+    );
+
+    // Use different hashes, but both are wrong. This should fail because none of the merged
+    // hashes match.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str(indoc::indoc! { r"
+            anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+            anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha512:e30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
+    " })?;
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--require-hashes")
+        .arg("--reinstall"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
+      ╰─▶ Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
+
+          Expected:
+            sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+            sha512:e30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
+
+          Computed:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+            sha512:f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
+    "
+    );
+
+    Ok(())
+}
+
+/// Repeated direct URL requirements merge hashes across nested requirements files.
+#[test]
+fn require_hashes_repeated_hash_multiple_files() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_a = context.temp_dir.child("requirements-a.txt");
+    requirements_a.write_str(indoc::indoc! { r"
+        anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+    " })?;
+
+    let requirements_b = context.temp_dir.child("requirements-b.txt");
+    requirements_b.write_str(indoc::indoc! { r"
+        anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha512:f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
+    " })?;
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc::indoc! { r"
+        -r requirements-a.txt
+        -r requirements-b.txt
+    " })?;
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
     "
     );
 
@@ -4481,7 +4623,7 @@ fn require_hashes_repeated_hash() -> Result<()> {
 /// If a dependency is repeated, the hash should be required for both instances.
 #[test]
 fn require_hashes_at_least_one() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Request `anyio` with a `sha256` hash.
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -4554,7 +4696,7 @@ fn require_hashes_at_least_one() -> Result<()> {
 /// Using `--find-links`, but the registry doesn't provide us with a hash.
 #[test]
 fn require_hashes_find_links_no_hash() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // First, use the correct hash.
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -4667,7 +4809,7 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
 /// Using `--find-links`, and the registry serves us a correct hash.
 #[test]
 fn require_hashes_find_links_valid_hash() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
@@ -4696,7 +4838,7 @@ fn require_hashes_find_links_valid_hash() -> Result<()> {
 /// Using `--find-links`, and the registry serves us an incorrect hash.
 #[test]
 fn require_hashes_find_links_invalid_hash() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // First, request some other hash.
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -4840,7 +4982,7 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
 /// Using `--index-url`, but the registry doesn't provide us with a hash.
 #[test]
 fn require_hashes_registry_no_hash() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
@@ -4870,7 +5012,7 @@ fn require_hashes_registry_no_hash() -> Result<()> {
 /// Using `--index-url`, and the registry serves us a correct hash.
 #[test]
 fn require_hashes_registry_valid_hash() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
@@ -4898,7 +5040,7 @@ fn require_hashes_registry_valid_hash() -> Result<()> {
 /// Using `--index-url`, and the registry serves us an incorrect hash.
 #[test]
 fn require_hashes_registry_invalid_hash() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // First, request some other hash.
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -5047,7 +5189,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
 /// Include the hash in the URL directly.
 #[test]
 fn require_hashes_url() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
@@ -5074,7 +5216,7 @@ fn require_hashes_url() -> Result<()> {
 /// Include an irrelevant fragment in the URL.
 #[test]
 fn require_hashes_url_other_fragment() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
@@ -5098,7 +5240,7 @@ fn require_hashes_url_other_fragment() -> Result<()> {
 /// Include an invalid hash in the URL directly.
 #[test]
 fn require_hashes_url_invalid() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
@@ -5127,32 +5269,27 @@ fn require_hashes_url_invalid() -> Result<()> {
     Ok(())
 }
 
-/// Ignore the (valid) hash on the fragment if (invalid) hashes are provided directly.
+/// Merge the hash on the fragment with hashes provided directly.
 #[test]
-fn require_hashes_url_ignore() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
+fn require_hashes_url_merge() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
-        .write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374 --hash sha256:c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
+        .write_str("anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl#sha256=cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f --hash sha512:f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2")?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
         .arg("--require-hashes"), @"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
-      ╰─▶ Hash mismatch for `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
-
-          Expected:
-            sha256:c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
-
-          Computed:
-            sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl#sha256=cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f)
     "
     );
 
@@ -5162,7 +5299,7 @@ fn require_hashes_url_ignore() -> Result<()> {
 /// Include the hash in the URL directly.
 #[test]
 fn require_hashes_url_unnamed() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
@@ -5189,7 +5326,7 @@ fn require_hashes_url_unnamed() -> Result<()> {
 /// Sync to a `--target` directory with a built distribution.
 #[test]
 fn target_built_distribution() -> Result<()> {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix();
@@ -5289,7 +5426,7 @@ fn target_built_distribution() -> Result<()> {
 /// Sync to a `--target` directory with a package that requires building from source.
 #[test]
 fn target_source_distribution() -> Result<()> {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix();
@@ -5342,7 +5479,7 @@ fn target_source_distribution() -> Result<()> {
 /// `--no-build-isolation`.
 #[test]
 fn target_no_build_isolation() -> Result<()> {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix();
@@ -5412,7 +5549,7 @@ fn target_no_build_isolation() -> Result<()> {
 /// Sync to a `--target` directory without a virtual environment.
 #[test]
 fn target_system() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
 
     // Install `iniconfig` to the target directory.
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -5443,7 +5580,7 @@ fn target_system() -> Result<()> {
 /// Sync to a `--prefix` directory.
 #[test]
 fn prefix() -> Result<()> {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix();
@@ -5514,7 +5651,7 @@ fn prefix() -> Result<()> {
 /// Ensure that we install packages with markers on them.
 #[test]
 fn preserve_markers() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("anyio ; python_version > '3.7'")?;
@@ -5539,7 +5676,7 @@ fn preserve_markers() -> Result<()> {
 /// Include a `build_constraints.txt` file with an incompatible constraint.
 #[test]
 fn incompatible_build_constraint() -> Result<()> {
-    let context = TestContext::new("3.9");
+    let context = uv_test::test_context!("3.9");
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("requests==1.2")?;
 
@@ -5569,7 +5706,7 @@ fn incompatible_build_constraint() -> Result<()> {
 /// Include a `build_constraints.txt` file with a compatible constraint.
 #[test]
 fn compatible_build_constraint() -> Result<()> {
-    let context = TestContext::new("3.9");
+    let context = uv_test::test_context!("3.9");
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("requests==1.2")?;
 
@@ -5597,7 +5734,7 @@ fn compatible_build_constraint() -> Result<()> {
 
 #[test]
 fn sync_seed() -> Result<()> {
-    let context = TestContext::new("3.9");
+    let context = uv_test::test_context!("3.9");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("requests==1.2")?;
@@ -5671,7 +5808,7 @@ fn sync_seed() -> Result<()> {
 /// Sanitize zip files during extraction.
 #[test]
 fn sanitize() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Install a zip file that includes a path that extends outside the parent.
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -5702,7 +5839,7 @@ fn sanitize() -> Result<()> {
 /// Allow semicolons attached to markers, as long as they're preceded by a space.
 #[test]
 fn semicolon_trailing_space() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements = context.temp_dir.child("requirements.txt");
     requirements.write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl; python_version > '3.10'")?;
@@ -5727,7 +5864,7 @@ fn semicolon_trailing_space() -> Result<()> {
 /// Treat a semicolon that's not whitespace-separated as a part of the URL.
 #[test]
 fn semicolon_no_space() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements = context.temp_dir.child("requirements.txt");
     requirements.write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl;python_version > '3.10'")?;
@@ -5751,7 +5888,7 @@ fn semicolon_no_space() -> Result<()> {
 
 #[test]
 fn pep_751() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5795,7 +5932,7 @@ fn pep_751() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     "
     );
 
@@ -5844,7 +5981,7 @@ fn pep_751() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/13127>
 #[test]
 fn pep_751_wheel_only() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5918,7 +6055,7 @@ fn pep_751_wheel_only() -> Result<()> {
 /// Respect `--no-binary` et al when installing from a `pylock.toml`.
 #[test]
 fn pep_751_build_options() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -6047,7 +6184,7 @@ fn pep_751_build_options() -> Result<()> {
 
 #[test]
 fn pep_751_direct_url_tags() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -6104,7 +6241,7 @@ fn pep_751_direct_url_tags() -> Result<()> {
 
 #[test]
 fn incompatible_python_version_direct_url() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("numpy @ https://files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl")?;
@@ -6131,7 +6268,7 @@ fn incompatible_python_version_direct_url() -> Result<()> {
 
 #[test]
 fn incompatible_platform_direct_url() -> Result<()> {
-    let context = TestContext::new("3.13");
+    let context = uv_test::test_context!("3.13");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("numpy @ https://files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl")?;
@@ -6157,11 +6294,11 @@ fn incompatible_platform_direct_url() -> Result<()> {
 }
 
 /// Test that a missing Python version is not installed when not using `--target` or `--prefix`.
-#[cfg(feature = "python-managed")]
+#[cfg(feature = "test-python-managed")]
 #[test]
 fn sync_missing_python_no_target() -> Result<()> {
     // Create a context that only has Python 3.11 available.
-    let context = TestContext::new("3.11")
+    let context = uv_test::test_context!("3.11")
         .with_python_download_cache()
         .with_managed_python_dirs();
 
@@ -6183,13 +6320,14 @@ fn sync_missing_python_no_target() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "python-managed")]
+#[cfg(feature = "test-python-managed")]
 #[test]
 fn sync_with_target_installs_missing_python() -> Result<()> {
     // Create a context that only has Python 3.11 available.
-    let context = TestContext::new("3.11")
+    let context = uv_test::test_context!("3.11")
         .with_python_download_cache()
-        .with_managed_python_dirs();
+        .with_managed_python_dirs()
+        .with_filtered_latest_python_versions();
 
     let target_dir = context.temp_dir.child("target-dir");
     let requirements = context.temp_dir.child("requirements.txt");
@@ -6205,7 +6343,7 @@ fn sync_with_target_installs_missing_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.12
+    Using CPython 3.12.[LATEST]
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]

@@ -7,11 +7,13 @@ use reqwest::Proxy;
 use serde::{Deserialize, Deserializer, Serialize};
 use url::Url;
 
+use uv_redacted::DisplaySafeUrl;
+
 /// A validated proxy URL.
 ///
 /// This type validates that the [`Url`] is valid for a [`reqwest::Proxy`] on construction.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ProxyUrl(Url);
+pub struct ProxyUrl(DisplaySafeUrl);
 
 /// Mapping to [`reqwest::proxy::Intercept`] kinds which are not public API.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -21,8 +23,8 @@ pub enum ProxyUrlKind {
 }
 
 impl ProxyUrl {
-    /// Returns a reference to the underlying [`Url`].
-    fn as_url(&self) -> &Url {
+    /// Returns a reference to the underlying URL.
+    fn as_url(&self) -> &DisplaySafeUrl {
         &self.0
     }
 
@@ -45,7 +47,7 @@ pub enum ProxyUrlError {
     #[error(
         "invalid proxy URL scheme `{scheme}` in `{url}`: expected http, https, socks5, or socks5h"
     )]
-    InvalidScheme { scheme: String, url: Url },
+    InvalidScheme { scheme: String, url: DisplaySafeUrl },
 }
 
 /// Returns true if the input likely has no scheme (no "://" present).
@@ -84,6 +86,7 @@ impl TryFrom<Url> for ProxyUrl {
     type Error = ProxyUrlError;
 
     fn try_from(url: Url) -> Result<Self, Self::Error> {
+        let url = DisplaySafeUrl::from_url(url);
         match url.scheme() {
             "http" | "https" | "socks5" | "socks5h" => Ok(Self(url)),
             scheme => Err(ProxyUrlError::InvalidScheme {
@@ -166,7 +169,10 @@ mod tests {
         let url = "http://user:pass@proxy.example.com:8080"
             .parse::<ProxyUrl>()
             .unwrap();
-        assert_eq!(url.to_string(), "http://user:pass@proxy.example.com:8080/");
+        assert_eq!(
+            Url::from(url.as_url().clone()).to_string(),
+            "http://user:pass@proxy.example.com:8080/"
+        );
     }
 
     #[test]
@@ -180,7 +186,10 @@ mod tests {
         let url = "user:pass@proxy.example.com:8080"
             .parse::<ProxyUrl>()
             .unwrap();
-        assert_eq!(url.to_string(), "http://user:pass@proxy.example.com:8080/");
+        assert_eq!(
+            Url::from(url.as_url().clone()).to_string(),
+            "http://user:pass@proxy.example.com:8080/"
+        );
 
         // Just hostname
         let url = "proxy.example.com".parse::<ProxyUrl>().unwrap();

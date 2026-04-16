@@ -1,3 +1,4 @@
+use std::fmt;
 use std::path::PathBuf;
 
 use owo_colors::OwoColorize;
@@ -15,8 +16,22 @@ use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_platform_tags::Platform;
 use uv_pypi_types::{HashAlgorithm, HashDigest};
+use uv_python::PythonVariant;
 use uv_redacted::DisplaySafeUrl;
 use uv_types::AnyErrorBuild;
+
+#[derive(Debug, Clone, Copy)]
+pub struct PythonVersion {
+    pub(crate) version: (u8, u8),
+    pub(crate) variant: PythonVariant,
+}
+
+impl fmt::Display for PythonVersion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (major, minor) = self.version;
+        write!(f, "{major}.{minor}{}", self.variant.executable_suffix())
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -79,32 +94,28 @@ pub enum Error {
     },
     /// This shouldn't happen, it's a bug in the build backend.
     #[error(
-        "The built wheel `{}` is not compatible with the current Python {}.{} on {} {}",
+        "The built wheel `{}` is not compatible with the current Python {} on {}",
         filename,
-        python_version.0,
-        python_version.1,
-        python_platform.os(),
-        python_platform.arch(),
+        python_version,
+        python_platform.pretty(),
     )]
     BuiltWheelIncompatibleHostPlatform {
         filename: WheelFilename,
         python_platform: Platform,
-        python_version: (u8, u8),
+        python_version: PythonVersion,
     },
     /// This may happen when trying to cross-install native dependencies without their build backend
     /// being aware that the target is a cross-install.
     #[error(
-        "The built wheel `{}` is not compatible with the target Python {}.{} on {} {}. Consider using `--no-build` to disable building wheels.",
+        "The built wheel `{}` is not compatible with the target Python {} on {}. Consider using `--no-build` to disable building wheels.",
         filename,
-        python_version.0,
-        python_version.1,
-        python_platform.os(),
-        python_platform.arch(),
+        python_version,
+        python_platform.pretty(),
     )]
     BuiltWheelIncompatibleTargetPlatform {
         filename: WheelFilename,
         python_platform: Platform,
-        python_version: (u8, u8),
+        python_version: PythonVersion,
     },
     #[error("Failed to parse metadata from built wheel")]
     Metadata(#[from] uv_pypi_types::MetadataError),
@@ -185,6 +196,9 @@ pub enum Error {
 
     #[error("Hash-checking is not supported for Git repositories: `{0}`")]
     HashesNotSupportedGit(String),
+
+    #[error(transparent)]
+    InstallWheelError(uv_install_wheel::Error),
 }
 
 impl From<reqwest::Error> for Error {
@@ -266,5 +280,63 @@ impl Error {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Error, PythonVersion};
+    use std::str::FromStr;
+    use uv_distribution_filename::WheelFilename;
+    use uv_platform_tags::{Arch, Os, Platform};
+    use uv_python::PythonVariant;
+
+    #[test]
+    fn built_wheel_error_formats_freethreaded_python() {
+        let err = Error::BuiltWheelIncompatibleHostPlatform {
+            filename: WheelFilename::from_str(
+                "cryptography-47.0.0.dev1-cp315-abi3t-macosx_11_0_arm64.whl",
+            )
+            .unwrap(),
+            python_platform: Platform::new(
+                Os::Macos {
+                    major: 11,
+                    minor: 0,
+                },
+                Arch::Aarch64,
+            ),
+            python_version: PythonVersion {
+                version: (3, 15),
+                variant: PythonVariant::Freethreaded,
+            },
+        };
+
+        assert_eq!(
+            err.to_string(),
+            "The built wheel `cryptography-47.0.0.dev1-cp315-abi3t-macosx_11_0_arm64.whl` is not compatible with the current Python 3.15t on macOS aarch64"
+        );
+    }
+
+    #[test]
+    fn built_wheel_error_formats_target_python() {
+        let err = Error::BuiltWheelIncompatibleTargetPlatform {
+            filename: WheelFilename::from_str("py313-0.1.0-py313-none-any.whl").unwrap(),
+            python_platform: Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 28,
+                },
+                Arch::X86_64,
+            ),
+            python_version: PythonVersion {
+                version: (3, 12),
+                variant: PythonVariant::Default,
+            },
+        };
+
+        assert_eq!(
+            err.to_string(),
+            "The built wheel `py313-0.1.0-py313-none-any.whl` is not compatible with the target Python 3.12 on Linux x86_64. Consider using `--no-build` to disable building wheels."
+        );
     }
 }

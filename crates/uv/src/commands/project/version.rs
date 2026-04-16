@@ -2,12 +2,12 @@ use std::fmt::Write;
 use std::path::Path;
 use std::str::FromStr;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Result, anyhow};
 use owo_colors::OwoColorize;
 
 use tracing::debug;
 use uv_cache::Cache;
-use uv_cli::version::VersionInfo;
+use uv_cli::version::ProjectVersionInfo;
 use uv_cli::{VersionBump, VersionBumpSpec, VersionFormat};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
@@ -21,12 +21,12 @@ use uv_pep440::{BumpCommand, PrereleaseKind, Version};
 use uv_preview::Preview;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_settings::PythonInstallMirrors;
+use uv_workspace::VirtualProject;
 use uv_workspace::pyproject_mut::Error;
 use uv_workspace::{
     DiscoveryOptions, WorkspaceCache, WorkspaceError,
     pyproject_mut::{DependencyTarget, PyProjectTomlMut},
 };
-use uv_workspace::{VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
@@ -47,7 +47,19 @@ pub(crate) fn self_version(
     printer: Printer,
 ) -> Result<ExitStatus> {
     let version_info = uv_cli::version::uv_self_version();
-    print_version(version_info, None, short, output_format, printer)?;
+    match output_format {
+        VersionFormat::Text => {
+            if short {
+                writeln!(printer.stdout(), "{}", version_info.cyan())?;
+            } else {
+                writeln!(printer.stdout(), "uv {}", version_info.cyan())?;
+            }
+        }
+        VersionFormat::Json => {
+            let string = serde_json::to_string_pretty(&version_info)?;
+            writeln!(printer.stdout(), "{string}")?;
+        }
+    }
 
     Ok(ExitStatus::Success)
 }
@@ -77,11 +89,18 @@ pub(crate) async fn project_version(
     concurrency: Concurrency,
     no_config: bool,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
     // Read the metadata
-    let project = find_target(project_dir, package.as_ref(), explicit_project).await?;
+    let project = find_target(
+        project_dir,
+        package.as_ref(),
+        explicit_project,
+        workspace_cache,
+    )
+    .await?;
 
     let pyproject_path = project.root().join("pyproject.toml");
     let Some(name) = project.project_name().cloned() else {
@@ -107,9 +126,10 @@ pub(crate) async fn project_version(
                 client_builder,
                 python_preference,
                 python_downloads,
-                concurrency,
+                &concurrency,
                 no_config,
                 cache,
+                workspace_cache,
                 short,
                 output_format,
                 printer,
@@ -294,6 +314,11 @@ pub(crate) async fn project_version(
                     "{old_version} => {new_version} didn't increase the version; when bumping to a pre-release version you also need to increase a release version component, e.g., with `--bump <major|minor|patch>`"
                 ));
             }
+            if new_version.is_dev() && !old_version.is_dev() {
+                return Err(anyhow!(
+                    "{old_version} => {new_version} didn't increase the version; when bumping to a dev version you also need to increase another version component, e.g., with `--bump <major|minor|patch|alpha|beta|rc>`"
+                ));
+            }
             return Err(anyhow!(
                 "{old_version} => {new_version} didn't increase the version; provide the exact version to force an update"
             ));
@@ -323,7 +348,7 @@ pub(crate) async fn project_version(
             python_preference,
             python_downloads,
             installer_metadata,
-            concurrency,
+            &concurrency,
             no_config,
             cache,
             printer,
@@ -336,8 +361,8 @@ pub(crate) async fn project_version(
     };
 
     // Report the results
-    let old_version = VersionInfo::new(Some(&name), &old_version);
-    let new_version = new_version.map(|version| VersionInfo::new(Some(&name), &version));
+    let old_version = ProjectVersionInfo::new(Some(&name), &old_version);
+    let new_version = new_version.map(|version| ProjectVersionInfo::new(Some(&name), &version));
     print_version(old_version, new_version, short, output_format, printer)?;
 
     Ok(status)
@@ -366,24 +391,22 @@ async fn find_target(
     project_dir: &Path,
     package: Option<&PackageName>,
     explicit_project: bool,
+    workspace_cache: &WorkspaceCache,
 ) -> Result<VirtualProject> {
     // Find the project in the workspace.
     // No workspace caching since `uv version` changes the workspace definition.
     let project = if let Some(package) = package {
-        VirtualProject::Project(
-            Workspace::discover(
-                project_dir,
-                &DiscoveryOptions {
-                    project: uv_workspace::ProjectDiscovery::Required,
-                    ..DiscoveryOptions::default()
-                },
-                &WorkspaceCache::default(),
-            )
-            .await
-            .map_err(|err| hint_uv_self_version(err, explicit_project))?
-            .with_current_project(package.clone())
-            .with_context(|| format!("Package `{package}` not found in workspace"))?,
+        VirtualProject::discover_with_package(
+            project_dir,
+            &DiscoveryOptions {
+                project: uv_workspace::ProjectDiscovery::Required,
+                ..DiscoveryOptions::default()
+            },
+            workspace_cache,
+            package.clone(),
         )
+        .await
+        .map_err(|err| hint_uv_self_version(err, explicit_project))?
     } else {
         VirtualProject::discover(
             project_dir,
@@ -391,7 +414,7 @@ async fn find_target(
                 project: uv_workspace::ProjectDiscovery::Required,
                 ..DiscoveryOptions::default()
             },
-            &WorkspaceCache::default(),
+            workspace_cache,
         )
         .await
         .map_err(|err| hint_uv_self_version(err, explicit_project))?
@@ -413,7 +436,7 @@ fn update_project(
 
     // Update the `pyproject.toml` in-memory.
     let project = project
-        .with_pyproject_toml(toml::from_str(&content).map_err(ProjectError::PyprojectTomlParse)?)?
+        .update_member(toml::from_str(&content).map_err(ProjectError::PyprojectTomlParse)?)?
         .ok_or(ProjectError::PyprojectTomlUpdate)?;
 
     Ok(project)
@@ -432,9 +455,10 @@ async fn print_frozen_version(
     client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     no_config: bool,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     short: bool,
     output_format: VersionFormat,
     printer: Printer,
@@ -475,7 +499,7 @@ async fn print_frozen_version(
             Box::new(DefaultResolveLogger),
             concurrency,
             cache,
-            &WorkspaceCache::default(),
+            workspace_cache,
             printer,
             preview,
         )
@@ -485,9 +509,11 @@ async fn print_frozen_version(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::with_system_certs(
+                client_builder.system_certs(),
+            )
+            .report(err)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
@@ -509,7 +535,7 @@ async fn print_frozen_version(
     };
 
     // Finally, print!
-    let old_version = VersionInfo::new(Some(name), version);
+    let old_version = ProjectVersionInfo::new(Some(name), version);
     print_version(old_version, None, short, output_format, printer)?;
 
     Ok(ExitStatus::Success)
@@ -530,7 +556,7 @@ async fn lock_and_sync(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     no_config: bool,
     cache: &Cache,
     printer: Printer,
@@ -626,9 +652,11 @@ async fn lock_and_sync(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::with_system_certs(
+                client_builder.system_certs(),
+            )
+            .report(err)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
@@ -676,7 +704,7 @@ async fn lock_and_sync(
         installer_metadata,
         concurrency,
         cache,
-        workspace_cache,
+        &workspace_cache,
         DryRun::Disabled,
         printer,
         preview,
@@ -685,9 +713,11 @@ async fn lock_and_sync(
     {
         Ok(_) => {}
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::with_system_certs(
+                client_builder.system_certs(),
+            )
+            .report(err)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     }
@@ -696,8 +726,8 @@ async fn lock_and_sync(
 }
 
 fn print_version(
-    old_version: VersionInfo,
-    new_version: Option<VersionInfo>,
+    old_version: ProjectVersionInfo,
+    new_version: Option<ProjectVersionInfo>,
     short: bool,
     output_format: VersionFormat,
     printer: Printer,

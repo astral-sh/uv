@@ -11,7 +11,7 @@
 #![allow(unsafe_code)]
 // Usually we want fs_err over std::fs, but there's no advantage here, we don't
 // report errors encountered while reporting an exception.
-#![allow(clippy::disallowed_types)]
+#![expect(clippy::disallowed_types)]
 
 use std::fmt::Write;
 use std::fs::File;

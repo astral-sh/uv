@@ -1,6 +1,6 @@
 [package]
 name = "uv-torch"
-version = "0.0.17"
+version = "0.0.39"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -30,3 +30,6 @@ wmi = { workspace = true }
 
 [lints]
 workspace = true
+
+[lib]
+doctest = false

@@ -3,7 +3,6 @@ use std::path::Path;
 use anstream::print;
 use anyhow::{Error, Result};
 use futures::StreamExt;
-use tokio::sync::Semaphore;
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
@@ -147,9 +146,9 @@ pub(crate) async fn tree(
             client_builder,
             &state,
             Box::new(DefaultResolveLogger),
-            concurrency,
+            &concurrency,
             cache,
-            &WorkspaceCache::default(),
+            &workspace_cache,
             printer,
             preview,
         )
@@ -159,9 +158,11 @@ pub(crate) async fn tree(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::with_system_certs(
+                client_builder.system_certs(),
+            )
+            .report(err)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
@@ -225,15 +226,21 @@ pub(crate) async fn tree(
             )
             .index_locations(index_locations.clone())
             .keyring(*keyring_provider)
-            .build();
-            let download_concurrency = Semaphore::new(concurrency.downloads);
+            .build()?;
+            let download_concurrency = concurrency.downloads_semaphore.clone();
+
+            // Recompute the exclude-newer timestamps from relative spans so that
+            // `--outdated` judges outdatedness relative to the current moment,
+            // not the time the lock was originally generated.
+            let exclude_newer = lock.exclude_newer().recompute();
 
             // Initialize the client to fetch the latest version of each package.
             let client = LatestClient {
                 client: &client,
                 capabilities: &capabilities,
                 prerelease: lock.prerelease_mode(),
-                exclude_newer: &lock.exclude_newer(),
+                exclude_newer: &exclude_newer,
+                index_locations,
                 requires_python: Some(lock.requires_python()),
                 tags: None,
             };

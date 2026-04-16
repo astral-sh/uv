@@ -8,8 +8,8 @@ use uv_configuration::{
     RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
 };
 use uv_distribution_types::{
-    ConfigSettings, ExtraBuildVariables, Index, IndexUrl, IndexUrlError, PackageConfigSettings,
-    PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
+    ConfigSettings, ExtraBuildVariables, Index, IndexUrl, IndexUrlError, Origin,
+    PackageConfigSettings, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
 };
 use uv_install_wheel::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
@@ -19,8 +19,8 @@ use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{
-    AnnotationStyle, ExcludeNewer, ExcludeNewerPackage, ExcludeNewerValue, ForkStrategy,
-    PrereleaseMode, ResolutionMode,
+    AnnotationStyle, ExcludeNewer, ExcludeNewerPackage, ExcludeNewerSpan, ExcludeNewerValue,
+    ForkStrategy, PrereleaseMode, ResolutionMode, serialize_exclude_newer_package_with_spans,
 };
 use uv_torch::TorchMode;
 use uv_workspace::pyproject::ExtraBuildDependencies;
@@ -38,6 +38,32 @@ pub(crate) struct PyProjectToml {
 #[derive(Debug, Clone, Default, Deserialize)]
 pub(crate) struct Tools {
     pub(crate) uv: Option<Options>,
+}
+
+/// A `pyproject.toml` with an (optional) `[tool.uv.required-version]`.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub(crate) struct PyProjectRequiredVersionToml {
+    pub(crate) tool: Option<RequiredVersionTools>,
+}
+
+/// A `[tool]` section containing only the fields required for `required-version` discovery.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub(crate) struct RequiredVersionTools {
+    pub(crate) uv: Option<RequiredVersionOptions>,
+}
+
+/// The minimal `[tool.uv]` subset required to enforce `required-version` before full parsing.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) struct RequiredVersionOptions {
+    pub(crate) required_version: Option<RequiredVersion>,
+}
+
+/// A `uv.toml` containing only the fields required for `required-version` discovery.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) struct UvRequiredVersionToml {
+    pub(crate) required_version: Option<RequiredVersion>,
 }
 
 /// A `[tool.uv]` section.
@@ -61,6 +87,9 @@ pub struct Options {
 
     #[serde(flatten)]
     pub add: AddOptions,
+
+    #[option_group]
+    pub audit: Option<AuditOptions>,
 
     #[option_group]
     pub pip: Option<PipOptions>,
@@ -171,6 +200,40 @@ impl Options {
         }
     }
 
+    /// Set the [`Origin`] on all indexes without an existing origin.
+    #[must_use]
+    pub fn with_origin(mut self, origin: Origin) -> Self {
+        if let Some(indexes) = &mut self.top_level.index {
+            for index in indexes {
+                index.origin.get_or_insert(origin);
+            }
+        }
+        if let Some(index_url) = &mut self.top_level.index_url {
+            index_url.try_set_origin(origin);
+        }
+        if let Some(extra_index_urls) = &mut self.top_level.extra_index_url {
+            for index_url in extra_index_urls {
+                index_url.try_set_origin(origin);
+            }
+        }
+        if let Some(pip) = &mut self.pip {
+            if let Some(indexes) = &mut pip.index {
+                for index in indexes {
+                    index.origin.get_or_insert(origin);
+                }
+            }
+            if let Some(index_url) = &mut pip.index_url {
+                index_url.try_set_origin(origin);
+            }
+            if let Some(extra_index_urls) = &mut pip.extra_index_url {
+                for index_url in extra_index_urls {
+                    index_url.try_set_origin(origin);
+                }
+            }
+        }
+        self
+    }
+
     /// Resolve the [`Options`] relative to the given root directory.
     pub fn relative_to(self, root_dir: &Path) -> Result<Self, IndexUrlError> {
         Ok(Self {
@@ -202,13 +265,24 @@ pub struct GlobalOptions {
     pub required_version: Option<RequiredVersion>,
     /// Whether to load TLS certificates from the platform's native certificate store.
     ///
-    /// By default, uv loads certificates from the bundled `webpki-roots` crate. The
-    /// `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv
-    /// improves portability and performance (especially on macOS).
+    /// By default, uv uses bundled Mozilla root certificates. When enabled, this loads
+    /// certificates from the platform's native certificate store instead.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        uv_toml_only = true,
+        example = r#"
+            system-certs = true
+        "#
+    )]
+    pub system_certs: Option<bool>,
+    /// Whether to load TLS certificates from the platform's native certificate store.
     ///
-    /// However, in some cases, you may want to use the platform's native certificate store,
-    /// especially if you're relying on a corporate trust root (e.g., for a mandatory proxy) that's
-    /// included in your system's certificate store.
+    /// By default, uv uses bundled Mozilla root certificates. When enabled, this loads
+    /// certificates from the platform's native certificate store instead.
+    ///
+    /// (Deprecated: use `system-certs` instead.)
+    #[deprecated(note = "use `system-certs` instead")]
     #[option(
         default = "false",
         value_type = "bool",
@@ -451,6 +525,25 @@ pub struct ResolverInstallerOptions {
     pub no_binary_package: Option<Vec<PackageName>>,
 }
 
+impl ResolverInstallerOptions {
+    /// Recompute any relative exclude-newer values against the current time.
+    #[must_use]
+    pub fn recompute_exclude_newer(mut self) -> Self {
+        let exclude_newer = ExcludeNewer::new(
+            self.exclude_newer.take(),
+            self.exclude_newer_package.take().unwrap_or_default(),
+        )
+        .recompute();
+        self.exclude_newer = exclude_newer.global;
+        self.exclude_newer_package = if exclude_newer.package.is_empty() {
+            None
+        } else {
+            Some(exclude_newer.package)
+        };
+        self
+    }
+}
+
 impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
     fn from(value: ResolverInstallerSchema) -> Self {
         let ResolverInstallerSchema {
@@ -521,6 +614,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
                     .flatten()
                     .map(Into::into)
                     .collect(),
+                Vec::new(),
             ),
             reinstall: Reinstall::from_args(reinstall, reinstall_package.unwrap_or_default()),
             no_build,
@@ -846,6 +940,10 @@ pub struct ResolverInstallerSchema {
     pub extra_build_variables: Option<ExtraBuildVariables>,
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
+    /// The date is compared against the upload time of each individual distribution artifact
+    /// (i.e., when each file was uploaded to the package index), not the release date of the
+    /// package version.
+    ///
     /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), a "friendly" duration (e.g.,
     /// `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`, `P7D`, `P30D`).
     ///
@@ -870,17 +968,20 @@ pub struct ResolverInstallerSchema {
     /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
     /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
     /// Calendar units such as months and years are not allowed.
+    ///
+    /// Set a package to `false` to exempt it from the global [`exclude-newer`](#exclude-newer)
+    /// constraint entirely.
     #[option(
         default = "None",
         value_type = "dict",
         example = r#"
-            exclude-newer-package = { tqdm = "2022-04-04T00:00:00Z" }
+            exclude-newer-package = { tqdm = "2022-04-04T00:00:00Z", markupsafe = false }
         "#
     )]
     pub exclude_newer_package: Option<ExcludeNewerPackage>,
     /// The method to use when installing packages from the global cache.
     ///
-    /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
+    /// Defaults to `clone` (also known as Copy-on-Write) on macOS and Linux, and `hardlink` on
     /// Windows.
     ///
     /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
@@ -888,7 +989,7 @@ pub struct ResolverInstallerSchema {
     /// will break all installed packages by way of removing the underlying source files. Use
     /// symlinks with caution.
     #[option(
-        default = "\"clone\" (macOS) or \"hardlink\" (Linux, Windows)",
+        default = "\"clone\" (macOS, Linux) or \"hardlink\" (Windows)",
         value_type = "str",
         example = r#"
             link-mode = "copy"
@@ -1651,6 +1752,10 @@ pub struct PipOptions {
     pub universal: Option<bool>,
     /// Limit candidate packages to those that were uploaded prior to a given point in time.
     ///
+    /// The date is compared against the upload time of each individual distribution artifact
+    /// (i.e., when each file was uploaded to the package index), not the release date of the
+    /// package version.
+    ///
     /// Accepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,
     /// `2006-12-02T02:07:43Z`). A full timestamp is required to ensure that the resolver will
     /// behave consistently across timezones.
@@ -1664,12 +1769,13 @@ pub struct PipOptions {
     pub exclude_newer: Option<ExcludeNewerValue>,
     /// Limit candidate packages for specific packages to those that were uploaded prior to the given date.
     ///
-    /// Accepts package-date pairs in a dictionary format.
+    /// Accepts package-date pairs in a dictionary format. Set a package to `false` to exempt it
+    /// from the global [`exclude-newer`](#exclude-newer) constraint entirely.
     #[option(
         default = "None",
         value_type = "dict",
         example = r#"
-            exclude-newer-package = { tqdm = "2022-04-04T00:00:00Z" }
+            exclude-newer-package = { tqdm = "2022-04-04T00:00:00Z", markupsafe = false }
         "#
     )]
     pub exclude_newer_package: Option<ExcludeNewerPackage>,
@@ -1747,7 +1853,7 @@ pub struct PipOptions {
     pub annotation_style: Option<AnnotationStyle>,
     /// The method to use when installing packages from the global cache.
     ///
-    /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
+    /// Defaults to `clone` (also known as Copy-on-Write) on macOS and Linux, and `hardlink` on
     /// Windows.
     ///
     /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
@@ -1755,7 +1861,7 @@ pub struct PipOptions {
     /// will break all installed packages by way of removing the underlying source files. Use
     /// symlinks with caution.
     #[option(
-        default = "\"clone\" (macOS) or \"hardlink\" (Linux, Windows)",
+        default = "\"clone\" (macOS, Linux) or \"hardlink\" (Windows)",
         value_type = "str",
         example = r#"
             link-mode = "copy"
@@ -1972,6 +2078,7 @@ impl From<ResolverInstallerSchema> for ResolverOptions {
                     .flatten()
                     .map(Into::into)
                     .collect(),
+                Vec::new(),
             ),
             no_build: value.no_build,
             no_build_package: value.no_build_package,
@@ -2070,8 +2177,90 @@ pub struct ToolOptions {
     pub torch_backend: Option<TorchMode>,
 }
 
+/// The on-disk representation of [`ToolOptions`] in a tool receipt.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub struct ToolOptionsWire {
+    pub index: Option<Vec<Index>>,
+    pub index_url: Option<PipIndex>,
+    pub extra_index_url: Option<Vec<PipExtraIndex>>,
+    pub no_index: Option<bool>,
+    pub find_links: Option<Vec<PipFindLinks>>,
+    pub index_strategy: Option<IndexStrategy>,
+    pub keyring_provider: Option<KeyringProviderType>,
+    pub resolution: Option<ResolutionMode>,
+    pub prerelease: Option<PrereleaseMode>,
+    pub fork_strategy: Option<ForkStrategy>,
+    pub dependency_metadata: Option<Vec<StaticMetadata>>,
+    pub config_settings: Option<ConfigSettings>,
+    pub config_settings_package: Option<PackageConfigSettings>,
+    pub build_isolation: Option<BuildIsolation>,
+    pub extra_build_dependencies: Option<ExtraBuildDependencies>,
+    pub extra_build_variables: Option<ExtraBuildVariables>,
+    pub exclude_newer: Option<ExcludeNewerValue>,
+    pub exclude_newer_span: Option<ExcludeNewerSpan>,
+    #[serde(serialize_with = "serialize_exclude_newer_package_with_spans")]
+    pub exclude_newer_package: Option<ExcludeNewerPackage>,
+    pub link_mode: Option<LinkMode>,
+    pub compile_bytecode: Option<bool>,
+    pub no_sources: Option<bool>,
+    pub no_sources_package: Option<Vec<PackageName>>,
+    pub no_build: Option<bool>,
+    pub no_build_package: Option<Vec<PackageName>>,
+    pub no_binary: Option<bool>,
+    pub no_binary_package: Option<Vec<PackageName>>,
+    pub torch_backend: Option<TorchMode>,
+}
+
 impl From<ResolverInstallerOptions> for ToolOptions {
     fn from(value: ResolverInstallerOptions) -> Self {
+        Self {
+            index: value.index.map(|indexes| {
+                indexes
+                    .into_iter()
+                    .map(Index::with_promoted_auth_policy)
+                    .collect()
+            }),
+            index_url: value.index_url,
+            extra_index_url: value.extra_index_url,
+            no_index: value.no_index,
+            find_links: value.find_links,
+            index_strategy: value.index_strategy,
+            keyring_provider: value.keyring_provider,
+            resolution: value.resolution,
+            prerelease: value.prerelease,
+            fork_strategy: value.fork_strategy,
+            dependency_metadata: value.dependency_metadata,
+            config_settings: value.config_settings,
+            config_settings_package: value.config_settings_package,
+            build_isolation: value.build_isolation,
+            extra_build_dependencies: value.extra_build_dependencies,
+            extra_build_variables: value.extra_build_variables,
+            exclude_newer: value.exclude_newer,
+            exclude_newer_package: value.exclude_newer_package,
+            link_mode: value.link_mode,
+            compile_bytecode: value.compile_bytecode,
+            no_sources: value.no_sources,
+            no_sources_package: value.no_sources_package,
+            no_build: value.no_build,
+            no_build_package: value.no_build_package,
+            no_binary: value.no_binary,
+            no_binary_package: value.no_binary_package,
+            torch_backend: value.torch_backend,
+        }
+    }
+}
+
+impl From<ToolOptionsWire> for ToolOptions {
+    fn from(value: ToolOptionsWire) -> Self {
+        let exclude_newer = value.exclude_newer.map(|exclude_newer| {
+            if exclude_newer.span().is_none() {
+                ExcludeNewerValue::new(exclude_newer.timestamp(), value.exclude_newer_span)
+            } else {
+                exclude_newer
+            }
+        });
+
         Self {
             index: value.index,
             index_url: value.index_url,
@@ -2089,7 +2278,49 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             build_isolation: value.build_isolation,
             extra_build_dependencies: value.extra_build_dependencies,
             extra_build_variables: value.extra_build_variables,
-            exclude_newer: value.exclude_newer,
+            exclude_newer,
+            exclude_newer_package: value.exclude_newer_package,
+            link_mode: value.link_mode,
+            compile_bytecode: value.compile_bytecode,
+            no_sources: value.no_sources,
+            no_sources_package: value.no_sources_package,
+            no_build: value.no_build,
+            no_build_package: value.no_build_package,
+            no_binary: value.no_binary,
+            no_binary_package: value.no_binary_package,
+            torch_backend: value.torch_backend,
+        }
+    }
+}
+
+impl From<ToolOptions> for ToolOptionsWire {
+    fn from(value: ToolOptions) -> Self {
+        let (exclude_newer, exclude_newer_span) = value
+            .exclude_newer
+            .map(ExcludeNewerValue::into_parts)
+            .map_or((None, None), |(timestamp, span)| {
+                (Some(ExcludeNewerValue::from(timestamp)), span)
+            });
+
+        Self {
+            index: value.index,
+            index_url: value.index_url,
+            extra_index_url: value.extra_index_url,
+            no_index: value.no_index,
+            find_links: value.find_links,
+            index_strategy: value.index_strategy,
+            keyring_provider: value.keyring_provider,
+            resolution: value.resolution,
+            prerelease: value.prerelease,
+            fork_strategy: value.fork_strategy,
+            dependency_metadata: value.dependency_metadata,
+            config_settings: value.config_settings,
+            config_settings_package: value.config_settings_package,
+            build_isolation: value.build_isolation,
+            extra_build_dependencies: value.extra_build_dependencies,
+            extra_build_variables: value.extra_build_variables,
+            exclude_newer,
+            exclude_newer_span,
             exclude_newer_package: value.exclude_newer_package,
             link_mode: value.link_mode,
             compile_bytecode: value.compile_bytecode,
@@ -2148,6 +2379,7 @@ pub struct OptionsWire {
     // #[serde(flatten)]
     // globals: GlobalOptions
     required_version: Option<RequiredVersion>,
+    system_certs: Option<bool>,
     native_tls: Option<bool>,
     offline: Option<bool>,
     no_cache: Option<bool>,
@@ -2214,6 +2446,7 @@ pub struct OptionsWire {
     // add: AddOptions
     add_bounds: Option<AddBoundsKind>,
 
+    audit: Option<AuditOptions>,
     pip: Option<PipOptions>,
     cache_keys: Option<Vec<CacheKey>>,
 
@@ -2244,9 +2477,11 @@ pub struct OptionsWire {
 }
 
 impl From<OptionsWire> for Options {
+    #[allow(deprecated)]
     fn from(value: OptionsWire) -> Self {
         let OptionsWire {
             required_version,
+            system_certs,
             native_tls,
             offline,
             no_cache,
@@ -2294,6 +2529,7 @@ impl From<OptionsWire> for Options {
             no_binary,
             no_binary_package,
             torch_backend,
+            audit,
             pip,
             cache_keys,
             override_dependencies,
@@ -2323,6 +2559,7 @@ impl From<OptionsWire> for Options {
         Self {
             globals: GlobalOptions {
                 required_version,
+                system_certs,
                 native_tls,
                 offline,
                 no_cache,
@@ -2394,6 +2631,7 @@ impl From<OptionsWire> for Options {
                 check_url,
             },
             add: AddOptions { add_bounds: bounds },
+            audit,
             workspace,
             sources,
             dev_dependencies,
@@ -2481,4 +2719,36 @@ pub struct AddOptions {
         possible_values = true
     )]
     pub add_bounds: Option<AddBoundsKind>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, CombineOptions, OptionsMetadata)]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct AuditOptions {
+    /// A list of vulnerability IDs to ignore during auditing.
+    ///
+    /// Vulnerabilities matching any of the provided IDs (including aliases) will be excluded from
+    /// the audit results.
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            ignore = ["PYSEC-2022-43017", "GHSA-5239-wwwm-4pmq"]
+        "#
+    )]
+    pub ignore: Option<Vec<String>>,
+
+    /// A list of vulnerability IDs to ignore during auditing, but only while no fix is available.
+    ///
+    /// Vulnerabilities matching any of the provided IDs (including aliases) will be excluded from
+    /// the audit results as long as they have no known fix versions. Once a fix version becomes
+    /// available, the vulnerability will be reported again.
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            ignore-until-fixed = ["PYSEC-2022-43017"]
+        "#
+    )]
+    pub ignore_until_fixed: Option<Vec<String>>,
 }

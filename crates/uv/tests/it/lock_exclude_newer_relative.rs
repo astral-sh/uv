@@ -3,7 +3,7 @@ use assert_fs::fixture::{FileWriteStr, PathChild};
 use insta::assert_snapshot;
 use uv_static::EnvVars;
 
-use crate::common::{TestContext, uv_snapshot};
+use uv_test::uv_snapshot;
 
 /// Lock with a relative exclude-newer value.
 ///
@@ -12,7 +12,7 @@ use crate::common::{TestContext, uv_snapshot};
 /// - 3.7: 2024-04-11
 #[test]
 fn lock_exclude_newer_relative() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -96,13 +96,14 @@ fn lock_exclude_newer_relative() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
-        .arg("2 weeks"), @"
+        .arg("2 weeks")
+        .arg("--upgrade"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to change of exclude newer span from `P3W` to `P2W`
+    Resolving despite existing lockfile due to change of exclude newer span from `P3W` to `P2W`
     Resolved 2 packages in [TIME]
     Updated idna v3.6 -> v3.7
     ");
@@ -208,6 +209,123 @@ fn lock_exclude_newer_relative() -> Result<()> {
     Ok(())
 }
 
+/// Test that exclude-newer changes in either direction work correctly:
+/// - Getting OLDER (more restrictive): forces downgrade of invalid versions
+/// - Getting NEWER (less restrictive): keeps existing versions stable (use --upgrade to get newer)
+///
+/// Uses idna which has releases at:
+/// - 3.6: 2023-11-25
+/// - 3.7: 2024-04-11
+#[test]
+fn lock_exclude_newer_older_vs_newer() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["idna"]
+        "#,
+    )?;
+
+    // Start with a cutoff that allows idna 3.7 (released 2024-04-11)
+    // 2 weeks before 2024-05-01 is 2024-04-17, which is AFTER idna 3.7 release
+    let current_timestamp = "2024-05-01T00:00:00Z";
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .arg("--exclude-newer")
+        .arg("2 weeks"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(
+        lock.contains("version = \"3.7\""),
+        "Expected idna 3.7 in lockfile"
+    );
+
+    // Now make exclude-newer OLDER (more restrictive): 3 weeks back from 2024-05-01 is 2024-04-10
+    // This is BEFORE idna 3.7 release (2024-04-11), so 3.7 becomes INVALID and must be replaced
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .arg("--exclude-newer")
+        .arg("3 weeks"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolving despite existing lockfile due to change of exclude newer span from `P2W` to `P3W`
+    Resolved 2 packages in [TIME]
+    Updated idna v3.7 -> v3.6
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(
+        lock.contains("version = \"3.6\""),
+        "Expected idna 3.6 in lockfile after downgrade"
+    );
+
+    // Now make exclude-newer NEWER (less restrictive): back to 2 weeks (2024-04-17)
+    // This allows idna 3.7 again, but existing version (3.6) is still valid so it stays
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .arg("--exclude-newer")
+        .arg("2 weeks"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolving despite existing lockfile due to change of exclude newer span from `P3W` to `P2W`
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(
+        lock.contains("version = \"3.6\""),
+        "Expected idna 3.6 to stay stable without --upgrade"
+    );
+
+    // With --upgrade, should now get idna 3.7 since the constraint allows it
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .arg("--exclude-newer")
+        .arg("2 weeks")
+        .arg("--upgrade"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Updated idna v3.6 -> v3.7
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(
+        lock.contains("version = \"3.7\""),
+        "Expected idna 3.7 after --upgrade"
+    );
+
+    Ok(())
+}
+
 /// Lock with a relative exclude-newer-package value.
 ///
 /// Uses idna which has releases at:
@@ -215,7 +333,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
 /// - 3.7: 2024-04-11
 #[test]
 fn lock_exclude_newer_package_relative() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -300,13 +418,14 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer-package")
-        .arg("idna=2 weeks"), @"
+        .arg("idna=2 weeks")
+        .arg("--upgrade"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to change of exclude newer span from `P3W` to `P2W` for package `idna`
+    Resolving despite existing lockfile due to change of exclude newer span from `P3W` to `P2W` for package `idna`
     Resolved 2 packages in [TIME]
     Updated idna v3.6 -> v3.7
     ");
@@ -404,7 +523,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
 /// - 3.7: 2024-04-11
 #[test]
 fn lock_exclude_newer_relative_pyproject() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -475,7 +594,7 @@ fn lock_exclude_newer_relative_pyproject() -> Result<()> {
 /// - 3.7: 2024-04-11
 #[test]
 fn lock_exclude_newer_package_relative_pyproject() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -551,7 +670,7 @@ fn lock_exclude_newer_package_relative_pyproject() -> Result<()> {
 /// - 4.11.0: 2024-04-05
 #[test]
 fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -663,13 +782,14 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
         .arg("--exclude-newer")
         .arg("2 weeks")
         .arg("--exclude-newer-package")
-        .arg("typing-extensions=2 weeks"), @"
+        .arg("typing-extensions=2 weeks")
+        .arg("--upgrade"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to change of exclude newer span from `P3W` to `P2W`
+    Resolving despite existing lockfile due to change of exclude newer span from `P3W` to `P2W`
     Resolved 3 packages in [TIME]
     Updated idna v3.6 -> v3.7
     ");
@@ -688,7 +808,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to change of exclude newer span from `P2W` to `P3D` for package `typing-extensions`
+    Resolving despite existing lockfile due to change of exclude newer span from `P2W` to `P3D` for package `typing-extensions`
     Resolved 3 packages in [TIME]
     ");
 
@@ -706,7 +826,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to removal of exclude newer span
+    Resolving despite existing lockfile due to removal of exclude newer span
     Resolved 3 packages in [TIME]
     ");
 
@@ -772,7 +892,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to addition of exclude newer span `P3W`
+    Resolving despite existing lockfile due to addition of exclude newer span `P3W`
     Resolved 3 packages in [TIME]
     Updated idna v3.7 -> v3.6
     Updated typing-extensions v4.11.0 -> v4.10.0
@@ -833,7 +953,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
 /// Lock with various relative exclude newer value formats.
 #[test]
 fn lock_exclude_newer_relative_values() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -868,7 +988,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to change of exclude newer span from `P1D` to `P30D`
+    Resolving despite existing lockfile due to change of exclude newer span from `P1D` to `P30D`
     Resolved 2 packages in [TIME]
     ");
 
@@ -882,7 +1002,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to change of exclude newer span from `P30D` to `P1D`
+    Resolving despite existing lockfile due to change of exclude newer span from `P30D` to `P1D`
     Resolved 2 packages in [TIME]
     ");
 
@@ -896,7 +1016,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to change of exclude newer span from `P1D` to `P1W`
+    Resolving despite existing lockfile due to change of exclude newer span from `P1D` to `P1W`
     Resolved 2 packages in [TIME]
     ");
 
@@ -910,7 +1030,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to change of exclude newer span from `P1W` to `-P1W`
+    Resolving despite existing lockfile due to change of exclude newer span from `P1W` to `-P1W`
     Resolved 2 packages in [TIME]
     ");
 
@@ -991,7 +1111,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .arg("--exclude-newer")
-        .arg("P4Z"), @r#"
+        .arg("P4Z"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1000,20 +1120,23 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     error: invalid value 'P4Z' for '--exclude-newer <EXCLUDE_NEWER>': `P4Z` could not be parsed as an ISO 8601 duration: expected to find date unit designator suffix (`Y`, `M`, `W` or `D`), but found `Z` instead
 
     For more information, try '--help'.
-    "#);
+    ");
 
     uv_snapshot!(context.filters(), context
         .lock()
         .arg("--exclude-newer")
-        .arg("2006-12-02T02:07:43"), @"
+        .arg("2006-12-02T02:07:43Z"), @"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to removal of exclude newer span
+    Resolving despite existing lockfile due to removal of exclude newer span
       × No solution found when resolving dependencies:
-      ╰─▶ Because there are no versions of iniconfig and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because there are no versions of iniconfig and iniconfig==2.0.0 was published after the exclude newer time, we can conclude that all versions of iniconfig cannot be used.
+          And because your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2006-12-02T02:07:43Z. The latest version satisfying the requirement is v2.0.0, published at 2023-01-07T11:08:09.864Z. Consider using `exclude-newer-package` to override the cutoff for this package.
     ");
 
     uv_snapshot!(context.filters(), context
@@ -1067,7 +1190,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value '1000000 years' for '--exclude-newer <EXCLUDE_NEWER>': `1000000 years` could not be parsed as a duration: failed to parse input in the "friendly" duration format: failed to set value for year unit on span: parameter 'years' with value 1000000 is not in the required range of -19998..=19998
+    error: invalid value '1000000 years' for '--exclude-newer <EXCLUDE_NEWER>': `1000000 years` could not be parsed as a duration: failed to parse input in the "friendly" duration format: failed to set value for year unit on span: parameter 'years' is not in the required range of -19998..=19998
 
     For more information, try '--help'.
     "#);
@@ -1078,7 +1201,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
 /// Lock with various relative exclude newer value formats in a `pyproject.toml`.
 #[test]
 fn lock_exclude_newer_relative_values_pyproject() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"

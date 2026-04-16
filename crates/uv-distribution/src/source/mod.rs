@@ -6,7 +6,7 @@
 // instead. But that's a monster. On the other hand, applying this suppression
 // instruction more granularly is annoying. So we just slap it on the module
 // for now. ---AG
-#![allow(clippy::redundant_closure_for_method_calls)]
+#![expect(clippy::redundant_closure_for_method_calls)]
 
 use std::borrow::Cow;
 use std::ops::Bound;
@@ -36,7 +36,7 @@ use uv_distribution_types::{
     SourceUrl,
 };
 use uv_extract::hash::Hasher;
-use uv_fs::{rename_with_retry, write_atomic};
+use uv_fs::{Simplified, rename_with_retry, write_atomic};
 use uv_git::{GIT_LFS, GitError};
 use uv_git_types::{GitHubRepository, GitOid};
 use uv_metadata::read_archive_metadata;
@@ -792,6 +792,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         };
 
         let download = |response| {
+            let query_url = url.clone();
+
             async {
                 // At this point, we're seeing a new or updated source distribution. Initialize a
                 // new revision, to collect the source and built artifacts.
@@ -802,7 +804,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 let entry = cache_shard.shard(revision.id()).entry(SOURCE);
                 let algorithms = hashes.algorithms();
                 let hashes = self
-                    .download_archive(response, source, ext, entry.path(), &algorithms)
+                    .download_archive(query_url, response, source, ext, entry.path(), &algorithms)
                     .await?;
 
                 Ok(revision.with_hashes(HashDigests::from(hashes)))
@@ -816,7 +818,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 client.cached_client().get_serde_with_retry(
                     req,
                     &cache_entry,
-                    cache_control,
+                    cache_control.clone(),
                     download,
                 )
             })
@@ -1171,7 +1173,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         hashes: HashPolicy<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         // Before running the build, check that the hashes match.
-        if hashes.is_validate() {
+        if hashes.requires_validation() {
             return Err(Error::HashesNotSupportedSourceTree(source.to_string()));
         }
 
@@ -1233,7 +1235,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let (disk_filename, filename, metadata) = self
             .build_distribution(
                 source,
-                &resource.install_path,
+                resource.install_path,
                 None,
                 &cache_shard,
                 self.build_context.sources().clone(),
@@ -1275,20 +1277,29 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         credentials_cache: &CredentialsCache,
     ) -> Result<ArchiveMetadata, Error> {
         // Before running the build, check that the hashes match.
-        if hashes.is_validate() {
+        if hashes.requires_validation() {
             return Err(Error::HashesNotSupportedSourceTree(source.to_string()));
         }
 
+        // Project-style resolution always lowers workspace members as editable. Tool-style
+        // resolution preserves an explicit local requirement choice instead, defaulting implicit
+        // workspace siblings to non-editable.
+        let editable = self
+            .build_context
+            .source_tree_editable_policy()
+            .workspace_member_editable(resource.editable);
+
         // If the metadata is static, return it.
-        let dynamic = match StaticMetadata::read(source, &resource.install_path, None).await? {
+        let dynamic = match StaticMetadata::read(source, resource.install_path, None).await? {
             StaticMetadata::Some(metadata) => {
                 return Ok(ArchiveMetadata::from(
                     Metadata::from_workspace(
                         metadata,
-                        resource.install_path.as_ref(),
+                        resource.install_path,
                         None,
                         self.build_context.locations(),
                         self.build_context.sources().clone(),
+                        editable,
                         self.build_context.workspace_cache(),
                         credentials_cache,
                     )
@@ -1339,10 +1350,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     return Ok(ArchiveMetadata::from(
                         Metadata::from_workspace(
                             metadata,
-                            resource.install_path.as_ref(),
+                            resource.install_path,
                             None,
                             self.build_context.locations(),
                             self.build_context.sources().clone(),
+                            editable,
                             self.build_context.workspace_cache(),
                             credentials_cache,
                         )
@@ -1361,7 +1373,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         if let Some(metadata) = self
             .build_metadata(
                 source,
-                &resource.install_path,
+                resource.install_path,
                 None,
                 self.build_context.sources().clone(),
             )
@@ -1389,10 +1401,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Ok(ArchiveMetadata::from(
                 Metadata::from_workspace(
                     metadata,
-                    resource.install_path.as_ref(),
+                    resource.install_path,
                     None,
                     self.build_context.locations(),
                     self.build_context.sources().clone(),
+                    editable,
                     self.build_context.workspace_cache(),
                     credentials_cache,
                 )
@@ -1420,7 +1433,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let (_disk_filename, _filename, metadata) = self
             .build_distribution(
                 source,
-                &resource.install_path,
+                resource.install_path,
                 None,
                 &cache_shard,
                 self.build_context.sources().clone(),
@@ -1451,10 +1464,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         Ok(ArchiveMetadata::from(
             Metadata::from_workspace(
                 metadata,
-                resource.install_path.as_ref(),
+                resource.install_path,
                 None,
                 self.build_context.locations(),
                 self.build_context.sources().clone(),
+                editable,
                 self.build_context.workspace_cache(),
                 credentials_cache,
             )
@@ -1475,7 +1489,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // Determine the last-modified time of the source distribution.
-        let cache_info = CacheInfo::from_directory(&resource.install_path)?;
+        let cache_info = CacheInfo::from_directory(resource.install_path)?;
 
         // Read the existing metadata from the cache.
         let entry = cache_shard.entry(LOCAL_REVISION);
@@ -1531,6 +1545,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     None,
                     self.build_context.locations(),
                     self.build_context.sources().clone(),
+                    self.build_context
+                        .source_tree_editable_policy()
+                        .workspace_member_editable(None),
                     self.build_context.workspace_cache(),
                     credentials_cache,
                 )
@@ -1563,7 +1580,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         client: &ManagedClient<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         // Before running the build, check that the hashes match.
-        if hashes.is_validate() {
+        if hashes.requires_validation() {
             return Err(Error::HashesNotSupportedGit(source.to_string()));
         }
 
@@ -1573,7 +1590,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .fetch(
                 resource.git,
-                client.unmanaged.disable_ssl(resource.git.repository()),
+                client.unmanaged.disable_ssl(resource.git.url()),
                 client.unmanaged.connectivity() == Connectivity::Offline,
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter
@@ -1695,7 +1712,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         credentials_cache: &CredentialsCache,
     ) -> Result<ArchiveMetadata, Error> {
         // Before running the build, check that the hashes match.
-        if hashes.is_validate() {
+        if hashes.requires_validation() {
             return Err(Error::HashesNotSupportedGit(source.to_string()));
         }
 
@@ -1728,7 +1745,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     resource.git,
                     client
                         .unmanaged
-                        .uncached_client(resource.git.repository())
+                        .uncached_client(resource.git.url())
                         .raw_client(),
                 )
                 .await
@@ -1788,7 +1805,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .fetch(
                 resource.git,
-                client.unmanaged.disable_ssl(resource.git.repository()),
+                client.unmanaged.disable_ssl(resource.git.url()),
                 client.unmanaged.connectivity() == Connectivity::Offline,
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter
@@ -1853,6 +1870,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             Some(&git_member),
                             self.build_context.locations(),
                             self.build_context.sources().clone(),
+                            self.build_context
+                                .source_tree_editable_policy()
+                                .workspace_member_editable(None),
                             self.build_context.workspace_cache(),
                             credentials_cache,
                         )
@@ -1887,6 +1907,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                                 Some(&git_member),
                                 self.build_context.locations(),
                                 self.build_context.sources().clone(),
+                                self.build_context
+                                    .source_tree_editable_policy()
+                                    .workspace_member_editable(None),
                                 self.build_context.workspace_cache(),
                                 credentials_cache,
                             )
@@ -1940,6 +1963,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     Some(&git_member),
                     self.build_context.locations(),
                     self.build_context.sources().clone(),
+                    self.build_context
+                        .source_tree_editable_policy()
+                        .workspace_member_editable(None),
                     self.build_context.workspace_cache(),
                     credentials_cache,
                 )
@@ -2002,6 +2028,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Some(&git_member),
                 self.build_context.locations(),
                 self.build_context.sources().clone(),
+                self.build_context
+                    .source_tree_editable_policy()
+                    .workspace_member_editable(None),
                 self.build_context.workspace_cache(),
                 credentials_cache,
             )
@@ -2035,10 +2064,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .github_fast_path(
                 git,
-                client
-                    .unmanaged
-                    .uncached_client(git.repository())
-                    .raw_client(),
+                client.unmanaged.uncached_client(git.url()).raw_client(),
             )
             .await?
         {
@@ -2052,7 +2078,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .fetch(
                 git,
-                client.unmanaged.disable_ssl(git.repository()),
+                client.unmanaged.disable_ssl(git.url()),
                 client.unmanaged.connectivity() == Connectivity::Offline,
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter
@@ -2098,11 +2124,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         let content = client
             .managed(async |client| {
-                let response = client
-                    .uncached_client(git.repository())
-                    .get(&url)
-                    .send()
-                    .await?;
+                let response = client.uncached_client(git.url()).get(&url).send().await?;
 
                 // If the `pyproject.toml` does not exist, the GitHub API will return a 404.
                 if response.status() == StatusCode::NOT_FOUND {
@@ -2121,7 +2143,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         };
 
         // Parse the `pyproject.toml`.
-        let pyproject_toml = match PyProjectToml::from_toml(&content) {
+        let pyproject_toml = match PyProjectToml::from_toml(&content, source) {
             Ok(metadata) => metadata,
             Err(
                 uv_pypi_types::MetadataError::InvalidPyprojectTomlSyntax(..)
@@ -2242,6 +2264,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         };
 
         let download = |response| {
+            let query_url = url.clone();
+
             async {
                 // Take the union of the requested and existing hash algorithms.
                 let algorithms = {
@@ -2255,7 +2279,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 };
 
                 let hashes = self
-                    .download_archive(response, source, ext, entry.path(), &algorithms)
+                    .download_archive(query_url, response, source, ext, entry.path(), &algorithms)
                     .await?;
                 for existing in revision.hashes() {
                     if !hashes.contains(existing) {
@@ -2274,7 +2298,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .skip_cache_with_retry(
                         Self::request(url.clone(), client)?,
                         &cache_entry,
-                        cache_control,
+                        cache_control.clone(),
                         download,
                     )
                     .await
@@ -2289,6 +2313,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     /// Download and unzip a source distribution into the cache from an HTTP response.
     async fn download_archive(
         &self,
+        query_url: DisplaySafeUrl,
         response: Response,
         source: &BuildableSource<'_>,
         ext: SourceDistExtension,
@@ -2301,6 +2326,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .bucket(CacheBucket::SourceDistributions),
         )
         .map_err(Error::CacheWrite)?;
+
         let reader = response
             .bytes_stream()
             .map_err(std::io::Error::other)
@@ -2316,7 +2342,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Download and unzip the source distribution into a temporary directory.
         let span = info_span!("download_source_dist", source_dist = %source);
-        uv_extract::stream::archive(&mut hasher, ext, temp_dir.path())
+        uv_extract::stream::archive(query_url, &mut hasher, ext, temp_dir.path())
             .await
             .map_err(|err| Error::Extract(source.to_string(), err))?;
         drop(span);
@@ -2385,7 +2411,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let mut hasher = uv_extract::hash::HashReader::new(reader, &mut hashers);
 
         // Unzip the archive into a temporary directory.
-        uv_extract::stream::archive(&mut hasher, ext, &temp_dir.path())
+        uv_extract::stream::archive(path.display(), &mut hasher, ext, &temp_dir.path())
             .await
             .map_err(|err| Error::Extract(temp_dir.path().to_string_lossy().into_owned(), err))?;
 
@@ -2902,8 +2928,9 @@ fn has_sources(content: &str) -> Result<bool, toml::de::Error> {
         sources: Option<ToolUvSources>,
     }
 
-    let PyProjectToml { tool } = toml::from_str(content)?;
-    if let Some(tool) = tool {
+    let pyproject_toml =
+        info_span!("toml::from_str has sources").in_scope(|| toml::from_str(content))?;
+    if let PyProjectToml { tool: Some(tool) } = pyproject_toml {
         if let Some(uv) = tool.uv {
             if let Some(sources) = uv.sources {
                 if !sources.inner().is_empty() {
@@ -3071,7 +3098,7 @@ async fn read_pyproject_toml(
         Some(subdirectory) => source_tree.join(subdirectory).join("pyproject.toml"),
         None => source_tree.join("pyproject.toml"),
     };
-    let content = match fs::read_to_string(pyproject_toml).await {
+    let content = match fs::read_to_string(&pyproject_toml).await {
         Ok(content) => content,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
             return Err(Error::MissingPyprojectToml);
@@ -3079,7 +3106,7 @@ async fn read_pyproject_toml(
         Err(err) => return Err(Error::CacheRead(err)),
     };
 
-    let pyproject_toml = PyProjectToml::from_toml(&content)?;
+    let pyproject_toml = PyProjectToml::from_toml(&content, pyproject_toml.simplified_display())?;
 
     Ok(pyproject_toml)
 }

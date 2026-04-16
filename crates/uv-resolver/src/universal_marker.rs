@@ -710,8 +710,15 @@ impl<'a> ParsedRawExtra<'a> {
 ///
 /// If a conflict item isn't present in the map of known conflicts, it's assumed to be false in all
 /// environments.
-pub(crate) fn resolve_conflicts(
+/// Resolve unencoded package extra markers and conflict-encoded extra markers in a
+/// [`MarkerTree`] based on the conditions under which each item is known to be true.
+///
+/// When `scope_package` is set, unencoded package extras like `extra == 'cpu'` are interpreted
+/// relative to that package. Conflict-encoded extras and groups are resolved independent of
+/// `scope_package`.
+pub(crate) fn resolve_activated_extras(
     marker: MarkerTree,
+    scope_package: Option<&PackageName>,
     known_conflicts: &FxHashMap<ConflictItem, MarkerTree>,
 ) -> MarkerTree {
     if marker.is_true() || marker.is_false() {
@@ -799,6 +806,25 @@ pub(crate) fn resolve_conflicts(
                                 or.and(conflict_marker.negate());
                                 found = true;
                                 break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Search for an unencoded package extra in the current package scope.
+            if !found {
+                if let Some(package) = scope_package {
+                    let conflict_item = ConflictItem::from((package.clone(), name.clone()));
+                    if let Some(conflict_marker) = known_conflicts.get(&conflict_item) {
+                        match operator {
+                            ExtraOperator::Equal => {
+                                or.and(*conflict_marker);
+                                found = true;
+                            }
+                            ExtraOperator::NotEqual => {
+                                or.and(conflict_marker.negate());
+                                found = true;
                             }
                         }
                     }
@@ -1014,7 +1040,7 @@ mod tests {
     fn resolve() {
         let known_conflicts = create_known_conflicts([("foo", "sys_platform == 'darwin'")]);
         let cm = MarkerTree::from_str("(python_version >= '3.10' and extra == 'extra-3-pkg-foo') or (python_version < '3.10' and extra != 'extra-3-pkg-foo')").unwrap();
-        let cm = resolve_conflicts(cm, &known_conflicts);
+        let cm = resolve_activated_extras(cm, None, &known_conflicts);
         assert_eq!(
             cm.try_to_string().as_deref(),
             Some(
@@ -1024,7 +1050,7 @@ mod tests {
 
         let cm = MarkerTree::from_str("python_version >= '3.10' and extra == 'extra-3-pkg-foo'")
             .unwrap();
-        let cm = resolve_conflicts(cm, &known_conflicts);
+        let cm = resolve_activated_extras(cm, None, &known_conflicts);
         assert_eq!(
             cm.try_to_string().as_deref(),
             Some("python_full_version >= '3.10' and sys_platform == 'darwin'")
@@ -1032,7 +1058,31 @@ mod tests {
 
         let cm = MarkerTree::from_str("python_version >= '3.10' and extra == 'extra-3-pkg-bar'")
             .unwrap();
-        let cm = resolve_conflicts(cm, &known_conflicts);
+        let cm = resolve_activated_extras(cm, None, &known_conflicts);
+        assert!(cm.is_false());
+    }
+
+    #[test]
+    fn resolve_unencoded_package_extras() {
+        let known_conflicts = create_known_conflicts([("foo", "sys_platform == 'darwin'")]);
+        let package = create_package("pkg");
+
+        let cm = MarkerTree::from_str("python_version >= '3.10' and extra == 'foo'").unwrap();
+        let cm = resolve_activated_extras(cm, Some(&package), &known_conflicts);
+        assert_eq!(
+            cm.try_to_string().as_deref(),
+            Some("python_full_version >= '3.10' and sys_platform == 'darwin'")
+        );
+
+        let cm = MarkerTree::from_str("python_version >= '3.10' and extra != 'foo'").unwrap();
+        let cm = resolve_activated_extras(cm, Some(&package), &known_conflicts);
+        assert_eq!(
+            cm.try_to_string().as_deref(),
+            Some("python_full_version >= '3.10' and sys_platform != 'darwin'")
+        );
+
+        let cm = MarkerTree::from_str("python_version >= '3.10' and extra == 'bar'").unwrap();
+        let cm = resolve_activated_extras(cm, Some(&package), &known_conflicts);
         assert!(cm.is_false());
     }
 }

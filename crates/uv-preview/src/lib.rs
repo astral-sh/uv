@@ -1,3 +1,4 @@
+use std::sync::{Mutex, OnceLock};
 use std::{
     fmt::{Debug, Display, Formatter},
     ops::BitOr,
@@ -7,6 +8,220 @@ use std::{
 use enumflags2::{BitFlags, bitflags};
 use thiserror::Error;
 use uv_warnings::warn_user_once;
+
+/// Indicates if the preview state has been finalized yet or not.
+enum PreviewState {
+    Provisional(Preview),
+    Final(Preview),
+}
+
+/// Indicates how the preview was initialised, to distinguish between normal
+/// code and unit tests.
+enum PreviewMode {
+    /// Initialised by a call to [`init`].
+    Normal(Mutex<PreviewState>),
+    /// Initialised by a call to [`test::with_features`].
+    #[cfg(feature = "testing")]
+    Test(std::sync::RwLock<Option<Preview>>),
+}
+
+static PREVIEW: OnceLock<PreviewMode> = OnceLock::new();
+
+/// Error type for global preview state initialization related errors
+#[derive(Debug, Error)]
+pub enum PreviewError {
+    /// Returned when [`set`] or [`finalize`] are called on a finalized state.
+    #[error("The preview configuration has already been finalized")]
+    AlreadyFinalized,
+
+    /// Returned when [`finalize`] is called on an uninitialized state.
+    #[error("The preview configuration has not been initialized yet")]
+    NotInitialized,
+
+    /// Returned when [`set`] or [`finalize`] are called on a test state.
+    #[cfg(feature = "testing")]
+    #[error("The preview configuration is in test mode and {}::{} cannot be used", module_path!(), .0)]
+    InTest(&'static str),
+}
+
+/// Initialize the global preview configuration.
+///
+/// This should be called once at startup with the resolved preview settings.
+pub fn set(preview: Preview) -> Result<(), PreviewError> {
+    let mode = PREVIEW.get_or_init(|| {
+        PreviewMode::Normal(Mutex::new(PreviewState::Provisional(Preview::default())))
+    });
+    match mode {
+        PreviewMode::Normal(mutex) => {
+            // Calling `set` in a test context is already disallowed, so a panic if
+            // the mutex is poisoned is fine.
+            let mut state = mutex.lock().unwrap();
+            match &*state {
+                PreviewState::Provisional(_) => {
+                    *state = PreviewState::Provisional(preview);
+                    Ok(())
+                }
+                PreviewState::Final(_) => Err(PreviewError::AlreadyFinalized),
+            }
+        }
+        #[cfg(feature = "testing")]
+        PreviewMode::Test(_) => Err(PreviewError::InTest("set")),
+    }
+}
+
+pub fn finalize() -> Result<(), PreviewError> {
+    match PREVIEW.get().ok_or(PreviewError::NotInitialized)? {
+        PreviewMode::Normal(mutex) => {
+            // Calling `set` in a test context is already disallowed, so a panic if
+            // the mutex is poisoned is fine.
+            let mut state = mutex.lock().unwrap();
+            match &*state {
+                PreviewState::Provisional(preview) => {
+                    *state = PreviewState::Final(*preview);
+                    Ok(())
+                }
+                PreviewState::Final(_) => Err(PreviewError::AlreadyFinalized),
+            }
+        }
+        #[cfg(feature = "testing")]
+        PreviewMode::Test(_) => Err(PreviewError::InTest("finalize")),
+    }
+}
+
+/// Error returned when [`finalize`] is called on an uninitialized state.
+#[derive(Debug, Error)]
+#[error("The preview configuration has already been finalized")]
+pub struct SetError;
+
+/// Get the current global preview configuration.
+///
+/// # Panics
+///
+/// When called before [`init`] or (with the `testing` feature) when the
+/// current thread does not hold a [`test::with_features`] guard.
+pub fn get() -> Preview {
+    match PREVIEW.get() {
+        Some(PreviewMode::Normal(mutex)) => match *mutex.lock().unwrap() {
+            PreviewState::Provisional(preview) => preview,
+            PreviewState::Final(preview) => preview,
+        },
+        #[cfg(feature = "testing")]
+        Some(PreviewMode::Test(rwlock)) => {
+            assert!(
+                test::HELD.get(),
+                "The preview configuration is in test mode but the current thread does not hold a `FeaturesGuard`\nHint: Use `{}::test::with_features` to get a `FeaturesGuard` and hold it when testing functions which rely on the global preview state",
+                module_path!()
+            );
+            // The unwrap may panic only if the current thread had panicked
+            // while attempting to write the value and then recovered with
+            // `catch_unwind`. This seems unlikely.
+            rwlock
+                .read()
+                .unwrap()
+                .expect("FeaturesGuard is held but preview value is not set")
+        }
+        #[cfg(feature = "testing")]
+        None => panic!(
+            "The preview configuration has not been initialized\nHint: Use `{}::init` or `{}::test::with_features` to initialize it",
+            module_path!(),
+            module_path!()
+        ),
+        #[cfg(not(feature = "testing"))]
+        None => panic!("The preview configuration has not been initialized"),
+    }
+}
+
+/// Check if a specific preview feature is enabled globally.
+pub fn is_enabled(flag: PreviewFeature) -> bool {
+    get().is_enabled(flag)
+}
+
+/// Functions for unit tests, do not use from normal code!
+#[cfg(feature = "testing")]
+pub mod test {
+    use super::{PREVIEW, Preview, PreviewMode};
+    use std::cell::Cell;
+    use std::sync::{Mutex, MutexGuard, RwLock};
+
+    /// The global preview state test mutex. It does not guard any data but is
+    /// simply used to ensure tests which rely on the global preview state are
+    /// ran serially.
+    static MUTEX: Mutex<()> = Mutex::new(());
+
+    thread_local! {
+        /// Whether the current thread holds the global mutex.
+        ///
+        /// This is used to catch situations where a test forgets to set the
+        /// global test state but happens to work anyway because of another test
+        /// setting the state.
+        pub(crate) static HELD: Cell<bool> = const { Cell::new(false) };
+    }
+
+    /// A scope guard which ensures that the global preview state is configured
+    /// and consistent for the duration of its lifetime.
+    #[derive(Debug)]
+    #[expect(unused)]
+    pub struct FeaturesGuard(MutexGuard<'static, ()>);
+
+    /// Temporarily set the state of preview features for the duration of the
+    /// lifetime of the returned guard.
+    ///
+    /// Calls cannot be nested, and this function must be used to set the global
+    /// preview features when testing functionality which uses it, otherwise
+    /// that functionality will panic.
+    ///
+    /// The preview state will only be valid for the thread which calls this
+    /// function, it will not be valid for any other thread. This is a
+    /// consequence of how `HELD` is used to check for tests which are missing
+    /// the guard.
+    pub fn with_features(features: &[super::PreviewFeature]) -> FeaturesGuard {
+        assert!(
+            !HELD.get(),
+            "Additional calls to `{}::with_features` are not allowed while holding a `FeaturesGuard`",
+            module_path!()
+        );
+
+        let guard = match MUTEX.lock() {
+            Ok(guard) => guard,
+            // This is okay because the mutex isn't guarding any data, so when
+            // it gets poisoned, it just means a test thread died while holding
+            // it, so it's safe to just re-grab it from the PoisonError, there's
+            // no chance of any corruption.
+            Err(err) => err.into_inner(),
+        };
+
+        HELD.set(true);
+
+        let state = PREVIEW.get_or_init(|| PreviewMode::Test(RwLock::new(None)));
+        match state {
+            PreviewMode::Test(rwlock) => {
+                *rwlock.write().unwrap() = Some(Preview::new(features));
+            }
+            PreviewMode::Normal(_) => {
+                panic!(
+                    "Cannot use `{}::with_features` after `uv_preview::init` has been called",
+                    module_path!()
+                );
+            }
+        }
+        FeaturesGuard(guard)
+    }
+
+    impl Drop for FeaturesGuard {
+        fn drop(&mut self) {
+            HELD.set(false);
+
+            match PREVIEW.get().unwrap() {
+                PreviewMode::Test(rwlock) => {
+                    *rwlock.write().unwrap() = None;
+                }
+                PreviewMode::Normal(_) => {
+                    unreachable!("FeaturesGuard should not exist when in Normal mode");
+                }
+            }
+        }
+    }
+}
 
 #[bitflags]
 #[repr(u32)]
@@ -35,6 +250,12 @@ pub enum PreviewFeature {
     MetadataJson = 1 << 20,
     GcsEndpoint = 1 << 21,
     AdjustUlimit = 1 << 22,
+    SpecialCondaEnvNames = 1 << 23,
+    RelocatableEnvsDefault = 1 << 24,
+    PublishRequireNormalized = 1 << 25,
+    Audit = 1 << 26,
+    ProjectDirectoryMustExist = 1 << 27,
+    IndexExcludeNewer = 1 << 28,
 }
 
 impl PreviewFeature {
@@ -64,6 +285,12 @@ impl PreviewFeature {
             Self::MetadataJson => "metadata-json",
             Self::GcsEndpoint => "gcs-endpoint",
             Self::AdjustUlimit => "adjust-ulimit",
+            Self::SpecialCondaEnvNames => "special-conda-env-names",
+            Self::RelocatableEnvsDefault => "relocatable-envs-default",
+            Self::PublishRequireNormalized => "publish-require-normalized",
+            Self::Audit => "audit",
+            Self::ProjectDirectoryMustExist => "project-directory-must-exist",
+            Self::IndexExcludeNewer => "index-exclude-newer",
         }
     }
 }
@@ -106,6 +333,12 @@ impl FromStr for PreviewFeature {
             "target-workspace-discovery" => Self::TargetWorkspaceDiscovery,
             "metadata-json" => Self::MetadataJson,
             "adjust-ulimit" => Self::AdjustUlimit,
+            "special-conda-env-names" => Self::SpecialCondaEnvNames,
+            "relocatable-envs-default" => Self::RelocatableEnvsDefault,
+            "publish-require-normalized" => Self::PublishRequireNormalized,
+            "audit" => Self::Audit,
+            "project-directory-must-exist" => Self::ProjectDirectoryMustExist,
+            "index-exclude-newer" => Self::IndexExcludeNewer,
             _ => return Err(PreviewFeatureParseError),
         })
     }
@@ -148,9 +381,19 @@ impl Preview {
         Self::new(preview_features)
     }
 
-    /// Check if a single feature is enabled
+    /// Check if a single feature is enabled.
     pub fn is_enabled(&self, flag: PreviewFeature) -> bool {
         self.flags.contains(flag)
+    }
+
+    /// Check if all preview feature rae enabled.
+    pub fn all_enabled(&self) -> bool {
+        self.flags.is_all()
+    }
+
+    /// Check if any preview feature is enabled.
+    pub fn any_enabled(&self) -> bool {
+        !self.flags.is_empty()
     }
 }
 
@@ -329,5 +572,62 @@ mod tests {
         assert_eq!(PreviewFeature::MetadataJson.as_str(), "metadata-json");
         assert_eq!(PreviewFeature::GcsEndpoint.as_str(), "gcs-endpoint");
         assert_eq!(PreviewFeature::AdjustUlimit.as_str(), "adjust-ulimit");
+        assert_eq!(
+            PreviewFeature::SpecialCondaEnvNames.as_str(),
+            "special-conda-env-names"
+        );
+        assert_eq!(
+            PreviewFeature::RelocatableEnvsDefault.as_str(),
+            "relocatable-envs-default"
+        );
+        assert_eq!(
+            PreviewFeature::PublishRequireNormalized.as_str(),
+            "publish-require-normalized"
+        );
+        assert_eq!(
+            PreviewFeature::ProjectDirectoryMustExist.as_str(),
+            "project-directory-must-exist"
+        );
+        assert_eq!(
+            PreviewFeature::IndexExcludeNewer.as_str(),
+            "index-exclude-newer"
+        );
+    }
+
+    #[test]
+    fn test_global_preview() {
+        {
+            let _guard =
+                test::with_features(&[PreviewFeature::Pylock, PreviewFeature::WorkspaceMetadata]);
+            assert!(!is_enabled(PreviewFeature::InitProjectFlag));
+            assert!(is_enabled(PreviewFeature::Pylock));
+            assert!(is_enabled(PreviewFeature::WorkspaceMetadata));
+            assert!(!is_enabled(PreviewFeature::AuthHelper));
+        }
+        {
+            let _guard =
+                test::with_features(&[PreviewFeature::InitProjectFlag, PreviewFeature::AuthHelper]);
+            assert!(is_enabled(PreviewFeature::InitProjectFlag));
+            assert!(!is_enabled(PreviewFeature::Pylock));
+            assert!(!is_enabled(PreviewFeature::WorkspaceMetadata));
+            assert!(is_enabled(PreviewFeature::AuthHelper));
+        }
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Additional calls to `uv_preview::test::with_features` are not allowed while holding a `FeaturesGuard`"
+    )]
+    fn test_global_preview_panic_nested() {
+        let _guard =
+            test::with_features(&[PreviewFeature::Pylock, PreviewFeature::WorkspaceMetadata]);
+        let _guard2 =
+            test::with_features(&[PreviewFeature::InitProjectFlag, PreviewFeature::AuthHelper]);
+    }
+
+    #[test]
+    #[should_panic(expected = "uv_preview::test::with_features")]
+    fn test_global_preview_panic_uninitialized() {
+        let _preview = get();
     }
 }

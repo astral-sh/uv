@@ -94,7 +94,7 @@ impl LineHaul {
         // Build Distro as Linehaul expects.
         let distro: Option<Distro> = if cfg!(target_os = "linux") {
             // Gather distribution info from /etc/os-release.
-            sys_info::linux_os_release().ok().map(|info| Distro {
+            uv_platform::host::LinuxOsRelease::from_env().map(|info| Distro {
                 // e.g., Jammy, Focal, etc.
                 id: info.version_codename,
                 // e.g., Ubuntu, Fedora, etc.

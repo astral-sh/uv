@@ -3,7 +3,7 @@ use std::io;
 use std::path::Path;
 use std::str::FromStr;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use owo_colors::OwoColorize;
 use tracing::{debug, warn};
 
@@ -22,7 +22,7 @@ use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::DependencyType;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
-use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceCache};
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
@@ -89,16 +89,13 @@ pub(crate) async fn remove(
         // Find the project in the workspace.
         // No workspace caching since `uv remove` changes the workspace definition.
         let project = if let Some(package) = package {
-            VirtualProject::Project(
-                Workspace::discover(
-                    project_dir,
-                    &DiscoveryOptions::default(),
-                    &WorkspaceCache::default(),
-                )
-                .await?
-                .with_current_project(package.clone())
-                .with_context(|| format!("Package `{package}` not found in workspace"))?,
+            VirtualProject::discover_with_package(
+                project_dir,
+                &DiscoveryOptions::default(),
+                &WorkspaceCache::default(),
+                package.clone(),
             )
+            .await?
         } else {
             VirtualProject::discover(
                 project_dir,
@@ -307,7 +304,7 @@ pub(crate) async fn remove(
             &client_builder,
             &state,
             Box::new(DefaultResolveLogger),
-            concurrency,
+            &concurrency,
             cache,
             &WorkspaceCache::default(),
             printer,
@@ -319,9 +316,11 @@ pub(crate) async fn remove(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::with_system_certs(
+                client_builder.system_certs(),
+            )
+            .report(err)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
@@ -365,9 +364,9 @@ pub(crate) async fn remove(
         &state,
         Box::new(DefaultInstallLogger),
         installer_metadata,
-        concurrency,
+        &concurrency,
         cache,
-        WorkspaceCache::default(),
+        &WorkspaceCache::default(),
         DryRun::Disabled,
         printer,
         preview,
@@ -376,9 +375,11 @@ pub(crate) async fn remove(
     {
         Ok(_) => {}
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::with_system_certs(
+                client_builder.system_certs(),
+            )
+            .report(err)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     }
@@ -425,7 +426,6 @@ impl RemoveTarget {
     }
 
     /// Update the target in-memory to incorporate the new content.
-    #[expect(clippy::result_large_err)]
     fn update(self, content: &str) -> Result<Self, ProjectError> {
         match self {
             Self::Script(mut script) => {
@@ -435,7 +435,7 @@ impl RemoveTarget {
             }
             Self::Project(project) => {
                 let project = project
-                    .with_pyproject_toml(
+                    .update_member(
                         toml::from_str(content).map_err(ProjectError::PyprojectTomlParse)?,
                     )?
                     .ok_or(ProjectError::PyprojectTomlUpdate)?;

@@ -19,15 +19,15 @@ jobs:
       name: release
     permissions:
       contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-      # TODO(zanieb): Switch to trusted publishing once published
-      # - uses: rust-lang/crates-io-auth-action@v1
-      #   id: auth
+      - uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe # v1.0.4
+        id: auth
       - name: Publish workspace crates
         # Note `--no-verify` is safe because we do a publish dry-run elsewhere in CI
         run: cargo publish --workspace --no-verify
         env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}

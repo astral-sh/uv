@@ -47,7 +47,7 @@ jobs:
           echo "${{ github.workspace }}/nu-${nu_tag}-x86_64-unknown-linux-gnu" >> "${GITHUB_PATH}"
 
       - name: Download binary
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -71,14 +71,15 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-      - uses: conda-incubator/setup-miniconda@835234971496cad1653abb28a638a281cf32541f # v3.2.0
+      # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
+      - uses: conda-incubator/setup-miniconda@fc2d68f6413eb2d87b895e92f8584b5b94a10167 # v3.3.0
         with:
           miniconda-version: latest
           activate-environment: uv
           python-version: "3.12"
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -94,6 +95,44 @@ jobs:
         run: |
           echo "$CONDA_PREFIX"
           ./uv pip install anyio
+
+  integration-test-conda-macos-x86_64:
+    name: "conda on macos x86-64"
+    timeout-minutes: 10
+    runs-on: macos-15-intel # github-macos-15-x86_64-4
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
+      - uses: conda-incubator/setup-miniconda@fc2d68f6413eb2d87b895e92f8584b5b94a10167 # v3.3.0
+        with:
+          miniconda-version: latest
+          activate-environment: uv
+          python-version: "3.12"
+
+      - name: "Download binary"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: uv-macos-x86_64-${{ inputs.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: Conda info
+        shell: bash -el {0}
+        run: conda info
+
+      - name: "Install a package with macOS macOS 11.0 wheels"
+        shell: bash -el {0}
+        run: |
+          # greenlet has `macosx_11_0_universal2` wheels. Previously, conda interpreters on Intel
+          # macOS reported the incorrect platform tag `macosx_10_16` causing uv to consider the
+          # wheel incompatible. See https://github.com/astral-sh/uv/issues/14267
+          #
+          # Using `--only-binary` ensures this fails if the platform tags are wrong instead of
+          # falling back to a source build.
+          ./uv pip install --no-build 'greenlet==3.3.2'
 
   integration-test-deadsnakes-39-linux:
     name: "deadsnakes python3.9 on ubuntu"
@@ -113,7 +152,7 @@ jobs:
           sudo apt-get install python3.9
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -142,6 +181,48 @@ jobs:
         run: |
           ./uv pip install -v anyio
 
+  integration-test-linux-armv7-on-aarch64:
+    name: "armv7 on aarch64 linux"
+    timeout-minutes: 20
+    runs-on: github-ubuntu-24.04-aarch64-4
+    env:
+      UV_PYTHON_INSTALL_DIR: ${{ github.workspace }}/.python
+
+    steps:
+      - name: "Download binary"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: uv-linux-armv7-gnueabihf-${{ inputs.sha }}
+
+      - name: "Install armhf runtime"
+        run: |
+          sudo dpkg --add-architecture armhf
+          sudo apt-get update
+          sudo apt-get install -y libc6:armhf libgcc-s1:armhf
+
+      - name: "Prepare binary"
+        run: |
+          chmod +x ./uv
+          chmod +x ./uvx
+
+      - name: "Install Python via uv"
+        run: |
+          ./uv python install -v 3.13.12
+
+      - name: "Verify hard-float variant selected"
+        run: |
+          python_path=$(./uv python find 3.13)
+          expected="$GITHUB_WORKSPACE/.python/cpython-3.13-linux-armv7-gnueabihf/bin/python3.13"
+          if [[ "$python_path" != "$expected" ]]; then
+            echo "Expected: $expected"
+            echo "Found:    $python_path"
+            exit 1
+          fi
+
+      - name: "Create a virtual environment"
+        run: |
+          ./uv venv -c -p 3.13.12 --managed-python --no-python-downloads
+
   integration-test-free-threaded-windows-x86_64:
     name: "free-threaded on windows"
     timeout-minutes: 10
@@ -149,7 +230,7 @@ jobs:
 
     steps:
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-windows-x86_64-${{ inputs.sha }}
 
@@ -193,7 +274,7 @@ jobs:
 
     steps:
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-windows-aarch64-${{ inputs.sha }}
 
@@ -237,7 +318,7 @@ jobs:
 
     steps:
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-windows-aarch64-${{ inputs.sha }}
 
@@ -281,7 +362,7 @@ jobs:
 
     steps:
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-windows-x86_64-${{ inputs.sha }}
 
@@ -308,7 +389,7 @@ jobs:
           persist-credentials: false
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-windows-x86_64-${{ inputs.sha }}
 
@@ -325,7 +406,7 @@ jobs:
           persist-credentials: false
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -387,7 +468,7 @@ jobs:
 
     steps:
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-windows-x86_64-${{ inputs.sha }}
 
@@ -449,7 +530,7 @@ jobs:
           persist-credentials: false
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -507,7 +588,7 @@ jobs:
       - name: "Check a GraalPy dev version (different version parsing)"
         run: |
           curl -sLf https://github.com/graalvm/graal-languages-ea-builds/releases/download/graalpy-25.0.0-ea.31/graalpy-25.0.0-ea.31-linux-amd64.tar.gz | tar xz
-          ./uv run -p ./graalpy-25.0.0-dev-linux-amd64/bin/python python --version
+          ./uv run --no-project -p ./graalpy-25.0.0-dev-linux-amd64/bin/python python --version
 
   integration-test-graalpy-windows-x86_64:
     name: "graalpy on windows"
@@ -516,7 +597,7 @@ jobs:
 
     steps:
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-windows-x86_64-${{ inputs.sha }}
 
@@ -573,7 +654,7 @@ jobs:
           persist-credentials: false
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -627,7 +708,7 @@ jobs:
       PYODIDE_XBUILDENV_PATH: D:\pyodide-xbuildenv
     steps:
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-windows-x86_64-${{ inputs.sha }}
 
@@ -652,17 +733,42 @@ jobs:
           .\uv.exe pip install --extra-index-url=$env:PYODIDE_INDEX --no-build numpy
           python -c 'import numpy'
 
+  integration-test-termux:
+    name: "termux on android"
+    timeout-minutes: 15
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: "Download binary"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: uv-linux-musl-${{ inputs.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Run uv on Termux"
+        run: |
+          docker run --rm \
+            -v "$PWD/uv:/uv" \
+            -v "$PWD/test/integration/termux.sh:/test-termux.sh" \
+            ghcr.io/astral-sh/termux-python:latest \
+            /entrypoint.sh bash /test-termux.sh
+
   integration-test-github-actions:
     name: "github actions"
     timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: "3.12.7"
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -714,12 +820,12 @@ jobs:
     timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: "3.13t"
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -758,10 +864,11 @@ jobs:
           persist-credentials: false
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-linux-musl-${{ inputs.sha }}
 
+      # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - name: "Setup WSL"
         uses: Vampire/setup-wsl@6a8db447be7ed35f2f499c02c6e60ff77ef11278 # v6.0.0
         with:
@@ -803,7 +910,9 @@ jobs:
     timeout-minutes: 10
     runs-on: ubuntu-latest
     if: ${{ github.event.pull_request.head.repo.fork != true }}
-    environment: uv-test-registries
+    environment:
+      name: uv-test-registries
+      deployment: false
     env:
       PYTHON_VERSION: 3.12
     steps:
@@ -812,12 +921,12 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: "${{ env.PYTHON_VERSION }}"
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -825,7 +934,7 @@ jobs:
         run: chmod +x ./uv
 
       - name: "Configure AWS credentials"
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -859,7 +968,7 @@ jobs:
           echo "UV_TEST_GCP_TOKEN=$UV_TEST_GCP_TOKEN" >> $GITHUB_ENV
 
       - name: "Run registry tests with environment variable backend"
-        run: ./uv run -p "${PYTHON_VERSION}" scripts/registries-test.py --uv ./uv --color always --all --auth-method env
+        run: ./uv run --no-project -p "${PYTHON_VERSION}" scripts/registries-test.py --uv ./uv --color always --all --auth-method env
         env:
           RUST_LOG: uv=debug
           UV_TEST_ARTIFACTORY_TOKEN: ${{ secrets.UV_TEST_ARTIFACTORY_TOKEN }}
@@ -883,7 +992,7 @@ jobs:
           UV_TEST_GITLAB_USERNAME: token
 
       - name: "Run registry tests with text store backend"
-        run: ./uv run -p "${PYTHON_VERSION}" scripts/registries-test.py --uv ./uv --color always --all --auth-method text-store
+        run: ./uv run --no-project -p "${PYTHON_VERSION}" scripts/registries-test.py --uv ./uv --color always --all --auth-method text-store
         env:
           RUST_LOG: uv=debug
           UV_TEST_ARTIFACTORY_TOKEN: ${{ secrets.UV_TEST_ARTIFACTORY_TOKEN }}
@@ -915,12 +1024,12 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: "${{ env.PYTHON_VERSION }}"
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -964,12 +1073,12 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -991,8 +1100,12 @@ jobs:
         with:
           persist-credentials: false
 
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.14"
+
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-macos-aarch64-${{ inputs.sha }}
 

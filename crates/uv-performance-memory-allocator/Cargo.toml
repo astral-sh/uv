@@ -1,6 +1,6 @@
 [package]
 name = "uv-performance-memory-allocator"
-version = "0.0.17"
+version = "0.0.39"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -11,8 +11,7 @@ license = { workspace = true }
 
 [lib]
 doctest = false
-
-[dependencies]
+test = false
 
 [target.'cfg(all(target_os = "windows"))'.dependencies]
 mimalloc = { version = "0.1.43" }

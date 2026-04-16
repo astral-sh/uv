@@ -10,7 +10,6 @@ use anyhow::{Context, Result, anyhow};
 use cargo_util::{ProcessBuilder, paths};
 use owo_colors::OwoColorize;
 use tracing::{debug, instrument, warn};
-use url::Url;
 
 use uv_fs::Simplified;
 use uv_git_types::{GitOid, GitReference};
@@ -539,7 +538,7 @@ impl GitCheckout {
 /// The `remote_url` argument is the git remote URL where we want to fetch from.
 fn fetch(
     repo: &mut GitRepository,
-    remote_url: &Url,
+    remote_url: &DisplaySafeUrl,
     reference: ReferenceOrOid<'_>,
     disable_ssl: bool,
     offline: bool,
@@ -685,7 +684,7 @@ fn fetch(
 /// Attempts to use `git` CLI installed on the system to fetch a repository.
 fn fetch_with_cli(
     repo: &mut GitRepository,
-    url: &Url,
+    url: &DisplaySafeUrl,
     refspecs: &[String],
     tags: bool,
     disable_ssl: bool,
@@ -766,7 +765,7 @@ pub static GIT_LFS: LazyLock<Result<ProcessBuilder>> = LazyLock::new(|| {
 /// Attempts to use `git-lfs` CLI to fetch required LFS objects for a given revision.
 fn fetch_lfs(
     repo: &mut GitRepository,
-    url: &Url,
+    url: &DisplaySafeUrl,
     revision: &GitOid,
     disable_ssl: bool,
 ) -> Result<bool> {

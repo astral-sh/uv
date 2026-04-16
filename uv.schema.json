@@ -22,6 +22,16 @@
         "$ref": "#/definitions/TrustedHost"
       }
     },
+    "audit": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/AuditOptions"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "build-backend": {
       "description": "Configuration for the uv build backend.\n\nNote that those settings only apply when using the `uv_build` backend, other build backends\n(such as hatchling) have their own configuration.",
       "anyOf": [
@@ -175,7 +185,7 @@
       }
     },
     "exclude-newer": {
-      "description": "Limit candidate packages to those that were uploaded prior to the given date.\n\nAccepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), a \"friendly\" duration (e.g.,\n`24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`, `P7D`, `P30D`).\n\nDurations do not respect semantics of the local time zone and are always resolved to a fixed\nnumber of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).\nCalendar units such as months and years are not allowed.",
+      "description": "Limit candidate packages to those that were uploaded prior to the given date.\n\nThe date is compared against the upload time of each individual distribution artifact\n(i.e., when each file was uploaded to the package index), not the release date of the\npackage version.\n\nAccepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), a \"friendly\" duration (e.g.,\n`24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`, `P7D`, `P30D`).\n\nDurations do not respect semantics of the local time zone and are always resolved to a fixed\nnumber of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).\nCalendar units such as months and years are not allowed.",
       "anyOf": [
         {
           "$ref": "#/definitions/ExcludeNewerValue"
@@ -186,7 +196,7 @@
       ]
     },
     "exclude-newer-package": {
-      "description": "Limit candidate packages for specific packages to those that were uploaded prior to the\ngiven date.\n\nAccepts a dictionary format of `PACKAGE = \"DATE\"` pairs, where `DATE` is an RFC 3339\ntimestamp (e.g., `2006-12-02T02:07:43Z`), a \"friendly\" duration (e.g., `24 hours`, `1 week`,\n`30 days`), or a ISO 8601 duration (e.g., `PT24H`, `P7D`, `P30D`).\n\nDurations do not respect semantics of the local time zone and are always resolved to a fixed\nnumber of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).\nCalendar units such as months and years are not allowed.",
+      "description": "Limit candidate packages for specific packages to those that were uploaded prior to the\ngiven date.\n\nAccepts a dictionary format of `PACKAGE = \"DATE\"` pairs, where `DATE` is an RFC 3339\ntimestamp (e.g., `2006-12-02T02:07:43Z`), a \"friendly\" duration (e.g., `24 hours`, `1 week`,\n`30 days`), or a ISO 8601 duration (e.g., `PT24H`, `P7D`, `P30D`).\n\nDurations do not respect semantics of the local time zone and are always resolved to a fixed\nnumber of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).\nCalendar units such as months and years are not allowed.\n\nSet a package to `false` to exempt it from the global [`exclude-newer`](#exclude-newer)\nconstraint entirely.",
       "anyOf": [
         {
           "$ref": "#/definitions/ExcludeNewerPackage"
@@ -307,7 +317,7 @@
       ]
     },
     "link-mode": {
-      "description": "The method to use when installing packages from the global cache.\n\nDefaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and\nWindows.\n\nWARNING: The use of symlink link mode is discouraged, as they create tight coupling between\nthe cache and the target environment. For example, clearing the cache (`uv cache clean`)\nwill break all installed packages by way of removing the underlying source files. Use\nsymlinks with caution.",
+      "description": "The method to use when installing packages from the global cache.\n\nDefaults to `clone` (also known as Copy-on-Write) on macOS and Linux, and `hardlink` on\nWindows.\n\nWARNING: The use of symlink link mode is discouraged, as they create tight coupling between\nthe cache and the target environment. For example, clearing the cache (`uv cache clean`)\nwill break all installed packages by way of removing the underlying source files. Use\nsymlinks with caution.",
       "anyOf": [
         {
           "$ref": "#/definitions/LinkMode"
@@ -322,8 +332,9 @@
       "type": ["boolean", "null"]
     },
     "native-tls": {
-      "description": "Whether to load TLS certificates from the platform's native certificate store.\n\nBy default, uv loads certificates from the bundled `webpki-roots` crate. The\n`webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv\nimproves portability and performance (especially on macOS).\n\nHowever, in some cases, you may want to use the platform's native certificate store,\nespecially if you're relying on a corporate trust root (e.g., for a mandatory proxy) that's\nincluded in your system's certificate store.",
-      "type": ["boolean", "null"]
+      "description": "Whether to load TLS certificates from the platform's native certificate store.\n\nBy default, uv uses bundled Mozilla root certificates. When enabled, this loads\ncertificates from the platform's native certificate store instead.\n\n(Deprecated: use `system-certs` instead.)",
+      "type": ["boolean", "null"],
+      "deprecated": true
     },
     "no-binary": {
       "description": "Don't install pre-built wheels.\n\nThe given packages will be built and installed from source. The resolver will still use\npre-built wheels to extract package metadata, if available.",
@@ -520,6 +531,10 @@
         }
       ]
     },
+    "system-certs": {
+      "description": "Whether to load TLS certificates from the platform's native certificate store.\n\nBy default, uv uses bundled Mozilla root certificates. When enabled, this loads\ncertificates from the platform's native certificate store instead.",
+      "type": ["boolean", "null"]
+    },
     "torch-backend": {
       "description": "The backend to use when fetching packages in the PyTorch ecosystem.\n\nWhen set, uv will ignore the configured index URLs for packages in the PyTorch ecosystem,\nand will instead use the defined backend.\n\nFor example, when set to `cpu`, uv will use the CPU-only PyTorch index; when set to `cu126`,\nuv will use the PyTorch index for CUDA 12.6.\n\nThe `auto` mode will attempt to detect the appropriate PyTorch index based on the currently\ninstalled CUDA drivers.\n\nThis setting is only respected by `uv pip` commands.\n\nThis option is in preview and may change in any future release.",
       "anyOf": [
@@ -606,6 +621,25 @@
           "const": "split"
         }
       ]
+    },
+    "AuditOptions": {
+      "type": "object",
+      "properties": {
+        "ignore": {
+          "description": "A list of vulnerability IDs to ignore during auditing.\n\nVulnerabilities matching any of the provided IDs (including aliases) will be excluded from\nthe audit results.",
+          "type": ["array", "null"],
+          "items": {
+            "type": "string"
+          }
+        },
+        "ignore-until-fixed": {
+          "description": "A list of vulnerability IDs to ignore during auditing, but only while no fix is available.\n\nVulnerabilities matching any of the provided IDs (including aliases) will be excluded from\nthe audit results as long as they have no known fix versions. Once a fix version becomes\navailable, the vulnerability will be reported again.",
+          "type": ["array", "null"],
+          "items": {
+            "type": "string"
+          }
+        }
+      }
     },
     "AuthPolicy": {
       "description": "When to use authentication.",
@@ -804,10 +838,22 @@
       "type": "string",
       "format": "uri"
     },
+    "ExcludeNewerOverride": {
+      "oneOf": [
+        {
+          "description": "Disable exclude-newer.",
+          "type": "boolean",
+          "const": false
+        },
+        {
+          "$ref": "#/definitions/ExcludeNewerValue"
+        }
+      ]
+    },
     "ExcludeNewerPackage": {
       "type": "object",
       "additionalProperties": {
-        "$ref": "#/definitions/PackageExcludeNewer"
+        "$ref": "#/definitions/ExcludeNewerOverride"
       }
     },
     "ExcludeNewerValue": {
@@ -924,6 +970,14 @@
           "description": "Mark the index as the default index.\n\nBy default, uv uses PyPI as the default index, such that even if additional indexes are\ndefined via `[[tool.uv.index]]`, PyPI will still be used as a fallback for packages that\naren't found elsewhere. To disable the PyPI default, set `default = true` on at least one\nother index.\n\nMarking an index as default will move it to the front of the list of indexes, such that it\nis given the highest priority when resolving packages.",
           "type": "boolean",
           "default": false
+        },
+        "exclude-newer": {
+          "description": "An index-specific `exclude-newer` cutoff.\n\nAccepts the same date, timestamp, and duration values as the global `exclude-newer`\nsetting. Set this to `false` to disable `exclude-newer` for this index entirely.\n\nWhen set to a value, packages resolved from this index will use that cutoff instead of the\nglobally-specified value, unless a package-specific `exclude-newer-package` override is\npresent.\n\nThis option is in preview and may change in any future release.\n\n```toml\n[tool.uv]\nexclude-newer = \"2025-01-01T00:00:00Z\"\n\n[[tool.uv.index]]\nname = \"internal\"\nurl = \"https://internal.example.com/simple\"\nexclude-newer = \"7 days\"\n```",
+          "allOf": [
+            {
+              "$ref": "#/definitions/ExcludeNewerOverride"
+            }
+          ]
         },
         "explicit": {
           "description": "Mark the index as explicit.\n\nExplicit indexes will _only_ be used when explicitly requested via a `[tool.uv.sources]`\ndefinition, as in:\n\n```toml\n[[tool.uv.index]]\nname = \"pytorch\"\nurl = \"https://download.pytorch.org/whl/cu121\"\nexplicit = true\n\n[tool.uv.sources]\ntorch = { index = \"pytorch\" }\n```",
@@ -1051,24 +1105,25 @@
       ]
     },
     "LinkMode": {
+      "description": "The method to use when linking.\n\nDefaults to [`LinkMode::Clone`] on macOS and Linux (which support copy-on-write on\nAPFS and btrfs/xfs/bcachefs respectively), and [`LinkMode::Hardlink`] on other\nplatforms.",
       "oneOf": [
         {
-          "description": "Clone (i.e., copy-on-write or reflink) packages from the wheel into the `site-packages` directory.",
+          "description": "Clone (i.e., copy-on-write) packages from the source into the destination.",
           "type": "string",
           "const": "clone"
         },
         {
-          "description": "Copy packages from the wheel into the `site-packages` directory.",
+          "description": "Copy packages from the source into the destination.",
           "type": "string",
           "const": "copy"
         },
         {
-          "description": "Hard link packages from the wheel into the `site-packages` directory.",
+          "description": "Hard link packages from the source into the destination.",
           "type": "string",
           "const": "hardlink"
         },
         {
-          "description": "Symbolically link packages from the wheel into the `site-packages` directory.",
+          "description": "Symbolically link packages from the source into the destination.",
           "type": "string",
           "const": "symlink"
         }
@@ -1100,18 +1155,6 @@
       "additionalProperties": {
         "$ref": "#/definitions/ConfigSettings"
       }
-    },
-    "PackageExcludeNewer": {
-      "oneOf": [
-        {
-          "description": "Disable exclude-newer for this package.",
-          "type": "boolean",
-          "const": false
-        },
-        {
-          "$ref": "#/definitions/ExcludeNewerValue"
-        }
-      ]
     },
     "PackageName": {
       "description": "The normalized name of a package.\n\nConverts the name to lowercase and collapses runs of `-`, `_`, and `.` down to a single `-`.\nFor example, `---`, `.`, and `__` are all converted to a single `-`.\n\nSee: <https://packaging.python.org/en/latest/specifications/name-normalization/>",
@@ -1220,7 +1263,7 @@
           "type": ["boolean", "null"]
         },
         "exclude-newer": {
-          "description": "Limit candidate packages to those that were uploaded prior to a given point in time.\n\nAccepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,\n`2006-12-02T02:07:43Z`). A full timestamp is required to ensure that the resolver will\nbehave consistently across timezones.",
+          "description": "Limit candidate packages to those that were uploaded prior to a given point in time.\n\nThe date is compared against the upload time of each individual distribution artifact\n(i.e., when each file was uploaded to the package index), not the release date of the\npackage version.\n\nAccepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,\n`2006-12-02T02:07:43Z`). A full timestamp is required to ensure that the resolver will\nbehave consistently across timezones.",
           "anyOf": [
             {
               "$ref": "#/definitions/ExcludeNewerValue"
@@ -1231,7 +1274,7 @@
           ]
         },
         "exclude-newer-package": {
-          "description": "Limit candidate packages for specific packages to those that were uploaded prior to the given date.\n\nAccepts package-date pairs in a dictionary format.",
+          "description": "Limit candidate packages for specific packages to those that were uploaded prior to the given date.\n\nAccepts package-date pairs in a dictionary format. Set a package to `false` to exempt it\nfrom the global [`exclude-newer`](#exclude-newer) constraint entirely.",
           "anyOf": [
             {
               "$ref": "#/definitions/ExcludeNewerPackage"
@@ -1340,7 +1383,7 @@
           ]
         },
         "link-mode": {
-          "description": "The method to use when installing packages from the global cache.\n\nDefaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and\nWindows.\n\nWARNING: The use of symlink link mode is discouraged, as they create tight coupling between\nthe cache and the target environment. For example, clearing the cache (`uv cache clean`)\nwill break all installed packages by way of removing the underlying source files. Use\nsymlinks with caution.",
+          "description": "The method to use when installing packages from the global cache.\n\nDefaults to `clone` (also known as Copy-on-Write) on macOS and Linux, and `hardlink` on\nWindows.\n\nWARNING: The use of symlink link mode is discouraged, as they create tight coupling between\nthe cache and the target environment. For example, clearing the cache (`uv cache clean`)\nwill break all installed packages by way of removing the underlying source files. Use\nsymlinks with caution.",
           "anyOf": [
             {
               "$ref": "#/definitions/LinkMode"
@@ -1693,7 +1736,8 @@
           ],
           "default": null
         }
-      }
+      },
+      "additionalProperties": false
     },
     "SchemaConflictSet": {
       "description": "Like [`ConflictSet`], but for deserialization in `pyproject.toml`.\n\nThe schema format is different from the in-memory format. Specifically, the\nschema format does not allow specifying the package name (or will make it\noptional in the future), where as the in-memory format needs the package\nname.",
@@ -2396,6 +2440,11 @@
           "description": "Use the PyTorch index for CUDA 8.0.",
           "type": "string",
           "const": "cu80"
+        },
+        {
+          "description": "Use the PyTorch index for ROCm 7.2.",
+          "type": "string",
+          "const": "rocm7.2"
         },
         {
           "description": "Use the PyTorch index for ROCm 7.1.",

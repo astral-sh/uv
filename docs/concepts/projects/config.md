@@ -296,11 +296,14 @@ flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
 
 !!! note
 
-    The `FLASH_ATTENTION_SKIP_CUDA_BUILD` environment variable ensures that `flash-attn` is installed
-    from a compatible, pre-built wheel, rather than attempting to build it from source, which requires
-    access to the CUDA development toolkit. If the CUDA toolkit is not available, the environment variable
-    can be omitted, and `flash-attn` will be installed from a pre-built wheel if one is available for the
-    current platform, Python version, and PyTorch version.
+    The `FLASH_ATTENTION_SKIP_CUDA_BUILD` environment variable enables `flash-attn` to be
+    resolved from a pre-built wheel, rather than attempting to build it from source, which
+    requires access to the CUDA development toolkit.
+
+    If the CUDA toolkit is available during resolution, we recommend omitting the
+    `FLASH_ATTENTION_SKIP_CUDA_BUILD` variable, as setting `FLASH_ATTENTION_SKIP_CUDA_BUILD`
+    to `TRUE` can lead to an incompatible install if no compatible pre-built wheel is available
+    for the target PyTorch version, GPU version, and platform.
 
 Similarly, [`deep_gemm`](https://github.com/deepseek-ai/DeepGEMM) follows the same pattern:
 

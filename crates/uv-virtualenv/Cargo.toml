@@ -1,6 +1,6 @@
 [package]
 name = "uv-virtualenv"
-version = "0.0.17"
+version = "0.0.39"
 description = "This is an internal component crate of uv"
 keywords = ["virtualenv", "venv", "python"]
 
@@ -13,6 +13,7 @@ license = { workspace = true }
 
 [lib]
 doctest = false
+test = false
 
 [lints]
 workspace = true
@@ -21,12 +22,10 @@ workspace = true
 uv-console = { workspace = true }
 uv-fs = { workspace = true }
 uv-platform-tags = { workspace = true }
-uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
 uv-shell = { workspace = true }
 uv-version = { workspace = true }
-uv-warnings = { workspace = true }
 
 console = { workspace = true }
 fs-err = { workspace = true }

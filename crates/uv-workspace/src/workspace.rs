@@ -11,11 +11,11 @@ use tracing::{debug, trace, warn};
 
 use uv_configuration::DependencyGroupsWithDefaults;
 use uv_distribution_types::{Index, Requirement, RequirementSource};
-use uv_fs::{CWD, Simplified};
+use uv_fs::{CWD, Simplified, normalize_path};
 use uv_normalize::{DEV_DEPENDENCIES, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerTree, VerbatimUrl};
-use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
+use uv_pypi_types::{ConflictError, Conflicts, SupportedEnvironments, VerbatimParsedUrl};
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 
@@ -49,14 +49,16 @@ pub enum WorkspaceError {
     MissingPyprojectToml,
     #[error("Workspace member `{}` is missing a `pyproject.toml` (matches: `{}`)", _0.simplified_display(), _1)]
     MissingPyprojectTomlMember(PathBuf, String),
-    #[error("No `project` table found in: `{}`", _0.simplified_display())]
+    #[error("No `project` table found in: {}", _0.simplified_display())]
     MissingProject(PathBuf),
-    #[error("No workspace found for: `{}`", _0.simplified_display())]
+    #[error("No workspace found for: {}", _0.simplified_display())]
     MissingWorkspace(PathBuf),
-    #[error("The project is marked as unmanaged: `{}`", _0.simplified_display())]
+    #[error("The project is marked as unmanaged: {}", _0.simplified_display())]
     NonWorkspace(PathBuf),
-    #[error("Nested workspaces are not supported, but workspace member (`{}`) has a `uv.workspace` table", _0.simplified_display())]
+    #[error("Nested workspaces are not supported, but workspace member has a `tool.uv.workspace` table: {}", _0.simplified_display())]
     NestedWorkspace(PathBuf),
+    #[error("The workspace does not have a member {}: {}", _0, _1.simplified_display())]
+    NoSuchMember(PackageName, PathBuf),
     #[error("Two workspace members are both named `{name}`: `{}` and `{}`", first.simplified_display(), second.simplified_display())]
     DuplicatePackage {
         name: PackageName,
@@ -79,6 +81,8 @@ pub enum WorkspaceError {
     Io(#[from] std::io::Error),
     #[error("Failed to parse: `{}`", _0.user_display())]
     Toml(PathBuf, #[source] Box<PyprojectTomlError>),
+    #[error(transparent)]
+    Conflicts(#[from] ConflictError),
     #[error("Failed to normalize workspace member path")]
     Normalize(#[source] std::io::Error),
 }
@@ -97,14 +101,10 @@ pub enum MemberDiscovery {
 /// Whether a "project" must be defined via a `[project]` table.
 #[derive(Debug, Default, Clone, Hash, PartialEq, Eq)]
 pub enum ProjectDiscovery {
-    /// The `[project]` table is optional; when missing, the target is treated as virtual.
+    /// The `[project]` table is optional; when missing, the target is treated as a virtual
+    /// project with only dependency groups.
     #[default]
     Optional,
-    /// A `[project]` table must be defined, unless `[tool.uv.workspace]` is present indicating a
-    /// legacy non-project workspace root.
-    ///
-    /// If neither is defined, discovery will fail.
-    Legacy,
     /// A `[project]` table must be defined.
     ///
     /// If not defined, discovery will fail.
@@ -114,20 +114,12 @@ pub enum ProjectDiscovery {
 impl ProjectDiscovery {
     /// Whether a `[project]` table is required.
     pub fn allows_implicit_workspace(&self) -> bool {
-        match self {
-            Self::Optional => true,
-            Self::Legacy => false,
-            Self::Required => false,
-        }
+        matches!(self, Self::Optional)
     }
 
-    /// Whether a legacy workspace root is allowed.
-    pub fn allows_legacy_workspace(&self) -> bool {
-        match self {
-            Self::Optional => true,
-            Self::Legacy => true,
-            Self::Required => false,
-        }
+    /// Whether a non-project workspace root is allowed.
+    pub fn allows_non_project_workspace(&self) -> bool {
+        matches!(self, Self::Optional)
     }
 }
 
@@ -184,7 +176,7 @@ impl Workspace {
     ///   * If an explicit workspace root exists: Collect workspace from this root, we're done.
     ///   * If there is no explicit workspace: We have a single project workspace, we're done.
     ///
-    /// Note that there are two kinds of workspace roots: projects, and (legacy) non-project roots.
+    /// Note that there are two kinds of workspace roots: projects, and non-project roots.
     /// The non-project roots lack a `[project]` table, and so are not themselves projects, as in:
     /// ```toml
     /// [tool.uv.workspace]
@@ -201,10 +193,7 @@ impl Workspace {
         let path = std::path::absolute(path)
             .map_err(WorkspaceError::Normalize)?
             .clone();
-        // Remove `.` and `..`
-        let path = uv_fs::normalize_path(&path);
-        // Trim trailing slashes.
-        let path = path.components().collect::<PathBuf>();
+        let path = normalize_path(&path);
 
         let project_path = path
             .ancestors()
@@ -214,7 +203,7 @@ impl Workspace {
 
         let pyproject_path = project_path.join("pyproject.toml");
         let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
-        let pyproject_toml = PyProjectToml::from_string(contents)
+        let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
             .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
         // Check if the project is explicitly marked as unmanaged.
@@ -270,7 +259,7 @@ impl Workspace {
             workspace_root.simplified_display()
         );
 
-        // Unlike in `ProjectWorkspace` discovery, we might be in a legacy non-project root without
+        // Unlike in `ProjectWorkspace` discovery, we might be in a non-project root without
         // being in any specific project.
         let current_project = pyproject_toml
             .project
@@ -307,7 +296,7 @@ impl Workspace {
     /// Set the [`ProjectWorkspace`] for a given workspace member.
     ///
     /// Assumes that the project name is unchanged in the updated [`PyProjectToml`].
-    pub fn with_pyproject_toml(
+    pub fn update_member(
         self,
         package_name: &PackageName,
         pyproject_toml: PyProjectToml,
@@ -365,7 +354,7 @@ impl Workspace {
         }
     }
 
-    /// Returns `true` if the workspace has a (legacy) non-project root.
+    /// Returns `true` if the workspace has a non-project root.
     pub fn is_non_project(&self) -> bool {
         !self
             .packages
@@ -376,9 +365,7 @@ impl Workspace {
     /// Returns the set of all workspace members.
     pub fn members_requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
         self.packages.iter().filter_map(|(name, member)| {
-            let url = VerbatimUrl::from_absolute_path(&member.root)
-                .expect("path is valid URL")
-                .with_given(member.root.to_string_lossy());
+            let url = VerbatimUrl::from_absolute_path(&member.root).expect("path is valid URL");
             Some(Requirement {
                 name: member.pyproject_toml.project.as_ref()?.name.clone(),
                 extras: Box::new([]),
@@ -486,9 +473,7 @@ impl Workspace {
     /// Returns the set of all workspace member dependency groups.
     pub fn group_requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
         self.packages.iter().filter_map(|(name, member)| {
-            let url = VerbatimUrl::from_absolute_path(&member.root)
-                .expect("path is valid URL")
-                .with_given(member.root.to_string_lossy());
+            let url = VerbatimUrl::from_absolute_path(&member.root).expect("path is valid URL");
 
             let groups = {
                 let mut groups = member
@@ -562,12 +547,24 @@ impl Workspace {
     }
 
     /// Returns the set of conflicts for the workspace.
-    pub fn conflicts(&self) -> Conflicts {
+    pub fn conflicts(&self) -> Result<Conflicts, WorkspaceError> {
         let mut conflicting = Conflicts::empty();
+        if self.is_non_project() {
+            if let Some(root_conflicts) = self
+                .pyproject_toml
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.conflicts.as_ref())
+            {
+                let mut root_conflicts = root_conflicts.to_conflicts()?;
+                conflicting.append(&mut root_conflicts);
+            }
+        }
         for member in self.packages.values() {
             conflicting.append(&mut member.pyproject_toml.conflicts());
         }
-        conflicting
+        Ok(conflicting)
     }
 
     /// Returns an iterator over the `requires-python` values for each member of the workspace.
@@ -965,7 +962,7 @@ impl Workspace {
         if let Some(project) = &workspace_pyproject_toml.project {
             let pyproject_path = workspace_root.join("pyproject.toml");
             let contents = fs_err::read_to_string(&pyproject_path)?;
-            let pyproject_toml = PyProjectToml::from_string(contents)
+            let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
                 .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
             debug!(
@@ -987,7 +984,7 @@ impl Workspace {
         // Add all other workspace members.
         for member_glob in workspace_definition.clone().members.unwrap_or_default() {
             // Normalize the member glob to remove leading `./` and other relative path components
-            let normalized_glob = uv_fs::normalize_path(Path::new(member_glob.as_str()));
+            let normalized_glob = normalize_path(Path::new(member_glob.as_str()));
             let absolute_glob = PathBuf::from(glob::Pattern::escape(
                 workspace_root.simplified().to_string_lossy().as_ref(),
             ))
@@ -1062,6 +1059,16 @@ impl Workspace {
                                 continue;
                             }
 
+                            // If the directory only contains gitignored files
+                            // (e.g., `__pycache__`), skip it.
+                            if has_only_gitignored_files(&member_root) {
+                                debug!(
+                                    "Ignoring workspace member with only gitignored files: `{}`",
+                                    member_root.simplified_display()
+                                );
+                                continue;
+                            }
+
                             return Err(WorkspaceError::MissingPyprojectTomlMember(
                                 member_root,
                                 member_glob.to_string(),
@@ -1071,7 +1078,7 @@ impl Workspace {
                         return Err(err.into());
                     }
                 };
-                let pyproject_toml = PyProjectToml::from_string(contents)
+                let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
                     .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
                 // Check if the current project is explicitly marked as unmanaged.
@@ -1082,10 +1089,17 @@ impl Workspace {
                     .and_then(|uv| uv.managed)
                     == Some(false)
                 {
-                    debug!(
-                        "Project `{}` is marked as unmanaged; omitting from workspace members",
-                        pyproject_toml.project.as_ref().unwrap().name
-                    );
+                    if let Some(project) = pyproject_toml.project.as_ref() {
+                        debug!(
+                            "Project `{}` is marked as unmanaged; omitting from workspace members",
+                            project.name
+                        );
+                    } else {
+                        debug!(
+                            "Workspace member at `{}` is marked as unmanaged; omitting from workspace members",
+                            member_root.simplified_display()
+                        );
+                    }
                     continue;
                 }
 
@@ -1294,7 +1308,7 @@ impl ProjectWorkspace {
         // Read the current `pyproject.toml`.
         let pyproject_path = project_root.join("pyproject.toml");
         let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
-        let pyproject_toml = PyProjectToml::from_string(contents)
+        let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
             .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
         // It must have a `[project]` table.
@@ -1319,7 +1333,7 @@ impl ProjectWorkspace {
             // No `pyproject.toml`, but there may still be a `setup.py` or `setup.cfg`.
             return Ok(None);
         };
-        let pyproject_toml = PyProjectToml::from_string(contents)
+        let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
             .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
         // Extract the `[project]` metadata.
@@ -1359,13 +1373,13 @@ impl ProjectWorkspace {
     /// Set the `pyproject.toml` for the current project.
     ///
     /// Assumes that the project name is unchanged in the updated [`PyProjectToml`].
-    pub fn with_pyproject_toml(
+    pub fn update_member(
         self,
         pyproject_toml: PyProjectToml,
     ) -> Result<Option<Self>, WorkspaceError> {
         let Some(workspace) = self
             .workspace
-            .with_pyproject_toml(&self.project_name, pyproject_toml)?
+            .update_member(&self.project_name, pyproject_toml)?
         else {
             return Ok(None);
         };
@@ -1373,7 +1387,7 @@ impl ProjectWorkspace {
     }
 
     /// Find the workspace for a project.
-    pub async fn from_project(
+    async fn from_project(
         install_path: &Path,
         project: &Project,
         project_pyproject_toml: &PyProjectToml,
@@ -1383,10 +1397,7 @@ impl ProjectWorkspace {
         let project_path = std::path::absolute(install_path)
             .map_err(WorkspaceError::Normalize)?
             .clone();
-        // Remove `.` and `..`
-        let project_path = uv_fs::normalize_path(&project_path);
-        // Trim trailing slashes.
-        let project_path = project_path.components().collect::<PathBuf>();
+        let project_path = normalize_path(&project_path);
 
         // Check if workspaces are explicitly disabled for the project.
         if project_pyproject_toml
@@ -1397,7 +1408,7 @@ impl ProjectWorkspace {
             == Some(false)
         {
             debug!("Project `{}` is marked as unmanaged", project.name);
-            return Err(WorkspaceError::NonWorkspace(project_path));
+            return Err(WorkspaceError::NonWorkspace(project_path.to_path_buf()));
         }
 
         // Check if the current project is also an explicit workspace root.
@@ -1408,7 +1419,7 @@ impl ProjectWorkspace {
             .and_then(|uv| uv.workspace.as_ref())
             .map(|workspace| {
                 (
-                    project_path.clone(),
+                    project_path.to_path_buf(),
                     workspace.clone(),
                     project_pyproject_toml.clone(),
                 )
@@ -1421,7 +1432,7 @@ impl ProjectWorkspace {
         }
 
         let current_project = WorkspaceMember {
-            root: project_path.clone(),
+            root: project_path.to_path_buf(),
             project: project.clone(),
             pyproject_toml: project_pyproject_toml.clone(),
         };
@@ -1444,10 +1455,10 @@ impl ProjectWorkspace {
             )?;
 
             return Ok(Self {
-                project_root: project_path.clone(),
+                project_root: project_path.to_path_buf(),
                 project_name: project.name.clone(),
                 workspace: Workspace {
-                    install_path: project_path.clone(),
+                    install_path: project_path.to_path_buf(),
                     packages: current_project_as_members,
                     required_members,
                     // There may be package sources, but we don't need to duplicate them into the
@@ -1475,7 +1486,7 @@ impl ProjectWorkspace {
         .await?;
 
         Ok(Self {
-            project_root: project_path,
+            project_root: project_path.to_path_buf(),
             project_name: project.name.clone(),
             workspace,
         })
@@ -1512,7 +1523,7 @@ async fn find_workspace(
 
         // Read the `pyproject.toml`.
         let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
-        let pyproject_toml = PyProjectToml::from_string(contents)
+        let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
             .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
         return if let Some(workspace) = pyproject_toml
@@ -1580,6 +1591,38 @@ async fn find_workspace(
     Ok(None)
 }
 
+/// Check if a directory only contains files that are ignored.
+///
+/// Returns `true` if walking the directory while respecting `.gitignore` and `.ignore` rules
+/// yields no files, indicating that any files present (e.g., `__pycache__`) are all ignored.
+fn has_only_gitignored_files(path: &Path) -> bool {
+    let walker = ignore::WalkBuilder::new(path)
+        .hidden(false)
+        .parents(true)
+        .ignore(true)
+        .git_ignore(true)
+        .git_global(true)
+        .git_exclude(true)
+        .build();
+
+    for entry in walker {
+        let Ok(entry) = entry else {
+            // If we can't read an entry, assume non-ignored content exists.
+            return false;
+        };
+
+        // Skip directories.
+        if entry.path().is_dir() {
+            continue;
+        }
+
+        // A non-ignored entry exists.
+        return false;
+    }
+
+    true
+}
+
 /// Check if we're in the `tool.uv.workspace.excluded` of a workspace.
 fn is_excluded_from_workspace(
     project_path: &Path,
@@ -1588,7 +1631,7 @@ fn is_excluded_from_workspace(
 ) -> Result<bool, WorkspaceError> {
     for exclude_glob in workspace.exclude.iter().flatten() {
         // Normalize the exclude glob to remove leading `./` and other relative path components
-        let normalized_glob = uv_fs::normalize_path(Path::new(exclude_glob.as_str()));
+        let normalized_glob = normalize_path(Path::new(exclude_glob.as_str()));
         let absolute_glob = PathBuf::from(glob::Pattern::escape(
             workspace_root.simplified().to_string_lossy().as_ref(),
         ))
@@ -1611,11 +1654,11 @@ fn is_included_in_workspace(
 ) -> Result<bool, WorkspaceError> {
     for member_glob in workspace.members.iter().flatten() {
         // Normalize the member glob to remove leading `./` and other relative path components
-        let normalized_glob = uv_fs::normalize_path(Path::new(member_glob.as_str()));
+        let normalized_glob = normalize_path(Path::new(member_glob.as_str()));
         let absolute_glob = PathBuf::from(glob::Pattern::escape(
             workspace_root.simplified().to_string_lossy().as_ref(),
         ))
-        .join(normalized_glob.as_ref());
+        .join(normalized_glob);
         let absolute_glob = absolute_glob.to_string_lossy();
         let include_pattern = glob::Pattern::new(&absolute_glob)
             .map_err(|err| WorkspaceError::Pattern(absolute_glob.to_string(), err))?;
@@ -1677,7 +1720,7 @@ impl VirtualProject {
         // Read the current `pyproject.toml`.
         let pyproject_path = project_root.join("pyproject.toml");
         let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
-        let pyproject_toml = PyProjectToml::from_string(contents)
+        let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
             .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
         if let Some(project) = pyproject_toml.project.as_ref() {
@@ -1696,7 +1739,7 @@ impl VirtualProject {
             .as_ref()
             .and_then(|tool| tool.uv.as_ref())
             .and_then(|uv| uv.workspace.as_ref())
-            .filter(|_| options.project.allows_legacy_workspace())
+            .filter(|_| options.project.allows_non_project_workspace())
         {
             // Otherwise, if it contains a `tool.uv.workspace` table, it's a non-project workspace
             // root.
@@ -1738,16 +1781,30 @@ impl VirtualProject {
         }
     }
 
-    /// Set the `pyproject.toml` for the current project.
+    /// Discover a project workspace with the member package.
+    pub async fn discover_with_package(
+        path: &Path,
+        options: &DiscoveryOptions,
+        cache: &WorkspaceCache,
+        package: PackageName,
+    ) -> Result<Self, WorkspaceError> {
+        let workspace = Workspace::discover(path, options, cache).await?;
+        let project_workspace = Workspace::with_current_project(workspace.clone(), package.clone());
+        Ok(Self::Project(project_workspace.ok_or_else(|| {
+            WorkspaceError::NoSuchMember(package.clone(), workspace.install_path)
+        })?))
+    }
+
+    /// Update the `pyproject.toml` for the current project.
     ///
     /// Assumes that the project name is unchanged in the updated [`PyProjectToml`].
-    pub fn with_pyproject_toml(
+    pub fn update_member(
         self,
         pyproject_toml: PyProjectToml,
     ) -> Result<Option<Self>, WorkspaceError> {
         Ok(match self {
             Self::Project(project) => {
-                let Some(project) = project.with_pyproject_toml(pyproject_toml)? else {
+                let Some(project) = project.update_member(pyproject_toml)? else {
                     return Ok(None);
                 };
                 Some(Self::Project(project))
@@ -2745,8 +2802,8 @@ foo = ["a", {include-group = "bar"}]
 bar = ["b"]
 "#;
 
-        let result =
-            PyProjectToml::from_string(toml.to_string()).expect("Deserialization should succeed");
+        let result = PyProjectToml::from_string(toml.to_string(), "pyproject.toml")
+            .expect("Deserialization should succeed");
 
         let groups = result
             .dependency_groups
@@ -2814,7 +2871,7 @@ bar = ["b"]
         insta::with_settings!({filters => filters}, {
             assert_snapshot!(
                 error,
-            @"Nested workspaces are not supported, but workspace member (`[ROOT]/packages/seeds`) has a `uv.workspace` table");
+            @"Nested workspaces are not supported, but workspace member has a `tool.uv.workspace` table: [ROOT]/packages/seeds");
         });
 
         Ok(())

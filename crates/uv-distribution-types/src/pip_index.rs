@@ -7,7 +7,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use std::borrow::Cow;
 use std::path::Path;
 
-use crate::{Index, IndexUrl};
+use crate::{Index, IndexUrl, Origin};
 
 macro_rules! impl_index {
     ($name:ident, $from:expr) => {
@@ -17,6 +17,11 @@ macro_rules! impl_index {
         impl $name {
             pub fn relative_to(self, root_dir: &Path) -> Result<Self, crate::IndexUrlError> {
                 Ok(Self(self.0.relative_to(root_dir)?))
+            }
+
+            /// Set the [`Origin`] if not already set.
+            pub fn try_set_origin(&mut self, origin: Origin) {
+                self.0.origin.get_or_insert(origin);
             }
         }
 

@@ -38,9 +38,8 @@ pub struct PythonInstallation {
 }
 
 impl PythonInstallation {
-    /// Create a new [`PythonInstallation`] from a source, interpreter tuple.
-    pub(crate) fn from_tuple(tuple: (PythonSource, Interpreter)) -> Self {
-        let (source, interpreter) = tuple;
+    /// Create a new [`PythonInstallation`] from a source and interpreter.
+    pub fn new(source: PythonSource, interpreter: Interpreter) -> Self {
         Self {
             source,
             interpreter,
@@ -89,7 +88,7 @@ impl PythonInstallation {
         preview: Preview,
     ) -> Result<Self, Error> {
         let retry_policy = client_builder.retry_policy();
-        let client = client_builder.clone().retries(0).build();
+        let client = client_builder.clone().retries(0).build()?;
         let download_list =
             ManagedPythonDownloadList::new(&client, python_downloads_json_url).await?;
         let downloads_enabled = preference.allows_managed()
@@ -135,7 +134,7 @@ impl PythonInstallation {
         // Python downloads are performing their own retries to catch stream errors, disable the
         // default retries to avoid the middleware performing uncontrolled retries.
         let retry_policy = client_builder.retry_policy();
-        let client = client_builder.clone().retries(0).build();
+        let client = client_builder.clone().retries(0).build()?;
         let download_list =
             ManagedPythonDownloadList::new(&client, python_downloads_json_url).await?;
 
@@ -260,7 +259,6 @@ impl PythonInstallation {
             reporter,
             python_install_mirror,
             pypy_install_mirror,
-            preview,
         )
         .await?;
 
@@ -278,7 +276,6 @@ impl PythonInstallation {
         reporter: Option<&dyn Reporter>,
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
-        preview: Preview,
     ) -> Result<Self, Error> {
         let installations = ManagedPythonInstallations::from_settings(None)?.init()?;
         let installations_dir = installations.root();
@@ -321,7 +318,7 @@ impl PythonInstallation {
             .patch()
             .is_some_and(|p| p >= highest_patch)
         {
-            installed.ensure_minor_version_link(preview)?;
+            installed.ensure_minor_version_link()?;
         }
 
         if let Err(e) = installed.ensure_dylib_patched() {
@@ -359,6 +356,13 @@ impl PythonInstallation {
     /// Return the [`LenientImplementationName`] of the Python installation as reported by its interpreter.
     pub fn implementation(&self) -> LenientImplementationName {
         LenientImplementationName::from(self.interpreter.implementation_name())
+    }
+
+    /// Returns `true` if this is a managed (uv-installed) Python installation.
+    ///
+    /// Uses the source as a fast path, then falls back to checking the interpreter's base prefix.
+    pub fn is_managed(&self) -> bool {
+        self.source.is_managed() || self.interpreter.is_managed()
     }
 
     /// Whether this is a CPython installation.
@@ -585,7 +589,8 @@ impl PythonInstallationKey {
     /// Return a canonical name for a minor versioned executable.
     pub fn executable_name_minor(&self) -> String {
         format!(
-            "python{maj}.{min}{var}{exe}",
+            "{name}{maj}.{min}{var}{exe}",
+            name = self.implementation().executable_install_name(),
             maj = self.major,
             min = self.minor,
             var = self.variant.executable_suffix(),
@@ -596,7 +601,8 @@ impl PythonInstallationKey {
     /// Return a canonical name for a major versioned executable.
     pub fn executable_name_major(&self) -> String {
         format!(
-            "python{maj}{var}{exe}",
+            "{name}{maj}{var}{exe}",
+            name = self.implementation().executable_install_name(),
             maj = self.major,
             var = self.variant.executable_suffix(),
             exe = std::env::consts::EXE_SUFFIX
@@ -606,7 +612,8 @@ impl PythonInstallationKey {
     /// Return a canonical name for an un-versioned executable.
     pub fn executable_name(&self) -> String {
         format!(
-            "python{var}{exe}",
+            "{name}{var}{exe}",
+            name = self.implementation().executable_install_name(),
             var = self.variant.executable_suffix(),
             exe = std::env::consts::EXE_SUFFIX
         )

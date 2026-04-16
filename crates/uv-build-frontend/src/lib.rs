@@ -12,9 +12,8 @@ use std::fmt::Write;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::ExitStatus;
-use std::rc::Rc;
 use std::str::FromStr;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 use std::{env, iter};
 
 use fs_err as fs;
@@ -40,7 +39,6 @@ use uv_fs::{LockedFile, LockedFileMode};
 use uv_fs::{PythonExt, Simplified};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_preview::Preview;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_static::EnvVars;
@@ -109,6 +107,8 @@ struct Tool {
 #[serde(rename_all = "kebab-case")]
 struct ToolUv {
     workspace: Option<de::IgnoredAny>,
+    /// To warn users about ignored build backend settings.
+    build_backend: Option<de::IgnoredAny>,
 }
 
 impl BackendPath {
@@ -215,11 +215,23 @@ impl Pep517Backend {
     }
 }
 
-/// Uses an [`Rc`] internally, clone freely.
-#[derive(Debug, Default, Clone)]
+/// Uses an [`Arc`] internally, clone freely.
+#[derive(Debug, Clone)]
 pub struct SourceBuildContext {
     /// An in-memory resolution of the default backend's requirements for PEP 517 builds.
-    default_resolution: Rc<Mutex<Option<Resolution>>>,
+    default_resolution: Arc<Mutex<Option<Resolution>>>,
+    /// A shared semaphore to limit the number of concurrent builds.
+    concurrent_build_slots: Arc<Semaphore>,
+}
+
+impl SourceBuildContext {
+    /// Create a [`SourceBuildContext`] with the given shared concurrency semaphore.
+    pub fn new(concurrent_build_slots: Arc<Semaphore>) -> Self {
+        Self {
+            default_resolution: Arc::default(),
+            concurrent_build_slots,
+        }
+    }
 }
 
 /// Holds the state through a series of PEP 517 frontend to backend calls or a single `setup.py`
@@ -291,9 +303,7 @@ impl SourceBuild {
         build_kind: BuildKind,
         mut environment_variables: FxHashMap<OsString, OsString>,
         level: BuildOutput,
-        concurrent_builds: usize,
         credentials_cache: &CredentialsCache,
-        preview: Preview,
     ) -> Result<Self, Error> {
         let temp_dir = build_context.cache().venv_dir()?;
 
@@ -365,7 +375,6 @@ impl SourceBuild {
                 false,
                 false,
                 false,
-                preview,
             )?
         };
 
@@ -382,7 +391,7 @@ impl SourceBuild {
 
             let resolved_requirements = Self::get_resolved_requirements(
                 build_context,
-                source_build_context,
+                source_build_context.clone(),
                 &pep517_backend,
                 extra_build_dependencies,
                 build_stack,
@@ -430,7 +439,7 @@ impl SourceBuild {
 
         // Create the PEP 517 build environment. If build isolation is disabled, we assume the build
         // environment is already setup.
-        let runner = PythonRunner::new(concurrent_builds, level);
+        let runner = PythonRunner::new(source_build_context.concurrent_build_slots.clone(), level);
         if build_isolation.is_isolated(package_name.as_ref()) {
             debug!("Creating PEP 517 build environment");
 
@@ -565,99 +574,12 @@ impl SourceBuild {
         workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<(Pep517Backend, Option<Project>), Box<Error>> {
-        match fs::read_to_string(source_tree.join("pyproject.toml")) {
+        let pyproject_toml = match fs::read_to_string(source_tree.join("pyproject.toml")) {
             Ok(toml) => {
                 let pyproject_toml = toml_edit::Document::from_str(&toml)
                     .map_err(Error::InvalidPyprojectTomlSyntax)?;
-                let pyproject_toml = PyProjectToml::deserialize(pyproject_toml.into_deserializer())
-                    .map_err(Error::InvalidPyprojectTomlSchema)?;
-
-                let backend = if let Some(build_system) = pyproject_toml.build_system {
-                    // If necessary, lower the requirements.
-                    let requirements = if let Some(name) = pyproject_toml
-                        .project
-                        .as_ref()
-                        .map(|project| &project.name)
-                        .or(package_name)
-                        // If sources are disabled, there's nothing to do here
-                        .filter(|_| !no_sources.all())
-                    {
-                        let build_requires = uv_pypi_types::BuildRequires {
-                            name: Some(name.clone()),
-                            requires_dist: build_system.requires,
-                        };
-                        let build_requires = BuildRequires::from_project_maybe_workspace(
-                            build_requires,
-                            install_path,
-                            locations,
-                            no_sources,
-                            workspace_cache,
-                            credentials_cache,
-                        )
-                        .await
-                        .map_err(Error::Lowering)?;
-                        build_requires.requires_dist
-                    } else {
-                        build_system
-                            .requires
-                            .into_iter()
-                            .map(Requirement::from)
-                            .collect()
-                    };
-
-                    Pep517Backend {
-                        // If `build-backend` is missing, inject the legacy setuptools backend, but
-                        // retain the `requires`, to match `pip` and `build`. Note that while PEP 517
-                        // says that in this case we "should revert to the legacy behaviour of running
-                        // `setup.py` (either directly, or by implicitly invoking the
-                        // `setuptools.build_meta:__legacy__` backend)", we found that in practice, only
-                        // the legacy setuptools backend is allowed. See also:
-                        // https://github.com/pypa/build/blob/de5b44b0c28c598524832dff685a98d5a5148c44/src/build/__init__.py#L114-L118
-                        backend: build_system
-                            .build_backend
-                            .unwrap_or_else(|| "setuptools.build_meta:__legacy__".to_string()),
-                        backend_path: build_system.backend_path,
-                        requirements,
-                    }
-                } else {
-                    // If a `pyproject.toml` is present, but `[build-system]` is missing, proceed
-                    // with a PEP 517 build using the default backend (`setuptools`), to match `pip`
-                    // and `build`.
-                    //
-                    // If there is no build system defined and there is no metadata source for
-                    // `setuptools`, warn. The build will succeed, but the metadata will be
-                    // incomplete (for example, the package name will be `UNKNOWN`).
-                    if pyproject_toml.project.is_none()
-                        && !source_tree.join("setup.py").is_file()
-                        && !source_tree.join("setup.cfg").is_file()
-                    {
-                        // Give a specific hint for `uv pip install .` in a workspace root.
-                        let looks_like_workspace_root = pyproject_toml
-                            .tool
-                            .as_ref()
-                            .and_then(|tool| tool.uv.as_ref())
-                            .and_then(|tool| tool.workspace.as_ref())
-                            .is_some();
-                        if looks_like_workspace_root {
-                            warn_user_once!(
-                                "`{}` appears to be a workspace root without a Python project; \
-                                consider using `uv sync` to install the workspace, or add a \
-                                `[build-system]` table to `pyproject.toml`",
-                                source_tree.simplified_display().cyan(),
-                            );
-                        } else {
-                            warn_user_once!(
-                                "`{}` does not appear to be a Python project, as the `pyproject.toml` \
-                                does not include a `[build-system]` table, and neither `setup.py` \
-                                nor `setup.cfg` are present in the directory",
-                                source_tree.simplified_display().cyan(),
-                            );
-                        }
-                    }
-
-                    DEFAULT_BACKEND.clone()
-                };
-                Ok((backend, pyproject_toml.project))
+                PyProjectToml::deserialize(pyproject_toml.into_deserializer())
+                    .map_err(Error::InvalidPyprojectTomlSchema)?
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
                 // We require either a `pyproject.toml` or a `setup.py` file at the top level.
@@ -671,10 +593,131 @@ impl SourceBuild {
                 // the default backend, to match `build`. `pip` uses `setup.py` directly in this
                 // case, but plans to make PEP 517 builds the default in the future.
                 // See: https://github.com/pypa/pip/issues/9175.
-                Ok((DEFAULT_BACKEND.clone(), None))
+                return Ok((DEFAULT_BACKEND.clone(), None));
             }
-            Err(err) => Err(Box::new(err.into())),
+            Err(err) => return Err(Box::new(err.into())),
+        };
+
+        let build_backend = pyproject_toml
+            .build_system
+            .as_ref()
+            .and_then(|build_system| build_system.build_backend.as_deref());
+        // Only show the warning for first party and URL dependencies, not for registry dependencies
+        // (which have sources disabled).
+        if !no_sources.all()
+            && pyproject_toml
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .map(|uv| uv.build_backend.is_some())
+                .unwrap_or(false)
+            && build_backend != Some("uv_build")
+            && let Some(package_name) =
+                package_name.or(pyproject_toml.project.as_ref().map(|project| &project.name))
+        {
+            // Show only the name, but not the path to `pyproject.toml`, to avoid showing a
+            // (duplicate) warning that contains the temporary path of an unpacked source
+            // distribution in a source tree -> source dist -> wheel build.
+            if let Some(build_backend) = build_backend {
+                warn_user_once!(
+                    "`{package_name}` defines settings for `uv_build` in `tool.uv.build-backend`, \
+                    but uses `{build_backend}` as build backend instead",
+                );
+            } else {
+                warn_user_once!(
+                    "`{package_name}` defines settings for `uv_build` in `tool.uv.build-backend`, \
+                    but the `build-system` table is missing",
+                );
+            }
         }
+
+        let backend = if let Some(build_system) = pyproject_toml.build_system {
+            // If necessary, lower the requirements.
+            let requirements = if let Some(name) = pyproject_toml
+                .project
+                .as_ref()
+                .map(|project| &project.name)
+                .or(package_name)
+                // If sources are disabled, there's nothing to do here
+                .filter(|_| !no_sources.all())
+            {
+                let build_requires = uv_pypi_types::BuildRequires {
+                    name: Some(name.clone()),
+                    requires_dist: build_system.requires,
+                };
+                let build_requires = BuildRequires::from_project_maybe_workspace(
+                    build_requires,
+                    install_path,
+                    locations,
+                    no_sources,
+                    true,
+                    workspace_cache,
+                    credentials_cache,
+                )
+                .await
+                .map_err(Error::Lowering)?;
+                build_requires.requires_dist
+            } else {
+                build_system
+                    .requires
+                    .into_iter()
+                    .map(Requirement::from)
+                    .collect()
+            };
+
+            Pep517Backend {
+                // If `build-backend` is missing, inject the legacy setuptools backend, but
+                // retain the `requires`, to match `pip` and `build`. Note that while PEP 517
+                // says that in this case we "should revert to the legacy behaviour of running
+                // `setup.py` (either directly, or by implicitly invoking the
+                // `setuptools.build_meta:__legacy__` backend)", we found that in practice, only
+                // the legacy setuptools backend is allowed. See also:
+                // https://github.com/pypa/build/blob/de5b44b0c28c598524832dff685a98d5a5148c44/src/build/__init__.py#L114-L118
+                backend: build_system
+                    .build_backend
+                    .unwrap_or_else(|| "setuptools.build_meta:__legacy__".to_string()),
+                backend_path: build_system.backend_path,
+                requirements,
+            }
+        } else {
+            // If a `pyproject.toml` is present, but `[build-system]` is missing, proceed
+            // with a PEP 517 build using the default backend (`setuptools`), to match `pip`
+            // and `build`.
+            //
+            // If there is no build system defined and there is no metadata source for
+            // `setuptools`, warn. The build will succeed, but the metadata will be
+            // incomplete (for example, the package name will be `UNKNOWN`).
+            if pyproject_toml.project.is_none()
+                && !source_tree.join("setup.py").is_file()
+                && !source_tree.join("setup.cfg").is_file()
+            {
+                // Give a specific hint for `uv pip install .` in a workspace root.
+                let looks_like_workspace_root = pyproject_toml
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|tool| tool.workspace.as_ref())
+                    .is_some();
+                if looks_like_workspace_root {
+                    warn_user_once!(
+                        "`{}` appears to be a workspace root without a Python project; \
+                        consider using `uv sync` to install the workspace, or add a \
+                        `[build-system]` table to `pyproject.toml`",
+                        source_tree.simplified_display().cyan(),
+                    );
+                } else {
+                    warn_user_once!(
+                        "`{}` does not appear to be a Python project, as the `pyproject.toml` \
+                        does not include a `[build-system]` table, and neither `setup.py` \
+                        nor `setup.cfg` are present in the directory",
+                        source_tree.simplified_display().cyan(),
+                    );
+                }
+            }
+
+            DEFAULT_BACKEND.clone()
+        };
+        Ok((backend, pyproject_toml.project))
     }
 
     /// Try calling `prepare_metadata_for_build_wheel` to get the metadata without executing the
@@ -1053,6 +1096,9 @@ async fn create_pep517_build_environment(
             install_path,
             locations,
             &no_sources,
+            build_context
+                .source_tree_editable_policy()
+                .workspace_member_editable(None),
             workspace_cache,
             credentials_cache,
         )
@@ -1098,7 +1144,7 @@ async fn create_pep517_build_environment(
 /// concurrency limit.
 #[derive(Debug)]
 struct PythonRunner {
-    control: Semaphore,
+    concurrent_build_slots: Arc<Semaphore>,
     level: BuildOutput,
 }
 
@@ -1110,10 +1156,10 @@ struct PythonRunnerOutput {
 }
 
 impl PythonRunner {
-    /// Create a `PythonRunner` with the provided concurrency limit and output level.
-    fn new(concurrency: usize, level: BuildOutput) -> Self {
+    /// Create a `PythonRunner` with the provided shared concurrency semaphore and output level.
+    fn new(concurrent_build_slots: Arc<Semaphore>, level: BuildOutput) -> Self {
         Self {
-            control: Semaphore::new(concurrency),
+            concurrent_build_slots,
             level,
         }
     }
@@ -1151,7 +1197,7 @@ impl PythonRunner {
             }
         }
 
-        let _permit = self.control.acquire().await.unwrap();
+        let _permit = self.concurrent_build_slots.acquire().await.unwrap();
 
         let mut child = Command::new(venv.python_executable())
             .args(["-c", script])

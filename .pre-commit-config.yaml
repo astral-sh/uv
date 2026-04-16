@@ -12,18 +12,17 @@ repos:
       - id: validate-pyproject
 
   - repo: https://github.com/crate-ci/typos
-    rev: v1.42.0
+    rev: v1.42.3
     hooks:
       - id: typos
 
   - repo: local
     hooks:
-      - id: cargo-fmt
-        name: cargo fmt
-        entry: cargo fmt --
+      - id: rustfmt
+        name: rustfmt
+        entry: rustfmt
         language: system
         types: [rust]
-        pass_filenames: false # This makes it a lot faster
 
   - repo: local
     hooks:
@@ -45,7 +44,7 @@ repos:
         types_or: [yaml, json5]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.13
+    rev: v0.14.14
     hooks:
       - id: ruff-format
       - id: ruff

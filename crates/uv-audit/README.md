@@ -1,0 +1,13 @@
+<!-- This file is generated. DO NOT EDIT -->
+
+# uv-audit
+
+This crate is an internal component of [uv](https://crates.io/crates/uv). The Rust API exposed here
+is unstable and will have frequent breaking changes.
+
+This version (0.0.39) is a component of [uv 0.11.6](https://crates.io/crates/uv/0.11.6). The source
+can be found [here](https://github.com/astral-sh/uv/blob/0.11.6/crates/uv-audit).
+
+See uv's
+[crate versioning policy](https://docs.astral.sh/uv/reference/policies/versioning/#crate-versioning)
+for details on versioning.

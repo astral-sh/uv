@@ -445,10 +445,23 @@ impl Cache {
         // We have to put this below the gitignore. Otherwise, if the build backend uses the rust
         // ignore crate it will walk up to the top level .gitignore and ignore its python source
         // files.
-        fs_err::OpenOptions::new().create(true).write(true).open(
-            root.join(CacheBucket::SourceDistributions.to_str())
-                .join(".git"),
-        )?;
+        let phony_git = root
+            .join(CacheBucket::SourceDistributions.to_str())
+            .join(".git");
+        match fs_err::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open(&phony_git)
+        {
+            Ok(_) => {}
+            // Handle read-only caches including sandboxed environments.
+            Err(err) if err.kind() == io::ErrorKind::ReadOnlyFilesystem => {
+                if !phony_git.exists() {
+                    return Err(err);
+                }
+            }
+            Err(err) => return Err(err),
+        }
 
         Ok(())
     }
@@ -1174,10 +1187,10 @@ impl CacheBucket {
             Self::Interpreter => "interpreter-v4",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/it/cache_clean.rs`.
-            Self::Simple => "simple-v19",
+            Self::Simple => "simple-v21",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/it/cache_prune.rs`.
-            Self::Wheels => "wheels-v5",
+            Self::Wheels => "wheels-v6",
             // Note that when bumping this, you'll also need to bump
             // `ARCHIVE_VERSION` in `crates/uv-cache/src/lib.rs`.
             Self::Archive => "archive-v0",

@@ -21,10 +21,12 @@ Ok(
                 ],
                 abi_tag: [
                     CPython {
-                        gil_disabled: false,
                         python_version: (
                             3,
                             11,
+                        ),
+                        variant: CPythonAbiVariants(
+                            0,
                         ),
                     },
                 ],

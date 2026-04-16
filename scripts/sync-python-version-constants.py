@@ -2,7 +2,7 @@
 
 This script reads the download-metadata.json file and extracts the latest
 patch version for each minor version (3.15, 3.14, 3.13, 3.12, 3.11, 3.10).
-It then updates the LATEST_PYTHON_X_Y constants in crates/uv/tests/it/common/mod.rs.
+It then updates the LATEST_PYTHON_X_Y constants in crates/uv-test/src/lib.rs.
 
 For minor versions with stable releases, it uses the latest stable version.
 For minor versions with only prereleases, it uses the latest prerelease.
@@ -70,9 +70,9 @@ def main() -> None:
         if minor not in latest_versions:
             latest_versions[minor] = prerelease_versions[minor]
 
-    # Update the constants in common/mod.rs
-    mod_path = ROOT / "crates" / "uv" / "tests" / "it" / "common" / "mod.rs"
-    content = mod_path.read_text()
+    # Update the constants in uv-test/src/lib.rs
+    lib_path = ROOT / "crates" / "uv-test" / "src" / "lib.rs"
+    content = lib_path.read_text()
 
     # Extract old values first
     old_versions: dict[str, str] = {}
@@ -90,7 +90,7 @@ def main() -> None:
         new_value = f'pub const {const_name}: &str = "{latest_versions[minor]}";'
         content = re.sub(old_pattern, new_value, content)
 
-    mod_path.write_text(content)
+    lib_path.write_text(content)
 
     updates = []
     for minor in ["3.15", "3.14", "3.13", "3.12", "3.11", "3.10"]:

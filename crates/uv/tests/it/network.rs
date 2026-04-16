@@ -1,13 +1,22 @@
+use std::convert::Infallible;
 use std::io;
+use std::time::{Duration, Instant};
 
 use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild};
+use bytes::Bytes;
 use http::StatusCode;
+use http_body_util::combinators::BoxBody;
+use http_body_util::{BodyExt, StreamBody};
+use hyper::body::Frame;
+use hyper::service::service_fn;
+use hyper_util::rt::TokioIo;
 use serde_json::json;
-use uv_static::EnvVars;
+use tokio_stream::wrappers::ReceiverStream;
 use wiremock::matchers::{any, method};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
-use crate::common::{TestContext, uv_snapshot};
+use uv_static::EnvVars;
+use uv_test::{TestContext, uv_snapshot};
 
 /// Creates a CONNECT tunnel proxy that forwards connections to the target.
 ///
@@ -167,15 +176,71 @@ async fn mixed_error_server() -> (MockServer, String) {
     (server, mock_server_uri)
 }
 
+async fn time_out_response(
+    _req: hyper::Request<hyper::body::Incoming>,
+) -> Result<hyper::Response<BoxBody<Bytes, Infallible>>, Infallible> {
+    let (tx, rx) = tokio::sync::mpsc::channel(1);
+    tokio::spawn(async move {
+        let _ = tx.send(Ok(Frame::data(Bytes::new()))).await;
+        tokio::time::sleep(Duration::from_secs(60)).await;
+    });
+    let body = StreamBody::new(ReceiverStream::new(rx)).boxed();
+    Ok(hyper::Response::builder()
+        .header("Content-Type", "text/html")
+        .body(body)
+        .unwrap())
+}
+
+/// Returns the server URL and a drop guard that shuts down the server.
+///
+/// The server runs in a thread with its own tokio runtime, so it
+/// won't be starved by the subprocess blocking the test thread. Dropping the
+/// guard shuts down the runtime and all tasks running in it.
+fn read_timeout_server() -> (String, impl Drop) {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let server = format!("http://{}", listener.local_addr().unwrap());
+
+    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+
+    std::thread::spawn(move || {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async move {
+            let listener = tokio::net::TcpListener::from_std(listener).unwrap();
+            tokio::select! {
+                _ = async {
+                    loop {
+                        let (stream, _) = listener.accept().await.unwrap();
+                        let io = TokioIo::new(stream);
+
+                        tokio::spawn(async move {
+                           let _ = hyper_util::server::conn::auto::Builder::new(
+                                hyper_util::rt::TokioExecutor::new(),
+                            )
+                            .serve_connection(io, service_fn(time_out_response))
+                            .await;
+                        });
+                    }
+                } => {}
+                _ = shutdown_rx => {}
+            }
+        });
+    });
+
+    (server, shutdown_tx)
+}
+
 /// Check the simple index error message when the server returns HTTP status 500, a retryable error.
 #[tokio::test]
 async fn simple_http_500() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let (_server_drop_guard, mock_server_uri) = http_error_server().await;
 
-    let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
-    uv_snapshot!(filters, context
+    uv_snapshot!(context.filters(), context
         .pip_install()
         .arg("tqdm")
         .arg("--index-url")
@@ -186,21 +251,20 @@ async fn simple_http_500() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Request failed after 3 retries
-      Caused by: Failed to fetch: `[SERVER]/tqdm/`
-      Caused by: HTTP status server error (500 Internal Server Error) for url ([SERVER]/tqdm/)
+    error: Request failed after 3 retries in [TIME]
+      Caused by: Failed to fetch: `http://[LOCALHOST]/tqdm/`
+      Caused by: HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/tqdm/)
     ");
 }
 
 /// Check the simple index error message when the server returns a retryable IO error.
 #[tokio::test]
 async fn simple_io_err() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let (_server_drop_guard, mock_server_uri) = io_error_server().await;
 
-    let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
-    uv_snapshot!(filters, context
+    uv_snapshot!(context.filters(), context
         .pip_install()
         .arg("tqdm")
         .arg("--index-url")
@@ -211,9 +275,9 @@ async fn simple_io_err() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Request failed after 3 retries
-      Caused by: Failed to fetch: `[SERVER]/tqdm/`
-      Caused by: error sending request for url ([SERVER]/tqdm/)
+    error: Request failed after 3 retries in [TIME]
+      Caused by: Failed to fetch: `http://[LOCALHOST]/tqdm/`
+      Caused by: error sending request for url (http://[LOCALHOST]/tqdm/)
       Caused by: client error (SendRequest)
       Caused by: connection closed before message completed
     ");
@@ -222,12 +286,11 @@ async fn simple_io_err() {
 /// Check the find links error message when the server returns HTTP status 500, a retryable error.
 #[tokio::test]
 async fn find_links_http_500() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let (_server_drop_guard, mock_server_uri) = http_error_server().await;
 
-    let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
-    uv_snapshot!(filters, context
+    uv_snapshot!(context.filters(), context
         .pip_install()
         .arg("tqdm")
         .arg("--no-index")
@@ -239,22 +302,21 @@ async fn find_links_http_500() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to read `--find-links` URL: [SERVER]/
-      Caused by: Request failed after 3 retries
-      Caused by: Failed to fetch: `[SERVER]/`
-      Caused by: HTTP status server error (500 Internal Server Error) for url ([SERVER]/)
+    error: Failed to read `--find-links` URL: http://[LOCALHOST]/
+      Caused by: Request failed after 3 retries in [TIME]
+      Caused by: Failed to fetch: `http://[LOCALHOST]/`
+      Caused by: HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/)
     ");
 }
 
 /// Check the find links error message when the server returns a retryable IO error.
 #[tokio::test]
 async fn find_links_io_error() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let (_server_drop_guard, mock_server_uri) = io_error_server().await;
 
-    let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
-    uv_snapshot!(filters, context
+    uv_snapshot!(context.filters(), context
         .pip_install()
         .arg("tqdm")
         .arg("--no-index")
@@ -266,10 +328,10 @@ async fn find_links_io_error() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to read `--find-links` URL: [SERVER]/
-      Caused by: Request failed after 3 retries
-      Caused by: Failed to fetch: `[SERVER]/`
-      Caused by: error sending request for url ([SERVER]/)
+    error: Failed to read `--find-links` URL: http://[LOCALHOST]/
+      Caused by: Request failed after 3 retries in [TIME]
+      Caused by: Failed to fetch: `http://[LOCALHOST]/`
+      Caused by: error sending request for url (http://[LOCALHOST]/)
       Caused by: client error (SendRequest)
       Caused by: connection closed before message completed
     ");
@@ -279,12 +341,11 @@ async fn find_links_io_error() {
 /// returns different kinds of retryable errors.
 #[tokio::test]
 async fn find_links_mixed_error() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let (_server_drop_guard, mock_server_uri) = mixed_error_server().await;
 
-    let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
-    uv_snapshot!(filters, context
+    uv_snapshot!(context.filters(), context
         .pip_install()
         .arg("tqdm")
         .arg("--no-index")
@@ -296,10 +357,10 @@ async fn find_links_mixed_error() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to read `--find-links` URL: [SERVER]/
-      Caused by: Request failed after 3 retries
-      Caused by: Failed to fetch: `[SERVER]/`
-      Caused by: HTTP status server error (500 Internal Server Error) for url ([SERVER]/)
+    error: Failed to read `--find-links` URL: http://[LOCALHOST]/
+      Caused by: Request failed after 3 retries in [TIME]
+      Caused by: Failed to fetch: `http://[LOCALHOST]/`
+      Caused by: HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/)
     ");
 }
 
@@ -307,15 +368,14 @@ async fn find_links_mixed_error() {
 /// error.
 #[tokio::test]
 async fn direct_url_http_500() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let (_server_drop_guard, mock_server_uri) = http_error_server().await;
 
     let tqdm_url = format!(
         "{mock_server_uri}/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl"
     );
-    let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
-    uv_snapshot!(filters, context
+    uv_snapshot!(context.filters(), context
         .pip_install()
         .arg(format!("tqdm @ {tqdm_url}"))
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
@@ -324,25 +384,24 @@ async fn direct_url_http_500() {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download `tqdm @ [SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
-      ├─▶ Request failed after 3 retries
-      ├─▶ Failed to fetch: `[SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
-      ╰─▶ HTTP status server error (500 Internal Server Error) for url ([SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
+      × Failed to download `tqdm @ http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
+      ├─▶ Request failed after 3 retries in [TIME]
+      ├─▶ Failed to fetch: `http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
+      ╰─▶ HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
     ");
 }
 
 /// Check the direct package URL error message when the server returns a retryable IO error.
 #[tokio::test]
 async fn direct_url_io_error() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let (_server_drop_guard, mock_server_uri) = io_error_server().await;
 
     let tqdm_url = format!(
         "{mock_server_uri}/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl"
     );
-    let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
-    uv_snapshot!(filters, context
+    uv_snapshot!(context.filters(), context
         .pip_install()
         .arg(format!("tqdm @ {tqdm_url}"))
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
@@ -351,10 +410,10 @@ async fn direct_url_io_error() {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download `tqdm @ [SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
-      ├─▶ Request failed after 3 retries
-      ├─▶ Failed to fetch: `[SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
-      ├─▶ error sending request for url ([SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
+      × Failed to download `tqdm @ http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
+      ├─▶ Request failed after 3 retries in [TIME]
+      ├─▶ Failed to fetch: `http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
+      ├─▶ error sending request for url (http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
       ├─▶ client error (SendRequest)
       ╰─▶ connection closed before message completed
     ");
@@ -364,15 +423,14 @@ async fn direct_url_io_error() {
 /// different kinds of retryable errors.
 #[tokio::test]
 async fn direct_url_mixed_error() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let (_server_drop_guard, mock_server_uri) = mixed_error_server().await;
 
     let tqdm_url = format!(
         "{mock_server_uri}/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl"
     );
-    let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
-    uv_snapshot!(filters, context
+    uv_snapshot!(context.filters(), context
         .pip_install()
         .arg(format!("tqdm @ {tqdm_url}"))
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
@@ -381,10 +439,10 @@ async fn direct_url_mixed_error() {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download `tqdm @ [SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
-      ├─▶ Request failed after 3 retries
-      ├─▶ Failed to fetch: `[SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
-      ╰─▶ HTTP status server error (500 Internal Server Error) for url ([SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
+      × Failed to download `tqdm @ http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
+      ├─▶ Request failed after 3 retries in [TIME]
+      ├─▶ Failed to fetch: `http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
+      ╰─▶ HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
     ");
 }
 
@@ -418,7 +476,7 @@ fn write_python_downloads_json(context: &TestContext, mock_server_uri: &String) 
 /// error.
 #[tokio::test]
 async fn python_install_http_500() {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs();
@@ -427,8 +485,7 @@ async fn python_install_http_500() {
 
     let python_downloads_json = write_python_downloads_json(&context, &mock_server_uri);
 
-    let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
-    uv_snapshot!(filters, context
+    uv_snapshot!(context.filters(), context
         .python_install()
         .arg("cpython-3.10.0-darwin-aarch64-none")
         .arg("--python-downloads-json-url")
@@ -439,17 +496,17 @@ async fn python_install_http_500() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to install cpython-3.10.0-macos-aarch64-none
-      Caused by: Request failed after 3 retries
-      Caused by: Failed to download [SERVER]/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-aarch64-apple-darwin-pgo%2Blto-20211017T1616.tar.zst
-      Caused by: HTTP status server error (500 Internal Server Error) for url ([SERVER]/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-aarch64-apple-darwin-pgo%2Blto-20211017T1616.tar.zst)
+    error: Failed to install cpython-3.10.0-[PLATFORM]
+      Caused by: Request failed after 3 retries in [TIME]
+      Caused by: Failed to download http://[LOCALHOST]/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-[PLATFORM]-pgo%2Blto-20211017T1616.tar.zst
+      Caused by: HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-[PLATFORM]-pgo%2Blto-20211017T1616.tar.zst)
     ");
 }
 
 /// Check the Python install error message when the server returns a retryable IO error.
 #[tokio::test]
 async fn python_install_io_error() {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs();
@@ -458,8 +515,7 @@ async fn python_install_io_error() {
 
     let python_downloads_json = write_python_downloads_json(&context, &mock_server_uri);
 
-    let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
-    uv_snapshot!(filters, context
+    uv_snapshot!(context.filters(), context
         .python_install()
         .arg("cpython-3.10.0-darwin-aarch64-none")
         .arg("--python-downloads-json-url")
@@ -470,10 +526,10 @@ async fn python_install_io_error() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to install cpython-3.10.0-macos-aarch64-none
-      Caused by: Request failed after 3 retries
-      Caused by: Failed to download [SERVER]/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-aarch64-apple-darwin-pgo%2Blto-20211017T1616.tar.zst
-      Caused by: error sending request for url ([SERVER]/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-aarch64-apple-darwin-pgo%2Blto-20211017T1616.tar.zst)
+    error: Failed to install cpython-3.10.0-[PLATFORM]
+      Caused by: Request failed after 3 retries in [TIME]
+      Caused by: Failed to download http://[LOCALHOST]/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-[PLATFORM]-pgo%2Blto-20211017T1616.tar.zst
+      Caused by: error sending request for url (http://[LOCALHOST]/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-[PLATFORM]-pgo%2Blto-20211017T1616.tar.zst)
       Caused by: client error (SendRequest)
       Caused by: connection closed before message completed
     ");
@@ -481,7 +537,7 @@ async fn python_install_io_error() {
 
 #[tokio::test]
 async fn install_http_retries() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let server = MockServer::start().await;
 
@@ -545,7 +601,7 @@ async fn install_http_retries() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Request failed after 5 retries
+    error: Request failed after 5 retries in [TIME]
       Caused by: Failed to fetch: `http://[LOCALHOST]/anyio/`
       Caused by: HTTP status server error (503 Service Unavailable) for url (http://[LOCALHOST]/anyio/)
     "
@@ -554,7 +610,7 @@ async fn install_http_retries() {
 
 #[tokio::test]
 async fn install_http_retry_low_level() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let server = MockServer::start().await;
 
@@ -577,7 +633,7 @@ async fn install_http_retry_low_level() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Request failed after 1 retry
+    error: Request failed after 1 retry in [TIME]
       Caused by: Failed to fetch: `http://[LOCALHOST]/anyio/`
       Caused by: error sending request for url (http://[LOCALHOST]/anyio/)
       Caused by: client error (SendRequest)
@@ -589,7 +645,7 @@ async fn install_http_retry_low_level() {
 /// Test problem details with a 403 error containing license compliance information
 #[tokio::test]
 async fn rfc9457_problem_details_license_violation() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let server = MockServer::start().await;
 
@@ -618,8 +674,7 @@ async fn rfc9457_problem_details_license_violation() {
     let mock_server_uri = server.uri();
     let tqdm_url = format!("{mock_server_uri}/packages/tqdm-4.67.1-py3-none-any.whl");
 
-    let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
-    uv_snapshot!(filters, context
+    uv_snapshot!(context.filters(), context
         .pip_install()
         .arg(format!("tqdm @ {tqdm_url}")), @"
     success: false
@@ -627,17 +682,17 @@ async fn rfc9457_problem_details_license_violation() {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download `tqdm @ [SERVER]/packages/tqdm-4.67.1-py3-none-any.whl`
-      ├─▶ Failed to fetch: `[SERVER]/packages/tqdm-4.67.1-py3-none-any.whl`
+      × Failed to download `tqdm @ http://[LOCALHOST]/packages/tqdm-4.67.1-py3-none-any.whl`
+      ├─▶ Failed to fetch: `http://[LOCALHOST]/packages/tqdm-4.67.1-py3-none-any.whl`
       ├─▶ Server message: License Compliance Issue, This package version has a license that violates organizational policy.
-      ╰─▶ HTTP status client error (403 Forbidden) for url ([SERVER]/packages/tqdm-4.67.1-py3-none-any.whl)
+      ╰─▶ HTTP status client error (403 Forbidden) for url (http://[LOCALHOST]/packages/tqdm-4.67.1-py3-none-any.whl)
     ");
 }
 
 /// Test that invalid proxy URL in uv.toml produces a helpful error message.
 #[tokio::test]
 async fn proxy_invalid_url_in_uv_toml() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let uv_toml = context.temp_dir.child("uv.toml");
     uv_toml
@@ -668,7 +723,7 @@ async fn proxy_invalid_url_in_uv_toml() {
 /// Test that invalid proxy URL (not a URL) in uv.toml produces a helpful error message.
 #[tokio::test]
 async fn proxy_invalid_url_not_a_url_in_uv_toml() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let uv_toml = context.temp_dir.child("uv.toml");
     uv_toml
@@ -697,10 +752,10 @@ async fn proxy_invalid_url_not_a_url_in_uv_toml() {
 }
 
 /// Test that valid proxy URL in uv.toml routes requests through the proxy.
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 #[tokio::test]
 async fn proxy_valid_url_in_uv_toml() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let target_server = MockServer::start().await;
     Mock::given(any())
@@ -756,10 +811,10 @@ async fn proxy_valid_url_in_uv_toml() {
 }
 
 /// Test that https-proxy in uv.toml routes HTTPS requests through a CONNECT tunnel proxy.
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 #[test]
 fn proxy_https_proxy_in_uv_toml() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let proxy_addr = start_connect_tunnel_proxy();
     let proxy_uri = format!("http://{proxy_addr}");
@@ -793,10 +848,10 @@ fn proxy_https_proxy_in_uv_toml() {
 }
 
 /// Test that no-proxy in uv.toml bypasses the proxy for specified hosts.
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 #[tokio::test]
 async fn proxy_no_proxy_in_uv_toml() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let target_server = MockServer::start().await;
     mock_simple_api(&target_server).await;
@@ -861,10 +916,10 @@ no-proxy = ["{target_host}"]
 }
 
 /// Test that proxy URLs without a scheme in uv.toml default to http://.
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 #[tokio::test]
 async fn proxy_schemeless_url_in_uv_toml() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let target_server = MockServer::start().await;
     Mock::given(any())
@@ -923,4 +978,126 @@ async fn proxy_schemeless_url_in_uv_toml() {
         !has_received_requests(&target_server).await,
         "Target should NOT have been called directly when proxy is configured"
     );
+}
+
+#[test]
+fn connect_timeout_index() {
+    let context = uv_test::test_context!("3.12");
+
+    // Create a server that never responds, causing a timeout for our requests.
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let server = listener.local_addr().unwrap().to_string();
+
+    let start = Instant::now();
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("tqdm")
+        .arg("--index-url")
+        .arg(format!("https://{server}"))
+        .env(EnvVars::UV_HTTP_CONNECT_TIMEOUT, "1")
+        .env(EnvVars::UV_HTTP_RETRIES, "0"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch: `https://[LOCALHOST]/tqdm/`
+      Caused by: error sending request for url (https://[LOCALHOST]/tqdm/)
+      Caused by: client error (Connect)
+      Caused by: operation timed out
+    ");
+
+    // Assumption: There's less than 2s overhead for this test and startup.
+    let elapsed = start.elapsed();
+    assert!(
+        elapsed < Duration::from_secs(3),
+        "Test with 1s connect timeout took too long"
+    );
+}
+
+#[test]
+fn connect_timeout_stream() {
+    let context = uv_test::test_context!("3.12");
+
+    // Create a server that never responds, causing a timeout for our requests.
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let server = listener.local_addr().unwrap().to_string();
+
+    let start = Instant::now();
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg(format!("https://{server}/tqdm-0.1-py3-none-any.whl"))
+        .env(EnvVars::UV_HTTP_CONNECT_TIMEOUT, "1")
+        .env(EnvVars::UV_HTTP_RETRIES, "0"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download `tqdm @ https://[LOCALHOST]/tqdm-0.1-py3-none-any.whl`
+      ├─▶ Failed to fetch: `https://[LOCALHOST]/tqdm-0.1-py3-none-any.whl`
+      ├─▶ error sending request for url (https://[LOCALHOST]/tqdm-0.1-py3-none-any.whl)
+      ├─▶ client error (Connect)
+      ╰─▶ operation timed out
+    ");
+
+    // Assumption: There's less than 2s overhead for this test and startup.
+    let elapsed = start.elapsed();
+    assert!(
+        elapsed < Duration::from_secs(3),
+        "Test with 1s connect timeout took too long"
+    );
+}
+
+#[tokio::test]
+async fn retry_read_timeout_index() {
+    let context = uv_test::test_context!("3.12");
+
+    let (server, _guard) = read_timeout_server();
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("tqdm")
+        .arg("--index-url")
+        .arg(server)
+        // Speed the test up with the minimum testable values
+        .env(EnvVars::UV_HTTP_TIMEOUT, "1")
+        .env(EnvVars::UV_HTTP_RETRIES, "1"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Request failed after 1 retry in [TIME]
+      Caused by: Failed to fetch: `http://[LOCALHOST]/tqdm/`
+      Caused by: error decoding response body
+      Caused by: request or response body error
+      Caused by: operation timed out
+    ");
+}
+
+#[tokio::test]
+async fn retry_read_timeout_stream() {
+    let context = uv_test::test_context!("3.12");
+
+    let (server, _guard) = read_timeout_server();
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg(format!("{server}/tqdm-0.1-py3-none-any.whl"))
+        // Speed the test up with the minimum testable values
+        .env(EnvVars::UV_HTTP_TIMEOUT, "1")
+        .env(EnvVars::UV_HTTP_RETRIES, "1"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download `tqdm @ http://[LOCALHOST]/tqdm-0.1-py3-none-any.whl`
+      ├─▶ Request failed after 1 retry in [TIME]
+      ├─▶ Failed to read metadata: `http://[LOCALHOST]/tqdm-0.1-py3-none-any.whl`
+      ├─▶ Failed to read from zip file
+      ├─▶ an upstream reader returned an error: Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: [TIME]).
+      ╰─▶ Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: [TIME]).
+    ");
 }
