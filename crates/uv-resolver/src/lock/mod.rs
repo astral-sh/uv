@@ -1162,9 +1162,9 @@ impl Lock {
                 // Always serialize global exclude-newer as a string
                 if let Some(global) = &exclude_newer.global {
                     if let Some(span) = global.span() {
-                        // When a relative span is present, write a no-op timestamp
-                        // for backwards compatibility with older versions of uv that
-                        // don't understand `exclude-newer-span`.
+                        // When a relative span is present, write a no-op timestamp to avoid
+                        // merge conflicts in the lockfile. In a future version of uv, we'll drop
+                        // this field entirely but it's retained for backwards compatibility for now.
                         let mut noop = value("0001-01-01T00:00:00Z");
                         if let Item::Value(ref mut v) = noop {
                             v.decor_mut().set_suffix(" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.");
