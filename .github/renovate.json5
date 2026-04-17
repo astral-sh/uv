@@ -82,8 +82,8 @@
     },
     {
       matchFileNames: [".github/workflows/test-system.yml"],
-      schedule: ["before 4am on the first day of the month"],
-      description: "Monthly update of test-system.yml dependencies",
+      schedule: ["on day 1 through 7 of the month"],
+      description: "Monthly update of test-system.yml dependencies (first Monday of the month via global schedule)",
     },
     {
       groupName: "pre-commit dependencies",
