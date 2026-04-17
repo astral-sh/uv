@@ -79,6 +79,7 @@ ctrlc = { workspace = true }
 diskus = { workspace = true }
 dotenvy = { workspace = true }
 dunce = { workspace = true }
+etcetera = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 http = { workspace = true }

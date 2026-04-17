@@ -5773,6 +5773,7 @@ dependencies = [
  "dotenvy",
  "dunce",
  "embed-manifest",
+ "etcetera",
  "filetime",
  "flate2",
  "fs-err",
