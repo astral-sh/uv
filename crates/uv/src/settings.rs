@@ -1374,13 +1374,13 @@ impl PythonInstallSettings {
             bin: flag(bin, no_bin, "bin").or(environment.python_install_bin),
             registry: match flag(registry, no_registry, "registry") {
                 Some(registry) => Some(registry),
-                None => {
+                None => environment.python_install_registry.or(
                     if environment.python_no_registry.value == Some(true) {
                         Some(false)
                     } else {
-                        environment.python_install_registry
-                    }
-                }
+                        None
+                    },
+                ),
             },
             python_install_mirror,
             pypy_install_mirror,
@@ -1438,11 +1438,13 @@ impl PythonUpgradeSettings {
         let force = false;
         let default = false;
         let bin = None;
-        let registry = if environment.python_no_registry.value == Some(true) {
-            Some(false)
-        } else {
-            environment.python_install_registry
-        };
+        let registry = environment.python_install_registry.or(
+            if environment.python_no_registry.value == Some(true) {
+                Some(false)
+            } else {
+                None
+            },
+        );
 
         let PythonUpgradeArgs {
             install_dir,

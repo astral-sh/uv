@@ -1320,7 +1320,7 @@ fn python_install_freethreaded_and_gil_list() {
 
 #[cfg(all(windows, feature = "test-windows-registry"))]
 #[test]
-fn python_install_no_registry_respected() {
+fn python_install_registry_takes_precedence_over_no_registry() {
     use assert_cmd::assert::OutputAssertExt;
 
     let context = uv_test::test_context_with_versions!(&[])
@@ -1341,9 +1341,9 @@ fn python_install_no_registry_respected() {
         .assert()
         .success();
 
-    // Even if registry installation is requested, `UV_PYTHON_NO_REGISTRY` should prevent
-    // registration. When we re-enable registry discovery for this command and clear the search
-    // path, we should only see the managed installation entry.
+    // `UV_PYTHON_INSTALL_REGISTRY` should take precedence over `UV_PYTHON_NO_REGISTRY`.
+    // When we re-enable registry discovery for this command and clear the search path, we should
+    // see both the registry entry and the managed installation entry.
     uv_snapshot!(context.filters(), context.python_list()
         .arg("3.13")
         .arg("--only-installed")
@@ -1354,6 +1354,7 @@ fn python_install_no_registry_respected() {
     success: true
     exit_code: 0
     ----- stdout -----
+    cpython-3.13.[LATEST]-[PLATFORM] managed/cpython-3.13.[LATEST]-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
     cpython-3.13.[LATEST]-[PLATFORM] managed/cpython-3.13-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
