@@ -6,10 +6,8 @@
 //!
 //! [OSV]: https://osv.dev/
 
-use std::path::Path;
 use std::str::FromStr as _;
 use std::sync::LazyLock;
-use std::time::Duration;
 
 use indexmap::IndexMap;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -210,23 +208,12 @@ impl Filter {
     }
 }
 
-/// Maximum age for cached batch query results (vulnerability IDs per package).
-const QUERY_CACHE_MAX_AGE: Duration = Duration::from_secs(30 * 60);
-
 /// Synthetic `Cache-Control` header for vulnerability record caching (1 hour).
 ///
 /// This is injected into responses from OSV (which sends no cache headers)
 /// so that the [`CachedClient`] middleware handles caching transparently.
 static VULN_CACHE_CONTROL: LazyLock<http::HeaderValue> =
     LazyLock::new(|| "max-age=3600".parse().expect("valid header value"));
-
-/// Returns `true` if the file at `path` exists and was modified within `max_age`.
-fn is_cache_fresh(path: &Path, max_age: Duration) -> bool {
-    path.metadata()
-        .and_then(|m| m.modified())
-        .map(|mtime| mtime.elapsed().is_ok_and(|age| age < max_age))
-        .unwrap_or(false)
-}
 
 /// Represents [OSV](https://osv.dev/), an open-source vulnerability database.
 pub struct Osv {
@@ -256,53 +243,10 @@ impl Osv {
         }
     }
 
-    /// Return a [`CacheEntry`] for batch query results for a given package and version.
-    fn query_cache_entry(&self, name: &str, version: &str) -> CacheEntry {
-        let bucket = self.cache.bucket(CacheBucket::Osv);
-        CacheEntry::new(
-            bucket.join("query").join(name),
-            format!("{version}.msgpack"),
-        )
-    }
-
     /// Return a [`CacheEntry`] for a full vulnerability record.
     fn vuln_cache_entry(&self, id: &str) -> CacheEntry {
         let bucket = self.cache.bucket(CacheBucket::Osv);
         CacheEntry::new(bucket.join("vulns"), format!("{id}.msgpack"))
-    }
-
-    /// Read cached vulnerability IDs for a package, if fresh.
-    ///
-    /// Batch query results use manual caching with a TTL check because the
-    /// [`CachedClient`] middleware does not support POST requests.
-    fn read_cached_query_ids(&self, name: &str, version: &str) -> Option<Vec<String>> {
-        let entry = self.query_cache_entry(name, version);
-        if !is_cache_fresh(entry.path(), QUERY_CACHE_MAX_AGE) {
-            return None;
-        }
-        let data = fs_err::read(entry.path()).ok()?;
-        rmp_serde::from_slice::<Vec<String>>(&data).ok()
-    }
-
-    /// Write vulnerability IDs to cache for a package. Only called for non-empty results.
-    fn write_cached_query_ids(&self, name: &str, version: &str, ids: &[String]) {
-        let entry = self.query_cache_entry(name, version);
-        if let Err(err) = fs_err::create_dir_all(entry.dir()) {
-            trace!(
-                "Failed to create cache directory {}: {err}",
-                entry.dir().display()
-            );
-            return;
-        }
-        let Ok(data) = rmp_serde::to_vec(ids) else {
-            return;
-        };
-        if let Err(err) = uv_fs::write_atomic_sync(entry.path(), &data) {
-            trace!(
-                "Failed to write query cache {}: {err}",
-                entry.path().display()
-            );
-        }
     }
 
     /// Query OSV for vulnerabilities affecting the given dependencies, returning only vulnerability IDs.
@@ -320,106 +264,63 @@ impl Osv {
         let mut result_map: IndexMap<&types::Dependency, FxHashSet<VulnerabilityID>> =
             IndexMap::default();
 
-        // Check cache for each dependency, splitting into hits and misses.
-        // Cache stores unfiltered IDs so results are reusable across filter modes.
-        let mut pending: Vec<(&types::Dependency, Option<String>)> = Vec::new();
-        for dep in dependencies {
-            if let Some(cached_ids) =
-                self.read_cached_query_ids(dep.name().as_ref(), &dep.version().to_string())
-            {
-                trace!(
-                    "Cache hit for {name}=={version} ({n} vuln IDs)",
-                    name = dep.name(),
-                    version = dep.version(),
-                    n = cached_ids.len(),
-                );
-                let ids: FxHashSet<VulnerabilityID> = cached_ids
-                    .into_iter()
-                    .filter(|id| filter.matches(id))
-                    .map(VulnerabilityID::new)
-                    .collect();
-                result_map.insert(dep, ids);
-            } else {
-                pending.push((dep, None));
-            }
-        }
+        // Pending queries: (dependency, page_token). Initially one per dependency with no token.
+        let mut pending: Vec<(&types::Dependency, Option<String>)> =
+            dependencies.iter().map(|dep| (dep, None)).collect();
 
-        // Query OSV for cache misses only, using the uncached client for POST.
-        if !pending.is_empty() {
-            // Track unfiltered IDs per dependency for caching.
-            let mut unfiltered_ids: FxHashMap<&types::Dependency, Vec<String>> =
-                FxHashMap::default();
+        loop {
+            let request = QueryBatchRequest {
+                queries: pending
+                    .iter()
+                    .map(|(dep, page_token)| QueryRequest {
+                        package: Package {
+                            name: dep.name().to_string(),
+                            ecosystem: "PyPI".to_string(),
+                        },
+                        version: dep.version().to_string(),
+                        page_token: page_token.clone(),
+                    })
+                    .collect(),
+            };
 
-            loop {
-                let request = QueryBatchRequest {
-                    queries: pending
+            let url = self
+                .base_url
+                .join("v1/querybatch")
+                .map_err(|e| Error::Url(self.base_url.clone(), e))?;
+            let batch_response: QueryBatchResponse = self
+                .client
+                .uncached()
+                .for_host(&url)
+                .raw_client()
+                .post(url.as_ref())
+                .json(&request)
+                .send()
+                .await?
+                .error_for_status()
+                .map_err(reqwest_middleware::Error::Reqwest)?
+                .json()
+                .await
+                .map_err(reqwest_middleware::Error::Reqwest)?;
+
+            let mut next_pending = Vec::new();
+            for ((dep, _), batch_result) in pending.iter().zip(batch_response.results.iter()) {
+                let ids = result_map.entry(dep).or_default();
+                ids.extend(
+                    batch_result
+                        .vulns
                         .iter()
-                        .map(|(dep, page_token)| QueryRequest {
-                            package: Package {
-                                name: dep.name().to_string(),
-                                ecosystem: "PyPI".to_string(),
-                            },
-                            version: dep.version().to_string(),
-                            page_token: page_token.clone(),
-                        })
-                        .collect(),
-                };
-
-                let url = self
-                    .base_url
-                    .join("v1/querybatch")
-                    .map_err(|e| Error::Url(self.base_url.clone(), e))?;
-                let batch_response: QueryBatchResponse = self
-                    .client
-                    .uncached()
-                    .for_host(&url)
-                    .raw_client()
-                    .post(url.as_ref())
-                    .json(&request)
-                    .send()
-                    .await?
-                    .error_for_status()
-                    .map_err(reqwest_middleware::Error::Reqwest)?
-                    .json()
-                    .await
-                    .map_err(reqwest_middleware::Error::Reqwest)?;
-
-                let mut next_pending = Vec::new();
-                for ((dep, _), batch_result) in pending.iter().zip(batch_response.results.iter()) {
-                    // Collect unfiltered IDs for caching.
-                    let raw_ids = unfiltered_ids.entry(dep).or_default();
-                    raw_ids.extend(batch_result.vulns.iter().map(|v| v.id.clone()));
-
-                    // Collect filtered IDs for the result.
-                    let ids = result_map.entry(dep).or_default();
-                    ids.extend(
-                        batch_result
-                            .vulns
-                            .iter()
-                            .filter(|v| filter.matches(&v.id))
-                            .map(|v| VulnerabilityID::new(v.id.clone())),
-                    );
-                    if let Some(token) = &batch_result.next_page_token {
-                        next_pending.push((*dep, Some(token.clone())));
-                    }
-                }
-
-                if next_pending.is_empty() {
-                    break;
-                }
-                pending = next_pending;
-            }
-
-            // Cache positive results (non-empty vuln ID sets) for future lookups.
-            for (dep, ids) in &unfiltered_ids {
-                if !ids.is_empty() {
-                    self.write_cached_query_ids(
-                        dep.name().as_ref(),
-                        &dep.version().to_string(),
-                        ids,
-                    );
+                        .filter(|v| filter.matches(&v.id))
+                        .map(|v| VulnerabilityID::new(v.id.clone())),
+                );
+                if let Some(token) = &batch_result.next_page_token {
+                    next_pending.push((*dep, Some(token.clone())));
                 }
             }
+
+            if next_pending.is_empty() {
+                break;
+            }
+            pending = next_pending;
         }
 
         Ok(result_map)
