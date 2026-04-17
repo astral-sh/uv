@@ -89,6 +89,8 @@ fn lock_exclude_newer_relative() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
+    assert_eq!(context.read("uv.lock"), lock);
+
     // Changing the span to 2 weeks should cause a new resolution.
     // 2 weeks before 2024-05-01 is 2024-04-17, which is after idna 3.7 (released 2024-04-11).
     uv_snapshot!(context.filters(), context
