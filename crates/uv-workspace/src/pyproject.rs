@@ -1721,6 +1721,34 @@ impl Source {
                         group: None,
                     }
                 } else {
+                    // If the package has an existing git source, use it
+                    if let Some(sources) = existing_sources {
+                        if let Some(package_sources) = sources.get(name) {
+                            for existing_source in package_sources.iter() {
+                                if let Self::Git {
+                                    git,
+                                    subdirectory,
+                                    marker,
+                                    extra,
+                                    group,
+                                    ..
+                                } = existing_source
+                                {
+                                    return Ok(Some(Self::Git {
+                                        git: git.clone(),
+                                        subdirectory: subdirectory.clone(),
+                                        rev: None,
+                                        tag: None,
+                                        branch: None,
+                                        lfs: GitLfsSetting::default(),
+                                        marker: *marker,
+                                        extra: extra.clone(),
+                                        group: group.clone(),
+                                    }));
+                                }
+                            }
+                        }
+                    }
                     return Ok(None);
                 }
             }
