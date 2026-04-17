@@ -201,7 +201,7 @@ fn write_registry_entry(
 
 fn registry_python_tag(key: &PythonInstallationKey) -> String {
     // Include the variant's executable suffix (e.g., "t" for freethreaded) in the
-    // registry tag so that GIL and freethreaded installations of the same version
+    // registry tag so that variant (freethreaded, debug, etc.) installations of the same version
     // get distinct registry entries. This suffix can be empty.
     //
     // See: https://github.com/astral-sh/uv/issues/18795
