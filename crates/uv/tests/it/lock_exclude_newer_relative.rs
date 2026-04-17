@@ -48,7 +48,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
     requires-python = ">=3.12"
 
     [options]
-    exclude-newer = "2024-04-10T00:00:00Z"
+    exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
     exclude-newer-span = "P3W"
 
     [[package]]
@@ -116,7 +116,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
     requires-python = ">=3.12"
 
     [options]
-    exclude-newer = "2024-04-17T00:00:00Z"
+    exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
     exclude-newer-span = "P2W"
 
     [[package]]
@@ -165,7 +165,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
     requires-python = ">=3.12"
 
     [options]
-    exclude-newer = "2024-05-18T00:00:00Z"
+    exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
     exclude-newer-span = "P2W"
 
     [[package]]
@@ -560,7 +560,7 @@ fn lock_exclude_newer_relative_pyproject() -> Result<()> {
     requires-python = ">=3.12"
 
     [options]
-    exclude-newer = "2024-04-10T00:00:00Z"
+    exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
     exclude-newer-span = "P3W"
 
     [[package]]
@@ -714,7 +714,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     requires-python = ">=3.12"
 
     [options]
-    exclude-newer = "2024-04-10T00:00:00Z"
+    exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
     exclude-newer-span = "P3W"
 
     [options.exclude-newer-package]
@@ -907,7 +907,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     requires-python = ">=3.12"
 
     [options]
-    exclude-newer = "2024-04-10T00:00:00Z"
+    exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
     exclude-newer-span = "P3W"
 
     [options.exclude-newer-package]
@@ -1235,7 +1235,7 @@ fn lock_exclude_newer_relative_no_timestamp_in_lockfile() -> Result<()> {
     requires-python = ">=3.12"
 
     [options]
-    exclude-newer = "2024-04-10T00:00:00Z"
+    exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
     exclude-newer-span = "P3W"
 
     [[package]]
@@ -1260,7 +1260,7 @@ fn lock_exclude_newer_relative_no_timestamp_in_lockfile() -> Result<()> {
     "#);
 
     // Manually remove the exclude-newer timestamp from the lockfile, leaving the span.
-    let lock = lock.replace("exclude-newer = \"2024-04-10T00:00:00Z\"\n", "");
+    let lock = lock.replace("exclude-newer = \"0001-01-01T00:00:00Z\" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.\n", "");
     context.temp_dir.child("uv.lock").write_str(&lock)?;
 
     // The lockfile now has no exclude-newer, but `pyproject.toml` still configures one,
@@ -1274,11 +1274,10 @@ fn lock_exclude_newer_relative_no_timestamp_in_lockfile() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolving despite existing lockfile due to addition of global exclude newer 2024-04-10T00:00:00Z
     Resolved 2 packages in [TIME]
     ");
 
-    // The lockfile should have exclude-newer restored.
+    // The lockfile retains the span but no timestamp since no re-resolution occurred.
     let lock = context.read("uv.lock");
     assert_snapshot!(lock, @r#"
     version = 1
@@ -1286,7 +1285,6 @@ fn lock_exclude_newer_relative_no_timestamp_in_lockfile() -> Result<()> {
     requires-python = ">=3.12"
 
     [options]
-    exclude-newer = "2024-04-10T00:00:00Z"
     exclude-newer-span = "P3W"
 
     [[package]]
