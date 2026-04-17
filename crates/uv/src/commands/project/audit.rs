@@ -23,7 +23,7 @@ use tracing::trace;
 use uv_audit::service::{VulnerabilityServiceFormat, osv};
 use uv_audit::types::{Dependency, Finding, VulnerabilityID};
 use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
+use uv_client::{BaseClientBuilder, CachedClient};
 use uv_configuration::{Concurrency, DependencyGroups, ExtrasSpecification, TargetTriple};
 use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_preview::{Preview, PreviewFeature};
@@ -207,8 +207,9 @@ pub(crate) async fn audit(
                     .as_deref()
                     .map(|url| url.parse().expect("invalid OSV service URL"))
                     .unwrap_or_else(|| osv::API_BASE.clone());
-                let client = base_client.for_host(&osv_url).raw_client().clone();
-                let service = osv::Osv::new(client, Some(osv_url), concurrency, Some(&cache));
+                let client = CachedClient::new(base_client);
+                let service =
+                    osv::Osv::new(client, Some(osv_url), concurrency, Some(cache.clone()));
                 trace!("Auditing {n} dependencies against OSV", n = auditable.len());
                 service.query_batch(&dependencies, osv::Filter::All).await?
             }

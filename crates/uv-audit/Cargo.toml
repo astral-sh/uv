@@ -17,6 +17,7 @@ workspace = true
 
 [dependencies]
 uv-cache = { workspace = true }
+uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-fs = { workspace = true }
 uv-normalize = { workspace = true }
@@ -26,6 +27,7 @@ uv-small-str = { workspace = true }
 
 clap = { workspace = true, optional = true }
 fs-err = { workspace = true }
+http = { workspace = true }
 futures = { workspace = true }
 indexmap = { workspace = true }
 jiff = { workspace = true }

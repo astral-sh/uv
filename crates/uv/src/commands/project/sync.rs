@@ -13,7 +13,7 @@ use uv_audit::service::osv::{self, Filter};
 use uv_audit::types::Dependency;
 use uv_cache::Cache;
 use uv_cli::SyncFormat;
-use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, CachedClient, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DryRun, EditableMode,
     ExtrasSpecification, ExtrasSpecificationWithDefaults, HashCheckingMode, InstallOptions,
@@ -943,8 +943,8 @@ async fn check_malware(
     let osv_url = malware_check_url.unwrap_or_else(|| osv::API_BASE.clone());
 
     let base_client = client_builder.build()?;
-    let client = base_client.for_host(&osv_url).raw_client().clone();
-    let service = osv::Osv::new(client, Some(osv_url), concurrency.clone(), Some(cache));
+    let client = CachedClient::new(base_client);
+    let service = osv::Osv::new(client, Some(osv_url), concurrency.clone(), Some(cache.clone()));
 
     trace!(
         "Running malware check for {} dependencies",

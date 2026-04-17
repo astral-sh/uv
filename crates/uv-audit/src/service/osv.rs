@@ -6,7 +6,7 @@
 //!
 //! [OSV]: https://osv.dev/
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr as _;
 use std::sync::LazyLock;
 use std::time::Duration;
@@ -18,9 +18,9 @@ use tracing::trace;
 use crate::types::{self, VulnerabilityID};
 use futures::{StreamExt as _, TryStreamExt as _};
 use jiff::Timestamp;
-use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
-use uv_cache::{Cache, CacheBucket};
+use uv_cache::{Cache, CacheBucket, CacheEntry};
+use uv_client::{CacheControl, CachedClient, CachedClientError};
 use uv_configuration::Concurrency;
 use uv_pep440::Version;
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
@@ -32,6 +32,9 @@ pub static API_BASE: LazyLock<DisplaySafeUrl> = LazyLock::new(|| {
 /// Errors during OSV service interactions.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// An error from the cached HTTP client.
+    #[error(transparent)]
+    Client(#[from] uv_client::Error),
     /// An error during an HTTP request, including middleware errors.
     #[error(transparent)]
     ReqwestMiddleware(#[from] reqwest_middleware::Error),
@@ -207,11 +210,15 @@ impl Filter {
     }
 }
 
-/// Maximum age for cached query results (vulnerability IDs per package).
+/// Maximum age for cached batch query results (vulnerability IDs per package).
 const QUERY_CACHE_MAX_AGE: Duration = Duration::from_secs(30 * 60);
 
-/// Maximum age for cached full vulnerability records.
-const VULN_CACHE_MAX_AGE: Duration = Duration::from_secs(60 * 60);
+/// Synthetic `Cache-Control` header for vulnerability record caching (1 hour).
+///
+/// This is injected into responses from OSV (which sends no cache headers)
+/// so that the [`CachedClient`] middleware handles caching transparently.
+static VULN_CACHE_CONTROL: LazyLock<http::HeaderValue> =
+    LazyLock::new(|| "max-age=3600".parse().expect("valid header value"));
 
 /// Returns `true` if the file at `path` exists and was modified within `max_age`.
 fn is_cache_fresh(path: &Path, max_age: Duration) -> bool {
@@ -224,100 +231,82 @@ fn is_cache_fresh(path: &Path, max_age: Duration) -> bool {
 /// Represents [OSV](https://osv.dev/), an open-source vulnerability database.
 pub struct Osv {
     base_url: DisplaySafeUrl,
-    client: ClientWithMiddleware,
+    /// The cached HTTP client. Individual vulnerability record fetches (GET) are
+    /// handled transparently by the [`CachedClient`] middleware. Batch queries
+    /// (POST) go through the uncached path since HTTP caching only applies to
+    /// GET/HEAD requests.
+    client: CachedClient,
     concurrency: Concurrency,
-    /// Resolved path to the audit cache bucket, if caching is enabled.
-    cache: Option<PathBuf>,
+    /// The cache used for batch query result persistence. Individual vulnerability
+    /// records are cached implicitly by the [`CachedClient`] middleware above.
+    cache: Option<Cache>,
 }
 
 impl Osv {
-    /// Create a new OSV client with the given HTTP client and optional base URL.
+    /// Create a new OSV client with the given cached HTTP client and optional base URL.
     ///
     /// If no base URL is provided, the client will default to the official OSV API endpoint.
-    /// If a [`Cache`] is provided, positive results will be cached to disk.
+    /// If a [`Cache`] is provided, positive batch query results will be cached to disk.
+    /// Individual vulnerability records are cached transparently by the [`CachedClient`].
     pub fn new(
-        client: ClientWithMiddleware,
+        client: CachedClient,
         base_url: Option<DisplaySafeUrl>,
         concurrency: Concurrency,
-        cache: Option<&Cache>,
+        cache: Option<Cache>,
     ) -> Self {
         Self {
             base_url: base_url.unwrap_or_else(|| API_BASE.clone()),
             client,
             concurrency,
-            cache: cache.map(|c| c.bucket(CacheBucket::Audit)),
+            cache,
         }
     }
 
-    /// Return the cache path for query results for a given package and version.
-    fn query_cache_path(&self, name: &str, version: &str) -> Option<PathBuf> {
-        self.cache
-            .as_ref()
-            .map(|root| root.join("osv").join("query").join(name).join(format!("{version}.msgpack")))
+    /// Return a [`CacheEntry`] for batch query results for a given package and version.
+    fn query_cache_entry(&self, name: &str, version: &str) -> Option<CacheEntry> {
+        let bucket = self.cache.as_ref()?.bucket(CacheBucket::Audit);
+        Some(CacheEntry::new(
+            bucket.join("osv").join("query").join(name),
+            format!("{version}.msgpack"),
+        ))
     }
 
-    /// Return the cache path for a full vulnerability record.
-    fn vuln_cache_path(&self, id: &str) -> Option<PathBuf> {
-        self.cache
-            .as_ref()
-            .map(|root| root.join("osv").join("vulns").join(format!("{id}.msgpack")))
+    /// Return a [`CacheEntry`] for a full vulnerability record.
+    fn vuln_cache_entry(&self, id: &str) -> Option<CacheEntry> {
+        let bucket = self.cache.as_ref()?.bucket(CacheBucket::Audit);
+        Some(CacheEntry::new(
+            bucket.join("osv").join("vulns"),
+            format!("{id}.msgpack"),
+        ))
     }
 
     /// Read cached vulnerability IDs for a package, if fresh.
+    ///
+    /// Batch query results use manual caching with a TTL check because the
+    /// [`CachedClient`] middleware does not support POST requests.
     fn read_cached_query_ids(&self, name: &str, version: &str) -> Option<Vec<String>> {
-        let path = self.query_cache_path(name, version)?;
-        if !is_cache_fresh(&path, QUERY_CACHE_MAX_AGE) {
+        let entry = self.query_cache_entry(name, version)?;
+        if !is_cache_fresh(entry.path(), QUERY_CACHE_MAX_AGE) {
             return None;
         }
-        let data = fs_err::read(&path).ok()?;
+        let data = fs_err::read(entry.path()).ok()?;
         rmp_serde::from_slice::<Vec<String>>(&data).ok()
     }
 
     /// Write vulnerability IDs to cache for a package. Only called for non-empty results.
     fn write_cached_query_ids(&self, name: &str, version: &str, ids: &[String]) {
-        let Some(path) = self.query_cache_path(name, version) else {
+        let Some(entry) = self.query_cache_entry(name, version) else {
             return;
         };
-        if let Some(parent) = path.parent() {
-            if let Err(err) = fs_err::create_dir_all(parent) {
-                trace!("Failed to create cache directory {}: {err}", parent.display());
-                return;
-            }
+        if let Err(err) = fs_err::create_dir_all(entry.dir()) {
+            trace!("Failed to create cache directory {}: {err}", entry.dir().display());
+            return;
         }
         let Ok(data) = rmp_serde::to_vec(ids) else {
             return;
         };
-        if let Err(err) = uv_fs::write_atomic_sync(&path, &data) {
-            trace!("Failed to write query cache {}: {err}", path.display());
-        }
-    }
-
-    /// Read a cached full vulnerability record, if fresh.
-    fn read_cached_vuln(&self, id: &str) -> Option<Vulnerability> {
-        let path = self.vuln_cache_path(id)?;
-        if !is_cache_fresh(&path, VULN_CACHE_MAX_AGE) {
-            return None;
-        }
-        let data = fs_err::read(&path).ok()?;
-        rmp_serde::from_slice::<Vulnerability>(&data).ok()
-    }
-
-    /// Write a full vulnerability record to cache.
-    fn write_cached_vuln(&self, id: &str, vuln: &Vulnerability) {
-        let Some(path) = self.vuln_cache_path(id) else {
-            return;
-        };
-        if let Some(parent) = path.parent() {
-            if let Err(err) = fs_err::create_dir_all(parent) {
-                trace!("Failed to create cache directory {}: {err}", parent.display());
-                return;
-            }
-        }
-        let Ok(data) = rmp_serde::to_vec(vuln) else {
-            return;
-        };
-        if let Err(err) = uv_fs::write_atomic_sync(&path, &data) {
-            trace!("Failed to write vuln cache {}: {err}", path.display());
+        if let Err(err) = uv_fs::write_atomic_sync(entry.path(), &data) {
+            trace!("Failed to write query cache {}: {err}", entry.path().display());
         }
     }
 
@@ -361,7 +350,7 @@ impl Osv {
             }
         }
 
-        // Query OSV for cache misses only.
+        // Query OSV for cache misses only, using the uncached client for POST.
         if !pending.is_empty() {
             // Track unfiltered IDs per dependency for caching.
             let mut unfiltered_ids: FxHashMap<&types::Dependency, Vec<String>> =
@@ -388,6 +377,9 @@ impl Osv {
                     .map_err(|e| Error::Url(self.base_url.clone(), e))?;
                 let batch_response: QueryBatchResponse = self
                     .client
+                    .uncached()
+                    .for_host(&url)
+                    .raw_client()
                     .post(url.as_ref())
                     .json(&request)
                     .send()
@@ -477,20 +469,53 @@ impl Osv {
         Ok(findings)
     }
 
-    /// Fetch a full vulnerability record by ID from OSV, using cache when available.
+    /// Fetch a full vulnerability record by ID from OSV.
+    ///
+    /// Caching is handled transparently by the [`CachedClient`] middleware using
+    /// a synthetic `Cache-Control: max-age=3600` header, since OSV itself does
+    /// not send caching headers.
     async fn fetch_vuln(&self, id: &str) -> Result<Vulnerability, Error> {
-        // Check cache first.
-        if let Some(cached) = self.read_cached_vuln(id) {
-            trace!("Cache hit for vulnerability {id}");
-            return Ok(cached);
-        }
-
         let url = self
             .base_url
             .join(&format!("v1/vulns/{id}"))
             .map_err(|e| Error::Url(self.base_url.clone(), e))?;
+
+        // If we have a cache, use the CachedClient middleware for transparent caching.
+        if let Some(cache_entry) = self.vuln_cache_entry(id) {
+            let req = self
+                .client
+                .uncached()
+                .for_host(&url)
+                .raw_client()
+                .get(url.as_ref())
+                .build()
+                .map_err(reqwest_middleware::Error::Reqwest)?;
+
+            let vuln: Vulnerability = self
+                .client
+                .get_serde(
+                    req,
+                    &cache_entry,
+                    CacheControl::Override(VULN_CACHE_CONTROL.clone()),
+                    async |response| response.json::<Vulnerability>().await,
+                )
+                .await
+                .map_err(|err| match err {
+                    CachedClientError::Client(err) => Error::Client(err),
+                    CachedClientError::Callback { err, .. } => {
+                        Error::ReqwestMiddleware(reqwest_middleware::Error::Reqwest(err))
+                    }
+                })?;
+
+            return Ok(vuln);
+        }
+
+        // No cache available: make an uncached request.
         let vuln: Vulnerability = self
             .client
+            .uncached()
+            .for_host(&url)
+            .raw_client()
             .get(url.as_ref())
             .send()
             .await?
@@ -499,9 +524,6 @@ impl Osv {
             .json()
             .await
             .map_err(reqwest_middleware::Error::Reqwest)?;
-
-        // Cache the fetched record.
-        self.write_cached_vuln(id, &vuln);
 
         Ok(vuln)
     }
@@ -590,8 +612,8 @@ impl Osv {
 mod tests {
     use std::str::FromStr;
 
-    use reqwest_middleware::ClientWithMiddleware;
     use serde_json::json;
+    use uv_client::{BaseClientBuilder, CachedClient};
     use uv_configuration::Concurrency;
     use uv_normalize::PackageName;
     use uv_pep440::Version;
@@ -604,6 +626,15 @@ mod tests {
 
     use super::Event;
     use super::Osv;
+
+    /// Create a [`CachedClient`] suitable for tests (no retries, no cache).
+    fn test_client() -> CachedClient {
+        CachedClient::new(
+            BaseClientBuilder::default()
+                .build()
+                .expect("Failed to build test client"),
+        )
+    }
 
     #[test]
     fn test_deserialize_events() {
@@ -680,7 +711,7 @@ mod tests {
             .await;
 
         let osv = Osv::new(
-            ClientWithMiddleware::default(),
+            test_client(),
             Some(DisplaySafeUrl::parse(&server.uri()).unwrap()),
             Concurrency::default(),
             None,
@@ -777,7 +808,7 @@ mod tests {
             .await;
 
         let osv = Osv::new(
-            ClientWithMiddleware::default(),
+            test_client(),
             Some(DisplaySafeUrl::parse(&server.uri()).unwrap()),
             Concurrency::default(),
             None,
@@ -972,7 +1003,7 @@ mod tests {
             .await;
 
         let osv = Osv::new(
-            ClientWithMiddleware::default(),
+            test_client(),
             Some(DisplaySafeUrl::parse(&server.uri()).unwrap()),
             Concurrency::default(),
             None,
@@ -1056,7 +1087,7 @@ mod tests {
             .await;
 
         let osv = Osv::new(
-            ClientWithMiddleware::default(),
+            test_client(),
             Some(DisplaySafeUrl::parse(&server.uri()).unwrap()),
             Concurrency::default(),
             None,
