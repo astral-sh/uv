@@ -1203,6 +1203,18 @@ pub enum ProjectCommand {
         after_long_help = ""
     )]
     Format(FormatArgs),
+    /// Type check the project.
+    ///
+    /// Type checks Python code using ty. By default, all Python files in the project
+    /// are checked. This command has the same behavior as running `ty check` in the project
+    /// root.
+    ///
+    /// Additional arguments can be passed to ty after `--`.
+    #[command(
+        after_help = "Use `uv help check` for more details.",
+        after_long_help = ""
+    )]
+    Check(CheckArgs),
     /// Audit the project's dependencies.
     ///
     /// Dependencies are audited for known vulnerabilities, as well as 'adverse' statuses such as
@@ -5193,6 +5205,48 @@ pub struct FormatArgs {
     ///
     /// This is useful for verifying which version was resolved when using version constraints
     /// (e.g., `--version ">=0.8.0"`) or `--version latest`.
+    #[arg(long, hide = true)]
+    pub show_version: bool,
+}
+
+#[derive(Args)]
+pub struct CheckArgs {
+    /// The version of ty to use for type checking.
+    ///
+    /// Accepts either a version (e.g., `0.0.1`) which will be treated as an exact pin,
+    /// a version specifier (e.g., `>=0.0.1`), or `latest` to use the latest available version.
+    ///
+    /// By default, a constrained version range of ty will be used (e.g., `>=0.0,<0.1`).
+    #[arg(long, value_hint = ValueHint::Other)]
+    pub version: Option<String>,
+
+    /// Limit candidate ty versions to those released prior to the given date.
+    ///
+    /// Accepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,
+    /// `2006-12-02T02:07:43Z`) or local date in the same format (e.g. `2006-12-02`), as well as
+    /// durations relative to "now" (e.g., `-1 week`).
+    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER)]
+    pub exclude_newer: Option<ExcludeNewerValue>,
+
+    /// Additional arguments to pass to ty.
+    ///
+    /// For example, use `uv check -- --warn-on error` to treat warnings as errors or
+    /// `uv check -- src/module/foo.py` to check a specific file.
+    #[arg(last = true, value_hint = ValueHint::Other)]
+    pub extra_args: Vec<String>,
+
+    /// Avoid discovering a project or workspace.
+    ///
+    /// Instead of running the type checker in the context of the current project, run it in the
+    /// context of the current directory. This is useful when the current directory is not a
+    /// project.
+    #[arg(long)]
+    pub no_project: bool,
+
+    /// Display the version of ty that will be used for type checking.
+    ///
+    /// This is useful for verifying which version was resolved when using version constraints
+    /// (e.g., `--version ">=0.0.1"`) or `--version latest`.
     #[arg(long, hide = true)]
     pub show_version: bool,
 }

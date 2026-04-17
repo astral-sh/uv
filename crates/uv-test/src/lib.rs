@@ -1431,6 +1431,16 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv check` command with options shared across scenarios.
+    pub fn check(&self) -> Command {
+        let mut command = self.new_command();
+        command.arg("check");
+        self.add_shared_options(&mut command, false);
+        // Override to a more recent date for ty version resolution
+        command.env(EnvVars::UV_EXCLUDE_NEWER, "2026-02-15T00:00:00Z");
+        command
+    }
+
     /// Create a `uv build` command with options shared across scenarios.
     pub fn build(&self) -> Command {
         let mut command = self.new_command();

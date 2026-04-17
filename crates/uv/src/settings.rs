@@ -22,7 +22,7 @@ use uv_cli::{
     ToolUninstallArgs, TreeArgs, VenvArgs, VersionArgs, VersionBumpSpec, VersionFormat,
 };
 use uv_cli::{
-    AuthorFrom, BuildArgs, ExportArgs, FormatArgs, PublishArgs, PythonDirArgs,
+    AuthorFrom, BuildArgs, CheckArgs, ExportArgs, FormatArgs, PublishArgs, PythonDirArgs,
     ResolverInstallerArgs, ToolUpgradeArgs,
     options::{
         Flag, FlagSource, check_conflicts, flag, resolve_flag, resolve_flag_pair,
@@ -2733,6 +2733,37 @@ impl FormatSettings {
         Self {
             check,
             diff,
+            extra_args,
+            version,
+            exclude_newer: exclude_newer.map(|v| v.timestamp()),
+            no_project,
+            show_version,
+        }
+    }
+}
+
+/// The resolved settings to use for a `check` invocation.
+#[derive(Debug, Clone)]
+pub(crate) struct CheckSettings {
+    pub(crate) extra_args: Vec<String>,
+    pub(crate) version: Option<String>,
+    pub(crate) exclude_newer: Option<jiff::Timestamp>,
+    pub(crate) no_project: bool,
+    pub(crate) show_version: bool,
+}
+
+impl CheckSettings {
+    /// Resolve the [`CheckSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: CheckArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+        let CheckArgs {
+            extra_args,
+            version,
+            exclude_newer,
+            no_project,
+            show_version,
+        } = args;
+
+        Self {
             extra_args,
             version,
             exclude_newer: exclude_newer.map(|v| v.timestamp()),

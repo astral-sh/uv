@@ -2687,6 +2687,28 @@ async fn run_project(
             ))
             .await
         }
+        ProjectCommand::Check(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::CheckSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init().await?;
+
+            Box::pin(commands::check(
+                project_dir,
+                args.extra_args,
+                args.version,
+                args.exclude_newer,
+                args.show_version,
+                client_builder.subcommand(vec!["check".to_owned()]),
+                cache,
+                printer,
+                globals.preview,
+                args.no_project,
+            ))
+            .await
+        }
         ProjectCommand::Audit(audit_args) => {
             let args = settings::AuditSettings::resolve(audit_args, filesystem, environment);
             show_settings!(args);
