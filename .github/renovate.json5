@@ -81,6 +81,11 @@
       enabled: false,
     },
     {
+      matchPackageNames: ["/chainguard/"],
+      schedule: ["before 4am on the first day of the month"],
+      description: "Monthly update of Chainguard image digests",
+    },
+    {
       groupName: "pre-commit dependencies",
       matchManagers: ["pre-commit"],
       description: "Weekly update of pre-commit dependencies",
