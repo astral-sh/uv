@@ -81,9 +81,9 @@
       enabled: false,
     },
     {
-      matchPackageNames: ["/chainguard/"],
+      matchFileNames: [".github/workflows/test-system.yml"],
       schedule: ["before 4am on the first day of the month"],
-      description: "Monthly update of Chainguard image digests",
+      description: "Monthly update of test-system.yml dependencies",
     },
     {
       groupName: "pre-commit dependencies",
