@@ -231,14 +231,8 @@ fn is_cache_fresh(path: &Path, max_age: Duration) -> bool {
 /// Represents [OSV](https://osv.dev/), an open-source vulnerability database.
 pub struct Osv {
     base_url: DisplaySafeUrl,
-    /// The cached HTTP client. Individual vulnerability record fetches (GET) are
-    /// handled transparently by the [`CachedClient`] middleware. Batch queries
-    /// (POST) go through the uncached path since HTTP caching only applies to
-    /// GET/HEAD requests.
     client: CachedClient,
     concurrency: Concurrency,
-    /// The cache used for batch query result persistence. Individual vulnerability
-    /// records are cached implicitly by the [`CachedClient`] middleware above.
     cache: Cache,
 }
 
