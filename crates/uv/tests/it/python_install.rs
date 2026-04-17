@@ -1254,6 +1254,7 @@ fn python_install_freethreaded_and_gil_list() {
     context
         .python_install()
         .arg("3.13")
+        .env_remove(EnvVars::UV_PYTHON_NO_REGISTRY)
         .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "1")
         .assert()
         .success();
@@ -1261,13 +1262,14 @@ fn python_install_freethreaded_and_gil_list() {
         .python_install()
         .arg("--preview")
         .arg("3.13t")
+        .env_remove(EnvVars::UV_PYTHON_NO_REGISTRY)
         .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "1")
         .assert()
         .success();
 
     // List installed versions with registry discovery enabled.
-    // We remove `UV_PYTHON_NO_REGISTRY` to opt back into registry discovery, and use
-    // `--managed-python --only-installed` to exclude unrelated system Pythons.
+    // We remove `UV_PYTHON_NO_REGISTRY` to opt back into registry discovery, and remove
+    // `UV_TEST_PYTHON_PATH` so the test can discover the installed bin trampolines.
     //
     // Both the GIL and freethreaded variants should show entries from:
     // - The registry (patch-versioned managed directory path)
@@ -1278,6 +1280,7 @@ fn python_install_freethreaded_and_gil_list() {
         .arg("--only-installed")
         .arg("--managed-python")
         .env_remove(EnvVars::UV_PYTHON_NO_REGISTRY)
+        .env_remove(EnvVars::UV_TEST_PYTHON_PATH)
         .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "1"), @"
     success: true
     exit_code: 0
@@ -1294,6 +1297,7 @@ fn python_install_freethreaded_and_gil_list() {
         .arg("--only-installed")
         .arg("--managed-python")
         .env_remove(EnvVars::UV_PYTHON_NO_REGISTRY)
+        .env_remove(EnvVars::UV_TEST_PYTHON_PATH)
         .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "1"), @"
     success: true
     exit_code: 0
