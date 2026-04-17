@@ -1174,15 +1174,15 @@ pub enum CacheBucket {
     Python,
     /// Downloaded tool binaries (e.g., Ruff).
     Binaries,
-    /// Cached vulnerability audit results from services like OSV.
+    /// Cached vulnerability data from [OSV](https://osv.dev/).
     ///
     /// Cache structure:
-    ///  * `audit-v0/osv/query/<package_name>/<version>.msgpack` — cached vulnerability IDs
-    ///  * `audit-v0/osv/vulns/<vuln_id>.msgpack` — cached full vulnerability records
+    ///  * `osv-v0/query/<package_name>/<version>.msgpack` — cached vulnerability IDs
+    ///  * `osv-v0/vulns/<vuln_id>.msgpack` — cached full vulnerability records
     ///
     /// Only positive results (packages with known vulnerabilities) are cached.
     /// Negative results are not cached since new vulnerabilities may be discovered.
-    Audit,
+    Osv,
 }
 
 impl CacheBucket {
@@ -1207,7 +1207,7 @@ impl CacheBucket {
             Self::Environments => "environments-v2",
             Self::Python => "python-v0",
             Self::Binaries => "binaries-v0",
-            Self::Audit => "audit-v0",
+            Self::Osv => "osv-v0",
         }
     }
 
@@ -1316,7 +1316,7 @@ impl CacheBucket {
             | Self::Environments
             | Self::Python
             | Self::Binaries
-            | Self::Audit => {
+            | Self::Osv => {
                 // Nothing to do.
             }
         }
@@ -1336,7 +1336,7 @@ impl CacheBucket {
             Self::Builds,
             Self::Environments,
             Self::Binaries,
-            Self::Audit,
+            Self::Osv,
         ]
         .iter()
         .copied()

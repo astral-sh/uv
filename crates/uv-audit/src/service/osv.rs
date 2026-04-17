@@ -258,17 +258,17 @@ impl Osv {
 
     /// Return a [`CacheEntry`] for batch query results for a given package and version.
     fn query_cache_entry(&self, name: &str, version: &str) -> CacheEntry {
-        let bucket = self.cache.bucket(CacheBucket::Audit);
+        let bucket = self.cache.bucket(CacheBucket::Osv);
         CacheEntry::new(
-            bucket.join("osv").join("query").join(name),
+            bucket.join("query").join(name),
             format!("{version}.msgpack"),
         )
     }
 
     /// Return a [`CacheEntry`] for a full vulnerability record.
     fn vuln_cache_entry(&self, id: &str) -> CacheEntry {
-        let bucket = self.cache.bucket(CacheBucket::Audit);
-        CacheEntry::new(bucket.join("osv").join("vulns"), format!("{id}.msgpack"))
+        let bucket = self.cache.bucket(CacheBucket::Osv);
+        CacheEntry::new(bucket.join("vulns"), format!("{id}.msgpack"))
     }
 
     /// Read cached vulnerability IDs for a package, if fresh.
