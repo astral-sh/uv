@@ -500,7 +500,7 @@ impl EnvVars {
     ///
     /// When set, uv will search for Python interpreters in the directories specified by this
     /// variable instead of `PATH`.
-    #[attr_added_in("0.7.12")]
+    #[attr_added_in("next release")]
     pub const UV_PYTHON_SEARCH_PATH: &'static str = "UV_PYTHON_SEARCH_PATH";
 
     /// Include resolver and installer output related to environment modifications.
