@@ -1266,7 +1266,7 @@ fn python_install_freethreaded_and_gil_list() {
         .success();
 
     // List installed versions with registry discovery enabled.
-    // We remove UV_TEST_PYTHON_PATH to enable registry discovery (it's skipped when set),
+    // We remove `UV_PYTHON_SEARCH_PATH` to enable registry discovery (it's skipped when set),
     // and use `--managed-python --only-installed` to exclude unrelated system Pythons.
     //
     // Both the GIL and freethreaded variants should show entries from:
@@ -1277,7 +1277,7 @@ fn python_install_freethreaded_and_gil_list() {
         .arg("3.13")
         .arg("--only-installed")
         .arg("--managed-python")
-        .env_remove(EnvVars::UV_TEST_PYTHON_PATH)
+        .env_remove(EnvVars::UV_PYTHON_SEARCH_PATH)
         .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "1"), @"
     success: true
     exit_code: 0
@@ -1293,7 +1293,7 @@ fn python_install_freethreaded_and_gil_list() {
         .arg("3.13t")
         .arg("--only-installed")
         .arg("--managed-python")
-        .env_remove(EnvVars::UV_TEST_PYTHON_PATH)
+        .env_remove(EnvVars::UV_PYTHON_SEARCH_PATH)
         .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "1"), @"
     success: true
     exit_code: 0
