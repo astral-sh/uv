@@ -127,8 +127,13 @@ pub(crate) async fn check(
     .with_context(|| format!("Failed to install ty {}", resolved.version))?;
 
     let mut command = Command::new(&ty_path);
-    command.current_dir(target_dir);
+    command.current_dir(&target_dir);
     command.arg("check");
+
+    let venv_dir = target_dir.join(".venv");
+    if venv_dir.is_dir() {
+        command.env("VIRTUAL_ENV", &venv_dir);
+    }
 
     command.args(extra_args.iter());
 
