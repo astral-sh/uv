@@ -208,8 +208,7 @@ pub(crate) async fn audit(
                     .map(|url| url.parse().expect("invalid OSV service URL"))
                     .unwrap_or_else(|| osv::API_BASE.clone());
                 let client = CachedClient::new(base_client);
-                let service =
-                    osv::Osv::new(client, Some(osv_url), concurrency, Some(cache.clone()));
+                let service = osv::Osv::new(client, Some(osv_url), concurrency, cache.clone());
                 trace!("Auditing {n} dependencies against OSV", n = auditable.len());
                 service.query_batch(&dependencies, osv::Filter::All).await?
             }

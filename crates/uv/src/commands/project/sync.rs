@@ -944,7 +944,7 @@ async fn check_malware(
 
     let base_client = client_builder.build()?;
     let client = CachedClient::new(base_client);
-    let service = osv::Osv::new(client, Some(osv_url), concurrency.clone(), Some(cache.clone()));
+    let service = osv::Osv::new(client, Some(osv_url), concurrency.clone(), cache.clone());
 
     trace!(
         "Running malware check for {} dependencies",

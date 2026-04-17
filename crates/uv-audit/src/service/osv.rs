@@ -239,20 +239,20 @@ pub struct Osv {
     concurrency: Concurrency,
     /// The cache used for batch query result persistence. Individual vulnerability
     /// records are cached implicitly by the [`CachedClient`] middleware above.
-    cache: Option<Cache>,
+    cache: Cache,
 }
 
 impl Osv {
     /// Create a new OSV client with the given cached HTTP client and optional base URL.
     ///
     /// If no base URL is provided, the client will default to the official OSV API endpoint.
-    /// If a [`Cache`] is provided, positive batch query results will be cached to disk.
-    /// Individual vulnerability records are cached transparently by the [`CachedClient`].
+    /// Positive batch query results are cached to disk. Individual vulnerability records
+    /// are cached transparently by the [`CachedClient`].
     pub fn new(
         client: CachedClient,
         base_url: Option<DisplaySafeUrl>,
         concurrency: Concurrency,
-        cache: Option<Cache>,
+        cache: Cache,
     ) -> Self {
         Self {
             base_url: base_url.unwrap_or_else(|| API_BASE.clone()),
@@ -263,21 +263,18 @@ impl Osv {
     }
 
     /// Return a [`CacheEntry`] for batch query results for a given package and version.
-    fn query_cache_entry(&self, name: &str, version: &str) -> Option<CacheEntry> {
-        let bucket = self.cache.as_ref()?.bucket(CacheBucket::Audit);
-        Some(CacheEntry::new(
+    fn query_cache_entry(&self, name: &str, version: &str) -> CacheEntry {
+        let bucket = self.cache.bucket(CacheBucket::Audit);
+        CacheEntry::new(
             bucket.join("osv").join("query").join(name),
             format!("{version}.msgpack"),
-        ))
+        )
     }
 
     /// Return a [`CacheEntry`] for a full vulnerability record.
-    fn vuln_cache_entry(&self, id: &str) -> Option<CacheEntry> {
-        let bucket = self.cache.as_ref()?.bucket(CacheBucket::Audit);
-        Some(CacheEntry::new(
-            bucket.join("osv").join("vulns"),
-            format!("{id}.msgpack"),
-        ))
+    fn vuln_cache_entry(&self, id: &str) -> CacheEntry {
+        let bucket = self.cache.bucket(CacheBucket::Audit);
+        CacheEntry::new(bucket.join("osv").join("vulns"), format!("{id}.msgpack"))
     }
 
     /// Read cached vulnerability IDs for a package, if fresh.
@@ -285,7 +282,7 @@ impl Osv {
     /// Batch query results use manual caching with a TTL check because the
     /// [`CachedClient`] middleware does not support POST requests.
     fn read_cached_query_ids(&self, name: &str, version: &str) -> Option<Vec<String>> {
-        let entry = self.query_cache_entry(name, version)?;
+        let entry = self.query_cache_entry(name, version);
         if !is_cache_fresh(entry.path(), QUERY_CACHE_MAX_AGE) {
             return None;
         }
@@ -295,18 +292,22 @@ impl Osv {
 
     /// Write vulnerability IDs to cache for a package. Only called for non-empty results.
     fn write_cached_query_ids(&self, name: &str, version: &str, ids: &[String]) {
-        let Some(entry) = self.query_cache_entry(name, version) else {
-            return;
-        };
+        let entry = self.query_cache_entry(name, version);
         if let Err(err) = fs_err::create_dir_all(entry.dir()) {
-            trace!("Failed to create cache directory {}: {err}", entry.dir().display());
+            trace!(
+                "Failed to create cache directory {}: {err}",
+                entry.dir().display()
+            );
             return;
         }
         let Ok(data) = rmp_serde::to_vec(ids) else {
             return;
         };
         if let Err(err) = uv_fs::write_atomic_sync(entry.path(), &data) {
-            trace!("Failed to write query cache {}: {err}", entry.path().display());
+            trace!(
+                "Failed to write query cache {}: {err}",
+                entry.path().display()
+            );
         }
     }
 
@@ -329,10 +330,9 @@ impl Osv {
         // Cache stores unfiltered IDs so results are reusable across filter modes.
         let mut pending: Vec<(&types::Dependency, Option<String>)> = Vec::new();
         for dep in dependencies {
-            if let Some(cached_ids) = self.read_cached_query_ids(
-                dep.name().as_ref(),
-                &dep.version().to_string(),
-            ) {
+            if let Some(cached_ids) =
+                self.read_cached_query_ids(dep.name().as_ref(), &dep.version().to_string())
+            {
                 trace!(
                     "Cache hit for {name}=={version} ({n} vuln IDs)",
                     name = dep.name(),
@@ -480,50 +480,31 @@ impl Osv {
             .join(&format!("v1/vulns/{id}"))
             .map_err(|e| Error::Url(self.base_url.clone(), e))?;
 
-        // If we have a cache, use the CachedClient middleware for transparent caching.
-        if let Some(cache_entry) = self.vuln_cache_entry(id) {
-            let req = self
-                .client
-                .uncached()
-                .for_host(&url)
-                .raw_client()
-                .get(url.as_ref())
-                .build()
-                .map_err(reqwest_middleware::Error::Reqwest)?;
-
-            let vuln: Vulnerability = self
-                .client
-                .get_serde(
-                    req,
-                    &cache_entry,
-                    CacheControl::Override(VULN_CACHE_CONTROL.clone()),
-                    async |response| response.json::<Vulnerability>().await,
-                )
-                .await
-                .map_err(|err| match err {
-                    CachedClientError::Client(err) => Error::Client(err),
-                    CachedClientError::Callback { err, .. } => {
-                        Error::ReqwestMiddleware(reqwest_middleware::Error::Reqwest(err))
-                    }
-                })?;
-
-            return Ok(vuln);
-        }
-
-        // No cache available: make an uncached request.
-        let vuln: Vulnerability = self
+        let cache_entry = self.vuln_cache_entry(id);
+        let req = self
             .client
             .uncached()
             .for_host(&url)
             .raw_client()
             .get(url.as_ref())
-            .send()
-            .await?
-            .error_for_status()
-            .map_err(reqwest_middleware::Error::Reqwest)?
-            .json()
-            .await
+            .build()
             .map_err(reqwest_middleware::Error::Reqwest)?;
+
+        let vuln: Vulnerability = self
+            .client
+            .get_serde(
+                req,
+                &cache_entry,
+                CacheControl::Override(VULN_CACHE_CONTROL.clone()),
+                async |response| response.json::<Vulnerability>().await,
+            )
+            .await
+            .map_err(|err| match err {
+                CachedClientError::Client(err) => Error::Client(err),
+                CachedClientError::Callback { err, .. } => {
+                    Error::ReqwestMiddleware(reqwest_middleware::Error::Reqwest(err))
+                }
+            })?;
 
         Ok(vuln)
     }
@@ -613,6 +594,7 @@ mod tests {
     use std::str::FromStr;
 
     use serde_json::json;
+    use uv_cache::Cache;
     use uv_client::{BaseClientBuilder, CachedClient};
     use uv_configuration::Concurrency;
     use uv_normalize::PackageName;
@@ -714,7 +696,7 @@ mod tests {
             test_client(),
             Some(DisplaySafeUrl::parse(&server.uri()).unwrap()),
             Concurrency::default(),
-            None,
+            Cache::temp().unwrap(),
         );
 
         let dependencies = vec![
@@ -811,7 +793,7 @@ mod tests {
             test_client(),
             Some(DisplaySafeUrl::parse(&server.uri()).unwrap()),
             Concurrency::default(),
-            None,
+            Cache::temp().unwrap(),
         );
 
         let dependencies = vec![
@@ -1006,7 +988,7 @@ mod tests {
             test_client(),
             Some(DisplaySafeUrl::parse(&server.uri()).unwrap()),
             Concurrency::default(),
-            None,
+            Cache::temp().unwrap(),
         );
 
         let dependencies = vec![
@@ -1090,7 +1072,7 @@ mod tests {
             test_client(),
             Some(DisplaySafeUrl::parse(&server.uri()).unwrap()),
             Concurrency::default(),
-            None,
+            Cache::temp().unwrap(),
         );
 
         let dependencies = vec![Dependency::new(
