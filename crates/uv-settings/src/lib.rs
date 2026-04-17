@@ -717,6 +717,7 @@ pub struct EnvironmentOptions {
     pub hide_build_output: Option<bool>,
     pub python_install_bin: Option<bool>,
     pub python_install_registry: Option<bool>,
+    pub python_no_registry: EnvFlag,
     pub install_mirrors: PythonInstallMirrors,
     pub log_context: Option<bool>,
     pub lfs: Option<bool>,
@@ -780,6 +781,7 @@ impl EnvironmentOptions {
             python_install_registry: parse_boolish_environment_variable(
                 EnvVars::UV_PYTHON_INSTALL_REGISTRY,
             )?,
+            python_no_registry: EnvFlag::new(EnvVars::UV_PYTHON_NO_REGISTRY)?,
             concurrency: Concurrency {
                 downloads: parse_integer_environment_variable(
                     EnvVars::UV_CONCURRENT_DOWNLOADS,

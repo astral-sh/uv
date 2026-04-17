@@ -1372,8 +1372,16 @@ impl PythonInstallSettings {
                 PythonUpgrade::Disabled
             },
             bin: flag(bin, no_bin, "bin").or(environment.python_install_bin),
-            registry: flag(registry, no_registry, "registry")
-                .or(environment.python_install_registry),
+            registry: match flag(registry, no_registry, "registry") {
+                Some(registry) => Some(registry),
+                None => {
+                    if environment.python_no_registry.value == Some(true) {
+                        Some(false)
+                    } else {
+                        environment.python_install_registry
+                    }
+                }
+            },
             python_install_mirror,
             pypy_install_mirror,
             python_downloads_json_url,
@@ -1430,7 +1438,11 @@ impl PythonUpgradeSettings {
         let force = false;
         let default = false;
         let bin = None;
-        let registry = None;
+        let registry = if environment.python_no_registry.value == Some(true) {
+            Some(false)
+        } else {
+            environment.python_install_registry
+        };
 
         let PythonUpgradeArgs {
             install_dir,

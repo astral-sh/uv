@@ -420,6 +420,14 @@ impl EnvVars {
     #[attr_added_in("0.8.0")]
     pub const UV_PYTHON_INSTALL_REGISTRY: &'static str = "UV_PYTHON_INSTALL_REGISTRY";
 
+    /// Disable use of the Windows registry for Python discovery and registration.
+    ///
+    /// When set, uv will not discover Python interpreters from the Windows registry or Microsoft
+    /// Store locations, and managed Python installations will not be registered in the Windows
+    /// registry.
+    #[attr_added_in("next release")]
+    pub const UV_PYTHON_NO_REGISTRY: &'static str = "UV_PYTHON_NO_REGISTRY";
+
     /// Managed Python installations information is hardcoded in the `uv` binary.
     ///
     /// This variable can be set to a local path or URL pointing to
