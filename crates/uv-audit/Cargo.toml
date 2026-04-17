@@ -16,17 +16,21 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-cache = { workspace = true }
 uv-configuration = { workspace = true }
-uv-pep440 = { workspace = true }
+uv-fs = { workspace = true }
 uv-normalize = { workspace = true }
+uv-pep440 = { workspace = true }
 uv-redacted = { workspace = true }
 uv-small-str = { workspace = true }
 
 clap = { workspace = true, optional = true }
+fs-err = { workspace = true }
 futures = { workspace = true }
 indexmap = { workspace = true }
 jiff = { workspace = true }
 reqwest-middleware = { workspace = true, features = ["json"] }
+rmp-serde = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }

@@ -873,6 +873,7 @@ pub(super) async fn do_sync(
             malware_check_client_builder,
             concurrency,
             malware_check_url.clone(),
+            cache,
         )
         .await?;
     }
@@ -920,6 +921,7 @@ async fn check_malware(
     client_builder: &BaseClientBuilder<'_>,
     concurrency: &Concurrency,
     malware_check_url: Option<DisplaySafeUrl>,
+    cache: &Cache,
 ) -> Result<(), ProjectError> {
     // NOTE: For now, we only check locked packages that indicate a source from
     // PyPI. The rationale behind this is that private (i.e. non-PyPI) packages
@@ -942,7 +944,7 @@ async fn check_malware(
 
     let base_client = client_builder.build()?;
     let client = base_client.for_host(&osv_url).raw_client().clone();
-    let service = osv::Osv::new(client, Some(osv_url), concurrency.clone());
+    let service = osv::Osv::new(client, Some(osv_url), concurrency.clone(), Some(cache));
 
     trace!(
         "Running malware check for {} dependencies",
