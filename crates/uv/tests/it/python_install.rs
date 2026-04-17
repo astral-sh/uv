@@ -333,7 +333,7 @@ fn python_install_automatic() {
         uv_snapshot!(context.filters(), context.run()
             .env_remove(EnvVars::VIRTUAL_ENV)
             // In tests, we ignore `PATH` during Python discovery so we need to add the context `bin`
-            .env(EnvVars::UV_TEST_PYTHON_PATH, context.bin_dir.as_os_str())
+            .env(EnvVars::UV_PYTHON_SEARCH_PATH, context.bin_dir.as_os_str())
             .arg("-p").arg("3.11")
             .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @"
         success: true

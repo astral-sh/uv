@@ -35,7 +35,7 @@ fn command(context: &TestContext, python_versions: &[&str]) -> Command {
         .arg(build_vendor_links_url());
     context.add_shared_options(&mut command, true);
     command.env_remove(EnvVars::UV_EXCLUDE_NEWER);
-    command.env(EnvVars::UV_TEST_PYTHON_PATH, python_path);
+    command.env(EnvVars::UV_PYTHON_SEARCH_PATH, python_path);
 
     command
 }

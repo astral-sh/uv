@@ -219,7 +219,7 @@ mod tests {
 
             let mut run_vars = vec![
                 // Ensure `PATH` is used
-                (EnvVars::UV_TEST_PYTHON_PATH, None),
+                (EnvVars::UV_PYTHON_SEARCH_PATH, None),
                 // Ignore active virtual environments (i.e. that the dev is using)
                 (EnvVars::VIRTUAL_ENV, None),
                 (EnvVars::PATH, path.as_deref()),

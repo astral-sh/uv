@@ -1908,7 +1908,7 @@ fn compile_fallback_interpreter_broken_in_path() -> Result<()> {
             .arg("--python-version")
             .arg("3.12")
             // In tests, we ignore `PATH` during Python discovery so we need to add the context `bin`
-            .env(EnvVars::UV_TEST_PYTHON_PATH, context.bin_dir.as_os_str()), @"
+            .env(EnvVars::UV_PYTHON_SEARCH_PATH, context.bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----

@@ -9043,7 +9043,7 @@ fn install_incompatible_python_version_interpreter_broken_in_path() -> Result<()
         .arg("-p").arg("3.12")
         .arg("anyio")
         // In tests, we ignore `PATH` during Python discovery so we need to add the context `bin`
-        .env(EnvVars::UV_TEST_PYTHON_PATH, path.as_os_str()), @"
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, path.as_os_str()), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -9070,7 +9070,7 @@ fn install_incompatible_python_version_interpreter_broken_in_path() -> Result<()
         .arg("-p").arg("3.12")
         .arg("anyio")
         // In tests, we ignore `PATH` during Python discovery so we need to add the context `bin`
-        .env(EnvVars::UV_TEST_PYTHON_PATH, path.as_os_str()), @"
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, path.as_os_str()), @"
     success: false
     exit_code: 2
     ----- stdout -----
