@@ -2289,17 +2289,14 @@ fn self_version_short() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(
-            r"\d+\.\d+\.\d+(-alpha\.\d+)?(\+\d+)?( \(.*\))?",
-            r"[VERSION] ([COMMIT] DATE)",
-        )])
+        .chain([(r"\d+\.\d+\.\d+(-alpha\.\d+)?(\+\d+)?", r"[VERSION]")])
         .collect::<Vec<_>>();
     uv_snapshot!(filters, context.self_version()
         .arg("--short"), @"
     success: true
     exit_code: 0
     ----- stdout -----
-    [VERSION] ([COMMIT] DATE)
+    [VERSION]
 
     ----- stderr -----
     ");

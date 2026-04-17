@@ -50,7 +50,7 @@ pub(crate) fn self_version(
     match output_format {
         VersionFormat::Text => {
             if short {
-                writeln!(printer.stdout(), "{}", version_info.cyan())?;
+                writeln!(printer.stdout(), "{}", version_info.version().cyan())?;
             } else {
                 writeln!(printer.stdout(), "uv {}", version_info.cyan())?;
             }
