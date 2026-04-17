@@ -1277,7 +1277,7 @@ fn lock_exclude_newer_relative_no_timestamp_in_lockfile() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    // The lockfile retains the span but no timestamp since no re-resolution occurred.
+    // The lockfile retains the span but the timestamp is not restored or updated.
     let lock = context.read("uv.lock");
     assert_snapshot!(lock, @r#"
     version = 1
