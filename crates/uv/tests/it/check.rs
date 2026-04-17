@@ -1,5 +1,4 @@
 use anyhow::Result;
-use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use indoc::indoc;
 
@@ -7,7 +6,7 @@ use uv_test::uv_snapshot;
 
 #[test]
 fn check_project() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&[]);
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -93,9 +92,6 @@ fn check_with_declared_dependency() -> Result<()> {
         dependencies = ["iniconfig"]
     "#})?;
 
-    // Sync to install the dependency into the virtual environment.
-    context.sync().assert().success();
-
     let main_py = context.temp_dir.child("main.py");
     main_py.write_str(indoc! {r#"
         import iniconfig
@@ -110,6 +106,7 @@ fn check_with_declared_dependency() -> Result<()> {
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check` to disable this warning.
+    Installed 1 package in [TIME]
     ");
 
     Ok(())
@@ -127,9 +124,6 @@ fn check_with_undeclared_dependency() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = []
     "#})?;
-
-    // Sync to create the virtual environment (no dependencies installed).
-    context.sync().assert().success();
 
     let main_py = context.temp_dir.child("main.py");
     main_py.write_str(indoc! {r#"

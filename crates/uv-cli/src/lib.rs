@@ -5211,6 +5211,110 @@ pub struct FormatArgs {
 
 #[derive(Args)]
 pub struct CheckArgs {
+    /// Include optional dependencies from the specified extra name.
+    ///
+    /// May be provided more than once.
+    #[arg(
+        long,
+        conflicts_with = "all_extras",
+        conflicts_with = "only_group",
+        value_delimiter = ',',
+        value_parser = extra_name_with_clap_error,
+        value_hint = ValueHint::Other,
+    )]
+    pub extra: Option<Vec<ExtraName>>,
+
+    /// Include all optional dependencies.
+    #[arg(long, conflicts_with = "extra", conflicts_with = "only_group")]
+    pub all_extras: bool,
+
+    /// Exclude the specified optional dependencies, if `--all-extras` is supplied.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, value_hint = ValueHint::Other)]
+    pub no_extra: Vec<ExtraName>,
+
+    #[arg(long, overrides_with("all_extras"), hide = true)]
+    pub no_all_extras: bool,
+
+    /// Include the development dependency group [env: UV_DEV=]
+    ///
+    /// This option is an alias for `--group dev`.
+    #[arg(long, overrides_with("no_dev"), hide = true, value_parser = clap::builder::BoolishValueParser::new())]
+    pub dev: bool,
+
+    /// Disable the development dependency group [env: UV_NO_DEV=]
+    ///
+    /// This option is an alias of `--no-group dev`.
+    /// See `--no-default-groups` to disable all default groups instead.
+    #[arg(long, overrides_with("dev"), value_parser = clap::builder::BoolishValueParser::new())]
+    pub no_dev: bool,
+
+    /// Only include the development dependency group.
+    ///
+    /// The project and its dependencies will be omitted.
+    ///
+    /// This option is an alias for `--only-group dev`. Implies `--no-default-groups`.
+    #[arg(long, conflicts_with_all = ["group", "all_groups", "no_dev"])]
+    pub only_dev: bool,
+
+    /// Include dependencies from the specified dependency group.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, conflicts_with_all = ["only_group", "only_dev"], value_hint = ValueHint::Other)]
+    pub group: Vec<GroupName>,
+
+    /// Disable the specified dependency group.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, env = EnvVars::UV_NO_GROUP, value_delimiter = ' ', value_hint = ValueHint::Other)]
+    pub no_group: Vec<GroupName>,
+
+    /// Ignore the default dependency groups.
+    #[arg(long, env = EnvVars::UV_NO_DEFAULT_GROUPS, value_parser = clap::builder::BoolishValueParser::new())]
+    pub no_default_groups: bool,
+
+    /// Only include dependencies from the specified dependency group.
+    ///
+    /// The project and its dependencies will be omitted.
+    ///
+    /// May be provided multiple times. Implies `--no-default-groups`.
+    #[arg(long, conflicts_with_all = ["group", "dev", "all_groups"], value_hint = ValueHint::Other)]
+    pub only_group: Vec<GroupName>,
+
+    /// Include dependencies from all dependency groups.
+    ///
+    /// `--no-group` can be used to exclude specific groups.
+    #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
+    pub all_groups: bool,
+
+    /// Assert that the `uv.lock` will remain unchanged.
+    #[arg(long, conflicts_with = "frozen")]
+    pub locked: bool,
+
+    /// Sync without updating the `uv.lock` file.
+    #[arg(long, conflicts_with = "locked")]
+    pub frozen: bool,
+
+    /// Don't sync the project environment before type checking.
+    #[arg(long)]
+    pub no_sync: bool,
+
+    /// The Python interpreter to use for the project environment.
+    ///
+    /// By default, the first interpreter that meets the project's
+    /// `requires-python` constraint is used.
+    ///
+    /// See `uv python` for more details on Python discovery and requests.
+    #[arg(
+        long,
+        short,
+        env = EnvVars::UV_PYTHON,
+        value_parser = parse_maybe_string,
+        value_hint = ValueHint::Other,
+    )]
+    pub python: Option<Maybe<String>>,
+
     /// The version of ty to use for type checking.
     ///
     /// Accepts either a version (e.g., `0.0.1`) which will be treated as an exact pin,
@@ -5219,14 +5323,6 @@ pub struct CheckArgs {
     /// By default, a constrained version range of ty will be used (e.g., `>=0.0,<0.1`).
     #[arg(long, value_hint = ValueHint::Other)]
     pub version: Option<String>,
-
-    /// Limit candidate ty versions to those released prior to the given date.
-    ///
-    /// Accepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,
-    /// `2006-12-02T02:07:43Z`) or local date in the same format (e.g. `2006-12-02`), as well as
-    /// durations relative to "now" (e.g., `-1 week`).
-    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER)]
-    pub exclude_newer: Option<ExcludeNewerValue>,
 
     /// Additional arguments to pass to ty.
     ///
@@ -5237,18 +5333,22 @@ pub struct CheckArgs {
 
     /// Avoid discovering a project or workspace.
     ///
-    /// Instead of running the type checker in the context of the current project, run it in the
-    /// context of the current directory. This is useful when the current directory is not a
-    /// project.
+    /// Instead of running the type checker in the context of the current directory.
     #[arg(long)]
     pub no_project: bool,
 
     /// Display the version of ty that will be used for type checking.
-    ///
-    /// This is useful for verifying which version was resolved when using version constraints
-    /// (e.g., `--version ">=0.0.1"`) or `--version latest`.
     #[arg(long, hide = true)]
     pub show_version: bool,
+
+    #[command(flatten)]
+    pub installer: ResolverInstallerArgs,
+
+    #[command(flatten)]
+    pub build: BuildOptionsArgs,
+
+    #[command(flatten)]
+    pub refresh: RefreshArgs,
 }
 
 #[derive(Args)]
