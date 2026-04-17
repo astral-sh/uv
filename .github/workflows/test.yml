@@ -250,7 +250,7 @@ jobs:
           cargo nextest run \
             --cargo-profile fast-build \
             --no-default-features \
-            --features test-python,test-pypi,test-python-managed,native-auth,windows-native \
+            --features test-python,test-pypi,test-python-managed,test-windows-registry,native-auth,windows-native \
             --workspace \
             --profile ci-windows \
             --partition hash:${{ matrix.partition }}/3
