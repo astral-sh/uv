@@ -208,6 +208,10 @@ test-python-managed = []
 test-slow = []
 # Includes test cases that require ecosystem packages
 test-ecosystem = []
+# Includes test cases that write to the Windows registry. These tests mutate
+# global state (the Windows registry).
+# We don't run these tests by default locally; the CI for Windows enables them.
+test-windows-registry = []
 # Build uvw binary on Windows
 windows-gui-bin = []
 
