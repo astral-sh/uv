@@ -166,8 +166,15 @@ impl GitRepository {
     /// Opens an existing Git repository at `path`.
     pub(crate) fn open(path: &Path) -> Result<Self> {
         // Make sure there is a Git repository at the specified path.
+        // Unset GIT_DIR to ensure git operates on the correct local repository.
+        // See the comment in `fetch_with_cli` for more details.
         ProcessBuilder::new(GIT.as_ref()?)
             .arg("rev-parse")
+            .env_remove(EnvVars::GIT_DIR)
+            .env_remove(EnvVars::GIT_WORK_TREE)
+            .env_remove(EnvVars::GIT_INDEX_FILE)
+            .env_remove(EnvVars::GIT_OBJECT_DIRECTORY)
+            .env_remove(EnvVars::GIT_ALTERNATE_OBJECT_DIRECTORIES)
             .cwd(path)
             .exec_with_output()?;
 
@@ -185,8 +192,17 @@ impl GitRepository {
         // opts.external_template(false);
 
         // Initialize the repository.
+        // If cargo is run by git (for example, the `exec` command in `git
+        // rebase`) or if GIT_DIR is set by other tools (e.g., `git bisect run`),
+        // the GIT_DIR will point to the wrong location (this takes precedence
+        // over cwd). Make sure this is unset so git will look at cwd for the repo.
         ProcessBuilder::new(GIT.as_ref()?)
             .arg("init")
+            .env_remove(EnvVars::GIT_DIR)
+            .env_remove(EnvVars::GIT_WORK_TREE)
+            .env_remove(EnvVars::GIT_INDEX_FILE)
+            .env_remove(EnvVars::GIT_OBJECT_DIRECTORY)
+            .env_remove(EnvVars::GIT_ALTERNATE_OBJECT_DIRECTORIES)
             .cwd(path)
             .exec_with_output()?;
 
@@ -200,6 +216,11 @@ impl GitRepository {
         let result = ProcessBuilder::new(GIT.as_ref()?)
             .arg("rev-parse")
             .arg(refname)
+            .env_remove(EnvVars::GIT_DIR)
+            .env_remove(EnvVars::GIT_WORK_TREE)
+            .env_remove(EnvVars::GIT_INDEX_FILE)
+            .env_remove(EnvVars::GIT_OBJECT_DIRECTORY)
+            .env_remove(EnvVars::GIT_ALTERNATE_OBJECT_DIRECTORIES)
             .cwd(&self.path)
             .exec_with_output()?;
 
@@ -223,6 +244,11 @@ impl GitRepository {
             .arg("fsck")
             .arg("--objects")
             .arg(refname)
+            .env_remove(EnvVars::GIT_DIR)
+            .env_remove(EnvVars::GIT_WORK_TREE)
+            .env_remove(EnvVars::GIT_INDEX_FILE)
+            .env_remove(EnvVars::GIT_OBJECT_DIRECTORY)
+            .env_remove(EnvVars::GIT_ALTERNATE_OBJECT_DIRECTORIES)
             .cwd(&self.path)
             .exec_with_output();
 
@@ -363,6 +389,11 @@ impl GitDatabase {
             .arg("rev-parse")
             .arg("--short")
             .arg(revision.as_str())
+            .env_remove(EnvVars::GIT_DIR)
+            .env_remove(EnvVars::GIT_WORK_TREE)
+            .env_remove(EnvVars::GIT_INDEX_FILE)
+            .env_remove(EnvVars::GIT_OBJECT_DIRECTORY)
+            .env_remove(EnvVars::GIT_ALTERNATE_OBJECT_DIRECTORIES)
             .cwd(&self.repo.path)
             .exec_with_output()?;
 
@@ -424,6 +455,13 @@ impl GitCheckout {
             // have a HEAD checked out.
             .arg(database.repo.path.simplified_display().to_string())
             .arg(into.simplified_display().to_string())
+            // Unset GIT_DIR to ensure git operates on the correct local repository.
+            // See the comment in `fetch_with_cli` for more details.
+            .env_remove(EnvVars::GIT_DIR)
+            .env_remove(EnvVars::GIT_WORK_TREE)
+            .env_remove(EnvVars::GIT_INDEX_FILE)
+            .env_remove(EnvVars::GIT_OBJECT_DIRECTORY)
+            .env_remove(EnvVars::GIT_ALTERNATE_OBJECT_DIRECTORIES)
             .exec_with_output();
 
         if let Err(e) = res {
@@ -434,6 +472,11 @@ impl GitCheckout {
                 .arg("--no-hardlinks")
                 .arg(database.repo.path.simplified_display().to_string())
                 .arg(into.simplified_display().to_string())
+                .env_remove(EnvVars::GIT_DIR)
+                .env_remove(EnvVars::GIT_WORK_TREE)
+                .env_remove(EnvVars::GIT_INDEX_FILE)
+                .env_remove(EnvVars::GIT_OBJECT_DIRECTORY)
+                .env_remove(EnvVars::GIT_ALTERNATE_OBJECT_DIRECTORIES)
                 .exec_with_output()?;
         }
 
@@ -495,6 +538,11 @@ impl GitCheckout {
             .arg("--hard")
             .arg(self.revision.as_str())
             .env(EnvVars::GIT_LFS_SKIP_SMUDGE, lfs_skip_smudge)
+            .env_remove(EnvVars::GIT_DIR)
+            .env_remove(EnvVars::GIT_WORK_TREE)
+            .env_remove(EnvVars::GIT_INDEX_FILE)
+            .env_remove(EnvVars::GIT_OBJECT_DIRECTORY)
+            .env_remove(EnvVars::GIT_ALTERNATE_OBJECT_DIRECTORIES)
             .cwd(&self.repo.path)
             .exec_with_output()?;
 
@@ -505,6 +553,11 @@ impl GitCheckout {
             .arg("--recursive")
             .arg("--init")
             .env(EnvVars::GIT_LFS_SKIP_SMUDGE, lfs_skip_smudge)
+            .env_remove(EnvVars::GIT_DIR)
+            .env_remove(EnvVars::GIT_WORK_TREE)
+            .env_remove(EnvVars::GIT_INDEX_FILE)
+            .env_remove(EnvVars::GIT_OBJECT_DIRECTORY)
+            .env_remove(EnvVars::GIT_ALTERNATE_OBJECT_DIRECTORIES)
             .cwd(&self.repo.path)
             .exec_with_output()
             .map(drop)?;
