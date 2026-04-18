@@ -946,6 +946,43 @@ fn lock_sdist_git_short_rev() -> Result<()> {
     Ok(())
 }
 
+/// Verify that `uv lock` succeeds on a git dependency even when `GIT_DIR` is
+/// set in the environment — as happens when uv is invoked from `git bisect run`.
+/// Regression test for <https://github.com/astral-sh/uv/issues/19008>.
+#[test]
+#[cfg(feature = "test-git")]
+fn lock_sdist_git_with_git_dir_env() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["uv-public-pypackage"]
+
+        [tool.uv.sources]
+        uv-public-pypackage = { git = "https://github.com/astral-test/uv-public-pypackage", tag = "0.0.1" }
+        "#,
+    )?;
+
+    // `git bisect run` sets GIT_DIR to the bisected repo's .git directory.
+    // Without the fix, this leaks into uv's internal git subprocesses and
+    // causes them to operate on the wrong repository.
+    uv_snapshot!(context.filters(), context.lock().env(EnvVars::GIT_DIR, "/nonexistent"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Lock a requirement from a direct URL to a wheel.
 #[test]
 fn lock_wheel_url() -> Result<()> {
