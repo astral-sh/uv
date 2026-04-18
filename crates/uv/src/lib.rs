@@ -94,11 +94,16 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             module,
             script,
             gui_script,
+            interactive,
             ..
         }) = **command
     {
         Some(ParsedRunCommand::from_args(
-            command, module, script, gui_script,
+            command,
+            interactive,
+            module,
+            script,
+            gui_script,
         )?)
     } else {
         None
