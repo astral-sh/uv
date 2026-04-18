@@ -333,7 +333,7 @@ rcgen = { version = "0.14.5", features = [
   "ring",
 ], default-features = false }
 rustls = { version = "0.23.36", default-features = false }
-similar = { version = "2.6.0" }
+similar = { version = "3.0.0" }
 webpki = { package = "rustls-webpki", version = "0.103.10" }
 x509-parser = { version = "0.18.0" }
 temp-env = { version = "0.3.6", features = ["async_closure"] }
