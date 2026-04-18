@@ -874,6 +874,10 @@ impl EnvVars {
     #[attr_added_in("0.0.5")]
     pub const GIT_ALTERNATE_OBJECT_DIRECTORIES: &'static str = "GIT_ALTERNATE_OBJECT_DIRECTORIES";
 
+    /// Unsets `GIT_COMMON_DIR` to prevent git from using the wrong common directory.
+    #[attr_added_in("0.5.28")]
+    pub const GIT_COMMON_DIR: &'static str = "GIT_COMMON_DIR";
+
     /// Disables SSL verification for git operations.
     #[attr_hidden]
     #[attr_added_in("0.5.28")]
