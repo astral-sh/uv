@@ -117,6 +117,7 @@ plugins:
           - guides/integration/gitlab.md
           - guides/integration/pre-commit.md
           - guides/integration/pytorch.md
+          - guides/integration/mlflow.md
           - guides/integration/fastapi.md
           - guides/integration/azure.md
           - guides/integration/google.md
@@ -202,6 +203,7 @@ nav:
           - GitLab CI/CD: guides/integration/gitlab.md
           - Pre-commit: guides/integration/pre-commit.md
           - PyTorch: guides/integration/pytorch.md
+          - MLflow: guides/integration/mlflow.md
           - FastAPI: guides/integration/fastapi.md
           - Azure Artifacts: guides/integration/azure.md
           - Google Artifact Registry: guides/integration/google.md
