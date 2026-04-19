@@ -1654,7 +1654,11 @@ impl ParsedRunCommand {
 
         let gist_url;
         // If it's a Gist URL, use the GitHub API to get the raw URL.
-        if response.url().host_str() == Some("gist.github.com") {
+        let is_gist = {
+            let url = response.url();
+            url.host_str() == Some("gist.github.com") || url.path().starts_with("/gists/")
+        };
+        if is_gist {
             gist_url =
                 resolve_gist_url(DisplaySafeUrl::ref_cast(response.url()), client_builder).await?;
             url = &gist_url;
@@ -1967,7 +1971,12 @@ async fn resolve_gist_url(
         .ok_or_else(|| anyhow!("Invalid Gist URL format"))?;
 
     // Build the API URL.
-    let api_url = format!("https://api.github.com/gists/{gist_id}");
+    let api_url = if url.host_str() == Some("gist.github.com") {
+        format!("https://api.github.com/gists/{gist_id}")
+    } else {
+        let host = url.host_str().unwrap_or("github.com");
+        format!("https://{host}/api/v3/gists/{gist_id}")
+    };
 
     let client = client_builder.build()?;
 
