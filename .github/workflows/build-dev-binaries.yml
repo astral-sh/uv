@@ -335,6 +335,58 @@ jobs:
             ./target/aarch64-linux-android/no-debug/uvx
           retention-days: 1
 
+  build-binary-android-x86_64:
+    name: "android x86_64"
+    timeout-minutes: 10
+    runs-on: github-ubuntu-24.04-x86_64-8
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: "Setup Android NDK"
+        run: |
+          if [ -z "${ANDROID_NDK_ROOT}" ]; then
+            NDK_ROOT=$(ls -d "${ANDROID_HOME}/ndk/"* 2>/dev/null | sort -V | tail -n1)
+          else
+            NDK_ROOT="${ANDROID_NDK_ROOT}"
+          fi
+          TOOLCHAIN="${NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64"
+
+          echo "CC_x86_64_linux_android=${TOOLCHAIN}/bin/x86_64-linux-android24-clang" >> "$GITHUB_ENV"
+          echo "CXX_x86_64_linux_android=${TOOLCHAIN}/bin/x86_64-linux-android24-clang++" >> "$GITHUB_ENV"
+          echo "AR_x86_64_linux_android=${TOOLCHAIN}/bin/llvm-ar" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=${TOOLCHAIN}/bin/x86_64-linux-android24-clang" >> "$GITHUB_ENV"
+
+          # NDK 23+ removed libgcc, provide stubs that redirect to libunwind.
+          CLANG_LIBDIR=$(echo "${TOOLCHAIN}"/lib/clang/*/lib/linux/x86_64)
+          if [ ! -f "${CLANG_LIBDIR}/libgcc.a" ]; then
+            echo 'INPUT(-lunwind)' | sudo tee "${CLANG_LIBDIR}/libgcc.a" > /dev/null
+          fi
+
+          SYSROOT_LIBDIR="${TOOLCHAIN}/sysroot/usr/lib/x86_64-linux-android/24"
+          if [ -d "${SYSROOT_LIBDIR}" ] && [ ! -f "${SYSROOT_LIBDIR}/libgcc.a" ]; then
+            echo 'INPUT(-lunwind)' | sudo tee "${SYSROOT_LIBDIR}/libgcc.a" > /dev/null
+          fi
+
+          rustup target add x86_64-linux-android
+
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+
+      - name: "Build"
+        run: cargo build --profile no-debug --target x86_64-linux-android --bin uv --bin uvx
+
+      - name: "Upload binary"
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: uv-android-x86_64-${{ github.sha }}
+          path: |
+            ./target/x86_64-linux-android/no-debug/uv
+            ./target/x86_64-linux-android/no-debug/uvx
+          retention-days: 1
+
   build-binary-freebsd:
     name: "freebsd"
     timeout-minutes: 10
