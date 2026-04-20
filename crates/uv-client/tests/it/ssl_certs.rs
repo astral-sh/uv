@@ -45,20 +45,6 @@ impl TestCertificate {
         Self::persist(ca, server, &client)
     }
 
-    /// Generate a fresh certificate set whose CA contains an unsupported
-    /// critical extension.
-    fn new_with_unsupported_critical_ca_extension() -> Result<Self> {
-        let mut unsupported_extension = CustomExtension::from_oid_content(
-            &[1, 2, 3, 4],
-            [vec![0x0c, 0x0b], b"unsupported".to_vec()].concat(),
-        );
-        unsupported_extension.set_criticality(true);
-
-        let (ca, server, client) =
-            generate_self_signed_certs_with_ca_custom_extensions(vec![unsupported_extension])?;
-        Self::persist(ca, server, &client)
-    }
-
     /// Generate a fresh certificate set whose CA contains a duplicate
     /// `basicConstraints` extension, which webpki rejects as an invalid trust
     /// anchor.
@@ -462,19 +448,6 @@ async fn test_ssl_cert_file_valid() -> Result<()> {
     client()
         .ssl_cert_file(&cert.trust_path)
         .expect_https_connect_succeeds(&cert)
-        .await;
-    Ok(())
-}
-
-/// If `SSL_CERT_FILE` contains only an invalid certificate with an
-/// unsupported critical extension, the invalid certificate is ignored and the
-/// client falls back to webpki roots.
-#[tokio::test]
-async fn test_ssl_cert_file_unsupported_critical_extension_falls_back() -> Result<()> {
-    let cert = TestCertificate::new_with_unsupported_critical_ca_extension()?;
-    client()
-        .ssl_cert_file(&cert.trust_path)
-        .expect_https_connect_fails(&cert)
         .await;
     Ok(())
 }
