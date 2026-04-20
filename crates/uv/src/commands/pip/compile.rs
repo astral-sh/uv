@@ -33,7 +33,8 @@ use uv_preview::Preview;
 use uv_pypi_types::{Conflicts, SupportedEnvironments};
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVersion, VersionRequest,
+    PythonPreference, PythonRequest, PythonRequestKind, PythonRequestSource, PythonVersion,
+    VersionRequest,
 };
 use uv_requirements::upgrade::{LockedRequirements, read_pylock_toml_requirements};
 use uv_requirements::{
@@ -289,7 +290,7 @@ pub(crate) async fn pip_compile(
     let python_preference = python_preference.with_system_flag(system);
     let reporter = PythonDownloadReporter::single(printer);
     let interpreter = if let Some(python) = python.as_ref() {
-        let request = PythonRequest::parse(python);
+        let request = PythonRequest::parse(python).with_source(PythonRequestSource::UserRequest);
         PythonInstallation::find_or_download(
             Some(&request),
             environment_preference,
@@ -309,7 +310,7 @@ pub(crate) async fn pip_compile(
         // be able to use `PythonInstallation::find(...)` here.
         let request = if let Some(version) = python_version.as_ref() {
             // TODO(zanieb): We should consolidate `VersionRequest` and `PythonVersion`
-            PythonRequest::Version(VersionRequest::from(version))
+            PythonRequestKind::Version(VersionRequest::from(version)).into()
         } else {
             PythonRequest::default()
         };

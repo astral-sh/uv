@@ -1157,7 +1157,7 @@ fn python_find_script_no_such_version() {
     ----- stdout -----
 
     ----- stderr -----
-    No interpreter found for Python >=3.15 in [PYTHON SOURCES]
+    No interpreter found for Python >=3.15 (from `requires-python` metadata) in [PYTHON SOURCES]
     ");
 }
 

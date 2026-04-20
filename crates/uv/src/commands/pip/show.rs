@@ -15,7 +15,8 @@ use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_preview::Preview;
 use uv_python::{
-    EnvironmentPreference, Prefix, PythonEnvironment, PythonPreference, PythonRequest, Target,
+    EnvironmentPreference, Prefix, PythonEnvironment, PythonPreference, PythonRequest,
+    PythonRequestSource, Target,
 };
 
 use crate::commands::ExitStatus;
@@ -49,8 +50,14 @@ pub(crate) fn pip_show(
     }
 
     // Detect the current Python interpreter.
+    let python_request = python.map(PythonRequest::parse).unwrap_or_default();
+    let python_request = if python.is_some() {
+        python_request.with_source(PythonRequestSource::UserRequest)
+    } else {
+        python_request
+    };
     let environment = PythonEnvironment::find(
-        &python.map(PythonRequest::parse).unwrap_or_default(),
+        &python_request,
         EnvironmentPreference::from_system_flag(system, false),
         PythonPreference::default().with_system_flag(system),
         cache,

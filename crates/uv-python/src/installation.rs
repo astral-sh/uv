@@ -16,7 +16,8 @@ use uv_platform::{Arch, Libc, Os, Platform};
 use uv_preview::Preview;
 
 use crate::discovery::{
-    EnvironmentPreference, PythonRequest, find_best_python_installation, find_python_installation,
+    EnvironmentPreference, PythonRequest, PythonRequestKind, find_best_python_installation,
+    find_python_installation,
 };
 use crate::downloads::{
     DownloadResult, ManagedPythonDownload, ManagedPythonDownloadList, PythonDownloadRequest,
@@ -129,7 +130,8 @@ impl PythonInstallation {
         python_downloads_json_url: Option<&str>,
         preview: Preview,
     ) -> Result<Self, Error> {
-        let request = request.unwrap_or(&PythonRequest::Default);
+        let default_request = PythonRequest::default();
+        let request = request.unwrap_or(&default_request);
 
         // Python downloads are performing their own retries to catch stream errors, disable the
         // default retries to avoid the middleware performing uncontrolled retries.
@@ -183,7 +185,10 @@ impl PythonInstallation {
             Ok(Err(downloads::Error::NoDownloadFound(_))) => {
                 if downloads_enabled {
                     debug!("No downloads are available for {request}");
-                    if matches!(request, PythonRequest::Default | PythonRequest::Any) {
+                    if matches!(
+                        request.kind(),
+                        PythonRequestKind::Default | PythonRequestKind::Any
+                    ) {
                         return Err(err);
                     }
                     return Err(err.with_missing_python_hint(
@@ -211,8 +216,8 @@ impl PythonInstallation {
 
         // If the download is available, but not usable, we attach a hint to the original error.
         if !downloads_enabled {
-            let for_request = match request {
-                PythonRequest::Default | PythonRequest::Any => String::new(),
+            let for_request = match request.kind() {
+                PythonRequestKind::Default | PythonRequestKind::Any => String::new(),
                 _ => format!(" for {request}"),
             };
 

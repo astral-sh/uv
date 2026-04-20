@@ -31,8 +31,9 @@ use uv_preview::Preview;
 use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts};
 use uv_python::{
     BrokenLink, EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads,
-    PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, PythonSource,
-    PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions, VersionRequest,
+    PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, PythonRequestKind,
+    PythonRequestSource, PythonSource, PythonVariant, PythonVersionFile,
+    VersionFileDiscoveryOptions, VersionRequest,
 };
 use uv_requirements::upgrade::{LockedRequirements, read_lock_requirements};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
@@ -772,6 +773,7 @@ impl ScriptInterpreter {
 
         let reporter = PythonDownloadReporter::single(printer);
 
+        let python_request = python_request.map(|r| r.with_source(source.clone()));
         let interpreter = PythonInstallation::find_or_download(
             python_request.as_ref(),
             EnvironmentPreference::Any,
@@ -1062,6 +1064,7 @@ impl ProjectInterpreter {
         let reporter = PythonDownloadReporter::single(printer);
 
         // Locate the Python interpreter to use in the environment.
+        let python_request = python_request.map(|r| r.with_source(source.clone()));
         let python = PythonInstallation::find_or_download(
             python_request.as_ref(),
             EnvironmentPreference::OnlySystem,
@@ -1144,28 +1147,6 @@ pub(crate) enum RequiresPythonSource {
     Project,
 }
 
-#[derive(Debug, Clone)]
-pub(crate) enum PythonRequestSource {
-    /// The request was provided by the user.
-    UserRequest,
-    /// The request was inferred from a `.python-version` or `.python-versions` file.
-    DotPythonVersion(PythonVersionFile),
-    /// The request was inferred from a `pyproject.toml` file.
-    RequiresPython,
-}
-
-impl std::fmt::Display for PythonRequestSource {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::UserRequest => write!(f, "explicit request"),
-            Self::DotPythonVersion(file) => {
-                write!(f, "version file at `{}`", file.path().user_display())
-            }
-            Self::RequiresPython => write!(f, "`requires-python` metadata"),
-        }
-    }
-}
-
 /// The resolved Python request and requirement for a [`Workspace`].
 #[derive(Debug, Clone)]
 pub(crate) struct WorkspacePython {
@@ -1230,10 +1211,11 @@ impl WorkspacePython {
                 .as_ref()
                 .map(RequiresPython::specifiers)
                 .map(|specifiers| {
-                    PythonRequest::Version(VersionRequest::Range(
+                    PythonRequestKind::Version(VersionRequest::Range(
                         specifiers.clone(),
                         PythonVariant::Default,
                     ))
+                    .into()
                 });
             let source = PythonRequestSource::RequiresPython;
             (source, request)
@@ -1328,10 +1310,11 @@ impl ScriptPython {
             )
         } else if let Some(specifiers) = script.metadata().requires_python.as_ref() {
             // (3) `requires-python` from script metadata
-            let request = PythonRequest::Version(VersionRequest::Range(
+            let request: PythonRequest = PythonRequestKind::Version(VersionRequest::Range(
                 specifiers.clone(),
                 PythonVariant::Default,
-            ));
+            ))
+            .into();
             (PythonRequestSource::RequiresPython, Some(request))
         } else {
             // (4) `requires-python` from workspace `pyproject.toml`
@@ -1339,10 +1322,11 @@ impl ScriptPython {
                 .as_ref()
                 .map(RequiresPython::specifiers)
                 .map(|specifiers| {
-                    PythonRequest::Version(VersionRequest::Range(
+                    PythonRequestKind::Version(VersionRequest::Range(
                         specifiers.clone(),
                         PythonVariant::Default,
                     ))
+                    .into()
                 });
             (PythonRequestSource::RequiresPython, request)
         };
@@ -2660,18 +2644,18 @@ pub(crate) async fn init_script_python_requirement(
 ) -> anyhow::Result<RequiresPython> {
     let python_request = if let Some(request) = python {
         // (1) Explicit request from user
-        Some(PythonRequest::parse(request))
-    } else if let (false, Some(request)) = (
+        Some(PythonRequest::parse(request).with_source(PythonRequestSource::UserRequest))
+    } else if let (false, Some(file)) = (
         no_pin_python,
         PythonVersionFile::discover(
             directory,
             &VersionFileDiscoveryOptions::default().with_no_config(no_config),
         )
-        .await?
-        .and_then(PythonVersionFile::into_version),
+        .await?,
     ) {
         // (2) Request from `.python-version`
-        Some(request)
+        let source = PythonRequestSource::DotPythonVersion(file.clone());
+        file.into_version().map(|r| r.with_source(source))
     } else {
         // (3) No explicit request
         None

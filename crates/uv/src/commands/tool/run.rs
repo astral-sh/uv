@@ -34,7 +34,7 @@ use uv_python::PythonVersionFile;
 use uv_python::VersionFileDiscoveryOptions;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest,
+    PythonPreference, PythonRequest, PythonRequestKind, PythonRequestSource,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
@@ -744,6 +744,7 @@ async fn get_or_create_environment(
     preview: Preview,
 ) -> Result<(ToolRequirement, PythonEnvironment), ProjectError> {
     let reporter = PythonDownloadReporter::single(printer);
+    let has_python = python.is_some();
 
     // Determine explicit Python version requests
     let explicit_python_request = python.map(PythonRequest::parse);
@@ -755,7 +756,9 @@ async fn get_or_create_environment(
     // Resolve Python request with version file lookup when no explicit request
     let python_request = match (explicit_python_request, tool_python_request) {
         // e.g., `uvx --python 3.10 python3.12`
-        (Some(explicit), Some(tool_request)) if tool_request != PythonRequest::Default => {
+        (Some(explicit), Some(tool_request))
+            if !matches!(tool_request.kind(), PythonRequestKind::Default) =>
+        {
             // Conflict: both --python flag and versioned tool name
             return Err(anyhow::anyhow!(
                 "Received multiple Python version requests: `{}` and `{}`",
@@ -766,8 +769,14 @@ async fn get_or_create_environment(
         }
         // e.g, `uvx --python 3.10 ...`
         (Some(explicit), _) => Some(explicit),
-        // e.g., `uvx python` or `uvx <tool>`
-        (None, Some(PythonRequest::Default) | None) => PythonVersionFile::discover(
+        // e.g., `uvx python3.12`
+        (None, Some(tool_request))
+            if !matches!(tool_request.kind(), PythonRequestKind::Default) =>
+        {
+            Some(tool_request)
+        }
+        // e.g., `uvx python` or `uvx <tool>` — discover from version file
+        (None, _) => PythonVersionFile::discover(
             &*CWD,
             &VersionFileDiscoveryOptions::default()
                 .with_no_config(false)
@@ -775,9 +784,14 @@ async fn get_or_create_environment(
         )
         .await?
         .and_then(PythonVersionFile::into_version),
-        // e.g., `uvx python3.12`
-        (None, Some(tool_request)) => Some(tool_request),
     };
+    let python_request = python_request.map(|r| {
+        if has_python {
+            r.with_source(PythonRequestSource::UserRequest)
+        } else {
+            r
+        }
+    });
 
     // Discover an interpreter.
     let interpreter = PythonInstallation::find_or_download(

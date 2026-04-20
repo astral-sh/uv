@@ -27,7 +27,7 @@ use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::Conflicts;
 use uv_python::{
     EnvironmentPreference, Prefix, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVersion, Target,
+    PythonPreference, PythonRequest, PythonRequestSource, PythonVersion, Target,
 };
 use uv_requirements::{GroupsSpecification, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
@@ -186,7 +186,9 @@ pub(crate) async fn pip_install(
 
     // Detect the current Python interpreter.
     let environment = if target.is_some() || prefix.is_some() {
-        let python_request = python.as_deref().map(PythonRequest::parse);
+        let python_request = python
+            .as_deref()
+            .map(|p| PythonRequest::parse(p).with_source(PythonRequestSource::UserRequest));
         let reporter = PythonDownloadReporter::single(printer);
 
         let installation = PythonInstallation::find_or_download(
@@ -206,11 +208,17 @@ pub(crate) async fn pip_install(
         report_interpreter(&installation, true, printer)?;
         PythonEnvironment::from_installation(installation)
     } else {
+        let python_request = python
+            .as_deref()
+            .map(PythonRequest::parse)
+            .unwrap_or_default();
+        let python_request = if python.is_some() {
+            python_request.with_source(PythonRequestSource::UserRequest)
+        } else {
+            python_request
+        };
         let environment = PythonEnvironment::find(
-            &python
-                .as_deref()
-                .map(PythonRequest::parse)
-                .unwrap_or_default(),
+            &python_request,
             EnvironmentPreference::from_system_flag(system, true),
             PythonPreference::default().with_system_flag(system),
             &cache,

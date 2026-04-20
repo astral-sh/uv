@@ -33,8 +33,8 @@ use uv_pep440::Version;
 use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
-    VersionRequest,
+    PythonPreference, PythonRequest, PythonRequestKind, PythonRequestSource, PythonVariant,
+    PythonVersionFile, VersionFileDiscoveryOptions, VersionRequest,
 };
 use uv_requirements::RequirementsSource;
 use uv_resolver::{ExcludeNewer, FlatIndex};
@@ -512,16 +512,20 @@ async fn build_package(
     }
 
     // (1) Explicit request from user
-    let mut interpreter_request = python_request.map(PythonRequest::parse);
+    let mut interpreter_request = python_request
+        .map(|p| PythonRequest::parse(p).with_source(PythonRequestSource::UserRequest));
 
     // (2) Request from `.python-version`
     if interpreter_request.is_none() {
-        interpreter_request = PythonVersionFile::discover(
+        if let Some(file) = PythonVersionFile::discover(
             source.directory(),
             &VersionFileDiscoveryOptions::default().with_no_config(no_config),
         )
         .await?
-        .and_then(PythonVersionFile::into_version);
+        {
+            let source = PythonRequestSource::DotPythonVersion(file.clone());
+            interpreter_request = file.into_version().map(|r| r.with_source(source));
+        }
     }
 
     // (3) `Requires-Python` in `pyproject.toml`
@@ -532,10 +536,11 @@ async fn build_package(
                 .as_ref()
                 .map(RequiresPython::specifiers)
                 .map(|specifiers| {
-                    PythonRequest::Version(VersionRequest::Range(
+                    PythonRequest::from(PythonRequestKind::Version(VersionRequest::Range(
                         specifiers.clone(),
                         PythonVariant::Default,
-                    ))
+                    )))
+                    .with_source(PythonRequestSource::RequiresPython)
                 });
         }
     }

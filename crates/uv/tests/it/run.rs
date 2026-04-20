@@ -5554,7 +5554,7 @@ fn run_groups_requires_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No interpreter found for Python >=3.100 in [PYTHON SOURCES]
+    error: No interpreter found for Python >=3.100 (from `requires-python` metadata) in [PYTHON SOURCES]
     ");
 
     Ok(())

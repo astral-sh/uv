@@ -17,7 +17,7 @@ use uv_python::downloads::{
 };
 use uv_python::{
     DiscoveryError, EnvironmentPreference, PythonDownloads, PythonInstallation, PythonNotFound,
-    PythonPreference, PythonRequest, PythonSource, find_python_installations,
+    PythonPreference, PythonRequest, PythonRequestKind, PythonSource, find_python_installations,
 };
 
 use crate::commands::ExitStatus;
@@ -74,11 +74,12 @@ pub(crate) async fn list(
     preview: Preview,
 ) -> Result<ExitStatus> {
     let request = request.as_deref().map(PythonRequest::parse);
+    let any_request: PythonRequest = PythonRequestKind::Any.into();
     let base_download_request = if python_preference == PythonPreference::OnlySystem {
         None
     } else {
         // If the user request cannot be mapped to a download request, we won't show any downloads
-        PythonDownloadRequest::from_request(request.as_ref().unwrap_or(&PythonRequest::Any))
+        PythonDownloadRequest::from_request(request.as_ref().unwrap_or(&any_request))
     };
 
     let client = client_builder.build()?;
@@ -151,7 +152,7 @@ pub(crate) async fn list(
                     python_preference
                 };
                 Some(find_python_installations(
-                request.as_ref().unwrap_or(&PythonRequest::Any),
+                request.as_ref().unwrap_or(&any_request),
                 EnvironmentPreference::OnlySystem,
                 discovery_preference,
                 cache,

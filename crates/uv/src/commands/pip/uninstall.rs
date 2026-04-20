@@ -15,7 +15,7 @@ use uv_pep508::UnnamedRequirement;
 use uv_preview::Preview;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::PythonRequest;
-use uv_python::{EnvironmentPreference, PythonPreference};
+use uv_python::{EnvironmentPreference, PythonPreference, PythonRequestSource};
 use uv_python::{Prefix, PythonEnvironment, Target};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 
@@ -46,11 +46,17 @@ pub(crate) async fn pip_uninstall(
     let spec = RequirementsSpecification::from_simple_sources(sources, &client_builder).await?;
 
     // Detect the current Python interpreter.
+    let python_request = python
+        .as_deref()
+        .map(PythonRequest::parse)
+        .unwrap_or_default();
+    let python_request = if python.is_some() {
+        python_request.with_source(PythonRequestSource::UserRequest)
+    } else {
+        python_request
+    };
     let environment = PythonEnvironment::find(
-        &python
-            .as_deref()
-            .map(PythonRequest::parse)
-            .unwrap_or_default(),
+        &python_request,
         EnvironmentPreference::from_system_flag(system, true),
         PythonPreference::default().with_system_flag(system),
         &cache,

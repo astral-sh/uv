@@ -24,7 +24,8 @@ use uv_pep508::MarkerTree;
 use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
+    PythonPreference, PythonRequest, PythonRequestSource, PythonVersionFile,
+    VersionFileDiscoveryOptions,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
@@ -89,7 +90,10 @@ pub(crate) async fn install(
     let reporter = PythonDownloadReporter::single(printer);
 
     let (python_request, explicit_python_request) = if let Some(request) = python.as_deref() {
-        (Some(PythonRequest::parse(request)), true)
+        (
+            Some(PythonRequest::parse(request).with_source(PythonRequestSource::UserRequest)),
+            true,
+        )
     } else {
         // Discover a global Python version pin, if no request was made
         (

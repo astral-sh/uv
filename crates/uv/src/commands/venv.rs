@@ -150,6 +150,7 @@ pub(crate) async fn venv(
     .await?;
 
     // Locate the Python interpreter to use in the environment
+    let python_request = python_request.map(|r| r.with_source(source.clone()));
     let interpreter = {
         let python = PythonInstallation::find_or_download(
             python_request.as_ref(),

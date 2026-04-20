@@ -34,7 +34,8 @@ use crate::installation::{self, PythonInstallationKey};
 use crate::interpreter::Interpreter;
 use crate::python_version::PythonVersion;
 use crate::{
-    PythonInstallationMinorVersionKey, PythonRequest, PythonVariant, macos_dylib, sysconfig,
+    PythonInstallationMinorVersionKey, PythonRequest, PythonRequestKind, PythonVariant,
+    macos_dylib, sysconfig,
 };
 
 #[derive(Error, Debug)]
@@ -501,22 +502,22 @@ impl ManagedPythonInstallation {
     }
 
     pub fn satisfies(&self, request: &PythonRequest) -> bool {
-        match request {
-            PythonRequest::File(path) => self.executable(false) == *path,
-            PythonRequest::Default | PythonRequest::Any => true,
-            PythonRequest::Directory(path) => self.path() == *path,
-            PythonRequest::ExecutableName(name) => self
+        match request.kind() {
+            PythonRequestKind::File(path) => self.executable(false) == *path,
+            PythonRequestKind::Default | PythonRequestKind::Any => true,
+            PythonRequestKind::Directory(path) => self.path() == *path,
+            PythonRequestKind::ExecutableName(name) => self
                 .executable(false)
                 .file_name()
                 .is_some_and(|filename| filename.to_string_lossy() == *name),
-            PythonRequest::Implementation(implementation) => {
+            PythonRequestKind::Implementation(implementation) => {
                 *implementation == self.implementation()
             }
-            PythonRequest::ImplementationVersion(implementation, version) => {
+            PythonRequestKind::ImplementationVersion(implementation, version) => {
                 *implementation == self.implementation() && version.matches_version(&self.version())
             }
-            PythonRequest::Version(version) => version.matches_version(&self.version()),
-            PythonRequest::Key(request) => request.satisfied_by_key(self.key()),
+            PythonRequestKind::Version(version) => version.matches_version(&self.version()),
+            PythonRequestKind::Key(request) => request.satisfied_by_key(self.key()),
         }
     }
 
