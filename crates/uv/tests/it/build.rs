@@ -1078,6 +1078,139 @@ fn build_source_path_ignores_workspace_build_constraint_dependencies() -> Result
     Ok(())
 }
 
+/// A workspace member can use another workspace member as a PEP 517 build dependency, even when
+/// that build dependency itself depends on a third workspace member. Regression test for
+/// <https://github.com/astral-sh/uv/issues/19074>.
+#[test]
+fn build_workspace_transitive_build_dependency() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([
+            (r"\\\.", ""),
+            (r"\[my-util\]", "[PKG]"),
+            (r"\[my-backend\]", "[PKG]"),
+            (r"\[my-tool\]", "[PKG]"),
+        ])
+        .collect::<Vec<_>>();
+
+    let project = context.temp_dir.child("project");
+
+    project.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "my-workspace"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.workspace]
+        members = ["my-util", "my-backend", "my-tool"]
+
+        [tool.uv.sources]
+        my-backend = { workspace = true }
+        my-util = { workspace = true }
+        "#,
+    )?;
+    project.child("README.md").touch()?;
+
+    let my_util = project.child("my-util");
+    fs_err::create_dir_all(my_util.path())?;
+    my_util.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "my-util"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+    my_util
+        .child("src")
+        .child("my_util")
+        .child("__init__.py")
+        .touch()?;
+    my_util.child("README.md").touch()?;
+
+    let my_backend = project.child("my-backend");
+    fs_err::create_dir_all(my_backend.path())?;
+    my_backend.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "my-backend"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["my-util"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+    my_backend
+        .child("src")
+        .child("my_backend")
+        .child("__init__.py")
+        .touch()?;
+    my_backend.child("README.md").touch()?;
+
+    let my_tool = project.child("my-tool");
+    fs_err::create_dir_all(my_tool.path())?;
+    my_tool.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "my-tool"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["my-backend", "hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+    my_tool
+        .child("src")
+        .child("my_tool")
+        .child("__init__.py")
+        .touch()?;
+    my_tool.child("README.md").touch()?;
+
+    uv_snapshot!(
+        &filters,
+        context
+            .build()
+            .arg("--wheel")
+            .arg("--package")
+            .arg("my-tool")
+            .current_dir(&project),
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building wheel...
+    Successfully built dist/my_tool-0.1.0-py3-none-any.whl
+    "
+    );
+
+    project
+        .child("dist")
+        .child("my_tool-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::is_file());
+
+    Ok(())
+}
+
 #[test]
 fn build_sha() -> Result<()> {
     let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION);
