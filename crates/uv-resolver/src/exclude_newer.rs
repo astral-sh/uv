@@ -545,7 +545,9 @@ impl ExcludeNewer {
         match (&self.global, &other.global) {
             (Some(self_global), Some(other_global)) => {
                 if let Some(change) = compare_exclude_newer_value(self_global, other_global) {
-                    return Some(ExcludeNewerChange::GlobalChanged(change));
+                    if !change.is_relative_timestamp_change() {
+                        return Some(ExcludeNewerChange::GlobalChanged(change));
+                    }
                 }
             }
             (None, Some(global)) => {
