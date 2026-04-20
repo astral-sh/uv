@@ -387,7 +387,7 @@ impl Osv {
 
         let vuln: Vulnerability = self
             .client
-            .get_serde(
+            .get_serde_with_retry(
                 req,
                 &cache_entry,
                 CacheControl::Override(VULN_CACHE_CONTROL.clone()),
