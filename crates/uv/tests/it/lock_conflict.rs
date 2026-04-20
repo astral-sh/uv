@@ -2262,7 +2262,7 @@ fn group_default() -> Result<()> {
 /// This tests conflicting groups in a virtual pyproject.toml
 ///
 /// (One with no `[project]` which is allowed for specifically dependency-groups).
-/// Currently this isn't supported, as we require a PackageName when representing
+/// Currently this isn't supported, as we require a `PackageName` when representing
 /// Conflicts internally.
 #[test]
 fn group_virtual() -> Result<()> {
