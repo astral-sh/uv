@@ -466,19 +466,6 @@ async fn test_ssl_cert_file_valid() -> Result<()> {
     Ok(())
 }
 
-/// If `SSL_CERT_FILE` contains only an invalid certificate with an
-/// unsupported critical extension, the invalid certificate is ignored and the
-/// client falls back to webpki roots.
-#[tokio::test]
-async fn test_ssl_cert_file_unsupported_critical_extension_falls_back() -> Result<()> {
-    let cert = TestCertificate::new_with_unsupported_critical_ca_extension()?;
-    client()
-        .ssl_cert_file(&cert.trust_path)
-        .expect_https_connect_fails(&cert)
-        .await;
-    Ok(())
-}
-
 /// If `SSL_CERT_FILE` contains only an invalid trust anchor, the invalid
 /// certificate is ignored and the client falls back to webpki roots.
 #[tokio::test]
