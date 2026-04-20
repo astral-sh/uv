@@ -2,12 +2,17 @@ use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use fs_err::File;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use std::env::current_dir;
+use url::Url;
 use uv_static::EnvVars;
 use uv_test::{DEFAULT_PYTHON_VERSION, apply_filters, uv_snapshot};
+use wiremock::{
+    Mock, MockServer, ResponseTemplate,
+    matchers::{method, path as url_path},
+};
 use zip::ZipArchive;
 
 #[test]
@@ -1407,6 +1412,111 @@ fn build_sha() -> Result<()> {
         .child("dist")
         .child("project-0.1.0.tar.gz")
         .assert(predicate::path::is_file());
+    project
+        .child("dist")
+        .child("project-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::is_file());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn build_transitive_url_build_requirement_hashes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"\\\.", "")])
+        .collect::<Vec<_>>();
+
+    let ok_wheel = current_dir()?.join("../../test/links/ok-1.0.0-py3-none-any.whl");
+    let validation_wheel =
+        current_dir()?.join("../../test/links/validation-1.0.0-py3-none-any.whl");
+    let server = MockServer::start().await;
+    let ok_wheel_url = Url::parse(&format!("{}/ok-1.0.0-py3-none-any.whl", server.uri()))?;
+    let validation_wheel_url = Url::parse(&format!(
+        "{}/validation-1.0.0-py3-none-any.whl",
+        server.uri()
+    ))?;
+
+    Mock::given(method("GET"))
+        .and(url_path("/ok-1.0.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(ok_wheel)?))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(url_path("/validation-1.0.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(validation_wheel)?))
+        .mount(&server)
+        .await;
+
+    let project = context.temp_dir.child("project");
+
+    project.child("pyproject.toml").write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["validation @ {validation_wheel_url}#sha256=23ee8bda94d44f5480dccca240b37a4de7c823bc4683d00fd8e5eb85cf056ce6"]
+        build-backend = "backend"
+        backend-path = ["."]
+
+        [[tool.uv.dependency-metadata]]
+        name = "validation"
+        version = "1.0.0"
+        requires-dist = ["ok @ {ok_wheel_url}#sha256=79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f"]
+    "#})?;
+    project.child("backend.py").write_str(indoc! {r#"
+        import pathlib
+        import zipfile
+
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            wheel_name = "project-0.1.0-py3-none-any.whl"
+            wheel_path = pathlib.Path(wheel_directory, wheel_name)
+            records = [
+                ("project/__init__.py", b""),
+                (
+                    "project-0.1.0.dist-info/METADATA",
+                    b"Metadata-Version: 2.1\nName: project\nVersion: 0.1.0\n",
+                ),
+                (
+                    "project-0.1.0.dist-info/WHEEL",
+                    b"Wheel-Version: 1.0\nGenerator: uv-test\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                ),
+            ]
+
+            with zipfile.ZipFile(wheel_path, "w") as wheel:
+                for path, contents in records:
+                    wheel.writestr(path, contents)
+                record = "\n".join(f"{path},," for path, _ in records)
+                wheel.writestr(
+                    "project-0.1.0.dist-info/RECORD",
+                    record + "\nproject-0.1.0.dist-info/RECORD,,\n",
+                )
+
+            return wheel_name
+    "#})?;
+    uv_snapshot!(
+        &filters,
+        context
+            .build()
+            .arg("--wheel")
+            .arg("--require-hashes")
+            .current_dir(&project),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building wheel...
+    Successfully built dist/project-0.1.0-py3-none-any.whl
+    "
+    );
+
     project
         .child("dist")
         .child("project-0.1.0-py3-none-any.whl")
