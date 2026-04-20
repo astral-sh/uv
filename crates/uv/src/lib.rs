@@ -2447,6 +2447,7 @@ async fn run_project(
                 globals.concurrency,
                 no_config,
                 &cache,
+                workspace_cache,
                 printer,
                 globals.preview,
             ))
@@ -2496,6 +2497,7 @@ async fn run_project(
                 globals.concurrency,
                 no_config,
                 &cache,
+                workspace_cache,
                 printer,
                 globals.preview,
             ))
