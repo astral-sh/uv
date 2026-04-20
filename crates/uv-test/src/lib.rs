@@ -1183,7 +1183,7 @@ impl TestContext {
     ///   but snapshotted to a string.
     /// * Use a fake `HOME` to avoid accidentally changing the developer's machine.
     /// * Hide other Pythons with `UV_PYTHON_INSTALL_DIR` and installed interpreters with
-    ///   `UV_TEST_PYTHON_PATH` and an active venv (if applicable) by removing `VIRTUAL_ENV`.
+    ///   `UV_PYTHON_SEARCH_PATH` and an active venv (if applicable) by removing `VIRTUAL_ENV`.
     /// * Increase the stack size to avoid stack overflows on windows due to large async functions.
     pub fn add_shared_options(&self, command: &mut Command, activate_venv: bool) {
         self.add_shared_args(command);
@@ -1232,7 +1232,7 @@ impl TestContext {
             .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
             // Installations are not allowed by default; see `Self::with_managed_python_dirs`
             .env(EnvVars::UV_PYTHON_DOWNLOADS, "never")
-            .env(EnvVars::UV_TEST_PYTHON_PATH, self.python_path())
+            .env(EnvVars::UV_PYTHON_SEARCH_PATH, self.python_path())
             .env(EnvVars::UV_EXCLUDE_NEWER, TEST_TIMESTAMP)
             .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, TEST_TIMESTAMP)
             .env(EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF, TEST_TIMESTAMP)
@@ -2068,7 +2068,7 @@ pub fn create_venv_from_executable<P: AsRef<Path>>(
 
 /// Create a `PATH` with the requested Python versions available in order.
 ///
-/// Generally this should be used with `UV_TEST_PYTHON_PATH`.
+/// Generally this should be used with `UV_PYTHON_SEARCH_PATH`.
 pub fn python_path_with_versions(
     temp_dir: &ChildPath,
     python_versions: &[&str],
@@ -2083,7 +2083,7 @@ pub fn python_path_with_versions(
 
 /// Returns a list of Python executables for the given versions.
 ///
-/// Generally this should be used with `UV_TEST_PYTHON_PATH`.
+/// Generally this should be used with `UV_PYTHON_SEARCH_PATH`.
 pub fn python_installations_for_versions(
     temp_dir: &ChildPath,
     python_versions: &[&str],

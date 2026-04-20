@@ -588,8 +588,8 @@ fn python_executables_from_search_path<'a>(
     version: &'a VersionRequest,
     implementation: Option<&'a ImplementationName>,
 ) -> impl Iterator<Item = PathBuf> + 'a {
-    // `UV_TEST_PYTHON_PATH` can be used to override `PATH` to limit Python executable availability in the test suite
-    let search_path = env::var_os(EnvVars::UV_TEST_PYTHON_PATH)
+    // `UV_PYTHON_SEARCH_PATH` can be used to override `PATH` for Python executable discovery
+    let search_path = env::var_os(EnvVars::UV_PYTHON_SEARCH_PATH)
         .unwrap_or(env::var_os(EnvVars::PATH).unwrap_or_default());
 
     let possible_names: Vec<_> = version
