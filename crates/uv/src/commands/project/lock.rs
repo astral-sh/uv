@@ -40,7 +40,7 @@ use uv_types::{
     BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy,
 };
 use uv_warnings::{warn_user, warn_user_once};
-use uv_workspace::{DiscoveryOptions, Editability, Workspace, WorkspaceCache, WorkspaceMember};
+use uv_workspace::{DiscoveryOptions, Editability, VirtualProject, WorkspaceCache, WorkspaceMember};
 
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::lock_target::LockTarget;
@@ -130,8 +130,8 @@ pub(crate) async fn lock(
         LockTarget::Script(script)
     } else {
         workspace =
-            Workspace::discover(project_dir, &DiscoveryOptions::default(), workspace_cache).await?;
-        LockTarget::Workspace(&workspace)
+            VirtualProject::discover(project_dir, &DiscoveryOptions::default(), workspace_cache).await?;
+        LockTarget::Workspace(workspace.workspace())
     };
 
     // Determine the lock mode.
