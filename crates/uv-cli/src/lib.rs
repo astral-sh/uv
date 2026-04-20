@@ -2551,7 +2551,7 @@ pub struct PipUninstallArgs {
     pub dry_run: bool,
 
     #[command(flatten)]
-    pub compat_args: compat::PipGlobalCompatArgs,
+    pub compat_args: compat::PipUninstallCompatArgs,
 }
 
 #[derive(Args)]
