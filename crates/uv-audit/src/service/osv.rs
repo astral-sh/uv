@@ -16,8 +16,9 @@ use tracing::trace;
 use crate::types::{self, VulnerabilityID};
 use futures::{StreamExt as _, TryStreamExt as _};
 use jiff::Timestamp;
-use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
+use uv_cache::{Cache, CacheBucket, CacheEntry};
+use uv_client::{CacheControl, CachedClient, CachedClientError};
 use uv_configuration::Concurrency;
 use uv_pep440::Version;
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
@@ -29,6 +30,9 @@ pub static API_BASE: LazyLock<DisplaySafeUrl> = LazyLock::new(|| {
 /// Errors during OSV service interactions.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// An error from the cached HTTP client.
+    #[error(transparent)]
+    Client(#[from] uv_client::Error),
     /// An error during an HTTP request, including middleware errors.
     #[error(transparent)]
     ReqwestMiddleware(#[from] reqwest_middleware::Error),
@@ -58,7 +62,7 @@ struct QueryRequest {
 
 /// Event in a vulnerability range.
 /// Per the OSV schema, each event object contains exactly one of these event types.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum Event {
     /// A version that introduces the vulnerability.
@@ -72,7 +76,7 @@ enum Event {
 }
 
 /// The type of a version range in an OSV vulnerability record.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
 enum RangeType {
     /// The versions in events are SemVer 2.0 versions.
@@ -92,7 +96,7 @@ enum RangeType {
 }
 
 /// Version range for affected packages.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct Range {
     #[serde(rename = "type")]
     range_type: RangeType,
@@ -100,7 +104,7 @@ struct Range {
 }
 
 /// Package affected by a vulnerability.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct Affected {
     ranges: Option<Vec<Range>>,
     // TODO: Enable these fields if/when they contain information that's
@@ -111,7 +115,7 @@ struct Affected {
 }
 
 /// The type of a reference in an OSV vulnerability record.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
 enum ReferenceType {
     Advisory,
@@ -131,7 +135,7 @@ enum ReferenceType {
 }
 
 /// A reference for more information about a vulnerability.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct Reference {
     #[serde(rename = "type")]
     reference_type: ReferenceType,
@@ -139,7 +143,7 @@ struct Reference {
 }
 
 /// A full vulnerability record from OSV.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct Vulnerability {
     id: String,
     modified: Timestamp,
@@ -204,27 +208,47 @@ impl Filter {
     }
 }
 
+/// Synthetic `Cache-Control` header for vulnerability record caching (10 minutes).
+///
+/// This is injected into responses from OSV (which sends no cache headers)
+/// so that the [`CachedClient`] middleware handles caching transparently.
+///
+/// We use a TTL of 10 minutes for alignment with PyPI.
+static VULN_CACHE_CONTROL: LazyLock<http::HeaderValue> =
+    LazyLock::new(|| "max-age=600".parse().expect("valid header value"));
+
 /// Represents [OSV](https://osv.dev/), an open-source vulnerability database.
 pub struct Osv {
     base_url: DisplaySafeUrl,
-    client: ClientWithMiddleware,
+    client: CachedClient,
     concurrency: Concurrency,
+    cache: Cache,
 }
 
 impl Osv {
-    /// Create a new OSV client with the given HTTP client and optional base URL.
+    /// Create a new OSV client with the given cached HTTP client and optional base URL.
     ///
     /// If no base URL is provided, the client will default to the official OSV API endpoint.
+    /// Positive batch query results are cached to disk. Individual vulnerability records
+    /// are cached transparently by the [`CachedClient`].
     pub fn new(
-        client: ClientWithMiddleware,
+        client: CachedClient,
         base_url: Option<DisplaySafeUrl>,
         concurrency: Concurrency,
+        cache: Cache,
     ) -> Self {
         Self {
             base_url: base_url.unwrap_or_else(|| API_BASE.clone()),
             client,
             concurrency,
+            cache,
         }
+    }
+
+    /// Return a [`CacheEntry`] for a full vulnerability record.
+    fn vuln_cache_entry(&self, id: &str) -> CacheEntry {
+        let bucket = self.cache.bucket(CacheBucket::Osv);
+        CacheEntry::new(bucket.join("vulnerability"), format!("{id}.msgpack"))
     }
 
     /// Query OSV for vulnerabilities affecting the given dependencies, returning only vulnerability IDs.
@@ -265,8 +289,14 @@ impl Osv {
                 .base_url
                 .join("v1/querybatch")
                 .map_err(|e| Error::Url(self.base_url.clone(), e))?;
+
+            // NOTE: we need `uncached` here to access the underlying
+            // client for our POST request.
             let batch_response: QueryBatchResponse = self
                 .client
+                .uncached()
+                .for_host(&url)
+                .raw_client()
                 .post(url.as_ref())
                 .json(&request)
                 .send()
@@ -340,21 +370,42 @@ impl Osv {
     }
 
     /// Fetch a full vulnerability record by ID from OSV.
+    ///
+    /// Caching is handled transparently by the [`CachedClient`] middleware using
+    /// a synthetic `Cache-Control: max-age=600` header, since OSV itself does
+    /// not send caching headers.
     async fn fetch_vuln(&self, id: &str) -> Result<Vulnerability, Error> {
         let url = self
             .base_url
             .join(&format!("v1/vulns/{id}"))
             .map_err(|e| Error::Url(self.base_url.clone(), e))?;
+
+        let cache_entry = self.vuln_cache_entry(id);
+        let req = self
+            .client
+            .uncached()
+            .for_host(&url)
+            .raw_client()
+            .get(url.as_ref())
+            .build()
+            .map_err(reqwest_middleware::Error::Reqwest)?;
+
         let vuln: Vulnerability = self
             .client
-            .get(url.as_ref())
-            .send()
-            .await?
-            .error_for_status()
-            .map_err(reqwest_middleware::Error::Reqwest)?
-            .json()
+            .get_serde_with_retry(
+                req,
+                &cache_entry,
+                CacheControl::Override(VULN_CACHE_CONTROL.clone()),
+                async |response| response.json::<Vulnerability>().await,
+            )
             .await
-            .map_err(reqwest_middleware::Error::Reqwest)?;
+            .map_err(|err| match err {
+                CachedClientError::Client(err) => Error::Client(err),
+                CachedClientError::Callback { err, .. } => {
+                    Error::ReqwestMiddleware(reqwest_middleware::Error::Reqwest(err))
+                }
+            })?;
+
         Ok(vuln)
     }
 
@@ -442,8 +493,9 @@ impl Osv {
 mod tests {
     use std::str::FromStr;
 
-    use reqwest_middleware::ClientWithMiddleware;
     use serde_json::json;
+    use uv_cache::Cache;
+    use uv_client::{BaseClientBuilder, CachedClient};
     use uv_configuration::Concurrency;
     use uv_normalize::PackageName;
     use uv_pep440::Version;
@@ -456,6 +508,15 @@ mod tests {
 
     use super::Event;
     use super::Osv;
+
+    /// Create a [`CachedClient`] suitable for tests (no retries, no cache).
+    fn test_client() -> CachedClient {
+        CachedClient::new(
+            BaseClientBuilder::default()
+                .build()
+                .expect("Failed to build test client"),
+        )
+    }
 
     #[test]
     fn test_deserialize_events() {
@@ -532,9 +593,10 @@ mod tests {
             .await;
 
         let osv = Osv::new(
-            ClientWithMiddleware::default(),
+            test_client(),
             Some(DisplaySafeUrl::parse(&server.uri()).unwrap()),
             Concurrency::default(),
+            Cache::temp().unwrap(),
         );
 
         let dependencies = vec![
@@ -628,9 +690,10 @@ mod tests {
             .await;
 
         let osv = Osv::new(
-            ClientWithMiddleware::default(),
+            test_client(),
             Some(DisplaySafeUrl::parse(&server.uri()).unwrap()),
             Concurrency::default(),
+            Cache::temp().unwrap(),
         );
 
         let dependencies = vec![
@@ -822,9 +885,10 @@ mod tests {
             .await;
 
         let osv = Osv::new(
-            ClientWithMiddleware::default(),
+            test_client(),
             Some(DisplaySafeUrl::parse(&server.uri()).unwrap()),
             Concurrency::default(),
+            Cache::temp().unwrap(),
         );
 
         let dependencies = vec![
@@ -905,9 +969,10 @@ mod tests {
             .await;
 
         let osv = Osv::new(
-            ClientWithMiddleware::default(),
+            test_client(),
             Some(DisplaySafeUrl::parse(&server.uri()).unwrap()),
             Concurrency::default(),
+            Cache::temp().unwrap(),
         );
 
         let dependencies = vec![Dependency::new(
