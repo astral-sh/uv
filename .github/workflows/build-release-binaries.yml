@@ -46,7 +46,7 @@ jobs:
       - name: "Prep README.md"
         run: python scripts/transform_readme.py --target pypi
       - name: "Build sdist"
-        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           maturin-version: v1.13.1
           command: sdist
@@ -67,7 +67,7 @@ jobs:
 
       # uv-build
       - name: "Build sdist uv-build"
-        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           maturin-version: v1.13.1
           command: sdist
@@ -105,7 +105,7 @@ jobs:
 
       # uv
       - name: "Build wheels - x86_64"
-        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           maturin-version: v1.13.1
           target: x86_64
@@ -138,7 +138,7 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build - x86_64"
-        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           maturin-version: v1.13.1
           target: x86_64
@@ -171,7 +171,7 @@ jobs:
 
       # uv
       - name: "Build wheels - aarch64"
-        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           maturin-version: v1.13.1
           target: aarch64
@@ -211,7 +211,7 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build - aarch64"
-        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           maturin-version: v1.13.1
           target: aarch64
@@ -268,7 +268,7 @@ jobs:
           echo "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append
       # uv
       - name: "Build wheels"
-        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           maturin-version: v1.13.1
           target: ${{ matrix.platform.target }}
@@ -310,7 +310,7 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build"
-        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           maturin-version: v1.13.1
           target: ${{ matrix.platform.target }}
@@ -351,7 +351,7 @@ jobs:
 
       # uv
       - name: "Build wheels"
-        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           maturin-version: v1.13.1
           target: ${{ matrix.target }}
@@ -422,7 +422,7 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build"
-        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           maturin-version: v1.13.1
           target: ${{ matrix.target }}
@@ -481,7 +481,7 @@ jobs:
 
       # uv
       - name: "Build wheels"
-        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           maturin-version: v1.13.1
           target: ${{ matrix.platform.target }}
@@ -539,7 +539,7 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build"
-        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           maturin-version: v1.13.1
           target: ${{ matrix.platform.target }}
@@ -598,7 +598,7 @@ jobs:
 
       # uv
       - name: "Build wheels"
-        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           maturin-version: v1.13.1
           target: ${{ matrix.platform.target }}
@@ -661,7 +661,7 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build"
-        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           maturin-version: v1.13.1
           target: ${{ matrix.platform.target }}
@@ -721,7 +721,7 @@ jobs:
 
       # uv
       - name: "Build wheels"
-        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           maturin-version: v1.13.1
           target: ${{ matrix.platform.target }}
@@ -782,7 +782,7 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build"
-        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           maturin-version: v1.13.1
           target: ${{ matrix.platform.target }}
@@ -830,7 +830,7 @@ jobs:
 
       # uv
       - name: "Build wheels"
-        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           maturin-version: v1.13.1
           target: ${{ matrix.platform.target }}
@@ -889,7 +889,7 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build"
-        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           maturin-version: v1.13.1
           target: ${{ matrix.platform.target }}
@@ -947,7 +947,7 @@ jobs:
 
       # uv
       - name: "Build wheels"
-        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           maturin-version: v1.13.1
           target: ${{ matrix.target }}
@@ -999,7 +999,7 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build"
-        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           maturin-version: v1.13.1
           target: ${{ matrix.target }}
@@ -1058,7 +1058,7 @@ jobs:
 
       # uv
       - name: "Build wheels"
-        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           maturin-version: v1.13.1
           target: ${{ matrix.platform.target }}
@@ -1138,7 +1138,7 @@ jobs:
 
       # uv-build
       - name: "Build wheels"
-        uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           maturin-version: v1.13.1
           target: ${{ matrix.platform.target }}
