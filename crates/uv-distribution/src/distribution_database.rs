@@ -1002,11 +1002,18 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
-        let partial_len =
-            || std::fs::metadata(partial_entry.path()).map(|m| m.len()).unwrap_or(0);
+        let partial_len = || {
+            std::fs::metadata(partial_entry.path())
+                .map(|m| m.len())
+                .unwrap_or(0)
+        };
 
         let mut retry_state = RetryState::start(
-            self.client.unmanaged.cached_client().uncached().retry_policy(),
+            self.client
+                .unmanaged
+                .cached_client()
+                .uncached()
+                .retry_policy(),
             url.clone(),
         );
         let mut use_range = true;
@@ -1023,9 +1030,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             let result = self
                 .client
                 .managed(|client| {
-                    client
-                        .cached_client()
-                        .get_serde(req, &http_entry, cache_control.clone(), &download)
+                    client.cached_client().get_serde(
+                        req,
+                        &http_entry,
+                        cache_control.clone(),
+                        &download,
+                    )
                 })
                 .await;
 
