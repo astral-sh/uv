@@ -208,12 +208,14 @@ impl Filter {
     }
 }
 
-/// Synthetic `Cache-Control` header for vulnerability record caching (1 hour).
+/// Synthetic `Cache-Control` header for vulnerability record caching (10 minutes).
 ///
 /// This is injected into responses from OSV (which sends no cache headers)
 /// so that the [`CachedClient`] middleware handles caching transparently.
+///
+/// We use a TTL of 10 minutes for alignment with PyPI.
 static VULN_CACHE_CONTROL: LazyLock<http::HeaderValue> =
-    LazyLock::new(|| "max-age=3600".parse().expect("valid header value"));
+    LazyLock::new(|| "max-age=600".parse().expect("valid header value"));
 
 /// Represents [OSV](https://osv.dev/), an open-source vulnerability database.
 pub struct Osv {
