@@ -59,7 +59,8 @@ pub static GIT: LazyLock<Result<ProcessBuilder, GitError>> = LazyLock::new(|| {
         .env_remove(EnvVars::GIT_WORK_TREE)
         .env_remove(EnvVars::GIT_INDEX_FILE)
         .env_remove(EnvVars::GIT_OBJECT_DIRECTORY)
-        .env_remove(EnvVars::GIT_ALTERNATE_OBJECT_DIRECTORIES);
+        .env_remove(EnvVars::GIT_ALTERNATE_OBJECT_DIRECTORIES)
+        .env_remove(EnvVars::GIT_COMMON_DIR);
 
     Ok(cmd)
 });

@@ -927,6 +927,12 @@ impl EnvVars {
     #[attr_added_in("0.4.29")]
     pub const GIT_CEILING_DIRECTORIES: &'static str = "GIT_CEILING_DIRECTORIES";
 
+    /// Cleared for uv's git invocations to ensure git behaves correctly in
+    /// spite of an odd environment.
+    #[attr_hidden]
+    #[attr_added_in("next release")]
+    pub const GIT_COMMON_DIR: &'static str = "GIT_COMMON_DIR";
+
     /// Indicates that the current process is running in GitHub Actions.
     ///
     /// `uv publish` may attempt trusted publishing flows when set
