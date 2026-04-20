@@ -15,7 +15,7 @@ use url::Url;
 use uv_cache::{ArchiveId, CacheBucket, CacheEntry, WheelCache};
 use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
-    CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
+    CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient, RetryState,
 };
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
@@ -838,11 +838,29 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
+        // Ensure the cache dir exists so we can rename the completed download into it.
+        fs_err::create_dir_all(wheel_entry.dir()).map_err(Error::CacheWrite)?;
+
+        // A NamedTempFile in the cache dir holds the completed .whl between download and
+        // extraction; auto-deleted on drop if extraction fails or the process is interrupted.
+        let complete_entry = tempfile::Builder::new()
+            .suffix(".whl")
+            .tempfile_in(wheel_entry.dir())
+            .map_err(Error::CacheWrite)?;
+
+        // A tempfile in the cache root accumulates bytes across retries. Using a NamedTempFile
+        // means it is cleaned up automatically on drop if the download fails.
+        let partial_entry = tempfile::Builder::new()
+            .tempfile_in(self.build_context.cache().root())
+            .map_err(Error::CacheWrite)?;
 
         let query_url = &url.clone();
 
         let download = |response: reqwest::Response| {
             async {
+                // Resume when the server honored the Range header and returned 206.
+                // Otherwise, truncate and start fresh.
+                let resuming = response.status() == reqwest::StatusCode::PARTIAL_CONTENT;
                 let size = size.or_else(|| content_length(&response));
 
                 let progress = self
@@ -855,12 +873,16 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .map_err(|err| self.handle_response_errors(err))
                     .into_async_read();
 
-                // Download the wheel to a temporary file.
-                let temp_file = tempfile::tempfile_in(self.build_context.cache().root())
+                // Open the partial entry (temp file), truncating if not resuming.
+                let temp_file = std::fs::OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .append(resuming)
+                    .truncate(!resuming)
+                    .open(partial_entry.path())
                     .map_err(Error::CacheWrite)?;
                 let mut writer = tokio::io::BufWriter::new(fs_err::tokio::File::from_std(
-                    // It's an unnamed file on Linux so that's the best approximation.
-                    fs_err::File::from_parts(temp_file, self.build_context.cache().root()),
+                    fs_err::File::from_parts(temp_file, partial_entry.path()),
                 ));
 
                 match progress {
@@ -882,10 +904,18 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     }
                 }
 
+                // Download is complete, atomically rename into place.
+                fs_err::rename(partial_entry.path(), complete_entry.path())
+                    .map_err(Error::CacheWrite)?;
+
+                // Re-open the renamed file for extraction.
+                let mut file = fs_err::tokio::File::open(complete_entry.path())
+                    .await
+                    .map_err(Error::CacheWrite)?;
+
                 // Unzip the wheel to a temporary directory.
                 let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
                     .map_err(Error::CacheWrite)?;
-                let mut file = writer.into_inner();
                 file.seek(io::SeekFrom::Start(0))
                     .await
                     .map_err(Error::CacheWrite)?;
@@ -951,9 +981,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .instrument(info_span!("wheel", wheel = %dist))
         };
 
-        // Fetch the archive from the cache, or download it if necessary.
-        let req = self.request(url.clone())?;
-
         // Determine the cache control policy for the URL.
         let cache_control = match self.client.unmanaged.connectivity() {
             Connectivity::Online => {
@@ -975,21 +1002,56 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
-        let archive = self
-            .client
-            .managed(|client| {
-                client.cached_client().get_serde_with_retry(
-                    req,
-                    &http_entry,
-                    cache_control.clone(),
-                    download,
-                )
-            })
-            .await
-            .map_err(|err| match err {
-                CachedClientError::Callback { err, .. } => err,
-                CachedClientError::Client(err) => Error::Client(err),
-            })?;
+        let partial_len =
+            || std::fs::metadata(partial_entry.path()).map(|m| m.len()).unwrap_or(0);
+
+        let mut retry_state = RetryState::start(
+            self.client.unmanaged.cached_client().uncached().retry_policy(),
+            url.clone(),
+        );
+        let mut use_range = true;
+
+        let archive = loop {
+            let bytes_written = partial_len();
+
+            let req = if use_range && bytes_written > 0 {
+                self.request_with_offset(url.clone(), bytes_written)?
+            } else {
+                self.request(url.clone())?
+            };
+
+            let result = self
+                .client
+                .managed(|client| {
+                    client
+                        .cached_client()
+                        .get_serde(req, &http_entry, cache_control.clone(), &download)
+                })
+                .await;
+
+            match result {
+                Ok(archive) => break archive,
+                Err(CachedClientError::Client(err)) => {
+                    let new_partial_len = partial_len();
+                    // If the download made forward progress before being cut off, don't
+                    // consume a retry—the next attempt will resume via Range header.
+                    if use_range && new_partial_len > bytes_written {
+                        continue;
+                    }
+                    if let Some(backoff) = retry_state.should_retry(&err, err.retries()) {
+                        // Server ignored our Range header (returned 200, truncating the file);
+                        // fall back to plain GET for remaining retries.
+                        if use_range && bytes_written > 0 && new_partial_len == 0 {
+                            use_range = false;
+                        }
+                        retry_state.sleep_backoff(backoff).await;
+                    } else {
+                        return Err(Error::Client(err));
+                    }
+                }
+                Err(CachedClientError::Callback { err, .. }) => return Err(err),
+            }
+        };
 
         // If the archive is missing the required hashes, or has since been removed, force a refresh.
         let archive = Some(archive)
@@ -1210,6 +1272,30 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 // behavior from servers. ref: https://github.com/pypa/pip/pull/1688
                 "accept-encoding",
                 reqwest::header::HeaderValue::from_static("identity"),
+            )
+            .build()
+    }
+
+    /// Returns a GET [`reqwest::Request`] with a `Range: bytes=<offset>-` header.
+    ///
+    /// Used to resume an interrupted download from `offset` bytes into the file.
+    fn request_with_offset(
+        &self,
+        url: DisplaySafeUrl,
+        offset: u64,
+    ) -> Result<reqwest::Request, reqwest::Error> {
+        self.client
+            .unmanaged
+            .uncached_client(&url)
+            .get(Url::from(url))
+            .header(
+                "accept-encoding",
+                reqwest::header::HeaderValue::from_static("identity"),
+            )
+            .header(
+                reqwest::header::RANGE,
+                reqwest::header::HeaderValue::from_str(&format!("bytes={offset}-"))
+                    .expect("valid range header value"),
             )
             .build()
     }
