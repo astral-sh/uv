@@ -122,6 +122,7 @@ pub(crate) async fn list(
         &preview,
         download_request.as_ref(),
         download_limit,
+        Some(cache.root()),
     )
     .await?;
 

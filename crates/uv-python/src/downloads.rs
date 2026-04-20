@@ -897,6 +897,274 @@ const BUILTIN_PYTHON_DOWNLOADS_JSON: &[u8] =
 /// Default URL for the remote Python download metadata endpoint (NDJSON format).
 const REMOTE_PYTHON_DOWNLOAD_METADATA_URL: &str = "https://raw.githubusercontent.com/astral-sh/versions/refs/heads/main/v1/python-build-standalone.ndjson";
 
+/// Subdirectory within the Python cache bucket for versions metadata.
+const VERSIONS_CACHE_SUBDIR: &str = "versions";
+
+/// Filename for the cached NDJSON content.
+const VERSIONS_CACHE_FILENAME: &str = "python-build-standalone.ndjson";
+
+/// Filename for the cache metadata (content length, etag).
+const VERSIONS_CACHE_META_FILENAME: &str = "python-build-standalone.meta.json";
+
+/// Metadata about a cached versions file, used to determine if we need to fetch updates.
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+struct VersionsCacheMeta {
+    /// The Content-Length of the cached file.
+    content_length: u64,
+    /// Optional ETag for cache validation.
+    etag: Option<String>,
+}
+
+/// Get the path to the versions cache directory within a cache root.
+fn versions_cache_dir(cache_dir: &Path) -> PathBuf {
+    // Use "python-v0" bucket like other Python cache entries
+    cache_dir.join("python-v0").join(VERSIONS_CACHE_SUBDIR)
+}
+
+/// Read cached NDJSON metadata if available.
+async fn read_versions_cache(cache_dir: &Path) -> Option<(Vec<u8>, VersionsCacheMeta)> {
+    let cache_path = versions_cache_dir(cache_dir);
+    let content_path = cache_path.join(VERSIONS_CACHE_FILENAME);
+    let meta_path = cache_path.join(VERSIONS_CACHE_META_FILENAME);
+
+    // Read metadata first
+    let meta_bytes = fs_err::tokio::read(&meta_path).await.ok()?;
+    let meta: VersionsCacheMeta = serde_json::from_slice(&meta_bytes).ok()?;
+
+    // Read content
+    let content = fs_err::tokio::read(&content_path).await.ok()?;
+
+    // Verify content length matches
+    if content.len() as u64 != meta.content_length {
+        debug!(
+            "Cache content length mismatch: expected {}, got {}",
+            meta.content_length,
+            content.len()
+        );
+        return None;
+    }
+
+    Some((content, meta))
+}
+
+/// Write NDJSON content and metadata to cache.
+async fn write_versions_cache(
+    cache_dir: &Path,
+    content: &[u8],
+    meta: &VersionsCacheMeta,
+) -> Result<(), Error> {
+    let cache_path = versions_cache_dir(cache_dir);
+    fs_err::tokio::create_dir_all(&cache_path).await?;
+
+    let content_path = cache_path.join(VERSIONS_CACHE_FILENAME);
+    let meta_path = cache_path.join(VERSIONS_CACHE_META_FILENAME);
+
+    // Write content first
+    fs_err::tokio::write(&content_path, content).await?;
+
+    // Then metadata
+    let meta_bytes = serde_json::to_vec(meta).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::Other,
+            format!("Failed to serialize cache metadata: {e}"),
+        )
+    })?;
+    fs_err::tokio::write(&meta_path, &meta_bytes).await?;
+
+    Ok(())
+}
+
+/// Prepend new content to an existing cache file.
+async fn prepend_to_versions_cache(
+    cache_dir: &Path,
+    new_content: &[u8],
+    new_meta: &VersionsCacheMeta,
+) -> Result<(), Error> {
+    let cache_path = versions_cache_dir(cache_dir);
+    let content_path = cache_path.join(VERSIONS_CACHE_FILENAME);
+
+    // Read existing content
+    let existing = fs_err::tokio::read(&content_path).await?;
+
+    // Combine: new content + existing content
+    let mut combined = Vec::with_capacity(new_content.len() + existing.len());
+    combined.extend_from_slice(new_content);
+    combined.extend_from_slice(&existing);
+
+    // Write combined content and new metadata
+    write_versions_cache(cache_dir, &combined, new_meta).await
+}
+
+/// Fetch NDJSON content with caching and delta updates.
+///
+/// If `cache_dir` is provided, this function will:
+/// 1. Check if a cached version exists
+/// 2. Send a HEAD request to get the current Content-Length
+/// 3. If Content-Length matches: use the cached content
+/// 4. If Content-Length is larger: fetch only the new bytes (delta) using Range request,
+///    prepend to cache, and return combined content
+/// 5. If no cache or Content-Length is smaller: fetch the full content and cache it
+///
+/// The NDJSON file is prepend-only (new versions are added at the beginning), so we can
+/// efficiently update by fetching only the new bytes at the start.
+async fn fetch_ndjson_cached(
+    client: &BaseClient,
+    url: &DisplaySafeUrl,
+    cache_dir: Option<&Path>,
+) -> Result<Vec<u8>, Error> {
+    // If no cache directory provided, just do a full fetch
+    let Some(cache_dir) = cache_dir else {
+        return fetch_ndjson_full(client, url).await;
+    };
+
+    // Try to read existing cache
+    let cached = read_versions_cache(cache_dir).await;
+
+    // Send HEAD request to get current Content-Length
+    // If HEAD fails (e.g., not supported), fall back to full fetch
+    let head_result = client
+        .for_host(url)
+        .head(Url::from(url.clone()))
+        .send()
+        .await;
+
+    let head_response = match head_result {
+        Ok(resp) => match resp.error_for_status() {
+            Ok(resp) => Some(resp),
+            Err(e) => {
+                debug!("HEAD request failed with status error: {e}, falling back to full fetch");
+                None
+            }
+        },
+        Err(e) => {
+            debug!("HEAD request failed: {e}, falling back to full fetch");
+            None
+        }
+    };
+
+    // If HEAD request failed, fall back to full fetch and cache
+    let Some(head_response) = head_response else {
+        let content = fetch_ndjson_full(client, url).await?;
+
+        // Cache the content (we don't have Content-Length from HEAD, use actual size)
+        let meta = VersionsCacheMeta {
+            content_length: content.len() as u64,
+            etag: None,
+        };
+        if let Err(e) = write_versions_cache(cache_dir, &content, &meta).await {
+            debug!("Failed to write cache: {e}");
+        }
+
+        return Ok(content);
+    };
+
+    let current_length: u64 = head_response
+        .headers()
+        .get(reqwest::header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+
+    let current_etag = head_response
+        .headers()
+        .get(reqwest::header::ETAG)
+        .and_then(|v| v.to_str().ok())
+        .map(String::from);
+
+    // Check if we can use cache or need to fetch delta
+    if let Some((cached_content, cached_meta)) = cached {
+        if current_length == cached_meta.content_length {
+            // Content-Length unchanged - use cache
+            debug!(
+                "Using cached NDJSON metadata ({} bytes)",
+                cached_meta.content_length
+            );
+            return Ok(cached_content);
+        }
+
+        if current_length > cached_meta.content_length {
+            // Content-Length increased - fetch only the new bytes (delta)
+            let delta_size = current_length - cached_meta.content_length;
+            debug!(
+                "Fetching delta NDJSON metadata ({} new bytes, {} total)",
+                delta_size, current_length
+            );
+
+            // Range request for new bytes at the start: bytes=0-(delta_size-1)
+            let range_header = format!("bytes=0-{}", delta_size - 1);
+            let delta_response = client
+                .for_host(url)
+                .get(Url::from(url.clone()))
+                .header(reqwest::header::RANGE, &range_header)
+                .send()
+                .await
+                .map_err(|err| Error::from_reqwest_middleware(url.clone(), err))?;
+
+            // Check for 206 Partial Content or fall back to full fetch
+            if delta_response.status() == reqwest::StatusCode::PARTIAL_CONTENT {
+                let delta_bytes = delta_response
+                    .bytes()
+                    .await
+                    .map_err(|err| Error::from_reqwest(url.clone(), err, None))?;
+
+                // Prepend delta to cache
+                let new_meta = VersionsCacheMeta {
+                    content_length: current_length,
+                    etag: current_etag,
+                };
+                if let Err(e) = prepend_to_versions_cache(cache_dir, &delta_bytes, &new_meta).await
+                {
+                    debug!("Failed to update cache: {e}");
+                }
+
+                // Combine delta with existing cache for return
+                let mut combined = Vec::with_capacity(delta_bytes.len() + cached_content.len());
+                combined.extend_from_slice(&delta_bytes);
+                combined.extend_from_slice(&cached_content);
+                return Ok(combined);
+            }
+
+            debug!("Server doesn't support Range requests, falling back to full fetch");
+        }
+    }
+
+    // No valid cache or needs full refresh - fetch everything
+    debug!("Fetching full NDJSON metadata ({} bytes)", current_length);
+    let content = fetch_ndjson_full(client, url).await?;
+
+    // Cache the content
+    let meta = VersionsCacheMeta {
+        content_length: content.len() as u64,
+        etag: current_etag,
+    };
+    if let Err(e) = write_versions_cache(cache_dir, &content, &meta).await {
+        debug!("Failed to write cache: {e}");
+    }
+
+    Ok(content)
+}
+
+/// Fetch the full NDJSON content from a URL.
+async fn fetch_ndjson_full(client: &BaseClient, url: &DisplaySafeUrl) -> Result<Vec<u8>, Error> {
+    let response = client
+        .for_host(url)
+        .get(Url::from(url.clone()))
+        .send()
+        .await
+        .map_err(|err| Error::from_reqwest_middleware(url.clone(), err))?;
+
+    let response = response
+        .error_for_status()
+        .map_err(|err| Error::from_reqwest(url.clone(), err, None))?;
+
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|err| Error::from_reqwest(url.clone(), err, None))?;
+
+    Ok(bytes.to_vec())
+}
+
 pub struct ManagedPythonDownloadList {
     downloads: Vec<ManagedPythonDownload>,
 }
@@ -1247,9 +1515,11 @@ impl ManagedPythonDownloadList {
 
     /// Load available Python distributions with optional filtering and limiting.
     ///
-    /// When using the NDJSON format (default for preview), this streams the data and
-    /// early-exits once `limit` matching downloads are found. For JSON format, filtering
-    /// is applied after loading all data.
+    /// When using the NDJSON format (default for preview), this can use caching with
+    /// delta fetching if `cache_dir` is provided. The cache stores the full NDJSON
+    /// content and uses HTTP Range requests to fetch only new entries on subsequent calls.
+    ///
+    /// For JSON format, filtering is applied after loading all data.
     ///
     /// This is useful for commands like `uv python list` where we only need a subset
     /// of matching downloads.
@@ -1259,6 +1529,7 @@ impl ManagedPythonDownloadList {
         preview: &Preview,
         filter: Option<&PythonDownloadRequest>,
         limit: Option<usize>,
+        cache_dir: Option<&Path>,
     ) -> Result<Self, Error> {
         // Determine the source
         enum Source<'a> {
@@ -1296,20 +1567,34 @@ impl ManagedPythonDownloadList {
             Source::BuiltIn
         };
 
-        // For NDJSON sources, use streaming with filter and limit
+        // For NDJSON sources, use caching with delta fetching when cache_dir is provided
         if let Source::Ndjson(ref url) = source {
-            let downloads = fetch_ndjson_collect(
-                client,
-                url,
-                |download| {
-                    filter
-                        .map(|f| f.satisfied_by_download(download))
-                        .unwrap_or(true)
-                },
-                limit,
-            )
-            .await
-            .map_err(|e| Error::FetchingPythonDownloadsNdjsonError(url.to_string(), Box::new(e)))?;
+            let predicate = |download: &ManagedPythonDownload| {
+                filter
+                    .map(|f| f.satisfied_by_download(download))
+                    .unwrap_or(true)
+            };
+
+            // If we have a cache directory, use cached fetch with delta updates
+            if let Some(cache_dir) = cache_dir {
+                let bytes = fetch_ndjson_cached(client, url, Some(cache_dir))
+                    .await
+                    .map_err(|e| {
+                        Error::FetchingPythonDownloadsNdjsonError(url.to_string(), Box::new(e))
+                    })?;
+
+                let downloads =
+                    parse_ndjson_bytes_filtered(&url.to_string(), &bytes, predicate, limit)?;
+
+                return Ok(Self { downloads });
+            }
+
+            // Otherwise, use streaming without caching
+            let downloads = fetch_ndjson_collect(client, url, predicate, limit)
+                .await
+                .map_err(|e| {
+                    Error::FetchingPythonDownloadsNdjsonError(url.to_string(), Box::new(e))
+                })?;
 
             return Ok(Self { downloads });
         }
@@ -1623,6 +1908,57 @@ fn parse_ndjson_bytes(source: &str, buf: &[u8]) -> Result<Vec<ManagedPythonDownl
     }
 
     // Sort by key in descending order (newest first)
+    downloads.sort_by(|a, b| Ord::cmp(&b.key, &a.key));
+
+    Ok(downloads)
+}
+
+/// Parse NDJSON content from bytes with filtering and optional limit.
+///
+/// This is similar to `parse_ndjson_bytes` but supports early-exit when a limit is reached.
+/// Note: The NDJSON file is ordered newest-first, so we don't need to sort after filtering.
+fn parse_ndjson_bytes_filtered(
+    source: &str,
+    buf: &[u8],
+    predicate: impl Fn(&ManagedPythonDownload) -> bool,
+    limit: Option<usize>,
+) -> Result<Vec<ManagedPythonDownload>, Error> {
+    let mut downloads = Vec::new();
+
+    'outer: for line in buf.split(|&b| b == b'\n') {
+        if line.is_empty() {
+            continue;
+        }
+
+        let line_str = std::str::from_utf8(line).map_err(|_| {
+            Error::InvalidPythonDownloadsNdjsonLine(
+                source.to_string(),
+                serde_json::from_str::<()>("invalid utf8").unwrap_err(),
+            )
+        })?;
+
+        if line_str.trim().is_empty() {
+            continue;
+        }
+
+        let version_info: NdjsonPythonVersionInfo = serde_json::from_str(line_str)
+            .map_err(|e| Error::InvalidPythonDownloadsNdjsonLine(source.to_string(), e))?;
+
+        for download in parse_ndjson_version_info(version_info) {
+            if predicate(&download) {
+                downloads.push(download);
+                if let Some(limit) = limit {
+                    if downloads.len() >= limit {
+                        break 'outer;
+                    }
+                }
+            }
+        }
+    }
+
+    // Sort by key in descending order (newest first)
+    // Note: The NDJSON is ordered newest-first by version, but within a version
+    // there are multiple artifacts, so we still sort to ensure consistent ordering
     downloads.sort_by(|a, b| Ord::cmp(&b.key, &a.key));
 
     Ok(downloads)

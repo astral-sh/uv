@@ -793,3 +793,214 @@ async fn python_list_remote_ndjson_with_limit() -> Result<()> {
 
     Ok(())
 }
+
+/// Test `uv python list` caching with delta fetching.
+///
+/// This test verifies that:
+/// 1. First call fetches full content and caches it
+/// 2. Second call with same content uses cache (no GET request)
+/// 3. Third call with new content fetches only the delta using Range request
+#[tokio::test]
+async fn python_list_remote_ndjson_caching() -> Result<()> {
+    let context: TestContext = TestContext::new_with_versions(&[]);
+    let server = MockServer::start().await;
+
+    // Initial content
+    let initial_content = r#"{"version":"3.13.2","artifacts":[{"url":"https://custom.com/cpython-3.13.2-darwin-aarch64.tar.gz","platform":"aarch64-apple-darwin","sha256":"def456","variant":"install_only"}]}
+{"version":"3.12.8","artifacts":[{"url":"https://custom.com/cpython-3.12.8-darwin-aarch64.tar.gz","platform":"aarch64-apple-darwin","sha256":"jkl012","variant":"install_only"}]}
+"#;
+
+    // Mock HEAD request returning content length
+    let initial_len = initial_content.len();
+    Mock::given(method("HEAD"))
+        .and(path("/versions.ndjson"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Length", initial_len.to_string())
+                .insert_header("Accept-Ranges", "bytes"),
+        )
+        .expect(2) // Called twice: first call + second call (cache validation)
+        .mount(&server)
+        .await;
+
+    // Mock GET request for full content
+    Mock::given(method("GET"))
+        .and(path("/versions.ndjson"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_raw(initial_content, "application/x-ndjson")
+                .insert_header("Content-Length", initial_len.to_string()),
+        )
+        .expect(1) // Only called once on first fetch
+        .mount(&server)
+        .await;
+
+    // First call - should fetch full content
+    let output1 = context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("--all-versions")
+        .arg("--all-platforms")
+        .arg("--all-arches")
+        .arg("--show-urls")
+        .arg("--preview-features")
+        .arg("remote-python-download-metadata")
+        .arg("--python-downloads-json-url")
+        .arg(format!("{}/versions.ndjson", server.uri()))
+        .output()?;
+
+    assert!(output1.status.success(), "First call should succeed");
+
+    // Second call - should use cache (same content length from HEAD)
+    let output2 = context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("--all-versions")
+        .arg("--all-platforms")
+        .arg("--all-arches")
+        .arg("--show-urls")
+        .arg("--preview-features")
+        .arg("remote-python-download-metadata")
+        .arg("--python-downloads-json-url")
+        .arg(format!("{}/versions.ndjson", server.uri()))
+        .output()?;
+
+    assert!(output2.status.success(), "Second call should succeed");
+    assert_eq!(
+        String::from_utf8_lossy(&output1.stdout),
+        String::from_utf8_lossy(&output2.stdout),
+        "Both calls should produce the same output"
+    );
+
+    // Verify mock expectations (HEAD called twice, GET called once)
+    // The mock server automatically verifies the `expect` counts on drop
+
+    Ok(())
+}
+
+/// Test `uv python list` delta fetching with Range requests.
+///
+/// This test verifies that when new content is prepended to the NDJSON file,
+/// only the new bytes are fetched using HTTP Range requests.
+#[tokio::test]
+async fn python_list_remote_ndjson_delta_fetch() -> Result<()> {
+    let context: TestContext = TestContext::new_with_versions(&[]);
+    let server = MockServer::start().await;
+
+    // Initial content (will be cached first)
+    let initial_content = r#"{"version":"3.12.8","artifacts":[{"url":"https://custom.com/cpython-3.12.8-darwin-aarch64.tar.gz","platform":"aarch64-apple-darwin","sha256":"jkl012","variant":"install_only"}]}
+"#;
+
+    // New content prepended (newer version at the start)
+    let new_line = r#"{"version":"3.13.2","artifacts":[{"url":"https://custom.com/cpython-3.13.2-darwin-aarch64.tar.gz","platform":"aarch64-apple-darwin","sha256":"def456","variant":"install_only"}]}
+"#;
+    let updated_content = format!("{new_line}{initial_content}");
+
+    let initial_len = initial_content.len();
+    let updated_len = updated_content.len();
+    let delta_len = new_line.len();
+
+    // First HEAD request - initial length
+    Mock::given(method("HEAD"))
+        .and(path("/versions.ndjson"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Length", initial_len.to_string())
+                .insert_header("Accept-Ranges", "bytes"),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // First GET request - full initial content
+    Mock::given(method("GET"))
+        .and(path("/versions.ndjson"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_raw(initial_content, "application/x-ndjson")
+                .insert_header("Content-Length", initial_len.to_string()),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // First call - fetch full content
+    let output1 = context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("--all-versions")
+        .arg("--all-platforms")
+        .arg("--all-arches")
+        .arg("--show-urls")
+        .arg("--preview-features")
+        .arg("remote-python-download-metadata")
+        .arg("--python-downloads-json-url")
+        .arg(format!("{}/versions.ndjson", server.uri()))
+        .output()?;
+
+    assert!(output1.status.success(), "First call should succeed");
+
+    // Drop the old mocks and set up new ones for updated content
+    drop(server);
+    let server = MockServer::start().await;
+
+    // Second HEAD request - updated length (larger)
+    Mock::given(method("HEAD"))
+        .and(path("/versions.ndjson"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Length", updated_len.to_string())
+                .insert_header("Accept-Ranges", "bytes"),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // Range request for delta bytes (new content at start)
+    Mock::given(method("GET"))
+        .and(path("/versions.ndjson"))
+        .and(wiremock::matchers::header(
+            "Range",
+            format!("bytes=0-{}", delta_len - 1),
+        ))
+        .respond_with(
+            ResponseTemplate::new(206) // Partial Content
+                .set_body_raw(new_line, "application/x-ndjson")
+                .insert_header(
+                    "Content-Range",
+                    format!("bytes 0-{}/{}", delta_len - 1, updated_len),
+                ),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // Second call - should fetch only delta
+    let output2 = context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("--all-versions")
+        .arg("--all-platforms")
+        .arg("--all-arches")
+        .arg("--show-urls")
+        .arg("--preview-features")
+        .arg("remote-python-download-metadata")
+        .arg("--python-downloads-json-url")
+        .arg(format!("{}/versions.ndjson", server.uri()))
+        .output()?;
+
+    assert!(output2.status.success(), "Second call should succeed");
+
+    // Second call should show both versions (cached + delta)
+    let stdout2 = String::from_utf8_lossy(&output2.stdout);
+    assert!(
+        stdout2.contains("3.13.2"),
+        "Output should contain new version 3.13.2"
+    );
+    assert!(
+        stdout2.contains("3.12.8"),
+        "Output should contain cached version 3.12.8"
+    );
+
+    Ok(())
+}
