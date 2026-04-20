@@ -579,3 +579,43 @@ fn uninstall_record_path_traversal() -> Result<()> {
 
     Ok(())
 }
+
+/// `--yes` is accepted for `pip uninstall` compatibility, but emits a warning.
+#[test]
+fn yes_flag() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_uninstall()
+        .arg("--yes")
+        .arg("flask"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `--yes` has no effect (uv never asks for confirmation)
+    warning: Skipping flask as it is not installed
+    warning: No packages to uninstall
+    "
+    );
+}
+
+/// `-y` is accepted for `pip uninstall` compatibility, but emits a warning.
+#[test]
+fn yes_short_flag() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_uninstall()
+        .arg("-y")
+        .arg("flask"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `--yes` has no effect (uv never asks for confirmation)
+    warning: Skipping flask as it is not installed
+    warning: No packages to uninstall
+    "
+    );
+}
