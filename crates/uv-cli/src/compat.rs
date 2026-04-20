@@ -310,6 +310,40 @@ impl CompatArgs for VenvCompatArgs {
     }
 }
 
+/// Arguments for `pip uninstall` compatibility.
+///
+/// These represent a subset of the `pip uninstall` interface that uv supports by default.
+#[derive(Args)]
+pub struct PipUninstallCompatArgs {
+    /// Don't ask for confirmation of uninstall deletions.
+    ///
+    /// This option is for compatibility with `pip uninstall` and has no effect.
+    #[clap(short, long, hide = true)]
+    yes: bool,
+
+    #[clap(long, hide = true)]
+    disable_pip_version_check: bool,
+}
+
+impl CompatArgs for PipUninstallCompatArgs {
+    /// Validate the arguments passed for `pip uninstall` compatibility.
+    ///
+    /// This method will warn when an argument is passed that has no effect but matches uv's
+    /// behavior. If an argument is passed that does _not_ match uv's behavior, this method will
+    /// return an error.
+    fn validate(&self) -> Result<()> {
+        if self.yes {
+            warn_user!("`--yes` has no effect (uv never asks for confirmation)");
+        }
+
+        if self.disable_pip_version_check {
+            warn_user!("pip's `--disable-pip-version-check` has no effect");
+        }
+
+        Ok(())
+    }
+}
+
 /// Arguments for `pip install` compatibility.
 ///
 /// These represent a subset of the `pip install` interface that uv supports by default.

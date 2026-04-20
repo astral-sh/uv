@@ -1161,10 +1161,18 @@ impl Lock {
             if !exclude_newer.is_empty() {
                 // Always serialize global exclude-newer as a string
                 if let Some(global) = &exclude_newer.global {
-                    options_table.insert("exclude-newer", value(global.to_string()));
-                    // Serialize the original span if present
                     if let Some(span) = global.span() {
+                        // When a relative span is present, write a no-op timestamp to avoid
+                        // merge conflicts in the lockfile. In a future version of uv, we'll drop
+                        // this field entirely but it's retained for backwards compatibility for now.
+                        let mut noop = value("0001-01-01T00:00:00Z");
+                        if let Item::Value(ref mut v) = noop {
+                            v.decor_mut().set_suffix(" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.");
+                        }
+                        options_table.insert("exclude-newer", noop);
                         options_table.insert("exclude-newer-span", value(span.to_string()));
+                    } else {
+                        options_table.insert("exclude-newer", value(global.to_string()));
                     }
                 }
 
@@ -2349,10 +2357,13 @@ struct ExcludeNewerWire {
 
 impl From<ExcludeNewerWire> for ExcludeNewer {
     fn from(wire: ExcludeNewerWire) -> Self {
+        let global = match (wire.exclude_newer, wire.exclude_newer_span) {
+            (Some(timestamp), span) => Some(ExcludeNewerValue::new(timestamp, span)),
+            (None, Some(span)) => Some(ExcludeNewerValue::new(Timestamp::UNIX_EPOCH, Some(span))),
+            (None, None) => None,
+        };
         Self {
-            global: wire
-                .exclude_newer
-                .map(|timestamp| ExcludeNewerValue::new(timestamp, wire.exclude_newer_span)),
+            global,
             package: wire.exclude_newer_package,
         }
     }
