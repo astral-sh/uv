@@ -45,20 +45,6 @@ impl TestCertificate {
         Self::persist(ca, server, &client)
     }
 
-    /// Generate a fresh certificate set whose CA contains an unsupported
-    /// critical extension.
-    fn new_with_unsupported_critical_ca_extension() -> Result<Self> {
-        let mut unsupported_extension = CustomExtension::from_oid_content(
-            &[1, 2, 3, 4],
-            [vec![0x0c, 0x0b], b"unsupported".to_vec()].concat(),
-        );
-        unsupported_extension.set_criticality(true);
-
-        let (ca, server, client) =
-            generate_self_signed_certs_with_ca_custom_extensions(vec![unsupported_extension])?;
-        Self::persist(ca, server, &client)
-    }
-
     /// Generate a fresh certificate set whose CA contains a duplicate
     /// `basicConstraints` extension, which webpki rejects as an invalid trust
     /// anchor.
