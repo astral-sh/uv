@@ -59,6 +59,7 @@ pub(crate) async fn remove(
     concurrency: Concurrency,
     no_config: bool,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
     malware_settings: MalwareCheckSettings,
@@ -88,22 +89,17 @@ pub(crate) async fn remove(
         RemoveTarget::Script(script)
     } else {
         // Find the project in the workspace.
-        // No workspace caching since `uv remove` changes the workspace definition.
         let project = if let Some(package) = package {
             VirtualProject::discover_with_package(
                 project_dir,
                 &DiscoveryOptions::default(),
-                &WorkspaceCache::default(),
+                workspace_cache,
                 package.clone(),
             )
             .await?
         } else {
-            VirtualProject::discover(
-                project_dir,
-                &DiscoveryOptions::default(),
-                &WorkspaceCache::default(),
-            )
-            .await?
+            VirtualProject::discover(project_dir, &DiscoveryOptions::default(), workspace_cache)
+                .await?
         };
 
         RemoveTarget::Project(project)
@@ -187,7 +183,7 @@ pub(crate) async fn remove(
     let content = toml.to_string();
 
     // Save the modified `pyproject.toml` or script.
-    target.write(&content)?;
+    target.write(&content, workspace_cache)?;
 
     // If `--frozen`, exit early. There's no reason to lock and sync, since we don't need a `uv.lock`
     // to exist at all.
@@ -320,7 +316,7 @@ pub(crate) async fn remove(
             Box::new(DefaultResolveLogger),
             &concurrency,
             cache,
-            &WorkspaceCache::default(),
+            workspace_cache,
             printer,
             preview,
         )
@@ -380,7 +376,7 @@ pub(crate) async fn remove(
         installer_metadata,
         &concurrency,
         cache,
-        &WorkspaceCache::default(),
+        workspace_cache,
         DryRun::Disabled,
         printer,
         preview,
@@ -415,8 +411,9 @@ enum RemoveTarget {
 impl RemoveTarget {
     /// Write the updated content to the target.
     ///
-    /// Returns `true` if the content was modified.
-    fn write(&self, content: &str) -> Result<bool, io::Error> {
+    /// Returns `true` if the content was modified. Invalidates the [`WorkspaceCache`] entry for
+    /// the written `pyproject.toml` so any subsequent read sees the new contents.
+    fn write(&self, content: &str, workspace_cache: &WorkspaceCache) -> Result<bool, io::Error> {
         match self {
             Self::Script(script) => {
                 if content == script.metadata.raw {
@@ -433,7 +430,8 @@ impl RemoveTarget {
                     Ok(false)
                 } else {
                     let pyproject_path = project.root().join("pyproject.toml");
-                    fs_err::write(pyproject_path, content)?;
+                    fs_err::write(&pyproject_path, content)?;
+                    workspace_cache.invalidate(&pyproject_path);
                     Ok(true)
                 }
             }
