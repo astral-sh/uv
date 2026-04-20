@@ -12,14 +12,8 @@ use uv_cache::{CacheEntry, Freshness};
 use uv_fs::write_atomic;
 use uv_redacted::DisplaySafeUrl;
 
-use crate::BaseClient;
-use crate::base_client::RetryState;
-use crate::error::ProblemDetails;
-use crate::{
-    Error, ErrorKind,
-    httpcache::{AfterResponse, BeforeRequest, CachePolicy, CachePolicyBuilder},
-    rkyvutil::OwnedArchive,
-};
+use crate::httpcache::{AfterResponse, BeforeRequest, CachePolicy, CachePolicyBuilder};
+use crate::{BaseClient, Error, ErrorKind, OwnedArchive, ProblemDetails, RetryState};
 
 /// A trait the generalizes (de)serialization at a high level.
 ///
