@@ -11512,6 +11512,36 @@ fn pip_install_no_sources_package() -> Result<()> {
     Ok(())
 }
 
+/// Certain git environment variables should not be forwarded to git
+#[test]
+#[cfg(feature = "test-git")]
+fn install_git_with_git_envs_set() {
+    let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION);
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage")
+        .env(EnvVars::GIT_DIR, "/nonexistent")
+        .env(EnvVars::GIT_COMMON_DIR, "/nonexistent")
+        .env(EnvVars::GIT_WORK_TREE, "/nonexistent")
+        .env(EnvVars::GIT_INDEX_FILE, "/nonexistent")
+        .env(EnvVars::GIT_OBJECT_DIRECTORY, "/nonexistent")
+        .env(EnvVars::GIT_ALTERNATE_OBJECT_DIRECTORIES, "/nonexistent"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+    ");
+
+    context.assert_installed("uv_public_pypackage", "0.1.0");
+}
+
 #[test]
 fn unsupported_git_scheme() {
     let context = uv_test::test_context!("3.12");
