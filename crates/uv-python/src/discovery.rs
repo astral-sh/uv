@@ -1749,6 +1749,18 @@ impl PythonVariant {
     }
 }
 impl PythonRequest {
+    /// Create a request from a `Requires-Python` constraint.
+    pub fn from_requires_python(requires_python: RequiresPython) -> Option<Self> {
+        if requires_python.is_unbounded() {
+            return None;
+        }
+
+        Some(Self::Version(VersionRequest::from_specifiers(
+            requires_python.into_specifiers(),
+            PythonVariant::Default,
+        )))
+    }
+
     /// Create a request from a string.
     ///
     /// This cannot fail, which means weird inputs will be parsed as [`PythonRequest::File`] or
@@ -2621,6 +2633,22 @@ impl fmt::Display for ExecutableName {
 }
 
 impl VersionRequest {
+    /// Create a [`VersionRequest`] from [`VersionSpecifiers`].
+    ///
+    /// If the specifiers consist of a single `==` constraint, the version is parsed as a
+    /// concrete version request (e.g., `MajorMinorPatch`) rather than a range. This ensures that
+    /// version-specific executable names (like `python3.12`) are included during discovery.
+    pub fn from_specifiers(specifiers: VersionSpecifiers, variant: PythonVariant) -> Self {
+        if let [specifier] = specifiers.iter().as_slice() {
+            if specifier.operator() == &uv_pep440::Operator::Equal {
+                if let Ok(request) = Self::from_str(&specifier.version().to_string()) {
+                    return request;
+                }
+            }
+        }
+        Self::Range(specifiers, variant)
+    }
+
     /// Drop any patch or prerelease information from the version request.
     #[must_use]
     pub fn only_minor(self) -> Self {
@@ -3324,12 +3352,7 @@ fn parse_version_specifiers_request(
     if specifiers.is_empty() {
         return Err(Error::InvalidVersionRequest(s.to_string()));
     }
-    if let [specifier] = specifiers.iter().as_slice() {
-        if specifier.operator() == &uv_pep440::Operator::Equal {
-            return VersionRequest::from_str(&specifier.version().to_string());
-        }
-    }
-    Ok(VersionRequest::Range(specifiers, variant))
+    Ok(VersionRequest::from_specifiers(specifiers, variant))
 }
 
 impl From<&PythonVersion> for VersionRequest {
@@ -4136,6 +4159,71 @@ mod tests {
             VersionRequest::from_str("3.13tt"),
             Err(Error::InvalidVersionRequest(_))
         ));
+
+        // `==` specifiers are parsed as concrete version requests via `from_specifiers`
+        assert_eq!(
+            VersionRequest::from_str("==3.12").unwrap(),
+            VersionRequest::MajorMinor(3, 12, PythonVariant::Default)
+        );
+        assert_eq!(
+            VersionRequest::from_str("==3.12.1").unwrap(),
+            VersionRequest::MajorMinorPatch(3, 12, 1, PythonVariant::Default)
+        );
+    }
+
+    #[test]
+    fn version_request_from_specifiers() {
+        // A single `==` specifier is parsed as a concrete version request
+        assert_eq!(
+            VersionRequest::from_specifiers(
+                VersionSpecifiers::from_str("==3.12").unwrap(),
+                PythonVariant::Default
+            ),
+            VersionRequest::MajorMinor(3, 12, PythonVariant::Default)
+        );
+        assert_eq!(
+            VersionRequest::from_specifiers(
+                VersionSpecifiers::from_str("==3.12.1").unwrap(),
+                PythonVariant::Default
+            ),
+            VersionRequest::MajorMinorPatch(3, 12, 1, PythonVariant::Default)
+        );
+
+        // Wildcard `==` specifiers remain as ranges
+        assert_eq!(
+            VersionRequest::from_specifiers(
+                VersionSpecifiers::from_str("==3.12.*").unwrap(),
+                PythonVariant::Default
+            ),
+            VersionRequest::Range(
+                VersionSpecifiers::from_str("==3.12.*").unwrap(),
+                PythonVariant::Default
+            )
+        );
+
+        // Range specifiers remain as ranges
+        assert_eq!(
+            VersionRequest::from_specifiers(
+                VersionSpecifiers::from_str(">=3.12").unwrap(),
+                PythonVariant::Default
+            ),
+            VersionRequest::Range(
+                VersionSpecifiers::from_str(">=3.12").unwrap(),
+                PythonVariant::Default
+            )
+        );
+
+        // Multi-specifier constraints remain as ranges
+        assert_eq!(
+            VersionRequest::from_specifiers(
+                VersionSpecifiers::from_str(">=3.12,<3.14").unwrap(),
+                PythonVariant::Default
+            ),
+            VersionRequest::Range(
+                VersionSpecifiers::from_str(">=3.12,<3.14").unwrap(),
+                PythonVariant::Default
+            )
+        );
     }
 
     #[test]

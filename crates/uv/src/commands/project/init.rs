@@ -652,10 +652,8 @@ async fn determine_requires_python(
         .flatten()
     {
         // (3) `requires-python` from the workspace
-        let python_request = PythonRequest::Version(VersionRequest::Range(
-            requires_python.specifiers().clone(),
-            PythonVariant::Default,
-        ));
+        let python_request = PythonRequest::from_requires_python(requires_python.clone())
+            .unwrap_or(PythonRequest::Default);
 
         // Pin to the minor version.
         let python_pin = if pin_python {
