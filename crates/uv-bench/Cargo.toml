@@ -23,8 +23,15 @@ name = "uv"
 path = "benches/uv.rs"
 harness = false
 
+[[bench]]
+name = "airflow_run"
+path = "benches/airflow_run.rs"
+harness = false
+
 [dev-dependencies]
+uv = { path = "../uv", default-features = false }
 uv-cache = { workspace = true }
+uv-cli = { workspace = true }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-dispatch = { workspace = true }
@@ -43,9 +50,13 @@ uv-types = { workspace = true }
 uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
+clap = { workspace = true }
 criterion = { version = "4.0.3", default-features = false, package = "codspeed-criterion-compat", features = ["async_tokio"] }
+fs-err = { workspace = true }
 jiff = { workspace = true }
+reqwest = { workspace = true }
 tokio = { workspace = true }
+toml = { workspace = true }
 
 [package.metadata.cargo-shear]
 ignored = ["uv-extract"]
