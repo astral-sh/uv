@@ -248,7 +248,7 @@ impl Osv {
     /// Return a [`CacheEntry`] for a full vulnerability record.
     fn vuln_cache_entry(&self, id: &str) -> CacheEntry {
         let bucket = self.cache.bucket(CacheBucket::Osv);
-        CacheEntry::new(bucket.join("vulns"), format!("{id}.msgpack"))
+        CacheEntry::new(bucket.join("vulnerability"), format!("{id}.msgpack"))
     }
 
     /// Query OSV for vulnerabilities affecting the given dependencies, returning only vulnerability IDs.

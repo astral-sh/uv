@@ -1177,7 +1177,7 @@ pub enum CacheBucket {
     /// Cached vulnerability data from [OSV](https://osv.dev/).
     ///
     /// Cache structure:
-    ///  * `osv-v0/vulns/<vuln_id>.msgpack` — cached full vulnerability records
+    ///  * `osv-v0/vulnerability/<vuln_id>.msgpack` — cached full vulnerability records
     Osv,
 }
 
