@@ -274,6 +274,9 @@ pub enum Error {
     #[error("Failed to query installed Python versions from the Windows registry")]
     RegistryError(#[from] windows::core::Error),
 
+    #[error(transparent)]
+    InvalidEnvironmentVariable(#[from] uv_static::InvalidEnvironmentVariable),
+
     /// An invalid version request was given
     #[error("Invalid version request: {0}")]
     InvalidVersionRequest(String),
@@ -441,49 +444,50 @@ fn python_executables_from_installed<'a>(
     })
     .flatten();
 
-    let from_windows_registry = iter::once_with(move || {
-        #[cfg(windows)]
-        {
-            // Skip interpreter probing if we already know the version doesn't match.
-            let version_filter = move |entry: &WindowsPython| {
-                if let Some(found) = &entry.version {
-                    // Some distributions emit the patch version (example: `SysVersion: 3.9`)
-                    if found.string.chars().filter(|c| *c == '.').count() == 1 {
-                        version.matches_major_minor(found.major(), found.minor())
+    #[cfg(windows)]
+    let from_windows_registry: Box<
+        dyn Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a,
+    > = match uv_static::parse_boolish_environment_variable(EnvVars::UV_PYTHON_NO_REGISTRY) {
+        Ok(Some(true)) => Box::new(iter::empty()),
+        Ok(Some(false) | None) => Box::new(
+            iter::once_with(move || {
+                // Skip interpreter probing if we already know the version doesn't match.
+                let version_filter = move |entry: &WindowsPython| {
+                    if let Some(found) = &entry.version {
+                        // Some distributions emit the patch version (example: `SysVersion: 3.9`)
+                        if found.string.chars().filter(|c| *c == '.').count() == 1 {
+                            version.matches_major_minor(found.major(), found.minor())
+                        } else {
+                            version.matches_version(found)
+                        }
                     } else {
-                        version.matches_version(found)
+                        true
                     }
-                } else {
-                    true
-                }
-            };
+                };
 
-            env::var_os(EnvVars::UV_TEST_PYTHON_PATH)
-                .is_none()
-                .then(|| {
-                    registry_pythons()
-                        .map(|entries| {
-                            entries
-                                .into_iter()
-                                .filter(version_filter)
-                                .map(|entry| (PythonSource::Registry, entry.path))
-                                .chain(
-                                    find_microsoft_store_pythons()
-                                        .filter(version_filter)
-                                        .map(|entry| (PythonSource::MicrosoftStore, entry.path)),
-                                )
-                        })
-                        .map_err(Error::from)
-                })
-                .into_iter()
-                .flatten_ok()
-        }
-        #[cfg(not(windows))]
-        {
-            Vec::new()
-        }
-    })
-    .flatten();
+                registry_pythons()
+                    .map(|entries| {
+                        entries
+                            .into_iter()
+                            .filter(version_filter)
+                            .map(|entry| (PythonSource::Registry, entry.path))
+                            .chain(
+                                find_microsoft_store_pythons()
+                                    .filter(version_filter)
+                                    .map(|entry| (PythonSource::MicrosoftStore, entry.path)),
+                            )
+                    })
+                    .map_err(Error::from)
+            })
+            .flatten_ok(),
+        ),
+        Err(err) => Box::new(iter::once(Err(Error::from(err)))),
+    };
+
+    #[cfg(not(windows))]
+    let from_windows_registry: Box<
+        dyn Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a,
+    > = Box::new(iter::empty());
 
     match preference {
         PythonPreference::OnlyManaged => {

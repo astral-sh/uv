@@ -1236,8 +1236,9 @@ impl TestContext {
             .env(EnvVars::UV_EXCLUDE_NEWER, TEST_TIMESTAMP)
             .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, TEST_TIMESTAMP)
             .env(EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF, TEST_TIMESTAMP)
-            // When installations are allowed, we don't want to write to global state, like the
-            // Windows registry
+            // Keep Python discovery hermetic and avoid mutating global state, like the Windows
+            // registry, unless a test opts in explicitly.
+            .env(EnvVars::UV_PYTHON_NO_REGISTRY, "1")
             .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "0")
             // Since downloads, fetches and builds run in parallel, their message output order is
             // non-deterministic, so can't capture them in test output.

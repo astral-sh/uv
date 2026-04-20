@@ -1233,8 +1233,8 @@ fn python_install_freethreaded() {
 /// Regression test for <https://github.com/astral-sh/uv/issues/18795>.
 ///
 /// IMPORTANT: this test writes to the shared `HKCU` registry. The trailing uninstall is
-/// best-effort cleanup; panics will leak entries. This is fine for now since this is the only
-/// test exercising the registry pathway, but adding more will probably require isolation.
+/// best-effort cleanup; panics will leak entries. These registry tests still share global state,
+/// so adding more will probably require isolation.
 #[cfg(all(windows, feature = "test-windows-registry"))]
 #[test]
 fn python_install_freethreaded_and_gil_list() {
@@ -1254,6 +1254,7 @@ fn python_install_freethreaded_and_gil_list() {
     context
         .python_install()
         .arg("3.13")
+        .env_remove(EnvVars::UV_PYTHON_NO_REGISTRY)
         .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "1")
         .assert()
         .success();
@@ -1261,13 +1262,14 @@ fn python_install_freethreaded_and_gil_list() {
         .python_install()
         .arg("--preview")
         .arg("3.13t")
+        .env_remove(EnvVars::UV_PYTHON_NO_REGISTRY)
         .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "1")
         .assert()
         .success();
 
     // List installed versions with registry discovery enabled.
-    // We remove UV_TEST_PYTHON_PATH to enable registry discovery (it's skipped when set),
-    // and use `--managed-python --only-installed` to exclude unrelated system Pythons.
+    // We remove `UV_PYTHON_NO_REGISTRY` to opt back into registry discovery, and remove
+    // `UV_TEST_PYTHON_PATH` so the test can discover the installed bin trampolines.
     //
     // Both the GIL and freethreaded variants should show entries from:
     // - The registry (patch-versioned managed directory path)
@@ -1277,6 +1279,7 @@ fn python_install_freethreaded_and_gil_list() {
         .arg("3.13")
         .arg("--only-installed")
         .arg("--managed-python")
+        .env_remove(EnvVars::UV_PYTHON_NO_REGISTRY)
         .env_remove(EnvVars::UV_TEST_PYTHON_PATH)
         .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "1"), @"
     success: true
@@ -1293,6 +1296,7 @@ fn python_install_freethreaded_and_gil_list() {
         .arg("3.13t")
         .arg("--only-installed")
         .arg("--managed-python")
+        .env_remove(EnvVars::UV_PYTHON_NO_REGISTRY)
         .env_remove(EnvVars::UV_TEST_PYTHON_PATH)
         .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "1"), @"
     success: true
@@ -1306,6 +1310,56 @@ fn python_install_freethreaded_and_gil_list() {
     ");
 
     // Clean up registry entries
+    context
+        .python_uninstall()
+        .arg("--all")
+        .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "1")
+        .assert()
+        .success();
+}
+
+#[cfg(all(windows, feature = "test-windows-registry"))]
+#[test]
+fn python_install_registry_takes_precedence_over_no_registry() {
+    use assert_cmd::assert::OutputAssertExt;
+
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_latest_python_versions()
+        .with_managed_python_dirs()
+        .with_python_download_cache()
+        .with_filtered_python_install_bin()
+        .with_filtered_python_names()
+        .with_filtered_exe_suffix()
+        .with_collapsed_whitespace();
+
+    context
+        .python_install()
+        .arg("3.13")
+        .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "1")
+        .env(EnvVars::UV_PYTHON_NO_REGISTRY, "1")
+        .assert()
+        .success();
+
+    // `UV_PYTHON_INSTALL_REGISTRY` should take precedence over `UV_PYTHON_NO_REGISTRY`.
+    // When we re-enable registry discovery for this command and clear the search path, we should
+    // see both the registry entry and the managed installation entry.
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("3.13")
+        .arg("--only-installed")
+        .arg("--managed-python")
+        .env_remove(EnvVars::UV_PYTHON_NO_REGISTRY)
+        .env(EnvVars::UV_TEST_PYTHON_PATH, "")
+        .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.13.[LATEST]-[PLATFORM] managed/cpython-3.13.[LATEST]-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    cpython-3.13.[LATEST]-[PLATFORM] managed/cpython-3.13-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+
+    ----- stderr -----
+    ");
+
     context
         .python_uninstall()
         .arg("--all")
