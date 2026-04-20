@@ -39,7 +39,7 @@ use uv_resolver::{
 };
 use uv_types::{
     AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages,
-    HashStrategy, InFlight, SourceTreeEditablePolicy,
+    HashStrategy, InFlight, ResolvedRequirements, SourceTreeEditablePolicy,
 };
 use uv_workspace::WorkspaceCache;
 
@@ -254,7 +254,7 @@ impl BuildContext for BuildDispatch<'_> {
         &'data self,
         requirements: &'data [Requirement],
         build_stack: &'data BuildStack,
-    ) -> Result<Resolution, BuildDispatchError> {
+    ) -> Result<ResolvedRequirements, BuildDispatchError> {
         let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
         let marker_env = self.interpreter.resolver_marker_environment();
         let resolver_env = ResolverEnvironment::specific(marker_env);
@@ -265,12 +265,17 @@ impl BuildContext for BuildDispatch<'_> {
         // its URL allow-list check. This mirrors what the project resolver does in
         // `uv_requirements::LookaheadResolver` and prevents a `DisallowedUrl` error when one
         // `build-system.requires` entry pulls in another URL dependency.
+        let hasher = self
+            .hasher
+            .clone()
+            .augment_with_requirements(requirements.iter())
+            .map_err(uv_requirements::Error::from)?;
         let overrides = Overrides::default();
-        let (lookaheads, _hasher) = LookaheadResolver::new(
+        let (lookaheads, hasher) = LookaheadResolver::new(
             requirements,
             self.constraints,
             &overrides,
-            self.hasher,
+            &hasher,
             &self.shared_state.index,
             DistributionDatabase::new(
                 self.client,
@@ -302,7 +307,7 @@ impl BuildContext for BuildDispatch<'_> {
             Some(tags),
             self.flat_index,
             &self.shared_state.index,
-            self.hasher,
+            &hasher,
             self,
             EmptyInstalledPackages,
             DistributionDatabase::new(
@@ -321,22 +326,25 @@ impl BuildContext for BuildDispatch<'_> {
                     .join(", ")
             )
         })?);
-        Ok(resolution)
+        Ok(ResolvedRequirements::new(resolution, hasher))
     }
 
     #[instrument(
-        skip(self, resolution, venv),
+        skip(self, requirements, venv),
         fields(
-            resolution = resolution.distributions().map(ToString::to_string).join(", "),
+            resolution = requirements.resolution().distributions().map(ToString::to_string).join(", "),
             venv = ?venv.root()
         )
     )]
     async fn install<'data>(
         &'data self,
-        resolution: &'data Resolution,
+        requirements: &'data ResolvedRequirements,
         venv: &'data PythonEnvironment,
         build_stack: &'data BuildStack,
     ) -> Result<Vec<CachedDist>, BuildDispatchError> {
+        let resolution = requirements.resolution();
+        let hasher = requirements.hasher();
+
         debug!(
             "Installing in {} in {}",
             resolution
@@ -362,7 +370,7 @@ impl BuildContext for BuildDispatch<'_> {
             InstallationStrategy::Permissive,
             &Reinstall::default(),
             self.build_options,
-            self.hasher,
+            hasher,
             self.index_locations,
             self.config_settings,
             self.config_settings_package,
@@ -396,7 +404,7 @@ impl BuildContext for BuildDispatch<'_> {
             let preparer = Preparer::new(
                 self.cache,
                 tags,
-                self.hasher,
+                hasher,
                 self.build_options,
                 DistributionDatabase::new(
                     self.client,
