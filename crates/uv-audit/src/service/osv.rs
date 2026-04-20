@@ -289,6 +289,9 @@ impl Osv {
                 .base_url
                 .join("v1/querybatch")
                 .map_err(|e| Error::Url(self.base_url.clone(), e))?;
+
+            // NOTE: we need `uncached` here to access the underlying
+            // client for our POST request.
             let batch_response: QueryBatchResponse = self
                 .client
                 .uncached()
