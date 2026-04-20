@@ -931,7 +931,7 @@ impl PubGrubReportFormatter<'_> {
             return None;
         };
 
-        let candidate = selector.select_no_preference(name, set, version_maps, env)?;
+        let candidate = selector.select_no_preference(name, set, version_maps, env, None)?;
 
         let prioritized = candidate.prioritized()?;
 

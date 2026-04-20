@@ -18,7 +18,7 @@ use crate::preferences::{Entry, PreferenceSource, Preferences};
 use crate::prerelease::{AllowPrerelease, PrereleaseStrategy};
 use crate::resolution_mode::ResolutionStrategy;
 use crate::version_map::{VersionMap, VersionMapDistHandle};
-use crate::{Exclusions, Manifest, Options, ResolverEnvironment};
+use crate::{ExcludeNewerTimestamp, Exclusions, Manifest, Options, ResolverEnvironment};
 
 #[derive(Debug, Clone)]
 #[expect(clippy::struct_field_names)]
@@ -86,6 +86,7 @@ impl CandidateSelector {
         index: Option<&'a IndexUrl>,
         env: &ResolverEnvironment,
         tags: Option<&'a Tags>,
+        exclude_newer: Option<ExcludeNewerTimestamp>,
     ) -> Option<Candidate<'a>> {
         let reinstall = exclusions.reinstall(package_name);
         let upgrade = exclusions.upgrade(package_name);
@@ -134,7 +135,7 @@ impl CandidateSelector {
         }
 
         // Otherwise, find the best candidate from the version maps.
-        let compatible = self.select_no_preference(package_name, range, version_maps, env);
+        let compatible = self.select_no_preference(package_name, range, version_maps, env, exclude_newer);
 
         // Cross-reference against the already-installed distribution.
         //
@@ -418,6 +419,7 @@ impl CandidateSelector {
         range: &Range<Version>,
         version_maps: &'a [VersionMap],
         env: &ResolverEnvironment,
+        exclude_newer: Option<ExcludeNewerTimestamp>,
     ) -> Option<Candidate<'a>> {
         trace!(
             "Selecting candidate for {package_name} with range {range} with {} remote versions",
@@ -457,6 +459,7 @@ impl CandidateSelector {
                     package_name,
                     range,
                     allow_prerelease,
+                    exclude_newer,
                 )
             } else {
                 Self::select_candidate(
@@ -479,6 +482,7 @@ impl CandidateSelector {
                     package_name,
                     range,
                     allow_prerelease,
+                    exclude_newer,
                 )
             }
         } else {
@@ -489,6 +493,7 @@ impl CandidateSelector {
                         package_name,
                         range,
                         allow_prerelease,
+                        exclude_newer,
                     )
                 })
             } else {
@@ -498,6 +503,7 @@ impl CandidateSelector {
                         package_name,
                         range,
                         allow_prerelease,
+                        exclude_newer,
                     )
                 })
             }
@@ -526,11 +532,13 @@ impl CandidateSelector {
     /// The returned [`Candidate`] _may not_ be compatible with the current platform; in such
     /// cases, the resolver is responsible for tracking the incompatibility and re-running the
     /// selection process with additional constraints.
+    #[allow(unused_variables)] // exclude_newer is unused here, logging handled at higher level
     fn select_candidate<'a>(
         versions: impl Iterator<Item = (&'a Version, VersionMapDistHandle<'a>)>,
         package_name: &'a PackageName,
         range: &Range<Version>,
         allow_prerelease: bool,
+        exclude_newer: Option<ExcludeNewerTimestamp>,
     ) -> Option<Candidate<'a>> {
         let mut steps = 0usize;
         let mut incompatible: Option<Candidate> = None;
