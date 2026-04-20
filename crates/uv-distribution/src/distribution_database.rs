@@ -874,7 +874,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .into_async_read();
 
                 // Open the partial entry (temp file), truncating if not resuming.
-                let temp_file = std::fs::OpenOptions::new()
+                let temp_file = fs_err::OpenOptions::new()
                     .create(true)
                     .write(true)
                     .append(resuming)
@@ -882,7 +882,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .open(partial_entry.path())
                     .map_err(Error::CacheWrite)?;
                 let mut writer = tokio::io::BufWriter::new(fs_err::tokio::File::from_std(
-                    fs_err::File::from_parts(temp_file, partial_entry.path()),
+                    fs_err::File::from_parts(temp_file.into(), partial_entry.path()),
                 ));
 
                 match progress {
@@ -1003,7 +1003,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         };
 
         let partial_len = || {
-            std::fs::metadata(partial_entry.path())
+            fs_err::metadata(partial_entry.path())
                 .map(|m| m.len())
                 .unwrap_or(0)
         };
