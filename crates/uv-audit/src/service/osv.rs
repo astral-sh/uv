@@ -369,7 +369,7 @@ impl Osv {
     /// Fetch a full vulnerability record by ID from OSV.
     ///
     /// Caching is handled transparently by the [`CachedClient`] middleware using
-    /// a synthetic `Cache-Control: max-age=3600` header, since OSV itself does
+    /// a synthetic `Cache-Control: max-age=600` header, since OSV itself does
     /// not send caching headers.
     async fn fetch_vuln(&self, id: &str) -> Result<Vulnerability, Error> {
         let url = self
