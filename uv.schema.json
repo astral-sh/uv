@@ -462,7 +462,7 @@
       ]
     },
     "python-downloads-json-url": {
-      "description": "URL pointing to JSON of custom Python installations.",
+      "description": "URL pointing to JSON or NDJSON describing custom Python installations.",
       "type": ["string", "null"]
     },
     "python-install-mirror": {

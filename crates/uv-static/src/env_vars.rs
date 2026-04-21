@@ -621,6 +621,12 @@ impl EnvVars {
     #[attr_added_in("0.8.0")]
     pub const UV_INTERNAL__TEST_PYTHON_MANAGED: &'static str = "UV_INTERNAL__TEST_PYTHON_MANAGED";
 
+    /// Used to override the Python download metadata source during tests without affecting user-visible settings.
+    #[attr_hidden]
+    #[attr_added_in("0.11.7")]
+    pub const UV_INTERNAL__TEST_PYTHON_DOWNLOADS_JSON_URL: &'static str =
+        "UV_INTERNAL__TEST_PYTHON_DOWNLOADS_JSON_URL";
+
     /// Used to force ignoring Git LFS commands as `git-lfs` detection cannot be overridden via PATH.
     #[attr_hidden]
     #[attr_added_in("0.9.15")]
