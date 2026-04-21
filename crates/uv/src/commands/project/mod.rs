@@ -144,7 +144,7 @@ pub(crate) enum ProjectError {
     MissingLockfile(MissingLockfileSource, PathBuf),
 
     #[error(
-        "The lockfile at `uv.lock` needs to be updated, but `--frozen` was provided: Missing workspace member `{0}`. To update the lockfile, run `uv lock`."
+        "The lockfile at `uv.lock` needs to be updated, but `--frozen` was provided: Missing workspace member `{0}`. This can happen after renaming `project.name`. To update the lockfile, run `uv lock`."
     )]
     LockWorkspaceMismatch(PackageName),
 
