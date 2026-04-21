@@ -23,10 +23,10 @@ use tracing::{Level, debug, info, instrument, trace, warn};
 use uv_configuration::{Constraints, Excludes, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
-    BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, ExcludeNewerValue, Identifier,
-    IncompatibleDist, IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations,
-    IndexMetadata, IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement,
-    ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
+    BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier, IncompatibleDist,
+    IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations, IndexMetadata,
+    IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement, ResolvedDist,
+    ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -2725,7 +2725,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let mut included_versions = FxHashMap::default();
         let mut available_versions = FxHashMap::default();
 
-        let available_version_cutoff: Option<ExcludeNewerValue> =
+        let available_version_cutoff: Option<jiff::Timestamp> =
             std::env::var(EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF)
                 .ok()
                 .and_then(|s| s.parse().ok());
@@ -2771,7 +2771,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 };
                                 prioritized_dist.files().all(|file| {
                                     file.upload_time_utc_ms.is_none_or(|upload_time| {
-                                        upload_time >= exclude_newer.timestamp_millis()
+                                        upload_time >= exclude_newer.as_millisecond()
                                     })
                                 })
                             };
@@ -2794,7 +2794,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 };
                                 prioritized_dist.files().all(|file| {
                                     file.upload_time_utc_ms.is_some_and(|upload_time| {
-                                        upload_time >= exclude_newer.timestamp_millis()
+                                        upload_time >= exclude_newer.as_millisecond()
                                     })
                                 })
                             };

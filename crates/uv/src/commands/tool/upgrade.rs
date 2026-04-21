@@ -319,7 +319,6 @@ async fn upgrade_tool(
     // Resolve the appropriate settings, preferring: CLI > receipt > user.
     let options = args.clone().combine(
         ResolverInstallerOptions::from(existing_tool_receipt.options().clone())
-            .recompute_exclude_newer()
             .combine(filesystem.clone()),
     );
     let settings = ResolverInstallerSettings::from(options.clone());

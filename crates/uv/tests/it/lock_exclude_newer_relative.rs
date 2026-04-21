@@ -482,7 +482,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    // And the `exclude-newer-package` timestamp value in the lockfile should be changed
+    // The `exclude-newer-package` span is unchanged; the timestamp is a placeholder
     let lock = context.read("uv.lock");
     assert_snapshot!(lock, @r#"
     version = 1
@@ -492,7 +492,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     [options]
 
     [options.exclude-newer-package]
-    idna = { timestamp = "2024-05-18T00:00:00Z", span = "P2W" }
+    idna = { timestamp = "2024-04-17T00:00:00Z", span = "P2W" }
 
     [[package]]
     name = "idna"
@@ -1265,8 +1265,9 @@ fn lock_exclude_newer_relative_no_timestamp_in_lockfile() -> Result<()> {
     let lock = lock.replace("exclude-newer = \"0001-01-01T00:00:00Z\" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.\n", "");
     context.temp_dir.child("uv.lock").write_str(&lock)?;
 
-    // The lockfile now has no exclude-newer, but `pyproject.toml` still configures one,
-    // so the resolver detects "addition of global exclude newer" and re-resolves.
+    // The lockfile now has no exclude-newer timestamp, but the span is still present.
+    // Since the span matches the `pyproject.toml` configuration, the lockfile is still
+    // treated as valid — the missing timestamp alone does not trigger re-resolution.
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)

@@ -61,65 +61,61 @@ impl<'de> serde::Deserialize<'de> for ExcludeNewerSpan {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ExcludeNewerValue {
-    timestamp: Timestamp,
-    span: Option<ExcludeNewerSpan>,
+pub enum ExcludeNewerValue {
+    /// An absolute timestamp.
+    Absolute(Timestamp),
+    /// A span used to compute a timestamp relative to the current time.
+    Relative(ExcludeNewerSpan),
 }
 
 impl ExcludeNewerValue {
-    pub fn into_parts(self) -> (Timestamp, Option<ExcludeNewerSpan>) {
-        (self.timestamp, self.span)
-    }
+    /// A placeholder timestamp used when serializing a [`Relative`](Self::Relative)
+    /// value to a wire format that requires a timestamp field.
+    pub const PLACEHOLDER: &'static str = "0001-01-01T00:00:00Z";
 
-    /// Return the [`Timestamp`] in milliseconds.
-    pub fn timestamp_millis(&self) -> i64 {
-        self.timestamp.as_millisecond()
-    }
-
-    /// Return the [`Timestamp`].
-    pub fn timestamp(&self) -> Timestamp {
-        self.timestamp
-    }
-
-    /// Return the [`ExcludeNewerSpan`] used to construct the [`Timestamp`], if any.
-    pub fn span(&self) -> Option<&ExcludeNewerSpan> {
-        self.span.as_ref()
-    }
-
-    /// Create a new [`ExcludeNewerValue`].
-    pub fn new(timestamp: Timestamp, span: Option<ExcludeNewerSpan>) -> Self {
-        Self { timestamp, span }
-    }
-
-    /// If this value was derived from a relative span, recompute the timestamp relative to now.
+    /// Return the effective [`Timestamp`].
     ///
-    /// Returns `self` unchanged if there is no span (i.e., the timestamp is absolute).
-    #[must_use]
-    pub fn recompute(self) -> Self {
-        let Some(span) = self.span else {
-            return self;
-        };
-
-        let now = if let Ok(test_time) = std::env::var("UV_TEST_CURRENT_TIMESTAMP") {
-            test_time
-                .parse::<Timestamp>()
-                .expect("UV_TEST_CURRENT_TIMESTAMP must be a valid RFC 3339 timestamp")
-                .to_zoned(TimeZone::UTC)
-        } else {
-            Timestamp::now().to_zoned(TimeZone::UTC)
-        };
-
-        let Ok(cutoff) = now.checked_sub(span.0.abs()) else {
-            return Self {
-                timestamp: self.timestamp,
-                span: Some(span),
-            };
-        };
-
-        Self {
-            timestamp: cutoff.into(),
-            span: Some(span),
+    /// For [`Relative`](Self::Relative) values this is computed from the span and the current
+    /// time on each call.
+    pub fn timestamp(&self) -> Timestamp {
+        match self {
+            Self::Absolute(timestamp) => *timestamp,
+            Self::Relative(span) => {
+                let now = current_time();
+                now.checked_sub(span.0.abs())
+                    .map_or(now.timestamp(), |cutoff| cutoff.timestamp())
+            }
         }
+    }
+
+    /// Return the [`ExcludeNewerSpan`], if any.
+    pub fn span(&self) -> Option<&ExcludeNewerSpan> {
+        match self {
+            Self::Absolute(_) => None,
+            Self::Relative(span) => Some(span),
+        }
+    }
+
+    /// Create a new [`ExcludeNewerValue`] from an absolute timestamp.
+    pub fn absolute(timestamp: Timestamp) -> Self {
+        Self::Absolute(timestamp)
+    }
+
+    /// Create a new [`ExcludeNewerValue`] from a relative span.
+    pub fn relative(span: ExcludeNewerSpan) -> Self {
+        Self::Relative(span)
+    }
+}
+
+/// Return the current time, respecting the `UV_TEST_CURRENT_TIMESTAMP` override.
+fn current_time() -> jiff::Zoned {
+    if let Ok(test_time) = std::env::var("UV_TEST_CURRENT_TIMESTAMP") {
+        test_time
+            .parse::<Timestamp>()
+            .expect("UV_TEST_CURRENT_TIMESTAMP must be a valid RFC 3339 timestamp")
+            .to_zoned(TimeZone::UTC)
+    } else {
+        Timestamp::now().to_zoned(TimeZone::UTC)
     }
 }
 
@@ -128,7 +124,7 @@ impl serde::Serialize for ExcludeNewerValue {
     where
         S: serde::Serializer,
     {
-        self.timestamp.serialize(serializer)
+        self.timestamp().serialize(serializer)
     }
 }
 
@@ -152,17 +148,23 @@ impl<'de> serde::Deserialize<'de> for ExcludeNewerValue {
 
         match Helper::deserialize(deserializer)? {
             Helper::String(s) => Self::from_str(&s).map_err(serde::de::Error::custom),
-            Helper::Table(table) => Ok(Self::new(table.timestamp, table.span)),
+            Helper::Table(table) => Ok(match table.span {
+                Some(span) => Self::relative(span),
+                None => Self::absolute(table.timestamp),
+            }),
         }
     }
 }
 
 impl From<Timestamp> for ExcludeNewerValue {
     fn from(timestamp: Timestamp) -> Self {
-        Self {
-            timestamp,
-            span: None,
-        }
+        Self::Absolute(timestamp)
+    }
+}
+
+impl From<ExcludeNewerSpan> for ExcludeNewerValue {
+    fn from(span: ExcludeNewerSpan) -> Self {
+        Self::Relative(span)
     }
 }
 
@@ -213,7 +215,7 @@ impl FromStr for ExcludeNewerValue {
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         if let Ok(timestamp) = input.parse::<Timestamp>() {
-            return Ok(Self::new(timestamp, None));
+            return Ok(Self::absolute(timestamp));
         }
 
         let date_err = match input.parse::<jiff::civil::Date>() {
@@ -227,7 +229,7 @@ impl FromStr for ExcludeNewerValue {
                             "`{input}` parsed to date `{date}`, but could not be converted to a timestamp: {err}",
                         )
                     })?;
-                return Ok(Self::new(timestamp, None));
+                return Ok(Self::absolute(timestamp));
             }
             Err(err) => err,
         };
@@ -266,10 +268,10 @@ impl FromStr for ExcludeNewerValue {
                     ));
                 }
 
-                let cutoff = now.checked_sub(span.abs()).map_err(|err| {
+                now.checked_sub(span.abs()).map_err(|err| {
                     format!("Duration `{input}` is too large to subtract from current time: {err}")
                 })?;
-                return Ok(Self::new(cutoff.into(), Some(ExcludeNewerSpan(span))));
+                return Ok(Self::relative(ExcludeNewerSpan(span)));
             }
             Err(err) => err,
         };
@@ -280,7 +282,7 @@ impl FromStr for ExcludeNewerValue {
 
 impl std::fmt::Display for ExcludeNewerValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.timestamp.fmt(f)
+        self.timestamp().fmt(f)
     }
 }
 

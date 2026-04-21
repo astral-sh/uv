@@ -154,7 +154,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
         &self,
         package_name: &PackageName,
         index: &uv_distribution_types::IndexUrl,
-    ) -> Option<crate::ExcludeNewerValue> {
+    ) -> Option<jiff::Timestamp> {
         self.exclude_newer.exclude_newer_package_for_index(
             package_name,
             self.index_locations.exclude_newer_for(index),
