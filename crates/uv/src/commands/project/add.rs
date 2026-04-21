@@ -51,7 +51,7 @@ use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     PlatformState, ProjectEnvironment, ProjectError, ProjectInterpreter, ScriptInterpreter,
-    UniversalState, default_dependency_groups, init_script_python_requirement,
+    UniversalState, WorkspacePython, default_dependency_groups, init_script_python_requirement,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{ExitStatus, ScriptPath, diagnostics, project};
@@ -273,17 +273,23 @@ pub(crate) async fn add(
 
         if frozen.is_some() || no_sync {
             // Discover the interpreter.
+            let workspace_python = WorkspacePython::from_request(
+                python.as_deref().map(PythonRequest::parse),
+                Some(project.workspace()),
+                &defaulted_groups,
+                project_dir,
+                no_config,
+            )
+            .await?;
             let interpreter = ProjectInterpreter::discover(
                 project.workspace(),
-                project_dir,
                 &defaulted_groups,
-                python.as_deref().map(PythonRequest::parse),
+                workspace_python,
                 &client_builder,
                 python_preference,
                 python_downloads,
                 &install_mirrors,
                 false,
-                no_config,
                 active,
                 cache,
                 printer,
