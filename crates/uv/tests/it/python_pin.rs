@@ -5,9 +5,11 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use insta::assert_snapshot;
 use uv_platform::{Arch, Os};
-use uv_python::{PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME};
+use uv_python::downloads::{ManagedPythonDownloadList, PythonDownloadRequest};
+use uv_python::{PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME, PythonRequest};
 use uv_static::EnvVars;
 use uv_test::uv_snapshot;
+use wiremock::MockServer;
 
 #[test]
 fn python_pin() {
@@ -826,6 +828,83 @@ fn python_pin_install() {
 
     ----- stderr -----
     ");
+}
+
+#[test]
+#[cfg(feature = "test-python-managed")]
+fn python_pin_with_ndjson_manifest() {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_sources()
+        .with_managed_python_dirs()
+        .with_empty_python_install_mirror()
+        .with_python_download_cache();
+
+    let download_list = ManagedPythonDownloadList::new_only_embedded().unwrap();
+    let download_request = PythonDownloadRequest::from_request(&PythonRequest::parse("3.12"))
+        .unwrap()
+        .fill()
+        .unwrap();
+    let download = download_list.find(&download_request).unwrap();
+
+    let version = if let Some(build) = download.build() {
+        format!("{}+{build}", download.key().version())
+    } else {
+        download.key().version().to_string()
+    };
+    let sha256 = download.sha256().unwrap();
+    let manifest = context.temp_dir.child("python-downloads.ndjson");
+    manifest
+        .write_str(&format!(
+            "{{\"version\":\"{version}\",\"artifacts\":[{{\"url\":\"{}\",\"platform\":\"{}\",\"sha256\":\"{}\",\"variant\":\"install_only\"}}]}}\n",
+            download.url(),
+            download.key().platform().as_cargo_dist_triple(),
+            sha256,
+        ))
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context
+        .python_pin()
+        .arg("3.12")
+        .arg("--python-downloads-json-url")
+        .arg(manifest.path())
+        .env(EnvVars::UV_PYTHON_DOWNLOADS, "auto"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Pinned `.python-version` to `3.12`
+
+    ----- stderr -----
+    ");
+}
+
+#[tokio::test]
+#[cfg(feature = "test-python-managed")]
+async fn python_pin_custom_ndjson_url_does_not_fallback() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_sources()
+        .with_managed_python_dirs()
+        .with_empty_python_install_mirror()
+        .with_python_download_cache();
+    let server = MockServer::start().await;
+
+    uv_snapshot!(context.filters(), context
+        .python_pin()
+        .arg("--resolved")
+        .arg("3.12")
+        .arg("--python-downloads-json-url")
+        .arg(format!("{}/versions.ndjson", server.uri()))
+        .env(EnvVars::UV_PYTHON_DOWNLOADS, "auto"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Error while fetching remote python downloads NDJSON from 'http://[LOCALHOST]/versions.ndjson'
+      Caused by: Failed to download http://[LOCALHOST]/versions.ndjson
+      Caused by: HTTP status client error (404 Not Found) for url (http://[LOCALHOST]/versions.ndjson)
+    ");
+
+    Ok(())
 }
 
 #[test]

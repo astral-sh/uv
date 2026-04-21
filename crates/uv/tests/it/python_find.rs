@@ -4,6 +4,8 @@ use assert_fs::{fixture::FileWriteStr, prelude::PathCreateDir};
 use indoc::indoc;
 
 use uv_platform::{Arch, Os};
+use uv_python::PythonRequest;
+use uv_python::downloads::{ManagedPythonDownloadList, PythonDownloadRequest};
 use uv_static::EnvVars;
 
 use uv_test::{uv_snapshot, venv_bin_path};
@@ -1462,6 +1464,61 @@ fn python_find_prerelease_version_specifiers() {
     [TEMP_DIR]/managed/cpython-3.14.0-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
+    ");
+}
+
+#[test]
+#[cfg(feature = "test-python-managed")]
+fn python_find_prerelease_warning_with_ndjson_manifest() {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_python_sources()
+        .with_managed_python_dirs()
+        .with_python_download_cache()
+        .with_filtered_python_install_bin()
+        .with_filtered_python_names()
+        .with_filtered_exe_suffix();
+
+    context.python_install().arg("3.14.0rc3").assert().success();
+
+    let download_list = ManagedPythonDownloadList::new_only_embedded().unwrap();
+    let download_request = PythonDownloadRequest::from_request(&PythonRequest::parse("3.14"))
+        .unwrap()
+        .fill()
+        .unwrap();
+    let download = download_list.find(&download_request).unwrap();
+
+    let version = if let Some(build) = download.build() {
+        format!("{}+{build}", download.key().version())
+    } else {
+        download.key().version().to_string()
+    };
+    let sha256 = download.sha256().unwrap();
+    let manifest = context.temp_dir.child("python-downloads.ndjson");
+    manifest
+        .write_str(&format!(
+            "{{\"version\":\"{version}\",\"artifacts\":[{{\"url\":\"{}\",\"platform\":\"{}\",\"sha256\":\"{}\",\"variant\":\"install_only\"}}]}}\n",
+            download.url(),
+            download.key().platform().as_cargo_dist_triple(),
+            sha256,
+        ))
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context
+        .python_find()
+        .arg("3.14")
+        .arg("--resolve-links")
+        .env(
+            EnvVars::UV_INTERNAL__TEST_PYTHON_DOWNLOADS_JSON_URL,
+            manifest.path(),
+        ), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.14.0rc3-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+
+    ----- stderr -----
+    warning: You're using a pre-release version of Python (3.14.0rc3) but a stable version is available. Use `uv python upgrade 3.14` to upgrade.
     ");
 }
 

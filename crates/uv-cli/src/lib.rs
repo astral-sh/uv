@@ -6336,7 +6336,7 @@ pub struct PythonListArgs {
     #[arg(long, value_enum, default_value_t = PythonListFormat::default())]
     pub output_format: PythonListFormat,
 
-    /// URL pointing to JSON of custom Python installations.
+    /// URL pointing to JSON or NDJSON describing custom Python installations.
     #[arg(long, value_hint = ValueHint::Other)]
     pub python_downloads_json_url: Option<String>,
 }
@@ -6462,7 +6462,7 @@ pub struct PythonInstallArgs {
     #[arg(long, value_hint = ValueHint::Url)]
     pub pypy_mirror: Option<String>,
 
-    /// URL pointing to JSON of custom Python installations.
+    /// URL pointing to JSON or NDJSON describing custom Python installations.
     #[arg(long, value_hint = ValueHint::Other)]
     pub python_downloads_json_url: Option<String>,
 
@@ -6567,7 +6567,7 @@ pub struct PythonUpgradeArgs {
     #[arg(long, short)]
     pub reinstall: bool,
 
-    /// URL pointing to JSON of custom Python installations.
+    /// URL pointing to JSON or NDJSON describing custom Python installations.
     #[arg(long, value_hint = ValueHint::Other)]
     pub python_downloads_json_url: Option<String>,
 
@@ -6662,7 +6662,7 @@ pub struct PythonFindArgs {
     #[arg(long)]
     pub resolve_links: bool,
 
-    /// URL pointing to JSON of custom Python installations.
+    /// URL pointing to JSON or NDJSON describing custom Python installations.
     #[arg(long, value_hint = ValueHint::Other)]
     pub python_downloads_json_url: Option<String>,
 }
