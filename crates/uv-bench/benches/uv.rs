@@ -6,7 +6,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, RegistryClientBuilder};
 use uv_distribution_types::Requirement;
 use uv_python::PythonEnvironment;
-use uv_resolver::Manifest;
+use uv_resolver::{Lock, Manifest};
 
 fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
     let manifest = Manifest::simple(vec![Requirement::from(
@@ -47,11 +47,43 @@ fn resolve_warm_airflow(c: &mut Criterion<WallTime>) {
 //     c.bench_function("resolve_warm_airflow_universal", |b| b.iter(&run));
 // }
 
+/// Benchmark lock file parsing for the airflow workspace.
+fn parse_airflow_lockfile(c: &mut Criterion<WallTime>) {
+    let lockfile = airflow_lockfile();
+
+    c.bench_function("parse_airflow_lockfile", |b| {
+        b.iter(|| toml::from_str::<Lock>(black_box(&lockfile)).unwrap());
+    });
+}
+
+/// Fetch the airflow lockfile from GitHub, caching it locally.
+fn airflow_lockfile() -> String {
+    let cache_path = std::path::absolute("../../.cache/airflow.uv.lock").unwrap();
+    if let Ok(contents) = fs_err::read_to_string(&cache_path) {
+        return contents;
+    }
+
+    let url = "https://raw.githubusercontent.com/apache/airflow/7fa400745ac7aebc7cc4ec21d3a047e9fb258310/uv.lock";
+    let error_message = "Failed to fetch airflow lockfile from GitHub";
+    let response = reqwest::blocking::get(url)
+        .expect(error_message)
+        .error_for_status()
+        .expect(error_message)
+        .text()
+        .expect(error_message);
+
+    fs_err::create_dir_all(cache_path.parent().unwrap()).unwrap();
+    fs_err::write(&cache_path, &response).unwrap();
+
+    response
+}
+
 criterion_group!(
     uv,
     resolve_warm_jupyter,
     resolve_warm_jupyter_universal,
-    resolve_warm_airflow
+    resolve_warm_airflow,
+    parse_airflow_lockfile,
 );
 criterion_main!(uv);
 

@@ -2,7 +2,7 @@ use std::fmt::Write;
 use std::path::Path;
 use std::str::FromStr;
 
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, bail};
 use owo_colors::OwoColorize;
 
 use tracing::debug;
@@ -333,7 +333,13 @@ pub(crate) async fn project_version(
     let status = if dry_run {
         ExitStatus::Success
     } else if let Some(new_version) = &new_version {
-        let project = update_project(project, new_version, &mut toml, &pyproject_path)?;
+        let project = update_project(
+            project,
+            new_version,
+            &mut toml,
+            &pyproject_path,
+            workspace_cache,
+        )?;
         Box::pin(lock_and_sync(
             project,
             project_dir,
@@ -398,26 +404,27 @@ async fn find_target(
     let project = if let Some(package) = package {
         VirtualProject::discover_with_package(
             project_dir,
-            &DiscoveryOptions {
-                project: uv_workspace::ProjectDiscovery::Required,
-                ..DiscoveryOptions::default()
-            },
+            &DiscoveryOptions::default(),
             workspace_cache,
             package.clone(),
         )
         .await
         .map_err(|err| hint_uv_self_version(err, explicit_project))?
     } else {
-        VirtualProject::discover(
-            project_dir,
-            &DiscoveryOptions {
-                project: uv_workspace::ProjectDiscovery::Required,
-                ..DiscoveryOptions::default()
-            },
-            workspace_cache,
-        )
-        .await
-        .map_err(|err| hint_uv_self_version(err, explicit_project))?
+        let project =
+            VirtualProject::discover(project_dir, &DiscoveryOptions::default(), workspace_cache)
+                .await
+                .map_err(|err| hint_uv_self_version(err, explicit_project))?;
+        match &project {
+            VirtualProject::Project(_) => project,
+            VirtualProject::NonProject(workspace) => bail!(
+                "No `project` table found in: {}",
+                workspace
+                    .install_path()
+                    .join("pyproject.toml")
+                    .simplified_display()
+            ),
+        }
     };
     Ok(project)
 }
@@ -428,6 +435,7 @@ fn update_project(
     new_version: &Version,
     toml: &mut PyProjectTomlMut,
     pyproject_path: &Path,
+    workspace_cache: &WorkspaceCache,
 ) -> Result<VirtualProject> {
     // Save to disk
     toml.set_version(new_version)?;
@@ -436,7 +444,10 @@ fn update_project(
 
     // Update the `pyproject.toml` in-memory.
     let project = project
-        .update_member(toml::from_str(&content).map_err(ProjectError::PyprojectTomlParse)?)?
+        .update_member(
+            toml::from_str(&content).map_err(ProjectError::PyprojectTomlParse)?,
+            workspace_cache,
+        )?
         .ok_or(ProjectError::PyprojectTomlUpdate)?;
 
     Ok(project)
