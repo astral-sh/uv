@@ -122,12 +122,7 @@ fn python_install() {
     ----- stdout -----
 
     ----- stderr -----
-    error: the following required arguments were not provided:
-      <TARGETS>...
-
-    Usage: uv python uninstall --cache-dir [CACHE_DIR] --install-dir <INSTALL_DIR> <TARGETS>...
-
-    For more information, try '--help'.
+    error: No targets specified for uninstall
     ");
 
     uv_snapshot!(context.filters(), context.python_uninstall().arg("3.14"), @"
@@ -759,12 +754,7 @@ fn python_install_preview() {
     ----- stdout -----
 
     ----- stderr -----
-    error: the following required arguments were not provided:
-      <TARGETS>...
-
-    Usage: uv python uninstall --cache-dir [CACHE_DIR] --install-dir <INSTALL_DIR> <TARGETS>...
-
-    For more information, try '--help'.
+    error: No targets specified for uninstall
     ");
 
     uv_snapshot!(context.filters(), context.python_uninstall().arg("3.14"), @"
@@ -2490,12 +2480,7 @@ fn python_install_default_from_env() {
     ----- stdout -----
 
     ----- stderr -----
-    error: the following required arguments were not provided:
-      <TARGETS>...
-
-    Usage: uv python uninstall --cache-dir [CACHE_DIR] --install-dir <INSTALL_DIR> <TARGETS>...
-
-    For more information, try '--help'.
+    error: No targets specified for uninstall
     ");
 
     // We should ignore `UV_PYTHON` here and respect `--all`
@@ -2518,12 +2503,7 @@ fn python_install_default_from_env() {
     ----- stdout -----
 
     ----- stderr -----
-    error: the following required arguments were not provided:
-      <TARGETS>...
-
-    Usage: uv python uninstall --cache-dir [CACHE_DIR] --install-dir <INSTALL_DIR> <TARGETS>...
-
-    For more information, try '--help'.
+    error: No targets specified for uninstall
     ");
 
     // Uninstall with conflicting options should error
@@ -2533,9 +2513,9 @@ fn python_install_default_from_env() {
     ----- stdout -----
 
     ----- stderr -----
-    error: the argument '--all' cannot be used with '<TARGETS>...'
+    error: the argument '--all' cannot be used with '[TARGETS]...'
 
-    Usage: uv python uninstall --cache-dir [CACHE_DIR] --all --install-dir <INSTALL_DIR> <TARGETS>...
+    Usage: uv python uninstall --cache-dir [CACHE_DIR] --all --install-dir <INSTALL_DIR> [TARGETS]...
 
     For more information, try '--help'.
     ");
@@ -2855,12 +2835,7 @@ fn python_install_no_cache() {
     ----- stdout -----
 
     ----- stderr -----
-    error: the following required arguments were not provided:
-      <TARGETS>...
-
-    Usage: uv python uninstall --cache-dir [CACHE_DIR] --install-dir <INSTALL_DIR> <TARGETS>...
-
-    For more information, try '--help'.
+    error: No targets specified for uninstall
     ");
 
     uv_snapshot!(context.filters(), context.python_uninstall().arg("3.14"), @"
@@ -4686,5 +4661,145 @@ fn python_install_compile_bytecode_pypy() {
     Installed Python 3.11.15 in [TIME]
      + pypy-3.11.15-[PLATFORM] (pypy3.11)
     Bytecode compiled [COUNT] files in [TIME]
+    ");
+}
+
+#[test]
+fn python_uninstall_outdated() {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_python_download_cache();
+
+    // Install multiple versions of the same minor release
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12.1"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.1 in [TIME]
+     + cpython-3.12.1-[PLATFORM] (python3.12)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12.5"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.5 in [TIME]
+     + cpython-3.12.5-[PLATFORM] (python3.12)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_install().arg("3.11.8"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.11.8 in [TIME]
+     + cpython-3.11.8-[PLATFORM] (python3.11)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_install().arg("3.11.10"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.11.10 in [TIME]
+     + cpython-3.11.10-[PLATFORM] (python3.11)
+    ");
+
+    // --outdated removes older versions while keeping latest in each family
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("--outdated"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Searching for Python installations
+    Uninstalled 2 outdated versions in [TIME]
+     - cpython-3.11.8-[PLATFORM]
+     - cpython-3.12.1-[PLATFORM]
+    ");
+}
+
+#[test]
+fn python_uninstall_outdated_with_target() {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_python_download_cache();
+
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12.1"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.1 in [TIME]
+     + cpython-3.12.1-[PLATFORM] (python3.12)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12.5"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.5 in [TIME]
+     + cpython-3.12.5-[PLATFORM] (python3.12)
+    ");
+
+    // --outdated with specific target
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("3.12").arg("--outdated"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Searching for Python versions matching: Python 3.12
+    Uninstalled outdated version Python 3.12.1 in [TIME]
+     - cpython-3.12.1-[PLATFORM]
+    ");
+}
+
+#[test]
+fn python_uninstall_outdated_without_installs() {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
+
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("--outdated"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Searching for Python installations
+    No outdated Python installations found
+    ");
+}
+
+#[test]
+fn python_uninstall_outdated_with_target_without_installs() {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
+
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("3.12").arg("--outdated"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Searching for Python versions matching: Python 3.12
+    No outdated Python installations found matching the requests
     ");
 }

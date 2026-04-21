@@ -6567,6 +6567,12 @@ pub struct PythonUpgradeArgs {
     #[arg(long, short)]
     pub reinstall: bool,
 
+    /// Uninstall old patch versions in the same minor version group after upgrade.
+    ///
+    /// Only applies to successfully upgraded versions. Failures to delete are warnings.
+    #[arg(long)]
+    pub uninstall: bool,
+
     /// URL pointing to JSON of custom Python installations.
     #[arg(long, value_hint = ValueHint::Other)]
     pub python_downloads_json_url: Option<String>,
@@ -6595,12 +6601,21 @@ pub struct PythonUninstallArgs {
     /// The Python version(s) to uninstall.
     ///
     /// See `uv help python` to view supported request formats.
-    #[arg(required = true)]
     pub targets: Vec<String>,
 
     /// Uninstall all managed Python versions.
     #[arg(long, conflicts_with("targets"))]
     pub all: bool,
+
+    /// Uninstall outdated Python versions, keeping the latest patch version for each minor version.
+    ///
+    /// For example, if you have Python 3.11.8, 3.11.10, 3.12.1, and 3.12.5 installed,
+    /// this will remove 3.11.8 and 3.12.1, keeping only 3.11.10 and 3.12.5.
+    ///
+    /// When a specific patch version is provided (e.g., `3.12.1`), the `--outdated` flag is
+    /// ignored and the exact version is removed regardless of whether it's the latest.
+    #[arg(long, conflicts_with_all(["all"]))]
+    pub outdated: bool,
 }
 
 #[derive(Args)]

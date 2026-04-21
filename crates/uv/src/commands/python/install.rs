@@ -198,6 +198,7 @@ pub(crate) async fn install(
     concurrency: &Concurrency,
     cache: &Cache,
     preview: Preview,
+    uninstall: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let (sender, mut receiver) = mpsc::unbounded_channel();
@@ -244,6 +245,7 @@ pub(crate) async fn install(
         compile_bytecode.then_some(sender),
         concurrency,
         preview,
+        uninstall,
         printer,
     );
 
@@ -303,6 +305,7 @@ async fn perform_install(
     bytecode_compilation_sender: Option<mpsc::UnboundedSender<ManagedPythonInstallation>>,
     concurrency: &Concurrency,
     preview: Preview,
+    uninstall: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
@@ -667,11 +670,11 @@ async fn perform_install(
         Some(python_executable_dir()?)
     };
 
-    let installations: Vec<_> = downloaded.iter().chain(satisfied.iter().copied()).collect();
+    let new_installations: Vec<_> = downloaded.iter().chain(satisfied.iter().copied()).collect();
 
     // Ensure that the installations are _complete_ for both downloaded installations and existing
     // installations that match the request
-    for installation in &installations {
+    for installation in &new_installations {
         installation.ensure_externally_managed()?;
         installation.ensure_sysconfig_patched()?;
         installation.ensure_canonical_executables()?;
@@ -697,7 +700,7 @@ async fn perform_install(
                 ),
                 is_default_install,
                 &existing_installations,
-                &installations,
+                &new_installations,
                 &mut changelog,
                 &mut errors,
                 preview,
@@ -723,7 +726,7 @@ async fn perform_install(
 
     let minor_versions =
         PythonInstallationMinorVersionKey::highest_installations_by_minor_version_key(
-            installations
+            new_installations
                 .iter()
                 .copied()
                 .chain(existing_installations.iter()),
@@ -835,6 +838,7 @@ async fn perform_install(
                 }
             }
         }
+
         if changelog.installed.len() == 1 {
             let installed = changelog.installed.iter().next().unwrap();
             // Ex) "Installed Python 3.9.7 in 1.68s"
@@ -888,6 +892,26 @@ async fn perform_install(
                         "~".yellow(),
                         event.key.bold(),
                     )?;
+                }
+            }
+        }
+
+        if uninstall && !changelog.installed.is_empty() {
+            let upgraded_groups: FxHashSet<_> = changelog
+                .installed
+                .iter()
+                .map(PythonInstallationMinorVersionKey::ref_cast)
+                .collect();
+
+            let all_installations: Vec<_> = installations.find_all()?.collect();
+            let all_refs: Vec<_> = all_installations.iter().collect();
+
+            for group_key in upgraded_groups {
+                if let Err(err) =
+                    delete_old_patches_in_group(&all_refs, group_key, &changelog.installed, printer)
+                        .await
+                {
+                    debug!("Failed to clean up old patches for {group_key}: {err}");
                 }
             }
         }
@@ -959,6 +983,125 @@ async fn perform_install(
     }
 
     Ok(ExitStatus::Success)
+}
+
+/// Remove old patch versions from a minor-version group after a successful upgrade.
+///
+/// Cleanup failures are logged as warnings and do not affect the exit code.
+async fn delete_old_patches_in_group(
+    all_installations: &[&ManagedPythonInstallation],
+    group_key: &PythonInstallationMinorVersionKey,
+    newly_installed: &FxHashSet<PythonInstallationKey>,
+    printer: Printer,
+) -> Result<()> {
+    let group: Vec<_> = all_installations
+        .iter()
+        .copied()
+        .filter(|inst| PythonInstallationMinorVersionKey::ref_cast(inst.key()) == group_key)
+        .collect();
+
+    if group.is_empty() {
+        return Ok(());
+    }
+
+    let by_minor = PythonInstallationMinorVersionKey::highest_installations_by_minor_version_key(
+        group.iter().copied(),
+    );
+
+    let Some(newest) = by_minor.get(group_key) else {
+        return Ok(());
+    };
+
+    let to_delete: Vec<_> = group
+        .iter()
+        .filter(|inst| {
+            !newly_installed.contains(inst.key())
+                && inst.key() != newest.key()
+                && newest.is_upgrade_of(inst)
+        })
+        .map(|inst| (*inst).clone())
+        .collect();
+
+    if to_delete.is_empty() {
+        return Ok(());
+    }
+
+    let bin_dir = python_executable_dir().ok();
+    let mut deleted = Vec::new();
+
+    for installation in &to_delete {
+        let path = installation.path().to_path_buf();
+
+        if let Err(err) = fs_err::tokio::remove_dir_all(&path).await {
+            warn!("Failed to remove {}: {err}", path.display());
+            continue;
+        }
+
+        deleted.push((installation.key().version().to_string(), path));
+
+        if let Some(ref bin) = bin_dir {
+            remove_bin_links(bin, installation);
+        }
+    }
+
+    // Update or remove the minor-version symlink
+    let remaining: Vec<_> = group
+        .into_iter()
+        .filter(|inst| !to_delete.iter().any(|d| d.key() == inst.key()))
+        .collect();
+
+    if let Some(first) = remaining.first() {
+        if let Err(err) = first.ensure_minor_version_link() {
+            warn!("Failed to update minor version symlink: {err}");
+        }
+    } else if let Some(installation) = to_delete.first() {
+        if let Some(link) = PythonMinorVersionLink::from_installation(installation) {
+            if link.exists() {
+                let result = if cfg!(windows) {
+                    fs_err::remove_dir(link.symlink_directory.as_path())
+                } else {
+                    fs_err::remove_file(link.symlink_directory.as_path())
+                };
+                if let Err(err) = result {
+                    warn!("Failed to remove symlink: {err}");
+                }
+            }
+        }
+    }
+
+    for (version, path) in &deleted {
+        writeln!(
+            printer.stderr(),
+            "  {} {:<12} {}",
+            "-".red(),
+            format!("Python {version}"),
+            format!("from {}", path.simplified_display()).dimmed()
+        )?;
+    }
+
+    Ok(())
+}
+
+/// Remove bin executables that belong to a given [`ManagedPythonInstallation`].
+fn remove_bin_links(bin: &Path, installation: &ManagedPythonInstallation) {
+    let Ok(entries) = bin.read_dir() else {
+        return;
+    };
+
+    for entry in entries.flatten() {
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if file_type.is_dir() {
+            continue;
+        }
+        let path = entry.path();
+        if installation.is_bin_link(&path) {
+            if let Err(err) = fs_err::remove_file(&path) {
+                warn!("Failed to remove {}: {err}", path.display());
+            }
+        }
+    }
 }
 
 /// Link the binaries of a managed Python installation to the bin directory.
