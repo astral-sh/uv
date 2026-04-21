@@ -10,6 +10,7 @@ use uv_distribution_types::{
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_platform_tags::Tags;
+use uv_static::EnvVars;
 use uv_types::{BuildContext, HashStrategy};
 
 use crate::ExcludeNewer;
@@ -117,6 +118,7 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext> {
     allowed_yanks: AllowedYanks,
     hasher: HashStrategy,
     exclude_newer: ExcludeNewer,
+    available_version_cutoff: Option<jiff::Timestamp>,
     index_locations: &'a IndexLocations,
     build_options: &'a BuildOptions,
     capabilities: &'a IndexCapabilities,
@@ -144,6 +146,9 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
             allowed_yanks,
             hasher: hasher.clone(),
             exclude_newer,
+            available_version_cutoff: std::env::var(EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF)
+                .ok()
+                .and_then(|value| value.parse().ok()),
             index_locations,
             build_options,
             capabilities,
@@ -189,27 +194,37 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
             Ok(results) => Ok(VersionsResponse::Found(
                 results
                     .into_iter()
-                    .map(|(index, metadata)| match metadata {
-                        MetadataFormat::Simple(metadata) => VersionMap::from_simple_metadata(
-                            metadata,
-                            package_name,
-                            index,
-                            self.tags.as_ref(),
-                            &self.requires_python,
-                            &self.allowed_yanks,
-                            &self.hasher,
-                            self.effective_exclude_newer(package_name, index),
-                            flat_index
-                                .and_then(|flat_index| flat_index.get(package_name))
-                                .cloned(),
-                            self.build_options,
-                        ),
-                        MetadataFormat::Flat(metadata) => VersionMap::from_flat_metadata(
-                            metadata,
-                            self.tags.as_ref(),
-                            &self.hasher,
-                            self.build_options,
-                        ),
+                    .map(|(index, metadata)| {
+                        let included_version_cutoff =
+                            self.effective_exclude_newer(package_name, index);
+                        let available_version_cutoff = included_version_cutoff
+                            .is_none()
+                            .then_some(self.available_version_cutoff)
+                            .flatten();
+
+                        match metadata {
+                            MetadataFormat::Simple(metadata) => VersionMap::from_simple_metadata(
+                                metadata,
+                                package_name,
+                                index,
+                                self.tags.as_ref(),
+                                &self.requires_python,
+                                &self.allowed_yanks,
+                                &self.hasher,
+                                included_version_cutoff,
+                                available_version_cutoff,
+                                flat_index
+                                    .and_then(|flat_index| flat_index.get(package_name))
+                                    .cloned(),
+                                self.build_options,
+                            ),
+                            MetadataFormat::Flat(metadata) => VersionMap::from_flat_metadata(
+                                metadata,
+                                self.tags.as_ref(),
+                                &self.hasher,
+                                self.build_options,
+                            ),
+                        }
                     })
                     .collect(),
             )),
