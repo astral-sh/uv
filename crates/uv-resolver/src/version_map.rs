@@ -400,10 +400,10 @@ struct VersionMapLazy {
     /// The set of compatibility tags that determines whether a wheel is usable
     /// in the current environment.
     tags: Option<Tags>,
-    /// Whether files newer than this timestamp should be excluded from included versions or not.
+    /// Files newer than this timestamp are considered excluded, i.e., that they cannot be selected by the
+    /// resolver.
     included_version_cutoff: Option<Timestamp>,
-    /// An available version cutoff used to keep selected versions deterministic without excluding
-    /// files that are missing upload timestamps.
+    /// Files newer than this timestamp are considered unavailable, i.e., that they do not exist.
     available_version_cutoff: Option<Timestamp>,
     /// Which yanked versions are allowed
     allowed_yanks: AllowedYanks,
