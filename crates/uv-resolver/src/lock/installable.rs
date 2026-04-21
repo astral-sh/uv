@@ -69,11 +69,10 @@ pub trait Installable<'lock> {
 
         // Determine the set of activated extras and groups, from the root.
         //
-        // TODO(charlie): This isn't quite right. Below, when we add the dependency groups to the
-        // graph, we rely on the activated extras and dependency groups, to evaluate the conflict
-        // marker. But at that point, we don't know the full set of activated extras; this is only
-        // computed below. We somehow need to add the dependency groups _after_ we've computed all
-        // enabled extras, but the groups themselves could depend on the set of enabled extras.
+        // Extras activated by dependency groups (via `pkg[extra]` entries in the group) are
+        // accumulated below, when we process the groups themselves. This ensures that when we
+        // later evaluate conflict markers on transitive dependencies, self-extras enabled by an
+        // active group are treated as enabled.
         if !self.lock().conflicts().is_empty() {
             for root_name in self.roots() {
                 let dist = self
@@ -212,6 +211,14 @@ pub trait Installable<'lock> {
                     // satisfied, so we can safely drop the conflict marker.
                     Edge::Dev(group.clone()),
                 );
+
+                // Persist any self-extras activated by this group dependency (e.g., a group
+                // that references `pkg[extra]`). Without this, conflict markers on transitive
+                // dependencies gated by the activated extra would not evaluate to `true`
+                // during the graph traversals below.
+                for key in additional_activated_extras {
+                    activated_extras.push(key);
+                }
 
                 // Push its dependencies on the queue.
                 if seen.insert((&dep.package_id, None)) {
