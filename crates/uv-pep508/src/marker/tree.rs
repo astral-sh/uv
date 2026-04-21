@@ -1456,8 +1456,8 @@ impl MarkerTree {
     /// This is useful for debugging when one wants to look at a
     /// representation of a `MarkerTree` that is more faithful to its
     /// internal representation.
-    pub fn debug_graph(&self) -> MarkerTreeDebugGraph<'_> {
-        MarkerTreeDebugGraph { marker: self }
+    pub fn debug_graph(&self) -> impl fmt::Debug + '_ {
+        fmt::from_fn(|f| self.fmt_graph(f, 0))
     }
 
     /// Formats a [`MarkerTree`] in its "raw" representation.
@@ -1465,8 +1465,11 @@ impl MarkerTree {
     /// This is useful for debugging when one wants to look at a
     /// representation of a `MarkerTree` that is precisely identical
     /// to its internal representation.
-    pub fn debug_raw(&self) -> MarkerTreeDebugRaw<'_> {
-        MarkerTreeDebugRaw { marker: self }
+    pub fn debug_raw(&self) -> impl fmt::Debug + '_ {
+        fmt::from_fn(|f| {
+            let node = INTERNER.shared.node(self.0);
+            f.debug_tuple("MarkerTreeDebugRaw").field(node).finish()
+        })
     }
 
     fn fmt_graph(self, f: &mut Formatter<'_>, level: usize) -> fmt::Result {
@@ -1570,38 +1573,6 @@ impl PartialOrd for MarkerTree {
 impl Ord for MarkerTree {
     fn cmp(&self, other: &Self) -> Ordering {
         self.kind().cmp(&other.kind())
-    }
-}
-
-/// Formats a [`MarkerTree`] as a graph.
-///
-/// This type is created by the [`MarkerTree::debug_graph`] routine.
-#[derive(Clone)]
-pub struct MarkerTreeDebugGraph<'a> {
-    marker: &'a MarkerTree,
-}
-
-impl fmt::Debug for MarkerTreeDebugGraph<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        self.marker.fmt_graph(f, 0)
-    }
-}
-
-/// Formats a [`MarkerTree`] using its raw internals.
-///
-/// This is very verbose and likely only useful if you're working
-/// on the internals of this crate.
-///
-/// This type is created by the [`MarkerTree::debug_raw`] routine.
-#[derive(Clone)]
-pub struct MarkerTreeDebugRaw<'a> {
-    marker: &'a MarkerTree,
-}
-
-impl fmt::Debug for MarkerTreeDebugRaw<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let node = INTERNER.shared.node(self.marker.0);
-        f.debug_tuple("MarkerTreeDebugRaw").field(node).finish()
     }
 }
 
