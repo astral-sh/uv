@@ -1184,8 +1184,8 @@ impl Lock {
                             ExcludeNewerOverride::Enabled(exclude_newer_value) => {
                                 if let Some(span) = exclude_newer_value.span() {
                                     // When a relative span is present, write a no-op timestamp
-                                    // for the same reason we do so for the global
-                                    // `exclude-newer`: keep the lockfile stable across runs.
+                                    // for backwards compatibility. This matches treatment for
+                                    // the global `exclude-newer`.
                                     let mut inline = toml_edit::InlineTable::new();
                                     inline.insert(
                                         "timestamp",
