@@ -48,7 +48,7 @@ use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, Summary
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     MissingLockfileSource, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
-    init_script_python_requirement, script_extra_build_requires,
+    WorkspacePython, init_script_python_requirement, script_extra_build_requires,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{ExitStatus, ScriptPath, diagnostics, pip};
@@ -143,25 +143,34 @@ pub(crate) async fn lock(
         LockMode::Frozen(frozen_source.into())
     } else {
         interpreter = match target {
-            LockTarget::Workspace(workspace) => ProjectInterpreter::discover(
-                workspace,
-                project_dir,
+            LockTarget::Workspace(workspace) => {
                 // Don't enable any groups' requires-python for interpreter discovery
-                &DependencyGroupsWithDefaults::none(),
-                python.as_deref().map(PythonRequest::parse),
-                &client_builder,
-                python_preference,
-                python_downloads,
-                &install_mirrors,
-                false,
-                no_config,
-                Some(false),
-                cache,
-                printer,
-                preview,
-            )
-            .await?
-            .into_interpreter(),
+                let groups = DependencyGroupsWithDefaults::none();
+                let workspace_python = WorkspacePython::from_request(
+                    python.as_deref().map(PythonRequest::parse),
+                    Some(workspace),
+                    &groups,
+                    project_dir,
+                    no_config,
+                )
+                .await?;
+                ProjectInterpreter::discover(
+                    workspace,
+                    &groups,
+                    workspace_python,
+                    &client_builder,
+                    python_preference,
+                    python_downloads,
+                    &install_mirrors,
+                    false,
+                    Some(false),
+                    cache,
+                    printer,
+                    preview,
+                )
+                .await?
+                .into_interpreter()
+            }
             LockTarget::Script(script) => ScriptInterpreter::discover(
                 script.into(),
                 python.as_deref().map(PythonRequest::parse),
