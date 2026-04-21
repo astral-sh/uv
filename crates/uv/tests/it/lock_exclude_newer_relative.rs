@@ -1534,9 +1534,7 @@ fn lock_exclude_newer_relative_values_pyproject() -> Result<()> {
 }
 
 /// When a relative span is configured for `exclude-newer-package`, the lockfile
-/// should use a fixed no-op sentinel for the stored timestamp so that
-/// consecutive `uv lock` runs at different wall-clock times don't produce
-/// churn in the lockfile. Regression test for #19089.
+/// should use a fixed no-op sentinel for the stored timestamp.
 #[test]
 fn lock_exclude_newer_package_relative_noop_timestamp() -> Result<()> {
     let context = uv_test::test_context!("3.12");

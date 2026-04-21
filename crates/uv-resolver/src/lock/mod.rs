@@ -1187,10 +1187,8 @@ impl Lock {
                                     // for backwards compatibility. This matches treatment for
                                     // the global `exclude-newer`.
                                     let mut inline = toml_edit::InlineTable::new();
-                                    inline.insert(
-                                        "timestamp",
-                                        ExcludeNewerValue::PLACEHOLDER.into(),
-                                    );
+                                    inline
+                                        .insert("timestamp", ExcludeNewerValue::PLACEHOLDER.into());
                                     inline.insert("span", span.to_string().into());
                                     package_table.insert(name.as_ref(), Item::Value(inline.into()));
                                 } else {
