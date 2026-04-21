@@ -4,6 +4,7 @@ use std::ops::Bound;
 
 use indexmap::IndexSet;
 use itertools::Itertools;
+use jiff::Timestamp;
 use owo_colors::OwoColorize;
 use pubgrub::{DerivationTree, Derived, External, Map, Range, ReportFormatter, Term};
 use rustc_hash::FxHashMap;
@@ -30,9 +31,7 @@ use crate::resolver::{
     MetadataUnavailable, UnavailableErrorChain, UnavailablePackage, UnavailableReason,
     UnavailableVersion,
 };
-use crate::{
-    ExcludeNewerValue, Flexibility, InMemoryIndex, Options, ResolverEnvironment, VersionsResponse,
-};
+use crate::{Flexibility, InMemoryIndex, Options, ResolverEnvironment, VersionsResponse};
 
 #[derive(Debug)]
 pub(crate) struct PubGrubReportFormatter<'a> {
@@ -1393,7 +1392,7 @@ pub(crate) enum PubGrubHint {
         package: PackageName,
         source: EffectiveExcludeNewerSource,
         // excluded from `PartialEq` and `Hash`
-        exclude_newer: ExcludeNewerValue,
+        exclude_newer: Timestamp,
         // excluded from `PartialEq` and `Hash`
         matching_version: Option<ExcludeNewerVersionDetail>,
     },

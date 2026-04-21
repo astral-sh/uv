@@ -3,6 +3,7 @@ use std::collections::btree_map::{BTreeMap, Entry};
 use std::ops::RangeBounds;
 use std::sync::OnceLock;
 
+use jiff::Timestamp;
 use pubgrub::Ranges;
 use rustc_hash::FxHashMap;
 use tracing::{instrument, trace};
@@ -23,7 +24,7 @@ use uv_types::HashStrategy;
 use uv_warnings::warn_user_once;
 
 use crate::flat_index::FlatDistributions;
-use crate::{ExcludeNewerValue, yanks::AllowedYanks};
+use crate::yanks::AllowedYanks;
 
 /// A map from versions to distributions.
 #[derive(Debug)]
@@ -51,7 +52,7 @@ impl VersionMap {
         requires_python: &RequiresPython,
         allowed_yanks: &AllowedYanks,
         hasher: &HashStrategy,
-        exclude_newer: Option<ExcludeNewerValue>,
+        exclude_newer: Option<Timestamp>,
         flat_index: Option<FlatDistributions>,
         build_options: &BuildOptions,
     ) -> Self {
@@ -189,7 +190,7 @@ impl VersionMap {
     }
 
     /// Return the effective `exclude-newer` cutoff for this version map, if any.
-    pub(crate) fn exclude_newer(&self) -> Option<&ExcludeNewerValue> {
+    pub(crate) fn exclude_newer(&self) -> Option<&Timestamp> {
         match &self.inner {
             VersionMapInner::Eager(_) => None,
             VersionMapInner::Lazy(lazy) => lazy.exclude_newer.as_ref(),
@@ -398,7 +399,7 @@ struct VersionMapLazy {
     /// in the current environment.
     tags: Option<Tags>,
     /// Whether files newer than this timestamp should be excluded or not.
-    exclude_newer: Option<ExcludeNewerValue>,
+    exclude_newer: Option<Timestamp>,
     /// Which yanked versions are allowed
     allowed_yanks: AllowedYanks,
     /// The hashes of allowed distributions.
@@ -455,7 +456,7 @@ impl VersionMapLazy {
                 // upload time information.
                 let (excluded, upload_time) = if let Some(exclude_newer) = &self.exclude_newer {
                     match file.upload_time_utc_ms.as_ref() {
-                        Some(&upload_time) if upload_time >= exclude_newer.timestamp_millis() => {
+                        Some(&upload_time) if upload_time >= exclude_newer.as_millisecond() => {
                             trace!(
                                 "Excluding `{}` (uploaded {upload_time}) due to exclude-newer ({exclude_newer})",
                                 file.filename

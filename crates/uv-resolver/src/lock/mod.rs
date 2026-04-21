@@ -1165,7 +1165,7 @@ impl Lock {
                         // When a relative span is present, write a no-op timestamp to avoid
                         // merge conflicts in the lockfile. In a future version of uv, we'll drop
                         // this field entirely but it's retained for backwards compatibility for now.
-                        let mut noop = value("0001-01-01T00:00:00Z");
+                        let mut noop = value(ExcludeNewerValue::PLACEHOLDER);
                         if let Item::Value(ref mut v) = noop {
                             v.decor_mut().set_suffix(" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.");
                         }
@@ -2358,8 +2358,11 @@ struct ExcludeNewerWire {
 impl From<ExcludeNewerWire> for ExcludeNewer {
     fn from(wire: ExcludeNewerWire) -> Self {
         let global = match (wire.exclude_newer, wire.exclude_newer_span) {
-            (Some(timestamp), span) => Some(ExcludeNewerValue::new(timestamp, span)),
-            (None, Some(span)) => Some(ExcludeNewerValue::new(Timestamp::UNIX_EPOCH, Some(span))),
+            (Some(_), Some(span)) => Some(ExcludeNewerValue::relative(span)),
+            (Some(timestamp), None) => Some(ExcludeNewerValue::absolute(timestamp)),
+            // Preserve span-only lockfile entries. Relative values compute their timestamp on
+            // demand, so a missing serialized timestamp should not invalidate the lockfile.
+            (None, Some(span)) => Some(ExcludeNewerValue::relative(span)),
             (None, None) => None,
         };
         Self {
@@ -2371,10 +2374,11 @@ impl From<ExcludeNewerWire> for ExcludeNewer {
 
 impl From<ExcludeNewer> for ExcludeNewerWire {
     fn from(exclude_newer: ExcludeNewer) -> Self {
-        let (timestamp, span) = exclude_newer
-            .global
-            .map(ExcludeNewerValue::into_parts)
-            .map_or((None, None), |(t, s)| (Some(t), s));
+        let (timestamp, span) = match exclude_newer.global {
+            Some(ExcludeNewerValue::Absolute(timestamp)) => (Some(timestamp), None),
+            Some(ExcludeNewerValue::Relative(span)) => (None, Some(span)),
+            None => (None, None),
+        };
         Self {
             exclude_newer: timestamp,
             exclude_newer_span: span,
@@ -2557,12 +2561,16 @@ impl TryFrom<LockWire> for Lock {
             .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
             .map(UniversalMarker::from_combined)
             .collect();
+        let mut options = wire.options;
+        if options.exclude_newer.exclude_newer_span.is_some() {
+            options.exclude_newer.exclude_newer = None;
+        }
         let lock = Self::new(
             wire.version,
             wire.revision.unwrap_or(0),
             packages,
             wire.requires_python,
-            wire.options,
+            options,
             wire.manifest,
             wire.conflicts.unwrap_or_else(Conflicts::empty),
             supported_environments,
