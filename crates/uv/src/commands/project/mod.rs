@@ -1412,9 +1412,6 @@ impl ProjectEnvironment {
             })
             .ok();
 
-        // Resolve the effective Python request, taking into account `--python`,
-        // `.python-version`, and `requires-python`, so that a patch version pinned via
-        // `.python-version` prevents the environment from being marked upgradeable.
         let workspace_python = WorkspacePython::from_request(
             python,
             Some(workspace),
