@@ -18630,6 +18630,101 @@ fn lock_non_project_group() -> Result<()> {
     Ok(())
 }
 
+/// Lock a non-project workspace root with `dependency-groups`.
+///
+/// Here instead of leaning on `tool.uv.workspace` we use the
+/// officially blessed "pyproject.toml with no `[project]` that
+/// declares `[dependency-groups]`".
+#[test]
+fn lock_non_project_group_standard() -> Result<()> {
+    let context = uv_test::test_context!("3.10");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [dependency-groups]
+        lint = ["iniconfig"]
+        dev = ["typing-extensions"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.10`.
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.10"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+
+        [manifest.dependency-groups]
+        dev = [{ name = "typing-extensions" }]
+        lint = [{ name = "iniconfig" }]
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        ]
+
+        [[package]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558, upload-time = "2024-02-25T22:12:49.693Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926, upload-time = "2024-02-25T22:12:47.72Z" },
+        ]
+        "#
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.10`.
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Re-run with `--offline`. We shouldn't need a network connection to validate an
+    // already-correct lockfile with immutable metadata.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.10`.
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Lock a non-project workspace root with `tool.uv.sources`.
 #[test]
 fn lock_non_project_sources() -> Result<()> {
@@ -19875,7 +19970,8 @@ fn lock_explicit_default_index() -> Result<()> {
 
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Found workspace root: `[TEMP_DIR]/`
+    DEBUG Found project root: `[TEMP_DIR]/`
+    DEBUG No workspace root found, using project root
     DEBUG No Python version file found in workspace: [TEMP_DIR]/
     DEBUG Using Python request `>=3.12` from `requires-python` metadata
     DEBUG Checking for Python environment at: `.venv`
