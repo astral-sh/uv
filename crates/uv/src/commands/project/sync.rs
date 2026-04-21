@@ -46,8 +46,8 @@ use crate::commands::project::lock::{LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     EnvironmentUpdate, PlatformState, ProjectEnvironment, ProjectError, ScriptEnvironment,
-    UniversalState, default_dependency_groups, detect_conflicts, script_extra_build_requires,
-    script_specification, update_environment,
+    UniversalState, default_dependency_groups, detect_conflicts, discovery_options,
+    script_extra_build_requires, script_specification, update_environment,
 };
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
@@ -104,7 +104,7 @@ pub(crate) async fn sync(
                 project_dir,
                 &DiscoveryOptions {
                     members: MemberDiscovery::None,
-                    ..DiscoveryOptions::default()
+                    ..discovery_options(&settings.resolver.sources)
                 },
                 workspace_cache,
             )
@@ -112,7 +112,7 @@ pub(crate) async fn sync(
         } else if let [name] = package.as_slice() {
             VirtualProject::discover_with_package(
                 project_dir,
-                &DiscoveryOptions::default(),
+                &discovery_options(&settings.resolver.sources),
                 workspace_cache,
                 name.clone(),
             )
@@ -120,7 +120,7 @@ pub(crate) async fn sync(
         } else {
             let project = VirtualProject::discover(
                 project_dir,
-                &DiscoveryOptions::default(),
+                &discovery_options(&settings.resolver.sources),
                 workspace_cache,
             )
             .await?;

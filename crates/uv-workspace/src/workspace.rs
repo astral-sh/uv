@@ -88,14 +88,50 @@ pub enum WorkspaceError {
 }
 
 #[derive(Debug, Default, Clone, Hash, PartialEq, Eq)]
+pub struct MemberExclusions {
+    paths: BTreeSet<PathBuf>,
+    packages: BTreeSet<PackageName>,
+}
+
+impl MemberExclusions {
+    /// Exclude the given member paths.
+    pub fn from_paths(paths: impl IntoIterator<Item = PathBuf>) -> Self {
+        Self {
+            paths: paths.into_iter().collect(),
+            packages: BTreeSet::new(),
+        }
+    }
+
+    /// Exclude the given member packages.
+    pub fn from_packages(packages: impl IntoIterator<Item = PackageName>) -> Self {
+        Self {
+            paths: BTreeSet::new(),
+            packages: packages.into_iter().collect(),
+        }
+    }
+
+    /// Returns `true` if the given path should be excluded from discovery.
+    pub fn excludes_path(&self, path: &Path) -> bool {
+        self.paths.contains(path)
+    }
+
+    /// Returns `true` if the given package should be excluded from discovery.
+    pub fn excludes_package(&self, package: &PackageName) -> bool {
+        self.packages.contains(package)
+    }
+}
+
+#[derive(Debug, Default, Clone, Hash, PartialEq, Eq)]
 pub enum MemberDiscovery {
     /// Discover all workspace members.
     #[default]
     All,
     /// Don't discover any workspace members.
     None,
-    /// Discover workspace members, but ignore the given paths.
-    Ignore(BTreeSet<PathBuf>),
+    /// Discover only the current project, if any.
+    CurrentProjectOnly,
+    /// Discover workspace members, but exclude a subset by path or package name.
+    Exclude(MemberExclusions),
 }
 
 /// Whether a "project" must be defined via a `[project]` table.
@@ -884,7 +920,7 @@ impl Workspace {
             Arc::new(workspace_members)
         };
 
-        // For the cases such as `MemberDiscovery::None`, add the current project if missing.
+        // For discovery modes that skip the active member during collection, add it back here.
         if let Some(root_member) = current_project {
             if !workspace_members.contains_key(&root_member.project.name) {
                 debug!(
@@ -960,25 +996,33 @@ impl Workspace {
         // Add the project at the workspace root, if it exists and if it's distinct from the current
         // project. If it is the current project, it is added as such in the next step.
         if let Some(project) = &workspace_pyproject_toml.project {
-            let pyproject_path = workspace_root.join("pyproject.toml");
-            let contents = fs_err::read_to_string(&pyproject_path)?;
-            let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
-                .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
+            let skip = match &options.members {
+                MemberDiscovery::CurrentProjectOnly => true,
+                MemberDiscovery::Exclude(exclusions) => exclusions.excludes_package(&project.name),
+                MemberDiscovery::All | MemberDiscovery::None => false,
+            };
 
-            debug!(
-                "Adding root workspace member: `{}`",
-                workspace_root.simplified_display()
-            );
+            if !skip {
+                let pyproject_path = workspace_root.join("pyproject.toml");
+                let contents = fs_err::read_to_string(&pyproject_path)?;
+                let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
+                    .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
-            seen.insert(workspace_root.clone());
-            workspace_members.insert(
-                project.name.clone(),
-                WorkspaceMember {
-                    root: workspace_root.clone(),
-                    project: project.clone(),
-                    pyproject_toml,
-                },
-            );
+                debug!(
+                    "Adding root workspace member: `{}`",
+                    workspace_root.simplified_display()
+                );
+
+                seen.insert(workspace_root.clone());
+                workspace_members.insert(
+                    project.name.clone(),
+                    WorkspaceMember {
+                        root: workspace_root.clone(),
+                        project: project.clone(),
+                        pyproject_toml,
+                    },
+                );
+            }
         }
 
         // Add all other workspace members.
@@ -1003,11 +1047,14 @@ impl Workspace {
                     .map_err(WorkspaceError::Normalize)?
                     .clone();
 
-                // If the directory is explicitly ignored, skip it.
+                // If the directory is explicitly excluded, skip it.
                 let skip = match &options.members {
                     MemberDiscovery::All => false,
                     MemberDiscovery::None => true,
-                    MemberDiscovery::Ignore(ignore) => ignore.contains(member_root.as_path()),
+                    MemberDiscovery::CurrentProjectOnly => true,
+                    MemberDiscovery::Exclude(exclusions) => {
+                        exclusions.excludes_path(member_root.as_path())
+                    }
                 };
                 if skip {
                     debug!(
@@ -1107,6 +1154,16 @@ impl Workspace {
                 let Some(project) = pyproject_toml.project.clone() else {
                     return Err(WorkspaceError::MissingProject(pyproject_path));
                 };
+
+                if let MemberDiscovery::Exclude(exclusions) = &options.members {
+                    if exclusions.excludes_package(&project.name) {
+                        debug!(
+                            "Excluding workspace member `{}` by discovery filter",
+                            project.name
+                        );
+                        continue;
+                    }
+                }
 
                 debug!(
                     "Adding discovered workspace member: `{}`",

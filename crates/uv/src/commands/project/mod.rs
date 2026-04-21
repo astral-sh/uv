@@ -13,7 +13,7 @@ use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
-    GitLfsSetting, Reinstall, TargetTriple, Upgrade,
+    GitLfsSetting, NoSources, Reinstall, TargetTriple, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
@@ -49,7 +49,10 @@ use uv_virtualenv::remove_virtualenv;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::pyproject::{ExtraBuildDependency, PyProjectToml};
-use uv_workspace::{RequiresPythonSources, Workspace, WorkspaceCache};
+use uv_workspace::{
+    DiscoveryOptions, MemberDiscovery, MemberExclusions, RequiresPythonSources, Workspace,
+    WorkspaceCache,
+};
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::{Changelog, Modifications};
@@ -76,6 +79,26 @@ pub(crate) mod run;
 pub(crate) mod sync;
 pub(crate) mod tree;
 pub(crate) mod version;
+
+/// Return the workspace discovery mode for project commands.
+///
+/// `--no-sources` needs to suppress sibling workspace members so project resolution
+/// doesn't implicitly treat them as local packages. Selective
+/// `--no-sources-package` keeps the workspace intact except for the named members.
+pub(super) fn discovery_options(sources: &NoSources) -> DiscoveryOptions {
+    let members = match sources {
+        NoSources::None => MemberDiscovery::default(),
+        NoSources::All => MemberDiscovery::CurrentProjectOnly,
+        NoSources::Packages(packages) => {
+            MemberDiscovery::Exclude(MemberExclusions::from_packages(packages.iter().cloned()))
+        }
+    };
+
+    DiscoveryOptions {
+        members,
+        ..DiscoveryOptions::default()
+    }
+}
 
 /// The source of a missing lockfile error.
 #[derive(Debug, Clone, Copy)]

@@ -11,7 +11,9 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
 use uv_workspace::dependency_groups::FlatDependencyGroups;
 use uv_workspace::pyproject::{Sources, ToolUvSources};
-use uv_workspace::{DiscoveryOptions, MemberDiscovery, ProjectWorkspace, WorkspaceCache};
+use uv_workspace::{
+    DiscoveryOptions, MemberDiscovery, MemberExclusions, ProjectWorkspace, WorkspaceCache,
+};
 
 use crate::Metadata;
 use crate::metadata::{GitWorkspaceMember, LoweredRequirement, MetadataError};
@@ -60,10 +62,12 @@ impl RequiresDist {
                     .expect("git checkout has a parent")
                     .to_path_buf()
             }),
-            members: if sources.is_none() {
-                MemberDiscovery::default()
-            } else {
-                MemberDiscovery::None
+            members: match &sources {
+                NoSources::None => MemberDiscovery::default(),
+                NoSources::All => MemberDiscovery::CurrentProjectOnly,
+                NoSources::Packages(packages) => MemberDiscovery::Exclude(
+                    MemberExclusions::from_packages(packages.iter().cloned()),
+                ),
             },
             ..DiscoveryOptions::default()
         };

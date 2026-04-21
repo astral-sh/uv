@@ -15,7 +15,7 @@ use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion}
 use uv_resolver::{PackageMap, TreeDisplay};
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
-use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
+use uv_workspace::{Workspace, WorkspaceCache};
 
 use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::loggers::DefaultResolveLogger;
@@ -24,6 +24,7 @@ use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, default_dependency_groups,
+    discovery_options,
 };
 use crate::commands::reporters::LatestVersionReporter;
 use crate::commands::{ExitStatus, diagnostics};
@@ -68,9 +69,12 @@ pub(crate) async fn tree(
     let target = if let Some(script) = script.as_ref() {
         LockTarget::Script(script)
     } else {
-        workspace =
-            Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
-                .await?;
+        workspace = Workspace::discover(
+            project_dir,
+            &discovery_options(&settings.sources),
+            &workspace_cache,
+        )
+        .await?;
         LockTarget::Workspace(&workspace)
     };
 

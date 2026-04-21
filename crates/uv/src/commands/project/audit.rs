@@ -11,7 +11,7 @@ use crate::commands::project::default_dependency_groups;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
+    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, discovery_options,
 };
 use crate::commands::reporters::AuditReporter;
 use crate::printer::Printer;
@@ -31,7 +31,7 @@ use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
+use uv_workspace::{Workspace, WorkspaceCache};
 
 pub(crate) async fn audit(
     project_dir: &Path,
@@ -70,9 +70,12 @@ pub(crate) async fn audit(
     let target = if let Some(script) = script.as_ref() {
         LockTarget::Script(script)
     } else {
-        workspace =
-            Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
-                .await?;
+        workspace = Workspace::discover(
+            project_dir,
+            &discovery_options(&settings.sources),
+            &workspace_cache,
+        )
+        .await?;
         LockTarget::Workspace(&workspace)
     };
 

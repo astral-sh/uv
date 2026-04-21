@@ -9,7 +9,8 @@ use uv_distribution_types::{
 use uv_normalize::PackageName;
 use uv_workspace::pyproject::{ExtraBuildDependencies, ExtraBuildDependency, ToolUvSources};
 use uv_workspace::{
-    DiscoveryOptions, MemberDiscovery, ProjectWorkspace, Workspace, WorkspaceCache,
+    DiscoveryOptions, MemberDiscovery, MemberExclusions, ProjectWorkspace, Workspace,
+    WorkspaceCache,
 };
 
 use crate::metadata::{LoweredRequirement, MetadataError};
@@ -46,13 +47,15 @@ impl BuildRequires {
         cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
-        let discovery = if sources.all() {
-            DiscoveryOptions {
-                members: MemberDiscovery::None,
-                ..Default::default()
-            }
-        } else {
-            DiscoveryOptions::default()
+        let discovery = DiscoveryOptions {
+            members: match sources {
+                NoSources::None => MemberDiscovery::default(),
+                NoSources::All => MemberDiscovery::CurrentProjectOnly,
+                NoSources::Packages(packages) => MemberDiscovery::Exclude(
+                    MemberExclusions::from_packages(packages.iter().cloned()),
+                ),
+            },
+            ..Default::default()
         };
         let Some(project_workspace) =
             ProjectWorkspace::from_maybe_project_root(install_path, &discovery, cache).await?
