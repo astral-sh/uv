@@ -139,7 +139,7 @@ impl<'de> serde::Deserialize<'de> for ExcludeNewerValue {
     {
         #[derive(serde::Deserialize)]
         struct TableForm {
-            timestamp: Option<Timestamp>,
+            timestamp: Timestamp,
             span: Option<ExcludeNewerSpan>,
         }
 
@@ -152,13 +152,7 @@ impl<'de> serde::Deserialize<'de> for ExcludeNewerValue {
 
         match Helper::deserialize(deserializer)? {
             Helper::String(s) => Self::from_str(&s).map_err(serde::de::Error::custom),
-            Helper::Table(table) => match (table.timestamp, table.span) {
-                (Some(timestamp), span) => Ok(Self::new(timestamp, span)),
-                (None, Some(span)) => Ok(Self::new(Timestamp::UNIX_EPOCH, Some(span))),
-                (None, None) => Err(serde::de::Error::custom(
-                    "expected a `timestamp` or `span` field",
-                )),
-            },
+            Helper::Table(table) => Ok(Self::new(table.timestamp, table.span)),
         }
     }
 }

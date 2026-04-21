@@ -1382,52 +1382,24 @@ fn lock_exclude_newer_package_relative_no_timestamp_in_lockfile() -> Result<()> 
     );
     context.temp_dir.child("uv.lock").write_str(&lock)?;
 
-    // The lockfile now has no timestamp for the per-package entry, but `pyproject.toml` still
-    // configures one, so the resolver detects "addition of per-package exclude newer" and re-resolves.
+    // Unlike the global case, a per-package entry with only a span (no timestamp) fails to
+    // deserialize.
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp), @"
-    success: true
-    exit_code: 0
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp), @r"
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 2 packages in [TIME]
+    error: Failed to parse `uv.lock`
+      Caused by: TOML parse error at line 5, column 1
+      |
+    5 | [options]
+      | ^^^^^^^^^
+    data did not match any variant of untagged enum Helper
     ");
-
-    // The lockfile retains the span but the timestamp is not restored or updated.
-    let lock = context.read("uv.lock");
-    assert_snapshot!(lock, @r#"
-    version = 1
-    revision = 3
-    requires-python = ">=3.12"
-
-    [options]
-
-    [options.exclude-newer-package]
-    idna = { span = "P3W" }
-
-    [[package]]
-    name = "idna"
-    version = "3.6"
-    source = { registry = "https://pypi.org/simple" }
-    sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
-    wheels = [
-        { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
-    ]
-
-    [[package]]
-    name = "project"
-    version = "0.1.0"
-    source = { virtual = "." }
-    dependencies = [
-        { name = "idna" },
-    ]
-
-    [package.metadata]
-    requires-dist = [{ name = "idna" }]
-    "#);
 
     Ok(())
 }
