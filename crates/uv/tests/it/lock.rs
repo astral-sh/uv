@@ -23385,6 +23385,7 @@ async fn lock_keyring_explicit_always() -> Result<()> {
                 .join("keyring_test_plugin"),
         )
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env_remove(EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF)
         // (from `echo "keyring==v25.6.0" | uv pip compile - --no-annotate --no-header -q`)
         .arg("jaraco-classes==3.4.0")
         .arg("jaraco-context==6.0.1")
@@ -23471,9 +23472,10 @@ async fn lock_keyring_credentials_always_authenticate_fetches_username() -> Resu
                 .join("packages")
                 .join("keyring_test_plugin"),
         )
-        // We need a newer version of keyring that supports `--mode`, so unset `EXCLUDE_NEWER` and
-        // pin the dependencies
+        // We need a newer version of keyring that supports `--mode`, so unset the timestamp
+        // cutoffs and pin the dependencies.
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env_remove(EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF)
         // (from `echo "keyring==v25.6.0" | uv pip compile - --no-annotate --no-header -q`)
         .arg("jaraco-classes==3.4.0")
         .arg("jaraco-context==6.0.1")
@@ -33574,11 +33576,11 @@ fn lock_exclude_newer_package_disable() -> Result<()> {
 
         [[package]]
         name = "idna"
-        version = "3.12"
+        version = "3.6"
         source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/22/12/2948fbe5513d062169bd91f7d7b1cd97bc8894f32946b71fa39f6e63ca0c/idna-3.12.tar.gz", hash = "sha256:724e9952cc9e2bd7550ea784adb098d837ab5267ef67a1ab9cf7846bdbdd8254", size = 194350, upload-time = "2026-04-21T13:32:48.916Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/53/b2/acc33950394b3becb2b664741a0c0889c7ef9f9ffbfa8d47eddb53a50abd/idna-3.12-py3-none-any.whl", hash = "sha256:60ffaa1858fac94c9c124728c24fcde8160f3fb4a7f79aa8cdd33a9d1af60a67", size = 68634, upload-time = "2026-04-21T13:32:47.403Z" },
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
         ]
 
         [[package]]

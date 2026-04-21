@@ -2763,7 +2763,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             // missing upload times are treated as excluded (matching
                             // the resolution behavior in `version_map.rs`).
                             let excluded_from_included = || {
-                                let Some(exclude_newer) = version_map.exclude_newer() else {
+                                let Some(included_version_cutoff) =
+                                    version_map.included_version_cutoff()
+                                else {
                                     return false;
                                 };
                                 let Some(prioritized_dist) = dists.prioritized_dist() else {
@@ -2771,7 +2773,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 };
                                 prioritized_dist.files().all(|file| {
                                     file.upload_time_utc_ms.is_none_or(|upload_time| {
-                                        upload_time >= exclude_newer.as_millisecond()
+                                        upload_time >= included_version_cutoff.as_millisecond()
                                     })
                                 })
                             };
