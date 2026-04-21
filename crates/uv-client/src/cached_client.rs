@@ -981,9 +981,10 @@ impl DataWithCachePolicy {
             );
             return Err(ErrorKind::ArchiveRead(msg).into());
         };
-        let cache_policy_len_bytes = <[u8; 8]>::try_from(&bytes[cache_policy_len_start..])
+        let cache_policy_len_bytes = bytes[cache_policy_len_start..]
+            .as_array::<8>()
             .expect("cache policy length is 8 bytes");
-        let len_u64 = u64::from_le_bytes(cache_policy_len_bytes);
+        let len_u64 = u64::from_le_bytes(*cache_policy_len_bytes);
         let Ok(len_usize) = usize::try_from(len_u64) else {
             let msg = format!(
                 "data-with-cache-policy has cache policy length of {len_u64}, \
