@@ -1,6 +1,6 @@
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
-use assert_fs::fixture::FileTouch;
+use assert_fs::fixture::{FileTouch, FileWriteStr};
 use assert_fs::prelude::PathChild;
 use uv_python::managed::platform_key_from_env;
 use uv_static::EnvVars;
@@ -837,4 +837,90 @@ fn python_upgrade_build_version() {
     ----- stderr -----
     Python 3.12 is already on the latest supported patch release
     ");
+}
+
+// Regression test for <https://github.com/astral-sh/uv/issues/19100>.
+//
+// A virtual environment created by `uv sync` should pin to a patch version
+// recorded in `.python-version` rather than symlinking to the mutable
+// minor-version directory, which would be silently upgraded by a later
+// `uv python install` of a newer patch release.
+#[test]
+fn python_sync_honors_pinned_patch_version() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_python_download_cache()
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_filtered_latest_python_versions();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.10"
+        "#,
+    )?;
+
+    // Install an earlier patch version
+    uv_snapshot!(context.filters(), context.python_install().arg("3.10.17"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.10.17 in [TIME]
+     + cpython-3.10.17-[PLATFORM] (python3.10)
+    ");
+
+    // Pin the project to the older patch version before the environment exists
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.10.17"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Pinned `.python-version` to `3.10.17`
+
+    ----- stderr -----
+    ");
+
+    // Create the environment via `uv sync`
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.10.17
+    Creating virtual environment at: .venv
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+
+    // Install a newer patch version, which moves the mutable `cpython-3.10`
+    // minor-version link to the newer release.
+    uv_snapshot!(context.filters(), context.python_upgrade().arg("3.10"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.10.[LATEST] in [TIME]
+     + cpython-3.10.[LATEST]-[PLATFORM] (python3.10)
+    ");
+
+    // The environment should continue to report the pinned patch version.
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.10.17
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+
+    Ok(())
 }
