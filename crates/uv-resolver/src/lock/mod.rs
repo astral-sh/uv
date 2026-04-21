@@ -2358,10 +2358,12 @@ struct ExcludeNewerWire {
 impl From<ExcludeNewerWire> for ExcludeNewer {
     fn from(wire: ExcludeNewerWire) -> Self {
         let global = match (wire.exclude_newer, wire.exclude_newer_span) {
-            (Some(_), Some(span)) => Some(ExcludeNewerValue::relative(span)),
             (Some(timestamp), None) => Some(ExcludeNewerValue::absolute(timestamp)),
-            // Preserve span-only lockfile entries. Relative values compute their timestamp on
-            // demand, so a missing serialized timestamp should not invalidate the lockfile.
+            // We're phasing out writing a timestamp when spans are used. uv writes a dummy
+            // timestamp for backwards compatibility that we can ignore on deserialization.
+            (Some(_), Some(span)) => Some(ExcludeNewerValue::relative(span)),
+            // A future version of uv will remove the timestamp entirely, so for forwards
+            // compatibility we ignore a missing value.
             (None, Some(span)) => Some(ExcludeNewerValue::relative(span)),
             (None, None) => None,
         };
