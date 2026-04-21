@@ -44,6 +44,57 @@ fn sync() -> Result<()> {
     Ok(())
 }
 
+/// `-q` should suppress timing output but retain the per-package change lines, so users can still
+/// see what was modified. `-qq` should suppress all output. See
+/// <https://github.com/astral-sh/uv/issues/19050>.
+#[test]
+fn sync_quiet() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // `-q` should show the change lines but hide timing output.
+    uv_snapshot!(context.filters(), context.sync().arg("-q"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+     + iniconfig==2.0.0
+    ");
+
+    // A subsequent `-q` sync with no changes should produce no output.
+    uv_snapshot!(context.filters(), context.sync().arg("-q"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    // Reset, then verify `-qq` suppresses all output even when there are changes.
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("-qq"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn locked() -> Result<()> {
     let context = uv_test::test_context!("3.12");

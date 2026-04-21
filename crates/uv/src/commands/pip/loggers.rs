@@ -211,7 +211,7 @@ impl InstallLogger for DefaultInstallLogger {
             match event.kind {
                 ChangeEventKind::Added => {
                     writeln!(
-                        printer.stderr(),
+                        printer.stderr_important(),
                         " {} {}{}",
                         "+".green(),
                         event.dist.name().bold(),
@@ -220,7 +220,7 @@ impl InstallLogger for DefaultInstallLogger {
                 }
                 ChangeEventKind::Removed => {
                     writeln!(
-                        printer.stderr(),
+                        printer.stderr_important(),
                         " {} {}{}",
                         "-".red(),
                         event.dist.name().bold(),
@@ -229,7 +229,7 @@ impl InstallLogger for DefaultInstallLogger {
                 }
                 ChangeEventKind::Reinstalled => {
                     writeln!(
-                        printer.stderr(),
+                        printer.stderr_important(),
                         " {} {}{}",
                         "~".yellow(),
                         event.dist.name().bold(),
@@ -395,7 +395,7 @@ impl InstallLogger for UpgradeInstallLogger {
                         .collect::<Vec<_>>()
                         .join(", ");
                     writeln!(
-                        printer.stderr(),
+                        printer.stderr_important(),
                         "{} {} {}",
                         "Reinstalled".yellow().bold(),
                         &self.target,
@@ -413,7 +413,7 @@ impl InstallLogger for UpgradeInstallLogger {
                         .collect::<Vec<_>>()
                         .join(", ");
                     writeln!(
-                        printer.stderr(),
+                        printer.stderr_important(),
                         "{} {} {} -> {}",
                         "Updated".green().bold(),
                         &self.target,
@@ -429,7 +429,7 @@ impl InstallLogger for UpgradeInstallLogger {
                     .collect::<Vec<_>>()
                     .join(", ");
                 writeln!(
-                    printer.stderr(),
+                    printer.stderr_important(),
                     "{} {} {}",
                     "Removed".red().bold(),
                     &self.target,
@@ -443,7 +443,7 @@ impl InstallLogger for UpgradeInstallLogger {
                     .collect::<Vec<_>>()
                     .join(", ");
                 writeln!(
-                    printer.stderr(),
+                    printer.stderr_important(),
                     "{} {} {}",
                     "Added".green().bold(),
                     &self.target,
@@ -452,7 +452,7 @@ impl InstallLogger for UpgradeInstallLogger {
             }
             (None, None) => {
                 writeln!(
-                    printer.stderr(),
+                    printer.stderr_important(),
                     "{} {} {}",
                     "Modified".dimmed(),
                     &self.target.dimmed().bold(),
