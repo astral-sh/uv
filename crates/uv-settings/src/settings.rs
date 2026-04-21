@@ -668,7 +668,7 @@ pub struct ResolverInstallerSchema {
     /// ```toml
     /// [[tool.uv.index]]
     /// name = "pytorch"
-    /// url = "https://download.pytorch.org/whl/cu121"
+    /// url = "https://download.pytorch.org/whl/cu130"
     /// explicit = true
     ///
     /// [tool.uv.sources]
@@ -684,7 +684,7 @@ pub struct ResolverInstallerSchema {
         example = r#"
             [[tool.uv.index]]
             name = "pytorch"
-            url = "https://download.pytorch.org/whl/cu121"
+            url = "https://download.pytorch.org/whl/cu130"
         "#
     )]
     pub index: Option<Vec<Index>>,

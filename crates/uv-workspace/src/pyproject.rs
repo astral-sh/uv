@@ -349,7 +349,7 @@ pub struct ToolUv {
     /// ```toml
     /// [[tool.uv.index]]
     /// name = "pytorch"
-    /// url = "https://download.pytorch.org/whl/cu121"
+    /// url = "https://download.pytorch.org/whl/cu130"
     /// explicit = true
     ///
     /// [tool.uv.sources]
@@ -365,7 +365,7 @@ pub struct ToolUv {
         example = r#"
             [[tool.uv.index]]
             name = "pytorch"
-            url = "https://download.pytorch.org/whl/cu121"
+            url = "https://download.pytorch.org/whl/cu130"
         "#
     )]
     #[serde(deserialize_with = "deserialize_index_vec", default)]
