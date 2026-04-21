@@ -81,12 +81,8 @@ pub(crate) async fn list(
         PythonDownloadRequest::from_request(request.as_ref().unwrap_or(&PythonRequest::Any))
     };
 
-    let client = client_builder.build()?;
-    let download_list =
-        ManagedPythonDownloadList::new(&client, python_downloads_json_url.as_deref()).await?;
-    let mut output = BTreeSet::new();
-    if let Some(base_download_request) = base_download_request {
-        let download_request = match kinds {
+    let download_request = if let Some(base_download_request) = base_download_request {
+        match kinds {
             PythonListKinds::Installed => None,
             PythonListKinds::Downloads => Some(if all_platforms {
                 base_download_request
@@ -110,14 +106,24 @@ pub(crate) async fn list(
                 }
             }
         }
-        // Include pre-release versions
-        .map(|request| request.with_prereleases(true));
+        .map(|request| request.with_prereleases(true))
+    } else {
+        None
+    };
 
-        let downloads = download_request
-            .as_ref()
-            .map(|request| download_list.iter_matching(request))
-            .into_iter()
-            .flatten()
+    let mut output = BTreeSet::new();
+    if let Some(download_request) = &download_request {
+        let client = client_builder.build()?;
+        let download_list = ManagedPythonDownloadList::new_filtered(
+            &client,
+            python_downloads_json_url.as_deref(),
+            Some(cache),
+            Some(download_request),
+            None,
+        )
+        .await?;
+        let downloads = download_list
+            .iter_matching(download_request)
             // TODO(zanieb): Add a way to show debug downloads, we just hide them for now
             .filter(|download| !download.key().variant().is_debug());
 
