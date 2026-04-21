@@ -1,7 +1,7 @@
 use std::fmt::Write;
 use std::iter;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::str::FromStr;
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -1299,7 +1299,8 @@ fn detect_git_repository(path: &Path) -> GitDiscoveryResult {
     let Ok(git) = GIT.as_ref() else {
         return GitDiscoveryResult::NoGit;
     };
-    let Ok(output) = Command::new(git)
+    let Ok(output) = git
+        .build_command()
         .arg("rev-parse")
         .arg("--is-inside-work-tree")
         .env(EnvVars::LC_ALL, "C")
@@ -1402,7 +1403,8 @@ fn get_author_from_git(path: &Path) -> Result<Author> {
     let mut name = None;
     let mut email = None;
 
-    let output = Command::new(git)
+    let output = git
+        .build_command()
         .arg("config")
         .arg("--get")
         .arg("user.name")
@@ -1414,7 +1416,8 @@ fn get_author_from_git(path: &Path) -> Result<Author> {
         name = Some(String::from_utf8_lossy(&output.stdout).trim().to_string());
     }
 
-    let output = Command::new(git)
+    let output = git
+        .build_command()
         .arg("config")
         .arg("--get")
         .arg("user.email")
