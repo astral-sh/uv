@@ -1412,10 +1412,6 @@ impl ProjectEnvironment {
             })
             .ok();
 
-        let upgradeable = python
-            .as_ref()
-            .is_none_or(|request| !request.includes_patch());
-
         let workspace_python = WorkspacePython::from_request(
             python,
             Some(workspace),
@@ -1424,6 +1420,11 @@ impl ProjectEnvironment {
             no_config,
         )
         .await?;
+
+        let upgradeable = workspace_python
+            .python_request
+            .as_ref()
+            .is_none_or(|request| !request.includes_patch());
 
         match ProjectInterpreter::discover(
             workspace,
