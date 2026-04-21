@@ -1282,7 +1282,7 @@ impl EnvVars {
     pub const UV_PROJECT: &'static str = "UV_PROJECT";
 
     /// Equivalent to the `--no-project` command-line argument.
-    #[attr_added_in("next")]
+    #[attr_added_in("next release")]
     pub const UV_NO_PROJECT: &'static str = "UV_NO_PROJECT";
 
     /// Equivalent to the `--directory` command-line argument. `UV_WORKING_DIRECTORY` (added in
