@@ -1183,12 +1183,12 @@ impl Lock {
                         match setting {
                             ExcludeNewerOverride::Enabled(exclude_newer_value) => {
                                 if let Some(span) = exclude_newer_value.span() {
-                                    // Serialize as inline table with timestamp and span
+                                    // When a relative span is present, write a no-op timestamp
+                                    // for backwards compatibility. This matches treatment for
+                                    // the global `exclude-newer`.
                                     let mut inline = toml_edit::InlineTable::new();
-                                    inline.insert(
-                                        "timestamp",
-                                        exclude_newer_value.timestamp().to_string().into(),
-                                    );
+                                    inline
+                                        .insert("timestamp", ExcludeNewerValue::PLACEHOLDER.into());
                                     inline.insert("span", span.to_string().into());
                                     package_table.insert(name.as_ref(), Item::Value(inline.into()));
                                 } else {

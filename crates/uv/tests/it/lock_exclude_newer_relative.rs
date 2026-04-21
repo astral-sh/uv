@@ -373,7 +373,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     [options]
 
     [options.exclude-newer-package]
-    idna = { timestamp = "2024-04-10T00:00:00Z", span = "P3W" }
+    idna = { timestamp = "0001-01-01T00:00:00Z", span = "P3W" }
 
     [[package]]
     name = "idna"
@@ -442,7 +442,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     [options]
 
     [options.exclude-newer-package]
-    idna = { timestamp = "2024-04-17T00:00:00Z", span = "P2W" }
+    idna = { timestamp = "0001-01-01T00:00:00Z", span = "P2W" }
 
     [[package]]
     name = "idna"
@@ -492,7 +492,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     [options]
 
     [options.exclude-newer-package]
-    idna = { timestamp = "2024-04-17T00:00:00Z", span = "P2W" }
+    idna = { timestamp = "0001-01-01T00:00:00Z", span = "P2W" }
 
     [[package]]
     name = "idna"
@@ -635,7 +635,7 @@ fn lock_exclude_newer_package_relative_pyproject() -> Result<()> {
     [options]
 
     [options.exclude-newer-package]
-    idna = { timestamp = "2024-04-10T00:00:00Z", span = "P3W" }
+    idna = { timestamp = "0001-01-01T00:00:00Z", span = "P3W" }
 
     [[package]]
     name = "idna"
@@ -720,7 +720,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     exclude-newer-span = "P3W"
 
     [options.exclude-newer-package]
-    typing-extensions = { timestamp = "2024-04-17T00:00:00Z", span = "P2W" }
+    typing-extensions = { timestamp = "0001-01-01T00:00:00Z", span = "P2W" }
 
     [[package]]
     name = "idna"
@@ -844,7 +844,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     exclude-newer = "2024-05-20T00:00:00Z"
 
     [options.exclude-newer-package]
-    typing-extensions = { timestamp = "2024-04-17T00:00:00Z", span = "P2W" }
+    typing-extensions = { timestamp = "0001-01-01T00:00:00Z", span = "P2W" }
 
     [[package]]
     name = "idna"
@@ -1353,7 +1353,7 @@ fn lock_exclude_newer_package_relative_no_timestamp_in_lockfile() -> Result<()> 
     [options]
 
     [options.exclude-newer-package]
-    idna = { timestamp = "2024-04-10T00:00:00Z", span = "P3W" }
+    idna = { timestamp = "0001-01-01T00:00:00Z", span = "P3W" }
 
     [[package]]
     name = "idna"
@@ -1378,7 +1378,7 @@ fn lock_exclude_newer_package_relative_no_timestamp_in_lockfile() -> Result<()> 
 
     // Manually remove the per-package exclude-newer timestamp from the lockfile, leaving the span.
     let lock = lock.replace(
-        "idna = { timestamp = \"2024-04-10T00:00:00Z\", span = \"P3W\" }",
+        "idna = { timestamp = \"0001-01-01T00:00:00Z\", span = \"P3W\" }",
         "idna = { span = \"P3W\" }",
     );
     context.temp_dir.child("uv.lock").write_str(&lock)?;
@@ -1529,6 +1529,67 @@ fn lock_exclude_newer_relative_values_pyproject() -> Result<()> {
 
     Resolved 2 packages in [TIME]
     "#);
+
+    Ok(())
+}
+
+/// When a relative span is configured for `exclude-newer-package`, the lockfile
+/// should use a fixed no-op sentinel for the stored timestamp.
+#[test]
+fn lock_exclude_newer_package_relative_noop_timestamp() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["idna"]
+        "#,
+    )?;
+
+    let current_timestamp = "2024-05-01T00:00:00Z";
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .arg("--exclude-newer-package")
+        .arg("idna=3 weeks"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // The lockfile stores the no-op sentinel timestamp alongside the span.
+    let lock = context.read("uv.lock");
+    assert!(
+        lock.contains(r#"idna = { timestamp = "0001-01-01T00:00:00Z", span = "P3W" }"#),
+        "expected no-op sentinel in lockfile, got:\n{lock}"
+    );
+
+    // Locking again at a later time should yield an identical lockfile, even
+    // without `--locked`, because the span is unchanged and the stored
+    // timestamp is a fixed sentinel.
+    let later_timestamp = "2024-06-01T00:00:00Z";
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, later_timestamp)
+        .arg("--exclude-newer-package")
+        .arg("idna=3 weeks"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    assert_eq!(context.read("uv.lock"), lock);
 
     Ok(())
 }
