@@ -247,6 +247,7 @@ pub fn uninstall_egg(
             Ok(top_level) => top_level
                 .lines()
                 .map(ToString::to_string)
+                .filter(|line| !line.is_empty())
                 .filter(|line| !namespace_packages.contains(line))
                 .collect::<Vec<_>>(),
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
