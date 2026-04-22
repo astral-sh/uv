@@ -2211,6 +2211,7 @@ pub(crate) async fn resolve_environment(
 pub(crate) async fn sync_environment(
     venv: PythonEnvironment,
     resolution: &Resolution,
+    hasher: Option<&HashStrategy>,
     modifications: Modifications,
     build_constraints: Constraints,
     settings: InstallerSettingsRef<'_>,
@@ -2270,7 +2271,8 @@ pub(crate) async fn sync_environment(
     // optional on the downstream APIs.
     let build_hasher = HashStrategy::default();
     let dry_run = DryRun::default();
-    let hasher = HashStrategy::default();
+    let default_hasher = HashStrategy::default();
+    let hasher = hasher.unwrap_or(&default_hasher);
     let workspace_cache = WorkspaceCache::default();
 
     // Resolve the flat indexes from `--find-links`.
