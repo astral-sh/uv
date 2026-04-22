@@ -2884,6 +2884,337 @@ fn group_activates_self_extra_non_project_workspace() -> Result<()> {
     Ok(())
 }
 
+/// Exercises the first uncovered case in the `TODO(zanieb)` in
+/// `crates/uv-resolver/src/lock/installable.rs`: ordering within the group-dep loop.
+///
+/// When a group dependency's conflict marker references an extra that is activated
+/// by a *later* entry in the same group (or a later group in BTreeMap iteration order),
+/// the earlier entry is evaluated with an incomplete `activated_extras` set and is
+/// silently dropped. The fix for #19106 only propagates self-extras from entries that
+/// precede the one being evaluated, so entries that sort alphabetically *before* their
+/// activator are lost.
+///
+/// The test uses a hand-crafted lockfile because the resolver generally emits markers
+/// with vacuously-true clauses (e.g. `extra != 'x'`) that mask this bug; the shape
+/// below is what a future resolver simplification could plausibly produce.
+///
+/// TODO(zanieb): Fix by iterating the group-dep loop to a fixed point, or by
+/// interleaving group-dep activation with the first-pass graph traversal. Once
+/// fixed, the two snapshots below should match (both installing `iniconfig`).
+#[test]
+fn group_activates_self_extra_ordering() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        a = ["idna==3.5"]
+        b = ["idna==3.6"]
+
+        [dependency-groups]
+        dev = ["project[a]", "iniconfig"]
+
+        [tool.uv]
+        conflicts = [
+            [{ extra = "a" }, { extra = "b" }],
+        ]
+        "#,
+    )?;
+
+    // Hand-crafted lockfile: dev-deps are sorted alphabetically on load, so
+    // `iniconfig` (with a marker needing `(project, a)`) ends up before
+    // `project[a]` (the activator). The group-dep loop sees `iniconfig` first
+    // with `activated_extras=[]` and drops it.
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        conflicts = [[
+            { package = "project", extra = "a" },
+            { package = "project", extra = "b" },
+        ]]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "idna"
+        version = "3.5"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/9b/c4/db3e4b22ebc18ee797dae8e14b5db68e5826ae6337334c276f1cb4ff84fb/idna-3.5.tar.gz", hash = "sha256:27009fe2735bf8723353582d48575b23c533cc2c2de7b5a68908d91b5eb18d08", size = 64640, upload-time = "2023-11-24T18:07:06.343Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ea/65/9c7a31be86861d43da3d4f8661f677b38120320540773a04979ad6fa9ecd/idna-3.5-py3-none-any.whl", hash = "sha256:79b8f0ac92d2351be5f6122356c9a592c96d81c9a79e4b488bf2a6a15f88057a", size = 61566, upload-time = "2023-11-24T18:07:03.851Z" },
+        ]
+
+        [[package]]
+        name = "idna"
+        version = "3.6"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
+        ]
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+
+        [package.optional-dependencies]
+        a = [
+            { name = "idna", version = "3.5", source = { registry = "https://pypi.org/simple" } },
+        ]
+        b = [
+            { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" } },
+        ]
+
+        [package.dev-dependencies]
+        dev = [
+            { name = "iniconfig", marker = "extra == 'extra-7-project-a'" },
+            { name = "project", extra = ["a"] },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "idna", marker = "extra == 'a'", specifier = "==3.5" },
+            { name = "idna", marker = "extra == 'b'", specifier = "==3.6" },
+        ]
+        provides-extras = ["a", "b"]
+
+        [package.metadata.requires-dev]
+        dev = [
+            { name = "iniconfig" },
+            { name = "project", extras = ["a"] },
+        ]
+        "#,
+    )?;
+
+    // BUG: activating the default group should install `iniconfig` via the
+    // group's `project[a]` entry (which activates `(project, a)`), but the
+    // marker-gated `iniconfig` entry is processed first and dropped.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==3.5
+    ");
+
+    // When `a` is enabled from the CLI, the CLI-supplied extra is already in
+    // `activated_extras` before the group-dep loop runs, so `iniconfig`'s
+    // marker passes and it is installed.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=a"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
+/// Exercises the second uncovered case in the `TODO(zanieb)` in
+/// `crates/uv-resolver/src/lock/installable.rs`: transitive self-extras.
+///
+/// A group dep `project[a]` activates `(project, a)` directly, but if
+/// `project.optional_dependencies.a` contains `project[b]`, then `(project, b)`
+/// is only activated during the first-pass graph traversal — *after* the
+/// group-dep loop has already checked markers on every group dep. A subsequent
+/// group dep whose marker requires `(project, b)` is evaluated too early and
+/// silently dropped.
+///
+/// As with `group_activates_self_extra_ordering`, this test uses a hand-crafted
+/// lockfile because the resolver tends to emit markers with vacuously-true
+/// clauses that mask the bug.
+///
+/// TODO(zanieb): Fix alongside the ordering case above (fixed-point iteration
+/// or interleaving the group-dep loop with the first-pass traversal). Once
+/// fixed, the two snapshots below should match (both installing
+/// `sortedcontainers`).
+#[test]
+fn group_activates_self_extra_transitive() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        a = ["project[b]"]
+        b = ["anyio"]
+        c = ["anyio", "idna==3.6"]
+
+        [dependency-groups]
+        dev = ["project[a]", "sortedcontainers"]
+
+        [tool.uv]
+        conflicts = [
+            [{ extra = "b" }, { extra = "c" }],
+        ]
+        "#,
+    )?;
+
+    // Hand-crafted lockfile. The group dep `project[a]` activates `(project, a)`,
+    // which transitively activates `(project, b)` via `project.optional_dependencies.a`
+    // — but only during the first-pass traversal, which runs *after* the group-dep
+    // loop. `sortedcontainers`'s marker requires `(project, b)` and is therefore
+    // evaluated with `activated_extras=[(project, a)]`, causing the entry to be
+    // dropped.
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        conflicts = [[
+            { package = "project", extra = "b" },
+            { package = "project", extra = "c" },
+        ]]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "anyio"
+        version = "4.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584, upload-time = "2024-02-19T08:36:26.842Z" },
+        ]
+
+        [[package]]
+        name = "idna"
+        version = "3.6"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+
+        [package.optional-dependencies]
+        a = [
+            { name = "project", extra = ["b"] },
+        ]
+        b = [
+            { name = "anyio" },
+        ]
+        c = [
+            { name = "anyio" },
+            { name = "idna" },
+        ]
+
+        [package.dev-dependencies]
+        dev = [
+            { name = "project", extra = ["a"] },
+            { name = "sortedcontainers", marker = "extra == 'extra-7-project-b'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "anyio", marker = "extra == 'b'" },
+            { name = "anyio", marker = "extra == 'c'" },
+            { name = "idna", marker = "extra == 'c'", specifier = "==3.6" },
+            { name = "project", extras = ["b"], marker = "extra == 'a'" },
+        ]
+        provides-extras = ["a", "b", "c"]
+
+        [package.metadata.requires-dev]
+        dev = [
+            { name = "project", extras = ["a"] },
+            { name = "sortedcontainers" },
+        ]
+
+        [[package]]
+        name = "sniffio"
+        version = "1.3.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
+        ]
+
+        [[package]]
+        name = "sortedcontainers"
+        version = "2.4.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f23394729afe52f3bf7adec04bf9ed2c820b39e19299111/sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88", size = 30594, upload-time = "2021-05-16T22:03:42.897Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575, upload-time = "2021-05-16T22:03:41.177Z" },
+        ]
+        "#,
+    )?;
+
+    // BUG: `sortedcontainers` should be installed because activating `project[a]`
+    // transitively activates `(project, b)`, which satisfies `sortedcontainers`'s
+    // marker. But that activation only happens in the first-pass traversal, after
+    // the group-dep loop has already rejected `sortedcontainers`.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    // When `b` is enabled from the CLI, `(project, b)` is in `activated_extras`
+    // before the group-dep loop runs, so `sortedcontainers`'s marker passes.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=b"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + sortedcontainers==2.4.0
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn multiple_sources_index_disjoint_extras() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00Z");
