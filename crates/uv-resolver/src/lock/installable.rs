@@ -74,20 +74,21 @@ pub trait Installable<'lock> {
         // later evaluate conflict markers on transitive dependencies, self-extras enabled by an
         // active group are treated as enabled.
         //
-        // TODO(zanieb): This is still not fully correct — it only propagates self-extras
-        // activated directly by a group dep entry. Two related cases are not handled:
+        // TODO(zanieb): For completeness, the group-dep loop below still has two structural
+        // soundness gaps. Neither is reachable through lockfiles the resolver currently
+        // produces — they'd require a group-dep entry with a strict positive conflict marker
+        // referencing an extra *other* than the entry's own self-extra, and the resolver
+        // either emits self-extra markers (handled by `newly_activated_extras` below) or
+        // markers with vacuously-true disjuncts. But the code should still handle them:
         //
-        // 1. Ordering within the group-dep loop: if an earlier group dep's conflict marker
-        //    references an extra activated by a later entry (in the same group, or in a
-        //    later group by BTreeMap iteration order), the earlier entry is evaluated with
-        //    an incomplete `activated_extras` and silently dropped.
+        // 1. Ordering: an earlier group-dep entry whose marker references an extra activated
+        //    by a later entry is evaluated with an incomplete `activated_extras` set.
         // 2. Transitive self-extras: a group dep `pkg[a]` where `pkg.optional_dependencies.a`
-        //    contains `pkg[b]` only activates `(pkg, b)` during the first-pass graph
-        //    traversal below; any subsequent group dep whose marker needs `(pkg, b)` would
-        //    see it as inactive.
+        //    includes `pkg[b]` only activates `(pkg, b)` during the first-pass traversal
+        //    below, so any group dep whose marker needs `(pkg, b)` is evaluated too early.
         //
-        // Truly resolving this likely requires iterating group-dep activation to a fixed
-        // point, or interleaving it with the first-pass traversal below.
+        // Fixing these correctly likely means iterating group-dep activation to a fixed point
+        // or interleaving it with the first-pass traversal.
         if !self.lock().conflicts().is_empty() {
             for root_name in self.roots() {
                 let dist = self
