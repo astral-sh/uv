@@ -2812,10 +2812,10 @@ fn group_activates_self_extra() -> Result<()> {
 /// They should produce identical environments — the fix for the package-level path in
 /// #19106 needs to be applied to the manifest-level path as well.
 ///
-/// TODO(#19106): Apply the same self-extra propagation fix to the manifest-level
+/// TODO(zanieb): Apply the same self-extra propagation fix to the manifest-level
 /// dependency-groups loop in `crates/uv-resolver/src/lock/installable.rs` (the block
 /// iterating `self.lock().dependency_groups()`), then update this test so the two
-/// snapshots match.
+/// snapshots match. See #19106.
 #[test]
 fn group_activates_self_extra_non_project_workspace() -> Result<()> {
     let context = uv_test::test_context!("3.12");

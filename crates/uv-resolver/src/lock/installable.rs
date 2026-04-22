@@ -73,6 +73,21 @@ pub trait Installable<'lock> {
         // accumulated below, when we process the groups themselves. This ensures that when we
         // later evaluate conflict markers on transitive dependencies, self-extras enabled by an
         // active group are treated as enabled.
+        //
+        // TODO(zanieb): This is still not fully correct — it only propagates self-extras
+        // activated directly by a group dep entry. Two related cases are not handled:
+        //
+        // 1. Ordering within the group-dep loop: if an earlier group dep's conflict marker
+        //    references an extra activated by a later entry (in the same group, or in a
+        //    later group by BTreeMap iteration order), the earlier entry is evaluated with
+        //    an incomplete `activated_extras` and silently dropped.
+        // 2. Transitive self-extras: a group dep `pkg[a]` where `pkg.optional_dependencies.a`
+        //    contains `pkg[b]` only activates `(pkg, b)` during the first-pass graph
+        //    traversal below; any subsequent group dep whose marker needs `(pkg, b)` would
+        //    see it as inactive.
+        //
+        // Truly resolving this likely requires iterating group-dep activation to a fixed
+        // point, or interleaving it with the first-pass traversal below.
         if !self.lock().conflicts().is_empty() {
             for root_name in self.roots() {
                 let dist = self
@@ -275,13 +290,13 @@ pub trait Installable<'lock> {
         // Add any dependency groups that are exclusive to the workspace root (e.g., dev
         // dependencies in non-project workspace roots).
         //
-        // TODO(#19106): Like the package-level dependency-groups loop above, this loop
+        // TODO(zanieb): Like the package-level dependency-groups loop above, this loop
         // does not propagate self-extras activated by `pkg[extra]` entries into
         // `activated_extras`. As a result, conflict markers on transitive dependencies
         // that are gated by those self-extras evaluate to `false`, so `uv sync` silently
         // drops them. See the `group_activates_self_extra_non_project_workspace` test in
-        // `crates/uv/tests/it/lock_conflict.rs`, which currently captures the buggy
-        // behavior.
+        // `crates/uv/tests/it/lock_conflict.rs` (#19106), which currently captures the
+        // buggy behavior.
         for (group, dependency) in self
             .lock()
             .dependency_groups()
