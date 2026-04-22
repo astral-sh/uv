@@ -2616,14 +2616,7 @@ fn mixed() -> Result<()> {
     Ok(())
 }
 
-/// This tests a case where a dependency group references a "self-extra" (an optional
-/// dependency of the project itself) and that extra also appears in a conflict set. Before
-/// the fix for #19106, the group activation did not propagate the self-extra into the set of
-/// activated extras used to evaluate conflict markers on transitive dependencies, so running
-/// `uv sync` (which activates the group by default) would produce a different environment
-/// than `uv sync --extra <extra>`, even though the two should be equivalent.
-///
-/// Ref <https://github.com/astral-sh/uv/issues/19106>
+/// See <https://github.com/astral-sh/uv/issues/19106>
 #[test]
 fn group_activates_self_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2800,12 +2793,9 @@ fn group_activates_self_extra() -> Result<()> {
     Ok(())
 }
 
-/// Companion to `group_activates_self_extra`, but for the *non-project workspace root*
-/// code path. When dependency groups live on the workspace manifest rather than on a
-/// project package (i.e. the root `pyproject.toml` has `[tool.uv.workspace]` but no
-/// `[project]` table), group deps go through a separate branch in
-/// `Installable::to_resolution`. This test asserts that `uv sync --frozen` (group
-/// active by default) produces the same environment as `uv sync --frozen --extra=dev`.
+/// See [`group_activates_self_extra`]
+///
+/// This covers the non-project workspace case, which uses a separate code path.
 #[test]
 fn group_activates_self_extra_non_project_workspace() -> Result<()> {
     let context = uv_test::test_context!("3.12");
