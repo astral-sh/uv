@@ -274,6 +274,14 @@ pub trait Installable<'lock> {
 
         // Add any dependency groups that are exclusive to the workspace root (e.g., dev
         // dependencies in non-project workspace roots).
+        //
+        // TODO(#19106): Like the package-level dependency-groups loop above, this loop
+        // does not propagate self-extras activated by `pkg[extra]` entries into
+        // `activated_extras`. As a result, conflict markers on transitive dependencies
+        // that are gated by those self-extras evaluate to `false`, so `uv sync` silently
+        // drops them. See the `group_activates_self_extra_non_project_workspace` test in
+        // `crates/uv/tests/it/lock_conflict.rs`, which currently captures the buggy
+        // behavior.
         for (group, dependency) in self
             .lock()
             .dependency_groups()

@@ -2800,6 +2800,105 @@ fn group_activates_self_extra() -> Result<()> {
     Ok(())
 }
 
+/// Companion to `group_activates_self_extra`, but for the *non-project workspace root*
+/// code path. When dependency groups live on the workspace manifest rather than on a
+/// project package (i.e. the root `pyproject.toml` has `[tool.uv.workspace]` but no
+/// `[project]` table), group deps go through a different branch in
+/// `Installable::to_resolution` that *also* fails to propagate self-extras activated by
+/// `pkg[extra]` entries into `activated_extras`.
+///
+/// This test currently captures the *buggy* behavior: `uv sync --frozen` installs three
+/// packages (missing `idna==3.5`) while `uv sync --frozen --extra=dev` installs four.
+/// They should produce identical environments — the fix for the package-level path in
+/// #19106 needs to be applied to the manifest-level path as well.
+///
+/// TODO(#19106): Apply the same self-extra propagation fix to the manifest-level
+/// dependency-groups loop in `crates/uv-resolver/src/lock/installable.rs` (the block
+/// iterating `self.lock().dependency_groups()`), then update this test so the two
+/// snapshots match.
+#[test]
+fn group_activates_self_extra_non_project_workspace() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let root_pyproject_toml = context.temp_dir.child("pyproject.toml");
+    root_pyproject_toml.write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["pkg1"]
+
+        [tool.uv.sources]
+        pkg1 = { workspace = true }
+
+        [dependency-groups]
+        dev = ["pkg1[dev]"]
+
+        [tool.uv]
+        conflicts = [
+          [{ package = "pkg1", extra = "dev" }, { package = "pkg1", extra = "summarize" }],
+          [{ package = "pkg1", extra = "foo" }, { package = "pkg1", extra = "summarize" }],
+        ]
+        "#,
+    )?;
+
+    let pkg1_pyproject_toml = context.temp_dir.child("pkg1").child("pyproject.toml");
+    pkg1_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg1"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        dev = ["anyio"]
+        summarize = ["anyio", "idna==3.6"]
+        foo = ["idna==3.5"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    // BUG: activating the `dev` group (the default) should install `idna==3.5` via
+    // `anyio`'s conflict-gated edge, because the group references `pkg1[dev]`.
+    // Currently it is missing.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + pkg1==0.1.0 (from file://[TEMP_DIR]/pkg1)
+     + sniffio==1.3.1
+    ");
+
+    // Enabling the extra explicitly adds `idna==3.5` — the package that the bare
+    // `sync` above should have installed as well. Once the manifest-level path is
+    // fixed, the bare invocation should install this package without requiring
+    // `--extra=dev`.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=dev"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==3.5
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn multiple_sources_index_disjoint_extras() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00Z");
