@@ -1942,6 +1942,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                     args.frozen,
                     args.dry_run,
                     args.refresh,
+                    args.module_owners,
                     args.python,
                     args.install_mirrors,
                     args.settings,

@@ -68,7 +68,7 @@ pub(crate) mod environment;
 pub(crate) mod export;
 pub(crate) mod format;
 pub(crate) mod init;
-mod install_target;
+pub(crate) mod install_target;
 pub(crate) mod lock;
 pub(crate) mod lock_target;
 pub(crate) mod remove;
@@ -1349,7 +1349,7 @@ impl ScriptPython {
 
 /// The Python environment for a project.
 #[derive(Debug)]
-enum ProjectEnvironment {
+pub(crate) enum ProjectEnvironment {
     /// An existing [`PythonEnvironment`] was discovered, which satisfies the project's requirements.
     Existing(PythonEnvironment),
     /// An existing [`PythonEnvironment`] was discovered, but did not satisfy the project's
