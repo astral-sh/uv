@@ -1,6 +1,9 @@
 use std::collections::BTreeMap;
 use std::fmt::Display;
 
+/// The name of an importable Python module.
+type ModuleName = String;
+
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{RequiresPython, UrlString};
 use uv_fs::PortablePathBuf;
@@ -66,6 +69,9 @@ pub struct Metadata {
     requires_python: RequiresPython,
     /// Info about conflicting packages
     conflicts: MetadataConflicts,
+    /// A mapping from importable module names to the distributions that provide them
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+    module_owners: BTreeMap<ModuleName, Vec<PackageName>>,
     /// An index of which nodes are workspace members
     ///
     /// These entries are often what you should use as the entry-points into the `resolve` graph.
@@ -818,11 +824,21 @@ impl Metadata {
                 version: SchemaVersion::Preview,
             },
             conflicts,
+            module_owners: BTreeMap::new(),
             workspace_root,
             requires_python: lock.requires_python.clone(),
             members,
             resolution: resolve,
         })
+    }
+
+    #[must_use]
+    pub fn with_module_owners(
+        mut self,
+        module_owners: BTreeMap<ModuleName, Vec<PackageName>>,
+    ) -> Self {
+        self.module_owners = module_owners;
+        self
     }
 
     pub fn to_json(&self) -> Result<String, MetadataError> {

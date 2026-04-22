@@ -1,7 +1,7 @@
 use std::fmt::Write;
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 
 use uv_cache::{Cache, Refresh};
@@ -9,18 +9,22 @@ use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, DependencyGroupsWithDefaults, DryRun};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
-use uv_resolver::{Lock, Metadata};
+use uv_resolver::Metadata;
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceCache};
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
-use crate::commands::project::{ProjectError, ProjectInterpreter, UniversalState, WorkspacePython};
+use crate::commands::project::{
+    ProjectEnvironment, ProjectError, ProjectInterpreter, UniversalState, WorkspacePython,
+};
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
+
+use super::module_owners::collect_module_owners;
 
 /// Display metadata about the workspace.
 pub(crate) async fn metadata(
@@ -29,6 +33,7 @@ pub(crate) async fn metadata(
     frozen: Option<FrozenSource>,
     dry_run: DryRun,
     refresh: Refresh,
+    module_owners: bool,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
@@ -54,38 +59,37 @@ pub(crate) async fn metadata(
             .await?;
     let target = LockTarget::Workspace(virtual_project.workspace());
 
+    // Don't enable any groups' requires-python for interpreter discovery.
+    let groups = DependencyGroupsWithDefaults::none();
+    let workspace_python = WorkspacePython::from_request(
+        python.as_deref().map(PythonRequest::parse),
+        Some(virtual_project.workspace()),
+        &groups,
+        project_dir,
+        no_config,
+    )
+    .await?;
+    let interpreter = ProjectInterpreter::discover(
+        virtual_project.workspace(),
+        &groups,
+        workspace_python,
+        &client_builder,
+        python_preference,
+        python_downloads,
+        &install_mirrors,
+        false,
+        Some(false),
+        cache,
+        printer,
+        preview,
+    )
+    .await?
+    .into_interpreter();
+
     // Determine the lock mode.
-    let interpreter;
     let mode = if let Some(frozen_source) = frozen {
         LockMode::Frozen(frozen_source.into())
     } else {
-        // Don't enable any groups' requires-python for interpreter discovery
-        let groups = DependencyGroupsWithDefaults::none();
-        let workspace_python = WorkspacePython::from_request(
-            python.as_deref().map(PythonRequest::parse),
-            Some(virtual_project.workspace()),
-            &groups,
-            project_dir,
-            no_config,
-        )
-        .await?;
-        interpreter = ProjectInterpreter::discover(
-            virtual_project.workspace(),
-            &groups,
-            workspace_python,
-            &client_builder,
-            python_preference,
-            python_downloads,
-            &install_mirrors,
-            false,
-            Some(false),
-            cache,
-            printer,
-            preview,
-        )
-        .await?
-        .into_interpreter();
-
         if let LockCheck::Enabled(lock_check) = lock_check {
             LockMode::Locked(&interpreter, lock_check)
         } else if dry_run.enabled() {
@@ -117,7 +121,46 @@ pub(crate) async fn metadata(
     )
     .await
     {
-        Ok(lock) => print_lock_as_metadata(virtual_project.workspace(), &lock.into_lock(), printer),
+        Ok(lock) => {
+            let lock = lock.into_lock();
+            let mut export = Metadata::from_lock(virtual_project.workspace(), &lock)?;
+            if module_owners {
+                let environment = ProjectEnvironment::get_or_init(
+                    virtual_project.workspace(),
+                    &groups,
+                    python.as_deref().map(PythonRequest::parse),
+                    &install_mirrors,
+                    &client_builder,
+                    python_preference,
+                    python_downloads,
+                    false,
+                    no_config,
+                    Some(false),
+                    cache,
+                    DryRun::Disabled,
+                    printer,
+                    preview,
+                )
+                .await?;
+                let module_owners = collect_module_owners(
+                    virtual_project.workspace(),
+                    &lock,
+                    &environment,
+                    &settings,
+                    &client_builder,
+                    &state,
+                    &concurrency,
+                    cache,
+                    workspace_cache,
+                    preview,
+                )
+                .await
+                .context("Failed to collect module owners")?;
+                export = export.with_module_owners(module_owners);
+            }
+
+            print_metadata(&export, printer)
+        }
         Err(err @ ProjectError::LockMismatch(..)) => {
             writeln!(printer.stderr(), "{}", err.to_string().bold())?;
             Ok(ExitStatus::Failure)
@@ -131,13 +174,7 @@ pub(crate) async fn metadata(
     }
 }
 
-fn print_lock_as_metadata(
-    workspace: &Workspace,
-    lock: &Lock,
-    printer: Printer,
-) -> Result<ExitStatus> {
-    let export = Metadata::from_lock(workspace, lock)?;
-
+fn print_metadata(export: &Metadata, printer: Printer) -> Result<ExitStatus> {
     writeln!(printer.stdout(), "{}", export.to_json()?)?;
 
     Ok(ExitStatus::Success)

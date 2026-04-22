@@ -1923,6 +1923,7 @@ pub(crate) struct MetadataSettings {
     pub(crate) lock_check: LockCheck,
     pub(crate) frozen: Option<FrozenSource>,
     pub(crate) dry_run: DryRun,
+    pub(crate) module_owners: bool,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
@@ -1943,6 +1944,7 @@ impl MetadataSettings {
             resolver,
             build,
             refresh,
+            module_owners,
             python,
         } = *args;
 
@@ -1962,6 +1964,7 @@ impl MetadataSettings {
             lock_check: resolve_lock_check(locked),
             frozen: resolve_frozen(frozen),
             dry_run: DryRun::from_args(dry_run),
+            module_owners,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(
