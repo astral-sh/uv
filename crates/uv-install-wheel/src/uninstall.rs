@@ -599,4 +599,59 @@ mod tests {
             "sibling dist-info must not be removed"
         );
     }
+
+    /// Same bug shape as #19113, but triggered by a blank or whitespace-only line embedded
+    /// between valid entries in `top_level.txt`. Exercises the filter in combination with
+    /// real entries to make sure they're still honored after skipping empties.
+    #[test]
+    fn test_uninstall_egg_info_blank_lines_in_top_level() {
+        let venv = assert_fs::TempDir::new().unwrap();
+        let site_packages = venv.child("lib/python3.12/site-packages");
+        site_packages.create_dir_all().unwrap();
+
+        // A sibling package that must survive.
+        let sibling_init = site_packages.child("sibling").child("__init__.py");
+        sibling_init.touch().unwrap();
+
+        // Two real top-level modules that should be removed.
+        let pkg_a_init = site_packages.child("pkg_a").child("__init__.py");
+        pkg_a_init.touch().unwrap();
+        let pkg_b_init = site_packages.child("pkg_b").child("__init__.py");
+        pkg_b_init.touch().unwrap();
+
+        // `top_level.txt` with a leading blank line, a whitespace-only line between the two
+        // valid entries, a trailing blank line, and `\r\n` line endings mixed in.
+        let egg_info = site_packages.child("mixedpkg-0.1.0.egg-info");
+        egg_info.create_dir_all().unwrap();
+        egg_info
+            .child("top_level.txt")
+            .write_str("\npkg_a\n   \r\npkg_b\n\n")
+            .unwrap();
+
+        let layout = Layout {
+            sys_executable: venv.path().join("bin/python"),
+            python_version: (3, 13),
+            os_name: "posix".to_string(),
+            scheme: Scheme {
+                purelib: site_packages.to_path_buf(),
+                platlib: site_packages.to_path_buf(),
+                scripts: venv.path().join("bin"),
+                data: venv.path().to_path_buf(),
+                include: venv.path().join("include/python3.12"),
+            },
+        };
+
+        uninstall_egg(egg_info.path(), "mixedpkg 0.1.0", &layout).unwrap();
+
+        // The two named packages are gone, the egg-info is gone, and site-packages plus
+        // the sibling survive.
+        assert!(!egg_info.exists());
+        assert!(!pkg_a_init.exists(), "pkg_a must be removed");
+        assert!(!pkg_b_init.exists(), "pkg_b must be removed");
+        assert!(
+            site_packages.exists(),
+            "uninstall must not remove site-packages itself"
+        );
+        assert!(sibling_init.exists(), "sibling package must not be removed");
+    }
 }
