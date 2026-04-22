@@ -131,6 +131,24 @@ Requesting a different dependency source will update the `tool.uv.sources` table
 $ uv add "httpx @ ../httpx"
 ```
 
+## Upgrading dependencies
+
+To upgrade all dependencies to their latest compatible versions:
+
+```console
+$ uv lock --upgrade
+```
+
+This will update the `uv.lock` file with the latest versions of all packages that satisfy your
+project's constraints. The upgrade respects the version constraints defined in your
+`pyproject.toml`, so packages will only be upgraded within the allowed bounds.
+
+To upgrade a single package instead of all packages, use the `--upgrade-package` option (as
+described in the [changing dependencies](#changing-dependencies) section above).
+
+See the [lockfile](./sync.md#upgrading-locked-package-versions) documentation for more details on
+upgrading strategies.
+
 ## Platform-specific dependencies
 
 To ensure that a dependency is only installed on a specific platform or on specific Python versions,
