@@ -81,6 +81,14 @@
       enabled: false,
     },
     {
+      // Exclude test-integration.yml from Python version updates, as it intentionally
+      // tests specific Python versions and should not be auto-updated.
+      matchFileNames: [".github/workflows/test-integration.yml"],
+      matchDepNames: ["python"],
+      description: "Disable Python version updates in test-integration.yml",
+      enabled: false,
+    },
+    {
       matchFileNames: [".github/workflows/test-system.yml"],
       extends: ["schedule:monthly"],
       description: "Monthly update of test-system.yml dependencies",
