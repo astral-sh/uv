@@ -2281,7 +2281,7 @@ pub(crate) async fn sync_environment(
         let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
+        FlatIndex::from_entries(entries, Some(tags), hasher, build_options)
     };
 
     // Lower the extra build dependencies, if any.
@@ -2326,7 +2326,7 @@ pub(crate) async fn sync_environment(
         build_options,
         link_mode,
         compile_bytecode,
-        &hasher,
+        hasher,
         tags,
         &client,
         state.in_flight(),
