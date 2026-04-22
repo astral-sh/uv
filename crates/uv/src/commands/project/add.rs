@@ -734,7 +734,7 @@ pub(crate) async fn add(
     let lock_state = state.fork();
     let sync_state = state;
 
-    match Box::pin(lock_and_sync(
+    match lock_and_sync(
         target,
         &mut toml,
         &edits,
@@ -762,7 +762,7 @@ pub(crate) async fn add(
         cache,
         printer,
         preview,
-    ))
+    )
     .await
     {
         Ok(()) => Ok(ExitStatus::Success),
@@ -1005,28 +1005,26 @@ async fn lock_and_sync(
     printer: Printer,
     preview: Preview,
 ) -> Result<(), ProjectError> {
-    let mut lock = Box::pin(
-        project::lock::LockOperation::new(
-            if let LockCheck::Enabled(lock_check) = lock_check {
-                LockMode::Locked(target.interpreter(), lock_check)
-            } else if dry_run {
-                LockMode::DryRun(target.interpreter())
-            } else {
-                LockMode::Write(target.interpreter())
-            },
-            &settings.resolver,
-            client_builder,
-            &lock_state,
-            Box::new(DefaultResolveLogger),
-            concurrency,
-            cache,
-            &WorkspaceCache::default(),
-            printer,
-            preview,
-        )
-        .with_constraints(constraints)
-        .execute((&target).into()),
+    let mut lock = project::lock::LockOperation::new(
+        if let LockCheck::Enabled(lock_check) = lock_check {
+            LockMode::Locked(target.interpreter(), lock_check)
+        } else if dry_run {
+            LockMode::DryRun(target.interpreter())
+        } else {
+            LockMode::Write(target.interpreter())
+        },
+        &settings.resolver,
+        client_builder,
+        &lock_state,
+        Box::new(DefaultResolveLogger),
+        concurrency,
+        cache,
+        &WorkspaceCache::default(),
+        printer,
+        preview,
     )
+    .with_constraints(constraints)
+    .execute((&target).into())
     .await?
     .into_lock();
 
@@ -1130,27 +1128,25 @@ async fn lock_and_sync(
 
             // If the file was modified, we have to lock again, though the only expected change is
             // the addition of the minimum version specifiers.
-            lock = Box::pin(
-                project::lock::LockOperation::new(
-                    if let LockCheck::Enabled(lock_check) = lock_check {
-                        LockMode::Locked(target.interpreter(), lock_check)
-                    } else if dry_run {
-                        LockMode::DryRun(target.interpreter())
-                    } else {
-                        LockMode::Write(target.interpreter())
-                    },
-                    &settings.resolver,
-                    client_builder,
-                    &lock_state,
-                    Box::new(SummaryResolveLogger),
-                    concurrency,
-                    cache,
-                    &WorkspaceCache::default(),
-                    printer,
-                    preview,
-                )
-                .execute((&target).into()),
+            lock = project::lock::LockOperation::new(
+                if let LockCheck::Enabled(lock_check) = lock_check {
+                    LockMode::Locked(target.interpreter(), lock_check)
+                } else if dry_run {
+                    LockMode::DryRun(target.interpreter())
+                } else {
+                    LockMode::Write(target.interpreter())
+                },
+                &settings.resolver,
+                client_builder,
+                &lock_state,
+                Box::new(SummaryResolveLogger),
+                concurrency,
+                cache,
+                &WorkspaceCache::default(),
+                printer,
+                preview,
             )
+            .execute((&target).into())
             .await?
             .into_lock();
         }

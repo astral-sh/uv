@@ -115,7 +115,7 @@ pub(crate) async fn project_version(
     let is_read_only = value.is_none() && bump.is_empty();
     if let Some(frozen_source) = frozen {
         if is_read_only {
-            return Box::pin(print_frozen_version(
+            return print_frozen_version(
                 project,
                 &name,
                 project_dir,
@@ -135,7 +135,7 @@ pub(crate) async fn project_version(
                 output_format,
                 printer,
                 preview,
-            ))
+            )
             .await;
         }
     }
@@ -335,7 +335,7 @@ pub(crate) async fn project_version(
         ExitStatus::Success
     } else if let Some(new_version) = &new_version {
         let project = update_project(project, new_version, &mut toml, &pyproject_path)?;
-        Box::pin(lock_and_sync(
+        lock_and_sync(
             project,
             project_dir,
             lock_check,
@@ -354,7 +354,7 @@ pub(crate) async fn project_version(
             cache,
             printer,
             preview,
-        ))
+        )
         .await?
     } else {
         debug!("No changes to version; skipping update");
@@ -498,21 +498,19 @@ async fn print_frozen_version(
     let state = UniversalState::default();
 
     // Lock and sync the environment, if necessary.
-    let lock = match Box::pin(
-        project::lock::LockOperation::new(
-            LockMode::Frozen(frozen_source.into()),
-            &settings.resolver,
-            &client_builder,
-            &state,
-            Box::new(DefaultResolveLogger),
-            concurrency,
-            cache,
-            workspace_cache,
-            printer,
-            preview,
-        )
-        .execute((&target).into()),
+    let lock = match project::lock::LockOperation::new(
+        LockMode::Frozen(frozen_source.into()),
+        &settings.resolver,
+        &client_builder,
+        &state,
+        Box::new(DefaultResolveLogger),
+        concurrency,
+        cache,
+        workspace_cache,
+        printer,
+        preview,
     )
+    .execute((&target).into())
     .await
     {
         Ok(result) => result.into_lock(),
@@ -647,21 +645,19 @@ async fn lock_and_sync(
     let workspace_cache = WorkspaceCache::default();
 
     // Lock and sync the environment, if necessary.
-    let lock = match Box::pin(
-        project::lock::LockOperation::new(
-            mode,
-            &settings.resolver,
-            &client_builder,
-            &state,
-            Box::new(DefaultResolveLogger),
-            concurrency,
-            cache,
-            &workspace_cache,
-            printer,
-            preview,
-        )
-        .execute((&target).into()),
+    let lock = match project::lock::LockOperation::new(
+        mode,
+        &settings.resolver,
+        &client_builder,
+        &state,
+        Box::new(DefaultResolveLogger),
+        concurrency,
+        cache,
+        &workspace_cache,
+        printer,
+        preview,
     )
+    .execute((&target).into())
     .await
     {
         Ok(result) => result.into_lock(),

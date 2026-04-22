@@ -903,7 +903,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                     .combine(Refresh::from(args.settings.upgrade.clone())),
             );
 
-            Box::pin(commands::pip_install(
+            commands::pip_install(
                 &requirements,
                 &constraints,
                 &overrides,
@@ -956,7 +956,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.dry_run,
                 printer,
                 globals.preview,
-            ))
+            )
             .await
         }
         Commands::Pip(PipNamespace {
@@ -1298,7 +1298,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             .await
         }
         Commands::Project(project) => {
-            Box::pin(run_project(
+            run_project(
                 project,
                 &project_dir,
                 run_command,
@@ -1311,7 +1311,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 cache,
                 &workspace_cache,
                 printer,
-            ))
+            )
             .await
         }
         #[cfg(feature = "self-update")]
@@ -1462,7 +1462,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 }
             };
 
-            Box::pin(commands::tool_run(
+            commands::tool_run(
                 args.command,
                 args.from,
                 &requirements,
@@ -1489,7 +1489,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.env_file,
                 args.no_env_file,
                 globals.preview,
-            ))
+            )
             .await
         }
         Commands::Tool(ToolNamespace {
@@ -1562,7 +1562,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 .map(RequirementsSource::from_constraints_txt)
                 .collect::<Result<Vec<_>, _>>()?;
 
-            Box::pin(commands::tool_install(
+            commands::tool_install(
                 args.package,
                 args.editable,
                 args.from,
@@ -1589,7 +1589,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &workspace_cache,
                 printer,
                 globals.preview,
-            ))
+            )
             .await
         }
         Commands::Tool(ToolNamespace {
@@ -1631,7 +1631,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 .await?
                 .with_refresh(Refresh::All(Timestamp::now()));
 
-            Box::pin(commands::tool_upgrade(
+            commands::tool_upgrade(
                 args.names,
                 args.python,
                 args.python_platform,
@@ -1647,7 +1647,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &workspace_cache,
                 printer,
                 globals.preview,
-            ))
+            )
             .await
         }
         Commands::Tool(ToolNamespace {
@@ -1938,7 +1938,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                         .combine(Refresh::from(args.settings.upgrade.clone())),
                 );
 
-                Box::pin(commands::metadata(
+                commands::metadata(
                     &project_dir,
                     args.lock_check,
                     args.frozen,
@@ -1956,7 +1956,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                     &workspace_cache,
                     printer,
                     globals.preview,
-                ))
+                )
                 .await
             }
             WorkspaceCommand::Dir(args) => {
@@ -2173,7 +2173,7 @@ async fn run_project(
                     .collect::<Result<Vec<_>, _>>()?,
             );
 
-            Box::pin(commands::run(
+            commands::run(
                 project_dir,
                 script,
                 command,
@@ -2207,7 +2207,7 @@ async fn run_project(
                 args.env_file,
                 globals.preview,
                 args.max_recursion_depth,
-            ))
+            )
             .await
         }
         ProjectCommand::Sync(args) => {
@@ -2234,7 +2234,7 @@ async fn run_project(
                 Pep723Item::Remote(..) => unreachable!("`uv lock` does not support remote files"),
             });
 
-            Box::pin(commands::sync(
+            commands::sync(
                 project_dir,
                 args.lock_check,
                 args.frozen,
@@ -2263,7 +2263,7 @@ async fn run_project(
                 printer,
                 globals.preview,
                 args.output_format,
-            ))
+            )
             .await
         }
         ProjectCommand::Lock(args) => {
@@ -2296,7 +2296,7 @@ async fn run_project(
                 .map(ScriptPath::Script)
                 .or(args.script.map(ScriptPath::Path));
 
-            Box::pin(commands::lock(
+            commands::lock(
                 project_dir,
                 args.lock_check,
                 args.frozen,
@@ -2315,7 +2315,7 @@ async fn run_project(
                 workspace_cache,
                 printer,
                 globals.preview,
-            ))
+            )
             .await
         }
         ProjectCommand::Add(args) => {
@@ -2407,7 +2407,7 @@ async fn run_project(
                 .map(RequirementsSource::from_constraints_txt)
                 .collect::<Result<Vec<_>, _>>()?;
 
-            Box::pin(commands::add(
+            commands::add(
                 project_dir,
                 args.lock_check,
                 args.frozen,
@@ -2449,7 +2449,7 @@ async fn run_project(
                 &cache,
                 printer,
                 globals.preview,
-            ))
+            )
             .await
         }
         ProjectCommand::Remove(args) => {
@@ -2476,7 +2476,7 @@ async fn run_project(
                 Pep723Item::Remote(..) => unreachable!("`uv remove` does not support remote files"),
             });
 
-            Box::pin(commands::remove(
+            commands::remove(
                 project_dir,
                 args.lock_check,
                 args.frozen,
@@ -2498,7 +2498,7 @@ async fn run_project(
                 &cache,
                 printer,
                 globals.preview,
-            ))
+            )
             .await
         }
         ProjectCommand::Version(args) => {
@@ -2518,7 +2518,7 @@ async fn run_project(
                     .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
             );
 
-            Box::pin(commands::project_version(
+            commands::project_version(
                 args.value,
                 args.bump,
                 args.short,
@@ -2544,7 +2544,7 @@ async fn run_project(
                 workspace_cache,
                 printer,
                 globals.preview,
-            ))
+            )
             .await
         }
         ProjectCommand::Tree(args) => {
@@ -2562,7 +2562,7 @@ async fn run_project(
                 Pep723Item::Remote(..) => unreachable!("`uv tree` does not support remote files"),
             });
 
-            Box::pin(commands::tree(
+            commands::tree(
                 project_dir,
                 args.groups,
                 args.lock_check,
@@ -2589,7 +2589,7 @@ async fn run_project(
                 &cache,
                 printer,
                 globals.preview,
-            ))
+            )
             .await
         }
         ProjectCommand::Export(args) => {
@@ -2648,7 +2648,7 @@ async fn run_project(
             // Initialize the cache.
             let cache = cache.init().await?;
 
-            Box::pin(commands::format(
+            commands::format(
                 project_dir,
                 args.check,
                 args.diff,
@@ -2661,7 +2661,7 @@ async fn run_project(
                 printer,
                 globals.preview,
                 args.no_project,
-            ))
+            )
             .await
         }
         ProjectCommand::Audit(audit_args) => {
@@ -2678,7 +2678,7 @@ async fn run_project(
                 Pep723Item::Remote(..) => unreachable!("`uv audit` does not support remote files"),
             });
 
-            Box::pin(commands::audit(
+            commands::audit(
                 project_dir,
                 args.extras,
                 args.groups,
@@ -2701,7 +2701,7 @@ async fn run_project(
                 args.service_url,
                 args.ignore,
                 args.ignore_until_fixed,
-            ))
+            )
             .await
         }
     }
@@ -2801,7 +2801,7 @@ where
             .build()
             .expect("Failed building the Runtime");
         // Box the large main future to avoid stack overflows.
-        let result = runtime.block_on(Box::pin(run(cli)));
+        let result = runtime.block_on(run(cli));
         // Avoid waiting for pending tasks to complete.
         //
         // The resolver may have kicked off HTTP requests during resolution that

@@ -99,22 +99,20 @@ pub(crate) async fn metadata(
     let state = UniversalState::default();
 
     // Perform the lock operation.
-    match Box::pin(
-        LockOperation::new(
-            mode,
-            &settings,
-            &client_builder,
-            &state,
-            Box::new(DefaultResolveLogger),
-            &concurrency,
-            cache,
-            workspace_cache,
-            printer,
-            preview,
-        )
-        .with_refresh(&refresh)
-        .execute(target),
+    match LockOperation::new(
+        mode,
+        &settings,
+        &client_builder,
+        &state,
+        Box::new(DefaultResolveLogger),
+        &concurrency,
+        cache,
+        workspace_cache,
+        printer,
+        preview,
     )
+    .with_refresh(&refresh)
+    .execute(target)
     .await
     {
         Ok(lock) => print_lock_as_metadata(virtual_project.workspace(), &lock.into_lock(), printer),

@@ -275,25 +275,23 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             };
 
             // Generate a lockfile.
-            let lock = match Box::pin(
-                project::lock::LockOperation::new(
-                    mode,
-                    &settings.resolver,
-                    &client_builder,
-                    &lock_state,
-                    if show_resolution {
-                        Box::new(DefaultResolveLogger)
-                    } else {
-                        Box::new(SummaryResolveLogger)
-                    },
-                    &concurrency,
-                    &cache,
-                    workspace_cache,
-                    printer,
-                    preview,
-                )
-                .execute(target),
+            let lock = match project::lock::LockOperation::new(
+                mode,
+                &settings.resolver,
+                &client_builder,
+                &lock_state,
+                if show_resolution {
+                    Box::new(DefaultResolveLogger)
+                } else {
+                    Box::new(SummaryResolveLogger)
+                },
+                &concurrency,
+                &cache,
+                workspace_cache,
+                printer,
+                preview,
             )
+            .execute(target)
             .await
             {
                 Ok(result) => result.into_lock(),
@@ -785,25 +783,23 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     LockMode::Write(venv.interpreter())
                 };
 
-                let result = match Box::pin(
-                    project::lock::LockOperation::new(
-                        mode,
-                        &settings.resolver,
-                        &client_builder,
-                        &lock_state,
-                        if show_resolution {
-                            Box::new(DefaultResolveLogger)
-                        } else {
-                            Box::new(SummaryResolveLogger)
-                        },
-                        &concurrency,
-                        &cache,
-                        workspace_cache,
-                        printer,
-                        preview,
-                    )
-                    .execute(project.workspace().into()),
+                let result = match project::lock::LockOperation::new(
+                    mode,
+                    &settings.resolver,
+                    &client_builder,
+                    &lock_state,
+                    if show_resolution {
+                        Box::new(DefaultResolveLogger)
+                    } else {
+                        Box::new(SummaryResolveLogger)
+                    },
+                    &concurrency,
+                    &cache,
+                    workspace_cache,
+                    printer,
+                    preview,
                 )
+                .execute(project.workspace().into())
                 .await
                 {
                     Ok(result) => result,

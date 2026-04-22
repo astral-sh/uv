@@ -286,7 +286,7 @@ pub(crate) async fn run(
     };
 
     // Get or create a compatible environment in which to execute the tool.
-    let result = Box::pin(get_or_create_environment(
+    let result = get_or_create_environment(
         &request,
         with,
         constraints,
@@ -309,7 +309,7 @@ pub(crate) async fn run(
         &workspace_cache,
         printer,
         preview,
-    ))
+    )
     .await;
 
     let explicit_from = from.is_some();

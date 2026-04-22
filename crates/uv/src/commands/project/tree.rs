@@ -148,21 +148,19 @@ pub(crate) async fn tree(
     let state = UniversalState::default();
 
     // Update the lockfile, if necessary.
-    let lock = match Box::pin(
-        LockOperation::new(
-            mode,
-            &settings,
-            client_builder,
-            &state,
-            Box::new(DefaultResolveLogger),
-            &concurrency,
-            cache,
-            &workspace_cache,
-            printer,
-            preview,
-        )
-        .execute(target),
+    let lock = match LockOperation::new(
+        mode,
+        &settings,
+        client_builder,
+        &state,
+        Box::new(DefaultResolveLogger),
+        &concurrency,
+        cache,
+        &workspace_cache,
+        printer,
+        preview,
     )
+    .execute(target)
     .await
     {
         Ok(result) => result.into_lock(),

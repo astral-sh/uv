@@ -202,22 +202,20 @@ pub(crate) async fn lock(
     let state = UniversalState::default();
 
     // Perform the lock operation.
-    match Box::pin(
-        LockOperation::new(
-            mode,
-            &settings,
-            &client_builder,
-            &state,
-            Box::new(DefaultResolveLogger),
-            &concurrency,
-            cache,
-            workspace_cache,
-            printer,
-            preview,
-        )
-        .with_refresh(&refresh)
-        .execute(target),
+    match LockOperation::new(
+        mode,
+        &settings,
+        &client_builder,
+        &state,
+        Box::new(DefaultResolveLogger),
+        &concurrency,
+        cache,
+        workspace_cache,
+        printer,
+        preview,
     )
+    .with_refresh(&refresh)
+    .execute(target)
     .await
     {
         Ok(lock) => {
@@ -390,7 +388,7 @@ impl<'env> LockOperation<'env> {
                 ))?;
 
                 // Perform the lock operation, but don't write the lockfile to disk.
-                let result = Box::pin(do_lock(
+                let result = do_lock(
                     target,
                     interpreter,
                     Some(existing),
@@ -405,7 +403,7 @@ impl<'env> LockOperation<'env> {
                     self.workspace_cache,
                     self.printer,
                     self.preview,
-                ))
+                )
                 .await?;
 
                 // If the lockfile changed, return an error.
@@ -434,7 +432,7 @@ impl<'env> LockOperation<'env> {
                 };
 
                 // Perform the lock operation.
-                let result = Box::pin(do_lock(
+                let result = do_lock(
                     target,
                     interpreter,
                     existing,
@@ -449,7 +447,7 @@ impl<'env> LockOperation<'env> {
                     self.workspace_cache,
                     self.printer,
                     self.preview,
-                ))
+                )
                 .await?;
 
                 // If the lockfile changed, write it to disk.
