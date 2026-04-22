@@ -289,14 +289,6 @@ pub trait Installable<'lock> {
 
         // Add any dependency groups that are exclusive to the workspace root (e.g., dev
         // dependencies in non-project workspace roots).
-        //
-        // TODO(zanieb): Like the package-level dependency-groups loop above, this loop
-        // does not propagate self-extras activated by `pkg[extra]` entries into
-        // `activated_extras`. As a result, conflict markers on transitive dependencies
-        // that are gated by those self-extras evaluate to `false`, so `uv sync` silently
-        // drops them. See the `group_activates_self_extra_non_project_workspace` test in
-        // `crates/uv/tests/it/lock_conflict.rs` (#19106), which currently captures the
-        // buggy behavior.
         for (group, dependency) in self
             .lock()
             .dependency_groups()
@@ -359,6 +351,17 @@ pub trait Installable<'lock> {
 
             // Add the edge.
             petgraph.add_edge(root, index, Edge::Dev(group.clone()));
+
+            // Persist any self-extras activated by this group dependency. Mirrors the
+            // handling in the package-level `dependency_groups` loop above; without this,
+            // conflict markers on transitive dependencies gated by the activated extra
+            // would not evaluate to `true` during the graph traversals below.
+            for extra in &dependency.extras {
+                let key = (&dist.id.name, extra);
+                if !activated_extras.contains(&key) {
+                    activated_extras.push(key);
+                }
+            }
 
             // Push its dependencies on the queue.
             if seen.insert((&dist.id, None)) {

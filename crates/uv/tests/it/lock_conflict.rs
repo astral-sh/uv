@@ -2803,19 +2803,9 @@ fn group_activates_self_extra() -> Result<()> {
 /// Companion to `group_activates_self_extra`, but for the *non-project workspace root*
 /// code path. When dependency groups live on the workspace manifest rather than on a
 /// project package (i.e. the root `pyproject.toml` has `[tool.uv.workspace]` but no
-/// `[project]` table), group deps go through a different branch in
-/// `Installable::to_resolution` that *also* fails to propagate self-extras activated by
-/// `pkg[extra]` entries into `activated_extras`.
-///
-/// This test currently captures the *buggy* behavior: `uv sync --frozen` installs three
-/// packages (missing `idna==3.5`) while `uv sync --frozen --extra=dev` installs four.
-/// They should produce identical environments — the fix for the package-level path in
-/// #19106 needs to be applied to the manifest-level path as well.
-///
-/// TODO(zanieb): Apply the same self-extra propagation fix to the manifest-level
-/// dependency-groups loop in `crates/uv-resolver/src/lock/installable.rs` (the block
-/// iterating `self.lock().dependency_groups()`), then update this test so the two
-/// snapshots match. See #19106.
+/// `[project]` table), group deps go through a separate branch in
+/// `Installable::to_resolution`. This test asserts that `uv sync --frozen` (group
+/// active by default) produces the same environment as `uv sync --frozen --extra=dev`.
 #[test]
 fn group_activates_self_extra_non_project_workspace() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2865,35 +2855,30 @@ fn group_activates_self_extra_non_project_workspace() -> Result<()> {
     Resolved 5 packages in [TIME]
     ");
 
-    // BUG: activating the `dev` group (the default) should install `idna==3.5` via
-    // `anyio`'s conflict-gated edge, because the group references `pkg1[dev]`.
-    // Currently it is missing.
+    // Activating the `dev` group (the default) installs `idna==3.5` via `anyio`'s
+    // conflict-gated edge, because the group references `pkg1[dev]`.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
      + anyio==4.3.0
+     + idna==3.5
      + pkg1==0.1.0 (from file://[TEMP_DIR]/pkg1)
      + sniffio==1.3.1
     ");
 
-    // Enabling the extra explicitly adds `idna==3.5` — the package that the bare
-    // `sync` above should have installed as well. Once the manifest-level path is
-    // fixed, the bare invocation should install this package without requiring
-    // `--extra=dev`.
+    // Enabling the extra explicitly produces the same environment.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=dev"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + idna==3.5
+    Checked 4 packages in [TIME]
     ");
 
     Ok(())
