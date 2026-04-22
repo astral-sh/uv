@@ -14,7 +14,6 @@ env:
   CARGO_TERM_COLOR: always
   PYTHON_VERSION: "3.12"
   RUSTUP_MAX_RETRIES: 10
-  UBUNTU_SNAPSHOT: "20260301T000000Z"
 
 jobs:
   integration-test-nushell:
@@ -199,7 +198,7 @@ jobs:
         run: |
           sudo dpkg --add-architecture armhf
           echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
-          sudo apt install -y --update --snapshot ${UBUNTU_SNAPSHOT} libc6:armhf libgcc-s1:armhf
+          sudo apt install -y --update libc6:armhf libgcc-s1:armhf
 
       - name: "Prepare binary"
         run: |

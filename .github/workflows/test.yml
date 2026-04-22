@@ -18,7 +18,6 @@ env:
   CARGO_TERM_COLOR: always
   PYTHON_VERSION: "3.12"
   RUSTUP_MAX_RETRIES: 10
-  UBUNTU_SNAPSHOT: "20260301T000000Z"
 
 jobs:
   # We use the large GitHub actions runners
@@ -54,7 +53,7 @@ jobs:
       - name: "Install secret service"
         run: |
           echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
-          sudo apt install -y --update --snapshot ${UBUNTU_SNAPSHOT} gnome-keyring
+          sudo apt install -y --update gnome-keyring
 
       - name: "Start gnome-keyring"
         # run gnome-keyring with 'foobar' as password for the login keyring
@@ -64,7 +63,7 @@ jobs:
 
       - name: "Create btrfs filesystem"
         run: |
-          sudo apt install -y --update --snapshot ${UBUNTU_SNAPSHOT} btrfs-progs
+          sudo apt install -y --update btrfs-progs
           truncate -s 1G /tmp/btrfs.img
           mkfs.btrfs /tmp/btrfs.img
           sudo mkdir /btrfs
