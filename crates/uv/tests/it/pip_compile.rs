@@ -17848,8 +17848,8 @@ fn incompatible_cuda() -> Result<()> {
     let context = uv_test::test_context!("3.11");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(indoc! {r"
-        torch==2.6.0+cu126
-        torchvision==0.16.0+cu121
+        torch==2.2.1+cu121
+        torchvision==0.17.1+cu118
     "})?;
 
     uv_snapshot!(context
@@ -17869,8 +17869,8 @@ fn incompatible_cuda() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because torchvision==0.16.0+cu121 depends on system:cuda==12.1 and torch==2.6.0+cu126 depends on system:cuda==12.6, we can conclude that torch==2.6.0+cu126 and torchvision==0.16.0+cu121 are incompatible.
-          And because you require torch==2.6.0+cu126 and torchvision==0.16.0+cu121, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because torchvision==0.17.1+cu118 depends on system:cuda==11.8 and torch==2.2.1+cu121 depends on system:cuda==12.1, we can conclude that torch==2.2.1+cu121 and torchvision==0.17.1+cu118 are incompatible.
+          And because you require torch==2.2.1+cu121 and torchvision==0.17.1+cu118, we can conclude that your requirements are unsatisfiable.
     ");
 
     Ok(())
