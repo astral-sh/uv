@@ -158,7 +158,19 @@ fn make_child_cmdline() -> CString {
                 // whether `PYTHONHOME` was set by uv. This allows us to:
                 // - Override inherited `PYTHONHOME` from parent Python processes
                 // - Preserve user-defined `PYTHONHOME` values
-                if !is_virtualenv(python_exe.as_path()) {
+                //
+                // We must check both `executable_name` (the trampoline itself,
+                // which may live inside a virtual environment's `Scripts`
+                // directory and target the base interpreter via the
+                // `python_path` resource) and `python_exe` (the resolved target
+                // interpreter). Otherwise, virtual environments built on top of
+                // managed interpreters would incorrectly receive `PYTHONHOME`
+                // pointing at the base installation, which then leaks into
+                // child processes and can shadow stdlib from a different Python
+                // (see https://github.com/astral-sh/uv/issues/19080).
+                if !is_virtualenv(executable_name.as_path())
+                    && !is_virtualenv(python_exe.as_path())
+                {
                     let python_home = std::env::var(EnvVars::PYTHONHOME).ok();
                     let marker = std::env::var(EnvVars::UV_INTERNAL__PYTHONHOME).ok();
 
