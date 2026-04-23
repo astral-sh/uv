@@ -48,6 +48,7 @@ strip = true
 include = [
   { path = "LICENSE-APACHE", format = "sdist" },
   { path = "LICENSE-MIT", format = "sdist" },
+  { path = "rust-toolchain.toml", format = "sdist" },
 ]
 
 [tool.uv]
