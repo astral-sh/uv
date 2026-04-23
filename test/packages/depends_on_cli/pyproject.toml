@@ -1,0 +1,17 @@
+[project]
+name = "depends-on-cli"
+version = "0.1.0"
+description = "A package with no executables that depends on simple-cli"
+authors = [
+    {name = "Astral Software Inc.", email = "hey@astral.sh"},
+]
+dependencies = ["simple-cli"]
+requires-python = ">=3.8"
+license = {text = "MIT"}
+
+[build-system]
+requires = ["flit_core>=3.4,<4"]
+build-backend = "flit_core.buildapi"
+
+[tool.uv.sources]
+simple-cli = { path = "../simple_cli" }
