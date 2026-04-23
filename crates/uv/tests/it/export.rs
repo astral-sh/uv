@@ -1373,7 +1373,7 @@ fn reduce_ssh_key_file_permissions(key_file: &Path) -> Result<()> {
         Command::new("icacls")
             .arg(key_file)
             .arg("/grant:r")
-            .arg(format!("{}:R", whoami::username()?))
+            .arg(format!("{}:R", std::env::var("USERNAME")?))
             .assert()
             .success();
     }
