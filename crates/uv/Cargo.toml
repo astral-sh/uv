@@ -152,7 +152,6 @@ tar = { workspace = true }
 tempfile = { workspace = true }
 tokio-stream = { workspace = true }
 tokio-util = { workspace = true }
-whoami = { workspace = true }
 wiremock = { workspace = true }
 zip = { workspace = true }
 
