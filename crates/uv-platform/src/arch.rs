@@ -1,5 +1,6 @@
-use crate::Error;
 use std::str::FromStr;
+
+use crate::Error;
 
 /// Architecture variants, e.g., with support for different instruction sets
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Hash, Ord, PartialOrd)]
@@ -82,7 +83,7 @@ impl Arch {
         }
 
         Self {
-            family: target_lexicon::HOST.architecture,
+            family: arch_from_uname().unwrap_or(target_lexicon::HOST.architecture),
             variant: None,
         }
     }
@@ -97,6 +98,27 @@ impl Arch {
 
     pub fn is_wasm(&self) -> bool {
         matches!(self.family, target_lexicon::Architecture::Wasm32)
+    }
+}
+
+/// Read the machine architecture from `uname(2)` at runtime.
+///
+/// Returns `None` on non-Unix platforms or if the uname machine string
+/// cannot be parsed into a known architecture.
+fn arch_from_uname() -> Option<target_lexicon::Architecture> {
+    #[cfg(unix)]
+    {
+        let uname = rustix::system::uname();
+        let machine = uname.machine().to_str().ok()?;
+        let architecture = target_lexicon::Architecture::from_str(machine).ok()?;
+        if matches!(architecture, target_lexicon::Architecture::Unknown) {
+            return None;
+        }
+        Some(architecture)
+    }
+    #[cfg(not(unix))]
+    {
+        None
     }
 }
 
@@ -227,6 +249,30 @@ impl From<&uv_platform_tags::Arch> for Arch {
                 None,
             ),
             uv_platform_tags::Arch::Wasm32 => Self::new(target_lexicon::Architecture::Wasm32, None),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_arch_from_uname() {
+        // On Unix, `arch_from_uname` should return a known architecture.
+        #[cfg(unix)]
+        {
+            let arch = arch_from_uname().expect("uname should return a known architecture");
+            assert!(
+                !matches!(arch, target_lexicon::Architecture::Unknown),
+                "uname returned an unknown architecture: {arch}"
+            );
+        }
+
+        // On non-Unix, `arch_from_uname` should always return `None`.
+        #[cfg(not(unix))]
+        {
+            assert!(arch_from_uname().is_none());
         }
     }
 }
