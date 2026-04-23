@@ -257,6 +257,7 @@ pub enum PreviewFeature {
     ProjectDirectoryMustExist = 1 << 27,
     IndexExcludeNewer = 1 << 28,
     AzureEndpoint = 1 << 29,
+    TomlBackwardsCompatibility = 1 << 30,
 }
 
 impl PreviewFeature {
@@ -293,6 +294,7 @@ impl PreviewFeature {
             Self::ProjectDirectoryMustExist => "project-directory-must-exist",
             Self::IndexExcludeNewer => "index-exclude-newer",
             Self::AzureEndpoint => "azure-endpoint",
+            Self::TomlBackwardsCompatibility => "toml-backwards-compatibility",
         }
     }
 }
@@ -342,6 +344,7 @@ impl FromStr for PreviewFeature {
             "project-directory-must-exist" => Self::ProjectDirectoryMustExist,
             "index-exclude-newer" => Self::IndexExcludeNewer,
             "azure-endpoint" => Self::AzureEndpoint,
+            "toml-backwards-compatibility" => Self::TomlBackwardsCompatibility,
             _ => return Err(PreviewFeatureParseError),
         })
     }
