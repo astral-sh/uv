@@ -12,7 +12,7 @@ ARG CARGO_XWIN_VERSION=0.21.4
 ARG XWIN_SDK_VERSION=10.0.22621
 ARG XWIN_CRT_VERSION=14.44.17.14
 
-FROM ubuntu:26.04@sha256:4095ef613201918336b5d7d00be15d8b09c72ddb77c80bca249c255887a64d87 AS base
+FROM docker.io/ubuntu:26.04@sha256:4095ef613201918336b5d7d00be15d8b09c72ddb77c80bca249c255887a64d87 AS base
 
 ARG RUST_NIGHTLY
 ARG UBUNTU_SNAPSHOT
@@ -62,6 +62,6 @@ RUN cargo xwin cache xwin \
 
 FROM base
 
-COPY --chmod=a+rwX --from=xwin-cache ${HOME}/xwin-cache ${HOME}/xwin-cache
-RUN chmod a+w ${HOME}/xwin-cache
+COPY --from=xwin-cache ${HOME}/xwin-cache ${HOME}/xwin-cache
+RUN chmod a+rwX ${HOME}/xwin-cache
 COPY --from=xwin-cache ${CARGO_HOME}/bin/cargo-xwin ${CARGO_HOME}/bin/cargo-xwin
