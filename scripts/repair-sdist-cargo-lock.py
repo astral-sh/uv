@@ -1,29 +1,43 @@
 #!/usr/bin/env python3
-"""Fix the Cargo.lock inside a maturin-generated sdist tarball.
+"""Fix a maturin-generated sdist tarball.
 
-Maturin copies the full workspace Cargo.lock into the sdist, but the sdist
-only contains a subset of workspace crates. This makes `cargo build --locked`
-fail because the lock file references packages not present in the sdist.
+Two fixups are applied:
 
-This script extracts the sdist, runs `cargo update --workspace` to prune
-the lockfile to only the packages needed by the included crates (without
-changing any pinned versions), and repacks the tarball.
+1. Prune Cargo.lock. Maturin copies the full workspace Cargo.lock into the
+   sdist, but the sdist only contains a subset of workspace crates. This
+   makes `cargo build --locked` fail because the lock file references packages
+   not present in the sdist. `cargo update --workspace` prunes the lockfile to
+   only the packages needed by the included crates without changing any pinned
+   versions. See: https://github.com/astral-sh/uv/issues/18824
 
-See: https://github.com/astral-sh/uv/issues/18824
+2. Inject rust-toolchain.toml. Maturin does not include the workspace-root
+   rust-toolchain.toml in a crate-scoped sdist, so rustup falls back to the
+   builder's preinstalled rustc — which may be below our MSRV. Copying the
+   root toolchain file ensures the sdist builds the same way as the full uv
+   sdist (which does ship it).
 """
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 import tarfile
 import tempfile
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(SCRIPT_DIR)
+RUST_TOOLCHAIN_SRC = os.path.join(REPO_ROOT, "rust-toolchain.toml")
 
 
 def fix_sdist_lockfile(sdist_path: str) -> None:
     sdist_path = os.path.abspath(sdist_path)
     if not tarfile.is_tarfile(sdist_path):
         print(f"Error: {sdist_path} is not a valid tar file", file=sys.stderr)
+        sys.exit(1)
+
+    if not os.path.exists(RUST_TOOLCHAIN_SRC):
+        print(f"Error: {RUST_TOOLCHAIN_SRC} not found", file=sys.stderr)
         sys.exit(1)
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -49,6 +63,12 @@ def fix_sdist_lockfile(sdist_path: str) -> None:
                 f"Error: no Cargo.lock found in sdist {top_level_name}", file=sys.stderr
             )
             sys.exit(1)
+
+        # Inject rust-toolchain.toml so `pip install` of the sdist uses the
+        # pinned toolchain instead of whatever rustc the builder has installed.
+        toolchain_dst = os.path.join(extracted_dir, "rust-toolchain.toml")
+        print(f"Injecting rust-toolchain.toml into {top_level_name}...")
+        shutil.copyfile(RUST_TOOLCHAIN_SRC, toolchain_dst)
 
         # Prune Cargo.lock to only packages needed by the included crates.
         # `cargo update --workspace` removes entries for missing workspace members
