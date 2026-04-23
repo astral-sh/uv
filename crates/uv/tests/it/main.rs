@@ -44,6 +44,9 @@ mod format;
 
 mod help;
 
+#[cfg(all(feature = "test-python", feature = "test-pypi"))]
+mod mow;
+
 #[cfg(all(feature = "test-python", feature = "test-pypi", feature = "test-git"))]
 mod init;
 

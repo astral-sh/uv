@@ -254,8 +254,9 @@ pub enum PreviewFeature {
     RelocatableEnvsDefault = 1 << 24,
     PublishRequireNormalized = 1 << 25,
     Audit = 1 << 26,
-    ProjectDirectoryMustExist = 1 << 27,
-    IndexExcludeNewer = 1 << 28,
+    Mow = 1 << 27,
+    ProjectDirectoryMustExist = 1 << 28,
+    IndexExcludeNewer = 1 << 29,
 }
 
 impl PreviewFeature {
@@ -289,6 +290,7 @@ impl PreviewFeature {
             Self::RelocatableEnvsDefault => "relocatable-envs-default",
             Self::PublishRequireNormalized => "publish-require-normalized",
             Self::Audit => "audit",
+            Self::Mow => "mow",
             Self::ProjectDirectoryMustExist => "project-directory-must-exist",
             Self::IndexExcludeNewer => "index-exclude-newer",
         }
@@ -337,6 +339,7 @@ impl FromStr for PreviewFeature {
             "relocatable-envs-default" => Self::RelocatableEnvsDefault,
             "publish-require-normalized" => Self::PublishRequireNormalized,
             "audit" => Self::Audit,
+            "mow" => Self::Mow,
             "project-directory-must-exist" => Self::ProjectDirectoryMustExist,
             "index-exclude-newer" => Self::IndexExcludeNewer,
             _ => return Err(PreviewFeatureParseError),
@@ -584,6 +587,7 @@ mod tests {
             PreviewFeature::PublishRequireNormalized.as_str(),
             "publish-require-normalized"
         );
+        assert_eq!(PreviewFeature::Mow.as_str(), "mow");
         assert_eq!(
             PreviewFeature::ProjectDirectoryMustExist.as_str(),
             "project-directory-must-exist"

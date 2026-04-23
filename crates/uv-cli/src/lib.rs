@@ -1195,6 +1195,22 @@ pub enum ProjectCommand {
         after_long_help = ""
     )]
     Format(FormatArgs),
+    /// Lint the project's dependencies.
+    ///
+    /// Collects workspace metadata, including module ownership information, and passes it to
+    /// `ty check` via `--dependency-metadata`.
+    ///
+    /// A compatible `ty` executable must be available on `PATH`, or provided with `--ty`.
+    ///
+    /// If operating in a workspace, the current member is checked by default; use `--package`
+    /// to select a different member.
+    ///
+    /// Additional arguments can be passed to ty after `--`.
+    #[command(
+        after_help = "Use `uv help mow` for more details.",
+        after_long_help = ""
+    )]
+    Mow(MowArgs),
     /// Audit the project's dependencies.
     ///
     /// Dependencies are audited for known vulnerabilities, as well as 'adverse' statuses such as
@@ -5157,6 +5173,64 @@ pub struct FormatArgs {
     /// (e.g., `--version ">=0.8.0"`) or `--version latest`.
     #[arg(long, hide = true)]
     pub show_version: bool,
+}
+
+#[derive(Args)]
+pub struct MowArgs {
+    /// Check if the lockfile is up-to-date [env: UV_LOCKED=]
+    ///
+    /// Asserts that the `uv.lock` would remain unchanged after a resolution. If the lockfile is
+    /// missing or needs to be updated, uv will exit with an error.
+    #[arg(long, conflicts_with_all = ["frozen", "upgrade"])]
+    pub locked: bool,
+
+    /// Assert that a `uv.lock` exists without checking if it is up-to-date [env: UV_FROZEN=]
+    #[arg(long, conflicts_with_all = ["locked"])]
+    pub frozen: bool,
+
+    #[command(flatten)]
+    pub resolver: ResolverArgs,
+
+    #[command(flatten)]
+    pub build: BuildOptionsArgs,
+
+    #[command(flatten)]
+    pub refresh: RefreshArgs,
+
+    /// Lint a specific package in the workspace.
+    #[arg(long, value_hint = ValueHint::Other)]
+    pub package: Option<PackageName>,
+
+    /// The path to the `ty` executable to use.
+    #[arg(long, value_hint = ValueHint::FilePath)]
+    pub ty: Option<PathBuf>,
+
+    /// The Python interpreter to use during resolution.
+    ///
+    /// A Python interpreter is required for building source distributions to determine package
+    /// metadata when there are not wheels.
+    ///
+    /// The interpreter is also used as the fallback value for the minimum Python version if
+    /// `requires-python` is not set.
+    ///
+    /// See `uv help python` for details on Python discovery and supported request formats.
+    #[arg(
+        long,
+        short,
+        env = EnvVars::UV_PYTHON,
+        verbatim_doc_comment,
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
+        value_hint = ValueHint::Other,
+    )]
+    pub python: Option<Maybe<String>>,
+
+    /// Additional arguments to pass to ty.
+    ///
+    /// For example, use `uv mow -- --python-version 3.12` to target a specific Python version or
+    /// `uv mow -- src/module/foo.py` to lint a specific path.
+    #[arg(last = true, value_hint = ValueHint::Other)]
+    pub extra_args: Vec<String>,
 }
 
 #[derive(Args)]

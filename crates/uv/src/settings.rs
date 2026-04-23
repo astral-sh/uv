@@ -23,7 +23,7 @@ use uv_cli::{
     TreeArgs, VenvArgs, VersionArgs, VersionBumpSpec, VersionFormat,
 };
 use uv_cli::{
-    AuthorFrom, BuildArgs, ExportArgs, FormatArgs, PublishArgs, PythonDirArgs,
+    AuthorFrom, BuildArgs, ExportArgs, FormatArgs, MowArgs, PublishArgs, PythonDirArgs,
     ResolverInstallerArgs, ToolUpgradeArgs,
     options::{
         Flag, FlagSource, check_conflicts, flag, resolve_flag, resolver_installer_options,
@@ -2602,6 +2602,65 @@ impl FormatSettings {
             exclude_newer: exclude_newer.map(|v| v.timestamp()),
             no_project,
             show_version,
+        }
+    }
+}
+
+/// The resolved settings to use for a `mow` invocation.
+#[derive(Debug, Clone)]
+pub(crate) struct MowSettings {
+    pub(crate) lock_check: LockCheck,
+    pub(crate) frozen: Option<FrozenSource>,
+    pub(crate) python: Option<String>,
+    pub(crate) install_mirrors: PythonInstallMirrors,
+    pub(crate) refresh: Refresh,
+    pub(crate) settings: ResolverSettings,
+    pub(crate) package: Option<PackageName>,
+    pub(crate) ty: Option<PathBuf>,
+    pub(crate) extra_args: Vec<String>,
+}
+
+impl MowSettings {
+    /// Resolve the [`MowSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(
+        args: MowArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
+        let MowArgs {
+            locked,
+            frozen,
+            resolver,
+            build,
+            refresh,
+            package,
+            ty,
+            python,
+            extra_args,
+        } = args;
+
+        let filesystem_install_mirrors = filesystem
+            .clone()
+            .map(|fs| fs.install_mirrors.clone())
+            .unwrap_or_default();
+
+        let locked = resolve_flag(locked, "locked", environment.locked);
+        let frozen = resolve_flag(frozen, "frozen", environment.frozen);
+
+        check_conflicts(locked, frozen);
+
+        Self {
+            lock_check: resolve_lock_check(locked),
+            frozen: resolve_frozen(frozen),
+            python: python.and_then(Maybe::into_option),
+            install_mirrors: environment
+                .install_mirrors
+                .combine(filesystem_install_mirrors),
+            refresh: Refresh::from(refresh),
+            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
+            package,
+            ty,
+            extra_args,
         }
     }
 }

@@ -1442,6 +1442,14 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv mow` command with options shared across scenarios.
+    pub fn mow(&self) -> Command {
+        let mut command = self.new_command();
+        command.arg("mow");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
     /// Create a `uv build` command with options shared across scenarios.
     pub fn build(&self) -> Command {
         let mut command = self.new_command();

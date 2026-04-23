@@ -2663,6 +2663,35 @@ async fn run_project(
             ))
             .await
         }
+        ProjectCommand::Mow(args) => {
+            let args = settings::MowSettings::resolve(args, filesystem, environment);
+            show_settings!(args);
+
+            let cache = cache.init().await?;
+
+            Box::pin(commands::mow(
+                project_dir,
+                args.lock_check,
+                args.frozen,
+                args.python,
+                args.install_mirrors,
+                args.refresh,
+                args.settings,
+                args.package,
+                args.ty,
+                args.extra_args,
+                client_builder.subcommand(vec!["mow".to_owned()]),
+                globals.python_preference,
+                globals.python_downloads,
+                globals.concurrency,
+                no_config,
+                &cache,
+                workspace_cache,
+                printer,
+                globals.preview,
+            ))
+            .await
+        }
         ProjectCommand::Audit(audit_args) => {
             let args = settings::AuditSettings::resolve(audit_args, filesystem, environment);
             show_settings!(args);
