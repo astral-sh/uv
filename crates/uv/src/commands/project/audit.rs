@@ -20,11 +20,13 @@ use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 use anyhow::Result;
 use rustc_hash::FxHashSet;
 use tracing::trace;
+use uv_audit::service::project_status::ProjectStatusAudit;
 use uv_audit::service::{VulnerabilityServiceFormat, osv};
-use uv_audit::types::{Dependency, Finding, VulnerabilityID};
+use uv_audit::types::{AdverseStatus, Dependency, Finding, VulnerabilityID};
 use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{Concurrency, DependencyGroups, ExtrasSpecification, TargetTriple};
+use uv_distribution_types::IndexCapabilities;
 use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
@@ -196,19 +198,30 @@ pub(crate) async fn audit(
         )
     });
 
-    // Build the list of auditable packages by traversing the lockfile from workspace roots,
+    // Build the set of auditable packages by traversing the lockfile from workspace roots,
     // respecting the user's extras and dependency-group filters. Workspace members are excluded
     // (they are local and have no external package identity), as are packages without a version.
-    let auditable = lock.packages_for_audit(&extras, &groups);
+    // The `Auditable` view offers per-version and per-project projections from a single walk.
+    let auditable = lock.auditable(&extras, &groups);
+    let projects = auditable.projects(target.install_path())?;
 
     // Perform the audit.
     let reporter = AuditReporter::from(printer);
     let dependencies: Vec<Dependency> = auditable
-        .iter()
-        .map(|(name, version)| Dependency::new((*name).clone(), (*version).clone()))
+        .packages()
+        .map(|(name, version)| Dependency::new(name.clone(), version.clone()))
         .collect();
-    let base_client = client_builder.build()?;
-    let all_findings = {
+    let base_client = client_builder.clone().build()?;
+
+    let registry_client = RegistryClientBuilder::new(client_builder, cache.clone())
+        .index_locations(settings.index_locations.clone())
+        .keyring(settings.keyring_provider)
+        .build()?;
+    let capabilities = IndexCapabilities::default();
+    let status_audit =
+        ProjectStatusAudit::new(&registry_client, &capabilities, concurrency.clone());
+
+    let osv_future = async {
         match service {
             VulnerabilityServiceFormat::Osv => {
                 let osv_url = service_url
@@ -219,10 +232,20 @@ pub(crate) async fn audit(
                 let client = base_client.for_host(&osv_url).raw_client().clone();
                 let service = osv::Osv::new(client, Some(osv_url), concurrency);
                 trace!("Auditing {n} dependencies against OSV", n = auditable.len());
-                service.query_batch(&dependencies, osv::Filter::All).await?
+                service.query_batch(&dependencies, osv::Filter::All).await
             }
         }
     };
+    let status_future = async {
+        trace!(
+            "Auditing {n} projects for adverse status",
+            n = projects.len()
+        );
+        status_audit.query_batch(&projects).await
+    };
+    let (osv_findings, status_findings) = tokio::join!(osv_future, status_future);
+    let mut all_findings = osv_findings?;
+    all_findings.extend(status_findings);
 
     reporter.on_audit_complete();
 
@@ -380,8 +403,21 @@ impl AuditResults {
         if !statuses.is_empty() {
             writeln!(self.printer.stdout_important(), "\nAdverse statuses:\n")?;
 
-            // NOTE: Nothing here yet, since we don't actually produce
-            // any adverse project statuses at the moment.
+            for status in statuses {
+                let label = match status.status {
+                    AdverseStatus::Archived => "archived".yellow().to_string(),
+                    AdverseStatus::Deprecated => "deprecated".yellow().to_string(),
+                    AdverseStatus::Quarantined => "quarantined".red().to_string(),
+                };
+                let name = status.name.bold();
+                if let Some(reason) = &status.reason {
+                    writeln!(self.printer.stdout_important(), "{name} is {label}:")?;
+                    writeln!(self.printer.stdout_important(), "  Reason: {reason}")?;
+                } else {
+                    writeln!(self.printer.stdout_important(), "{name} is {label}")?;
+                }
+                writeln!(self.printer.stdout_important())?;
+            }
         }
 
         if has_findings {

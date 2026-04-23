@@ -1706,3 +1706,297 @@ async fn audit_script_extras() {
     Found no known vulnerabilities and no adverse project statuses in 2 packages
     ");
 }
+
+/// Audit a project whose index reports an adverse PEP 792 status (deprecated
+/// with reason) for a lockfile dependency.
+#[tokio::test]
+async fn audit_project_status_deprecated_with_reason() {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+    "#})
+        .unwrap();
+
+    context
+        .lock()
+        .arg("--default-index")
+        .arg(proxy.url("/status/deprecated/reason/no-longer-maintained/simple"))
+        .assert()
+        .success();
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--frozen")
+        .arg("--preview")
+        .arg("--service-url")
+        .arg(server.uri()), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    Adverse statuses:
+
+    iniconfig is deprecated:
+      Reason: no-longer-maintained
+
+
+    ----- stderr -----
+    Found no known vulnerabilities and 1 adverse project status in 1 package
+    ");
+}
+
+/// Audit a project whose index reports an archived status without a reason.
+#[tokio::test]
+async fn audit_project_status_archived_no_reason() {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+    "#})
+        .unwrap();
+
+    context
+        .lock()
+        .arg("--default-index")
+        .arg(proxy.url("/status/archived/simple"))
+        .assert()
+        .success();
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--frozen")
+        .arg("--preview")
+        .arg("--service-url")
+        .arg(server.uri()), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    Adverse statuses:
+
+    iniconfig is archived
+
+
+    ----- stderr -----
+    Found no known vulnerabilities and 1 adverse project status in 1 package
+    ");
+}
+
+/// Audit a project whose index reports a quarantined status.
+#[tokio::test]
+async fn audit_project_status_quarantined() {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+    "#})
+        .unwrap();
+
+    context
+        .lock()
+        .arg("--default-index")
+        .arg(proxy.url("/status/quarantined/reason/suspected-malware/simple"))
+        .assert()
+        .success();
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--frozen")
+        .arg("--preview")
+        .arg("--service-url")
+        .arg(server.uri()), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    Adverse statuses:
+
+    iniconfig is quarantined:
+      Reason: suspected-malware
+
+
+    ----- stderr -----
+    Found no known vulnerabilities and 1 adverse project status in 1 package
+    ");
+}
+
+/// An `active` status is not an adverse status and should not be reported.
+#[tokio::test]
+async fn audit_project_status_active_not_reported() {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+    "#})
+        .unwrap();
+
+    context
+        .lock()
+        .arg("--default-index")
+        .arg(proxy.url("/status/active/simple"))
+        .assert()
+        .success();
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--frozen")
+        .arg("--preview")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Found no known vulnerabilities and no adverse project statuses in 1 package
+    ");
+}
+
+/// A vulnerable project that also has an adverse status should surface both
+/// findings in the same audit run.
+#[tokio::test]
+async fn audit_vulnerability_and_project_status() {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+    "#})
+        .unwrap();
+
+    context
+        .lock()
+        .arg("--default-index")
+        .arg(proxy.url("/status/archived/simple"))
+        .assert()
+        .success();
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": [{"id": "PYSEC-2023-0001"}]}]
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/vulns/PYSEC-2023-0001"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "PYSEC-2023-0001",
+            "modified": "2026-01-01T00:00:00Z",
+            "summary": "A test vulnerability in iniconfig",
+            "affected": [{
+                "ranges": [{
+                    "type": "ECOSYSTEM",
+                    "events": [
+                        {"introduced": "0"},
+                        {"fixed": "2.1.0"}
+                    ]
+                }]
+            }]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--frozen")
+        .arg("--preview")
+        .arg("--service-url")
+        .arg(server.uri()), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    Vulnerabilities:
+
+    iniconfig 2.0.0 has 1 known vulnerability:
+
+    - PYSEC-2023-0001: A test vulnerability in iniconfig
+
+      Fixed in: 2.1.0
+
+      Advisory information: https://osv.dev/vulnerability/PYSEC-2023-0001
+
+
+    Adverse statuses:
+
+    iniconfig is archived
+
+
+    ----- stderr -----
+    Found 1 known vulnerability and 1 adverse project status in 1 package
+    ");
+}
