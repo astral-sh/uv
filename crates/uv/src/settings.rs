@@ -574,6 +574,7 @@ pub(crate) struct RunSettings {
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
     pub(crate) env_file: EnvFile,
+    pub(crate) recursion_depth: u32,
     pub(crate) max_recursion_depth: u32,
 }
 
@@ -654,6 +655,7 @@ impl RunSettings {
         let isolated = isolated || environment.isolated.value == Some(true);
         let show_resolution = show_resolution || environment.show_resolution.value == Some(true);
         let no_env_file = no_env_file || environment.no_env_file.value == Some(true);
+        let recursion_depth = environment.run_recursion_depth.unwrap_or(0);
 
         Self {
             lock_check: resolve_lock_check(locked),
@@ -710,6 +712,7 @@ impl RunSettings {
                 filesystem,
             ),
             env_file: EnvFile::from_args(env_file, no_env_file),
+            recursion_depth,
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
