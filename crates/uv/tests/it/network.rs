@@ -1146,7 +1146,7 @@ fn minimal_iniconfig_wheel() -> Vec<u8> {
 ///
 /// When `honor_range` is false:
 /// - HEAD → `Content-Length` only (no `Accept-Ranges`)
-/// - Plain GET → first two requests hang (stream_wheel + first download attempt); the third
+/// - Plain GET → first two requests hang (`stream_wheel` + first download attempt); the third
 ///   serves the full wheel so the retry (which consumes one retry budget) succeeds
 /// - Range GET → 200 full content (ignored, but never sent by the client once Range is disabled)
 fn wheel_server(wheel: Vec<u8>, honor_range: bool) -> (String, impl Drop) {
