@@ -5,6 +5,10 @@
 
 set -euo pipefail
 
+if ! command -v docker >/dev/null 2>&1 && command -v podman >/dev/null 2>&1; then
+    docker() { podman "$@"; }
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TRAMPOLINE_DIR="$REPO_ROOT/crates/uv-trampoline"
