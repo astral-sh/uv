@@ -14,9 +14,25 @@ OUTPUT_DIR="$REPO_ROOT/crates/uv-trampoline-builder/trampolines"
 TOOLCHAIN="$(grep '^channel' "$TRAMPOLINE_DIR/rust-toolchain.toml" | sed 's/.*"\(.*\)"/\1/')"
 
 # Build the pinned toolchain image.
-docker buildx build -t uv-trampoline-builder --load \
-    -f "$TRAMPOLINE_DIR/Dockerfile" "$TRAMPOLINE_DIR" \
-    "$@"
+#
+# In CI, `--load` and `--cache-to` are incompatible: `--load` forces the
+# docker exporter which silently drops the cache export. Work around this
+# by doing two passes: one to warm/export the GHA layer cache and one to
+# load the image into the local daemon using the cache.
+if [ "${CI:-}" = "true" ]; then
+    docker buildx build \
+        --cache-from type=gha \
+        --cache-to type=gha,mode=max \
+        -f "$TRAMPOLINE_DIR/Dockerfile" "$TRAMPOLINE_DIR" \
+        "$@"
+    docker buildx build -t uv-trampoline-builder --load \
+        --cache-from type=gha \
+        -f "$TRAMPOLINE_DIR/Dockerfile" "$TRAMPOLINE_DIR"
+else
+    docker buildx build -t uv-trampoline-builder --load \
+        -f "$TRAMPOLINE_DIR/Dockerfile" "$TRAMPOLINE_DIR" \
+        "$@"
+fi
 
 # Build trampolines inside the container with the workspace bind-mounted.
 # The working directory must be the trampoline crate so cargo picks up
