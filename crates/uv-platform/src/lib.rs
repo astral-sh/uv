@@ -163,7 +163,14 @@ impl Platform {
             (OperatingSystem::Linux, Libc::Some(env)) => Some({
                 // Special suffix for ARM with hardware float
                 if matches!(arch.family(), Architecture::Arm(ArmArchitecture::Armv7)) {
-                    format!("{env}eabihf")
+                    let env_str = env.to_string();
+                    // Only append "eabihf" if the environment doesn't already have it
+                    // (e.g., `Gnueabihf` already ends with "eabihf", but `Gnu` doesn't)
+                    if env_str.ends_with("eabihf") {
+                        env_str
+                    } else {
+                        format!("{env}eabihf")
+                    }
                 } else {
                     env.to_string()
                 }
@@ -316,6 +323,38 @@ mod tests {
         assert_eq!(platform.os.to_string(), "linux");
         assert_eq!(platform.arch.to_string(), "x86_64_v3");
         assert_eq!(platform.libc.to_string(), "gnu");
+    }
+
+    /// Regression test for <https://github.com/astral-sh/uv/issues/19137>
+    /// When libc detection returns `Gnueabihf` (which already has the hard-float suffix),
+    /// `as_cargo_dist_triple()` should not append "eabihf" again.
+    #[test]
+    fn test_armv7_gnueabihf_triple() {
+        let platform = Platform {
+            os: Os::from_str("linux").unwrap(),
+            arch: Arch::from_str("armv7").unwrap(),
+            libc: Libc::from_str("gnueabihf").unwrap(),
+        };
+        // The triple should be `armv7-unknown-linux-gnueabihf`, not `armv7-unknown-linux-gnueabihfeabihf`
+        assert_eq!(
+            platform.as_cargo_dist_triple(),
+            "armv7-unknown-linux-gnueabihf"
+        );
+    }
+
+    /// Test that armv7 with base `gnu` libc still gets the hard-float suffix appended.
+    #[test]
+    fn test_armv7_gnu_triple() {
+        let platform = Platform {
+            os: Os::from_str("linux").unwrap(),
+            arch: Arch::from_str("armv7").unwrap(),
+            libc: Libc::from_str("gnu").unwrap(),
+        };
+        // The triple should get "eabihf" appended to the base "gnu"
+        assert_eq!(
+            platform.as_cargo_dist_triple(),
+            "armv7-unknown-linux-gnueabihf"
+        );
     }
 
     #[test]
