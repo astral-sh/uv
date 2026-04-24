@@ -731,62 +731,6 @@ pub async fn untar_zst<R: tokio::io::AsyncRead + Unpin>(
         .map_err(Error::io_or_compression)
 }
 
-/// Unpack a `.tar.zst` archive from a file on disk into the target directory.
-///
-/// Returns the list of unpacked files and their sizes.
-pub fn untar_zst_file<R: std::io::Read>(
-    reader: R,
-    target: impl AsRef<Path>,
-) -> Result<Vec<(PathBuf, u64)>, Error> {
-    let reader = std::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
-    let decompressed = zstd::Decoder::new(reader).map_err(Error::Io)?;
-    let mut archive = tar::Archive::new(decompressed);
-    archive.set_preserve_mtime(false);
-
-    // The logic below is `Archive::unpack`, with slight simplifications as we know the target is
-    // a real directory, using our error handling and adding file recording.
-    let mut files = Vec::new();
-
-    // Canonicalizing the dst directory will prepend the path with '\\?\'
-    // on windows which will allow windows APIs to treat the path as an
-    // extended-length path with a 32,767 character limit. Otherwise all
-    // unpacked paths over 260 characters will fail on creation with a
-    // NotFound exception.
-    let dst = fs_err::canonicalize(&target).unwrap_or(target.as_ref().to_path_buf());
-
-    // Delay any directory entries until the end (they will be created if needed by
-    // descendants), to ensure that directory permissions do not interfere with descendant
-    // extraction.
-    let mut directories = Vec::new();
-    for entry in archive.entries().map_err(Error::io_or_compression)? {
-        let mut file = entry.map_err(Error::io_or_compression)?;
-        if file.header().entry_type() == tar::EntryType::Directory {
-            directories.push(file);
-        } else {
-            let entry_type = file.header().entry_type();
-            let path = file.path().map_err(Error::io_or_compression)?.into_owned();
-            let size = file.header().size().map_err(Error::io_or_compression)?;
-            if entry_type.is_file() || entry_type.is_hard_link() {
-                files.push((path, size));
-            }
-            file.unpack_in(&dst).map_err(Error::io_or_compression)?;
-        }
-    }
-
-    // Apply the directories.
-    //
-    // Note: the order of application is important to permissions. That is, we must traverse
-    // the filesystem graph in topological ordering or else we risk not being able to create
-    // child directories within those of more restrictive permissions. See [0] for details.
-    //
-    // [0]: <https://github.com/alexcrichton/tar-rs/issues/242>
-    directories.sort_by(|a, b| b.path_bytes().cmp(&a.path_bytes()));
-    for mut dir in directories {
-        dir.unpack_in(&dst).map_err(Error::io_or_compression)?;
-    }
-    Ok(files)
-}
-
 /// Unpack a `.tar.xz` archive into the target directory, without requiring `Seek`.
 ///
 /// This is useful for unpacking files as they're being downloaded.
