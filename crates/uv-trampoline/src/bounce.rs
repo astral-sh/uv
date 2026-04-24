@@ -168,8 +168,7 @@ fn make_child_cmdline() -> CString {
                 // pointing at the base installation, which then leaks into
                 // child processes and can shadow stdlib from a different Python
                 // (see https://github.com/astral-sh/uv/issues/19080).
-                if !is_virtualenv(executable_name.as_path())
-                    && !is_virtualenv(python_exe.as_path())
+                if !is_virtualenv(executable_name.as_path()) && !is_virtualenv(python_exe.as_path())
                 {
                     let python_home = std::env::var(EnvVars::PYTHONHOME).ok();
                     let marker = std::env::var(EnvVars::UV_INTERNAL__PYTHONHOME).ok();
