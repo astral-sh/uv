@@ -1372,8 +1372,16 @@ impl PythonInstallSettings {
                 PythonUpgrade::Disabled
             },
             bin: flag(bin, no_bin, "bin").or(environment.python_install_bin),
-            registry: flag(registry, no_registry, "registry")
-                .or(environment.python_install_registry),
+            registry: match flag(registry, no_registry, "registry") {
+                Some(registry) => Some(registry),
+                None => environment.python_install_registry.or(
+                    if environment.python_no_registry.value == Some(true) {
+                        Some(false)
+                    } else {
+                        None
+                    },
+                ),
+            },
             python_install_mirror,
             pypy_install_mirror,
             python_downloads_json_url,
@@ -1430,7 +1438,13 @@ impl PythonUpgradeSettings {
         let force = false;
         let default = false;
         let bin = None;
-        let registry = None;
+        let registry = environment.python_install_registry.or(
+            if environment.python_no_registry.value == Some(true) {
+                Some(false)
+            } else {
+                None
+            },
+        );
 
         let PythonUpgradeArgs {
             install_dir,
@@ -1573,11 +1587,19 @@ impl PythonPinSettings {
             no_project,
             global,
             rm,
+            python_downloads_json_url,
         } = args;
 
         let filesystem_install_mirrors = filesystem
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
+
+        let install_mirrors = PythonInstallMirrors {
+            python_downloads_json_url,
+            ..Default::default()
+        }
+        .combine(environment.install_mirrors)
+        .combine(filesystem_install_mirrors);
 
         Self {
             request,
@@ -1585,9 +1607,7 @@ impl PythonPinSettings {
             no_project,
             global,
             rm,
-            install_mirrors: environment
-                .install_mirrors
-                .combine(filesystem_install_mirrors),
+            install_mirrors,
         }
     }
 }

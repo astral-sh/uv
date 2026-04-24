@@ -31,7 +31,7 @@ impl LatestClient<'_> {
         &self,
         package: &PackageName,
         index: &IndexUrl,
-    ) -> Option<uv_resolver::ExcludeNewerValue> {
+    ) -> Option<jiff::Timestamp> {
         self.exclude_newer
             .exclude_newer_package_for_index(package, self.index_locations.exclude_newer_for(index))
     }
@@ -85,9 +85,7 @@ impl LatestClient<'_> {
                     // Skip distributions uploaded after the cutoff.
                     if let Some(exclude_newer) = &exclude_newer {
                         match file.upload_time_utc_ms.as_ref() {
-                            Some(&upload_time)
-                                if upload_time >= exclude_newer.timestamp_millis() =>
-                            {
+                            Some(&upload_time) if upload_time >= exclude_newer.as_millisecond() => {
                                 continue;
                             }
                             None => {

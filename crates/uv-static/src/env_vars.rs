@@ -420,6 +420,14 @@ impl EnvVars {
     #[attr_added_in("0.8.0")]
     pub const UV_PYTHON_INSTALL_REGISTRY: &'static str = "UV_PYTHON_INSTALL_REGISTRY";
 
+    /// Disable use of the Windows registry for Python discovery and registration.
+    ///
+    /// When set, uv will not discover Python interpreters from the Windows registry or Microsoft
+    /// Store locations, and managed Python installations will not be registered in the Windows
+    /// registry.
+    #[attr_added_in("next release")]
+    pub const UV_PYTHON_NO_REGISTRY: &'static str = "UV_PYTHON_NO_REGISTRY";
+
     /// Managed Python installations information is hardcoded in the `uv` binary.
     ///
     /// This variable can be set to a local path or URL pointing to
@@ -496,10 +504,12 @@ impl EnvVars {
     #[attr_added_in("0.5.21")]
     pub const UV_VENV_SEED: &'static str = "UV_VENV_SEED";
 
-    /// Used to override `PATH` to limit Python executable availability in the test suite.
-    #[attr_hidden]
-    #[attr_added_in("0.0.5")]
-    pub const UV_TEST_PYTHON_PATH: &'static str = "UV_TEST_PYTHON_PATH";
+    /// Used to override `PATH` for Python executable discovery.
+    ///
+    /// When set, uv will search for Python interpreters in the directories specified by this
+    /// variable instead of `PATH`.
+    #[attr_added_in("next release")]
+    pub const UV_PYTHON_SEARCH_PATH: &'static str = "UV_PYTHON_SEARCH_PATH";
 
     /// Include resolver and installer output related to environment modifications.
     #[attr_hidden]
@@ -919,6 +929,12 @@ impl EnvVars {
     #[attr_added_in("0.4.29")]
     pub const GIT_CEILING_DIRECTORIES: &'static str = "GIT_CEILING_DIRECTORIES";
 
+    /// Cleared for uv's git invocations to ensure git behaves correctly in
+    /// spite of an odd environment.
+    #[attr_hidden]
+    #[attr_added_in("next release")]
+    pub const GIT_COMMON_DIR: &'static str = "GIT_COMMON_DIR";
+
     /// Indicates that the current process is running in GitHub Actions.
     ///
     /// `uv publish` may attempt trusted publishing flows when set
@@ -1272,7 +1288,7 @@ impl EnvVars {
     pub const UV_PROJECT: &'static str = "UV_PROJECT";
 
     /// Equivalent to the `--no-project` command-line argument.
-    #[attr_added_in("next")]
+    #[attr_added_in("next release")]
     pub const UV_NO_PROJECT: &'static str = "UV_NO_PROJECT";
 
     /// Equivalent to the `--directory` command-line argument. `UV_WORKING_DIRECTORY` (added in

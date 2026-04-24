@@ -87,6 +87,7 @@ mod help;
 pub(crate) mod pip;
 mod project;
 mod publish;
+mod pylock;
 mod python;
 pub(crate) mod reporters;
 #[cfg(feature = "self-update")]

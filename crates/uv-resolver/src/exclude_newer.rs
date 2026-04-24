@@ -348,25 +348,6 @@ impl ExcludeNewerPackage {
         self.0.is_empty()
     }
 
-    /// Recompute all relative span timestamps relative to the current time.
-    #[must_use]
-    pub fn recompute(self) -> Self {
-        Self(
-            self.0
-                .into_iter()
-                .map(|(name, setting)| {
-                    let setting = match setting {
-                        ExcludeNewerOverride::Disabled => ExcludeNewerOverride::Disabled,
-                        ExcludeNewerOverride::Enabled(value) => {
-                            ExcludeNewerOverride::Enabled(Box::new((*value).recompute()))
-                        }
-                    };
-                    (name, setting)
-                })
-                .collect(),
-        )
-    }
-
     pub fn compare(&self, other: &Self) -> Option<ExcludeNewerPackageChange> {
         for (package, setting) in self {
             match (setting, other.get(package)) {
@@ -470,57 +451,54 @@ impl ExcludeNewer {
         Self { global, package }
     }
 
-    /// Returns the exclude-newer value for a specific package, returning `Some(value)` if the
-    /// package has a package-specific setting or falls back to the global value if set, or `None`
-    /// if exclude-newer is explicitly disabled for the package (set to `false`) or if no
-    /// exclude-newer is configured.
-    pub fn exclude_newer_package(&self, package_name: &PackageName) -> Option<ExcludeNewerValue> {
+    /// Returns the effective exclude-newer timestamp for a specific package, falling back to the
+    /// global value if no package-specific setting exists.
+    pub fn exclude_newer_package(&self, package_name: &PackageName) -> Option<Timestamp> {
         match self.package.get(package_name) {
-            Some(ExcludeNewerOverride::Enabled(timestamp)) => Some(timestamp.as_ref().clone()),
+            Some(ExcludeNewerOverride::Enabled(value)) => Some(value.timestamp()),
             Some(ExcludeNewerOverride::Disabled) => None,
-            None => self.global.clone(),
+            None => self.global.as_ref().map(ExcludeNewerValue::timestamp),
         }
     }
 
-    /// Returns the effective exclude-newer value for a package resolved from a specific index.
+    /// Returns the effective exclude-newer timestamp for a package resolved from a specific index.
     pub fn exclude_newer_package_for_index(
         &self,
         package_name: &PackageName,
         index: Option<&ExcludeNewerOverride>,
-    ) -> Option<ExcludeNewerValue> {
+    ) -> Option<Timestamp> {
         self.exclude_newer_package_for_index_with_source(package_name, index)
-            .map(|(exclude_newer, _)| exclude_newer)
+            .map(|(timestamp, _)| timestamp)
     }
 
-    /// Returns the effective exclude-newer value and its source for a package resolved from a
+    /// Returns the effective exclude-newer timestamp and its source for a package resolved from a
     /// specific index.
     pub(crate) fn exclude_newer_package_for_index_with_source(
         &self,
         package_name: &PackageName,
         index: Option<&ExcludeNewerOverride>,
-    ) -> Option<(ExcludeNewerValue, EffectiveExcludeNewerSource)> {
+    ) -> Option<(Timestamp, EffectiveExcludeNewerSource)> {
         match self.package.get(package_name) {
-            Some(ExcludeNewerOverride::Enabled(timestamp)) => Some((
-                timestamp.as_ref().clone(),
-                EffectiveExcludeNewerSource::Package,
-            )),
+            Some(ExcludeNewerOverride::Enabled(value)) => {
+                Some((value.timestamp(), EffectiveExcludeNewerSource::Package))
+            }
             Some(ExcludeNewerOverride::Disabled) => None,
             None => match index {
                 Some(ExcludeNewerOverride::Disabled) => {
                     Self::warn_index_exclude_newer_preview();
                     None
                 }
-                Some(ExcludeNewerOverride::Enabled(timestamp)) => Some((
+                Some(ExcludeNewerOverride::Enabled(value)) => Some((
                     {
                         Self::warn_index_exclude_newer_preview();
-                        ExcludeNewerValue::from(timestamp.timestamp())
+                        value.timestamp()
                     },
                     EffectiveExcludeNewerSource::Index,
                 )),
                 None => self
                     .global
-                    .clone()
-                    .map(|timestamp| (timestamp, EffectiveExcludeNewerSource::Global)),
+                    .as_ref()
+                    .map(|value| (value.timestamp(), EffectiveExcludeNewerSource::Global)),
             },
         }
     }
@@ -530,22 +508,13 @@ impl ExcludeNewer {
         self.global.is_none() && self.package.is_empty()
     }
 
-    /// Recompute all relative span timestamps relative to the current time.
-    ///
-    /// For values with an absolute timestamp (no span), the timestamp is unchanged.
-    #[must_use]
-    pub fn recompute(self) -> Self {
-        Self {
-            global: self.global.map(ExcludeNewerValue::recompute),
-            package: self.package.recompute(),
-        }
-    }
-
     pub fn compare(&self, other: &Self) -> Option<ExcludeNewerChange> {
         match (&self.global, &other.global) {
             (Some(self_global), Some(other_global)) => {
                 if let Some(change) = compare_exclude_newer_value(self_global, other_global) {
-                    return Some(ExcludeNewerChange::GlobalChanged(change));
+                    if !change.is_relative_timestamp_change() {
+                        return Some(ExcludeNewerChange::GlobalChanged(change));
+                    }
                 }
             }
             (None, Some(global)) => {

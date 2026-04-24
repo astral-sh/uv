@@ -23,7 +23,8 @@ use crate::commands::pip::resolution_markers;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, default_dependency_groups,
+    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, WorkspacePython,
+    default_dependency_groups,
 };
 use crate::commands::reporters::LatestVersionReporter;
 use crate::commands::{ExitStatus, diagnostics};
@@ -102,24 +103,32 @@ pub(crate) async fn tree(
             )
             .await?
             .into_interpreter(),
-            LockTarget::Workspace(workspace) => ProjectInterpreter::discover(
-                workspace,
-                project_dir,
-                &groups,
-                python.as_deref().map(PythonRequest::parse),
-                client_builder,
-                python_preference,
-                python_downloads,
-                &install_mirrors,
-                false,
-                no_config,
-                Some(false),
-                cache,
-                printer,
-                preview,
-            )
-            .await?
-            .into_interpreter(),
+            LockTarget::Workspace(workspace) => {
+                let workspace_python = WorkspacePython::from_request(
+                    python.as_deref().map(PythonRequest::parse),
+                    Some(workspace),
+                    &groups,
+                    project_dir,
+                    no_config,
+                )
+                .await?;
+                ProjectInterpreter::discover(
+                    workspace,
+                    &groups,
+                    workspace_python,
+                    client_builder,
+                    python_preference,
+                    python_downloads,
+                    &install_mirrors,
+                    false,
+                    Some(false),
+                    cache,
+                    printer,
+                    preview,
+                )
+                .await?
+                .into_interpreter()
+            }
         })
     };
 
@@ -229,10 +238,7 @@ pub(crate) async fn tree(
             .build()?;
             let download_concurrency = concurrency.downloads_semaphore.clone();
 
-            // Recompute the exclude-newer timestamps from relative spans so that
-            // `--outdated` judges outdatedness relative to the current moment,
-            // not the time the lock was originally generated.
-            let exclude_newer = lock.exclude_newer().recompute();
+            let exclude_newer = lock.exclude_newer();
 
             // Initialize the client to fetch the latest version of each package.
             let client = LatestClient {

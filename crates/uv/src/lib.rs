@@ -962,6 +962,8 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         Commands::Pip(PipNamespace {
             command: PipCommand::Uninstall(args),
         }) => {
+            args.compat_args.validate()?;
+
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipUninstallSettings::resolve(args, filesystem, environment);
             show_settings!(args);

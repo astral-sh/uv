@@ -1161,10 +1161,18 @@ impl Lock {
             if !exclude_newer.is_empty() {
                 // Always serialize global exclude-newer as a string
                 if let Some(global) = &exclude_newer.global {
-                    options_table.insert("exclude-newer", value(global.to_string()));
-                    // Serialize the original span if present
                     if let Some(span) = global.span() {
+                        // When a relative span is present, write a no-op timestamp to avoid
+                        // merge conflicts in the lockfile. In a future version of uv, we'll drop
+                        // this field entirely but it's retained for backwards compatibility for now.
+                        let mut noop = value(ExcludeNewerValue::PLACEHOLDER);
+                        if let Item::Value(ref mut v) = noop {
+                            v.decor_mut().set_suffix(" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.");
+                        }
+                        options_table.insert("exclude-newer", noop);
                         options_table.insert("exclude-newer-span", value(span.to_string()));
+                    } else {
+                        options_table.insert("exclude-newer", value(global.to_string()));
                     }
                 }
 
@@ -1175,12 +1183,12 @@ impl Lock {
                         match setting {
                             ExcludeNewerOverride::Enabled(exclude_newer_value) => {
                                 if let Some(span) = exclude_newer_value.span() {
-                                    // Serialize as inline table with timestamp and span
+                                    // When a relative span is present, write a no-op timestamp
+                                    // for backwards compatibility. This matches treatment for
+                                    // the global `exclude-newer`.
                                     let mut inline = toml_edit::InlineTable::new();
-                                    inline.insert(
-                                        "timestamp",
-                                        exclude_newer_value.timestamp().to_string().into(),
-                                    );
+                                    inline
+                                        .insert("timestamp", ExcludeNewerValue::PLACEHOLDER.into());
                                     inline.insert("span", span.to_string().into());
                                     package_table.insert(name.as_ref(), Item::Value(inline.into()));
                                 } else {
@@ -2349,10 +2357,18 @@ struct ExcludeNewerWire {
 
 impl From<ExcludeNewerWire> for ExcludeNewer {
     fn from(wire: ExcludeNewerWire) -> Self {
+        let global = match (wire.exclude_newer, wire.exclude_newer_span) {
+            (Some(timestamp), None) => Some(ExcludeNewerValue::absolute(timestamp)),
+            // We're phasing out writing a timestamp when spans are used. uv writes a dummy
+            // timestamp for backwards compatibility that we can ignore on deserialization.
+            (Some(_), Some(span)) => Some(ExcludeNewerValue::relative(span)),
+            // A future version of uv will remove the timestamp entirely, so for forwards
+            // compatibility we ignore a missing value.
+            (None, Some(span)) => Some(ExcludeNewerValue::relative(span)),
+            (None, None) => None,
+        };
         Self {
-            global: wire
-                .exclude_newer
-                .map(|timestamp| ExcludeNewerValue::new(timestamp, wire.exclude_newer_span)),
+            global,
             package: wire.exclude_newer_package,
         }
     }
@@ -2360,10 +2376,11 @@ impl From<ExcludeNewerWire> for ExcludeNewer {
 
 impl From<ExcludeNewer> for ExcludeNewerWire {
     fn from(exclude_newer: ExcludeNewer) -> Self {
-        let (timestamp, span) = exclude_newer
-            .global
-            .map(ExcludeNewerValue::into_parts)
-            .map_or((None, None), |(t, s)| (Some(t), s));
+        let (timestamp, span) = match exclude_newer.global {
+            Some(ExcludeNewerValue::Absolute(timestamp)) => (Some(timestamp), None),
+            Some(ExcludeNewerValue::Relative(span)) => (None, Some(span)),
+            None => (None, None),
+        };
         Self {
             exclude_newer: timestamp,
             exclude_newer_span: span,
@@ -2546,12 +2563,16 @@ impl TryFrom<LockWire> for Lock {
             .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
             .map(UniversalMarker::from_combined)
             .collect();
+        let mut options = wire.options;
+        if options.exclude_newer.exclude_newer_span.is_some() {
+            options.exclude_newer.exclude_newer = None;
+        }
         let lock = Self::new(
             wire.version,
             wire.revision.unwrap_or(0),
             packages,
             wire.requires_python,
-            wire.options,
+            options,
             wire.manifest,
             wire.conflicts.unwrap_or_else(Conflicts::empty),
             supported_environments,

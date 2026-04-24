@@ -4218,36 +4218,29 @@ mod tests {
         );
     }
 
-    /// Wraps a `Version` and provides a more "bloated" debug but standard
-    /// representation.
-    ///
-    /// We don't do this by default because it takes up a ton of space, and
-    /// just printing out the display version of the version is quite a bit
-    /// simpler.
-    ///
-    /// Nevertheless, when *testing* version parsing, you really want to
-    /// be able to peek at all of its constituent parts. So we use this in
-    /// assertion failure messages.
-    struct VersionBloatedDebug<'a>(&'a Version);
-
-    impl std::fmt::Debug for VersionBloatedDebug<'_> {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.debug_struct("Version")
-                .field("epoch", &self.0.epoch())
-                .field("release", &&*self.0.release())
-                .field("pre", &self.0.pre())
-                .field("post", &self.0.post())
-                .field("dev", &self.0.dev())
-                .field("local", &self.0.local())
-                .field("min", &self.0.min())
-                .field("max", &self.0.max())
-                .finish()
-        }
-    }
-
     impl Version {
+        /// Returns a more "bloated" debug representation of this [`Version`].
+        ///
+        /// We don't do this by default because it takes up a ton of space, and
+        /// just printing out the display version of the version is quite a bit
+        /// simpler.
+        ///
+        /// Nevertheless, when *testing* version parsing, you really want to
+        /// be able to peek at all of its constituent parts. So we use this in
+        /// assertion failure messages.
         pub(crate) fn as_bloated_debug(&self) -> impl std::fmt::Debug + '_ {
-            VersionBloatedDebug(self)
+            std::fmt::from_fn(|f| {
+                f.debug_struct("Version")
+                    .field("epoch", &self.epoch())
+                    .field("release", &&*self.release())
+                    .field("pre", &self.pre())
+                    .field("post", &self.post())
+                    .field("dev", &self.dev())
+                    .field("local", &self.local())
+                    .field("min", &self.min())
+                    .field("max", &self.max())
+                    .finish()
+            })
         }
     }
 

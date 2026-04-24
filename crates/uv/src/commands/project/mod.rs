@@ -953,33 +953,23 @@ impl ProjectInterpreter {
     /// Discover the interpreter to use in the current [`Workspace`].
     pub(crate) async fn discover(
         workspace: &Workspace,
-        project_dir: &Path,
         groups: &DependencyGroupsWithDefaults,
-        python_request: Option<PythonRequest>,
+        workspace_python: WorkspacePython,
         client_builder: &BaseClientBuilder<'_>,
         python_preference: PythonPreference,
         python_downloads: PythonDownloads,
         install_mirrors: &PythonInstallMirrors,
         keep_incompatible: bool,
-        no_config: bool,
         active: Option<bool>,
         cache: &Cache,
         printer: Printer,
         preview: Preview,
     ) -> Result<Self, ProjectError> {
-        // Resolve the Python request and requirement for the workspace.
         let WorkspacePython {
             source,
             python_request,
             requires_python,
-        } = WorkspacePython::from_request(
-            python_request,
-            Some(workspace),
-            groups,
-            project_dir,
-            no_config,
-        )
-        .await?;
+        } = workspace_python;
 
         // Read from the virtual environment first.
         let root = workspace.venv(active);
@@ -1422,21 +1412,29 @@ impl ProjectEnvironment {
             })
             .ok();
 
-        let upgradeable = python
+        let workspace_python = WorkspacePython::from_request(
+            python,
+            Some(workspace),
+            groups,
+            workspace.install_path().as_ref(),
+            no_config,
+        )
+        .await?;
+
+        let upgradeable = workspace_python
+            .python_request
             .as_ref()
             .is_none_or(|request| !request.includes_patch());
 
         match ProjectInterpreter::discover(
             workspace,
-            workspace.install_path().as_ref(),
             groups,
-            python,
+            workspace_python,
             client_builder,
             python_preference,
             python_downloads,
             install_mirrors,
             no_sync,
-            no_config,
             active,
             cache,
             printer,

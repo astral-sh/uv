@@ -74,17 +74,17 @@ dependencies = ["torch"]
 
 [tool.uv.sources]
 torch = [
-  { index = "pytorch-cu118", marker = "sys_platform == 'darwin'"},
-  { index = "pytorch-cu124", marker = "sys_platform != 'darwin'"},
+  { index = "pytorch-cpu", marker = "sys_platform == 'darwin'"},
+  { index = "pytorch-cu130", marker = "sys_platform != 'darwin'"},
 ]
 
 [[tool.uv.index]]
-name = "pytorch-cu118"
-url = "https://download.pytorch.org/whl/cu118"
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
 
 [[tool.uv.index]]
-name = "pytorch-cu124"
-url = "https://download.pytorch.org/whl/cu124"
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
 ```
 
 An index can be marked as `explicit = true` to prevent packages from being installed from that index
