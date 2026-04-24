@@ -27,7 +27,7 @@ use uv_auth::{Credentials, PyxTokenStore, Realm};
 use uv_cache::{Cache, Refresh};
 use uv_client::{
     BaseClient, DEFAULT_MAX_REDIRECTS, MetadataFormat, OwnedArchive, RegistryClientBuilder,
-    RequestBuilder, RetryParsingError, RetryState,
+    RequestBuilder, RetryParsingError, RetryState, WrappedReqwestError,
 };
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename};
@@ -125,9 +125,9 @@ pub enum PublishPrepareError {
 #[derive(Error, Debug)]
 pub enum PublishSendError {
     #[error("Failed to send POST request")]
-    ReqwestMiddleware(#[source] reqwest_middleware::Error),
+    ReqwestMiddleware(#[source] WrappedReqwestError),
     #[error("Server returned status code {0}")]
-    StatusNoBody(StatusCode, #[source] reqwest::Error),
+    StatusNoBody(StatusCode, #[source] WrappedReqwestError),
     #[error("Server returned status code {0}. Server says: {1}")]
     Status(StatusCode, String),
     #[error("Server returned status code {0}. {1}")]
@@ -603,7 +603,7 @@ pub async fn upload(
                 return Err(PublishError::PublishSend(
                     group.file.clone(),
                     current_registry.clone().into(),
-                    PublishSendError::ReqwestMiddleware(err).into(),
+                    PublishSendError::ReqwestMiddleware(err.into()).into(),
                 ));
             }
         };
@@ -678,7 +678,7 @@ pub async fn validate(
             PublishError::Validate(
                 file.to_path_buf(),
                 registry.clone().into(),
-                PublishSendError::ReqwestMiddleware(err).into(),
+                PublishSendError::ReqwestMiddleware(err.into()).into(),
             )
         })?;
 
@@ -767,7 +767,7 @@ pub async fn upload_two_phase(
     let response = reserve_request.send().await.map_err(|err| {
         PublishError::Reserve(
             group.file.clone(),
-            PublishSendError::ReqwestMiddleware(err).into(),
+            PublishSendError::ReqwestMiddleware(err.into()).into(),
         )
     })?;
 
@@ -782,7 +782,7 @@ pub async fn upload_two_phase(
             let body = response.text().await.map_err(|err| {
                 PublishError::Reserve(
                     group.file.clone(),
-                    PublishSendError::StatusNoBody(status, err).into(),
+                    PublishSendError::StatusNoBody(status, err.into()).into(),
                 )
             })?;
             serde_json::from_str(&body).map_err(|_| {
@@ -881,7 +881,7 @@ pub async fn upload_two_phase(
                     }
                     return Err(PublishError::S3Upload(
                         group.file.clone(),
-                        PublishSendError::ReqwestMiddleware(err).into(),
+                        PublishSendError::ReqwestMiddleware(err.into()).into(),
                     ));
                 }
             };
@@ -926,7 +926,7 @@ pub async fn upload_two_phase(
     let response = finalize_request.send().await.map_err(|err| {
         PublishError::Finalize(
             group.file.clone(),
-            PublishSendError::ReqwestMiddleware(err).into(),
+            PublishSendError::ReqwestMiddleware(err.into()).into(),
         )
     })?;
 
@@ -1464,7 +1464,7 @@ async fn handle_response(
         if status_code == StatusCode::METHOD_NOT_ALLOWED {
             PublishSendError::MethodNotAllowedNoBody
         } else {
-            PublishSendError::StatusNoBody(status_code, err)
+            PublishSendError::StatusNoBody(status_code, err.into())
         }
     })?;
     let upload_error = String::from_utf8_lossy(&upload_error);

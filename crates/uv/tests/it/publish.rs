@@ -684,6 +684,46 @@ async fn direct_publish_redacts_presigned_upload_url() {
     );
 }
 
+#[tokio::test]
+async fn direct_publish_redacts_presigned_upload_url_in_reqwest_error() {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/upload/reserve"))
+        .respond_with(ResponseTemplate::new(201).set_body_json(json!({
+            "upload_url": "ftp://user:password@example.com/s3/ok-1.0.0-py3-none-any.whl?X-Amz-Credential=credential&X-Amz-Signature=signature&X-Amz-Security-Token=token",
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--preview-features")
+        .arg("direct-publish")
+        .arg("--direct")
+        .arg("-u")
+        .arg("dummy")
+        .arg("-p")
+        .arg("dummy")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg(dummy_wheel()), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE])
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    error: Failed to upload to S3 for `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl`
+      Caused by: Failed to send POST request
+      Caused by: builder error for url (ftp://example.com/s3/ok-1.0.0-py3-none-any.whl?X-Amz-Credential=****&X-Amz-Signature=****&X-Amz-Security-Token=****)
+      Caused by: URL scheme is not allowed
+    "
+    );
+}
+
 /// PyPI returns `application/json` errors with a `code` field.
 #[tokio::test]
 async fn upload_error_pypi_json() {
