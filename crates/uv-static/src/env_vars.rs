@@ -98,6 +98,11 @@ impl EnvVars {
     #[attr_added_in("0.1.40")]
     pub const UV_PYTHON: &'static str = "UV_PYTHON";
 
+    /// Equivalent to the `--python-platform` command-line argument. If set, uv will target this
+    /// platform when resolving dependencies and selecting wheels.
+    #[attr_added_in("0.11.7")]
+    pub const UV_PYTHON_PLATFORM: &'static str = "UV_PYTHON_PLATFORM";
+
     /// Equivalent to the `--break-system-packages` command-line argument. If set to `true`,
     /// uv will allow the installation of packages that conflict with system-installed packages.
     ///
