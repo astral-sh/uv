@@ -487,9 +487,8 @@ fn parse_inverted_version_expr(
     // Invert the operator to normalize the expression order.
     let marker_operator = marker_operator.invert();
 
-    // Not star allowed here, `'3.*' == python_version` is not a valid PEP 440 comparison.
-    let version = match value.parse::<Version>() {
-        Ok(version) => version,
+    let pattern = match value.parse::<VersionPattern>() {
+        Ok(pattern) => pattern,
         Err(err) => {
             reporter.report(
                 MarkerWarningKind::Pep440Error,
@@ -508,14 +507,15 @@ fn parse_inverted_version_expr(
             MarkerWarningKind::Pep440Error,
             format!(
                 "Expected PEP 440 version operator to compare {key} with `{version}`,
-                    found `{marker_operator}`, will be ignored"
+                    found `{marker_operator}`, will be ignored",
+                version = pattern.version()
             ),
         );
 
         return None;
     };
 
-    let specifier = match VersionSpecifier::from_version(operator, version) {
+    let specifier = match VersionSpecifier::from_pattern(operator, pattern) {
         Ok(specifier) => specifier,
         Err(err) => {
             reporter.report(
