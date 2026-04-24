@@ -7,6 +7,12 @@ use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
 
+const SENSITIVE_QUERY_PARAMETERS: &[&str] = &[
+    "X-Amz-Credential",
+    "X-Amz-Security-Token",
+    "X-Amz-Signature",
+];
+
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum DisplaySafeUrlError {
     /// Failed to parse a URL.
@@ -19,7 +25,7 @@ pub enum DisplaySafeUrlError {
     AmbiguousAuthority(String),
 }
 
-/// A [`Url`] wrapper that redacts credentials when displaying the URL.
+/// A [`Url`] wrapper that redacts credentials and sensitive query parameters when displaying the URL.
 ///
 /// `DisplaySafeUrl` wraps the standard [`url::Url`] type, providing functionality to mask
 /// secrets by default when the URL is displayed or logged. This helps prevent accidental
@@ -246,7 +252,8 @@ impl Display for DisplaySafeUrl {
 
 impl Debug for DisplaySafeUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let url = &self.0;
+        let url = url_with_redacted_sensitive_query_values(&self.0);
+        let url = url.as_ref();
         // For URLs that use the `git` convention (i.e., `ssh://git@github.com/...`), avoid masking the
         // username.
         let (username, password) = if is_ssh_git_username(url) {
@@ -301,17 +308,46 @@ fn is_ssh_git_username(url: &Url) -> bool {
         && url.password().is_none()
 }
 
+fn is_sensitive_query_parameter(key: &str) -> bool {
+    SENSITIVE_QUERY_PARAMETERS
+        .iter()
+        .any(|sensitive| key.eq_ignore_ascii_case(sensitive))
+}
+
+fn url_with_redacted_sensitive_query_values(url: &Url) -> Cow<'_, Url> {
+    if !url
+        .query_pairs()
+        .any(|(key, _value)| is_sensitive_query_parameter(&key))
+    {
+        return Cow::Borrowed(url);
+    }
+
+    let query_pairs: Vec<_> = url
+        .query_pairs()
+        .map(|(key, value)| {
+            let value = if is_sensitive_query_parameter(&key) {
+                Cow::Borrowed("****")
+            } else {
+                value
+            };
+            (key, value)
+        })
+        .collect();
+
+    let mut url = url.clone();
+    url.query_pairs_mut().clear().extend_pairs(query_pairs);
+    Cow::Owned(url)
+}
+
 fn display_with_redacted_credentials(
     url: &Url,
     f: &mut std::fmt::Formatter<'_>,
 ) -> std::fmt::Result {
-    if url.password().is_none() && url.username() == "" {
-        return write!(f, "{url}");
-    }
-
+    let url = url_with_redacted_sensitive_query_values(url);
+    let url = url.as_ref();
     // For URLs that use the `git` convention (i.e., `ssh://git@github.com/...`), avoid dropping the
     // username.
-    if is_ssh_git_username(url) {
+    if is_ssh_git_username(url) || (url.username().is_empty() && url.password().is_none()) {
         return write!(f, "{url}");
     }
 
@@ -458,6 +494,69 @@ mod tests {
         assert_eq!(
             log_safe_url.displayable_with_credentials().to_string(),
             url_str
+        );
+    }
+
+    #[test]
+    fn redact_aws_presigned_query_values() {
+        let log_safe_url = DisplaySafeUrl::parse(
+            "https://bucket.s3.amazonaws.com/dist.whl?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=credential&X-Amz-Date=20260424T120000Z&X-Amz-Expires=300&X-Amz-SignedHeaders=host&X-Amz-Signature=signature&X-Amz-Security-Token=token",
+        )
+        .unwrap();
+
+        assert_eq!(
+            log_safe_url.to_string(),
+            "https://bucket.s3.amazonaws.com/dist.whl?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=****&X-Amz-Date=20260424T120000Z&X-Amz-Expires=300&X-Amz-SignedHeaders=host&X-Amz-Signature=****&X-Amz-Security-Token=****"
+        );
+    }
+
+    #[test]
+    fn redact_aws_presigned_query_values_case_insensitive() {
+        let log_safe_url = DisplaySafeUrl::parse(
+            "https://bucket.s3.amazonaws.com/dist.whl?x-amz-credential=credential&x-amz-signature=signature&x-amz-security-token=token",
+        )
+        .unwrap();
+
+        assert_eq!(
+            log_safe_url.to_string(),
+            "https://bucket.s3.amazonaws.com/dist.whl?x-amz-credential=****&x-amz-signature=****&x-amz-security-token=****"
+        );
+    }
+
+    #[test]
+    fn redact_aws_presigned_query_values_with_percent_encoded_keys() {
+        let log_safe_url = DisplaySafeUrl::parse(
+            "https://bucket.s3.amazonaws.com/dist.whl?X-Amz%2DSignature=signature&safe=value",
+        )
+        .unwrap();
+
+        assert_eq!(
+            log_safe_url.to_string(),
+            "https://bucket.s3.amazonaws.com/dist.whl?X-Amz-Signature=****&safe=value"
+        );
+    }
+
+    #[test]
+    fn redact_aws_presigned_query_values_in_debug() {
+        let log_safe_url = DisplaySafeUrl::parse(
+            "https://bucket.s3.amazonaws.com/dist.whl?X-Amz-Credential=credential&X-Amz-Signature=signature",
+        )
+        .unwrap();
+
+        let debug = format!("{log_safe_url:?}");
+        assert!(debug.contains(r#"query: Some("X-Amz-Credential=****&X-Amz-Signature=****")"#));
+        assert!(!debug.contains("credential"));
+        assert!(!debug.contains("signature"));
+    }
+
+    #[test]
+    fn does_not_redact_unknown_query_values() {
+        let log_safe_url =
+            DisplaySafeUrl::parse("https://bucket.s3.amazonaws.com/dist.whl?token=secret").unwrap();
+
+        assert_eq!(
+            log_safe_url.to_string(),
+            "https://bucket.s3.amazonaws.com/dist.whl?token=secret"
         );
     }
 
