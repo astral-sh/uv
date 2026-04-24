@@ -39,7 +39,7 @@ a PEM-encoded certificate bundle (e.g., `certs.pem`, `ca-bundle.crt`), or set
 PEM-encoded certificate files. Multiple entries are supported, separated using a platform-specific
 delimiter (`:` on Unix, `;` on Windows).
 
-Certificates are usually stored with `.pem`, `.crt`, or `.cer` extensions, but uv will attempt to
+Certificates are usually stored with `.pem`, `.crt`, or `.cert` extensions, but uv will attempt to
 read a certificate from any regular file in the provided `SSL_CERT_DIR`.
 
 Files that cannot be parsed as PEM certificates are ignored. uv resolves symlinks and ignores
