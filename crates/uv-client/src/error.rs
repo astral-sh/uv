@@ -1,4 +1,4 @@
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -514,9 +514,10 @@ impl ErrorKind {
 ///
 /// Wraps a [`reqwest_middleware::Error`] instead of an [`reqwest::Error`] since the actual reqwest
 /// error may be below some context in the [`anyhow::Error`].
-#[derive(Debug)]
+///
+/// When displayed, URLs attached to the reqwest error are formatted through [`DisplaySafeUrl`].
 pub struct WrappedReqwestError {
-    error: reqwest_middleware::Error,
+    error: DisplaySafeReqwestMiddlewareError,
     problem_details: Option<Box<ProblemDetails>>,
 }
 
@@ -527,7 +528,7 @@ impl WrappedReqwestError {
         problem_details: Option<ProblemDetails>,
     ) -> Self {
         Self {
-            error: Self::filter_retries_from_error(error),
+            error: DisplaySafeReqwestMiddlewareError(Self::filter_retries_from_error(error)),
             problem_details: problem_details.map(Box::new),
         }
     }
@@ -554,7 +555,7 @@ impl WrappedReqwestError {
 
     /// Return the inner [`reqwest::Error`] from the error chain, if it exists.
     pub fn inner(&self) -> Option<&reqwest::Error> {
-        match &self.error {
+        match &self.error.0 {
             reqwest_middleware::Error::Reqwest(err) => Some(err),
             reqwest_middleware::Error::Middleware(err) => err.chain().find_map(|err| {
                 if let Some(err) = err.downcast_ref::<reqwest::Error>() {
@@ -618,7 +619,7 @@ impl From<reqwest::Error> for WrappedReqwestError {
     fn from(error: reqwest::Error) -> Self {
         Self {
             // No need to filter retries as this error does not have retries.
-            error: error.into(),
+            error: DisplaySafeReqwestMiddlewareError(error.into()),
             problem_details: None,
         }
     }
@@ -627,7 +628,7 @@ impl From<reqwest::Error> for WrappedReqwestError {
 impl From<reqwest_middleware::Error> for WrappedReqwestError {
     fn from(error: reqwest_middleware::Error) -> Self {
         Self {
-            error: Self::filter_retries_from_error(error),
+            error: DisplaySafeReqwestMiddlewareError(Self::filter_retries_from_error(error)),
             problem_details: None,
         }
     }
@@ -637,14 +638,14 @@ impl Deref for WrappedReqwestError {
     type Target = reqwest_middleware::Error;
 
     fn deref(&self) -> &Self::Target {
-        &self.error
+        &self.error.0
     }
 }
 
 impl Display for WrappedReqwestError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if self.is_likely_offline() {
-            // Insert an extra hint, we'll show the wrapped error through `source`
+            // Insert an extra hint; the lower-level cause is still shown through `source`.
             f.write_str("Could not connect, are you offline?")
         } else if let Some(problem_details) = &self.problem_details {
             // Show problem details if available
@@ -662,21 +663,152 @@ impl Display for WrappedReqwestError {
 impl std::error::Error for WrappedReqwestError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         if self.is_likely_offline() {
-            // `Display` is inserting an extra message, so we need to show the wrapped error
+            // `Display` is inserting an extra message, so show the wrapped transport error.
             Some(&self.error)
         } else if self.problem_details.is_some() {
-            // `Display` is showing problem details, so show the wrapped error as source
+            // `Display` is showing problem details, so show the wrapped transport error.
             Some(&self.error)
         } else {
-            // `Display` is showing the wrapped error, continue with its source
+            // `Display` is showing the wrapped error, continue with its source.
             self.error.source()
         }
     }
 }
 
+impl Debug for WrappedReqwestError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WrappedReqwestError")
+            .field("error", &self.to_string())
+            .field("problem_details", &self.problem_details)
+            .finish()
+    }
+}
+
+struct DisplaySafeReqwestMiddlewareError(reqwest_middleware::Error);
+
+impl Display for DisplaySafeReqwestMiddlewareError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        display_reqwest_middleware_error(&self.0, f)
+    }
+}
+
+impl Debug for DisplaySafeReqwestMiddlewareError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "DisplaySafeReqwestMiddlewareError({self})")
+    }
+}
+
+impl std::error::Error for DisplaySafeReqwestMiddlewareError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match &self.0 {
+            reqwest_middleware::Error::Middleware(error) => error.source(),
+            // Skip the outer reqwest error; its Display includes the unredacted URL.
+            reqwest_middleware::Error::Reqwest(error) => error.source(),
+        }
+    }
+}
+
+fn display_reqwest_middleware_error(
+    error: &reqwest_middleware::Error,
+    f: &mut Formatter<'_>,
+) -> std::fmt::Result {
+    match error {
+        reqwest_middleware::Error::Middleware(error) => write!(f, "{error}"),
+        reqwest_middleware::Error::Reqwest(error) => display_reqwest_error(error, f),
+    }
+}
+
+fn display_reqwest_error(error: &reqwest::Error, f: &mut Formatter<'_>) -> std::fmt::Result {
+    let Some(url) = error.url() else {
+        return write!(f, "{error}");
+    };
+
+    let message = error.to_string();
+    let raw_url = url.as_str();
+    let display_safe_url = DisplaySafeUrl::ref_cast(url).to_string();
+    write!(f, "{}", message.replace(raw_url, &display_safe_url))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use anyhow::{Result, bail};
+
+    async fn rejected_signed_url_error() -> Result<reqwest::Error> {
+        let result = reqwest::Client::new()
+            .get("ftp://user:password@example.com/s3/dist.whl?X-Amz-Credential=credential-secret&X-Amz-Signature=signature-secret&X-Amz-Security-Token=token-secret")
+            .send()
+            .await;
+        match result {
+            Ok(_) => bail!("expected reqwest to reject the URL scheme"),
+            Err(error) => Ok(error),
+        }
+    }
+
+    #[tokio::test]
+    async fn wrapped_reqwest_error_redacts_sensitive_url_parts() -> Result<()> {
+        let error = WrappedReqwestError::from(rejected_signed_url_error().await?);
+
+        assert_eq!(
+            error.to_string(),
+            "builder error for url (ftp://example.com/s3/dist.whl?X-Amz-Credential=****&X-Amz-Signature=****&X-Amz-Security-Token=****)"
+        );
+
+        let debug = format!("{error:?}");
+        for message in [error.to_string(), debug] {
+            assert!(!message.contains("credential-secret"));
+            assert!(!message.contains("signature-secret"));
+            assert!(!message.contains("token-secret"));
+            assert!(!message.contains("password"));
+        }
+
+        let mut source = std::error::Error::source(&error);
+        while let Some(error) = source {
+            let message = error.to_string();
+            assert!(!message.contains("credential-secret"));
+            assert!(!message.contains("signature-secret"));
+            assert!(!message.contains("token-secret"));
+            assert!(!message.contains("password"));
+            source = error.source();
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn wrapped_reqwest_error_keeps_safe_source_with_problem_details() -> Result<()> {
+        let error = WrappedReqwestError::with_problem_details(
+            rejected_signed_url_error().await?.into(),
+            Some(ProblemDetails {
+                problem_type: default_problem_type(),
+                title: Some("problem title".to_string()),
+                detail: None,
+                status: Some(400),
+                instance: None,
+            }),
+        );
+
+        assert_eq!(error.to_string(), "Server message: problem title");
+
+        let source = std::error::Error::source(&error).expect("source");
+        assert_eq!(
+            source.to_string(),
+            "builder error for url (ftp://example.com/s3/dist.whl?X-Amz-Credential=****&X-Amz-Signature=****&X-Amz-Security-Token=****)"
+        );
+
+        let mut source = Some(source);
+        while let Some(error) = source {
+            let message = error.to_string();
+            assert!(!message.contains("credential-secret"));
+            assert!(!message.contains("signature-secret"));
+            assert!(!message.contains("token-secret"));
+            assert!(!message.contains("password"));
+            source = error.source();
+        }
+
+        Ok(())
+    }
 
     #[test]
     fn test_problem_details_parsing() {

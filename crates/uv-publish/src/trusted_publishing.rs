@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::env;
 use std::fmt::Display;
 use thiserror::Error;
+use uv_client::WrappedReqwestError;
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_static::EnvVars;
 
@@ -30,9 +31,9 @@ pub enum TrustedPublishingError {
     #[error("No OIDC token discovered: are you in a supported trusted publishing environment?")]
     NoToken,
     #[error("Failed to fetch: `{0}`")]
-    Reqwest(DisplaySafeUrl, #[source] reqwest::Error),
+    Reqwest(DisplaySafeUrl, #[source] WrappedReqwestError),
     #[error("Failed to fetch: `{0}`")]
-    ReqwestMiddleware(DisplaySafeUrl, #[source] reqwest_middleware::Error),
+    ReqwestMiddleware(DisplaySafeUrl, #[source] WrappedReqwestError),
     #[error(transparent)]
     SerdeJson(#[from] serde_json::error::Error),
     #[error(
