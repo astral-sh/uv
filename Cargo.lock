@@ -6508,7 +6508,6 @@ dependencies = [
  "reqwest",
  "rustc-hash",
  "sha2",
- "tar",
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",
@@ -6520,7 +6519,6 @@ dependencies = [
  "uv-warnings",
  "xz2",
  "zip",
- "zstd",
 ]
 
 [[package]]
