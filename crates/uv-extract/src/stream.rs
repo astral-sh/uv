@@ -8,7 +8,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::{debug, warn};
 
-use uv_distribution_filename::SourceDistExtension;
+use uv_distribution_filename::{LegacySourceDistExtension, SourceDistExtension};
 
 use crate::{Error, insecure_no_validate, validate_archive_member_name};
 
@@ -769,30 +769,6 @@ pub fn untar_zst_file<R: std::io::Read>(
     Ok(files)
 }
 
-/// Unpack a `.tar.xz` archive into the target directory, without requiring `Seek`.
-///
-/// This is useful for unpacking files as they're being downloaded.
-///
-/// Returns the list of unpacked files and their sizes.
-pub async fn untar_xz<R: tokio::io::AsyncRead + Unpin>(
-    reader: R,
-    target: impl AsRef<Path>,
-) -> Result<Vec<(PathBuf, u64)>, Error> {
-    let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
-    let mut decompressed_bytes = async_compression::tokio::bufread::XzDecoder::new(reader);
-
-    let archive = tokio_tar::ArchiveBuilder::new(
-        &mut decompressed_bytes as &mut (dyn tokio::io::AsyncRead + Unpin),
-    )
-    .set_preserve_mtime(false)
-    .set_preserve_permissions(false)
-    .set_allow_external_symlinks(false)
-    .build();
-    untar_in(archive, target.as_ref())
-        .await
-        .map_err(Error::io_or_compression)
-}
-
 /// Unpack a `.tar` archive into the target directory, without requiring `Seek`.
 ///
 /// This is useful for unpacking files as they're being downloaded.
@@ -815,7 +791,7 @@ pub async fn untar<R: tokio::io::AsyncRead + Unpin>(
         .map_err(Error::io_or_compression)
 }
 
-/// Unpack a `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.zst`, or `.tar.xz` archive into the target directory,
+/// Unpack a `.zip`, `.tar.gz`, `.tar.bz2`, or `.tar.zst` archive into the target directory,
 /// without requiring `Seek`.
 ///
 /// Returns the list of unpacked files and their sizes.
@@ -825,15 +801,16 @@ pub async fn archive<R: tokio::io::AsyncRead + Unpin>(
     target: impl AsRef<Path>,
 ) -> Result<Vec<(PathBuf, u64)>, Error> {
     match ext {
-        SourceDistExtension::Zip => unzip(reader, target).await,
-        SourceDistExtension::Tar => untar(reader, target).await,
-        SourceDistExtension::Tgz | SourceDistExtension::TarGz => untar_gz(reader, target).await,
-        SourceDistExtension::Tbz | SourceDistExtension::TarBz2 => untar_bz2(reader, target).await,
-        SourceDistExtension::Txz
-        | SourceDistExtension::TarXz
-        | SourceDistExtension::Tlz
-        | SourceDistExtension::TarLz
-        | SourceDistExtension::TarLzma => untar_xz(reader, target).await,
-        SourceDistExtension::TarZst => untar_zst(reader, target).await,
+        SourceDistExtension::Legacy(LegacySourceDistExtension::Zip) => unzip(reader, target).await,
+        SourceDistExtension::Legacy(LegacySourceDistExtension::Tar) => untar(reader, target).await,
+        SourceDistExtension::Legacy(LegacySourceDistExtension::Tgz)
+        | SourceDistExtension::TarGz => untar_gz(reader, target).await,
+        SourceDistExtension::Legacy(
+            LegacySourceDistExtension::Tbz | LegacySourceDistExtension::TarBz2,
+        ) => untar_bz2(reader, target).await,
+        SourceDistExtension::Legacy(LegacySourceDistExtension::TarZst) => {
+            untar_zst(reader, target).await
+        }
+        SourceDistExtension::Legacy(_) => Err(Error::UnsupportedCompression),
     }
 }

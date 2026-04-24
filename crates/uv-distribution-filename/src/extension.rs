@@ -27,9 +27,29 @@ pub enum DistExtension {
 )]
 #[rkyv(derive(Debug))]
 pub enum SourceDistExtension {
+    TarGz,
+    Legacy(LegacySourceDistExtension),
+}
+
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
+#[rkyv(derive(Debug))]
+pub enum LegacySourceDistExtension {
     Tar,
     TarBz2,
-    TarGz,
     TarLz,
     TarLzma,
     TarXz,
@@ -83,20 +103,17 @@ impl SourceDistExtension {
 
         match extension {
             "gz" if is_tar(path.as_ref()) => Ok(Self::TarGz),
-            // TODO: Remove these other extensions in the future.
-            // NOTE: These get parsed from network sources like PyPI, so we don't
-            // necessarily want to hard-fail, just skip in the future.
-            "zip" => Ok(Self::Zip),
-            "tar" => Ok(Self::Tar),
-            "tgz" => Ok(Self::Tgz),
-            "tbz" => Ok(Self::Tbz),
-            "txz" => Ok(Self::Txz),
-            "tlz" => Ok(Self::Tlz),
-            "bz2" if is_tar(path.as_ref()) => Ok(Self::TarBz2),
-            "xz" if is_tar(path.as_ref()) => Ok(Self::TarXz),
-            "lz" if is_tar(path.as_ref()) => Ok(Self::TarLz),
-            "lzma" if is_tar(path.as_ref()) => Ok(Self::TarLzma),
-            "zst" if is_tar(path.as_ref()) => Ok(Self::TarZst),
+            "zip" => Ok(Self::Legacy(LegacySourceDistExtension::Zip)),
+            "tar" => Ok(Self::Legacy(LegacySourceDistExtension::Tar)),
+            "tgz" => Ok(Self::Legacy(LegacySourceDistExtension::Tgz)),
+            "tbz" => Ok(Self::Legacy(LegacySourceDistExtension::Tbz)),
+            "txz" => Ok(Self::Legacy(LegacySourceDistExtension::Txz)),
+            "tlz" => Ok(Self::Legacy(LegacySourceDistExtension::Tlz)),
+            "bz2" if is_tar(path.as_ref()) => Ok(Self::Legacy(LegacySourceDistExtension::TarBz2)),
+            "xz" if is_tar(path.as_ref()) => Ok(Self::Legacy(LegacySourceDistExtension::TarXz)),
+            "lz" if is_tar(path.as_ref()) => Ok(Self::Legacy(LegacySourceDistExtension::TarLz)),
+            "lzma" if is_tar(path.as_ref()) => Ok(Self::Legacy(LegacySourceDistExtension::TarLzma)),
+            "zst" if is_tar(path.as_ref()) => Ok(Self::Legacy(LegacySourceDistExtension::TarZst)),
             _ => Err(ExtensionError::SourceDist),
         }
     }
@@ -104,19 +121,30 @@ impl SourceDistExtension {
     /// Return the name for the extension.
     pub fn name(&self) -> &'static str {
         match self {
-            Self::Tar => "tar",
-            Self::TarBz2 => "tar.bz2",
             Self::TarGz => "tar.gz",
-            Self::TarLz => "tar.lz",
-            Self::TarLzma => "tar.lzma",
-            Self::TarXz => "tar.xz",
-            Self::TarZst => "tar.zst",
-            Self::Tbz => "tbz",
-            Self::Tgz => "tgz",
-            Self::Tlz => "tlz",
-            Self::Txz => "txz",
-            Self::Zip => "zip",
+            Self::Legacy(LegacySourceDistExtension::Tar) => "tar",
+            Self::Legacy(LegacySourceDistExtension::TarBz2) => "tar.bz2",
+            Self::Legacy(LegacySourceDistExtension::TarLz) => "tar.lz",
+            Self::Legacy(LegacySourceDistExtension::TarLzma) => "tar.lzma",
+            Self::Legacy(LegacySourceDistExtension::TarXz) => "tar.xz",
+            Self::Legacy(LegacySourceDistExtension::TarZst) => "tar.zst",
+            Self::Legacy(LegacySourceDistExtension::Tbz) => "tbz",
+            Self::Legacy(LegacySourceDistExtension::Tgz) => "tgz",
+            Self::Legacy(LegacySourceDistExtension::Tlz) => "tlz",
+            Self::Legacy(LegacySourceDistExtension::Txz) => "txz",
+            Self::Legacy(LegacySourceDistExtension::Zip) => "zip",
         }
+    }
+
+    /// Returns `true` if the extension conforms to [PEP 625](https://peps.python.org/pep-0625/)'s
+    /// naming requirements.
+    ///
+    /// PEP 625 mandates `.tar.gz`; `.zip` is also accepted for backwards compatibility.
+    pub fn is_pep625_compliant(&self) -> bool {
+        matches!(
+            self,
+            Self::TarGz | Self::Legacy(LegacySourceDistExtension::Zip)
+        )
     }
 }
 

@@ -806,27 +806,13 @@ exclude-newer-package = { setuptools = "30 days" }
 
 [PEP 625](https://peps.python.org/pep-0625/) specifies that packages must distribute source
 distributions as gzip tarball (`.tar.gz`) archives. Prior to this specification, other archive
-formats, which need to be supported for backward compatibility, were also allowed. uv supports
-reading and extracting archives in the following formats:
-
-- gzip tarball (`.tar.gz`, `.tgz`)
-- bzip2 tarball (`.tar.bz2`, `.tbz`)
-- xz tarball (`.tar.xz`, `.txz`)
-- zstd tarball (`.tar.zst`)
-- lzip tarball (`.tar.lz`)
-- lzma tarball (`.tar.lzma`)
-- zip (`.zip`)
+formats, which need to be supported for backward compatibility, were also allowed.
 
 !!! important
 
-    Using source distribution extensions other than `.tar.gz` is strongly
-    discouraged, as these extensions are not widely or consistently
-    supported across the Python packaging ecosystem.
-
-!!! warning "Deprecated"
-
-    Support for source distribution extensions other than `.tar.gz` is
-    deprecated and will be removed in a future release of uv.
+    As of 0.12, uv rejects source distributions that do not confirm to
+    [PEP 625]'s extension requirements with the exception of `.zip` archives,
+    which are still accepted for backward compatibility.
 
 ## Lockfile versioning
 

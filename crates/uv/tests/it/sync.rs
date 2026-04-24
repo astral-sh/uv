@@ -15468,6 +15468,246 @@ async fn sync_zstd_wheel() -> Result<()> {
     Ok(())
 }
 
+/// Sync with an index whose only source distribution has a non-PEP 625-compliant
+/// extension (e.g., `.tar.bz2`). The resolver should reject it as incompatible.
+#[tokio::test]
+async fn sync_non_pep625_sdist() -> Result<()> {
+    use serde_json::json;
+    use wiremock::{
+        Mock, MockServer, ResponseTemplate,
+        matchers::{method, path},
+    };
+
+    let context = uv_test::test_context!("3.13");
+    let server = MockServer::start().await;
+
+    let sdist_url = format!("{}/files/basic_package-0.1.0.tar.bz2", server.uri());
+
+    let simple_index = json!({
+        "meta": {
+            "api-version": "1.1"
+        },
+        "name": "basic-package",
+        "files": [{
+            "filename": "basic_package-0.1.0.tar.bz2",
+            "url": sdist_url,
+            "hashes": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+            }
+        }]
+    });
+
+    Mock::given(method("GET"))
+        .and(path("/simple/basic-package/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string().into_bytes(),
+            "application/vnd.pyx.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! { r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["basic-package"]
+
+        [tool.uv.sources]
+        basic-package = {{ index = "test-registry" }}
+
+        [[tool.uv.index]]
+        name = "test-registry"
+        url = "{}/simple"
+        "#,
+        server.uri()
+    })?;
+
+    uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only basic-package==0.1.0 is available and basic-package==0.1.0 has a non-PEP 625-compliant source distribution filename, we can conclude that all versions of basic-package cannot be used.
+          And because your project depends on basic-package, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: `basic-package` was found on http://[LOCALHOST]/simple, but not at the requested version (all of:
+              basic-package<0.1.0
+              basic-package>0.1.0
+          ). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
+    ");
+
+    Ok(())
+}
+
+/// Sync with an index that serves both a non-PEP 625-compliant sdist and a
+/// compatible wheel. The resolver should use the wheel and skip the sdist
+/// without surfacing an incompatibility error.
+#[tokio::test]
+async fn sync_non_pep625_sdist_with_compatible_wheel() -> Result<()> {
+    use serde_json::json;
+    use wiremock::{
+        Mock, MockServer, ResponseTemplate,
+        matchers::{method, path},
+    };
+
+    let context = uv_test::test_context!("3.13");
+    let server = MockServer::start().await;
+
+    let wheel_path = context
+        .temp_dir
+        .child("basic_package-0.1.0-py3-none-any.whl");
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/basic_package-0.1.0-py3-none-any.whl"),
+        &wheel_path,
+    )?;
+
+    let wheel_url = format!(
+        "{}/files/basic_package-0.1.0-py3-none-any.whl",
+        server.uri()
+    );
+    let sdist_url = format!("{}/files/basic_package-0.1.0.tar.bz2", server.uri());
+
+    Mock::given(method("GET"))
+        .and(path("/files/basic_package-0.1.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(&wheel_path)?))
+        .mount(&server)
+        .await;
+
+    let simple_index = json!({
+        "meta": {
+            "api-version": "1.1"
+        },
+        "name": "basic-package",
+        "files": [
+            {
+                "filename": "basic_package-0.1.0.tar.bz2",
+                "url": sdist_url,
+                "hashes": {
+                    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+                }
+            },
+            {
+                "filename": "basic_package-0.1.0-py3-none-any.whl",
+                "url": wheel_url,
+                "hashes": {
+                    "sha256": "7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82"
+                }
+            }
+        ]
+    });
+
+    Mock::given(method("GET"))
+        .and(path("/simple/basic-package/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string().into_bytes(),
+            "application/vnd.pyx.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! { r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["basic-package"]
+
+        [tool.uv.sources]
+        basic-package = {{ index = "test-registry" }}
+
+        [[tool.uv.index]]
+        name = "test-registry"
+        url = "{}/simple"
+        "#,
+        server.uri()
+    })?;
+
+    uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + basic-package==0.1.0
+    ");
+
+    Ok(())
+}
+
+/// A pre-existing lockfile may refer to a non-PEP 625-compliant direct URL sdist (e.g.
+/// one that was locked by an older uv). Refreshing it via `uv sync` should hard-error
+/// rather than silently install.
+#[test]
+fn sync_non_pep625_sdist_from_lockfile() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Stage the `.tar.bz2` sdist alongside the project.
+    let archive = context.temp_dir.child("bz2-1.0.0.tar.bz2");
+    fs_err::copy(
+        context.workspace_root.join("test/links/bz2-1.0.0.tar.bz2"),
+        &archive,
+    )?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bz2"]
+
+        [tool.uv.sources]
+        bz2 = { path = "bz2-1.0.0.tar.bz2" }
+    "#})?;
+
+    // Pre-write a lockfile as if a previous uv had resolved the `.tar.bz2` direct URL.
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "bz2"
+        version = "1.0.0"
+        source = { path = "bz2-1.0.0.tar.bz2" }
+        sdist = { hash = "sha256:f792d237bf8d8f1fc0b0ea16848371cbbb06a6b8a43b0da2f50d30bfba834f7b" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "bz2" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "bz2", path = "bz2-1.0.0.tar.bz2" }]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Source distribution for `bz2==1.0.0 @ path+bz2-1.0.0.tar.bz2` has a non-PEP 625-compliant filename; only `.tar.gz` and `.zip` archives are accepted
+    ");
+
+    Ok(())
+}
+
 #[test]
 #[cfg(not(windows))]
 fn toggle_workspace_editable() -> Result<()> {

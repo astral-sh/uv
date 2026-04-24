@@ -395,6 +395,9 @@ impl Dist {
                 })))
             }
             DistExtension::Source(ext) => {
+                if !ext.is_pep625_compliant() {
+                    return Err(Error::NotPep625Filename(url.verbatim().to_string()));
+                }
                 Ok(Self::Source(SourceDist::DirectUrl(DirectUrlSourceDist {
                     name,
                     location: Box::new(location),
@@ -443,6 +446,10 @@ impl Dist {
                 })))
             }
             DistExtension::Source(ext) => {
+                if !ext.is_pep625_compliant() {
+                    return Err(Error::NotPep625Filename(url.verbatim().to_string()));
+                }
+
                 // If there is a version in the filename, record it.
                 let version = url
                     .filename()
