@@ -45,16 +45,19 @@ struct BazelCredentialResponse {
 
 impl TryFrom<Credentials> for BazelCredentialResponse {
     fn try_from(creds: Credentials) -> Result<Self> {
-        let header_str = creds
-            .to_header_value()
-            .to_str()
-            // TODO: this is infallible in practice
-            .context("Failed to convert header value to string")?
-            .to_owned();
+        if let Some(header) = creds.to_header_value() {
+            let header_str = header
+                .to_str()
+                // TODO: this is infallible in practice
+                .context("Failed to convert header value to string")?
+                .to_owned();
 
-        Ok(Self {
-            headers: HashMap::from([("Authorization".to_owned(), vec![header_str])]),
-        })
+            Ok(Self {
+                headers: HashMap::from([("Authorization".to_owned(), vec![header_str])]),
+            })
+        } else {
+            Ok(Self::default())
+        }
     }
 
     type Error = anyhow::Error;

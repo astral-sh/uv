@@ -33,6 +33,8 @@ pub enum Credentials {
         /// The token to use for authentication.
         token: Token,
     },
+    /// No authentication.
+    None,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Serialize, Deserialize)]
@@ -155,6 +157,7 @@ impl Credentials {
         match self {
             Self::Basic { username, .. } => username.as_deref(),
             Self::Bearer { .. } => None,
+            Self::None => None,
         }
     }
 
@@ -162,6 +165,7 @@ impl Credentials {
         match self {
             Self::Basic { username, .. } => username.clone(),
             Self::Bearer { .. } => Username::none(),
+            Self::None => Username::none(),
         }
     }
 
@@ -169,6 +173,7 @@ impl Credentials {
         match self {
             Self::Basic { username, .. } => Cow::Borrowed(username),
             Self::Bearer { .. } => Cow::Owned(Username::none()),
+            Self::None => Cow::Owned(Username::none()),
         }
     }
 
@@ -176,6 +181,7 @@ impl Credentials {
         match self {
             Self::Basic { password, .. } => password.as_ref().map(Password::as_str),
             Self::Bearer { .. } => None,
+            Self::None => None,
         }
     }
 
@@ -186,6 +192,7 @@ impl Credentials {
                 password,
             } => password.is_some(),
             Self::Bearer { token } => !token.is_empty(),
+            Self::None => true,
         }
     }
 
@@ -193,6 +200,16 @@ impl Credentials {
         match self {
             Self::Basic { username, password } => username.is_none() && password.is_none(),
             Self::Bearer { token } => token.is_empty(),
+            Self::None => false,
+        }
+    }
+
+    /// Return the name of the authentication scheme.
+    pub fn scheme_name(&self) -> &'static str {
+        match self {
+            Self::Basic { .. } => "HTTP Basic",
+            Self::Bearer { .. } => "Bearer",
+            Self::None => "None",
         }
     }
 
@@ -328,8 +345,10 @@ impl Credentials {
 
     /// Create an HTTP Basic Authentication header for the credentials.
     ///
+    /// Returns `None` if the credentials are [`Credentials::None`].
+    ///
     /// Panics if the username or password cannot be base64 encoded.
-    pub fn to_header_value(&self) -> HeaderValue {
+    pub fn to_header_value(&self) -> Option<HeaderValue> {
         match self {
             Self::Basic { .. } => {
                 // See: <https://github.com/seanmonstar/reqwest/blob/2c11ef000b151c2eebeed2c18a7b81042220c6b0/src/util.rs#L3>
@@ -346,14 +365,15 @@ impl Credentials {
                 let mut header =
                     HeaderValue::from_bytes(&buf).expect("base64 is always valid HeaderValue");
                 header.set_sensitive(true);
-                header
+                Some(header)
             }
             Self::Bearer { token } => {
                 let mut header = HeaderValue::from_bytes(&[b"Bearer ", token.as_slice()].concat())
                     .expect("Bearer token is always valid HeaderValue");
                 header.set_sensitive(true);
-                header
+                Some(header)
             }
+            Self::None => None,
         }
     }
 
@@ -376,9 +396,11 @@ impl Credentials {
     /// Any existing credentials will be overridden.
     #[must_use]
     pub fn authenticate(&self, mut request: Request) -> Request {
-        request
-            .headers_mut()
-            .insert(reqwest::header::AUTHORIZATION, Self::to_header_value(self));
+        if let Some(header) = self.to_header_value() {
+            request
+                .headers_mut()
+                .insert(reqwest::header::AUTHORIZATION, header);
+        }
         request
     }
 }

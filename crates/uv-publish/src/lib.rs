@@ -1361,17 +1361,9 @@ async fn build_upload_request<'a>(
             "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
         );
 
-    match credentials {
-        Credentials::Basic { password, .. } => {
-            if password.is_some() {
-                debug!("Using HTTP Basic authentication");
-                request = request.header(AUTHORIZATION, credentials.to_header_value());
-            }
-        }
-        Credentials::Bearer { .. } => {
-            debug!("Using Bearer token authentication");
-            request = request.header(AUTHORIZATION, credentials.to_header_value());
-        }
+    if let Some(header) = credentials.to_header_value() {
+        debug!("Using {} authentication", credentials.scheme_name());
+        request = request.header(AUTHORIZATION, header);
     }
 
     Ok((request, idx))
@@ -1416,17 +1408,9 @@ fn build_metadata_request<'a>(
             "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
         );
 
-    match credentials {
-        Credentials::Basic { password, .. } => {
-            if password.is_some() {
-                debug!("Using HTTP Basic authentication");
-                request = request.header(AUTHORIZATION, credentials.to_header_value());
-            }
-        }
-        Credentials::Bearer { .. } => {
-            debug!("Using Bearer token authentication");
-            request = request.header(AUTHORIZATION, credentials.to_header_value());
-        }
+    if let Some(header) = credentials.to_header_value() {
+        debug!("Using {} authentication", credentials.scheme_name());
+        request = request.header(AUTHORIZATION, header);
     }
 
     request

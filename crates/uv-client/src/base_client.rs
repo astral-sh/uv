@@ -963,7 +963,9 @@ fn request_into_redirect(
         if let Some(credentials) = Credentials::from_url(&redirect_url) {
             let _ = redirect_url.set_username("");
             let _ = redirect_url.set_password(None);
-            headers.insert(AUTHORIZATION, credentials.to_header_value());
+            if let Some(header) = credentials.to_header_value() {
+                headers.insert(AUTHORIZATION, header);
+            }
         }
     }
 

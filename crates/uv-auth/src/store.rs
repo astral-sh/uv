@@ -66,6 +66,8 @@ pub enum AuthScheme {
     ///
     /// Uses a token provided as `Bearer <token>` in the `Authorization` header.
     Bearer,
+    /// No authentication.
+    None,
 }
 
 /// Errors that can occur when working with TOML credential storage.
@@ -83,6 +85,8 @@ pub enum TomlCredentialError {
     BasicAuthError(#[from] BasicAuthError),
     #[error(transparent)]
     BearerAuthError(#[from] BearerAuthError),
+    #[error(transparent)]
+    NoneAuthError(#[from] NoneAuthError),
     #[error("Failed to determine credentials directory")]
     CredentialsDirError,
     #[error("Token is not valid unicode")]
@@ -98,6 +102,7 @@ impl TomlCredentialError {
             | Self::SerializeError(_)
             | Self::BasicAuthError(_)
             | Self::BearerAuthError(_)
+            | Self::NoneAuthError(_)
             | Self::CredentialsDirError
             | Self::TokenNotUnicode(_) => None,
         }
@@ -120,6 +125,16 @@ pub enum BearerAuthError {
     UnexpectedUsername,
     #[error("`password` cannot be provided with `scheme = bearer`")]
     UnexpectedPassword,
+}
+
+#[derive(Debug, Error)]
+pub enum NoneAuthError {
+    #[error("`username` cannot be provided with `scheme = none`")]
+    Username,
+    #[error("`password` cannot be provided with `scheme = none`")]
+    Password,
+    #[error("`token` cannot be provided with `scheme = none`")]
+    Token,
 }
 
 #[derive(Debug, Error, PartialEq)]
@@ -169,6 +184,13 @@ impl From<TomlCredential> for TomlCredentialWire {
                 scheme: AuthScheme::Bearer,
                 password: None,
                 token: Some(String::from_utf8(token.into_bytes()).expect("Token is valid UTF-8")),
+            },
+            Credentials::None => Self {
+                service: value.service,
+                username: Username::new(None),
+                scheme: AuthScheme::None,
+                password: None,
+                token: None,
             },
         }
     }
@@ -221,6 +243,21 @@ impl TryFrom<TomlCredentialWire> for TomlCredential {
                 Ok(Self {
                     service: value.service,
                     credentials,
+                })
+            }
+            AuthScheme::None => {
+                if value.username.is_some() {
+                    return Err(TomlCredentialError::NoneAuthError(NoneAuthError::Username));
+                }
+                if value.password.is_some() {
+                    return Err(TomlCredentialError::NoneAuthError(NoneAuthError::Password));
+                }
+                if value.token.is_some() {
+                    return Err(TomlCredentialError::NoneAuthError(NoneAuthError::Token));
+                }
+                Ok(Self {
+                    service: value.service,
+                    credentials: Credentials::None,
                 })
             }
         }
@@ -280,6 +317,7 @@ impl TextCredentialStore {
                 let username = match &credential.credentials {
                     Credentials::Basic { username, .. } => username.clone(),
                     Credentials::Bearer { .. } => Username::none(),
+                    Credentials::None => Username::none(),
                 };
                 (
                     (credential.service.clone(), username),
@@ -400,6 +438,7 @@ impl TextCredentialStore {
         let username = match &credentials {
             Credentials::Basic { username, .. } => username.clone(),
             Credentials::Bearer { .. } => Username::none(),
+            Credentials::None => Username::none(),
         };
         self.credentials.insert((service, username), credentials)
     }
@@ -523,6 +562,66 @@ password = "pass2"
         let content = fs::read_to_string(temp_output.path()).unwrap();
         assert!(content.contains("example.com"));
         assert!(content.contains("testuser"));
+    }
+
+    #[tokio::test]
+    async fn test_auth_scheme_none() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(
+            temp_file,
+            r#"
+[[credential]]
+service = "https://example.com"
+scheme = "none"
+"#
+        )
+        .unwrap();
+
+        let store = TextCredentialStore::from_file(temp_file.path()).unwrap();
+        let url = DisplaySafeUrl::parse("https://example.com/").unwrap();
+        let cred = store.get_credentials(&url, None).unwrap().unwrap();
+        assert!(matches!(cred, Credentials::None));
+        assert!(cred.is_authenticated());
+        assert!(cred.to_header_value().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_nested_service_lookup() {
+        let mut store = TextCredentialStore::default();
+        
+        // Root service with Basic auth
+        let root_service = Service::from_str("https://example.com").unwrap();
+        let root_creds = Credentials::basic(Some("root".to_string()), Some("rootpass".to_string()));
+        store.insert(root_service, root_creds);
+
+        // Subpath service with None auth
+        let sub_service = Service::from_str("https://example.com/sub/path").unwrap();
+        let sub_creds = Credentials::None;
+        store.insert(sub_service, sub_creds);
+
+        // 1. Root URL should use root credentials
+        let url = DisplaySafeUrl::parse("https://example.com").unwrap();
+        let cred = store.get_credentials(&url, None).unwrap().unwrap();
+        assert_eq!(cred.username(), Some("root"));
+        assert_eq!(cred.scheme_name(), "HTTP Basic");
+
+        // 2. Subpath URL should use subpath credentials (None)
+        let url = DisplaySafeUrl::parse("https://example.com/sub/path").unwrap();
+        let cred = store.get_credentials(&url, None).unwrap().unwrap();
+        assert!(matches!(cred, Credentials::None));
+        assert_eq!(cred.scheme_name(), "None");
+
+        // 3. Sub-subpath URL should use subpath credentials (None)
+        let url = DisplaySafeUrl::parse("https://example.com/sub/path/extra").unwrap();
+        let cred = store.get_credentials(&url, None).unwrap().unwrap();
+        assert!(matches!(cred, Credentials::None));
+        assert_eq!(cred.scheme_name(), "None");
+
+        // 4. Other path should fall back to root credentials
+        let url = DisplaySafeUrl::parse("https://example.com/other/path").unwrap();
+        let cred = store.get_credentials(&url, None).unwrap().unwrap();
+        assert_eq!(cred.username(), Some("root"));
+        assert_eq!(cred.scheme_name(), "HTTP Basic");
     }
 
     #[test]
