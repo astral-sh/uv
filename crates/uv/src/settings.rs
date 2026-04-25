@@ -713,7 +713,9 @@ impl RunSettings {
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
-            max_recursion_depth: max_recursion_depth.unwrap_or(Self::DEFAULT_MAX_RECURSION_DEPTH),
+            max_recursion_depth: max_recursion_depth
+                .or(environment.run_max_recursion_depth)
+                .unwrap_or(Self::DEFAULT_MAX_RECURSION_DEPTH),
         }
     }
 }
