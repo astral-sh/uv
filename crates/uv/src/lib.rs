@@ -56,7 +56,7 @@ use crate::printer::Printer;
 use crate::settings::{
     CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
     PipInstallSettings, PipListSettings, PipShowSettings, PipSyncSettings, PipUninstallSettings,
-    PublishSettings,
+    PublishSettings, resolve_color,
 };
 
 pub(crate) mod child;
@@ -116,6 +116,24 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
 
     // Make the early preview flags globally available.
     uv_preview::set(early_preview)?;
+
+    // Configure the `tracing` crate, which controls internal logging.
+    #[cfg(feature = "tracing-durations-export")]
+    let (durations_layer, _duration_guard) =
+        logging::setup_durations(environment.tracing_durations_file.as_ref())?;
+    #[cfg(not(feature = "tracing-durations-export"))]
+    let durations_layer = None::<tracing_subscriber::layer::Identity>;
+    logging::setup_logging(
+        match cli.top_level.global_args.verbose {
+            0 => logging::Level::Off,
+            1 => logging::Level::DebugUv,
+            2 => logging::Level::TraceUv,
+            3.. => logging::Level::TraceAll,
+        },
+        durations_layer,
+        resolve_color(&cli.top_level.global_args),
+        environment.log_context.unwrap_or_default(),
+    )?;
 
     // Determine the project directory.
     //
@@ -384,24 +402,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     // Set the global flags.
     uv_flags::init(EnvironmentFlags::from(&environment))
         .map_err(|()| anyhow::anyhow!("Flags are already initialized"))?;
-
-    // Configure the `tracing` crate, which controls internal logging.
-    #[cfg(feature = "tracing-durations-export")]
-    let (durations_layer, _duration_guard) =
-        logging::setup_durations(environment.tracing_durations_file.as_ref())?;
-    #[cfg(not(feature = "tracing-durations-export"))]
-    let durations_layer = None::<tracing_subscriber::layer::Identity>;
-    logging::setup_logging(
-        match globals.verbose {
-            0 => logging::Level::Off,
-            1 => logging::Level::DebugUv,
-            2 => logging::Level::TraceUv,
-            3.. => logging::Level::TraceAll,
-        },
-        durations_layer,
-        globals.color,
-        environment.log_context.unwrap_or_default(),
-    )?;
 
     debug!("uv {}", uv_cli::version::uv_self_version());
     if let Some(config_file) = cli.top_level.config_file.as_ref() {
