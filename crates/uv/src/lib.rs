@@ -532,6 +532,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.username,
                 args.password,
                 args.token,
+                args.none,
                 client_builder,
                 printer,
                 globals.preview,

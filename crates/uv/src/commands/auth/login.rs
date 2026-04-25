@@ -27,12 +27,16 @@ pub(crate) async fn login(
     username: Option<String>,
     password: Option<String>,
     token: Option<String>,
+    none: bool,
     client_builder: BaseClientBuilder<'_>,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
     let pyx_store = PyxTokenStore::from_settings()?;
     if pyx_store.is_known_domain(service.url()) || is_default_pyx_domain(service.url()) {
+        if none {
+            bail!("Cannot specify `--none` when logging in to pyx");
+        }
         if username.is_some() {
             bail!("Cannot specify a username when logging in to pyx");
         }
@@ -69,6 +73,25 @@ pub(crate) async fn login(
         Some(root) => (Service::try_from(root.clone())?, root),
         None => (service, url),
     };
+
+    if none {
+        match backend {
+            AuthBackend::System(_) => {
+                bail!("The system keyring does not support disabling authentication; use the plaintext credential store instead");
+            }
+            AuthBackend::TextStore(mut store, _lock) => {
+                store.insert(service.clone(), Credentials::None);
+                store.write(TextCredentialStore::default_file()?, _lock)?;
+            }
+        }
+
+        writeln!(
+            printer.stderr(),
+            "Disabled authentication for {}",
+            url.bold().cyan()
+        )?;
+        return Ok(ExitStatus::Success);
+    }
 
     // Extract credentials from URL if present
     let url_credentials = Credentials::from_url(&url);

@@ -4449,6 +4449,7 @@ pub(crate) struct AuthLoginSettings {
     pub(crate) username: Option<String>,
     pub(crate) password: Option<String>,
     pub(crate) token: Option<String>,
+    pub(crate) none: bool,
 }
 
 impl AuthLoginSettings {
@@ -4459,6 +4460,7 @@ impl AuthLoginSettings {
             username: args.username,
             password: args.password,
             token: args.token,
+            none: args.none,
         }
     }
 }

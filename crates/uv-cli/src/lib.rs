@@ -6752,13 +6752,24 @@ pub struct AuthLoginArgs {
     pub service: Service,
 
     /// The username to use for the service.
-    #[arg(long, short, conflicts_with = "token", value_hint = ValueHint::Other)]
+    #[arg(
+        long,
+        short,
+        conflicts_with = "token",
+        conflicts_with = "none",
+        value_hint = ValueHint::Other
+    )]
     pub username: Option<String>,
 
     /// The password to use for the service.
     ///
     /// Use `-` to read the password from stdin.
-    #[arg(long, conflicts_with = "token", value_hint = ValueHint::Other)]
+    #[arg(
+        long,
+        conflicts_with = "token",
+        conflicts_with = "none",
+        value_hint = ValueHint::Other
+    )]
     pub password: Option<String>,
 
     /// The token to use for the service.
@@ -6766,8 +6777,24 @@ pub struct AuthLoginArgs {
     /// The username will be set to `__token__`.
     ///
     /// Use `-` to read the token from stdin.
-    #[arg(long, short, conflicts_with = "username", conflicts_with = "password", value_hint = ValueHint::Other)]
+    #[arg(
+        long,
+        short,
+        conflicts_with = "username",
+        conflicts_with = "password",
+        conflicts_with = "none",
+        value_hint = ValueHint::Other
+    )]
     pub token: Option<String>,
+
+    /// Use no authentication for the service.
+    #[arg(
+        long,
+        conflicts_with = "username",
+        conflicts_with = "password",
+        conflicts_with = "token"
+    )]
+    pub none: bool,
 
     /// The keyring provider to use for storage of credentials.
     ///
