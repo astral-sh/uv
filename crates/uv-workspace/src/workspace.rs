@@ -1,8 +1,9 @@
 //! Resolve the current [`ProjectWorkspace`] or [`Workspace`].
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use glob::{GlobError, PatternError, glob};
 use itertools::Itertools;
@@ -24,28 +25,64 @@ use crate::pyproject::{
     Project, PyProjectToml, PyprojectTomlError, Source, Sources, ToolUvSources, ToolUvWorkspace,
 };
 
+/// Cache of a parsed `pyproject.toml` file that guarantees that the `pyproject.toml` is only
+/// parsed once.
+#[derive(Debug, Default)]
+struct PyprojectTomlCache(OnceLock<Result<Arc<PyProjectToml>, Arc<WorkspaceError>>>);
+
+impl Deref for PyprojectTomlCache {
+    type Target = OnceLock<Result<Arc<PyProjectToml>, Arc<WorkspaceError>>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 /// Cache of parsed `pyproject.toml` files.
 ///
 /// Avoids re-parsing `pyproject.toml` files during workspace discovery from different roots.
+/// Specifically, each file is parsed at most once.
+///
+/// Errors are final, once a read errors, all subsequent reads will error.
 #[derive(Debug, Default, Clone)]
 pub struct WorkspaceCache {
-    pyproject_tomls: Arc<tokio::sync::Mutex<FxHashMap<PathBuf, Arc<PyProjectToml>>>>,
+    pyproject_tomls: Arc<tokio::sync::Mutex<FxHashMap<PathBuf, Arc<PyprojectTomlCache>>>>,
 }
 
 impl WorkspaceCache {
     /// Read and parse the `pyproject.toml` at `path` with caching.
     async fn read(&self, path: &Path) -> Result<Arc<PyProjectToml>, WorkspaceError> {
+        // Lock the entire collection in case we need to insert a finer-grained lock for the path.
+        // Low-contention as we drop this lock with any reading or parsing operation.
         let mut pyproject_tomls = self.pyproject_tomls.lock().await;
-        if let Some(cached) = pyproject_tomls.get(path) {
-            return Ok(cached.clone());
+
+        // Return the parsed contents if the path is already cached.
+        if let Some(cached_or_waiting) = pyproject_tomls.get(path)
+            && let Some(cached) = cached_or_waiting.get()
+        {
+            return Ok(cached.clone()?);
         }
-        let contents = fs_err::tokio::read_to_string(path).await?;
-        let pyproject_toml = PyProjectToml::from_string(contents, path)
-            .map_err(|err| WorkspaceError::Toml(path.to_path_buf(), Box::new(err)))?;
-        Ok(pyproject_tomls
+
+        // Scope the lock down to just the path
+        let cached_or_waiting: Arc<_> = pyproject_tomls
             .entry(path.to_path_buf())
-            .or_insert_with(|| Arc::new(pyproject_toml))
-            .clone())
+            .or_default()
+            .clone();
+
+        // Free the outer lock to allow parallel parsing of `pyproject.toml` files at different
+        // locations.
+        drop(pyproject_tomls);
+
+        // Either this function or a potential concurrent thread will read, parse and cache the
+        // file.
+        let cached = cached_or_waiting.get_or_init(|| {
+            // TODO(konsti): Does it matter that this is sync?
+            let contents = fs_err::read_to_string(path).map_err(WorkspaceError::Io)?;
+            let pyproject_toml = PyProjectToml::from_string(contents, path)
+                .map_err(|err| WorkspaceError::Toml(path.to_path_buf(), Box::new(err)))?;
+            Ok(Arc::new(pyproject_toml))
+        });
+        Ok(cached.clone()?)
     }
 
     /// Remove the cached entry for the `pyproject.toml` at `path`.
@@ -99,6 +136,9 @@ pub enum WorkspaceError {
     // fail.
     #[error("Failed to normalize workspace member path")]
     Normalize(#[source] std::io::Error),
+    // Workaround for `io::Error` not being `Clone`able.
+    #[error(transparent)]
+    Arc(#[from] Arc<Self>),
 }
 
 #[derive(Debug, Default, Clone, Hash, PartialEq, Eq)]
