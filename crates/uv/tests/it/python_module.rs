@@ -395,6 +395,110 @@ fn find_uv_bin_user_bin() {
 }
 
 #[test]
+fn find_uv_bin_pip_build_env() -> anyhow::Result<()> {
+    let vendor_url = uv_test::build_vendor_links_url();
+
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix()
+        .with_filtered_counts()
+        .with_filtered_system_tmp()
+        .with_filter(user_scheme_bin_filter())
+        // Target installs always use "bin" on all platforms. On Windows,
+        // `with_filtered_virtualenv_bin` only filters "Scripts", not "bin"
+        .with_filter((r"[\\/]bin".to_string(), "/[BIN]".to_string()))
+        .with_filter((r"pip-build-env-[a-z0-9_]+", "pip-build-env-[HASH]"));
+
+    // Build fake-uv into a wheel
+    let wheel_dir = context.temp_dir.child("wheels");
+    wheel_dir.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.build()
+        .arg(context.workspace_root.join("test/packages/fake-uv"))
+        .arg("--wheel")
+        .arg("--out-dir")
+        .arg(wheel_dir.path())
+        .arg("--python")
+        .arg("3.12"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building wheel (uv build backend)...
+    Successfully built wheels/uv-0.1.0-py3-none-any.whl
+    "
+    );
+
+    // Create a project whose build requires fake-uv
+    let project = context.temp_dir.child("project");
+    project.child("project").child("__init__.py").touch()?;
+
+    project.child("pyproject.toml").write_str(&formatdoc! { r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools", "uv==0.1.0"]
+        build-backend = "setuptools.build_meta"
+        "#
+    })?;
+
+    // The setup.py calls find_uv_bin during the build as a side effect
+    project.child("setup.py").write_str(indoc! { r#"
+        import sys
+        from setuptools import setup
+        from uv import find_uv_bin
+        print("FOUND_UV=" + find_uv_bin(), file=sys.stderr)
+        setup()
+        "#
+    })?;
+
+    // Use `pip install` to trigger a real pip build environment.
+    // The `-v` flag is required so pip surfaces subprocess stderr (where
+    // `setup.py` prints `FOUND_UV=...`).
+    let result = context
+        .tool_run()
+        .arg("pip")
+        .arg("install")
+        .arg(project.path())
+        .arg("-v")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&vendor_url)
+        .arg("--find-links")
+        .arg(wheel_dir.path())
+        .assert()
+        .success();
+
+    // Extract the FOUND_UV= lines from stderr (where setup.py prints them).
+    let stderr = String::from_utf8(result.get_output().stderr.clone()).unwrap();
+    let found_uv_lines: String = stderr
+        .lines()
+        .filter(|line| line.contains("FOUND_UV="))
+        .map(str::trim)
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    assert!(
+        !found_uv_lines.is_empty(),
+        "expected FOUND_UV= in pip output, got:\n{stderr}"
+    );
+
+    let snapshot = uv_test::apply_filters(found_uv_lines, context.filters());
+    insta::assert_snapshot!(snapshot, @"
+    FOUND_UV=[SYSTEM_TEMP_DIR]/pip-build-env-[HASH]/overlay/[BIN]/uv
+    FOUND_UV=[SYSTEM_TEMP_DIR]/pip-build-env-[HASH]/overlay/[BIN]/uv
+    FOUND_UV=[SYSTEM_TEMP_DIR]/pip-build-env-[HASH]/overlay/[BIN]/uv
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn find_uv_bin_error_message() {
     let mut context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
