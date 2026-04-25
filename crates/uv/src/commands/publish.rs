@@ -11,7 +11,7 @@ use uv_cache::Cache;
 use uv_client::{
     AuthIntegration, BaseClient, BaseClientBuilder, RedirectPolicy, RegistryClientBuilder,
 };
-use uv_configuration::{KeyringProviderType, TrustedPublishing};
+use uv_configuration::{KeyringProviderType, PublishFailureStrategy, TrustedPublishing};
 use uv_distribution_types::{IndexCapabilities, IndexLocations, IndexUrl};
 use uv_preview::{Preview, PreviewFeature};
 use uv_publish::{
@@ -41,6 +41,7 @@ pub(crate) async fn publish(
     dry_run: bool,
     no_attestations: bool,
     direct: bool,
+    on_failure: PublishFailureStrategy,
     preview: Preview,
     cache: &Cache,
     printer: Printer,
@@ -196,6 +197,7 @@ pub(crate) async fn publish(
         None
     };
 
+    let mut has_success = false;
     let mut error_count: usize = 0;
 
     for group in groups {
@@ -244,7 +246,26 @@ pub(crate) async fn publish(
                         error_count += 1;
                         continue;
                     }
-                    return Err(err.into());
+
+                    let should_stop = match on_failure {
+                        PublishFailureStrategy::StopFirst => true,
+                        PublishFailureStrategy::KeepGoing => false,
+                        PublishFailureStrategy::KeepGoingAfterSuccess => !has_success,
+                    };
+
+                    if should_stop {
+                        return Err(err.into());
+                    }
+
+                    let anyhow_err: anyhow::Error = err.into();
+                    write_error_chain(
+                        anyhow_err.as_ref(),
+                        printer.stderr(),
+                        "error",
+                        AnsiColors::Red,
+                    )?;
+                    error_count += 1;
+                    continue;
                 }
             }
         }
@@ -282,7 +303,26 @@ pub(crate) async fn publish(
                         error_count += 1;
                         continue;
                     }
-                    return Err(err.into());
+
+                    let should_stop = match on_failure {
+                        PublishFailureStrategy::StopFirst => true,
+                        PublishFailureStrategy::KeepGoing => false,
+                        PublishFailureStrategy::KeepGoingAfterSuccess => !has_success,
+                    };
+
+                    if should_stop {
+                        return Err(err.into());
+                    }
+
+                    let anyhow_err: anyhow::Error = err.into();
+                    write_error_chain(
+                        anyhow_err.as_ref(),
+                        printer.stderr(),
+                        "error",
+                        AnsiColors::Red,
+                    )?;
+                    error_count += 1;
+                    continue;
                 }
             };
 
@@ -294,7 +334,7 @@ pub(crate) async fn publish(
             format!("({bytes:.1}{unit})").dimmed()
         )?;
 
-        let uploaded = if direct {
+        let result = if direct {
             if dry_run {
                 // For dry run, call validate since we won't call reserve.
                 match uv_publish::validate(
@@ -342,7 +382,7 @@ pub(crate) async fn publish(
                 &credentials,
                 reporter.clone(),
             )
-            .await?
+            .await
         } else {
             // Run validation checks on the file, but don't upload it (if possible).
             match uv_publish::validate(
@@ -363,7 +403,7 @@ pub(crate) async fn publish(
 
                     // If validation indicates the file already exists, skip the upload.
                     if !should_upload {
-                        false
+                        Ok(false)
                     } else {
                         upload(
                             &group,
@@ -376,7 +416,7 @@ pub(crate) async fn publish(
                             &download_concurrency,
                             reporter.clone(),
                         )
-                        .await? // Filename and/or URL are already attached, if applicable.
+                        .await // Filename and/or URL are already attached, if applicable.
                     }
                 }
                 Err(err) => {
@@ -391,24 +431,82 @@ pub(crate) async fn publish(
                         error_count += 1;
                         continue;
                     }
-                    return Err(err.into());
+
+                    let should_stop = match on_failure {
+                        PublishFailureStrategy::StopFirst => true,
+                        PublishFailureStrategy::KeepGoing => false,
+                        PublishFailureStrategy::KeepGoingAfterSuccess => !has_success,
+                    };
+
+                    if should_stop {
+                        return Err(err.into());
+                    }
+
+                    let anyhow_err: anyhow::Error = err.into();
+                    write_error_chain(
+                        anyhow_err.as_ref(),
+                        printer.stderr(),
+                        "error",
+                        AnsiColors::Red,
+                    )?;
+                    error_count += 1;
+                    continue;
                 }
             }
         };
-        info!("Upload succeeded");
 
-        if !uploaded {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                "File already exists, skipping".dimmed()
-            )?;
+        match result {
+            Ok(uploaded) => {
+                if uploaded {
+                    has_success = true;
+                    info!("Upload succeeded");
+                } else {
+                    writeln!(
+                        printer.stderr(),
+                        "{}",
+                        "File already exists, skipping".dimmed()
+                    )?;
+                }
+            }
+            Err(err) => {
+                let should_stop = match on_failure {
+                    PublishFailureStrategy::StopFirst => true,
+                    PublishFailureStrategy::KeepGoing => false,
+                    PublishFailureStrategy::KeepGoingAfterSuccess => !has_success,
+                };
+
+                if should_stop {
+                    return Err(err.into());
+                }
+
+                let anyhow_err: anyhow::Error = err.into();
+                write_error_chain(
+                    anyhow_err.as_ref(),
+                    printer.stderr(),
+                    "error",
+                    AnsiColors::Red,
+                )?;
+                error_count += 1;
+            }
         }
     }
 
     if error_count > 0 {
-        let failed = if error_count == 1 { "file" } else { "files" };
-        writeln!(printer.stderr(), "Found issues with {error_count} {failed}")?;
+        if dry_run {
+            let failed = if error_count == 1 { "file" } else { "files" };
+            writeln!(printer.stderr(), "Found issues with {error_count} {failed}")?;
+        } else {
+            writeln!(
+                printer.stderr(),
+                "{}",
+                format!(
+                    "{error_count} file{s} failed to publish",
+                    s = if error_count == 1 { "" } else { "s" }
+                )
+                .bold()
+                .red()
+            )?;
+        }
         return Ok(ExitStatus::Failure);
     }
 
