@@ -1,17 +1,18 @@
 use std::fmt::Write;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use anyhow::{Context, Result, bail};
 use console::Term;
+use futures::StreamExt;
 use owo_colors::{AnsiColors, OwoColorize};
-use tokio::sync::Semaphore;
 use tracing::{debug, info, trace};
 use uv_auth::{Credentials, PyxTokenStore};
 use uv_cache::Cache;
 use uv_client::{
     AuthIntegration, BaseClient, BaseClientBuilder, RedirectPolicy, RegistryClientBuilder,
 };
-use uv_configuration::{KeyringProviderType, TrustedPublishing};
+use uv_configuration::{Concurrency, KeyringProviderType, TrustedPublishing};
 use uv_distribution_types::{IndexCapabilities, IndexLocations, IndexUrl};
 use uv_preview::{Preview, PreviewFeature};
 use uv_publish::{
@@ -31,6 +32,7 @@ pub(crate) async fn publish(
     publish_url: DisplaySafeUrl,
     trusted_publishing: TrustedPublishing,
     keyring_provider: KeyringProviderType,
+    concurrency: Concurrency,
     environment: &EnvironmentOptions,
     client_builder: &BaseClientBuilder<'_>,
     username: Option<String>,
@@ -161,8 +163,15 @@ pub(crate) async fn publish(
         .build()?;
 
     let retry_policy = client_builder.retry_policy();
-    // We're only checking a single URL and one at a time, so 1 permit is sufficient
-    let download_concurrency = Arc::new(Semaphore::new(1));
+    let publish_concurrency = if dry_run && token_store.is_known_url(&publish_url) {
+        concurrency.pyx_wheel_validations
+    } else {
+        concurrency.uploads
+    };
+    debug!("Using publish concurrency of {publish_concurrency}");
+    // The check-url step fetches the Simple API page, same as resolution, so
+    // use the standard global download concurrency rather than the upload limit.
+    let download_concurrency = concurrency.downloads_semaphore.clone();
 
     // Load credentials.
     let (publish_url, credentials) = gather_credentials(
@@ -196,216 +205,252 @@ pub(crate) async fn publish(
         None
     };
 
-    let mut error_count: usize = 0;
+    let error_count = AtomicUsize::new(0);
 
-    for group in groups {
-        // Check if the filename is normalized (e.g., version `2025.09.4` should be `2025.9.4`).
-        let normalized_filename = group.filename.to_string();
-        if group.raw_filename != normalized_filename {
-            if preview.is_enabled(PreviewFeature::PublishRequireNormalized) {
+    // Create a shared reporter for concurrent uploads so that progress bars are
+    // coordinated under a single `MultiProgress` and status messages can be
+    // printed above them via `reporter.println()`.
+    let reporter = Arc::new(PublishReporter::single(printer));
+
+    // Each task returns Ok(()) for success/skip, Err for fatal errors (non-dry-run only).
+    let publish_one = |group: uv_publish::UploadDistribution| {
+        let check_url_client = &check_url_client;
+        let download_concurrency = &download_concurrency;
+        let publish_url = &publish_url;
+        let token_store = &token_store;
+        let upload_client = &upload_client;
+        let s3_client = &s3_client;
+        let credentials = &credentials;
+        let error_count = &error_count;
+        let preview = &preview;
+        let reporter = &reporter;
+        async move {
+            // Check if the filename is normalized (e.g., version `2025.09.4` should be `2025.9.4`).
+            let normalized_filename = group.filename.to_string();
+            if group.raw_filename != normalized_filename {
+                if preview.is_enabled(PreviewFeature::PublishRequireNormalized) {
+                    warn_user_once!(
+                        "`{}` has a non-normalized filename (expected `{normalized_filename}`), skipping",
+                        group.raw_filename
+                    );
+                    return Ok(());
+                }
                 warn_user_once!(
-                    "`{}` has a non-normalized filename (expected `{normalized_filename}`), skipping",
-                    group.raw_filename
+                    "`{}` has a non-normalized filename (expected `{normalized_filename}`). \
+                    Pass `--preview-features {}` to skip such files.",
+                    group.raw_filename,
+                    PreviewFeature::PublishRequireNormalized
                 );
-                continue;
             }
-            warn_user_once!(
-                "`{}` has a non-normalized filename (expected `{normalized_filename}`). \
-                Pass `--preview-features {}` to skip such files.",
-                group.raw_filename,
-                PreviewFeature::PublishRequireNormalized
-            );
-        }
 
-        let reporter = Arc::new(PublishReporter::single(printer));
+            if let Some(check_url_client) = check_url_client {
+                match uv_publish::check_url(
+                    check_url_client,
+                    &group.file,
+                    &group.filename,
+                    download_concurrency,
+                    Arc::clone(reporter),
+                )
+                .await
+                {
+                    Ok(true) => {
+                        reporter.println(format!(
+                            "File `{}` already exists, skipping",
+                            group.filename
+                        ))?;
+                        return Ok(());
+                    }
+                    Ok(false) => {}
+                    Err(err) => {
+                        if dry_run {
+                            let err: anyhow::Error = err.into();
+                            let mut buf = String::new();
+                            let _ =
+                                write_error_chain(err.as_ref(), &mut buf, "error", AnsiColors::Red);
+                            reporter.println(buf.trim_end())?;
+                            error_count.fetch_add(1, Ordering::Relaxed);
+                            return Ok(());
+                        }
+                        return Err(err.into());
+                    }
+                }
+            }
 
-        if let Some(check_url_client) = &check_url_client {
-            match uv_publish::check_url(
-                check_url_client,
+            let size = fs_err::metadata(&group.file)?.len();
+            let (bytes, unit) = human_readable_bytes(size);
+            if dry_run {
+                reporter.println(format!(
+                    "{} {} {}",
+                    "Checking".bold().cyan(),
+                    group.filename,
+                    format!("({bytes:.1}{unit})").dimmed()
+                ))?;
+            } else if publish_concurrency == 1 {
+                // With concurrent uploads, the progress bars already indicate which file is being
+                // hashed and uploaded, so skip the per-file messages.
+                reporter.println(format!(
+                    "{} {} {}",
+                    "Hashing".bold().green(),
+                    group.filename,
+                    format!("({bytes:.1}{unit})").dimmed()
+                ))?;
+            }
+
+            // Collect the metadata for the file.
+            let form_metadata = match FormMetadata::read_from_file(
                 &group.file,
                 &group.filename,
-                &download_concurrency,
-                reporter.clone(),
+                Arc::clone(reporter),
             )
             .await
             {
-                Ok(true) => {
-                    writeln!(
-                        printer.stderr(),
-                        "File {} already exists, skipping",
-                        group.filename
-                    )?;
-                    continue;
-                }
-                Ok(false) => {}
-                Err(err) => {
-                    if dry_run {
-                        write_error_chain(&err, printer.stderr(), "error", AnsiColors::Red)?;
-                        error_count += 1;
-                        continue;
-                    }
-                    return Err(err.into());
-                }
-            }
-        }
-
-        let size = fs_err::metadata(&group.file)?.len();
-        let (bytes, unit) = human_readable_bytes(size);
-        if dry_run {
-            writeln!(
-                printer.stderr(),
-                "{} {} {}",
-                "Checking".bold().cyan(),
-                group.filename,
-                format!("({bytes:.1}{unit})").dimmed()
-            )?;
-        } else {
-            writeln!(
-                printer.stderr(),
-                "{} {} {}",
-                "Hashing".bold().green(),
-                group.filename,
-                format!("({bytes:.1}{unit})").dimmed()
-            )?;
-        }
-
-        // Collect the metadata for the file.
-        let form_metadata =
-            match FormMetadata::read_from_file(&group.file, &group.filename, reporter.clone())
-                .await
-                .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))
-            {
                 Ok(metadata) => metadata,
                 Err(err) => {
+                    let err: anyhow::Error =
+                        PublishError::PublishPrepare(group.file.clone(), Box::new(err)).into();
                     if dry_run {
-                        write_error_chain(&err, printer.stderr(), "error", AnsiColors::Red)?;
-                        error_count += 1;
-                        continue;
+                        let mut buf = String::new();
+                        let _ = write_error_chain(err.as_ref(), &mut buf, "error", AnsiColors::Red);
+                        reporter.println(buf.trim_end())?;
+                        error_count.fetch_add(1, Ordering::Relaxed);
+                        return Ok(());
                     }
-                    return Err(err.into());
+                    return Err(err);
                 }
             };
 
-        writeln!(
-            printer.stderr(),
-            "{} {} {}",
-            "Uploading".bold().green(),
-            group.filename,
-            format!("({bytes:.1}{unit})").dimmed()
-        )?;
+            if !dry_run && publish_concurrency == 1 {
+                reporter.println(format!(
+                    "{} {} {}",
+                    "Uploading".bold().green(),
+                    group.filename,
+                    format!("({bytes:.1}{unit})").dimmed()
+                ))?;
+            }
 
-        let uploaded = if direct {
-            if dry_run {
-                // For dry run, call validate since we won't call reserve.
+            let uploaded = if direct {
+                if dry_run {
+                    // For dry run, call validate since we won't call reserve.
+                    match uv_publish::validate(
+                        &group.file,
+                        &form_metadata,
+                        &group.raw_filename,
+                        publish_url,
+                        token_store,
+                        upload_client,
+                        credentials,
+                    )
+                    .await
+                    {
+                        Ok(should_upload) => {
+                            if !should_upload {
+                                reporter.println(format!(
+                                    "{}",
+                                    format_args!(
+                                        "File `{}` already exists, skipping",
+                                        group.filename
+                                    )
+                                    .dimmed()
+                                ))?;
+                            }
+                        }
+                        Err(err) => {
+                            let err: anyhow::Error = err.into();
+                            let mut buf = String::new();
+                            let _ =
+                                write_error_chain(err.as_ref(), &mut buf, "error", AnsiColors::Red);
+                            reporter.println(buf.trim_end())?;
+                            error_count.fetch_add(1, Ordering::Relaxed);
+                        }
+                    }
+                    return Ok(());
+                }
+
+                debug!("Using two-phase upload (direct mode)");
+                upload_two_phase(
+                    &group,
+                    &form_metadata,
+                    publish_url,
+                    upload_client,
+                    s3_client,
+                    retry_policy,
+                    credentials,
+                    Arc::clone(reporter),
+                )
+                .await?
+            } else {
+                // Run validation checks on the file, but don't upload it (if possible).
                 match uv_publish::validate(
                     &group.file,
                     &form_metadata,
                     &group.raw_filename,
-                    &publish_url,
-                    &token_store,
-                    &upload_client,
-                    &credentials,
+                    publish_url,
+                    token_store,
+                    upload_client,
+                    credentials,
                 )
                 .await
                 {
                     Ok(should_upload) => {
+                        if dry_run {
+                            return Ok(());
+                        }
+
+                        // If validation indicates the file already exists, skip the upload.
                         if !should_upload {
-                            writeln!(
-                                printer.stderr(),
-                                "{}",
-                                "File already exists, skipping".dimmed()
-                            )?;
+                            false
+                        } else {
+                            upload(
+                                &group,
+                                &form_metadata,
+                                publish_url,
+                                upload_client,
+                                retry_policy,
+                                credentials,
+                                check_url_client.as_ref(),
+                                download_concurrency,
+                                Arc::clone(reporter),
+                            )
+                            .await? // Filename and/or URL are already attached, if applicable.
                         }
                     }
                     Err(err) => {
-                        let err: anyhow::Error = err.into();
-                        write_error_chain(
-                            err.as_ref(),
-                            printer.stderr(),
-                            "error",
-                            AnsiColors::Red,
-                        )?;
-                        error_count += 1;
+                        if dry_run {
+                            let err: anyhow::Error = err.into();
+                            let mut buf = String::new();
+                            let _ =
+                                write_error_chain(err.as_ref(), &mut buf, "error", AnsiColors::Red);
+                            reporter.println(buf.trim_end())?;
+                            error_count.fetch_add(1, Ordering::Relaxed);
+                            return Ok(());
+                        }
+                        return Err(err.into());
                     }
                 }
-                continue;
+            };
+            info!("Upload succeeded");
+
+            if !uploaded {
+                reporter.println(format!(
+                    "{}",
+                    format_args!("File `{}` already exists, skipping", group.filename).dimmed()
+                ))?;
             }
-
-            debug!("Using two-phase upload (direct mode)");
-            upload_two_phase(
-                &group,
-                &form_metadata,
-                &publish_url,
-                &upload_client,
-                &s3_client,
-                retry_policy,
-                &credentials,
-                reporter.clone(),
-            )
-            .await?
-        } else {
-            // Run validation checks on the file, but don't upload it (if possible).
-            match uv_publish::validate(
-                &group.file,
-                &form_metadata,
-                &group.raw_filename,
-                &publish_url,
-                &token_store,
-                &upload_client,
-                &credentials,
-            )
-            .await
-            {
-                Ok(should_upload) => {
-                    if dry_run {
-                        continue;
-                    }
-
-                    // If validation indicates the file already exists, skip the upload.
-                    if !should_upload {
-                        false
-                    } else {
-                        upload(
-                            &group,
-                            &form_metadata,
-                            &publish_url,
-                            &upload_client,
-                            retry_policy,
-                            &credentials,
-                            check_url_client.as_ref(),
-                            &download_concurrency,
-                            reporter.clone(),
-                        )
-                        .await? // Filename and/or URL are already attached, if applicable.
-                    }
-                }
-                Err(err) => {
-                    if dry_run {
-                        let err: anyhow::Error = err.into();
-                        write_error_chain(
-                            err.as_ref(),
-                            printer.stderr(),
-                            "error",
-                            AnsiColors::Red,
-                        )?;
-                        error_count += 1;
-                        continue;
-                    }
-                    return Err(err.into());
-                }
-            }
-        };
-        info!("Upload succeeded");
-
-        if !uploaded {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                "File already exists, skipping".dimmed()
-            )?;
+            Ok(())
         }
-    }
+    };
 
+    let mut stream = futures::stream::iter(groups)
+        .map(publish_one)
+        .buffer_unordered(publish_concurrency);
+
+    while let Some(result) = stream.next().await {
+        // On error in non-dry-run mode, stop processing remaining files.
+        result?;
+    }
+    drop(stream);
+
+    let error_count = error_count.load(Ordering::Relaxed);
     if error_count > 0 {
         let failed = if error_count == 1 { "file" } else { "files" };
         writeln!(printer.stderr(), "Found issues with {error_count} {failed}")?;

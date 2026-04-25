@@ -1904,6 +1904,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 publish_url,
                 trusted_publishing,
                 keyring_provider,
+                globals.concurrency,
                 &environment,
                 &client_builder.subcommand(vec!["publish".to_owned()]),
                 username,
