@@ -15,6 +15,15 @@ This will prompt for the credentials.
 The credentials can also be provided using the `--username` and `--password` options, or the
 `--token` option for services which use a `__token__` or arbitrary username.
 
+To explicitly disable authentication for a service, use the `--none` flag:
+
+```console
+$ uv auth login example.com --none
+```
+
+This will prevent uv from attempting to authenticate with the service, including via discovery from
+the keyring or other providers.
+
 !!! note
 
     We recommend providing the secret via stdin. Use `-` to indicate the value should be read from

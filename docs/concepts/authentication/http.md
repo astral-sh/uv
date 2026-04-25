@@ -33,6 +33,15 @@ Credentials are stored in a plaintext file in uv's state directory, e.g.,
 `~/.local/share/uv/credentials/credentials.toml` on Unix. This file is currently not intended to be
 edited manually.
 
+The credentials store can also be used to explicitly disable authentication for a service by setting
+the `scheme` to `none`:
+
+```toml
+[[credential]]
+service = "https://example.com"
+scheme = "none"
+```
+
 !!! note
 
     A secure, system native storage mechanism is in [preview](../preview.md) — it is still
