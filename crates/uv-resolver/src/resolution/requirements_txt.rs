@@ -8,6 +8,7 @@ use uv_distribution_types::{
     DistributionMetadata, Name, RequiresPython, ResolvedDist, SimplifiedMarkerTree, Verbatim,
     VersionOrUrlRef,
 };
+use uv_fs::{PortablePath, try_relative_to_if};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::{MarkerTree, Scheme, split_scheme};
@@ -36,10 +37,28 @@ impl<'dist> RequirementsTxtDist<'dist> {
         &self,
         requires_python: &RequiresPython,
         include_markers: bool,
+        relative_to: Option<&Path>,
     ) -> Cow<'_, str> {
         // If the URL is editable, write it as an editable requirement.
         if self.dist.is_editable() {
             if let VersionOrUrlRef::Url(url) = self.dist.version_or_url() {
+                // If the URL was originally given as a relative path, recompute the path so it's
+                // relative to the requirements file's anchor (typically the directory containing
+                // the output `requirements.txt` or, when writing to stdout, the working directory).
+                // Without this, transitive editable dependencies that were declared in another
+                // package's `pyproject.toml` would have paths relative to that package, not to the
+                // requirements file we're emitting.
+                //
+                // Skip the rewrite when the input contained an environment variable reference
+                // (e.g., `${PROJECT_ROOT}`), since callers typically want those preserved verbatim.
+                if let Some(relative_to) = relative_to
+                    && !url.was_given_absolute()
+                    && url.given().is_some_and(|given| !given.contains('$'))
+                    && let Some(install_path) = self.dist.source_tree()
+                    && let Ok(path) = try_relative_to_if(install_path, relative_to, true)
+                {
+                    return Cow::Owned(format!("-e {}", PortablePath::from(&path)));
+                }
                 let given = url.verbatim();
                 return Cow::Owned(format!("-e {given}"));
             }

@@ -609,6 +609,18 @@ pub(crate) async fn pip_compile(
     // Write the resolved dependencies to the output channel.
     let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file);
 
+    // Determine the directory relative to which local paths in the output should be written. When
+    // the user passes `-o requirements.txt`, this is the directory containing that file; otherwise,
+    // it's the working directory. This anchor is used to rewrite editable paths discovered
+    // transitively (e.g., from a dependency's `pyproject.toml`) so they're meaningful from the
+    // perspective of the emitted requirements file.
+    let absolute_output_file = output_file.map(std::path::absolute).transpose()?;
+    let output_anchor: &Path = if let Some(output_file) = absolute_output_file.as_deref() {
+        output_file.parent().unwrap_or(&CWD)
+    } else {
+        &CWD
+    };
+
     if include_header {
         writeln!(
             writer,
@@ -719,6 +731,7 @@ pub(crate) async fn pip_compile(
                     include_annotations,
                     include_index_annotation,
                     annotation_style,
+                    Some(output_anchor),
                 )
             )?;
         }
@@ -749,19 +762,11 @@ pub(crate) async fn pip_compile(
                 );
             }
 
-            // Determine the directory relative to which the output file should be written.
-            let output_file = output_file.map(std::path::absolute).transpose()?;
-            let install_path = if let Some(output_file) = output_file.as_deref() {
-                output_file.parent().unwrap()
-            } else {
-                &*CWD
-            };
-
             // Convert the resolution to a `pylock.toml` file.
             let export = PylockToml::from_resolution(
                 &resolution,
                 &no_emit_packages,
-                install_path,
+                output_anchor,
                 tags.as_deref(),
                 &build_options,
             )?;
