@@ -95,35 +95,13 @@ impl GlobalSettings {
     ) -> Self {
         let network_settings = NetworkSettings::resolve(args, workspace, environment);
         let python_preference = resolve_python_preference(args, workspace, environment);
+        let color = resolve_color(args);
         Self {
             required_version: workspace
                 .and_then(|workspace| workspace.globals.required_version.clone()),
             quiet: args.quiet,
             verbose: args.verbose,
-            color: if let Some(color_choice) = args.color {
-                // If `--color` is passed explicitly, use its value.
-                color_choice
-            } else if args.no_color {
-                // If `--no-color` is passed explicitly, disable color output.
-                ColorChoice::Never
-            } else if std::env::var_os(EnvVars::NO_COLOR)
-                .filter(|v| !v.is_empty())
-                .is_some()
-            {
-                // If the `NO_COLOR` is set, disable color output.
-                ColorChoice::Never
-            } else if std::env::var_os(EnvVars::FORCE_COLOR)
-                .filter(|v| !v.is_empty())
-                .is_some()
-                || std::env::var_os(EnvVars::CLICOLOR_FORCE)
-                    .filter(|v| !v.is_empty())
-                    .is_some()
-            {
-                // If `FORCE_COLOR` or `CLICOLOR_FORCE` is set, always enable color output.
-                ColorChoice::Always
-            } else {
-                ColorChoice::Auto
-            },
+            color,
             network_settings,
             concurrency: Concurrency::new(
                 environment
@@ -173,6 +151,34 @@ impl GlobalSettings {
             )
             .is_enabled(),
         }
+    }
+}
+
+/// Resolve the color choice from CLI arguments and environment variables.
+pub(crate) fn resolve_color(args: &GlobalArgs) -> ColorChoice {
+    if let Some(color_choice) = args.color {
+        // If `--color` is passed explicitly, use its value.
+        color_choice
+    } else if args.no_color {
+        // If `--no-color` is passed explicitly, disable color output.
+        ColorChoice::Never
+    } else if std::env::var_os(EnvVars::NO_COLOR)
+        .filter(|v| !v.is_empty())
+        .is_some()
+    {
+        // If the `NO_COLOR` is set, disable color output.
+        ColorChoice::Never
+    } else if std::env::var_os(EnvVars::FORCE_COLOR)
+        .filter(|v| !v.is_empty())
+        .is_some()
+        || std::env::var_os(EnvVars::CLICOLOR_FORCE)
+            .filter(|v| !v.is_empty())
+            .is_some()
+    {
+        // If `FORCE_COLOR` or `CLICOLOR_FORCE` is set, always enable color output.
+        ColorChoice::Always
+    } else {
+        ColorChoice::Auto
     }
 }
 

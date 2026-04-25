@@ -19969,6 +19969,10 @@ fn lock_explicit_default_index() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    DEBUG Found workspace root: `[TEMP_DIR]/`
+    DEBUG Adding root workspace member: `[TEMP_DIR]/`
+    DEBUG Found workspace configuration at `[TEMP_DIR]/pyproject.toml`
+    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     DEBUG Found project root: `[TEMP_DIR]/`
     DEBUG No workspace root found, using project root
