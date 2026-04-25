@@ -15,6 +15,18 @@ This will prompt for the credentials.
 The credentials can also be provided using the `--username` and `--password` options, or the
 `--token` option for services which use a `__token__` or arbitrary username.
 
+For example, to store username and password credentials:
+
+```console
+$ uv auth login --username foo --password bar example.com
+```
+
+To store a token instead:
+
+```console
+$ uv auth login --token pypi-... example.com
+```
+
 !!! note
 
     We recommend providing the secret via stdin. Use `-` to indicate the value should be read from
@@ -38,9 +50,30 @@ will not yet be used for Git requests.
 
 To remove credentials, use the `uv auth logout` command:
 
+For username and password credentials, provide the username that was used to log in:
+
+```console
+$ uv auth logout --username foo example.com
+```
+
+For token-based credentials, no username is required:
+
 ```console
 $ uv auth logout example.com
 ```
+
+When `--username` is omitted, uv first tries to remove the default token entry for the service, suc
+that means `uv auth logout example.com` works naturally for credentials that were stored with
+`--token`.
+
+For username and password credentials, `--username` should usually be provided. If the default
+plaintext credential store is in use, uv can also remove the only matching credential when the
+choice is unambiguous. If multiple usernames match the same service, uv will ask you to specify
+which one to remove with `--username`.
+
+When the system-native storage backend is enabled with `UV_PREVIEW_FEATURES=native-auth`, uv cannot
+infer an arbitrary username from the service alone, so `--username` is required for
+username/password credentials.
 
 !!! note
 
@@ -51,13 +84,27 @@ $ uv auth logout example.com
 
 To show the credential stored for a given URL, use the `uv auth token` command:
 
+For token-based credentials:
+
 ```console
 $ uv auth token example.com
 ```
 
-If a username was used to log in, it will need to be provided as well, e.g.:
+If a username was used to log in, it must be provided as well:
 
 ```console
+$ uv auth token --username foo example.com
+```
+
+For example, these commands line up with the corresponding login flows:
+
+```console
+$ uv auth login --token pypi-... example.com
+$ uv auth token example.com
+```
+
+```console
+$ uv auth login --username foo --password bar example.com
 $ uv auth token --username foo example.com
 ```
 
