@@ -33784,7 +33784,87 @@ fn lock_exclude_newer_hint() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because there are no versions of iniconfig and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because all versions of iniconfig were published after the exclude newer time and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2000-01-01T00:00:00Z. The latest version satisfying the requirement is v2.0.0, published at 2023-01-07T11:08:09.864Z. Consider using `exclude-newer-package` to override the cutoff for this package.
+    ");
+
+    Ok(())
+}
+
+/// Test that the resolver does not report `all versions of` when only a subset of versions are
+/// excluded by `--exclude-newer`.
+#[test]
+fn lock_exclude_newer_partial_range() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>1.1.1"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--exclude-newer")
+        .arg("2021-01-01T00:00:00Z"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only iniconfig<=1.1.1 is available and all of:
+              iniconfig==2.0.0
+              iniconfig==2.1.0
+              iniconfig==2.2.0
+              iniconfig==2.3.0
+           were published after the exclude newer time, we can conclude that iniconfig>1.1.1 cannot be used.
+          And because your project depends on iniconfig>1.1.1, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2021-01-01T00:00:00Z. The latest available version is v1.1.1. Consider using `exclude-newer-package` to override the cutoff for this package.
+    ");
+
+    Ok(())
+}
+
+/// Test that a per-package `exclude-newer-package` override can coexist with a failing global
+/// `--exclude-newer` cutoff for another package.
+#[test]
+fn lock_exclude_newer_package_mixed_with_exclude_newer() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["idna", "iniconfig"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--exclude-newer")
+        .arg("2000-01-01T00:00:00Z")
+        .arg("--exclude-newer-package")
+        .arg("idna=false"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because all versions of iniconfig were published after the exclude newer time and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
           hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2000-01-01T00:00:00Z. The latest version satisfying the requirement is v2.0.0, published at 2023-01-07T11:08:09.864Z. Consider using `exclude-newer-package` to override the cutoff for this package.
     ");
@@ -34006,7 +34086,7 @@ fn lock_exclude_newer_hint_pinned_version() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of iniconfig==2.0.0 and your project depends on iniconfig==2.0.0, we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because iniconfig==2.0.0 was published after the exclude newer time and your project depends on iniconfig==2.0.0, we can conclude that your project's requirements are unsatisfiable.
 
           hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2022-01-01T00:00:00Z. The requested version, v2.0.0, was published at 2023-01-07T11:08:09.864Z. Consider using `exclude-newer-package` to override the cutoff for this package.
     ");
