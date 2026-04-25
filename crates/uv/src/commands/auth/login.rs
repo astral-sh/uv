@@ -77,7 +77,9 @@ pub(crate) async fn login(
     if none {
         match backend {
             AuthBackend::System(_) => {
-                bail!("The system keyring does not support disabling authentication; use the plaintext credential store instead");
+                bail!(
+                    "The system keyring does not support disabling authentication; use the plaintext credential store instead"
+                );
             }
             AuthBackend::TextStore(mut store, _lock) => {
                 store.insert(service.clone(), Credentials::None);

@@ -588,7 +588,7 @@ scheme = "none"
     #[tokio::test]
     async fn test_nested_service_lookup() {
         let mut store = TextCredentialStore::default();
-        
+
         // Root service with Basic auth
         let root_service = Service::from_str("https://example.com").unwrap();
         let root_creds = Credentials::basic(Some("root".to_string()), Some("rootpass".to_string()));
