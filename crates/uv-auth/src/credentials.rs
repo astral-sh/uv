@@ -350,30 +350,39 @@ impl Credentials {
     /// Panics if the username or password cannot be base64 encoded.
     pub fn to_header_value(&self) -> Option<HeaderValue> {
         match self {
-            Self::Basic { .. } => {
-                // See: <https://github.com/seanmonstar/reqwest/blob/2c11ef000b151c2eebeed2c18a7b81042220c6b0/src/util.rs#L3>
-                let mut buf = b"Basic ".to_vec();
-                {
-                    let mut encoder = EncoderWriter::new(&mut buf, &BASE64_STANDARD);
-                    write!(encoder, "{}:", self.username().unwrap_or_default())
-                        .expect("Write to base64 encoder should succeed");
-                    if let Some(password) = self.password() {
-                        write!(encoder, "{password}")
+            Self::None => None,
+            Self::Basic { username, password } => {
+                if username.is_some() || password.is_some() {
+                    // See: <https://github.com/seanmonstar/reqwest/blob/2c11ef000b151c2eebeed2c18a7b81042220c6b0/src/util.rs#L3>
+                    let mut buf = b"Basic ".to_vec();
+                    {
+                        let mut encoder = EncoderWriter::new(&mut buf, &BASE64_STANDARD);
+                        write!(encoder, "{}:", username.as_deref().unwrap_or_default())
                             .expect("Write to base64 encoder should succeed");
+                        if let Some(password) = password {
+                            write!(encoder, "{}", password.as_str())
+                                .expect("Write to base64 encoder should succeed");
+                        }
                     }
+                    let mut header =
+                        HeaderValue::from_bytes(&buf).expect("base64 is always valid HeaderValue");
+                    header.set_sensitive(true);
+                    Some(header)
+                } else {
+                    None
                 }
-                let mut header =
-                    HeaderValue::from_bytes(&buf).expect("base64 is always valid HeaderValue");
-                header.set_sensitive(true);
-                Some(header)
             }
             Self::Bearer { token } => {
-                let mut header = HeaderValue::from_bytes(&[b"Bearer ", token.as_slice()].concat())
-                    .expect("Bearer token is always valid HeaderValue");
-                header.set_sensitive(true);
-                Some(header)
+                if token.is_empty() {
+                    None
+                } else {
+                    let mut header =
+                        HeaderValue::from_bytes(&[b"Bearer ", token.as_slice()].concat())
+                            .expect("Bearer token is always valid HeaderValue");
+                    header.set_sensitive(true);
+                    Some(header)
+                }
             }
-            Self::None => None,
         }
     }
 

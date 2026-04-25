@@ -1362,8 +1362,10 @@ async fn build_upload_request<'a>(
         );
 
     if let Some(header) = credentials.to_header_value() {
-        debug!("Using {} authentication", credentials.scheme_name());
-        request = request.header(AUTHORIZATION, header);
+        if credentials.is_authenticated() {
+            debug!("Using {} authentication", credentials.scheme_name());
+            request = request.header(AUTHORIZATION, header);
+        }
     }
 
     Ok((request, idx))
@@ -1409,8 +1411,10 @@ fn build_metadata_request<'a>(
         );
 
     if let Some(header) = credentials.to_header_value() {
-        debug!("Using {} authentication", credentials.scheme_name());
-        request = request.header(AUTHORIZATION, header);
+        if credentials.is_authenticated() {
+            debug!("Using {} authentication", credentials.scheme_name());
+            request = request.header(AUTHORIZATION, header);
+        }
     }
 
     request
