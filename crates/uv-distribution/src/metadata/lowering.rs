@@ -58,6 +58,34 @@ impl LoweredRequirement {
             (None, RequirementOrigin::Project)
         };
 
+        // If the project declares a non-workspace source for a workspace member (e.g., a Git
+        // source for standalone use), but the workspace root declares it as a workspace source,
+        // prefer the workspace root's source.
+        let (sources, origin) = if matches!(origin, RequirementOrigin::Project)
+            && workspace.packages().contains_key(&requirement.name)
+            && sources.is_some_and(|s| s.iter().any(|s| !matches!(s, Source::Workspace { .. })))
+        {
+            if let Some(workspace_source) = workspace.sources().get(&requirement.name) {
+                if workspace_source.iter().any(|s| {
+                    matches!(
+                        s,
+                        Source::Workspace {
+                            workspace: true,
+                            ..
+                        }
+                    )
+                }) {
+                    (Some(workspace_source), RequirementOrigin::Workspace)
+                } else {
+                    (sources, origin)
+                }
+            } else {
+                (sources, origin)
+            }
+        } else {
+            (sources, origin)
+        };
+
         // If the source only applies to a given extra or dependency group, filter it out.
         let sources = sources.map(|sources| {
             sources
