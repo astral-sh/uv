@@ -62,6 +62,7 @@ pub(crate) use crate::resolver::availability::{
     UnavailableVersion,
 };
 use crate::resolver::batch_prefetch::BatchPrefetcher;
+use crate::resolver::dependency_builder::DependencyBuilder;
 pub use crate::resolver::derivation::DerivationChainBuilder;
 pub use crate::resolver::environment::ResolverEnvironment;
 use crate::resolver::environment::{
@@ -84,6 +85,7 @@ pub(crate) use provider::MetadataUnavailable;
 
 mod availability;
 mod batch_prefetch;
+mod dependency_builder;
 mod derivation;
 mod environment;
 mod fork_map;
@@ -1789,16 +1791,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     python_requirement,
                 );
 
-                requirements
-                    .flat_map(move |requirement| {
-                        PubGrubDependency::from_requirement(
-                            &self.conflicts,
-                            requirement,
-                            None,
-                            Some(package),
-                        )
-                    })
-                    .collect()
+                let mut compiler = DependencyBuilder::new(self, package, env, python_requirement);
+                compiler.extend_requirements(requirements, None);
+                compiler.rewrite_root_complementary_sources();
+                compiler.finish()
             }
 
             PubGrubPackageInner::Package {
@@ -1917,18 +1913,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     python_requirement,
                 );
 
-                requirements
-                    .filter(|requirement| !self.excludes.contains(&requirement.name))
-                    .flat_map(|requirement| {
-                        PubGrubDependency::from_requirement(
-                            &self.conflicts,
-                            requirement,
-                            group.as_ref(),
-                            Some(package),
-                        )
-                    })
-                    .chain(system_dependencies)
-                    .collect()
+                let mut compiler = DependencyBuilder::new(self, package, env, python_requirement);
+                compiler.extend_requirements(
+                    requirements.filter(|requirement| !self.excludes.contains(&requirement.name)),
+                    group.as_ref(),
+                );
+                compiler.extend_dependencies(system_dependencies);
+
+                if extra.is_none() && group.is_none() {
+                    compiler.add_complementary_source_dependencies(
+                        &metadata.requires_dist,
+                        &metadata.dependency_groups,
+                    );
+                }
+
+                compiler.finish()
             }
 
             PubGrubPackageInner::Python(_) => return Ok(Dependencies::Unforkable(Vec::default())),

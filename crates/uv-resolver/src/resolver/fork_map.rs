@@ -24,17 +24,19 @@ struct Entry<T> {
 
 /// The fork visibility of an entry.
 #[derive(Debug, Clone, Eq, PartialEq)]
-struct ForkScope {
+pub(crate) struct ForkScope {
     marker: MarkerTree,
     conflict: Option<ConflictItem>,
 }
 
 impl ForkScope {
-    /// Derive the scope under which a requirement should be visible in forked resolution.
-    ///
-    /// Group conflicts are folded into the marker so group-scoped entries only appear in forks
-    /// where that group is active.
-    fn from_requirement(requirement: &Requirement) -> Self {
+    /// Creates a fork scope from a marker and optional conflict item.
+    pub(crate) fn new(marker: MarkerTree, conflict: Option<ConflictItem>) -> Self {
+        Self { marker, conflict }
+    }
+
+    /// Derives the fork scope implied by a requirement's marker and conflict state.
+    pub(crate) fn from_requirement(requirement: &Requirement) -> Self {
         let conflict = Self::conflict_for_requirement(requirement);
         let marker = conflict
             .as_ref()
@@ -46,7 +48,12 @@ impl ForkScope {
                 )
                 .combined()
             });
-        Self { marker, conflict }
+        Self::new(marker, conflict)
+    }
+
+    /// Returns the conflict item that must remain enabled for this scope to match, if any.
+    pub(crate) fn conflict(&self) -> Option<ConflictItemRef<'_>> {
+        self.conflict.as_ref().map(ConflictItem::as_ref)
     }
 
     fn conflict_for_requirement(requirement: &Requirement) -> Option<ConflictItem> {
@@ -63,11 +70,6 @@ impl ForkScope {
             }
             _ => None,
         })
-    }
-
-    /// Return the conflict item that further restricts this scope, if any.
-    fn conflict(&self) -> Option<ConflictItemRef<'_>> {
-        self.conflict.as_ref().map(ConflictItem::as_ref)
     }
 
     fn matches(&self, env: &ResolverEnvironment) -> bool {
@@ -87,13 +89,23 @@ impl<T> Default for ForkMap<T> {
 impl<T> ForkMap<T> {
     /// Associate a value with the [`Requirement`] in a given fork.
     pub(crate) fn add(&mut self, requirement: &Requirement, value: T) {
-        self.0
-            .entry(requirement.name.clone())
-            .or_default()
-            .push(Entry {
-                value,
-                scope: ForkScope::from_requirement(requirement),
-            });
+        self.add_with_scope(
+            &requirement.name,
+            ForkScope::from_requirement(requirement),
+            value,
+        );
+    }
+
+    /// Associate a value with a package name and scope in a given fork.
+    pub(crate) fn add_with_scope(
+        &mut self,
+        package_name: &PackageName,
+        scope: ForkScope,
+        value: T,
+    ) {
+        let entry = Entry { value, scope };
+
+        self.0.entry(package_name.clone()).or_default().push(entry);
     }
 
     /// Returns `true` if the map contains any values for a package that are compatible with the
