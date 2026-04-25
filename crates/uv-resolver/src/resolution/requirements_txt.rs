@@ -51,9 +51,11 @@ impl<'dist> RequirementsTxtDist<'dist> {
                 //
                 // Skip the rewrite when the input contained an environment variable reference
                 // (e.g., `${PROJECT_ROOT}`), since callers typically want those preserved verbatim.
+                // Match the `${NAME}` form expanded by `uv_pep508::expand_env_vars`; bare `$` in
+                // a path (legitimate on Unix) shouldn't suppress the rewrite.
                 if let Some(relative_to) = relative_to
                     && !url.was_given_absolute()
-                    && url.given().is_some_and(|given| !given.contains('$'))
+                    && url.given().is_some_and(|given| !given.contains("${"))
                     && let Some(install_path) = self.dist.source_tree()
                     && let Ok(path) = try_relative_to_if(install_path, relative_to, true)
                 {
