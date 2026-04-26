@@ -20,7 +20,7 @@
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 $script:THIS_PATH = $myinvocation.mycommand.path
-$script:BASE_DIR = Split-Path (Resolve-Path "$THIS_PATH/..") -Parent
+$script:BASE_DIR = Split-Path -Parent (Split-Path -Parent (Resolve-Path -LiteralPath $THIS_PATH))
 
 function global:deactivate([switch] $NonDestructive) {
     if (Test-Path variable:_OLD_VIRTUAL_PATH) {
