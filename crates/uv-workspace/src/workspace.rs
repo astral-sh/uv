@@ -1,19 +1,19 @@
 //! Resolve the current [`ProjectWorkspace`] or [`Workspace`].
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
 use glob::{GlobError, PatternError, glob};
 use itertools::Itertools;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashSet;
 use tracing::{debug, instrument, trace, warn};
 
 use uv_configuration::DependencyGroupsWithDefaults;
 use uv_distribution_types::{Index, Requirement, RequirementSource};
 use uv_fs::{CWD, Simplified, normalize_path};
 use uv_normalize::{DEV_DEPENDENCIES, GroupName, PackageName};
+use uv_once_map::OnceMap;
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerTree, VerbatimUrl};
 use uv_pypi_types::{ConflictError, Conflicts, SupportedEnvironments, VerbatimParsedUrl};
@@ -25,18 +25,8 @@ use crate::pyproject::{
     Project, PyProjectToml, PyprojectTomlError, Source, Sources, ToolUvSources, ToolUvWorkspace,
 };
 
-/// Cache of a parsed `pyproject.toml` file that guarantees that the `pyproject.toml` is only
-/// parsed once.
-#[derive(Debug, Default)]
-struct PyprojectTomlCache(OnceLock<Result<Arc<PyProjectToml>, Arc<WorkspaceError>>>);
-
-impl Deref for PyprojectTomlCache {
-    type Target = OnceLock<Result<Arc<PyProjectToml>, Arc<WorkspaceError>>>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
+/// The cached result of reading and parsing a single `pyproject.toml`.
+type CachedPyprojectToml = Result<Arc<PyProjectToml>, Arc<WorkspaceError>>;
 
 /// Cache of parsed `pyproject.toml` files.
 ///
@@ -46,48 +36,47 @@ impl Deref for PyprojectTomlCache {
 /// Errors are final, once a read errors, all subsequent reads will error.
 #[derive(Debug, Default, Clone)]
 pub struct WorkspaceCache {
-    pyproject_tomls: Arc<tokio::sync::Mutex<FxHashMap<PathBuf, Arc<PyprojectTomlCache>>>>,
+    pyproject_tomls: Arc<OnceMap<PathBuf, CachedPyprojectToml>>,
 }
 
 impl WorkspaceCache {
     /// Read and parse the `pyproject.toml` at `path` with caching.
     async fn read(&self, path: &Path) -> Result<Arc<PyProjectToml>, WorkspaceError> {
-        // Lock the entire collection in case we need to insert a finer-grained lock for the path.
-        // Low-contention as we drop this lock with any reading or parsing operation.
-        let mut pyproject_tomls = self.pyproject_tomls.lock().await;
-
-        // Return the parsed contents if the path is already cached.
-        if let Some(cached_or_waiting) = pyproject_tomls.get(path)
-            && let Some(cached) = cached_or_waiting.get()
-        {
-            return Ok(cached.clone()?);
+        // Fast path: the result is already cached.
+        if let Some(cached) = self.pyproject_tomls.get(path) {
+            return Ok(cached?);
         }
 
-        // Scope the lock down to just the path
-        let cached_or_waiting: Arc<_> = pyproject_tomls
-            .entry(path.to_path_buf())
-            .or_default()
-            .clone();
-
-        // Free the outer lock to allow parallel parsing of `pyproject.toml` files at different
-        // locations.
-        drop(pyproject_tomls);
-
-        // Either this function or a potential concurrent thread will read, parse and cache the
-        // file.
-        let cached = cached_or_waiting.get_or_init(|| {
-            // TODO(konsti): Does it matter that this is sync?
-            let contents = fs_err::read_to_string(path).map_err(WorkspaceError::Io)?;
-            let pyproject_toml = PyProjectToml::from_string(contents, path)
-                .map_err(|err| WorkspaceError::Toml(path.to_path_buf(), Box::new(err)))?;
-            Ok(Arc::new(pyproject_toml))
-        });
-        Ok(cached.clone()?)
+        let path = path.to_path_buf();
+        if self.pyproject_tomls.register(path.clone()) {
+            // Read, parse and notify waiters.
+            let path_ = path.clone();
+            let read_and_parse = move || {
+                let contents = fs_err::read_to_string(&path_).map_err(WorkspaceError::Io)?;
+                PyProjectToml::from_string(contents, &path_)
+                    .map_err(|err| WorkspaceError::Toml(path_, Box::new(err)))
+            };
+            let result = tokio::task::spawn_blocking(read_and_parse)
+                .await
+                .expect("there was a panic in another thread")
+                .map(Arc::new)
+                .map_err(Arc::new);
+            self.pyproject_tomls.done(path, result.clone());
+            Ok(result?)
+        } else {
+            // Another task is loading the same file concurrently.
+            let cached = self
+                .pyproject_tomls
+                .wait(&path)
+                .await
+                .expect("registered key must exist");
+            Ok(cached?)
+        }
     }
 
     /// Remove the cached entry for the `pyproject.toml` at `path`.
-    pub async fn invalidate(&self, path: &Path) {
-        self.pyproject_tomls.lock().await.remove(path);
+    pub fn invalidate(&self, path: &Path) {
+        self.pyproject_tomls.remove(path);
     }
 }
 
@@ -139,6 +128,16 @@ pub enum WorkspaceError {
     // Workaround for `io::Error` not being `Clone`able.
     #[error(transparent)]
     Arc(#[from] Arc<Self>),
+}
+
+impl WorkspaceError {
+    fn as_io(&self) -> Option<&std::io::Error> {
+        match self {
+            Self::Io(err) => Some(err),
+            Self::Arc(inner) => inner.as_io(),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Default, Clone, Hash, PartialEq, Eq)]
@@ -1043,7 +1042,11 @@ impl Workspace {
                 let pyproject_path = member_root.join("pyproject.toml");
                 let pyproject_toml = match cache.read(&pyproject_path).await {
                     Ok(pyproject_toml) => pyproject_toml.clone(),
-                    Err(WorkspaceError::Io(err)) => {
+                    Err(err) => {
+                        let Some(io_err) = err.as_io() else {
+                            return Err(err);
+                        };
+
                         if !fs_err::metadata(&member_root)?.is_dir() {
                             warn!(
                                 "Ignoring non-directory workspace member: `{}`",
@@ -1053,7 +1056,7 @@ impl Workspace {
                         }
 
                         // A directory exists, but it doesn't contain a `pyproject.toml`.
-                        if err.kind() == std::io::ErrorKind::NotFound {
+                        if io_err.kind() == std::io::ErrorKind::NotFound {
                             // If the directory is hidden, skip it.
                             if member_root
                                 .file_name()
@@ -1083,9 +1086,8 @@ impl Workspace {
                             ));
                         }
 
-                        return Err(err.into());
+                        return Err(err);
                     }
-                    Err(err) => return Err(err),
                 };
 
                 // Check if the current project is explicitly marked as unmanaged.
@@ -1341,7 +1343,7 @@ impl ProjectWorkspace {
         let pyproject_path = project_root.join("pyproject.toml");
         let pyproject_toml = match cache.read(&pyproject_path).await {
             Ok(pyproject_toml) => pyproject_toml.clone(),
-            Err(WorkspaceError::Io(_)) => {
+            Err(err) if err.as_io().is_some() => {
                 // No `pyproject.toml`, but there may still be a `setup.py` or `setup.cfg`.
                 return Ok(None);
             }

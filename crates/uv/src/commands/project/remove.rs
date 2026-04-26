@@ -172,7 +172,7 @@ pub(crate) async fn remove(
     let content = toml.to_string();
 
     // Save the modified `pyproject.toml` or script.
-    target.write(&content, workspace_cache).await?;
+    target.write(&content, workspace_cache)?;
 
     // If `--frozen`, exit early. There's no reason to lock and sync, since we don't need a `uv.lock`
     // to exist at all.
@@ -404,11 +404,7 @@ impl RemoveTarget {
     ///
     /// Returns `true` if the content was modified. Invalidates the [`WorkspaceCache`] entry for
     /// the written `pyproject.toml` so any subsequent read sees the new contents.
-    async fn write(
-        &self,
-        content: &str,
-        workspace_cache: &WorkspaceCache,
-    ) -> Result<bool, io::Error> {
+    fn write(&self, content: &str, workspace_cache: &WorkspaceCache) -> Result<bool, io::Error> {
         match self {
             Self::Script(script) => {
                 if content == script.metadata.raw {
@@ -426,7 +422,7 @@ impl RemoveTarget {
                 } else {
                     let pyproject_path = project.root().join("pyproject.toml");
                     fs_err::write(&pyproject_path, content)?;
-                    workspace_cache.invalidate(&pyproject_path).await;
+                    workspace_cache.invalidate(&pyproject_path);
                     Ok(true)
                 }
             }

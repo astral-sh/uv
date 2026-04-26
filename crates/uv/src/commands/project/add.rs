@@ -598,7 +598,7 @@ pub(crate) async fn add(
                 project.workspace().install_path().join("pyproject.toml");
             let workspace_content = toml.to_string();
             fs_err::write(&workspace_pyproject_path, &workspace_content)?;
-            workspace_cache.invalidate(&workspace_pyproject_path).await;
+            workspace_cache.invalidate(&workspace_pyproject_path);
 
             AddTarget::Project(
                 VirtualProject::discover(
@@ -688,7 +688,7 @@ pub(crate) async fn add(
     let content = toml.to_string();
 
     // Save the modified `pyproject.toml` or script.
-    modified |= target.write(&content, workspace_cache).await?;
+    modified |= target.write(&content, workspace_cache)?;
 
     // If `--frozen`, exit early. There's no reason to lock and sync, since we don't need a `uv.lock`
     // to exist at all.
@@ -1111,7 +1111,7 @@ async fn lock_and_sync(
             let content = toml.to_string();
 
             // Write the updated `pyproject.toml` to disk.
-            target.write(&content, workspace_cache).await?;
+            target.write(&content, workspace_cache)?;
 
             // Update the `pypackage.toml` in-memory.
             target = target.update(&content)?;
@@ -1316,11 +1316,7 @@ impl AddTarget {
     ///
     /// Returns `true` if the content was modified. Invalidates the [`WorkspaceCache`] entry for
     /// the written `pyproject.toml` so any subsequent read sees the new contents.
-    async fn write(
-        &self,
-        content: &str,
-        workspace_cache: &WorkspaceCache,
-    ) -> Result<bool, io::Error> {
+    fn write(&self, content: &str, workspace_cache: &WorkspaceCache) -> Result<bool, io::Error> {
         match self {
             Self::Script(script, _) => {
                 if content == script.metadata.raw {
@@ -1338,7 +1334,7 @@ impl AddTarget {
                 } else {
                     let pyproject_path = project.root().join("pyproject.toml");
                     fs_err::write(&pyproject_path, content)?;
-                    workspace_cache.invalidate(&pyproject_path).await;
+                    workspace_cache.invalidate(&pyproject_path);
                     Ok(true)
                 }
             }

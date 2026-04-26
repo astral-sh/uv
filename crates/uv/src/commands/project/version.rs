@@ -340,8 +340,7 @@ pub(crate) async fn project_version(
             &mut toml,
             &pyproject_path,
             workspace_cache,
-        )
-        .await?;
+        )?;
         Box::pin(lock_and_sync(
             project,
             project_dir,
@@ -432,7 +431,7 @@ async fn find_target(
 }
 
 /// Update the pyproject.toml on-disk and in-memory with a new version
-async fn update_project(
+fn update_project(
     project: VirtualProject,
     new_version: &Version,
     toml: &mut PyProjectTomlMut,
@@ -443,7 +442,7 @@ async fn update_project(
     toml.set_version(new_version)?;
     let content = toml.to_string();
     fs_err::write(pyproject_path, &content)?;
-    workspace_cache.invalidate(pyproject_path).await;
+    workspace_cache.invalidate(pyproject_path);
 
     // Update the `pyproject.toml` in-memory.
     let project = project
