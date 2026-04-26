@@ -8,7 +8,7 @@ use std::sync::{Arc, OnceLock};
 use glob::{GlobError, PatternError, glob};
 use itertools::Itertools;
 use rustc_hash::{FxHashMap, FxHashSet};
-use tracing::{debug, trace, warn};
+use tracing::{debug, instrument, trace, warn};
 
 use uv_configuration::DependencyGroupsWithDefaults;
 use uv_distribution_types::{Index, Requirement, RequirementSource};
@@ -212,6 +212,7 @@ impl Workspace {
     /// [tool.uv]
     /// dev-dependencies = ["ruff"]
     /// ```
+    #[instrument(skip_all, fields(path = %path.display()))]
     pub async fn discover(
         path: &Path,
         options: &DiscoveryOptions,
@@ -955,6 +956,7 @@ impl Workspace {
         })
     }
 
+    #[instrument(skip_all, fields(workspace_root = %workspace_root.display()))]
     async fn collect_members_only(
         workspace_root: &PathBuf,
         workspace_definition: &ToolUvWorkspace,
@@ -1329,6 +1331,7 @@ impl ProjectWorkspace {
 
     /// If the current directory contains a `pyproject.toml` with a `project` table, discover the
     /// workspace and return it, otherwise it is a dynamic path dependency and we return `Ok(None)`.
+    #[instrument(skip_all, fields(project_root = %project_root.display()))]
     pub async fn from_maybe_project_root(
         project_root: &Path,
         options: &DiscoveryOptions,
