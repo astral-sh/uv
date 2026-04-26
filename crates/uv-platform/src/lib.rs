@@ -160,21 +160,20 @@ impl Platform {
 
         let abi = match (&**os, libc) {
             (OperatingSystem::Windows, _) => Some("msvc".to_string()),
-            (OperatingSystem::Linux, Libc::Some(env)) => Some({
-                // Special suffix for ARM with hardware float
-                if matches!(arch.family(), Architecture::Arm(ArmArchitecture::Armv7)) {
-                    let env_str = env.to_string();
-                    // Only append "eabihf" if the environment doesn't already have it
-                    // (e.g., `Gnueabihf` already ends with "eabihf", but `Gnu` doesn't)
-                    if env_str.ends_with("eabihf") {
-                        env_str
-                    } else {
-                        format!("{env}eabihf")
-                    }
-                } else {
-                    env.to_string()
-                }
-            }),
+            // Append the hard-float suffix for ARMv7 only when libc detection
+            // didn't already return one of the explicit `*eabihf` variants.
+            (OperatingSystem::Linux, Libc::Some(env))
+                if matches!(arch.family(), Architecture::Arm(ArmArchitecture::Armv7))
+                    && !matches!(
+                        env,
+                        target_lexicon::Environment::Gnueabihf
+                            | target_lexicon::Environment::Musleabihf
+                            | target_lexicon::Environment::Eabihf
+                    ) =>
+            {
+                Some(format!("{env}eabihf"))
+            }
+            (OperatingSystem::Linux, Libc::Some(env)) => Some(env.to_string()),
             _ => None,
         };
 
@@ -354,6 +353,21 @@ mod tests {
         assert_eq!(
             platform.as_cargo_dist_triple(),
             "armv7-unknown-linux-gnueabihf"
+        );
+    }
+
+    /// Same guarantee as the `Gnueabihf` case: if libc is constructed as `Musleabihf`
+    /// directly, `as_cargo_dist_triple()` must not double the `eabihf` suffix.
+    #[test]
+    fn test_armv7_musleabihf_triple() {
+        let platform = Platform {
+            os: Os::from_str("linux").unwrap(),
+            arch: Arch::from_str("armv7").unwrap(),
+            libc: Libc::Some(target_lexicon::Environment::Musleabihf),
+        };
+        assert_eq!(
+            platform.as_cargo_dist_triple(),
+            "armv7-unknown-linux-musleabihf"
         );
     }
 
