@@ -73,9 +73,6 @@ impl Libc {
 
                 Ok(Self::Some(match detect_linux_libc()? {
                     LibcVersion::Manylinux { .. } => match env::consts::ARCH {
-                        // Checks if the CPU supports hardware floating-point operations.
-                        // Depending on the result, it selects either the `gnueabihf` (hard-float) or `gnueabi` (soft-float) environment.
-                        // download-metadata.json only includes armv7.
                         "arm" | "armv5te" | "armv7" => {
                             match detect_hardware_floating_point_support() {
                                 Ok(true) => target_lexicon::Environment::Gnueabihf,
@@ -85,7 +82,16 @@ impl Libc {
                         }
                         _ => target_lexicon::Environment::Gnu,
                     },
-                    LibcVersion::Musllinux { .. } => target_lexicon::Environment::Musl,
+                    LibcVersion::Musllinux { .. } => match env::consts::ARCH {
+                        "arm" | "armv5te" | "armv7" => {
+                            match detect_hardware_floating_point_support() {
+                                Ok(true) => target_lexicon::Environment::Musleabihf,
+                                Ok(false) => target_lexicon::Environment::Musleabi,
+                                Err(_) => target_lexicon::Environment::Musl,
+                            }
+                        }
+                        _ => target_lexicon::Environment::Musl,
+                    },
                 }))
             }
             "windows" | "macos" => Ok(Self::None),
@@ -95,7 +101,14 @@ impl Libc {
     }
 
     pub fn is_musl(&self) -> bool {
-        matches!(self, Self::Some(target_lexicon::Environment::Musl))
+        matches!(
+            self,
+            Self::Some(
+                target_lexicon::Environment::Musl
+                    | target_lexicon::Environment::Musleabi
+                    | target_lexicon::Environment::Musleabihf
+            )
+        )
     }
 }
 
@@ -108,6 +121,8 @@ impl FromStr for Libc {
             "gnueabi" => Ok(Self::Some(target_lexicon::Environment::Gnueabi)),
             "gnueabihf" => Ok(Self::Some(target_lexicon::Environment::Gnueabihf)),
             "musl" => Ok(Self::Some(target_lexicon::Environment::Musl)),
+            "musleabi" => Ok(Self::Some(target_lexicon::Environment::Musleabi)),
+            "musleabihf" => Ok(Self::Some(target_lexicon::Environment::Musleabihf)),
             "none" => Ok(Self::None),
             _ => Err(crate::Error::UnknownLibc(s.to_string())),
         }
