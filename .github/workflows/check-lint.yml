@@ -103,7 +103,7 @@ jobs:
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
       - name: "Check uv_build dependencies"
-        uses: EmbarkStudios/cargo-deny-action@175dc7fd4fb85ec8f46948fb98f44db001149081 # v2.0.16
+        uses: EmbarkStudios/cargo-deny-action@91bf2b620e09e18d6eb78b92e7861937469acedb # v2.0.17
         with:
           command: check bans
           manifest-path: crates/uv-build/Cargo.toml
