@@ -2068,18 +2068,21 @@ fn build_list_files() -> Result<()> {
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output1"))
-        .arg("--list"), @"
+        .arg("--list")
+        .arg("--preview-features")
+        .arg("toml-backwards-compatibility"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     Building built_by_uv-0.1.0.tar.gz will include the following files:
     built_by_uv-0.1.0/PKG-INFO (generated)
+    built_by_uv-0.1.0/pyproject.toml (generated)
+    built_by_uv-0.1.0/pyproject.toml.orig (pyproject.toml)
     built_by_uv-0.1.0/LICENSE-APACHE (LICENSE-APACHE)
     built_by_uv-0.1.0/LICENSE-MIT (LICENSE-MIT)
     built_by_uv-0.1.0/README.md (README.md)
     built_by_uv-0.1.0/assets/data.csv (assets/data.csv)
     built_by_uv-0.1.0/header/built_by_uv.h (header/built_by_uv.h)
-    built_by_uv-0.1.0/pyproject.toml (pyproject.toml)
     built_by_uv-0.1.0/scripts/whoami.sh (scripts/whoami.sh)
     built_by_uv-0.1.0/src/built_by_uv/__init__.py (src/built_by_uv/__init__.py)
     built_by_uv-0.1.0/src/built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
@@ -2125,18 +2128,21 @@ fn build_list_files() -> Result<()> {
         .arg(context.temp_dir.join("output2"))
         .arg("--list")
         .arg("--sdist")
-        .arg("--wheel"), @"
+        .arg("--wheel")
+        .arg("--preview-features")
+        .arg("toml-backwards-compatibility"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     Building built_by_uv-0.1.0.tar.gz will include the following files:
     built_by_uv-0.1.0/PKG-INFO (generated)
+    built_by_uv-0.1.0/pyproject.toml (generated)
+    built_by_uv-0.1.0/pyproject.toml.orig (pyproject.toml)
     built_by_uv-0.1.0/LICENSE-APACHE (LICENSE-APACHE)
     built_by_uv-0.1.0/LICENSE-MIT (LICENSE-MIT)
     built_by_uv-0.1.0/README.md (README.md)
     built_by_uv-0.1.0/assets/data.csv (assets/data.csv)
     built_by_uv-0.1.0/header/built_by_uv.h (header/built_by_uv.h)
-    built_by_uv-0.1.0/pyproject.toml (pyproject.toml)
     built_by_uv-0.1.0/scripts/whoami.sh (scripts/whoami.sh)
     built_by_uv-0.1.0/src/built_by_uv/__init__.py (src/built_by_uv/__init__.py)
     built_by_uv-0.1.0/src/built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
