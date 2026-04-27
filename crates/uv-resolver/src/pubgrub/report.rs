@@ -177,7 +177,7 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
         let mut terms_vec: Vec<_> = terms.iter().collect();
         // We avoid relying on hashmap iteration order here by always sorting
         // by package first.
-        terms_vec.sort_by(|&(pkg1, _), &(pkg2, _)| pkg1.cmp(pkg2));
+        terms_vec.sort_by_key(|&(package, _)| package);
         match terms_vec.as_slice() {
             [] => "the requirements are unsatisfiable".into(),
             [(root, _)] if matches!(&**(*root), PubGrubPackageInner::Root(_)) => {
@@ -515,7 +515,7 @@ impl PubGrubReportFormatter<'_> {
                 let external1 = self.format_external(external1);
                 let external2 = self.format_external(external2);
 
-                format!("{}and {}", padded("", &external1, " "), &external2,)
+                format!("{}and {}", padded("", &external1, " "), &external2)
             }
         }
     }
@@ -1016,11 +1016,10 @@ impl PubGrubReportFormatter<'_> {
 
         // Add hints due to the package being entirely unavailable.
         match unavailable_packages.get(name) {
-            Some(UnavailablePackage::NoIndex) => {
-                if no_find_links {
-                    hints.insert(PubGrubHint::NoIndex);
-                }
+            Some(UnavailablePackage::NoIndex) if no_find_links => {
+                hints.insert(PubGrubHint::NoIndex);
             }
+            Some(UnavailablePackage::NoIndex) => {}
             Some(UnavailablePackage::Offline) => {
                 hints.insert(PubGrubHint::Offline);
             }

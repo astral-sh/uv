@@ -87,12 +87,10 @@ impl<'de> Deserialize<'de> for PypiFile {
 
                 while let Some(key) = access.next_key::<Cow<'_, str>>()? {
                     match &*key {
-                        "core-metadata" | "dist-info-metadata" | "data-dist-info-metadata" => {
-                            if core_metadata.is_none() {
-                                core_metadata = access.next_value()?;
-                            } else {
-                                let _: serde::de::IgnoredAny = access.next_value()?;
-                            }
+                        "core-metadata" | "dist-info-metadata" | "data-dist-info-metadata"
+                            if core_metadata.is_none() =>
+                        {
+                            core_metadata = access.next_value()?;
                         }
                         "filename" => filename = Some(access.next_value()?),
                         "hashes" => hashes = Some(access.next_value()?),
@@ -190,12 +188,10 @@ impl<'de> Deserialize<'de> for PyxFile {
 
                 while let Some(key) = access.next_key::<Cow<'_, str>>()? {
                     match &*key {
-                        "core-metadata" | "dist-info-metadata" | "data-dist-info-metadata" => {
-                            if core_metadata.is_none() {
-                                core_metadata = access.next_value()?;
-                            } else {
-                                let _: serde::de::IgnoredAny = access.next_value()?;
-                            }
+                        "core-metadata" | "dist-info-metadata" | "data-dist-info-metadata"
+                            if core_metadata.is_none() =>
+                        {
+                            core_metadata = access.next_value()?;
                         }
                         "filename" => filename = Some(access.next_value()?),
                         "hashes" => hashes = Some(access.next_value()?),

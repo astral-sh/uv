@@ -148,10 +148,8 @@ impl LatestClient<'_> {
                 }
 
                 match (latest.as_ref(), best) {
-                    (Some(current), Some(best)) => {
-                        if best.version() > current.version() {
-                            latest = Some(best);
-                        }
+                    (Some(current), Some(best)) if best.version() > current.version() => {
+                        latest = Some(best);
                     }
                     (None, Some(best)) => {
                         latest = Some(best);

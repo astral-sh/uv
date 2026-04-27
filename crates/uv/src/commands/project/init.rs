@@ -462,14 +462,14 @@ async fn init_project(
         if let Some(python_request) = python_pin {
             if PythonVersionFile::discover(path, &VersionFileDiscoveryOptions::default())
                 .await?
-                .filter(|file| {
+                .as_ref()
+                .is_none_or(|file| !{
                     file.version()
                         .is_some_and(|version| *version == python_request)
                         && file.path().parent().is_some_and(|parent| {
                             parent == workspace.install_path() || parent == path
                         })
                 })
-                .is_none()
             {
                 PythonVersionFile::new(path.join(".python-version"))
                     .with_versions(vec![python_request.clone()])
@@ -483,8 +483,8 @@ async fn init_project(
             if PythonVersionFile::discover(path, &VersionFileDiscoveryOptions::default())
                 .await?
                 .filter(|file| file.version().is_some())
-                .filter(|file| file.path().parent().is_some_and(|parent| parent == path))
-                .is_none()
+                .as_ref()
+                .is_none_or(|file| file.path().parent().is_none_or(|parent| parent != path))
             {
                 PythonVersionFile::new(path.join(".python-version"))
                     .with_versions(vec![python_request.clone()])

@@ -168,16 +168,17 @@ pub fn check_direct_build(
             // We can't validate the url.
             return Err(DirectBuildIncompatibility::UrlRequirement);
         }
-        Some(VersionOrUrl::VersionSpecifier(specifier)) => {
+        Some(VersionOrUrl::VersionSpecifier(specifier))
             // If the user doesn't set an upper bound, we don't help them by not using the fast
             // path, their build may equally fail if the index version of `uv_build`, so we allow
             // missing upper bounds.
-            if !compatible.iter().any(|version| specifier.contains(version)) {
-                return Err(DirectBuildIncompatibility::IncompatibleRange(
-                    specifier.clone(),
-                ));
-            }
+            if !compatible.iter().any(|version| specifier.contains(version)) =>
+        {
+            return Err(DirectBuildIncompatibility::IncompatibleRange(
+                specifier.clone(),
+            ));
         }
+        Some(VersionOrUrl::VersionSpecifier(_)) => {}
     }
 
     Ok(())
