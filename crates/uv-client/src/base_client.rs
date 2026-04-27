@@ -27,7 +27,6 @@ use uv_configuration::ProxyUrlKind;
 use uv_configuration::{KeyringProviderType, ProxyUrl, TrustedHost};
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
-use uv_preview::Preview;
 use uv_redacted::DisplaySafeUrl;
 use uv_redacted::DisplaySafeUrlError;
 use uv_static::EnvVars;
@@ -87,7 +86,6 @@ pub enum AuthIntegration {
 #[derive(Debug, Clone)]
 pub struct BaseClientBuilder<'a> {
     keyring: KeyringProviderType,
-    preview: Preview,
     allow_insecure_host: Vec<TrustedHost>,
     system_certs: bool,
     retries: u32,
@@ -159,7 +157,6 @@ impl Default for BaseClientBuilder<'_> {
     fn default() -> Self {
         Self {
             keyring: KeyringProviderType::default(),
-            preview: Preview::default(),
             allow_insecure_host: vec![],
             system_certs: false,
             connectivity: Connectivity::Online,
@@ -191,13 +188,11 @@ impl<'a> BaseClientBuilder<'a> {
         connectivity: Connectivity,
         system_certs: bool,
         allow_insecure_host: Vec<TrustedHost>,
-        preview: Preview,
         read_timeout: Duration,
         connect_timeout: Duration,
         retries: u32,
     ) -> Self {
         Self {
-            preview,
             allow_insecure_host,
             system_certs,
             retries,
@@ -532,7 +527,19 @@ impl<'a> BaseClientBuilder<'a> {
         let client_builder = if let Some(custom_certs) = custom_certs {
             client_builder.tls_certs_only(custom_certs)
         } else if self.system_certs {
-            client_builder
+            // On macOS and Windows, the platform verifier has a built-in trust store that is
+            // always available, so no extra roots are needed. On Linux, however, the platform
+            // verifier falls back to `rustls-native-certs` / `openssl-probe` which discover
+            // CA bundles from the filesystem — these may be absent in minimal environments
+            // (e.g., scratch containers). Merge the bundled Mozilla roots as a fallback so
+            // that basic connectivity works even without a system CA bundle.
+            //
+            // See: https://github.com/rustls/rustls-platform-verifier/blob/f60951917d1e8069e0c22cae1125294b3f653423/README.md#L39-L41
+            if cfg!(target_os = "linux") {
+                client_builder.tls_certs_merge(Certificates::webpki_roots().to_reqwest_certs())
+            } else {
+                client_builder
+            }
         } else {
             client_builder.tls_certs_only(Certificates::webpki_roots().to_reqwest_certs())
         };
@@ -629,8 +636,7 @@ impl<'a> BaseClientBuilder<'a> {
                             .with_cache_arc(self.credentials_cache.clone())
                             .with_base_client(base_client)
                             .with_indexes(self.indexes.clone())
-                            .with_keyring(self.keyring.to_provider())
-                            .with_preview(self.preview);
+                            .with_keyring(self.keyring.to_provider());
                         if let Ok(token_store) = PyxTokenStore::from_settings() {
                             auth_middleware = auth_middleware.with_pyx_token_store(token_store);
                         }
@@ -642,7 +648,6 @@ impl<'a> BaseClientBuilder<'a> {
                             .with_base_client(base_client)
                             .with_indexes(self.indexes.clone())
                             .with_keyring(self.keyring.to_provider())
-                            .with_preview(self.preview)
                             .with_only_authenticated(true);
                         if let Ok(token_store) = PyxTokenStore::from_settings() {
                             auth_middleware = auth_middleware.with_pyx_token_store(token_store);

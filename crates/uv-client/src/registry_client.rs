@@ -1653,6 +1653,15 @@ mod tests {
 
     type Error = Box<dyn std::error::Error>;
 
+    fn init_preview() {
+        static INIT: std::sync::OnceLock<()> = std::sync::OnceLock::new();
+        INIT.get_or_init(|| {
+            uv_preview::set(uv_preview::Preview::default())
+                .expect("preview state should initialize once for tests");
+            uv_preview::finalize().expect("preview state should finalize once for tests");
+        });
+    }
+
     async fn start_test_server(username: &'static str, password: &'static str) -> MockServer {
         let server = MockServer::start().await;
 
@@ -1672,6 +1681,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_redirect_to_server_with_credentials() -> Result<(), Error> {
+        init_preview();
         let username = "user";
         let password = "password";
 
@@ -1728,6 +1738,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_redirect_root_relative_url() -> Result<(), Error> {
+        init_preview();
         let username = "user";
         let password = "password";
 
@@ -1778,6 +1789,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_redirect_relative_url() -> Result<(), Error> {
+        init_preview();
         let username = "user";
         let password = "password";
 
