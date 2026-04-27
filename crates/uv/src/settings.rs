@@ -45,7 +45,7 @@ use uv_distribution_types::{
 use uv_install_wheel::LinkMode;
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep508::{MarkerTree, RequirementOrigin};
-use uv_preview::{Preview, PreviewFeature};
+use uv_preview::Preview;
 use uv_pypi_types::SupportedEnvironments;
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
 use uv_redacted::DisplaySafeUrl;
@@ -395,7 +395,6 @@ impl CacheSettings {
 pub(crate) struct InitSettings {
     pub(crate) path: Option<PathBuf>,
     pub(crate) name: Option<PackageName>,
-    pub(crate) package: bool,
     pub(crate) kind: InitKind,
     pub(crate) bare: bool,
     pub(crate) description: Option<String>,
@@ -416,7 +415,6 @@ impl InitSettings {
         args: InitArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
-        preview: Preview,
     ) -> Self {
         let InitArgs {
             path,
@@ -449,87 +447,72 @@ impl InitSettings {
 
         let no_description = no_description || (bare && description.is_none());
 
-        let (kind, package) = if preview.is_enabled(PreviewFeature::PackagedInit) {
-            let package_flag = flag(
+        let kind = if script {
+            InitKind::Script
+        } else if bare {
+            let package = flag(
                 package || build_backend.is_some(),
                 no_package || r#virtual,
                 "virtual",
             );
 
-            let kind = if script {
-                InitKind::Script
-            } else if bare {
-                if package_flag == Some(true) || lib {
-                    InitKind::Project(InitProjectKind::BareWithBuildSystem)
-                } else {
-                    InitKind::Project(InitProjectKind::Bare)
-                }
+            if package == Some(true) || lib {
+                InitKind::Project(InitProjectKind::BareWithBuildSystem)
             } else {
-                // Merge `--app` and `--lib`.
-                let app_lib_kind = match (app, lib) {
-                    (false, false) => InitProjectKind::ApplicationWithLibrary,
-                    (true, false) => InitProjectKind::Application,
-                    (false, true) => InitProjectKind::Library,
-                    (true, true) => unreachable!("`app` and `lib` are mutually exclusive"),
-                };
-
-                // Apply overrides from `--package`/`--no-package`.
-                let app_lib_kind = match (app_lib_kind, package_flag) {
-                    (InitProjectKind::ApplicationWithLibrary, None | Some(true)) => {
-                        InitProjectKind::ApplicationWithLibrary
-                    }
-                    (InitProjectKind::ApplicationWithLibrary, Some(false)) => {
-                        InitProjectKind::Application
-                    }
-                    // The user specifically asked for `--app`, so no library.
-                    (InitProjectKind::Application, None | Some(false)) => {
-                        InitProjectKind::Application
-                    }
-                    (InitProjectKind::Application, Some(true)) => {
-                        InitProjectKind::ApplicationWithLibrary
-                    }
-                    (InitProjectKind::Library, None | Some(true)) => InitProjectKind::Library,
-                    (InitProjectKind::Library, Some(false)) => {
-                        unreachable!("`lib` and `no_package` are mutually exclusive")
-                    }
-                    (InitProjectKind::Bare | InitProjectKind::BareWithBuildSystem, _) => {
-                        unreachable!()
-                    }
-                    (InitProjectKind::ApplicationOld | InitProjectKind::LibraryOld, _) => {
-                        unreachable!()
-                    }
-                };
-                InitKind::Project(app_lib_kind)
-            };
-
-            // Packaging is encoded in `kind`; `package` is only consumed by the old paths.
-            (kind, false)
+                InitKind::Project(InitProjectKind::Bare)
+            }
         } else {
-            // TODO(konsti): Remove when stabilizing packaged-init.
-            let kind = match (app, lib, script) {
-                (true, false, false) => InitKind::Project(InitProjectKind::ApplicationOld),
-                (false, true, false) => InitKind::Project(InitProjectKind::LibraryOld),
-                (false, false, true) => InitKind::Script,
-                (false, false, false) => InitKind::Project(InitProjectKind::ApplicationOld),
-                (_, _, _) => unreachable!("`app`, `lib`, and `script` are mutually exclusive"),
+            // Merge `--app` and `--lib`.
+            let app_lib_kind = match (app, lib) {
+                (false, false) => InitProjectKind::ApplicationWithLibrary,
+                (true, false) => InitProjectKind::Application,
+                (false, true) => InitProjectKind::Library,
+                (true, true) => unreachable!("`app` and `lib` are mutually exclusive"),
             };
 
             let package = flag(
                 package || build_backend.is_some(),
                 no_package || r#virtual,
                 "virtual",
-            )
-            .unwrap_or(matches!(
-                kind,
-                InitKind::Project(InitProjectKind::LibraryOld)
-            ));
-            (kind, package)
+            );
+
+            // Apply overrides from `--package`/`--no-package`.
+            let app_lib_kind = match (app_lib_kind, package) {
+                (InitProjectKind::ApplicationWithLibrary, None | Some(true)) => {
+                    InitProjectKind::ApplicationWithLibrary
+                }
+                (InitProjectKind::ApplicationWithLibrary, Some(false)) => {
+                    InitProjectKind::Application
+                }
+                // The user specifically asked for `--app`, so no library.
+                (InitProjectKind::Application, None | Some(false)) => InitProjectKind::Application,
+                (InitProjectKind::Application, Some(true)) => {
+                    InitProjectKind::ApplicationWithLibrary
+                }
+                (InitProjectKind::Library, None | Some(true)) => InitProjectKind::Library,
+                (InitProjectKind::Library, Some(false)) => {
+                    unreachable!("`lib` and `no_package` are mutually exclusive")
+                }
+                (InitProjectKind::Bare | InitProjectKind::BareWithBuildSystem, _) => {
+                    unreachable!()
+                }
+            };
+            InitKind::Project(app_lib_kind)
         };
+
+        if script
+            && flag(
+                package || build_backend.is_some(),
+                no_package || r#virtual,
+                "virtual",
+            ) == Some(true)
+        {
+            warn_user_once!("`--package` is a no-op for Python scripts, which are standalone");
+        }
 
         Self {
             path,
             name,
-            package,
             kind,
             bare,
             description,
