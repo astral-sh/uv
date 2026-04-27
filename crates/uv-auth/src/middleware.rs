@@ -828,9 +828,7 @@ impl AuthMiddleware {
                 } else {
                     String::new()
                 };
-                if let Some(index) = index {
-                    // N.B. The native store performs an exact look up right now, so we use the root
-                    // URL of the index instead of relying on prefix-matching.
+                let credentials = if let Some(index) = index {
                     debug!(
                         "Checking native store for credentials for index URL {}{}",
                         display_username, index.root_url
@@ -842,8 +840,14 @@ impl AuthMiddleware {
                         display_username, url
                     );
                     native_store.fetch(url, username).await
+                };
+                match credentials {
+                    Ok(credentials) => credentials,
+                    Err(err) => {
+                        debug!("Failed to get credentials from native store: {err}");
+                        None
+                    }
                 }
-                // TODO(zanieb): We should have a realm fallback here too
             } else {
                 None
             }
@@ -859,7 +863,9 @@ impl AuthMiddleware {
                 // The subprocess keyring provider is _slow_ so we do not perform fetches for all
                 // URLs; instead, we fetch if there's a username or if the user has requested to
                 // always authenticate.
-                if let Some(username) = credentials.and_then(|credentials| credentials.username()) {
+                let credentials = if let Some(username) =
+                    credentials.and_then(|credentials| credentials.username())
+                {
                     if let Some(index) = index {
                         debug!(
                             "Checking keyring for credentials for index URL {}@{}",
@@ -885,13 +891,20 @@ impl AuthMiddleware {
                             .fetch(DisplaySafeUrl::ref_cast(&index.url), None)
                             .await
                     } else {
-                        None
+                        Ok(None)
                     }
                 } else {
                     debug!(
                         "Skipping keyring fetch for {url} without username; use `authenticate = always` to force"
                     );
-                    None
+                    Ok(None)
+                };
+                match credentials {
+                    Ok(credentials) => credentials,
+                    Err(err) => {
+                        debug!("Failed to get credentials from keyring: {err}");
+                        None
+                    }
                 }
             }
             None => None,

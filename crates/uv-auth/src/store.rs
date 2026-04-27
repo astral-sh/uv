@@ -1,4 +1,3 @@
-use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
 use fs_err as fs;
@@ -13,6 +12,7 @@ use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
 
 use crate::credentials::{Password, Token, Username};
+use crate::matching;
 use crate::realm::Realm;
 use crate::service::Service;
 use crate::{Credentials, KeyringProvider};
@@ -128,18 +128,25 @@ pub enum LookupError {
     AmbiguousUsername(DisplaySafeUrl),
 }
 
-/// A single credential entry in a TOML credentials file.
+/// A persistent credential entry that can be serialized to TOML or JSON.
+///
+/// Used by both the text credential store (serialized to TOML) and the
+/// native keyring store (serialized to JSON). This ensures a consistent
+/// credential format across storage backends.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(try_from = "TomlCredentialWire", into = "TomlCredentialWire")]
-struct TomlCredential {
+#[serde(
+    try_from = "PersistentCredentialWire",
+    into = "PersistentCredentialWire"
+)]
+pub(crate) struct PersistentCredential {
     /// The service URL for this credential.
-    service: Service,
+    pub(crate) service: Service,
     /// The credentials for this entry.
-    credentials: Credentials,
+    pub(crate) credentials: Credentials,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct TomlCredentialWire {
+struct PersistentCredentialWire {
     /// The service URL for this credential.
     service: Service,
     /// The username to use. Only allowed with [`AuthScheme::Basic`].
@@ -153,8 +160,8 @@ struct TomlCredentialWire {
     token: Option<String>,
 }
 
-impl From<TomlCredential> for TomlCredentialWire {
-    fn from(value: TomlCredential) -> Self {
+impl From<PersistentCredential> for PersistentCredentialWire {
+    fn from(value: PersistentCredential) -> Self {
         match value.credentials {
             Credentials::Basic { username, password } => Self {
                 service: value.service,
@@ -174,10 +181,10 @@ impl From<TomlCredential> for TomlCredentialWire {
     }
 }
 
-impl TryFrom<TomlCredentialWire> for TomlCredential {
+impl TryFrom<PersistentCredentialWire> for PersistentCredential {
     type Error = TomlCredentialError;
 
-    fn try_from(value: TomlCredentialWire) -> Result<Self, Self::Error> {
+    fn try_from(value: PersistentCredentialWire) -> Result<Self, Self::Error> {
         match value.scheme {
             AuthScheme::Basic => {
                 if value.username.as_deref().is_none() {
@@ -228,10 +235,10 @@ impl TryFrom<TomlCredentialWire> for TomlCredential {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-struct TomlCredentials {
+struct PersistentCredentials {
     /// Array of credential entries.
     #[serde(rename = "credential")]
-    credentials: Vec<TomlCredential>,
+    credentials: Vec<PersistentCredential>,
 }
 
 /// A credential store with a plain text storage backend.
@@ -271,7 +278,7 @@ impl TextCredentialStore {
     /// Read credentials from a file.
     fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, TomlCredentialError> {
         let content = fs::read_to_string(path)?;
-        let credentials: TomlCredentials = toml::from_str(&content)?;
+        let credentials: PersistentCredentials = toml::from_str(&content)?;
 
         let credentials: FxHashMap<(Service, Username), Credentials> = credentials
             .credentials
@@ -314,13 +321,13 @@ impl TextCredentialStore {
         let credentials = self
             .credentials
             .into_iter()
-            .map(|((service, _username), credentials)| TomlCredential {
+            .map(|((service, _username), credentials)| PersistentCredential {
                 service,
                 credentials,
             })
             .collect::<Vec<_>>();
 
-        let toml_creds = TomlCredentials { credentials };
+        let toml_creds = PersistentCredentials { credentials };
         let content = toml::to_string_pretty(&toml_creds)?;
         fs::create_dir_all(
             path.as_ref()
@@ -359,31 +366,18 @@ impl TextCredentialStore {
         let mut best: Option<(usize, &Service, &Credentials)> = None;
 
         for ((service, stored_username), credential) in &self.credentials {
-            let service_realm = Realm::from(service.url().deref());
-
-            // Only consider services in the same realm
-            if service_realm != request_realm {
-                continue;
-            }
-
-            // Service path must be a prefix of request path
-            if !url.path().starts_with(service.url().path()) {
-                continue;
-            }
-
-            // If a username is provided, it must match
-            if let Some(request_username) = username {
-                if Some(request_username) != stored_username.as_deref() {
-                    continue;
+            // Check if this credential matches and get its specificity
+            if let Some(specificity) =
+                matching::match_specificity(service, stored_username, url, &request_realm, username)
+            {
+                // Update our best matching credential based on prefix length.
+                if best.is_none_or(|(best_specificity, _, _)| specificity > best_specificity) {
+                    best = Some((specificity, service, credential));
+                } else if best
+                    .is_some_and(|(best_specificity, _, _)| specificity == best_specificity)
+                {
+                    return Err(LookupError::AmbiguousUsername(url.clone()));
                 }
-            }
-
-            // Update our best matching credential based on prefix length
-            let specificity = service.url().path().len();
-            if best.is_none_or(|(best_specificity, _, _)| specificity > best_specificity) {
-                best = Some((specificity, service, credential));
-            } else if best.is_some_and(|(best_specificity, _, _)| specificity == best_specificity) {
-                return Err(LookupError::AmbiguousUsername(url.clone()));
             }
         }
 
@@ -422,16 +416,16 @@ mod tests {
 
     #[test]
     fn test_toml_serialization() {
-        let credentials = TomlCredentials {
+        let credentials = PersistentCredentials {
             credentials: vec![
-                TomlCredential {
+                PersistentCredential {
                     service: Service::from_str("https://example.com").unwrap(),
                     credentials: Credentials::Basic {
                         username: Username::new(Some("user1".to_string())),
                         password: Some(Password::new("pass1".to_string())),
                     },
                 },
-                TomlCredential {
+                PersistentCredential {
                     service: Service::from_str("https://test.org").unwrap(),
                     credentials: Credentials::Basic {
                         username: Username::new(Some("user2".to_string())),
@@ -442,7 +436,7 @@ mod tests {
         };
 
         let toml_str = toml::to_string_pretty(&credentials).unwrap();
-        let parsed: TomlCredentials = toml::from_str(&toml_str).unwrap();
+        let parsed: PersistentCredentials = toml::from_str(&toml_str).unwrap();
 
         assert_eq!(parsed.credentials.len(), 2);
         assert_eq!(
@@ -692,6 +686,31 @@ password = "pass2"
         let result = store.get_credentials(&url, None).unwrap();
         assert!(result.is_some());
         assert_eq!(result.unwrap().username(), Some("specific_user"));
+    }
+
+    #[test]
+    fn test_prefix_matching_respects_path_boundaries() {
+        let mut store = TextCredentialStore::default();
+        let service = Service::from_str("https://example.com/api").unwrap();
+        let credentials =
+            Credentials::basic(Some("user".to_string()), Some("password".to_string()));
+        store.insert(service, credentials);
+
+        let child_url = DisplaySafeUrl::parse("https://example.com/api/v1").unwrap();
+        assert!(
+            store
+                .get_credentials(&child_url, Some("user"))
+                .unwrap()
+                .is_some()
+        );
+
+        let sibling_url = DisplaySafeUrl::parse("https://example.com/apiv1").unwrap();
+        assert!(
+            store
+                .get_credentials(&sibling_url, Some("user"))
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]

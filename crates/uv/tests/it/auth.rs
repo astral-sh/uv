@@ -1839,10 +1839,17 @@ fn logout_text_store_multiple_usernames() {
 fn native_auth_prefix_match() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]).with_real_home();
 
-    // Clear state before the test
+    // Clear both the service-specific credential under test and any valid host fallback.
     context
         .auth_logout()
         .arg("https://example.com/api")
+        .arg("--username")
+        .arg("testuser")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
+        .status()?;
+    context
+        .auth_logout()
+        .arg("example.com")
         .arg("--username")
         .arg("testuser")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
@@ -1865,8 +1872,7 @@ fn native_auth_prefix_match() -> Result<()> {
     "
     );
 
-    // A request for a child path does not match, the native store does not yet implement prefix
-    // matching
+    // A request for a child path should match with prefix matching
     uv_snapshot!(context.auth_token()
         .arg("https://example.com/api/v1")
         .arg("--username")
@@ -1878,6 +1884,21 @@ fn native_auth_prefix_match() -> Result<()> {
     testpass
 
     ----- stderr -----
+    "
+    );
+
+    // A sibling path should not match.
+    uv_snapshot!(context.auth_token()
+        .arg("https://example.com/apiv1")
+        .arg("--username")
+        .arg("testuser")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for testuser@https://example.com/apiv1
     "
     );
 
@@ -1942,6 +1963,253 @@ fn native_auth_host_fallback() -> Result<()> {
 
     ----- stderr -----
     error: Failed to fetch credentials for testuser@https://another-example.com/any/path
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "native-auth")]
+fn native_auth_multiple_users() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_real_home();
+
+    // Clear state before the test
+    context
+        .auth_logout()
+        .arg("example.com")
+        .arg("--username")
+        .arg("user1")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
+        .status()?;
+    context
+        .auth_logout()
+        .arg("example.com")
+        .arg("--username")
+        .arg("user2")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
+        .status()?;
+
+    // Login with first user
+    uv_snapshot!(context.auth_login()
+        .arg("example.com")
+        .arg("--username")
+        .arg("user1")
+        .arg("--password")
+        .arg("pass1")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for user1@https://example.com/
+    "
+    );
+
+    // Login with second user (different username, same realm)
+    uv_snapshot!(context.auth_login()
+        .arg("example.com")
+        .arg("--username")
+        .arg("user2")
+        .arg("--password")
+        .arg("pass2")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for user2@https://example.com/
+    "
+    );
+
+    // Retrieve credentials for first user
+    uv_snapshot!(context.auth_token()
+        .arg("example.com")
+        .arg("--username")
+        .arg("user1")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pass1
+
+    ----- stderr -----
+    "
+    );
+
+    // Retrieve credentials for second user
+    uv_snapshot!(context.auth_token()
+        .arg("example.com")
+        .arg("--username")
+        .arg("user2")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pass2
+
+    ----- stderr -----
+    "
+    );
+
+    // Requests without a username should fail instead of picking an arbitrary user.
+    uv_snapshot!(context.filters(), context.auth_helper()
+        .arg("--protocol=bazel")
+        .arg("get")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth,auth-helper"),
+        input=r#"{"uri":"https://example.com/path"}"#,
+        @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Multiple credentials found for URL 'https://example.com/path', specify which username to use
+    "
+    );
+
+    // Logout first user
+    uv_snapshot!(context.auth_logout()
+        .arg("example.com")
+        .arg("--username")
+        .arg("user1")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Removed credentials for user1@https://example.com/
+    "
+    );
+
+    // First user's credentials should be gone
+    uv_snapshot!(context.auth_token()
+        .arg("example.com")
+        .arg("--username")
+        .arg("user1")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for user1@https://example.com/
+    "
+    );
+
+    // Second user's credentials should still exist
+    uv_snapshot!(context.auth_token()
+        .arg("example.com")
+        .arg("--username")
+        .arg("user2")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pass2
+
+    ----- stderr -----
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "native-auth")]
+fn native_auth_logout_is_service_scoped() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_real_home();
+
+    // Clear state before the test.
+    context
+        .auth_logout()
+        .arg("https://example.com/first")
+        .arg("--username")
+        .arg("user")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
+        .status()?;
+    context
+        .auth_logout()
+        .arg("https://example.com/second")
+        .arg("--username")
+        .arg("user")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
+        .status()?;
+
+    uv_snapshot!(context.auth_login()
+        .arg("https://example.com/first")
+        .arg("--username")
+        .arg("user")
+        .arg("--password")
+        .arg("pass-first")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for user@https://example.com/first
+    "
+    );
+
+    uv_snapshot!(context.auth_login()
+        .arg("https://example.com/second")
+        .arg("--username")
+        .arg("user")
+        .arg("--password")
+        .arg("pass-second")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for user@https://example.com/second
+    "
+    );
+
+    uv_snapshot!(context.auth_logout()
+        .arg("https://example.com/first")
+        .arg("--username")
+        .arg("user")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Removed credentials for user@https://example.com/first
+    "
+    );
+
+    uv_snapshot!(context.auth_token()
+        .arg("https://example.com/first")
+        .arg("--username")
+        .arg("user")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch credentials for user@https://example.com/first
+    "
+    );
+
+    uv_snapshot!(context.auth_token()
+        .arg("https://example.com/second")
+        .arg("--username")
+        .arg("user")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pass-second
+
+    ----- stderr -----
     "
     );
 
