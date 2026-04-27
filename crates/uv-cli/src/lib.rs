@@ -3702,6 +3702,12 @@ pub struct RunArgs {
     #[arg(long, conflicts_with_all = ["frozen", "upgrade"])]
     pub locked: bool,
 
+    /// Run python interactively after script is run.
+    ///
+    /// Runs python with --interactive flag, which opens an interactive shell after a script is run.
+    #[arg(long)]
+    pub interactive: bool,
+
     /// Run without updating the `uv.lock` file [env: UV_FROZEN=]
     ///
     /// Instead of checking if the lockfile is up-to-date, uses the versions in the lockfile as the
