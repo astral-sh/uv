@@ -236,8 +236,8 @@ pub struct GlobalArgs {
     )]
     pub color: Option<ColorChoice>,
 
-    /// Whether to load TLS certificates from the platform's native certificate store [env:
-    /// UV_NATIVE_TLS=]
+    /// (Deprecated: use `--system-certs` instead.) Whether to load TLS certificates from the
+    /// platform's native certificate store [env: UV_NATIVE_TLS=]
     ///
     /// By default, uv uses bundled Mozilla root certificates. When enabled, this flag loads
     /// certificates from the platform's native certificate store instead.

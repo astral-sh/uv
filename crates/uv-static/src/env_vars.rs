@@ -110,6 +110,7 @@ impl EnvVars {
     /// Equivalent to the `--native-tls` command-line argument. If set to `true`, uv will
     /// load TLS certificates from the platform's native certificate store instead of the
     /// bundled Mozilla root certificates.
+    /// (Deprecated: use `UV_SYSTEM_CERTS` instead.)
     #[attr_added_in("0.1.19")]
     pub const UV_NATIVE_TLS: &'static str = "UV_NATIVE_TLS";
 
