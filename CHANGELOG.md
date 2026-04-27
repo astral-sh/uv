@@ -25,7 +25,7 @@ Released on 2026-04-27.
 
 ### Bug fixes
 
-- Add rust-toolchain.toml to uv-build sdist ([#19131](https://github.com/astral-sh/uv/pull/19131))
+- Add `rust-toolchain.toml` to uv-build sdist ([#19131](https://github.com/astral-sh/uv/pull/19131))
 - Ensure uv invocations of git do not inherit repository location environment variables ([#19088](https://github.com/astral-sh/uv/pull/19088))
 - Redact pre-signed upload URLs in verbose output ([#19146](https://github.com/astral-sh/uv/pull/19146))
 - Handle transitive URL dependencies in PEP 517 build requirements ([#19076](https://github.com/astral-sh/uv/pull/19076), [#19086](https://github.com/astral-sh/uv/pull/19086))
@@ -38,7 +38,7 @@ Released on 2026-04-27.
 
 - Bump astral-sh/setup-uv version in docs ([#19030](https://github.com/astral-sh/uv/pull/19030))
 - Update PyTorch documentation for PyTorch 2.11 ([#19095](https://github.com/astral-sh/uv/pull/19095))
-- uv-build: fixup classifiers ([#19130](https://github.com/astral-sh/uv/pull/19130))
+- Remove deprecated license classifiers from uv-build and add Python 3.14 classifier ([#19130](https://github.com/astral-sh/uv/pull/19130))
 
 ## 0.11.7
 
