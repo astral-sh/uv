@@ -31,15 +31,15 @@ fn workspace_metadata_simple() {
         {
           "name": "foo",
           "path": "[TEMP_DIR]/foo",
-          "id": "foo==0.1.0@virtual+[TEMP_DIR]/foo/"
+          "id": "foo==0.1.0@editable+[TEMP_DIR]/foo/"
         }
       ],
       "resolution": {
-        "foo==0.1.0@virtual+[TEMP_DIR]/foo/": {
+        "foo==0.1.0@editable+[TEMP_DIR]/foo/": {
           "name": "foo",
           "version": "0.1.0",
           "source": {
-            "virtual": "[TEMP_DIR]/foo/"
+            "editable": "[TEMP_DIR]/foo/"
           },
           "kind": "package",
           "dependencies": []
@@ -655,43 +655,43 @@ fn workspace_metadata_multiple_members() {
         {
           "name": "pkg-a",
           "path": "[TEMP_DIR]/pkg-a",
-          "id": "pkg-a==0.1.0@virtual+[TEMP_DIR]/pkg-a/"
+          "id": "pkg-a==0.1.0@editable+[TEMP_DIR]/pkg-a/"
         },
         {
           "name": "pkg-b",
           "path": "[TEMP_DIR]/pkg-a/pkg-b",
-          "id": "pkg-b==0.1.0@virtual+[TEMP_DIR]/pkg-a/pkg-b"
+          "id": "pkg-b==0.1.0@editable+[TEMP_DIR]/pkg-a/pkg-b"
         },
         {
           "name": "pkg-c",
           "path": "[TEMP_DIR]/pkg-a/pkg-c",
-          "id": "pkg-c==0.1.0@virtual+[TEMP_DIR]/pkg-a/pkg-c"
+          "id": "pkg-c==0.1.0@editable+[TEMP_DIR]/pkg-a/pkg-c"
         }
       ],
       "resolution": {
-        "pkg-a==0.1.0@virtual+[TEMP_DIR]/pkg-a/": {
+        "pkg-a==0.1.0@editable+[TEMP_DIR]/pkg-a/": {
           "name": "pkg-a",
           "version": "0.1.0",
           "source": {
-            "virtual": "[TEMP_DIR]/pkg-a/"
+            "editable": "[TEMP_DIR]/pkg-a/"
           },
           "kind": "package",
           "dependencies": []
         },
-        "pkg-b==0.1.0@virtual+[TEMP_DIR]/pkg-a/pkg-b": {
+        "pkg-b==0.1.0@editable+[TEMP_DIR]/pkg-a/pkg-b": {
           "name": "pkg-b",
           "version": "0.1.0",
           "source": {
-            "virtual": "[TEMP_DIR]/pkg-a/pkg-b"
+            "editable": "[TEMP_DIR]/pkg-a/pkg-b"
           },
           "kind": "package",
           "dependencies": []
         },
-        "pkg-c==0.1.0@virtual+[TEMP_DIR]/pkg-a/pkg-c": {
+        "pkg-c==0.1.0@editable+[TEMP_DIR]/pkg-a/pkg-c": {
           "name": "pkg-c",
           "version": "0.1.0",
           "source": {
-            "virtual": "[TEMP_DIR]/pkg-a/pkg-c"
+            "editable": "[TEMP_DIR]/pkg-a/pkg-c"
           },
           "kind": "package",
           "dependencies": []
@@ -733,15 +733,15 @@ fn workspace_metadata_single_project() {
         {
           "name": "my-project",
           "path": "[TEMP_DIR]/my-project",
-          "id": "my-project==0.1.0@virtual+[TEMP_DIR]/my-project/"
+          "id": "my-project==0.1.0@editable+[TEMP_DIR]/my-project/"
         }
       ],
       "resolution": {
-        "my-project==0.1.0@virtual+[TEMP_DIR]/my-project/": {
+        "my-project==0.1.0@editable+[TEMP_DIR]/my-project/": {
           "name": "my-project",
           "version": "0.1.0",
           "source": {
-            "virtual": "[TEMP_DIR]/my-project/"
+            "editable": "[TEMP_DIR]/my-project/"
           },
           "kind": "package",
           "dependencies": []
