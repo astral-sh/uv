@@ -3,7 +3,7 @@
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::{fixture::ChildPath, prelude::*};
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use predicates::{prelude::predicate, str::contains};
 use std::path::Path;
@@ -5817,7 +5817,6 @@ fn run_without_overlay() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn detect_infinite_recursion() -> Result<()> {
-    use indoc::formatdoc;
     use std::os::unix::fs::PermissionsExt;
     use uv_test::get_bin;
 
@@ -6875,6 +6874,143 @@ fn run_project_file_no_ancestor_project() -> Result<()> {
     ----- stderr -----
     warning: Project path `isolated/somefile` is not a directory. This will become an error in a future release. Use `--preview-features project-directory-must-exist` to error on this now.
     error: failed to open file `[TEMP_DIR]/isolated/somefile/uv.toml`: Not a directory (os error 20)
+    ");
+
+    Ok(())
+}
+
+/// Run using `--index <name>` to reference an index defined in `pyproject.toml`.
+#[tokio::test]
+async fn run_index_by_name() -> Result<()> {
+    use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
+
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&server)
+        .await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [[tool.uv.index]]
+        name = "primary"
+        url = "{server_url}"
+
+        [[tool.uv.index]]
+        name = "example"
+        url = "{proxy_url}"
+        "#,
+        server_url = server.uri(),
+        proxy_url = proxy.url("/simple"),
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--index").arg("example").arg("python").arg("-c").arg("import iniconfig; print('ok')"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ok
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig" }]
+        "#);
+    });
+
+    Ok(())
+}
+
+/// Run using `--index <name>` for an index marked `default = true`.
+#[tokio::test]
+async fn run_index_by_name_default_selected_on_cli() -> Result<()> {
+    use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
+
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&server)
+        .await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [[tool.uv.index]]
+        name = "primary"
+        url = "{server_url}"
+
+        [[tool.uv.index]]
+        name = "example"
+        url = "{proxy_url}"
+        default = true
+        "#,
+        server_url = server.uri(),
+        proxy_url = proxy.url("/simple"),
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--index").arg("example").arg("python").arg("-c").arg("import iniconfig; print('ok')"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ok
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
     ");
 
     Ok(())
