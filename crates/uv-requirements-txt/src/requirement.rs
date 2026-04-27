@@ -3,7 +3,8 @@ use std::path::Path;
 
 use uv_normalize::PackageName;
 use uv_pep508::{
-    Pep508Error, Pep508ErrorSource, RequirementOrigin, TracingReporter, UnnamedRequirement,
+    PathHint, Pep508Error, Pep508ErrorSource, RequirementOrigin, TracingReporter,
+    UnnamedRequirement,
 };
 use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl, VerbatimParsedUrl};
 
@@ -132,15 +133,26 @@ impl RequirementsTxtRequirement {
         working_dir: impl AsRef<Path>,
         editable: bool,
     ) -> Result<Self, Box<Pep508Error<VerbatimParsedUrl>>> {
+        // When parsing an editable requirement, hint that the path is a directory. Editable
+        // requirements always refer to local directories (containing a `pyproject.toml` or
+        // `setup.py`), so when the path doesn't exist, we should assume it's a directory rather
+        // than a file with an unrecognized extension (like `foo.bar`).
+        let hint = if editable {
+            Some(PathHint::Directory)
+        } else {
+            None
+        };
+
         // Attempt to parse as a PEP 508-compliant requirement.
         match uv_pep508::Requirement::parse(input, &working_dir) {
             Ok(requirement) => {
                 // As a special-case, interpret `dagster` as `./dagster` if we're in editable mode.
                 if editable && requirement.version_or_url.is_none() {
-                    Ok(Self::Unnamed(UnnamedRequirement::parse(
+                    Ok(Self::Unnamed(UnnamedRequirement::parse_with_hint(
                         input,
                         &working_dir,
                         &mut TracingReporter,
+                        hint,
                     )?))
                 } else {
                     Ok(Self::Named(requirement))
@@ -149,10 +161,11 @@ impl RequirementsTxtRequirement {
             Err(err) => match err.message {
                 Pep508ErrorSource::UnsupportedRequirement(_) => {
                     // If that fails, attempt to parse as a direct URL requirement.
-                    Ok(Self::Unnamed(UnnamedRequirement::parse(
+                    Ok(Self::Unnamed(UnnamedRequirement::parse_with_hint(
                         input,
                         &working_dir,
                         &mut TracingReporter,
+                        hint,
                     )?))
                 }
                 _ => Err(err),
