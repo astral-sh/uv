@@ -39,7 +39,7 @@ pub struct DisplayResolutionGraph<'a> {
     /// The directory to which local paths in the output should be relative. Used to rewrite
     /// editable paths discovered transitively, which would otherwise be emitted relative to the
     /// `pyproject.toml` that declared them.
-    relative_to: Option<&'a Path>,
+    relative_to: &'a Path,
 }
 
 #[derive(Debug)]
@@ -66,7 +66,7 @@ impl<'a> DisplayResolutionGraph<'a> {
         include_annotations: bool,
         include_index_annotation: bool,
         annotation_style: AnnotationStyle,
-        relative_to: Option<&'a Path>,
+        relative_to: &'a Path,
     ) -> Self {
         for fork_marker in &underlying.fork_markers {
             assert!(

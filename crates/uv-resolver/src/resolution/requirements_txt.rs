@@ -37,7 +37,7 @@ impl<'dist> RequirementsTxtDist<'dist> {
         &self,
         requires_python: &RequiresPython,
         include_markers: bool,
-        relative_to: Option<&Path>,
+        relative_to: &Path,
     ) -> Cow<'_, str> {
         // If the URL is editable, write it as an editable requirement.
         if self.dist.is_editable() {
@@ -53,8 +53,7 @@ impl<'dist> RequirementsTxtDist<'dist> {
                 // (e.g., `${PROJECT_ROOT}`), since callers typically want those preserved verbatim.
                 // Match the `${NAME}` form expanded by `uv_pep508::expand_env_vars`; bare `$` in
                 // a path (legitimate on Unix) shouldn't suppress the rewrite.
-                if let Some(relative_to) = relative_to
-                    && !url.was_given_absolute()
+                if !url.was_given_absolute()
                     && url.given().is_some_and(|given| !given.contains("${"))
                     && let Some(install_path) = self.dist.source_tree()
                     && let Ok(path) = try_relative_to_if(install_path, relative_to, true)

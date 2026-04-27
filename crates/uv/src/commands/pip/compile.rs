@@ -731,7 +731,7 @@ pub(crate) async fn pip_compile(
                     include_annotations,
                     include_index_annotation,
                     annotation_style,
-                    Some(output_anchor),
+                    output_anchor,
                 )
             )?;
         }
