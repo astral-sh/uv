@@ -60,6 +60,7 @@ A complete listing would look like:
 │   ├── bin
 │   ├── lib
 │   └── pyvenv.cfg
+├── .gitignore
 ├── .python-version
 ├── README.md
 ├── main.py
