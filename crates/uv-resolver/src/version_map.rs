@@ -10,7 +10,7 @@ use tracing::{instrument, trace};
 
 use uv_client::{FlatIndexEntry, OwnedArchive, SimpleDetailMetadata, VersionFiles};
 use uv_configuration::BuildOptions;
-use uv_distribution_filename::{DistFilename, WheelFilename};
+use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
     HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
     RegistryBuiltWheel, RegistrySourceDist, RequiresPython, SourceDistCompatibility,
@@ -521,8 +521,7 @@ impl VersionMapLazy {
                     }
                     DistFilename::SourceDistFilename(filename) => {
                         let compatibility = self.source_dist_compatibility(
-                            &filename.name,
-                            &filename.version,
+                            &filename,
                             hashes.as_slice(),
                             yanked,
                             excluded,
@@ -551,8 +550,7 @@ impl VersionMapLazy {
 
     fn source_dist_compatibility(
         &self,
-        name: &PackageName,
-        version: &Version,
+        filename: &SourceDistFilename,
         hashes: &[HashDigest],
         yanked: Option<&Yanked>,
         excluded: bool,
@@ -572,15 +570,27 @@ impl VersionMapLazy {
 
         // Check if yanked
         if let Some(yanked) = yanked {
-            if yanked.is_yanked() && !self.allowed_yanks.contains(name, version) {
+            if yanked.is_yanked()
+                && !self
+                    .allowed_yanks
+                    .contains(&filename.name, &filename.version)
+            {
                 return SourceDistCompatibility::Incompatible(IncompatibleSource::Yanked(
                     yanked.clone(),
                 ));
             }
         }
 
+        // Check if the filename is PEP 625-compliant.
+        // TODO: Strengthen this check more; right now we allow `.zip`
+        // (which is not compliant) and we don't strictly
+        // enforce the formatting rules for the name or version.
+        if !filename.extension.is_pep625_compliant() {
+            return SourceDistCompatibility::Incompatible(IncompatibleSource::NotPep625Filename);
+        }
+
         // Check if hashes line up. If hashes aren't required, they're considered matching.
-        let hash_policy = self.hasher.get_package(name, version);
+        let hash_policy = self.hasher.get_package(&filename.name, &filename.version);
         let required_hashes = hash_policy.digests();
         let hash = if required_hashes.is_empty() {
             HashComparison::Matched

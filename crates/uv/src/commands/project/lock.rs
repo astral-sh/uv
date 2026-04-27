@@ -858,6 +858,11 @@ async fn do_lock(
                 // broken state. Specifically, tasks that fail with an error can be left as pending.
                 return Err(ProjectError::Lock(err));
             }
+            Err(ProjectError::Lock(err)) if err.is_not_pep625() => {
+                // A non-PEP 625-compliant sdist in the lockfile will also be rejected by a fresh
+                // resolve, so short-circuit rather than doing the extra work.
+                return Err(ProjectError::Lock(err));
+            }
             Err(err) => {
                 warn_user!("Failed to validate existing lockfile: {err}");
                 None

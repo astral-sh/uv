@@ -371,7 +371,6 @@ dependencies = [
  "memchr",
  "pin-project-lite",
  "tokio",
- "xz2",
  "zstd",
  "zstd-safe",
 ]
@@ -2635,17 +2634,6 @@ name = "lru-slab"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "112b39cec0b298b6c1999fee3e31427f74f676e4cb9879ed1a121b43661a4154"
-
-[[package]]
-name = "lzma-sys"
-version = "0.1.20"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5fda04ab3764e6cde78b9974eec4f779acaba7c4e84b36eca3cf77c581b85d27"
-dependencies = [
- "cc",
- "libc",
- "pkg-config",
-]
 
 [[package]]
 name = "mailparse"
@@ -6405,7 +6393,6 @@ dependencies = [
  "uv-python",
  "uv-redacted",
  "uv-types",
- "uv-warnings",
  "uv-workspace",
  "walkdir",
  "zip",
@@ -6493,7 +6480,6 @@ dependencies = [
  "uv-distribution-filename",
  "uv-pypi-types",
  "uv-static",
- "xz2",
  "zip",
  "zstd",
 ]
@@ -8236,15 +8222,6 @@ name = "xmlwriter"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec7a2a501ed189703dba8b08142f057e887dfc4b2cc4db2d343ac6376ba3e0b9"
-
-[[package]]
-name = "xz2"
-version = "0.1.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "388c44dc09d76f1536602ead6d325eb532f5c122f17782bd57fb47baeeb767e2"
-dependencies = [
- "lzma-sys",
-]
 
 [[package]]
 name = "yansi"

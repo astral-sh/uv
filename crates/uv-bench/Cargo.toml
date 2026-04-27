@@ -49,6 +49,3 @@ tokio = { workspace = true }
 
 [package.metadata.cargo-shear]
 ignored = ["uv-extract"]
-
-[features]
-static = ["uv-extract/static"]

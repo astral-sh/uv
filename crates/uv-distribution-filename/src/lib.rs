@@ -7,7 +7,9 @@ use uv_pep440::Version;
 pub use build_tag::{BuildTag, BuildTagError};
 pub use egg::{EggInfoFilename, EggInfoFilenameError};
 pub use expanded_tags::{ExpandedTagError, ExpandedTags};
-pub use extension::{DistExtension, ExtensionError, SourceDistExtension};
+pub use extension::{
+    DistExtension, ExtensionError, LegacySourceDistExtension, SourceDistExtension,
+};
 pub use source_dist::{SourceDistFilename, SourceDistFilenameError};
 pub use wheel::{WheelFilename, WheelFilenameError};
 

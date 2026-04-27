@@ -177,7 +177,7 @@ mod tests {
 
     use uv_normalize::PackageName;
 
-    use crate::{SourceDistExtension, SourceDistFilename};
+    use crate::{SourceDistExtension, SourceDistFilename, extension::LegacySourceDistExtension};
 
     /// Only test already normalized names since the parsing is lossy
     ///
@@ -229,7 +229,7 @@ mod tests {
         assert!(
             SourceDistFilename::parse(
                 "foo.zip",
-                SourceDistExtension::Zip,
+                SourceDistExtension::Legacy(LegacySourceDistExtension::Zip),
                 &PackageName::from_str("foo-lib").unwrap()
             )
             .is_err()

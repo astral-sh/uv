@@ -182,6 +182,14 @@ impl FlatDistributions {
             return SourceDistCompatibility::Incompatible(IncompatibleSource::NoBuild);
         }
 
+        // Check if the filename is PEP 625-compliant.
+        // TODO: Strengthen this check more; right now we allow `.zip`
+        // (which is not compliant) and we don't strictly
+        // enforce the formatting rules for the name or version.
+        if !filename.extension.is_pep625_compliant() {
+            return SourceDistCompatibility::Incompatible(IncompatibleSource::NotPep625Filename);
+        }
+
         // Check if hashes line up
         let hash_policy = hasher.get_package(&filename.name, &filename.version);
         let hash = if hash_policy.requires_validation() {

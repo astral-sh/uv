@@ -20,4 +20,9 @@ pub enum Error {
 
     #[error("Requested package name `{0}` does not match `{1}` in the distribution filename: {2}")]
     PackageNameMismatch(PackageName, PackageName, String),
+
+    #[error(
+        "Source distribution `{0}` has a non-PEP 625-compliant filename; only `.tar.gz` and `.zip` archives are accepted"
+    )]
+    NotPep625Filename(String),
 }

@@ -151,56 +151,69 @@ impl<T: Pep508Url> Requirement<T> {
 
     /// Returns a [`Display`] implementation that doesn't mask credentials.
     pub fn displayable_with_credentials(&self) -> impl Display {
-        std::fmt::from_fn(|f| fmt_requirement(self, f, true))
+        RequirementDisplay {
+            requirement: self,
+            display_credentials: true,
+        }
     }
 }
 
 impl<T: Pep508Url + Display> Display for Requirement<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        fmt_requirement(self, f, false)
+        RequirementDisplay {
+            requirement: self,
+            display_credentials: false,
+        }
+        .fmt(f)
     }
 }
 
-fn fmt_requirement<T: Pep508Url + Display>(
-    requirement: &Requirement<T>,
-    f: &mut Formatter<'_>,
+struct RequirementDisplay<'a, T>
+where
+    T: Pep508Url + Display,
+{
+    requirement: &'a Requirement<T>,
     display_credentials: bool,
-) -> std::fmt::Result {
-    write!(f, "{}", requirement.name)?;
-    if !requirement.extras.is_empty() {
-        write!(
-            f,
-            "[{}]",
-            requirement
-                .extras
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(",")
-        )?;
-    }
-    if let Some(version_or_url) = &requirement.version_or_url {
-        match version_or_url {
-            VersionOrUrl::VersionSpecifier(version_specifier) => {
-                let version_specifier: Vec<String> =
-                    version_specifier.iter().map(ToString::to_string).collect();
-                write!(f, "{}", version_specifier.join(","))?;
-            }
-            VersionOrUrl::Url(url) => {
-                let url_string = if display_credentials {
-                    url.displayable_with_credentials().to_string()
-                } else {
-                    url.to_string()
-                };
-                // We add the space for markers later if necessary
-                write!(f, " @ {url_string}")?;
+}
+
+impl<T: Pep508Url + Display> Display for RequirementDisplay<'_, T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.requirement.name)?;
+        if !self.requirement.extras.is_empty() {
+            write!(
+                f,
+                "[{}]",
+                self.requirement
+                    .extras
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )?;
+        }
+        if let Some(version_or_url) = &self.requirement.version_or_url {
+            match version_or_url {
+                VersionOrUrl::VersionSpecifier(version_specifier) => {
+                    let version_specifier: Vec<String> =
+                        version_specifier.iter().map(ToString::to_string).collect();
+                    write!(f, "{}", version_specifier.join(","))?;
+                }
+                VersionOrUrl::Url(url) => {
+                    let url_string = if self.display_credentials {
+                        url.displayable_with_credentials().to_string()
+                    } else {
+                        url.to_string()
+                    };
+                    // We add the space for markers later if necessary
+                    write!(f, " @ {url_string}")?;
+                }
             }
         }
+        if let Some(marker) = self.requirement.marker.contents() {
+            write!(f, " ; {marker}")?;
+        }
+        Ok(())
     }
-    if let Some(marker) = requirement.marker.contents() {
-        write!(f, " ; {marker}")?;
-    }
-    Ok(())
 }
 
 /// <https://github.com/serde-rs/serde/issues/908#issuecomment-298027413>
@@ -576,7 +589,10 @@ fn looks_like_unnamed_requirement(cursor: &mut Cursor) -> bool {
 /// Returns `true` if a file looks like an archive.
 ///
 /// See <https://github.com/pypa/pip/blob/111eed14b6e9fba7c78a5ec2b7594812d17b5d2b/src/pip/_internal/utils/filetypes.py#L8>
-/// for the list of supported archive extensions.
+/// for the original list of supported archive extensions.
+///
+/// NOTE: Unlike pip, we don't allow xz or lzma archives here.
+/// Longer term, we will also probably disallow bzip2 archives.
 fn looks_like_archive(file: impl AsRef<Path>) -> bool {
     let file = file.as_ref();
 
@@ -592,8 +608,7 @@ fn looks_like_archive(file: impl AsRef<Path>) -> bool {
 
     matches!(
         (pre_extension, extension),
-        (_, "whl" | "tbz" | "txz" | "tlz" | "zip" | "tgz" | "tar")
-            | (Some("tar"), "bz2" | "xz" | "lz" | "lzma" | "gz")
+        (_, "whl" | "tbz" | "tlz" | "zip" | "tgz" | "tar") | (Some("tar"), "bz2" | "gz")
     )
 }
 

@@ -38,7 +38,6 @@ uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
 uv-redacted = { workspace = true }
 uv-types = { workspace = true }
-uv-warnings = { workspace = true }
 uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
@@ -68,4 +67,3 @@ insta = { workspace = true }
 
 [features]
 default = []
-static = ["uv-extract/static"]
