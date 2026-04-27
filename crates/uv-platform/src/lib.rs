@@ -164,7 +164,13 @@ impl Platform {
             (OperatingSystem::Linux, Libc::Some(env)) => Some({
                 // If we've detected a bare `gnu` or `musl` environment on ARMv7,
                 // that means our floating point environment detection failed.
-                // We currently assume hard-float in that case.
+                // We currently assume hard-float in that case, for two reasons:
+                // 1. Statistically, we expect the overwhelming majority of ARMv7 Linux hosts to
+                //    be hard-float.
+                // 2. We currently only ship hard-float ARMv7 builds of ruff and uv anyways,
+                //    so we don't even have a soft-float build to fall back to.
+                // By contrast, we *do* ship soft-float Python builds via PBS, but PBS
+                // installations don't take this pathway.
                 if matches!(arch.family(), Architecture::Arm(ArmArchitecture::Armv7))
                     && matches!(env, Environment::Gnu | Environment::Musl)
                 {
