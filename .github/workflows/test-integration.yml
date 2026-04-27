@@ -870,7 +870,7 @@ jobs:
 
       # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
       - name: "Setup WSL"
-        uses: Vampire/setup-wsl@6a8db447be7ed35f2f499c02c6e60ff77ef11278 # v6.0.0
+        uses: Vampire/setup-wsl@d1da7f2c0322a5ee4f24975344f67fc0f5baf364 # v7.0.0
         with:
           distribution: Ubuntu-22.04
 
