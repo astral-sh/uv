@@ -968,26 +968,23 @@ fn collapse_unavailable_versions(
                                 other_versions,
                                 other_reason,
                             )),
-                        ) => {
-                            // And the package and reason are the same...
-                            if package == other_package && reason == other_reason {
-                                // Collapse both into a new node, with a union of their ranges
-                                let versions = other_versions.union(versions);
-                                let mut terms = terms.clone();
-                                if let Some(Term::Positive(range)) = terms.get_mut(package) {
-                                    *range = versions.clone();
-                                }
-                                *tree = DerivationTree::Derived(Derived {
-                                    terms,
-                                    shared_id: *shared_id,
-                                    cause1: cause1.clone(),
-                                    cause2: Arc::new(DerivationTree::External(External::Custom(
-                                        package.clone(),
-                                        versions,
-                                        reason.clone(),
-                                    ))),
-                                });
+                        ) if package == other_package && reason == other_reason => {
+                            // Collapse both into a new node, with a union of their ranges
+                            let versions = other_versions.union(versions);
+                            let mut terms = terms.clone();
+                            if let Some(Term::Positive(range)) = terms.get_mut(package) {
+                                *range = versions.clone();
                             }
+                            *tree = DerivationTree::Derived(Derived {
+                                terms,
+                                shared_id: *shared_id,
+                                cause1: cause1.clone(),
+                                cause2: Arc::new(DerivationTree::External(External::Custom(
+                                    package.clone(),
+                                    versions,
+                                    reason.clone(),
+                                ))),
+                            });
                         }
                         (
                             DerivationTree::External(External::Custom(
@@ -996,26 +993,23 @@ fn collapse_unavailable_versions(
                                 other_reason,
                             )),
                             _,
-                        ) => {
-                            // And the package and reason are the same...
-                            if package == other_package && reason == other_reason {
-                                // Collapse both into a new node, with a union of their ranges
-                                let versions = other_versions.union(versions);
-                                let mut terms = terms.clone();
-                                if let Some(Term::Positive(range)) = terms.get_mut(package) {
-                                    *range = versions.clone();
-                                }
-                                *tree = DerivationTree::Derived(Derived {
-                                    terms,
-                                    shared_id: *shared_id,
-                                    cause1: Arc::new(DerivationTree::External(External::Custom(
-                                        package.clone(),
-                                        versions,
-                                        reason.clone(),
-                                    ))),
-                                    cause2: cause2.clone(),
-                                });
+                        ) if package == other_package && reason == other_reason => {
+                            // Collapse both into a new node, with a union of their ranges
+                            let versions = other_versions.union(versions);
+                            let mut terms = terms.clone();
+                            if let Some(Term::Positive(range)) = terms.get_mut(package) {
+                                *range = versions.clone();
                             }
+                            *tree = DerivationTree::Derived(Derived {
+                                terms,
+                                shared_id: *shared_id,
+                                cause1: Arc::new(DerivationTree::External(External::Custom(
+                                    package.clone(),
+                                    versions,
+                                    reason.clone(),
+                                ))),
+                                cause2: cause2.clone(),
+                            });
                         }
                         _ => {}
                     }

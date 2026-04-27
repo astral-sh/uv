@@ -919,8 +919,8 @@ impl Workspace {
         )?;
 
         let dev_dependencies_members = workspace_members
-            .iter()
-            .filter_map(|(_, member)| {
+            .values()
+            .filter_map(|member| {
                 member
                     .pyproject_toml
                     .tool

@@ -172,7 +172,7 @@ impl Conflicts {
                 graph
                     .node_weight_mut(neighbor_idx)
                     .expect("Graph node should have weight")
-                    .extend(neighbor_canonical_items.into_iter());
+                    .extend(neighbor_canonical_items);
             }
         }
 
@@ -197,7 +197,7 @@ impl Conflicts {
                     }
                 }
             }
-            conflict_sets.extend(new_conflict_sets.into_iter());
+            conflict_sets.extend(new_conflict_sets);
         }
 
         // Add all newly discovered conflict sets (excluding the originals already in self.0)
