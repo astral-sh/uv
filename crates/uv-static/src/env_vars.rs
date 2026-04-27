@@ -425,7 +425,7 @@ impl EnvVars {
     /// When set, uv will not discover Python interpreters from the Windows registry or Microsoft
     /// Store locations, and managed Python installations will not be registered in the Windows
     /// registry.
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.11.8")]
     pub const UV_PYTHON_NO_REGISTRY: &'static str = "UV_PYTHON_NO_REGISTRY";
 
     /// Managed Python installations information is hardcoded in the `uv` binary.
@@ -508,7 +508,7 @@ impl EnvVars {
     ///
     /// When set, uv will search for Python interpreters in the directories specified by this
     /// variable instead of `PATH`.
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.11.8")]
     pub const UV_PYTHON_SEARCH_PATH: &'static str = "UV_PYTHON_SEARCH_PATH";
 
     /// Include resolver and installer output related to environment modifications.
@@ -932,7 +932,7 @@ impl EnvVars {
     /// Cleared for uv's git invocations to ensure git behaves correctly in
     /// spite of an odd environment.
     #[attr_hidden]
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.11.8")]
     pub const GIT_COMMON_DIR: &'static str = "GIT_COMMON_DIR";
 
     /// Indicates that the current process is running in GitHub Actions.
@@ -1288,7 +1288,7 @@ impl EnvVars {
     pub const UV_PROJECT: &'static str = "UV_PROJECT";
 
     /// Equivalent to the `--no-project` command-line argument.
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.11.8")]
     pub const UV_NO_PROJECT: &'static str = "UV_NO_PROJECT";
 
     /// Equivalent to the `--directory` command-line argument. `UV_WORKING_DIRECTORY` (added in
