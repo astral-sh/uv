@@ -18,7 +18,8 @@ test = false
 
 [features]
 default = ["std"]
-std = []
+std = ["dep:arrayvec"]
 
 [target.'cfg(windows)'.dependencies]
+arrayvec = { workspace = true, optional = true }
 windows = { workspace = true }
