@@ -7,6 +7,7 @@ use indexmap::IndexMap;
 use ref_cast::RefCast;
 use reqwest_retry::policies::ExponentialBackoff;
 use tracing::{debug, info};
+use uv_fs::Simplified;
 use uv_warnings::warn_user;
 
 use uv_cache::Cache;
@@ -16,7 +17,8 @@ use uv_platform::{Arch, Libc, Os, Platform};
 use uv_preview::Preview;
 
 use crate::discovery::{
-    EnvironmentPreference, PythonRequest, find_best_python_installation, find_python_installation,
+    EnvironmentPreference, PythonRequest, VersionRequest, find_best_python_installation,
+    find_python_installation,
 };
 use crate::downloads::{
     DownloadResult, ManagedPythonDownload, ManagedPythonDownloadList, PythonDownloadRequest,
@@ -44,6 +46,50 @@ impl PythonInstallation {
             source,
             interpreter,
         }
+    }
+
+    /// Return a new installation with the given [`PythonSource`].
+    #[must_use]
+    pub(crate) fn with_source(self, source: PythonSource) -> Self {
+        Self { source, ..self }
+    }
+
+    /// In test mode, change the source to [`PythonSource::Managed`] if the interpreter was
+    /// marked as managed via `TestContext::with_versions_as_managed`.
+    #[must_use]
+    pub(crate) fn maybe_with_test_source(self) -> Self {
+        if std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_PYTHON_MANAGED).is_ok()
+            && self.interpreter.is_managed()
+        {
+            self.with_source(PythonSource::Managed)
+        } else {
+            self
+        }
+    }
+
+    /// Check whether this installation satisfies the standard post-query discovery filters:
+    /// environment preference, version request, and Python preference.
+    pub(crate) fn satisfies_preferences(
+        &self,
+        version: &VersionRequest,
+        environments: EnvironmentPreference,
+        preference: PythonPreference,
+    ) -> bool {
+        if !environments.allows_installation(self) {
+            return false;
+        }
+        if !version.matches_installation(self) {
+            debug!(
+                "Skipping interpreter at `{}` from {}: does not satisfy request `{version}`",
+                self.interpreter.sys_executable().user_display(),
+                self.source,
+            );
+            return false;
+        }
+        if !preference.allows_installation(self) {
+            return false;
+        }
+        true
     }
 
     /// Find an installed [`PythonInstallation`].

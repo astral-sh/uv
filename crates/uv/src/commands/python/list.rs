@@ -16,8 +16,8 @@ use uv_python::downloads::{
     Error as PythonDownloadError, ManagedPythonDownloadList, PythonDownloadRequest,
 };
 use uv_python::{
-    DiscoveryError, EnvironmentPreference, PythonDownloads, PythonInstallation, PythonNotFound,
-    PythonPreference, PythonRequest, PythonSource, find_python_installations,
+    EnvironmentPreference, PythonDownloads, PythonPreference, PythonRequest, PythonSource,
+    find_all_python_installations,
 };
 
 use crate::commands::ExitStatus;
@@ -139,41 +139,32 @@ pub(crate) async fn list(
         }
     }
 
-    let installed =
-        match kinds {
-            PythonListKinds::Installed | PythonListKinds::Default => {
-                // While usually [`PythonPreference::OnlyManaged`] means we can skip searching the `PATH`,
-                // in `uv python list` we want to enumerate links to managed Python interpreters for inspection.
-                // Consequently, we widen the preference here and perform post-filtering.
-                let discovery_preference = if python_preference == PythonPreference::OnlyManaged {
-                    PythonPreference::Managed
-                } else {
-                    python_preference
-                };
-                Some(find_python_installations(
+    let installed = match kinds {
+        PythonListKinds::Installed | PythonListKinds::Default => {
+            // While usually [`PythonPreference::OnlyManaged`] means we can skip searching the
+            // `PATH`, in `uv python list` we want to enumerate links to managed Python
+            // interpreters for inspection. Consequently, we widen the preference here and
+            // perform post-filtering.
+            let discovery_preference = if python_preference == PythonPreference::OnlyManaged {
+                PythonPreference::Managed
+            } else {
+                python_preference
+            };
+            let mut installations = find_all_python_installations(
                 request.as_ref().unwrap_or(&PythonRequest::Any),
                 EnvironmentPreference::OnlySystem,
                 discovery_preference,
                 cache,
                 preview,
-            )
-            // Raise discovery errors if critical
-            .filter(|result| {
-                result
-                    .as_ref()
-                    .err()
-                    .is_none_or(DiscoveryError::is_critical)
-            })
-            .collect::<Result<Vec<Result<PythonInstallation, PythonNotFound>>, DiscoveryError>>()?
-            .into_iter()
-            // Drop any "missing" installations
-            .filter_map(Result::ok)
-            // Apply the `PythonPreference` to discovered interpreters, since we may have
-            // expanded it above
-            .filter(|installation| python_preference.allows_installation(installation)))
-            }
-            PythonListKinds::Downloads => None,
-        };
+            )?;
+            // Apply the original `PythonPreference` to discovered interpreters, since we may
+            // have expanded it above.
+            installations
+                .retain(|installation| python_preference.allows_installation(installation));
+            Some(installations)
+        }
+        PythonListKinds::Downloads => None,
+    };
 
     if let Some(installed) = installed {
         for installation in installed {

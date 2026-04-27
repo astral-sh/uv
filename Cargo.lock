@@ -6963,6 +6963,7 @@ dependencies = [
  "itertools 0.14.0",
  "junction",
  "owo-colors",
+ "rayon",
  "ref-cast",
  "regex",
  "reqwest",
