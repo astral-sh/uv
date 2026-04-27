@@ -825,16 +825,17 @@ impl Cache {
     /// version. On Unix, we create a symlink to the target directory.
     #[cfg(unix)]
     pub fn create_link(&self, id: &ArchiveId, dst: impl AsRef<Path>) -> io::Result<()> {
-        // Construct the link target.
-        let src = self.archive(id);
         let dst = dst.as_ref();
+        let dst_parent = dst.parent().expect("Cache entry to have parent");
+        // Construct the relative link target.
+        let src = uv_fs::relative_to(self.archive(id), dst_parent)?;
 
         // Attempt to create the symlink directly.
         match fs_err::os::unix::fs::symlink(&src, dst) {
             Ok(()) => Ok(()),
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
                 // Create a symlink, using a temporary file to ensure atomicity.
-                let temp_dir = tempfile::tempdir_in(dst.parent().unwrap())?;
+                let temp_dir = tempfile::tempdir_in(dst_parent)?;
                 let temp_file = temp_dir.path().join("link");
                 fs_err::os::unix::fs::symlink(&src, &temp_file)?;
 
