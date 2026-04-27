@@ -5754,7 +5754,6 @@ version = "0.11.8"
 dependencies = [
  "anstream",
  "anyhow",
- "arrayvec",
  "assert_cmd",
  "assert_fs",
  "astral-version-ranges",
@@ -5870,7 +5869,6 @@ dependencies = [
  "uv-workspace",
  "walkdir",
  "which",
- "windows",
  "wiremock",
  "zip",
 ]
@@ -7425,6 +7423,7 @@ dependencies = [
 name = "uv-windows"
 version = "0.0.41"
 dependencies = [
+ "arrayvec",
  "windows",
 ]
 

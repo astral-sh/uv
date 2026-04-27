@@ -6,11 +6,15 @@
 #![cfg(windows)]
 
 mod ctrl_handler;
+#[cfg(feature = "std")]
+mod exception;
 mod job;
 #[cfg(feature = "std")]
 mod spawn;
 
 pub use ctrl_handler::{CtrlHandlerError, install_ctrl_handler};
+#[cfg(feature = "std")]
+pub use exception::install_unhandled_exception_handler;
 pub use job::{Job, JobError};
 #[cfg(feature = "std")]
 pub use spawn::spawn_child;

@@ -66,8 +66,6 @@ mod install_source;
 pub(crate) mod logging;
 pub(crate) mod printer;
 pub(crate) mod settings;
-#[cfg(windows)]
-mod windows_exception;
 
 #[instrument(skip_all)]
 async fn run(cli: Cli) -> Result<ExitStatus> {
@@ -2728,7 +2726,7 @@ where
     T: Into<OsString> + Clone,
 {
     #[cfg(windows)]
-    windows_exception::setup();
+    uv_windows::install_unhandled_exception_handler();
 
     // Set the `UV` variable to the current executable so it is implicitly propagated to all child
     // processes, e.g., in `uv run`.
