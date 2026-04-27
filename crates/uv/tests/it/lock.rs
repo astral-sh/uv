@@ -33759,6 +33759,117 @@ fn lock_exclude_newer_package() -> Result<()> {
     Ok(())
 }
 
+/// Regression test for `[exclude-newer-package]` from a user-level `uv.toml` leaking into the
+/// project's lockfile for packages that aren't part of the resolution. Such entries cause
+/// `uv sync --locked` to fail in environments without the user-level config (e.g., CI).
+///
+/// See: <https://github.com/astral-sh/uv/issues/19196>
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn lock_exclude_newer_package_user_config_filtered_to_resolution() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [tool.uv]
+        exclude-newer-package = { iniconfig = "2024-01-01T00:00:00Z" }
+        "#,
+    )?;
+
+    // A user-level `uv.toml` configures `exclude-newer-package` for tools that
+    // are *not* part of the project's dependencies.
+    let xdg = assert_fs::TempDir::new().expect("Failed to create temp dir");
+    let uv_config = xdg.child("uv");
+    let uv_toml = uv_config.child("uv.toml");
+    uv_toml.write_str(
+        r#"
+        [exclude-newer-package]
+        tqdm = "2022-04-04T00:00:00Z"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    // Only `iniconfig` (an actual project dependency) appears in
+    // `[options.exclude-newer-package]`. The user-level entry for `tqdm`
+    // is filtered out because it isn't in the resolution.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+
+        [options.exclude-newer-package]
+        iniconfig = "2024-01-01T00:00:00Z"
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig" }]
+        "#
+        );
+    });
+
+    // Re-running `uv lock --locked` without the user-level config must not
+    // report "removal of exclude newer for package" — the lockfile no longer
+    // references the user-level package, so the check should pass.
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--locked")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Test that the resolver emits a hint when all versions are excluded by `--exclude-newer`.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/18014>
