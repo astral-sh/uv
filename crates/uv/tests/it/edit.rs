@@ -4525,6 +4525,57 @@ fn add_frozen() -> Result<()> {
     Ok(())
 }
 
+/// Warn when bounds are ignored under `--frozen`.
+#[test]
+fn add_frozen_warns_when_bounds_ignored() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Remove the virtual environment.
+    fs_err::remove_dir_all(&context.venv)?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--bounds").arg("exact").arg("--frozen"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    warning: Bounds preference `exact` is ignored when `--frozen` is provided; dependencies are added without constraints
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "anyio",
+        ]
+        "#
+        );
+    });
+
+    assert!(!context.temp_dir.join("uv.lock").exists());
+    assert!(!context.venv.exists());
+
+    Ok(())
+}
+
 /// Add a requirement without updating the environment.
 #[test]
 fn add_no_sync() -> Result<()> {

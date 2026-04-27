@@ -698,6 +698,13 @@ pub(crate) async fn add(
     // If `--frozen`, exit early. There's no reason to lock and sync, since we don't need a `uv.lock`
     // to exist at all.
     if frozen.is_some() {
+        if let Some(bound_kind) = bounds
+            && edits.iter().any(DependencyEdit::requires_bound)
+        {
+            warn_user_once!(
+                "Bounds preference `{bound_kind}` is ignored when `--frozen` is provided; dependencies are added without constraints"
+            );
+        }
         return Ok(ExitStatus::Success);
     }
 
@@ -1444,4 +1451,29 @@ struct DependencyEdit {
     requirement: uv_pep508::Requirement,
     source: Option<Source>,
     edit: ArrayEdit,
+}
+
+impl DependencyEdit {
+    fn requires_bound(&self) -> bool {
+        // Only set a minimum version for newly-added dependencies (as opposed to updates).
+        let ArrayEdit::Add(_) = &self.edit else {
+            return false;
+        };
+
+        // Only set a minimum version for registry requirements.
+        if self
+            .source
+            .as_ref()
+            .is_some_and(|source| !matches!(source, Source::Registry { .. }))
+        {
+            return false;
+        }
+
+        // Only set a minimum version for requirements without version specifiers.
+        match self.requirement.version_or_url.as_ref() {
+            Some(VersionOrUrl::VersionSpecifier(version)) => version.is_empty(),
+            Some(VersionOrUrl::Url(_)) => false,
+            None => true,
+        }
+    }
 }
