@@ -541,7 +541,7 @@ fn help_subsubcommand() {
               Distributions can be read from a local directory by using the `file://` URL scheme.
 
           --python-downloads-json-url <PYTHON_DOWNLOADS_JSON_URL>
-              URL pointing to JSON of custom Python installations
+              URL pointing to JSON or NDJSON describing custom Python installations
 
       -r, --reinstall
               Reinstall the requested Python version, if it's already installed.
@@ -835,7 +835,7 @@ fn help_flag_subsubcommand() {
           --pypy-mirror <PYPY_MIRROR>
               Set the URL to use as the source for downloading PyPy installations
           --python-downloads-json-url <PYTHON_DOWNLOADS_JSON_URL>
-              URL pointing to JSON of custom Python installations
+              URL pointing to JSON or NDJSON describing custom Python installations
       -r, --reinstall
               Reinstall the requested Python version, if it's already installed
       -f, --force

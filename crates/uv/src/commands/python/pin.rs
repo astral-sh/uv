@@ -4,10 +4,9 @@ use std::path::Path;
 use anyhow::{Result, bail};
 use owo_colors::OwoColorize;
 use tracing::debug;
-use uv_python::downloads::ManagedPythonDownloadList;
 
 use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
+use uv_client::{BaseClient, BaseClientBuilder};
 use uv_configuration::DependencyGroupsWithDefaults;
 use uv_fs::Simplified;
 use uv_preview::Preview;
@@ -93,23 +92,24 @@ pub(crate) async fn pin(
     let Some(request) = request else {
         // Display the current pinned Python version
         if let Some(file) = version_file? {
+            let client = if virtual_project.is_some() {
+                Some(client_builder.clone().retries(0).build()?)
+            } else {
+                None
+            };
             for pin in file.versions() {
                 writeln!(printer.stdout(), "{}", pin.to_canonical_string())?;
-                if let Some(virtual_project) = &virtual_project {
-                    let client = client_builder.clone().retries(0).build()?;
-                    let download_list = ManagedPythonDownloadList::new(
-                        &client,
-                        install_mirrors.python_downloads_json_url.as_deref(),
-                    )
-                    .await?;
+                if let (Some(virtual_project), Some(client)) = (&virtual_project, client.as_ref()) {
                     warn_if_existing_pin_incompatible_with_project(
                         pin,
                         virtual_project,
                         python_preference,
-                        &download_list,
+                        client,
+                        install_mirrors.python_downloads_json_url.as_deref(),
                         cache,
                         preview,
-                    );
+                    )
+                    .await?;
                 }
             }
             return Ok(ExitStatus::Success);
@@ -244,14 +244,15 @@ pub(crate) async fn pin(
 }
 
 /// Check if pinned request is compatible with the workspace/project's `Requires-Python`.
-fn warn_if_existing_pin_incompatible_with_project(
+async fn warn_if_existing_pin_incompatible_with_project(
     pin: &PythonRequest,
     virtual_project: &VirtualProject,
     python_preference: PythonPreference,
-    downloads_list: &ManagedPythonDownloadList,
+    client: &BaseClient,
+    python_downloads_json_url: Option<&str>,
     cache: &Cache,
     preview: Preview,
-) {
+) -> Result<()> {
     // Check if the pinned version is compatible with the project.
     if let Some(pin_version) = pin.as_pep440_version() {
         if let Err(err) = assert_pin_compatible_with_project(
@@ -264,20 +265,23 @@ fn warn_if_existing_pin_incompatible_with_project(
             virtual_project,
         ) {
             warn_user_once!("{err}");
-            return;
+            return Ok(());
         }
     }
 
     // If there is not a version in the pinned request, attempt to resolve the pin into an
     // interpreter to check for compatibility on the current system.
-    match PythonInstallation::find(
+    match PythonInstallation::find_with_source(
         pin,
         EnvironmentPreference::OnlySystem,
         python_preference,
-        downloads_list,
+        client,
+        python_downloads_json_url,
         cache,
         preview,
-    ) {
+    )
+    .await
+    {
         Ok(python) => {
             let python_version = python.python_version();
             debug!(
@@ -304,6 +308,8 @@ fn warn_if_existing_pin_incompatible_with_project(
             );
         }
     }
+
+    Ok(())
 }
 
 /// Utility struct for representing pins in error messages.

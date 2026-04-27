@@ -7,7 +7,6 @@ use uv_client::BaseClientBuilder;
 use uv_configuration::DependencyGroupsWithDefaults;
 use uv_fs::Simplified;
 use uv_preview::Preview;
-use uv_python::downloads::ManagedPythonDownloadList;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
@@ -79,16 +78,17 @@ pub(crate) async fn find(
     .await?;
 
     let client = client_builder.clone().retries(0).build()?;
-    let download_list = ManagedPythonDownloadList::new(&client, python_downloads_json_url).await?;
 
-    let python = PythonInstallation::find(
+    let python = PythonInstallation::find_with_source(
         &python_request.unwrap_or_default(),
         environment_preference,
         python_preference,
-        &download_list,
+        &client,
+        python_downloads_json_url,
         cache,
         preview,
-    )?;
+    )
+    .await?;
 
     // Warn if the discovered Python version is incompatible with the current workspace
     if let Some(requires_python) = requires_python {

@@ -66,9 +66,47 @@ impl PythonInstallation {
         cache: &Cache,
         preview: Preview,
     ) -> Result<Self, Error> {
-        let installation =
-            find_python_installation(request, environments, preference, cache, preview)??;
+        let installation = Self::find_impl(request, environments, preference, cache, preview)?;
         installation.warn_if_outdated_prerelease(request, download_list);
+        Ok(installation)
+    }
+
+    /// Find an installed [`PythonInstallation`] while resolving Python-download metadata lazily.
+    ///
+    /// When the source is implicit, this only consults download metadata if it needs to emit the
+    /// managed prerelease upgrade warning. Explicit metadata sources preserve eager validation.
+    pub async fn find_with_source(
+        request: &PythonRequest,
+        environments: EnvironmentPreference,
+        preference: PythonPreference,
+        client: &BaseClient,
+        python_downloads_json_url: Option<&str>,
+        cache: &Cache,
+        preview: Preview,
+    ) -> Result<Self, Error> {
+        if python_downloads_json_url.is_some() {
+            let download_list =
+                ManagedPythonDownloadList::new(client, python_downloads_json_url, Some(cache))
+                    .await?;
+            return Self::find(
+                request,
+                environments,
+                preference,
+                &download_list,
+                cache,
+                preview,
+            );
+        }
+
+        let installation = Self::find_impl(request, environments, preference, cache, preview)?;
+        installation
+            .warn_if_outdated_prerelease_with_source(
+                request,
+                client,
+                python_downloads_json_url,
+                cache,
+            )
+            .await?;
         Ok(installation)
     }
 
@@ -90,7 +128,7 @@ impl PythonInstallation {
         let retry_policy = client_builder.retry_policy();
         let client = client_builder.clone().retries(0).build()?;
         let download_list =
-            ManagedPythonDownloadList::new(&client, python_downloads_json_url).await?;
+            ManagedPythonDownloadList::new(&client, python_downloads_json_url, Some(cache)).await?;
         let downloads_enabled = preference.allows_managed()
             && python_downloads.is_automatic()
             && client_builder.connectivity.is_online();
@@ -135,18 +173,37 @@ impl PythonInstallation {
         // default retries to avoid the middleware performing uncontrolled retries.
         let retry_policy = client_builder.retry_policy();
         let client = client_builder.clone().retries(0).build()?;
-        let download_list =
-            ManagedPythonDownloadList::new(&client, python_downloads_json_url).await?;
+        let download_list = if python_downloads_json_url.is_some() {
+            Some(
+                ManagedPythonDownloadList::new(&client, python_downloads_json_url, Some(cache))
+                    .await?,
+            )
+        } else {
+            None
+        };
 
-        // Search for the installation
-        let err = match Self::find(
-            request,
-            environments,
-            preference,
-            &download_list,
-            cache,
-            preview,
-        ) {
+        // Search for the installation.
+        let err = match if let Some(download_list) = download_list.as_ref() {
+            Self::find(
+                request,
+                environments,
+                preference,
+                download_list,
+                cache,
+                preview,
+            )
+        } else {
+            Self::find_with_source(
+                request,
+                environments,
+                preference,
+                &client,
+                python_downloads_json_url,
+                cache,
+                preview,
+            )
+            .await
+        } {
             Ok(installation) => return Ok(installation),
             Err(err) => err,
         };
@@ -169,33 +226,57 @@ impl PythonInstallation {
             && python_downloads.is_automatic()
             && client_builder.connectivity.is_online();
 
-        let download = download_request
-            .clone()
-            .fill()
-            .map(|request| download_list.find(&request));
-
-        // Regardless of whether downloads are enabled, we want to determine if the download is
-        // available to power error messages. However, if downloads aren't enabled, we don't want to
-        // report any errors related to them.
-        let download = match download {
-            Ok(Ok(download)) => Some(download),
-            // If the download cannot be found, return the _original_ discovery error
-            Ok(Err(downloads::Error::NoDownloadFound(_))) => {
-                if downloads_enabled {
-                    debug!("No downloads are available for {request}");
-                    if matches!(request, PythonRequest::Default | PythonRequest::Any) {
-                        return Err(err);
+        let download = match download_request.clone().fill() {
+            Ok(download_request) => {
+                let download = if let Some(download_list) = download_list.as_ref() {
+                    match download_list.find(&download_request) {
+                        Ok(download) => Some(Cow::Borrowed(download)),
+                        Err(downloads::Error::NoDownloadFound(_)) => None,
+                        Err(err) => {
+                            if downloads_enabled {
+                                return Err(err.into());
+                            }
+                            None
+                        }
                     }
-                    return Err(err.with_missing_python_hint(
-                        "uv embeds available Python downloads and may require an update to install new versions. Consider retrying on a newer version of uv."
-                            .to_string(),
-                    ));
+                } else {
+                    match ManagedPythonDownloadList::find_streaming(
+                        &client,
+                        python_downloads_json_url,
+                        Some(cache),
+                        &download_request,
+                    )
+                    .await
+                    {
+                        Ok(download) => download.map(Cow::Owned),
+                        Err(err) => {
+                            if downloads_enabled {
+                                return Err(err.into());
+                            }
+                            None
+                        }
+                    }
+                };
+
+                if let Some(download) = download {
+                    Some(download)
+                } else {
+                    if downloads_enabled {
+                        debug!("No downloads are available for {request}");
+                        if matches!(request, PythonRequest::Default | PythonRequest::Any) {
+                            return Err(err);
+                        }
+                        return Err(err.with_missing_python_hint(
+                            "uv fetches available Python downloads at runtime and falls back to embedded metadata on failure. If this is a newly released Python version, retry later."
+                                .to_string(),
+                        ));
+                    }
+                    None
                 }
-                None
             }
-            Err(err) | Ok(Err(err)) => {
+            Err(err) => {
                 if downloads_enabled {
-                    // We failed to determine the platform information
+                    // We failed to determine the platform information.
                     return Err(err.into());
                 }
                 None
@@ -252,7 +333,7 @@ impl PythonInstallation {
         }
 
         let installation = Self::fetch(
-            download,
+            download.as_ref(),
             &client,
             &retry_policy,
             cache,
@@ -262,7 +343,18 @@ impl PythonInstallation {
         )
         .await?;
 
-        installation.warn_if_outdated_prerelease(request, &download_list);
+        if let Some(download_list) = download_list.as_ref() {
+            installation.warn_if_outdated_prerelease(request, download_list);
+        } else {
+            installation
+                .warn_if_outdated_prerelease_with_source(
+                    request,
+                    &client,
+                    python_downloads_json_url,
+                    cache,
+                )
+                .await?;
+        }
 
         Ok(installation)
     }
@@ -398,6 +490,94 @@ impl PythonInstallation {
     /// Consume the [`PythonInstallation`] and return the [`Interpreter`].
     pub fn into_interpreter(self) -> Interpreter {
         self.interpreter
+    }
+
+    fn find_impl(
+        request: &PythonRequest,
+        environments: EnvironmentPreference,
+        preference: PythonPreference,
+        cache: &Cache,
+        preview: Preview,
+    ) -> Result<Self, Error> {
+        Ok(find_python_installation(
+            request,
+            environments,
+            preference,
+            cache,
+            preview,
+        )??)
+    }
+
+    async fn warn_if_outdated_prerelease_with_source(
+        &self,
+        request: &PythonRequest,
+        client: &BaseClient,
+        python_downloads_json_url: Option<&str>,
+        cache: &Cache,
+    ) -> Result<(), Error> {
+        if request.allows_prereleases() {
+            return Ok(());
+        }
+
+        let interpreter = self.interpreter();
+        let version = interpreter.python_version();
+
+        if version.pre().is_none() {
+            return Ok(());
+        }
+
+        if !interpreter.is_managed() {
+            return Ok(());
+        }
+
+        if !interpreter
+            .implementation_name()
+            .eq_ignore_ascii_case("cpython")
+        {
+            return Ok(());
+        }
+
+        let release = version.only_release();
+
+        let Ok(download_request) = PythonDownloadRequest::try_from(&interpreter.key()) else {
+            return Ok(());
+        };
+
+        let download_request = download_request.with_prereleases(false);
+        let has_stable_download = ManagedPythonDownloadList::find_streaming(
+            client,
+            python_downloads_json_url,
+            Some(cache),
+            &download_request,
+        )
+        .await?
+        .is_some_and(|download| {
+            let download_version = download.key().version().into_version();
+            download_version.pre().is_none() && download_version.only_release() >= release
+        });
+
+        if !has_stable_download {
+            return Ok(());
+        }
+
+        if let Some(upgrade_request) = download_request
+            .unset_defaults()
+            .without_patch()
+            .simplified_display()
+        {
+            warn_user!(
+                "You're using a pre-release version of Python ({}) but a stable version is available. Use `uv python upgrade {}` to upgrade.",
+                version,
+                upgrade_request
+            );
+        } else {
+            warn_user!(
+                "You're using a pre-release version of Python ({}) but a stable version is available. Run `uv python upgrade` to update your managed interpreters.",
+                version,
+            );
+        }
+
+        Ok(())
     }
 
     /// Emit a warning when the interpreter is a managed prerelease and a matching stable

@@ -15,6 +15,8 @@ use tracing::debug;
 use uv_test::{LATEST_PYTHON_3_12, uv_snapshot};
 
 use uv_fs::Simplified;
+use uv_python::PythonRequest;
+use uv_python::downloads::{ManagedPythonDownloadList, PythonDownloadRequest};
 use uv_python::managed::platform_key_from_env;
 use uv_static::EnvVars;
 use walkdir::WalkDir;
@@ -4686,5 +4688,102 @@ fn python_install_compile_bytecode_pypy() {
     Installed Python 3.11.15 in [TIME]
      + pypy-3.11.15-[PLATFORM] (pypy3.11)
     Bytecode compiled [COUNT] files in [TIME]
+    ");
+}
+
+#[test]
+fn python_install_with_ndjson_manifest() {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_filtered_latest_python_versions()
+        .with_managed_python_dirs()
+        .with_empty_python_install_mirror()
+        .with_python_download_cache();
+
+    let download_list = ManagedPythonDownloadList::new_only_embedded().unwrap();
+    let download_request = PythonDownloadRequest::from_request(&PythonRequest::parse("3.14"))
+        .unwrap()
+        .fill()
+        .unwrap();
+    let download = download_list.find(&download_request).unwrap();
+
+    let version = if let Some(build) = download.build() {
+        format!("{}+{build}", download.key().version())
+    } else {
+        download.key().version().to_string()
+    };
+    let sha256 = download.sha256().unwrap();
+    let manifest = context.temp_dir.child("python-downloads.ndjson");
+    manifest
+        .write_str(&format!(
+            "{{\"version\":\"{version}\",\"artifacts\":[{{\"url\":\"{}\",\"platform\":\"{}\",\"sha256\":\"{}\",\"variant\":\"install_only\"}}]}}\n",
+            download.url(),
+            download.key().platform().as_cargo_dist_triple(),
+            sha256,
+        ))
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context
+        .python_install()
+        .arg("3.14")
+        .arg("--python-downloads-json-url")
+        .arg(manifest.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.14.[LATEST] in [TIME]
+     + cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
+    ");
+}
+
+#[cfg(unix)]
+#[test]
+fn python_install_with_debug_ndjson_manifest() {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_filtered_latest_python_versions()
+        .with_managed_python_dirs()
+        .with_empty_python_install_mirror()
+        .with_python_download_cache();
+
+    let download_list = ManagedPythonDownloadList::new_only_embedded().unwrap();
+    let download_request = PythonDownloadRequest::from_request(&PythonRequest::parse("3.12d"))
+        .unwrap()
+        .fill()
+        .unwrap();
+    let download = download_list.find(&download_request).unwrap();
+
+    let version = if let Some(build) = download.build() {
+        format!("{}+{build}", download.key().version())
+    } else {
+        download.key().version().to_string()
+    };
+    let sha256 = download.sha256().unwrap();
+    let manifest = context.temp_dir.child("python-downloads.ndjson");
+    manifest
+        .write_str(&format!(
+            "{{\"version\":\"{version}\",\"artifacts\":[{{\"url\":\"{}\",\"platform\":\"{}\",\"sha256\":\"{}\",\"variant\":\"debug+full\"}}]}}\n",
+            download.url(),
+            download.key().platform().as_cargo_dist_triple(),
+            sha256,
+        ))
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context
+        .python_install()
+        .arg("3.12d")
+        .arg("--python-downloads-json-url")
+        .arg(manifest.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.[LATEST] in [TIME]
+     + cpython-3.12.[LATEST]+debug-[PLATFORM] (python3.12d)
     ");
 }

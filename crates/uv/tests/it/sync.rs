@@ -14064,7 +14064,7 @@ fn sync_python_missing_download_hint() -> Result<()> {
     ----- stderr -----
     error: No interpreter found for Python 3.100 in [PYTHON SOURCES]
 
-    hint: uv embeds available Python downloads and may require an update to install new versions. Consider retrying on a newer version of uv.
+    hint: uv fetches available Python downloads at runtime and falls back to embedded metadata on failure. If this is a newly released Python version, retry later.
     ");
 
     Ok(())
