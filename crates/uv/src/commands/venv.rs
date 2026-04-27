@@ -314,7 +314,8 @@ pub(crate) async fn venv(
     }
 
     // Determine the appropriate activation command.
-    let activation = match Shell::from_env() {
+    let shell = Shell::from_env();
+    let activation = match shell {
         None => None,
         Some(Shell::Bash | Shell::Zsh | Shell::Ksh) => Some(format!(
             "source {}",
@@ -328,6 +329,8 @@ pub(crate) async fn venv(
             "overlay use {}",
             shlex_posix(venv.scripts().join("activate.nu"))
         )),
+        // csh can't determine its own script path, so `activate.csh` is not generated for relocatable venvs.
+        Some(Shell::Csh) if relocatable => None,
         Some(Shell::Csh) => Some(format!(
             "source {}",
             shlex_posix(venv.scripts().join("activate.csh"))
@@ -340,6 +343,12 @@ pub(crate) async fn venv(
     };
     if let Some(act) = activation {
         writeln!(printer.stderr(), "Activate with: {}", act.green())?;
+    } else if relocatable && matches!(shell, Some(Shell::Csh)) {
+        warn_user!(
+            "csh activation is not supported for relocatable virtual environments; \
+             activate from a POSIX shell with `source {}` instead",
+            shlex_posix(venv.scripts().join("activate"))
+        );
     }
 
     Ok(ExitStatus::Success)
