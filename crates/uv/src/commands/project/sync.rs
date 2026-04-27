@@ -80,6 +80,7 @@ pub(crate) async fn sync(
     script: Option<Pep723Script>,
     installer_metadata: bool,
     concurrency: Concurrency,
+    github_fast_path_url: Option<String>,
     no_config: bool,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
@@ -272,7 +273,7 @@ pub(crate) async fn sync(
                 script_extra_build_requires,
                 &settings,
                 &client_builder,
-                &PlatformState::default(),
+                &PlatformState::default().with_github_fast_path_url(github_fast_path_url.clone()),
                 Box::new(DefaultResolveLogger),
                 Box::new(DefaultInstallLogger),
                 installer_metadata,
@@ -326,7 +327,7 @@ pub(crate) async fn sync(
     }
 
     // Initialize any shared state.
-    let state = UniversalState::default();
+    let state = UniversalState::default().with_github_fast_path_url(github_fast_path_url);
 
     // Determine the lock mode.
     let mode = if let Some(frozen_source) = frozen {

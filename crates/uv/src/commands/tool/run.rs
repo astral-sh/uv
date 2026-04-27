@@ -119,6 +119,7 @@ pub(crate) async fn run(
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
+    github_fast_path_url: Option<String>,
     cache: Cache,
     workspace_cache: WorkspaceCache,
     printer: Printer,
@@ -305,6 +306,7 @@ pub(crate) async fn run(
         python_downloads,
         installer_metadata,
         &concurrency,
+        github_fast_path_url,
         &cache,
         &workspace_cache,
         printer,
@@ -738,6 +740,7 @@ async fn get_or_create_environment(
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: &Concurrency,
+    github_fast_path_url: Option<String>,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
@@ -797,7 +800,7 @@ async fn get_or_create_environment(
     .into_interpreter();
 
     // Initialize any shared state.
-    let state = PlatformState::default();
+    let state = PlatformState::default().with_github_fast_path_url(github_fast_path_url);
 
     let from = match request {
         ToolRequest::Python {

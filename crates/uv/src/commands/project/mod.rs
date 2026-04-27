@@ -464,6 +464,12 @@ impl UniversalState {
     pub(crate) fn fork(&self) -> PlatformState {
         PlatformState(self.0.fork())
     }
+
+    /// Set the GitHub API base URL used by the underlying [`uv_git::GitResolver`].
+    #[must_use]
+    pub(crate) fn with_github_fast_path_url(self, url: Option<String>) -> Self {
+        Self(self.0.with_github_fast_path_url(url))
+    }
 }
 
 /// A [`SharedState`] instance to use for platform-specific resolution.
@@ -487,6 +493,12 @@ impl PlatformState {
     /// Create a [`SharedState`] from the [`PlatformState`].
     pub(crate) fn into_inner(self) -> SharedState {
         self.0
+    }
+
+    /// Set the GitHub API base URL used by the underlying [`uv_git::GitResolver`].
+    #[must_use]
+    pub(crate) fn with_github_fast_path_url(self, url: Option<String>) -> Self {
+        Self(self.0.with_github_fast_path_url(url))
     }
 }
 

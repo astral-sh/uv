@@ -109,6 +109,7 @@ pub(crate) async fn run(
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
+    github_fast_path_url: Option<String>,
     cache: Cache,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
@@ -164,7 +165,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     }
 
     // Initialize any shared state.
-    let lock_state = UniversalState::default();
+    let lock_state = UniversalState::default().with_github_fast_path_url(github_fast_path_url);
     let sync_state = lock_state.fork();
 
     // Read from the `.env` file, if necessary.

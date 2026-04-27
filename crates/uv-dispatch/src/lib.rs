@@ -652,6 +652,13 @@ impl SharedState {
         }
     }
 
+    /// Set the GitHub API base URL used by the underlying [`GitResolver`].
+    #[must_use]
+    pub fn with_github_fast_path_url(mut self, url: Option<String>) -> Self {
+        self.git = self.git.with_github_fast_path_url(url);
+        self
+    }
+
     /// Return the [`GitResolver`] used by the [`SharedState`].
     pub fn git(&self) -> &GitResolver {
         &self.git

@@ -38,17 +38,30 @@ pub enum GitResolverError {
 
 /// A resolver for Git repositories.
 #[derive(Default, Clone)]
-pub struct GitResolver(Arc<DashMap<RepositoryReference, GitOid>>);
+pub struct GitResolver {
+    resolutions: Arc<DashMap<RepositoryReference, GitOid>>,
+    /// Override for the GitHub API base URL used by [`Self::github_fast_path`], typically sourced
+    /// from the `UV_GITHUB_FAST_PATH_URL` environment variable. Defaults to
+    /// `https://api.github.com/repos` when unset.
+    github_fast_path_url: Option<Arc<str>>,
+}
 
 impl GitResolver {
+    /// Set the GitHub API base URL used by [`Self::github_fast_path`].
+    #[must_use]
+    pub fn with_github_fast_path_url(mut self, url: Option<String>) -> Self {
+        self.github_fast_path_url = url.map(Arc::from);
+        self
+    }
+
     /// Inserts a new [`GitOid`] for the given [`RepositoryReference`].
     pub fn insert(&self, reference: RepositoryReference, sha: GitOid) {
-        self.0.insert(reference, sha);
+        self.resolutions.insert(reference, sha);
     }
 
     /// Returns the [`GitOid`] for the given [`RepositoryReference`], if it exists.
     fn get(&self, reference: &RepositoryReference) -> Option<Ref<'_, RepositoryReference, GitOid>> {
-        self.0.get(reference)
+        self.resolutions.get(reference)
     }
 
     /// Return the [`GitOid`] for the given [`GitUrl`], if it is already known.
@@ -100,8 +113,10 @@ impl GitResolver {
         // Determine the Git reference.
         let rev = url.reference().as_rev();
 
-        let github_api_base_url = std::env::var(EnvVars::UV_GITHUB_FAST_PATH_URL)
-            .unwrap_or("https://api.github.com/repos".to_owned());
+        let github_api_base_url = self
+            .github_fast_path_url
+            .as_deref()
+            .unwrap_or("https://api.github.com/repos");
         let github_api_url = format!("{github_api_base_url}/{owner}/{repo}/commits/{rev}");
 
         debug!("Querying GitHub for commit at: {github_api_url}");

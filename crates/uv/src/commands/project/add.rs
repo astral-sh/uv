@@ -98,6 +98,7 @@ pub(crate) async fn add(
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
+    github_fast_path_url: Option<String>,
     no_config: bool,
     cache: &Cache,
     printer: Printer,
@@ -352,7 +353,7 @@ pub(crate) async fn add(
     .await?;
 
     // Initialize any shared state.
-    let state = PlatformState::default();
+    let state = PlatformState::default().with_github_fast_path_url(github_fast_path_url);
 
     // Resolve any unnamed requirements.
     let requirements = {

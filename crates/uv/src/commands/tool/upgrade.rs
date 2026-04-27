@@ -51,6 +51,7 @@ pub(crate) async fn upgrade(
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
+    github_fast_path_url: Option<String>,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
@@ -137,6 +138,7 @@ pub(crate) async fn upgrade(
             &filesystem,
             installer_metadata,
             &concurrency,
+            github_fast_path_url.clone(),
             preview,
         ))
         .await;
@@ -273,6 +275,7 @@ async fn upgrade_tool(
     filesystem: &ResolverInstallerOptions,
     installer_metadata: bool,
     concurrency: &Concurrency,
+    github_fast_path_url: Option<String>,
     preview: Preview,
 ) -> Result<UpgradeReport> {
     // Ensure the tool is installed.
@@ -339,7 +342,7 @@ async fn upgrade_tool(
         existing_tool_receipt.excludes().to_vec(),
     );
     // Initialize any shared state.
-    let state = PlatformState::default();
+    let state = PlatformState::default().with_github_fast_path_url(github_fast_path_url);
 
     // Check if we need to create a new environment — if so, resolve it first, then
     // install the requested tool

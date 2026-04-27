@@ -125,6 +125,7 @@ pub(crate) async fn build_frontend(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
+    github_fast_path_url: Option<String>,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
@@ -154,6 +155,7 @@ pub(crate) async fn build_frontend(
         python_preference,
         python_downloads,
         &concurrency,
+        github_fast_path_url,
         cache,
         workspace_cache,
         printer,
@@ -203,6 +205,7 @@ async fn build_impl(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: &Concurrency,
+    github_fast_path_url: Option<String>,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
@@ -372,6 +375,7 @@ async fn build_impl(
             exclude_newer.clone(),
             sources.clone(),
             concurrency,
+            github_fast_path_url.clone(),
             build_options,
             sdist,
             wheel,
@@ -483,6 +487,7 @@ async fn build_package(
     exclude_newer: ExcludeNewer,
     sources: NoSources,
     concurrency: &Concurrency,
+    github_fast_path_url: Option<String>,
     build_options: &BuildOptions,
     sdist: bool,
     wheel: bool,
@@ -615,7 +620,7 @@ async fn build_package(
     };
 
     // Initialize any shared state.
-    let state = SharedState::default();
+    let state = SharedState::default().with_github_fast_path_url(github_fast_path_url);
 
     let extra_build_requires =
         LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())

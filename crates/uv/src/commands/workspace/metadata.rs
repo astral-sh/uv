@@ -36,6 +36,7 @@ pub(crate) async fn metadata(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
+    github_fast_path_url: Option<String>,
     no_config: bool,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
@@ -96,7 +97,7 @@ pub(crate) async fn metadata(
     };
 
     // Initialize any shared state.
-    let state = UniversalState::default();
+    let state = UniversalState::default().with_github_fast_path_url(github_fast_path_url);
 
     // Perform the lock operation.
     match Box::pin(

@@ -99,6 +99,7 @@ pub(crate) async fn pip_install(
     prefix: Option<Prefix>,
     python_preference: PythonPreference,
     concurrency: Concurrency,
+    github_fast_path_url: Option<String>,
     cache: Cache,
     workspace_cache: WorkspaceCache,
     dry_run: DryRun,
@@ -463,7 +464,7 @@ pub(crate) async fn pip_install(
     );
 
     // Initialize any shared state.
-    let state = SharedState::default();
+    let state = SharedState::default().with_github_fast_path_url(github_fast_path_url);
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(

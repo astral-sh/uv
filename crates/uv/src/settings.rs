@@ -84,6 +84,7 @@ pub(crate) struct GlobalSettings {
     pub(crate) python_downloads: PythonDownloads,
     pub(crate) no_progress: bool,
     pub(crate) installer_metadata: bool,
+    pub(crate) github_fast_path_url: Option<String>,
 }
 
 impl GlobalSettings {
@@ -150,6 +151,7 @@ impl GlobalSettings {
                 environment.no_installer_metadata,
             )
             .is_enabled(),
+            github_fast_path_url: environment.github_fast_path_url.clone(),
         }
     }
 }

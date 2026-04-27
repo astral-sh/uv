@@ -118,6 +118,7 @@ pub(crate) async fn pip_compile(
     system: bool,
     python_preference: PythonPreference,
     concurrency: Concurrency,
+    github_fast_path_url: Option<String>,
     quiet: bool,
     cache: Cache,
     workspace_cache: WorkspaceCache,
@@ -358,7 +359,7 @@ pub(crate) async fn pip_compile(
     }
 
     // Create the shared state.
-    let state = SharedState::default();
+    let state = SharedState::default().with_github_fast_path_url(github_fast_path_url);
 
     // If we're resolving against a different Python version, use a separate index. Source
     // distributions will be built against the installed version, and so the index may contain

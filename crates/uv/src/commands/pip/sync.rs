@@ -89,6 +89,7 @@ pub(crate) async fn pip_sync(
     sources: NoSources,
     python_preference: PythonPreference,
     concurrency: Concurrency,
+    github_fast_path_url: Option<String>,
     cache: Cache,
     workspace_cache: WorkspaceCache,
     dry_run: DryRun,
@@ -366,7 +367,7 @@ pub(crate) async fn pip_sync(
     );
 
     // Initialize any shared state.
-    let state = SharedState::default();
+    let state = SharedState::default().with_github_fast_path_url(github_fast_path_url);
 
     // Lower the extra build dependencies, if any.
     let extra_build_requires =

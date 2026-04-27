@@ -58,6 +58,7 @@ pub(crate) async fn tree(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
+    github_fast_path_url: Option<String>,
     no_config: bool,
     cache: &Cache,
     printer: Printer,
@@ -145,7 +146,7 @@ pub(crate) async fn tree(
     };
 
     // Initialize any shared state.
-    let state = UniversalState::default();
+    let state = UniversalState::default().with_github_fast_path_url(github_fast_path_url);
 
     // Update the lockfile, if necessary.
     let lock = match Box::pin(

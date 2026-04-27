@@ -80,6 +80,7 @@ pub(crate) async fn venv(
     on_existing: OnExisting,
     exclude_newer: ExcludeNewer,
     concurrency: Concurrency,
+    github_fast_path_url: Option<String>,
     no_config: bool,
     no_project: bool,
     cache: &Cache,
@@ -240,7 +241,7 @@ pub(crate) async fn venv(
         };
 
         // Initialize any shared state.
-        let state = SharedState::default();
+        let state = SharedState::default().with_github_fast_path_url(github_fast_path_url);
 
         // For seed packages, assume a bunch of default settings are sufficient.
         let build_constraints = Constraints::default();

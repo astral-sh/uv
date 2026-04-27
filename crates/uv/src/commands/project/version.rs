@@ -88,6 +88,7 @@ pub(crate) async fn project_version(
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
+    github_fast_path_url: Option<String>,
     no_config: bool,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
@@ -128,6 +129,7 @@ pub(crate) async fn project_version(
                 python_preference,
                 python_downloads,
                 &concurrency,
+                github_fast_path_url,
                 no_config,
                 cache,
                 workspace_cache,
@@ -350,6 +352,7 @@ pub(crate) async fn project_version(
             python_downloads,
             installer_metadata,
             &concurrency,
+            github_fast_path_url,
             no_config,
             cache,
             printer,
@@ -457,6 +460,7 @@ async fn print_frozen_version(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: &Concurrency,
+    github_fast_path_url: Option<String>,
     no_config: bool,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
@@ -495,7 +499,7 @@ async fn print_frozen_version(
     let target = AddTarget::Project(project, Box::new(PythonTarget::Interpreter(interpreter)));
 
     // Initialize any shared state.
-    let state = UniversalState::default();
+    let state = UniversalState::default().with_github_fast_path_url(github_fast_path_url.clone());
 
     // Lock and sync the environment, if necessary.
     let lock = match Box::pin(
@@ -565,6 +569,7 @@ async fn lock_and_sync(
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: &Concurrency,
+    github_fast_path_url: Option<String>,
     no_config: bool,
     cache: &Cache,
     printer: Printer,
@@ -643,7 +648,7 @@ async fn lock_and_sync(
     };
 
     // Initialize any shared state.
-    let state = UniversalState::default();
+    let state = UniversalState::default().with_github_fast_path_url(github_fast_path_url);
     let workspace_cache = WorkspaceCache::default();
 
     // Lock and sync the environment, if necessary.

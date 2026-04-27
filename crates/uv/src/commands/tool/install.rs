@@ -74,6 +74,7 @@ pub(crate) async fn install(
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
+    github_fast_path_url: Option<String>,
     no_config: bool,
     cache: Cache,
     workspace_cache: &WorkspaceCache,
@@ -126,7 +127,7 @@ pub(crate) async fn install(
     .into_interpreter();
 
     // Initialize any shared state.
-    let state = PlatformState::default();
+    let state = PlatformState::default().with_github_fast_path_url(github_fast_path_url);
 
     // Parse the input requirement.
     let request = ToolRequest::parse(&package, from.as_deref())?;
