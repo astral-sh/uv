@@ -215,7 +215,8 @@ impl EnvVars {
     pub const UV_PYTHON_DOWNLOADS: &'static str = "UV_PYTHON_DOWNLOADS";
 
     /// Overrides the environment-determined libc on linux systems when filling in the current platform
-    /// within Python version requests. Options are: `gnu`, `gnueabi`, `gnueabihf`, `musl`, and `none`.
+    /// within Python version requests. Options are: `gnu`, `gnueabi`, `gnueabihf`, `musl`,
+    /// `musleabi`, `musleabihf`, and `none`.
     #[attr_added_in("0.7.22")]
     pub const UV_LIBC: &'static str = "UV_LIBC";
 
