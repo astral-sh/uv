@@ -23,7 +23,9 @@ use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use predicates::prelude::predicate;
 use regex::Regex;
+use thiserror::Error;
 use tokio::io::AsyncWriteExt;
+use toml_edit::{DocumentMut, Item, Table};
 
 use uv_cache::{Cache, CacheBucket};
 use uv_fs::Simplified;
@@ -2006,6 +2008,147 @@ pub fn diff_snapshot(old: &str, new: &str) -> String {
     TRIM_TRAILING_WHITESPACE
         .replace_all(&unified, "")
         .into_owned()
+}
+
+#[derive(Debug, Error)]
+pub enum TomlKeyError {
+    #[error("failed to parse TOML: {0}")]
+    Toml(#[from] toml_edit::TomlError),
+    #[error("invalid selector `{selector}`: {message}")]
+    InvalidSelector { selector: String, message: String },
+    #[error("selector `{selector}` failed: {message}")]
+    QueryFailed { selector: String, message: String },
+}
+
+/// Select a value from a TOML document by key path and re-render it as TOML.
+///
+/// Selectors only support dot-separated bare keys, like `package.metadata`.
+/// Intermediate segments must refer to standard TOML tables. Descending into
+/// inline tables and quoted segments like `foo["bar baz"]` is not supported.
+pub fn toml_key(toml: &str, path: &str) -> Result<String, TomlKeyError> {
+    let segments = parse_toml_key(path)?;
+    let doc = DocumentMut::from_str(toml)?;
+
+    let mut current_path = Vec::new();
+    let mut current = doc
+        .get(&segments[0])
+        .ok_or_else(|| TomlKeyError::QueryFailed {
+            selector: path.to_string(),
+            message: format!("key `{}` does not exist at `<root>`", segments[0]),
+        })?;
+    current_path.push(segments[0].as_str());
+
+    for segment in &segments[1..] {
+        let prefix = current_path.join(".");
+        let table = match current {
+            Item::Table(table) => table,
+            Item::Value(toml_edit::Value::InlineTable(_)) => {
+                return Err(TomlKeyError::QueryFailed {
+                    selector: path.to_string(),
+                    message: format!(
+                        "expected standard table at `{prefix}`, found inline table; descending into inline tables is not supported"
+                    ),
+                });
+            }
+            _ => {
+                return Err(TomlKeyError::QueryFailed {
+                    selector: path.to_string(),
+                    message: format!(
+                        "expected table at `{prefix}`, found {}",
+                        toml_item_kind(current)
+                    ),
+                });
+            }
+        };
+        current = table
+            .get(segment)
+            .ok_or_else(|| TomlKeyError::QueryFailed {
+                selector: path.to_string(),
+                message: format!("key `{segment}` does not exist at `{prefix}`"),
+            })?;
+        current_path.push(segment.as_str());
+    }
+
+    Ok(render_selected_toml_path(&segments, current.clone()))
+}
+
+fn parse_toml_key(path: &str) -> Result<Vec<String>, TomlKeyError> {
+    if path.is_empty() {
+        return Err(TomlKeyError::InvalidSelector {
+            selector: path.to_string(),
+            message: "selector is empty".to_string(),
+        });
+    }
+
+    if path.contains(['[', ']']) {
+        return Err(TomlKeyError::InvalidSelector {
+            selector: path.to_string(),
+            message: "quoted segments are not supported; use dot-separated bare keys".to_string(),
+        });
+    }
+
+    path.split('.')
+        .map(|segment| {
+            if segment.is_empty() {
+                return Err(TomlKeyError::InvalidSelector {
+                    selector: path.to_string(),
+                    message: "selector contains an empty segment".to_string(),
+                });
+            }
+            if segment.chars().any(char::is_whitespace) {
+                return Err(TomlKeyError::InvalidSelector {
+                    selector: path.to_string(),
+                    message: format!(
+                        "segment `{segment}` contains whitespace; selectors only support bare keys"
+                    ),
+                });
+            }
+            Ok(segment.to_string())
+        })
+        .collect()
+}
+
+fn render_selected_toml_path(segments: &[String], item: Item) -> String {
+    let mut doc = DocumentMut::new();
+    let mut table = doc.as_table_mut();
+
+    for segment in &segments[..segments.len() - 1] {
+        table = table
+            .entry(segment)
+            .or_insert(implicit_table())
+            .as_table_mut()
+            .expect("implicit tables should always be tables");
+    }
+
+    let last = segments
+        .last()
+        .expect("selectors are validated to contain at least one segment");
+    table.insert(last, item);
+
+    doc.to_string()
+}
+
+fn implicit_table() -> Item {
+    let mut table = Table::new();
+    table.set_implicit(true);
+    Item::Table(table)
+}
+
+fn toml_item_kind(item: &Item) -> &'static str {
+    match item {
+        Item::None => "none",
+        Item::Value(value) => match value {
+            toml_edit::Value::String(_) => "string",
+            toml_edit::Value::Integer(_) => "integer",
+            toml_edit::Value::Float(_) => "float",
+            toml_edit::Value::Boolean(_) => "boolean",
+            toml_edit::Value::Datetime(_) => "datetime",
+            toml_edit::Value::Array(_) => "array",
+            toml_edit::Value::InlineTable(_) => "inline table",
+        },
+        Item::Table(_) => "table",
+        Item::ArrayOfTables(_) => "array of tables",
+    }
 }
 
 pub fn site_packages_path(venv: &Path, python: &str) -> PathBuf {
