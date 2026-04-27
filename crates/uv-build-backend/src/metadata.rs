@@ -1878,7 +1878,12 @@ mod tests {
         if last_compatible.release()[0] != current_version.release()[0]
             && last_compatible.release()[0] != current_version.release()[1]
         {
-            panic!("Please update the list of compatible versions for the uv build backend");
+            panic!(
+                "Please update the list of compatible versions for the uv build backend: \
+                If there was no breaking change in uv-build, add the last release before the \
+                breaking release to `COMPATIBLE_VERSIONS`, otherwise reset `COMPATIBLE_VERSIONS` \
+                to an empty list"
+            );
         }
     }
 }
