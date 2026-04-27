@@ -26,9 +26,10 @@ $ cd hello-world
 $ uv init
 ```
 
-uv will create the following files:
+uv will create the following files and directories:
 
 ```text
+├── .git/
 ├── .gitignore
 ├── .python-version
 ├── README.md
@@ -54,7 +55,8 @@ A complete listing would look like:
 
 ```text
 .
-├── .venv
+├── .git/
+├── .venv/
 │   ├── bin
 │   ├── lib
 │   └── pyvenv.cfg
