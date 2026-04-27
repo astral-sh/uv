@@ -1152,6 +1152,16 @@ impl InterpreterInfo {
 
         let canonical = canonicalize_executable(&absolute).map_err(handle_io_error)?;
 
+        // If the executable is inside a virtual environment, include the `pyvenv.cfg`
+        // content in the cache key. This ensures the cache is invalidated when the virtual
+        // environment is recreated with different settings (e.g., `--system-site-packages`),
+        // even if the underlying Python executable hasn't changed.
+        let pyvenv_cfg_content = absolute
+            .parent()
+            .and_then(|p| p.parent())
+            .map(|venv_root| venv_root.join("pyvenv.cfg"))
+            .and_then(|pyvenv_cfg| fs::read_to_string(&pyvenv_cfg).ok());
+
         let cache_entry = cache.entry(
             CacheBucket::Interpreter,
             // Shard interpreter metadata by host architecture, operating system, and version, to
@@ -1172,7 +1182,14 @@ impl InterpreterInfo {
             // absolute path refers to different interpreters with matching ctimes, e.g., if you
             // have a `.venv/bin/python` pointing to both Python 3.12 and Python 3.13 that were
             // modified at the same time.
-            format!("{}.msgpack", cache_digest(&(&absolute, &canonical))),
+            //
+            // We also include the `pyvenv.cfg` content so that recreating a virtual environment
+            // with different configuration (e.g., toggling `--system-site-packages`) produces a
+            // different cache key, avoiding stale results.
+            format!(
+                "{}.msgpack",
+                cache_digest(&(&absolute, &canonical, &pyvenv_cfg_content))
+            ),
         );
 
         // We check the timestamp of the canonicalized executable to check if an underlying
@@ -1439,6 +1456,138 @@ mod tests {
         assert_eq!(
             interpreter.markers.python_version().version,
             Version::from_str("3.13").unwrap()
+        );
+    }
+
+    /// Regression test for <https://github.com/astral-sh/uv/issues/18510>.
+    ///
+    /// Ensures that modifying `pyvenv.cfg` (e.g., toggling `--system-site-packages`)
+    /// invalidates the interpreter cache, even if the underlying Python executable
+    /// has not changed.
+    #[tokio::test]
+    async fn test_cache_invalidation_pyvenv_cfg() {
+        // Create a venv-like directory structure: `venv_root/bin/python` + `venv_root/pyvenv.cfg`.
+        let venv_root = tempdir().unwrap();
+        let bin_dir = venv_root.path().join("bin");
+        fs::create_dir_all(&bin_dir).unwrap();
+        let mocked_interpreter = bin_dir.join("python");
+
+        let make_json = |sys_executable: &str, site_packages: &str| {
+            formatdoc! {r##"
+            {{
+                "result": "success",
+                "platform": {{
+                    "os": {{
+                        "name": "manylinux",
+                        "major": 2,
+                        "minor": 38
+                    }},
+                    "arch": "x86_64"
+                }},
+                "manylinux_compatible": false,
+                "standalone": false,
+                "markers": {{
+                    "implementation_name": "cpython",
+                    "implementation_version": "3.12.0",
+                    "os_name": "posix",
+                    "platform_machine": "x86_64",
+                    "platform_python_implementation": "CPython",
+                    "platform_release": "6.5.0-13-generic",
+                    "platform_system": "Linux",
+                    "platform_version": "#13-Ubuntu SMP PREEMPT_DYNAMIC Fri Nov  3 12:16:05 UTC 2023",
+                    "python_full_version": "3.12.0",
+                    "python_version": "3.12",
+                    "sys_platform": "linux"
+                }},
+                "sys_base_exec_prefix": "/usr",
+                "sys_base_prefix": "/usr",
+                "sys_prefix": "{sys_executable}",
+                "sys_executable": "{sys_executable}",
+                "sys_path": [
+                    "/usr/lib/python3.12"
+                ],
+                "site_packages": [{site_packages}],
+                "stdlib": "/usr/lib/python3.12",
+                "scheme": {{
+                    "data": "/usr",
+                    "include": "/usr/include",
+                    "platlib": "/usr/lib/python3.12/site-packages",
+                    "purelib": "/usr/lib/python3.12/site-packages",
+                    "scripts": "/usr/bin"
+                }},
+                "virtualenv": {{
+                    "data": "",
+                    "include": "include",
+                    "platlib": "lib/python3.12/site-packages",
+                    "purelib": "lib/python3.12/site-packages",
+                    "scripts": "bin"
+                }},
+                "pointer_size": "64",
+                "gil_disabled": false,
+                "debug_enabled": false
+            }}
+            "##}
+        };
+
+        let cache = Cache::temp().unwrap().init().await.unwrap();
+
+        let abs_path = std::path::absolute(&mocked_interpreter).unwrap();
+        let abs_str = abs_path.to_str().unwrap();
+
+        // First: create with system site packages.
+        let json_with_system = make_json(
+            abs_str,
+            r#""/usr/lib/python3.12/site-packages", "/usr/lib/python3/dist-packages""#,
+        );
+        fs::write(
+            &mocked_interpreter,
+            formatdoc! {r"
+            #!/bin/sh
+            echo '{json_with_system}'
+            "},
+        )
+        .unwrap();
+        fs::set_permissions(
+            &mocked_interpreter,
+            std::os::unix::fs::PermissionsExt::from_mode(0o770),
+        )
+        .unwrap();
+
+        // Write pyvenv.cfg with system-site-packages enabled.
+        fs::write(
+            venv_root.path().join("pyvenv.cfg"),
+            "home = /usr\ninclude-system-site-packages = true\n",
+        )
+        .unwrap();
+
+        let interpreter = Interpreter::query(&mocked_interpreter, &cache).unwrap();
+        assert_eq!(interpreter.site_packages.len(), 2);
+
+        // Now simulate recreating the venv without system-site-packages.
+        // The Python executable stays the same, but pyvenv.cfg changes.
+        let json_without_system = make_json(abs_str, r#""/usr/lib/python3.12/site-packages""#);
+        fs::write(
+            &mocked_interpreter,
+            formatdoc! {r"
+            #!/bin/sh
+            echo '{json_without_system}'
+            "},
+        )
+        .unwrap();
+
+        // Rewrite pyvenv.cfg — this updates its ctime, invalidating the cache.
+        fs::write(
+            venv_root.path().join("pyvenv.cfg"),
+            "home = /usr\ninclude-system-site-packages = false\n",
+        )
+        .unwrap();
+
+        let interpreter = Interpreter::query(&mocked_interpreter, &cache).unwrap();
+        // Without the fix, this would still be 2 (stale cache).
+        assert_eq!(
+            interpreter.site_packages.len(),
+            1,
+            "pyvenv.cfg change should invalidate interpreter cache"
         );
     }
 }
