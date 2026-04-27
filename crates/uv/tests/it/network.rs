@@ -1101,3 +1101,59 @@ async fn retry_read_timeout_stream() {
       ╰─▶ Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: [TIME]).
     ");
 }
+
+/// Check the python list error message when the server returns HTTP status 500, a retryable error.
+#[tokio::test]
+async fn python_list_remote_python_downloads_json_url_http_500() {
+    let context = uv_test::test_context!("3.12");
+
+    let (_server_drop_guard, mock_server_uri) = http_error_server().await;
+
+    let python_downloads_json_url = format!("{mock_server_uri}/python_downloads.json");
+
+    uv_snapshot!(context.filters(), context
+        .python_list()
+        .arg("--python-downloads-json-url")
+        .arg(&python_downloads_json_url)
+        .env_remove(EnvVars::UV_HTTP_RETRIES)
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Error while fetching remote python downloads json from 'http://[LOCALHOST]/python_downloads.json'
+      Caused by: Request failed after 3 retries in [TIME]
+      Caused by: Failed to download http://[LOCALHOST]/python_downloads.json
+      Caused by: HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/python_downloads.json)
+    ");
+}
+
+/// Check the python list error message when the server returns a retryable IO error.
+#[tokio::test]
+async fn python_list_remote_python_downloads_json_url_io_error() {
+    let context = uv_test::test_context!("3.12");
+
+    let (_server_drop_guard, mock_server_uri) = io_error_server().await;
+
+    let python_downloads_json_url = format!("{mock_server_uri}/python_downloads.json");
+
+    uv_snapshot!(context.filters(), context
+        .python_list()
+        .arg("--python-downloads-json-url")
+        .arg(&python_downloads_json_url)
+        .env_remove(EnvVars::UV_HTTP_RETRIES)
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Error while fetching remote python downloads json from 'http://[LOCALHOST]/python_downloads.json'
+      Caused by: Failed to download http://[LOCALHOST]/python_downloads.json
+      Caused by: Request failed after 3 retries
+      Caused by: error sending request for url (http://[LOCALHOST]/python_downloads.json)
+      Caused by: client error (SendRequest)
+      Caused by: connection closed before message completed
+    ");
+}

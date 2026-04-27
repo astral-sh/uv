@@ -21,8 +21,9 @@ use tokio_util::either::Either;
 use tracing::{debug, instrument};
 use url::Url;
 
+use uv_cache::{Cache, CacheBucket};
 use uv_client::{
-    BaseClient, RetriableError, WrappedReqwestError, fetch_with_url_fallback,
+    BaseClient, CachedClient, RetriableError, WrappedReqwestError, fetch_with_url_fallback,
     retryable_on_request_failure,
 };
 use uv_distribution_filename::{ExtensionError, SourceDistExtension};
@@ -1035,7 +1036,26 @@ impl ManagedPythonDownloadList {
     /// Returns an error if the provided list could not be opened, if the JSON is invalid, or if it
     /// does not parse into the expected data structure.
     pub async fn new(
-        client: &BaseClient,
+        client: &CachedClient,
+        cache: Option<&Cache>,
+        python_downloads_json_url: Option<&str>,
+    ) -> Result<Self, Error> {
+        Self::new_internal(client, cache, false, python_downloads_json_url).await
+    }
+
+    /// Create a new download list, bypassing cache read but still updating cache.
+    pub async fn new_with_refresh(
+        client: &CachedClient,
+        cache: Option<&Cache>,
+        python_downloads_json_url: Option<&str>,
+    ) -> Result<Self, Error> {
+        Self::new_internal(client, cache, true, python_downloads_json_url).await
+    }
+
+    async fn new_internal(
+        client: &CachedClient,
+        cache: Option<&Cache>,
+        refresh: bool,
         python_downloads_json_url: Option<&str>,
     ) -> Result<Self, Error> {
         // Although read_url() handles file:// URLs and converts them to local file reads, here we
@@ -1067,7 +1087,7 @@ impl ManagedPythonDownloadList {
         let buf: Cow<'_, [u8]> = match json_source {
             Source::BuiltIn => BUILTIN_PYTHON_DOWNLOADS_JSON.into(),
             Source::Path(ref path) => fs_err::read(path.as_ref())?.into(),
-            Source::Http(ref url) => fetch_bytes_from_url(client, url)
+            Source::Http(ref url) => fetch_bytes_from_url(client, cache, refresh, url)
                 .await
                 .map_err(|e| Error::FetchingPythonDownloadsJSONError(url.to_string(), Box::new(e)))?
                 .into(),
@@ -1114,8 +1134,13 @@ impl ManagedPythonDownloadList {
     }
 }
 
-async fn fetch_bytes_from_url(client: &BaseClient, url: &DisplaySafeUrl) -> Result<Vec<u8>, Error> {
-    let (mut reader, size) = read_url(url, client).await?;
+async fn fetch_bytes_from_url(
+    client: &CachedClient,
+    cache: Option<&Cache>,
+    refresh: bool,
+    url: &DisplaySafeUrl,
+) -> Result<Vec<u8>, Error> {
+    let (mut reader, size) = read_cached_url(cache, url, client, refresh).await?;
     let capacity = size.and_then(|s| s.try_into().ok()).unwrap_or(1_048_576);
     let mut buf = Vec::with_capacity(capacity);
     reader.read_to_end(&mut buf).await?;
@@ -1836,6 +1861,78 @@ async fn read_url(
     }
 }
 
+/// Cached fetch for Python downloads JSON metadata.
+async fn read_cached_url(
+    cache: Option<&Cache>,
+    url: &DisplaySafeUrl,
+    client: &CachedClient,
+    refresh: bool,
+) -> Result<(impl AsyncRead + Unpin, Option<u64>), Error> {
+    if url.scheme() == "file" {
+        let path = url
+            .to_file_path()
+            .map_err(|()| Error::InvalidFileUrl(url.to_string()))?;
+        let size = fs_err::tokio::metadata(&path).await?.len();
+        let reader = fs_err::tokio::File::open(&path).await?;
+        Ok((Either::Left(reader), Some(size)))
+    } else if let Some(cache) = cache {
+        let cache_key = format!(
+            "python-downloads-{}.json",
+            url.host_str().unwrap_or("default")
+        );
+        let cache_entry = cache.entry(CacheBucket::Python, cache_key, "downloads.json");
+
+        if !refresh {
+            if let Ok(freshness) = cache.freshness(&cache_entry, None, None) {
+                if matches!(freshness, uv_cache::Freshness::Fresh) {
+                    let cached = fs_err::tokio::read(cache_entry.path()).await?;
+                    let size = cached.len() as u64;
+                    let cursor = std::io::Cursor::new(cached);
+                    return Ok((Either::Right(cursor), Some(size)));
+                }
+            }
+        }
+
+        let bytes = fetch_url_bytes(client, url).await?;
+
+        if let Some(parent) = cache_entry.path().parent() {
+            let _ = fs_err::tokio::create_dir_all(parent).await;
+            let _ = fs_err::tokio::write(cache_entry.path(), &bytes).await;
+        }
+        let size = bytes.len() as u64;
+        let cursor = std::io::Cursor::new(bytes);
+        Ok((Either::Right(cursor), Some(size)))
+    } else {
+        let bytes = fetch_url_bytes(client, url).await?;
+        let size = bytes.len() as u64;
+        let cursor = std::io::Cursor::new(bytes);
+        Ok((Either::Right(cursor), Some(size)))
+    }
+}
+
+async fn fetch_url_bytes(client: &CachedClient, url: &DisplaySafeUrl) -> Result<Vec<u8>, Error> {
+    let client = client.uncached();
+    let start = Instant::now();
+    let response = client
+        .for_host(url)
+        .get(Url::from(url.clone()))
+        .send()
+        .await
+        .map_err(|e| Error::from_reqwest_middleware(url.clone(), e))?;
+    let retry_count = response
+        .extensions()
+        .get::<reqwest_retry::RetryCount>()
+        .map(|r| r.value());
+    let response = response
+        .error_for_status()
+        .map_err(|e| Error::from_reqwest(url.clone(), e, retry_count, start))?;
+    Ok(response
+        .bytes()
+        .await
+        .map_err(|e| Error::from_reqwest(url.clone(), e, retry_count, start))?
+        .to_vec())
+}
+
 #[cfg(test)]
 mod tests {
     use crate::PythonVariant;
@@ -2065,10 +2162,14 @@ mod tests {
             .with_implementation(ImplementationName::CPython)
             .with_build("20240814".to_string());
 
-        let client = uv_client::BaseClientBuilder::default()
-            .build()
-            .expect("failed to build base client");
-        let download_list = ManagedPythonDownloadList::new(&client, None).await.unwrap();
+        let client = uv_client::CachedClient::new(
+            uv_client::BaseClientBuilder::default()
+                .build()
+                .expect("failed to build base client"),
+        );
+        let download_list = ManagedPythonDownloadList::new(&client, None, None)
+            .await
+            .unwrap();
 
         let downloads: Vec<_> = download_list
             .iter_all()
@@ -2093,10 +2194,14 @@ mod tests {
             .with_implementation(ImplementationName::CPython)
             .with_build("99999999".to_string());
 
-        let client = uv_client::BaseClientBuilder::default()
-            .build()
-            .expect("failed to build base client");
-        let download_list = ManagedPythonDownloadList::new(&client, None).await.unwrap();
+        let client = uv_client::CachedClient::new(
+            uv_client::BaseClientBuilder::default()
+                .build()
+                .expect("failed to build base client"),
+        );
+        let download_list = ManagedPythonDownloadList::new(&client, None, None)
+            .await
+            .unwrap();
 
         // Should find no matching downloads
         let downloads: Vec<_> = download_list
