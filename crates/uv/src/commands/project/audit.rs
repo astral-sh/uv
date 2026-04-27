@@ -342,7 +342,7 @@ impl AuditResults {
             .bold()
         )?;
 
-        let has_findings = !vulns.is_empty() || !statuses.is_empty();
+        let has_vulnerabilities = !vulns.is_empty();
 
         if !vulns.is_empty() {
             writeln!(self.printer.stdout_important(), "\nVulnerabilities:\n")?;
@@ -420,7 +420,10 @@ impl AuditResults {
             }
         }
 
-        if has_findings {
+        // NOTE: intentional: we don't currently fail if there are any adverse statuses,
+        // only when there are vulnerabilities. We will likely change this once we allow users
+        // to ignore adverse statuses and configure policies.
+        if has_vulnerabilities {
             Ok(ExitStatus::Failure)
         } else {
             Ok(ExitStatus::Success)

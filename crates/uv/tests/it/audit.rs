@@ -1747,8 +1747,8 @@ async fn audit_project_status_deprecated_with_reason() {
         .arg("--preview")
         .arg("--service-url")
         .arg(server.uri()), @r"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     Adverse statuses:
@@ -1801,8 +1801,8 @@ async fn audit_project_status_archived_no_reason() {
         .arg("--preview")
         .arg("--service-url")
         .arg(server.uri()), @r"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     Adverse statuses:
@@ -1854,8 +1854,8 @@ async fn audit_project_status_quarantined() {
         .arg("--preview")
         .arg("--service-url")
         .arg(server.uri()), @r"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     Adverse statuses:
