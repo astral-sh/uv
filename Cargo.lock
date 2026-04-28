@@ -6515,6 +6515,8 @@ version = "0.0.41"
 dependencies = [
  "fastrand",
  "rand 0.9.2",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

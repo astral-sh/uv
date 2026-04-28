@@ -15,6 +15,13 @@ doctest = false
 [dependencies]
 rand = { workspace = true }
 fastrand = { workspace = true }
+serde = { workspace = true, optional = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[features]
+default = []
 
 [lints]
 workspace = true
