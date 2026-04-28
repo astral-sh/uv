@@ -5993,6 +5993,7 @@ dependencies = [
  "uv-pep440",
  "uv-platform",
  "uv-redacted",
+ "uv-static",
  "wiremock",
 ]
 

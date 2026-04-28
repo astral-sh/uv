@@ -31,7 +31,9 @@ use uv_fs::{Simplified, rename_with_retry};
 use uv_platform::{self as platform, Arch, Libc, Os, Platform};
 use uv_pypi_types::{HashAlgorithm, HashDigest};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
-use uv_static::EnvVars;
+use uv_static::{
+    EnvVars, astral_mirror_base_url, astral_mirror_url_from_env, custom_astral_mirror_url,
+};
 
 use crate::PythonVariant;
 use crate::implementation::{
@@ -185,12 +187,16 @@ impl RetriableError for Error {
 const CPYTHON_DOWNLOADS_URL_PREFIX: &str =
     "https://github.com/astral-sh/python-build-standalone/releases/download/";
 
-/// The default Astral mirror for `python-build-standalone` releases.
-///
-/// This mirror is tried first for CPython downloads when no user-configured mirror is set.
-/// If the mirror fails, uv falls back to the canonical GitHub URL.
-const CPYTHON_DOWNLOAD_DEFAULT_MIRROR: &str =
-    "https://releases.astral.sh/github/python-build-standalone/releases/download/";
+/// The suffix appended to the Astral mirror base for `python-build-standalone` releases.
+const CPYTHON_MIRROR_SUFFIX: &str = "/github/python-build-standalone/releases/download/";
+
+/// Return the Astral mirror base URL for CPython downloads.
+fn effective_cpython_mirror(astral_mirror_url: Option<&str>) -> String {
+    format!(
+        "{}{CPYTHON_MIRROR_SUFFIX}",
+        astral_mirror_base_url(astral_mirror_url)
+    )
+}
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct ManagedPythonDownload {
@@ -1523,6 +1529,21 @@ impl ManagedPythonDownload {
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
     ) -> Result<Vec<DisplaySafeUrl>, Error> {
+        let custom_astral_mirror = astral_mirror_url_from_env();
+        self.download_urls_with_astral_mirror(
+            python_install_mirror,
+            pypy_install_mirror,
+            custom_astral_mirror.as_deref(),
+        )
+    }
+
+    fn download_urls_with_astral_mirror(
+        &self,
+        python_install_mirror: Option<&str>,
+        pypy_install_mirror: Option<&str>,
+        astral_mirror_url: Option<&str>,
+    ) -> Result<Vec<DisplaySafeUrl>, Error> {
+        let astral_mirror_url = custom_astral_mirror_url(astral_mirror_url);
         match self.key.implementation {
             LenientImplementationName::Known(ImplementationName::CPython) => {
                 if let Some(mirror) = python_install_mirror {
@@ -1537,16 +1558,17 @@ impl ManagedPythonDownload {
                         format!("{}/{}", mirror.trim_end_matches('/'), suffix).as_str(),
                     )?]);
                 }
-                // No user mirror: try the default Astral mirror first, fall back to GitHub.
+                // No user mirror: try the default/custom Astral mirror first.
                 if let Some(suffix) = self.url.strip_prefix(CPYTHON_DOWNLOADS_URL_PREFIX) {
+                    let effective_mirror = effective_cpython_mirror(astral_mirror_url);
                     let mirror_url = DisplaySafeUrl::parse(
-                        format!(
-                            "{}/{}",
-                            CPYTHON_DOWNLOAD_DEFAULT_MIRROR.trim_end_matches('/'),
-                            suffix
-                        )
-                        .as_str(),
+                        format!("{}/{}", effective_mirror.trim_end_matches('/'), suffix).as_str(),
                     )?;
+                    // When a custom Astral mirror is set, use it exclusively.
+                    if astral_mirror_url.is_some() {
+                        return Ok(vec![mirror_url]);
+                    }
+                    // Otherwise fall back to the canonical GitHub URL.
                     let canonical_url = DisplaySafeUrl::parse(&self.url)?;
                     return Ok(vec![mirror_url, canonical_url]);
                 }
@@ -2271,6 +2293,97 @@ mod tests {
                 .as_deref(),
             Some("3.12")
         );
+    }
+
+    fn cpython_download_for_url(url: &'static str) -> ManagedPythonDownload {
+        let key = PythonInstallationKey::new(
+            LenientImplementationName::Known(crate::implementation::ImplementationName::CPython),
+            3,
+            12,
+            4,
+            None,
+            Platform::new(
+                Os::from_str("linux").unwrap(),
+                Arch::from_str("x86_64").unwrap(),
+                Libc::from_str("gnu").unwrap(),
+            ),
+            crate::PythonVariant::default(),
+        );
+
+        ManagedPythonDownload {
+            key,
+            url: Cow::Borrowed(url),
+            sha256: Some(Cow::Borrowed("abc123")),
+            build: Some("20240713"),
+        }
+    }
+
+    #[test]
+    fn test_cpython_download_urls_custom_astral_mirror() {
+        let download = cpython_download_for_url(
+            "https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-x86_64-unknown-linux-gnu-install_only.tar.gz",
+        );
+
+        let urls = download
+            .download_urls_with_astral_mirror(
+                None,
+                None,
+                Some("https://nexus.example.com/repository/releases.astral.sh/"),
+            )
+            .expect("download URLs should be valid");
+        let urls = urls
+            .into_iter()
+            .map(|url| url.to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            urls,
+            vec![
+                "https://nexus.example.com/repository/releases.astral.sh/github/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-x86_64-unknown-linux-gnu-install_only.tar.gz"
+                    .to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_cpython_specific_mirror_takes_precedence_over_astral_mirror() {
+        let download = cpython_download_for_url(
+            "https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-x86_64-unknown-linux-gnu-install_only.tar.gz",
+        );
+
+        let urls = download
+            .download_urls_with_astral_mirror(
+                Some("https://python-mirror.example.com/releases/"),
+                None,
+                Some("https://nexus.example.com/repository/releases.astral.sh/"),
+            )
+            .expect("download URLs should be valid");
+        let urls = urls
+            .into_iter()
+            .map(|url| url.to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            urls,
+            vec![
+                "https://python-mirror.example.com/releases/20240713/cpython-3.12.4%2B20240713-x86_64-unknown-linux-gnu-install_only.tar.gz"
+                    .to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_cpython_download_urls_empty_astral_mirror_uses_default() {
+        let download = cpython_download_for_url(
+            "https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-x86_64-unknown-linux-gnu-install_only.tar.gz",
+        );
+
+        let default_urls = download
+            .download_urls_with_astral_mirror(None, None, None)
+            .expect("download URLs should be valid");
+        let empty_urls = download
+            .download_urls_with_astral_mirror(None, None, Some(""))
+            .expect("download URLs should be valid");
+
+        assert_eq!(default_urls, empty_urls);
     }
 
     /// Test build display

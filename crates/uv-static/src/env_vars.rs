@@ -450,6 +450,9 @@ impl EnvVars {
     /// The provided URL will replace `https://github.com/astral-sh/python-build-standalone/releases/download` in, e.g.,
     /// `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
+    ///
+    /// This more-specific mirror takes precedence over
+    /// [`UV_ASTRAL_MIRROR_URL`](Self::UV_ASTRAL_MIRROR_URL) for CPython downloads.
     #[attr_added_in("0.2.35")]
     pub const UV_PYTHON_INSTALL_MIRROR: &'static str = "UV_PYTHON_INSTALL_MIRROR";
 
@@ -462,6 +465,26 @@ impl EnvVars {
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
     #[attr_added_in("0.2.35")]
     pub const UV_PYPY_INSTALL_MIRROR: &'static str = "UV_PYPY_INSTALL_MIRROR";
+
+    /// Replaces the `https://releases.astral.sh` base URL for all Astral-mirrored
+    /// metadata and artifact downloads.
+    ///
+    /// When set, uv uses only the configured mirror URL and does not fall back to
+    /// GitHub or raw GitHub. Path components in the URL are preserved: only
+    /// trailing slashes are trimmed before appending the normal path suffix
+    /// (e.g., `/github/versions/main/v1/uv.ndjson`).
+    ///
+    /// This is useful for proxy repositories (e.g., Artifactory, Nexus) that
+    /// mirror `releases.astral.sh`.
+    ///
+    /// More-specific sources take precedence:
+    /// [`UV_PYTHON_INSTALL_MIRROR`](Self::UV_PYTHON_INSTALL_MIRROR) and
+    /// `python-install-mirror` override this variable for CPython downloads, while
+    /// [`UV_INSTALLER_GITHUB_BASE_URL`](Self::UV_INSTALLER_GITHUB_BASE_URL) and
+    /// [`UV_INSTALLER_GHE_BASE_URL`](Self::UV_INSTALLER_GHE_BASE_URL) override this
+    /// variable for `uv self update`.
+    #[attr_added_in("next release")]
+    pub const UV_ASTRAL_MIRROR_URL: &'static str = "UV_ASTRAL_MIRROR_URL";
 
     /// Pin managed CPython versions to a specific build version.
     ///
@@ -1213,11 +1236,17 @@ impl EnvVars {
 
     /// The URL from which to download uv using the standalone installer and `self update` feature,
     /// in lieu of the default GitHub URL.
+    ///
+    /// This more-specific installer source takes precedence over
+    /// [`UV_ASTRAL_MIRROR_URL`](Self::UV_ASTRAL_MIRROR_URL) for `uv self update`.
     #[attr_added_in("0.5.0")]
     pub const UV_INSTALLER_GITHUB_BASE_URL: &'static str = "UV_INSTALLER_GITHUB_BASE_URL";
 
     /// The URL from which to download uv using the standalone installer and `self update` feature,
     /// in lieu of the default GitHub Enterprise URL.
+    ///
+    /// This more-specific installer source takes precedence over
+    /// [`UV_ASTRAL_MIRROR_URL`](Self::UV_ASTRAL_MIRROR_URL) for `uv self update`.
     #[attr_added_in("0.5.0")]
     pub const UV_INSTALLER_GHE_BASE_URL: &'static str = "UV_INSTALLER_GHE_BASE_URL";
 
