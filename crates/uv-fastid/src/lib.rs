@@ -139,6 +139,18 @@ mod tests {
         assert!(id.bytes().all(|byte| ALPHABET.contains(&byte)));
     }
 
+    #[test]
+    fn test_from_str() {
+        for tc in ["", "short", "0123456789abcdefg", "invalid!"] {
+            assert!(Id::from_str(tc).is_err(),);
+        }
+
+        for tc in ["________________", "ZZZZZZZZZZZZZZZZ", "_-0123456789abcd"] {
+            let id = Id::from_str(tc).expect("should parse valid ID");
+            assert_eq!(&*id, tc, "parsed ID should match input");
+        }
+    }
+
     #[cfg(feature = "serde")]
     mod serde {
         use super::*;
