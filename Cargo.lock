@@ -2855,11 +2855,11 @@ dependencies = [
 
 [[package]]
 name = "nanoid"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ffa00dec017b5b1a8b7cf5e2c008bfda1aa7e0697ac1508b491fdf2622fb4d8"
+checksum = "8628de41fe064cc3f0cf07f3d299ee3e73521adaff72278731d5c8cae3797873"
 dependencies = [
- "rand 0.8.6",
+ "rand 0.9.2",
 ]
 
 [[package]]
@@ -3652,7 +3652,6 @@ version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5ca0ecfa931c29007047d1bc58e623ab12e5590e8c7cc53200d5202b69266d8a"
 dependencies = [
- "libc",
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
 ]
