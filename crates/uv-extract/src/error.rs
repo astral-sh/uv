@@ -5,9 +5,9 @@ pub enum Error {
     #[error("I/O operation failed during extraction")]
     Io(#[source] std::io::Error),
     #[error("Invalid zip file")]
-    Zip(#[from] zip::result::ZipError),
+    Zip(#[source] zip::result::ZipError),
     #[error("Invalid zip file structure")]
-    AsyncZip(#[from] async_zip::error::ZipError),
+    AsyncZip(#[source] async_zip::error::ZipError),
     #[error("Invalid tar file")]
     Tar(#[from] tokio_tar::TarError),
     #[error(
@@ -93,6 +93,31 @@ pub enum Error {
     EmptyFilename,
     #[error("Archive contains unacceptable filename: {filename}")]
     UnacceptableFilename { filename: String },
+    #[error(
+        "Archive contains a file with an unsupported compression method; files must be compressed with 'stored', 'DEFLATE', or 'zstd'"
+    )]
+    UnsupportedCompression,
+}
+
+impl From<async_zip::error::ZipError> for Error {
+    fn from(err: async_zip::error::ZipError) -> Self {
+        match err {
+            async_zip::error::ZipError::CompressionNotSupported(_) => Self::UnsupportedCompression,
+            o => Self::AsyncZip(o),
+        }
+    }
+}
+
+impl From<zip::result::ZipError> for Error {
+    fn from(err: zip::result::ZipError) -> Self {
+        match err {
+            // NOTE: No structured error from the zip crate, so we need to sniff the message.
+            zip::result::ZipError::UnsupportedArchive("Compression method not supported") => {
+                Self::UnsupportedCompression
+            }
+            o => Self::Zip(o),
+        }
+    }
 }
 
 impl Error {
