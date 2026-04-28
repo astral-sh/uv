@@ -14,6 +14,7 @@ use uv_workspace::pyproject::{Sources, ToolUvSources};
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, ProjectWorkspace, WorkspaceCache};
 
 use crate::Metadata;
+use crate::metadata::lowering::rewrite_git_relative_url;
 use crate::metadata::{GitWorkspaceMember, LoweredRequirement, MetadataError};
 
 #[derive(Debug, Clone)]
@@ -33,6 +34,24 @@ impl RequiresDist {
             name: metadata.name,
             requires_dist: Box::into_iter(metadata.requires_dist)
                 .map(Requirement::from)
+                .collect(),
+            provides_extra: metadata.provides_extra,
+            dependency_groups: BTreeMap::default(),
+            dynamic: metadata.dynamic,
+        }
+    }
+
+    /// Like [`Self::from_metadata23`], but rewrites any directory requirements that point inside
+    /// `git_member`'s checkout to a [`RequirementSource::Git`] with the appropriate `subdirectory`,
+    /// so the lockfile remains portable across machines.
+    fn from_metadata23_with_git_member(
+        metadata: uv_pypi_types::RequiresDist,
+        git_member: &GitWorkspaceMember<'_>,
+    ) -> Self {
+        Self {
+            name: metadata.name,
+            requires_dist: Box::into_iter(metadata.requires_dist)
+                .map(|requirement| rewrite_git_relative_url(requirement, git_member))
                 .collect(),
             provides_extra: metadata.provides_extra,
             dependency_groups: BTreeMap::default(),
@@ -70,7 +89,14 @@ impl RequiresDist {
         let Some(project_workspace) =
             ProjectWorkspace::from_maybe_project_root(install_path, &discovery, cache).await?
         else {
-            return Ok(Self::from_metadata23(metadata));
+            // Poetry-only `pyproject.toml`s (no `[project]` section) reach this fallback. If the
+            // metadata was lifted from a git checkout, re-anchor any path requirements that point
+            // inside that checkout so absolute cache paths don't leak into the lockfile.
+            return Ok(if let Some(git_member) = git_member {
+                Self::from_metadata23_with_git_member(metadata, git_member)
+            } else {
+                Self::from_metadata23(metadata)
+            });
         };
 
         Self::from_project_workspace(

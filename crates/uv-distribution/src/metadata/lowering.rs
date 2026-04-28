@@ -15,7 +15,9 @@ use uv_git_types::{GitLfs, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerTree, VerbatimUrl, VersionOrUrl, looks_like_git_repository};
-use uv_pypi_types::{ConflictItem, ParsedGitUrl, ParsedUrlError, VerbatimParsedUrl};
+use uv_pypi_types::{
+    ConflictItem, ParsedDirectoryUrl, ParsedGitUrl, ParsedUrl, ParsedUrlError, VerbatimParsedUrl,
+};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_workspace::Workspace;
 use uv_workspace::pyproject::{PyProjectToml, Source, Sources};
@@ -137,7 +139,16 @@ impl LoweredRequirement {
         }
 
         let Some(sources) = sources else {
-            return Either::Left(std::iter::once(Ok(Self(Requirement::from(requirement)))));
+            // If the requirement was lifted from the metadata of a package fetched via git, and it
+            // points to a directory inside that same git checkout (e.g. a `path = "../sibling"`
+            // declared in the upstream's `pyproject.toml`), re-anchor it to the parent git source
+            // so the absolute cache path doesn't leak into the lockfile.
+            let lowered = if let Some(git_member) = git_member {
+                rewrite_git_relative_url(requirement, git_member)
+            } else {
+                Requirement::from(requirement)
+            };
+            return Either::Left(std::iter::once(Ok(Self(lowered))));
         };
 
         // Determine whether the markers cover the full space for the requirement. If not, fill the
@@ -727,6 +738,62 @@ fn registry_source(
             index: Some(index),
             conflict,
         },
+    }
+}
+
+/// If a transitive requirement points to a directory inside a parent git
+/// checkout, rewrite it to a [`RequirementSource::Git`] with the appropriate
+/// `subdirectory`.
+///
+/// Why: when a git-fetched package declares a relative path dependency on a
+/// sibling directory of its own clone (typically via `[tool.poetry.dependencies]`
+/// `path = "../foo"`), the build backend resolves that path against the cache
+/// checkout. Without this rewrite, the resulting absolute cache path would be
+/// serialized into `uv.lock`, breaking portability across machines.
+///
+/// See <https://github.com/astral-sh/uv/issues/19152>.
+pub(super) fn rewrite_git_relative_url(
+    requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
+    git_member: &GitWorkspaceMember<'_>,
+) -> Requirement {
+    let install_path = match requirement.version_or_url.as_ref() {
+        Some(VersionOrUrl::Url(VerbatimParsedUrl {
+            parsed_url: ParsedUrl::Directory(ParsedDirectoryUrl { install_path, .. }),
+            ..
+        })) => install_path.as_ref(),
+        _ => return Requirement::from(requirement),
+    };
+    let Ok(subdirectory) = uv_fs::relative_to(install_path, git_member.fetch_root) else {
+        return Requirement::from(requirement);
+    };
+    let subdirectory = normalize_path(&subdirectory);
+    // `relative_to` returns leading `..` components when the path lies outside
+    // the base; in that case there's no valid git subdirectory to anchor to.
+    if subdirectory.starts_with("..") {
+        return Requirement::from(requirement);
+    }
+    let subdirectory = if subdirectory.as_os_str().is_empty() {
+        None
+    } else {
+        Some(subdirectory.into_owned().into_boxed_path())
+    };
+
+    let git = git_member.git_source.git.clone();
+    let url = DisplaySafeUrl::from(ParsedGitUrl {
+        url: git.clone(),
+        subdirectory: subdirectory.clone(),
+    });
+    Requirement {
+        name: requirement.name,
+        groups: Box::new([]),
+        extras: requirement.extras,
+        marker: requirement.marker,
+        source: RequirementSource::Git {
+            git,
+            subdirectory,
+            url: VerbatimUrl::from_url(url),
+        },
+        origin: requirement.origin,
     }
 }
 
