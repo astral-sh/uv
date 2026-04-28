@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 /// A unique identifier for an archive (unzipped wheel) in the cache.
 #[derive(Debug, Clone, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
-pub struct ArchiveId(String);
+pub struct ArchiveId(uv_fastid::Id);
 
 impl Default for ArchiveId {
     fn default() -> Self {
@@ -14,7 +14,7 @@ impl Default for ArchiveId {
 impl ArchiveId {
     /// Generate a new unique identifier for an archive.
     pub fn new() -> Self {
-        Self(uv_fastid::insecure().to_string())
+        Self(uv_fastid::insecure())
     }
 }
 
@@ -31,9 +31,9 @@ impl std::fmt::Display for ArchiveId {
 }
 
 impl FromStr for ArchiveId {
-    type Err = <String as FromStr>::Err;
+    type Err = <uv_fastid::Id as FromStr>::Err;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(s.to_string()))
+        uv_fastid::Id::from_str(s).map(Self)
     }
 }
