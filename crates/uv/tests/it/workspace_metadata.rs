@@ -118,7 +118,11 @@ fn workspace_metadata_module_owners_from_locked_wheels() -> Result<()> {
         typing_extensions.path(),
         "typing-extensions",
         "typing_extensions-0.1.0",
-        &[("typing_extensions.py", "")],
+        &[
+            ("typing_extensions.py", ""),
+            ("café.py", ""),
+            ("bytecode/__pycache__/compiled.cpython-312.pyc", ""),
+        ],
     )?;
 
     let gpu_a_url = Url::from_file_path(gpu_a.path())
@@ -161,6 +165,15 @@ dependencies = [
         "sets": []
       },
       "module_owners": {
+        "bytecode": [
+          "typing-extensions"
+        ],
+        "bytecode.compiled": [
+          "typing-extensions"
+        ],
+        "café": [
+          "typing-extensions"
+        ],
         "gpu": [
           "gpu-a",
           "gpu-b"

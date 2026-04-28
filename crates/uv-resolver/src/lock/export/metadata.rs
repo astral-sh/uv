@@ -1,15 +1,12 @@
 use std::collections::BTreeMap;
 use std::fmt::Display;
 
-/// The name of an importable Python module.
-type ModuleName = String;
-
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{RequiresPython, UrlString};
 use uv_fs::PortablePathBuf;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
-use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts};
+use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts, ModuleName};
 use uv_workspace::Workspace;
 
 use crate::Lock;
@@ -69,7 +66,7 @@ pub struct Metadata {
     requires_python: RequiresPython,
     /// Info about conflicting packages
     conflicts: MetadataConflicts,
-    /// A mapping from importable module names to the distributions that provide them
+    /// A mapping from importable module names to the package names that provide them
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
     module_owners: BTreeMap<ModuleName, Vec<PackageName>>,
     /// An index of which nodes are workspace members

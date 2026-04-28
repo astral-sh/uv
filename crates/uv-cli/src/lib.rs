@@ -8031,7 +8031,7 @@ pub struct MetadataArgs {
     /// Include module ownership metadata in the output.
     ///
     /// This adds a mapping from importable module names to the package names that provide
-    /// them. To do this, the venv will be synced in "inexact" mode.
+    /// them. To do this, the venv will be synced in inexact mode.
     #[arg(long)]
     pub module_owners: bool,
 
