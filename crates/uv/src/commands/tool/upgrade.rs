@@ -370,6 +370,7 @@ async fn upgrade_tool(
         let environment = sync_environment(
             environment,
             &resolution.into(),
+            None,
             Modifications::Exact,
             build_constraints,
             (&settings).into(),
