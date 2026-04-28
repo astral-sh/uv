@@ -6,24 +6,33 @@
 //!
 //! [OSV]: https://osv.dev/
 
-use rustc_hash::{FxHashMap, FxHashSet};
 use std::str::FromStr as _;
+use std::sync::LazyLock;
+
+use indexmap::IndexMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::trace;
 
-use crate::types;
+use crate::types::{self, VulnerabilityID};
 use futures::{StreamExt as _, TryStreamExt as _};
 use jiff::Timestamp;
-use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
+use uv_cache::{Cache, CacheBucket, CacheEntry};
+use uv_client::{CacheControl, CachedClient, CachedClientError};
 use uv_configuration::Concurrency;
 use uv_pep440::Version;
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 
-pub const API_BASE: &str = "https://api.osv.dev/";
+pub static API_BASE: LazyLock<DisplaySafeUrl> = LazyLock::new(|| {
+    DisplaySafeUrl::parse("https://api.osv.dev/").expect("impossible: embedded URL is invalid")
+});
 
 /// Errors during OSV service interactions.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// An error from the cached HTTP client.
+    #[error(transparent)]
+    Client(#[from] uv_client::Error),
     /// An error during an HTTP request, including middleware errors.
     #[error(transparent)]
     ReqwestMiddleware(#[from] reqwest_middleware::Error),
@@ -53,7 +62,7 @@ struct QueryRequest {
 
 /// Event in a vulnerability range.
 /// Per the OSV schema, each event object contains exactly one of these event types.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum Event {
     /// A version that introduces the vulnerability.
@@ -67,7 +76,7 @@ enum Event {
 }
 
 /// The type of a version range in an OSV vulnerability record.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
 enum RangeType {
     /// The versions in events are SemVer 2.0 versions.
@@ -87,7 +96,7 @@ enum RangeType {
 }
 
 /// Version range for affected packages.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct Range {
     #[serde(rename = "type")]
     range_type: RangeType,
@@ -95,7 +104,7 @@ struct Range {
 }
 
 /// Package affected by a vulnerability.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct Affected {
     ranges: Option<Vec<Range>>,
     // TODO: Enable these fields if/when they contain information that's
@@ -106,7 +115,7 @@ struct Affected {
 }
 
 /// The type of a reference in an OSV vulnerability record.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
 enum ReferenceType {
     Advisory,
@@ -126,7 +135,7 @@ enum ReferenceType {
 }
 
 /// A reference for more information about a vulnerability.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct Reference {
     #[serde(rename = "type")]
     reference_type: ReferenceType,
@@ -134,7 +143,7 @@ struct Reference {
 }
 
 /// A full vulnerability record from OSV.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct Vulnerability {
     id: String,
     modified: Timestamp,
@@ -199,42 +208,63 @@ impl Filter {
     }
 }
 
+/// Synthetic `Cache-Control` header for vulnerability record caching (10 minutes).
+///
+/// This is injected into responses from OSV (which sends no cache headers)
+/// so that the [`CachedClient`] middleware handles caching transparently.
+///
+/// We use a TTL of 10 minutes for alignment with PyPI.
+static VULN_CACHE_CONTROL: LazyLock<http::HeaderValue> =
+    LazyLock::new(|| "max-age=600".parse().expect("valid header value"));
+
 /// Represents [OSV](https://osv.dev/), an open-source vulnerability database.
 pub struct Osv {
     base_url: DisplaySafeUrl,
-    client: ClientWithMiddleware,
+    client: CachedClient,
     concurrency: Concurrency,
+    cache: Cache,
 }
 
 impl Osv {
-    /// Create a new OSV client with the given HTTP client and optional base URL.
+    /// Create a new OSV client with the given cached HTTP client and optional base URL.
     ///
     /// If no base URL is provided, the client will default to the official OSV API endpoint.
+    /// Positive batch query results are cached to disk. Individual vulnerability records
+    /// are cached transparently by the [`CachedClient`].
     pub fn new(
-        client: ClientWithMiddleware,
+        client: CachedClient,
         base_url: Option<DisplaySafeUrl>,
         concurrency: Concurrency,
+        cache: Cache,
     ) -> Self {
         Self {
-            base_url: base_url.unwrap_or_else(|| {
-                DisplaySafeUrl::parse(API_BASE).expect("impossible: embedded URL is invalid")
-            }),
+            base_url: base_url.unwrap_or_else(|| API_BASE.clone()),
             client,
             concurrency,
+            cache,
         }
     }
 
-    pub async fn query_batch(
+    /// Return a [`CacheEntry`] for a full vulnerability record.
+    fn vuln_cache_entry(&self, id: &str) -> CacheEntry {
+        let bucket = self.cache.bucket(CacheBucket::Osv);
+        CacheEntry::new(bucket.join("vulnerability"), format!("{id}.msgpack"))
+    }
+
+    /// Query OSV for vulnerabilities affecting the given dependencies, returning only vulnerability IDs.
+    ///
+    /// Returns a mapping from each input dependency to the set of vulnerability IDs affecting it.
+    pub async fn query_identifiers<'a>(
         &self,
-        dependencies: &[types::Dependency],
+        dependencies: &'a [types::Dependency],
         filter: Filter,
-    ) -> Result<Vec<types::Finding>, Error> {
+    ) -> Result<IndexMap<&'a types::Dependency, FxHashSet<VulnerabilityID>>, Error> {
         if dependencies.is_empty() {
-            return Ok(vec![]);
+            return Ok(IndexMap::default());
         }
 
-        // Accumulated (dependency, vuln_id) pairs across all pages.
-        let mut dep_vuln_ids: Vec<(&types::Dependency, String)> = Vec::new();
+        let mut result_map: IndexMap<&types::Dependency, FxHashSet<VulnerabilityID>> =
+            IndexMap::default();
 
         // Pending queries: (dependency, page_token). Initially one per dependency with no token.
         let mut pending: Vec<(&types::Dependency, Option<String>)> =
@@ -259,8 +289,14 @@ impl Osv {
                 .base_url
                 .join("v1/querybatch")
                 .map_err(|e| Error::Url(self.base_url.clone(), e))?;
+
+            // NOTE: we need `uncached` here to access the underlying
+            // client for our POST request.
             let batch_response: QueryBatchResponse = self
                 .client
+                .uncached()
+                .for_host(&url)
+                .raw_client()
                 .post(url.as_ref())
                 .json(&request)
                 .send()
@@ -272,15 +308,16 @@ impl Osv {
                 .map_err(reqwest_middleware::Error::Reqwest)?;
 
             let mut next_pending = Vec::new();
-            for ((dep, _), result) in pending.iter().zip(batch_response.results.iter()) {
-                dep_vuln_ids.extend(
-                    result
+            for ((dep, _), batch_result) in pending.iter().zip(batch_response.results.iter()) {
+                let ids = result_map.entry(dep).or_default();
+                ids.extend(
+                    batch_result
                         .vulns
                         .iter()
                         .filter(|v| filter.matches(&v.id))
-                        .map(|v| (*dep, v.id.clone())),
+                        .map(|v| VulnerabilityID::new(v.id.clone())),
                 );
-                if let Some(token) = &result.next_page_token {
+                if let Some(token) = &batch_result.next_page_token {
                     next_pending.push((*dep, Some(token.clone())));
                 }
             }
@@ -291,48 +328,84 @@ impl Osv {
             pending = next_pending;
         }
 
+        Ok(result_map)
+    }
+
+    /// Query OSV for vulnerabilities affecting the given dependencies, returning full vulnerability records.
+    pub async fn query_batch(
+        &self,
+        dependencies: &[types::Dependency],
+        filter: Filter,
+    ) -> Result<Vec<types::Finding>, Error> {
+        let dep_vuln_ids = self.query_identifiers(dependencies, filter).await?;
+
         // Collect unique vuln IDs to minimize fetches.
-        let unique_ids: FxHashSet<_> = dep_vuln_ids.iter().map(|(_, id)| id.clone()).collect();
+        let unique_ids: FxHashSet<_> = dep_vuln_ids
+            .values()
+            .flat_map(|ids| ids.iter())
+            .cloned()
+            .collect();
 
         // Fetch full vulnerability records concurrently.
         let vuln_details = futures::stream::iter(unique_ids)
             .map(async |id| {
-                let vuln = self.fetch_vuln(&id).await?;
-                Ok::<(String, Vulnerability), Error>((id, vuln))
+                let vuln = self.fetch_vuln(id.as_str()).await?;
+                Ok::<(VulnerabilityID, Vulnerability), Error>((id, vuln))
             })
             .buffer_unordered(self.concurrency.downloads)
-            .try_collect::<FxHashMap<String, Vulnerability>>()
+            .try_collect::<FxHashMap<VulnerabilityID, Vulnerability>>()
             .await?;
 
-        // Build findings from the accumulated (dependency, vuln_id) pairs.
-        let findings = dep_vuln_ids
-            .iter()
-            .filter_map(|(dep, vuln_id)| {
-                vuln_details
-                    .get(vuln_id)
-                    .map(|vuln| Self::vulnerability_to_finding(dep, vuln.clone()))
-            })
-            .collect();
+        // Build findings in dependency order (preserved by IndexMap).
+        let mut findings = Vec::new();
+        for (dep, vuln_ids) in &dep_vuln_ids {
+            for vuln_id in vuln_ids {
+                if let Some(vuln) = vuln_details.get(vuln_id) {
+                    findings.push(Self::vulnerability_to_finding(dep, vuln.clone()));
+                }
+            }
+        }
 
         Ok(findings)
     }
 
     /// Fetch a full vulnerability record by ID from OSV.
+    ///
+    /// Caching is handled transparently by the [`CachedClient`] middleware using
+    /// a synthetic `Cache-Control: max-age=600` header, since OSV itself does
+    /// not send caching headers.
     async fn fetch_vuln(&self, id: &str) -> Result<Vulnerability, Error> {
         let url = self
             .base_url
             .join(&format!("v1/vulns/{id}"))
             .map_err(|e| Error::Url(self.base_url.clone(), e))?;
+
+        let cache_entry = self.vuln_cache_entry(id);
+        let req = self
+            .client
+            .uncached()
+            .for_host(&url)
+            .raw_client()
+            .get(url.as_ref())
+            .build()
+            .map_err(reqwest_middleware::Error::Reqwest)?;
+
         let vuln: Vulnerability = self
             .client
-            .get(url.as_ref())
-            .send()
-            .await?
-            .error_for_status()
-            .map_err(reqwest_middleware::Error::Reqwest)?
-            .json()
+            .get_serde_with_retry(
+                req,
+                &cache_entry,
+                CacheControl::Override(VULN_CACHE_CONTROL.clone()),
+                async |response| response.json::<Vulnerability>().await,
+            )
             .await
-            .map_err(reqwest_middleware::Error::Reqwest)?;
+            .map_err(|err| match err {
+                CachedClientError::Client(err) => Error::Client(err),
+                CachedClientError::Callback { err, .. } => {
+                    Error::ReqwestMiddleware(reqwest_middleware::Error::Reqwest(err))
+                }
+            })?;
+
         Ok(vuln)
     }
 
@@ -420,8 +493,9 @@ impl Osv {
 mod tests {
     use std::str::FromStr;
 
-    use reqwest_middleware::ClientWithMiddleware;
     use serde_json::json;
+    use uv_cache::Cache;
+    use uv_client::{BaseClientBuilder, CachedClient};
     use uv_configuration::Concurrency;
     use uv_normalize::PackageName;
     use uv_pep440::Version;
@@ -434,6 +508,15 @@ mod tests {
 
     use super::Event;
     use super::Osv;
+
+    /// Create a [`CachedClient`] suitable for tests (no retries, no cache).
+    fn test_client() -> CachedClient {
+        CachedClient::new(
+            BaseClientBuilder::default()
+                .build()
+                .expect("Failed to build test client"),
+        )
+    }
 
     #[test]
     fn test_deserialize_events() {
@@ -474,6 +557,87 @@ mod tests {
             Other,
         ]
         ");
+    }
+
+    /// Ensure that `query_identifiers` returns the correct vulnerability ID mapping.
+    #[tokio::test]
+    async fn test_query_identifiers() {
+        let server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/v1/querybatch"))
+            .and(body_json(json!({
+                "queries": [
+                    {
+                        "package": { "name": "package-a", "ecosystem": "PyPI" },
+                        "version": "1.0.0",
+                    },
+                    {
+                        "package": { "name": "package-b", "ecosystem": "PyPI" },
+                        "version": "2.0.0",
+                    }
+                ]
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "results": [
+                    { "vulns": [
+                        { "id": "VULN-1", "modified": "2026-01-01T00:00:00Z" },
+                        { "id": "VULN-3", "modified": "2026-01-03T00:00:00Z" }
+                    ] },
+                    { "vulns": [
+                        { "id": "VULN-2", "modified": "2026-01-02T00:00:00Z" }
+                    ] }
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        let osv = Osv::new(
+            test_client(),
+            Some(DisplaySafeUrl::parse(&server.uri()).unwrap()),
+            Concurrency::default(),
+            Cache::temp().unwrap(),
+        );
+
+        let dependencies = vec![
+            Dependency::new(
+                PackageName::from_str("package-a").unwrap(),
+                Version::from_str("1.0.0").unwrap(),
+            ),
+            Dependency::new(
+                PackageName::from_str("package-b").unwrap(),
+                Version::from_str("2.0.0").unwrap(),
+            ),
+        ];
+
+        let identifiers = osv
+            .query_identifiers(&dependencies, Filter::All)
+            .await
+            .expect("Failed to query identifiers");
+
+        // package-a should have VULN-1 and VULN-3.
+        let pkg_a_ids = identifiers.get(&dependencies[0]).unwrap();
+        let mut pkg_a_sorted: Vec<_> = pkg_a_ids
+            .iter()
+            .map(crate::types::VulnerabilityID::as_str)
+            .collect();
+        pkg_a_sorted.sort_unstable();
+        assert_eq!(pkg_a_sorted, ["VULN-1", "VULN-3"]);
+
+        // package-b should have VULN-2.
+        let pkg_b_ids = identifiers.get(&dependencies[1]).unwrap();
+        let pkg_b_sorted: Vec<_> = pkg_b_ids
+            .iter()
+            .map(crate::types::VulnerabilityID::as_str)
+            .collect();
+        assert_eq!(pkg_b_sorted, ["VULN-2"]);
+
+        // Only 1 querybatch request, no vuln detail fetches.
+        assert_eq!(
+            server.received_requests().await.unwrap().len(),
+            1,
+            "Expected one querybatch request"
+        );
     }
 
     /// Ensure that `query_batch` returns the correct findings for a batch of dependencies
@@ -526,9 +690,10 @@ mod tests {
             .await;
 
         let osv = Osv::new(
-            ClientWithMiddleware::default(),
+            test_client(),
             Some(DisplaySafeUrl::parse(&server.uri()).unwrap()),
             Concurrency::default(),
+            Cache::temp().unwrap(),
         );
 
         let dependencies = vec![
@@ -720,9 +885,10 @@ mod tests {
             .await;
 
         let osv = Osv::new(
-            ClientWithMiddleware::default(),
+            test_client(),
             Some(DisplaySafeUrl::parse(&server.uri()).unwrap()),
             Concurrency::default(),
+            Cache::temp().unwrap(),
         );
 
         let dependencies = vec![
@@ -803,9 +969,10 @@ mod tests {
             .await;
 
         let osv = Osv::new(
-            ClientWithMiddleware::default(),
+            test_client(),
             Some(DisplaySafeUrl::parse(&server.uri()).unwrap()),
             Concurrency::default(),
+            Cache::temp().unwrap(),
         );
 
         let dependencies = vec![Dependency::new(
