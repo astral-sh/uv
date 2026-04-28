@@ -73,7 +73,7 @@ impl<'de> serde::Deserialize<'de> for Id {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         use std::borrow::Cow;
         let s = <Cow<'_, str>>::deserialize(deserializer)?;
-        Self::from_str(&s).map_err(|err| serde::de::Error::custom(err))
+        Self::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
 
