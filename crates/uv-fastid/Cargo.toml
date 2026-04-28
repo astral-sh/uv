@@ -1,5 +1,6 @@
 [package]
 name = "uv-fastid"
+description = "This is an internal component crate of uv"
 version = "0.0.41"
 edition.workspace = true
 rust-version.workspace = true
