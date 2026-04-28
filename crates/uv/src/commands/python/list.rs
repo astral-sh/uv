@@ -10,7 +10,7 @@ use itertools::Either;
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashSet;
 use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
+use uv_client::{BaseClientBuilder, CachedClient};
 use uv_fs::Simplified;
 use uv_python::downloads::{
     Error as PythonDownloadError, ManagedPythonDownloadList, PythonDownloadRequest,
@@ -81,9 +81,13 @@ pub(crate) async fn list(
         PythonDownloadRequest::from_request(request.as_ref().unwrap_or(&PythonRequest::Any))
     };
 
-    let client = client_builder.build()?;
-    let download_list =
-        ManagedPythonDownloadList::new(&client, python_downloads_json_url.as_deref()).await?;
+    let client = CachedClient::new(client_builder.build()?);
+    let download_list = ManagedPythonDownloadList::new_with_refresh(
+        &client,
+        Some(cache),
+        python_downloads_json_url.as_deref(),
+    )
+    .await?;
     let mut output = BTreeSet::new();
     if let Some(base_download_request) = base_download_request {
         let download_request = match kinds {
