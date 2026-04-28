@@ -14,7 +14,7 @@ impl Default for ArchiveId {
 impl ArchiveId {
     /// Generate a new unique identifier for an archive.
     pub fn new() -> Self {
-        Self(nanoid::nanoid!())
+        Self(uv_fastid::insecure().to_string())
     }
 }
 

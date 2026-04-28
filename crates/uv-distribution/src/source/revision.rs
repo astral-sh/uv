@@ -61,7 +61,7 @@ pub(crate) struct RevisionId(String);
 impl RevisionId {
     /// Generate a new unique identifier for an archive.
     fn new() -> Self {
-        Self(nanoid::nanoid!())
+        Self(uv_fastid::insecure().to_string())
     }
 
     pub(crate) fn as_str(&self) -> &str {
