@@ -2577,7 +2577,7 @@ fn python_install_patch_dylib() {
     let mut cmd = std::process::Command::new("otool");
     cmd.arg("-D").arg(dylib.as_ref());
 
-    uv_snapshot!(context.filters(), cmd, @r###"
+    uv_snapshot!(context.filters(), cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2585,7 +2585,7 @@ fn python_install_patch_dylib() {
     [TEMP_DIR]/managed/cpython-3.13.1-[PLATFORM]/lib/libpython3.13.dylib
 
     ----- stderr -----
-    "###);
+    ");
 }
 
 #[test]
