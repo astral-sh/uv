@@ -8,6 +8,9 @@ repository.workspace = true
 authors.workspace = true
 license.workspace = true
 
+[lib]
+doctest = false
+
 [dependencies]
 rand = { workspace = true }
 fastrand = { workspace = true }
