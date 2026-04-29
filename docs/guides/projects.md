@@ -93,7 +93,7 @@ dependencies = []
 hello-world = "hello_world:main"
 
 [build-system]
-requires = ["uv_build>=0.11.8,<0.12.0"]
+requires = ["uv_build>=0.11.8,<0.12"]
 build-backend = "uv_build"
 ```
 

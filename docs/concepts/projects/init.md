@@ -3,18 +3,16 @@
 uv supports creating a project with `uv init`.
 
 By default, uv uses a packaged layout where the source files are under `src/<module_name>/`.
-Packaged layouts are suitable for both applications (`--app`, the default) and libraries (`--lib`).
-You can use `--no-package` for a flat, unpackaged layout instead.
+Packaged layouts are suitable for both basic templates: [**applications**](#applications) and
+[**libraries**](#libraries). By default, uv will create a project for packaged application. The
+`--lib` flag can be used to create a project for a library instead, and `--no-package` can be used
+for a flat, unpackaged layout instead.
 
 !!! note
 
     Prior to v0.12.0, uv would use a flat layout for applications and packaged layout for libraries.
     By using the packaged layout for both, the differences between the library and application
     layouts are now small.
-
-When creating projects, uv supports two basic templates: [**applications**](#applications) and
-[**libraries**](#libraries). By default, uv will create a project for an application. The `--lib`
-flag can be used to create a project for a library instead.
 
 ## Target directory
 
@@ -37,13 +35,13 @@ $ uv init example-app
 The source code lives in a `src` directory with a module directory and an `__init__.py` file:
 
 ```console
-$ tree example-pkg
-example-pkg/
+$ tree example-app
+example-app/
 ├── .python-version
 ├── README.md
 ├── pyproject.toml
 └── src
-    └── example_pkg
+    └── example_app
         └── __init__.py
 ```
 
@@ -52,7 +50,7 @@ environment:
 
 ```toml title="pyproject.toml" hl_lines="12-14"
 [project]
-name = "example-pkg"
+name = "example-app"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -60,7 +58,7 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.scripts]
-example-pkg = "example_pkg:main"
+example-app = "example_app:main"
 
 [build-system]
 requires = ["uv_build>=0.11.8,<0.12"]
@@ -75,7 +73,7 @@ A [command](./config.md#entry-points) definition is included:
 
 ```toml title="pyproject.toml" hl_lines="9 10"
 [project]
-name = "example-pkg"
+name = "example-app"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -83,7 +81,7 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.scripts]
-example-pkg = "example_pkg:main"
+example-app = "example_app:main"
 
 [build-system]
 requires = ["uv_build>=0.11.8,<0.12"]
@@ -93,9 +91,9 @@ build-backend = "uv_build"
 The command can be executed with `uv run`:
 
 ```console
-$ cd example-pkg
-$ uv run example-pkg
-Hello from example-pkg!
+$ cd example-app
+$ uv run example-app
+Hello from example-app!
 ```
 
 ## Libraries
@@ -177,7 +175,7 @@ Many use-cases require a [package](./config.md#project-packaging). For example, 
 a command-line interface that will be published to PyPI or if you want to define tests in a
 dedicated directory. In other cases, a flat directory of Python files is simpler.
 
-The `--no-package` flag can be used to create a packaged application:
+The `--no-package` flag can be used to create an unpackaged application:
 
 ```console
 $ uv init --no-package example-app
@@ -228,7 +226,7 @@ Python files can be executed with `uv run`:
 ```console
 $ cd example-app
 $ uv run main.py
-Hello from example-project!
+Hello from example-app!
 ```
 
 ## Projects with extension modules
