@@ -12,7 +12,8 @@ use uv_distribution_types::IndexUrl;
 use uv_pep508::VerbatimUrl;
 use uv_preview::Preview;
 
-use crate::{commands::ExitStatus, printer::Printer};
+use crate::commands::ExitStatus;
+use uv_cli_output::printer::Printer;
 
 /// Logout from a service.
 ///

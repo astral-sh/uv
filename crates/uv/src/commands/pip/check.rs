@@ -13,10 +13,11 @@ use uv_python::{
     EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest, PythonVersion,
 };
 
+use crate::commands::ExitStatus;
 use crate::commands::pip::operations::report_target_environment;
 use crate::commands::pip::{resolution_markers, resolution_tags};
-use crate::commands::{ExitStatus, elapsed};
-use crate::printer::Printer;
+use uv_cli_output::format::elapsed;
+use uv_cli_output::printer::Printer;
 
 /// Check for incompatibilities in installed packages.
 pub(crate) fn pip_check(

@@ -71,13 +71,13 @@ use crate::commands::project::{
     default_dependency_groups, script_extra_build_requires, script_specification,
     update_environment, validate_project_requires_python,
 };
-use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, diagnostics, project};
-use crate::printer::Printer;
 use crate::settings::{
     FrozenSource, GlobalSettings, LockCheck, LockCheckSource, ResolverInstallerSettings,
     ResolverSettings,
 };
+use uv_cli_output::printer::Printer;
+use uv_cli_output::reporters::PythonDownloadReporter;
 
 /// Run a command.
 #[expect(clippy::fn_params_excessive_bools)]

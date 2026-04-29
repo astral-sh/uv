@@ -38,8 +38,8 @@ use crate::commands::project::{
     default_dependency_groups,
 };
 use crate::commands::{ExitStatus, diagnostics, project};
-use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
+use uv_cli_output::printer::Printer;
 
 /// Display version information for uv itself (`uv self version`)
 pub(crate) fn self_version(

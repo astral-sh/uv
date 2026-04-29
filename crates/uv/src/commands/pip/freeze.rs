@@ -18,7 +18,7 @@ use uv_python::{EnvironmentPreference, Prefix, PythonEnvironment, PythonRequest,
 
 use crate::commands::ExitStatus;
 use crate::commands::pip::operations::report_target_environment;
-use crate::printer::Printer;
+use uv_cli_output::printer::Printer;
 
 /// Enumerate the installed packages in the current environment.
 pub(crate) fn pip_freeze(

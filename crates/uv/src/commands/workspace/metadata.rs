@@ -19,8 +19,8 @@ use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{ProjectError, ProjectInterpreter, UniversalState, WorkspacePython};
 use crate::commands::{ExitStatus, diagnostics};
-use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
+use uv_cli_output::printer::Printer;
 
 /// Display metadata about the workspace.
 pub(crate) async fn metadata(

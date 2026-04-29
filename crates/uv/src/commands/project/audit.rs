@@ -13,9 +13,9 @@ use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, WorkspacePython,
 };
-use crate::commands::reporters::AuditReporter;
-use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
+use uv_cli_output::printer::Printer;
+use uv_cli_output::reporters::AuditReporter;
 
 use anyhow::Result;
 use rustc_hash::FxHashSet;

@@ -46,9 +46,9 @@ use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
 use crate::commands::ExitStatus;
 use crate::commands::pip::operations;
 use crate::commands::project::{ProjectError, find_requires_python};
-use crate::commands::reporters::PythonDownloadReporter;
-use crate::printer::Printer;
 use crate::settings::ResolverSettings;
+use uv_cli_output::printer::Printer;
+use uv_cli_output::reporters::PythonDownloadReporter;
 
 #[derive(Debug, Error)]
 enum Error {

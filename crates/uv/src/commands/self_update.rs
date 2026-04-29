@@ -23,7 +23,7 @@ use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 
 use crate::commands::ExitStatus;
-use crate::printer::Printer;
+use uv_cli_output::printer::Printer;
 
 const UV_GITHUB_RELEASES_DOWNLOAD_PREFIX: &str =
     "https://github.com/astral-sh/uv/releases/download/";

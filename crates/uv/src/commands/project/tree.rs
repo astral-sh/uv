@@ -26,12 +26,12 @@ use crate::commands::project::{
     ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, WorkspacePython,
     default_dependency_groups,
 };
-use crate::commands::reporters::LatestVersionReporter;
 use crate::commands::{ExitStatus, diagnostics};
-use crate::printer::Printer;
 use crate::settings::FrozenSource;
 use crate::settings::LockCheck;
 use crate::settings::ResolverSettings;
+use uv_cli_output::printer::Printer;
+use uv_cli_output::reporters::LatestVersionReporter;
 
 /// Run a command.
 #[expect(clippy::fn_params_excessive_bools)]

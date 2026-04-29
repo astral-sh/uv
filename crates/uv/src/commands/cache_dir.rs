@@ -5,7 +5,7 @@ use uv_cache::Cache;
 use uv_fs::Simplified;
 
 use crate::commands::ExitStatus;
-use crate::printer::Printer;
+use uv_cli_output::printer::Printer;
 
 /// Show the cache directory.
 pub(crate) fn cache_dir(cache: &Cache, printer: Printer) -> anyhow::Result<ExitStatus> {

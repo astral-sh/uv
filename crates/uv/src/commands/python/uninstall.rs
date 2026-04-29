@@ -18,10 +18,11 @@ use uv_python::managed::{
 };
 use uv_python::{PythonInstallationKey, PythonInstallationMinorVersionKey, PythonRequest};
 
+use crate::commands::ExitStatus;
 use crate::commands::python::install::format_executables;
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
-use crate::commands::{ExitStatus, elapsed};
-use crate::printer::Printer;
+use uv_cli_output::format::elapsed;
+use uv_cli_output::printer::Printer;
 
 /// Uninstall managed Python versions.
 pub(crate) async fn uninstall(

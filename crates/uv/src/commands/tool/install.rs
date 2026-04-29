@@ -34,6 +34,7 @@ use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
 
 use crate::commands::ExitStatus;
+use crate::commands::diagnostics;
 use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::{self, Modifications};
@@ -46,9 +47,9 @@ use crate::commands::tool::common::{
     finalize_tool_install, refine_interpreter, remove_entrypoints,
 };
 use crate::commands::tool::{Target, ToolRequest};
-use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
-use crate::printer::Printer;
 use crate::settings::{ResolverInstallerSettings, ResolverSettings};
+use uv_cli_output::printer::Printer;
+use uv_cli_output::reporters::PythonDownloadReporter;
 
 /// Install a tool.
 #[expect(clippy::fn_params_excessive_bools)]

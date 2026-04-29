@@ -39,8 +39,8 @@ use crate::commands::ExitStatus;
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
 use crate::commands::pip::operations::{Changelog, report_interpreter};
 use crate::commands::project::{WorkspacePython, validate_project_requires_python};
-use crate::commands::reporters::PythonDownloadReporter;
-use crate::printer::Printer;
+use uv_cli_output::printer::Printer;
+use uv_cli_output::reporters::PythonDownloadReporter;
 
 use super::project::default_dependency_groups;
 

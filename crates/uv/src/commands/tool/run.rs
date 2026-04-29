@@ -56,13 +56,13 @@ use crate::commands::pip::operations;
 use crate::commands::project::{
     EnvironmentSpecification, PlatformState, ProjectError, resolve_names,
 };
-use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::{matching_packages, refine_interpreter};
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, project::environment::CachedEnvironment};
-use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 use crate::settings::ResolverSettings;
+use uv_cli_output::printer::Printer;
+use uv_cli_output::reporters::PythonDownloadReporter;
 
 /// The user-facing command used to invoke a tool run.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]

@@ -53,10 +53,10 @@ use crate::commands::project::{
     PlatformState, ProjectEnvironment, ProjectError, ProjectInterpreter, ScriptInterpreter,
     UniversalState, WorkspacePython, default_dependency_groups, init_script_python_requirement,
 };
-use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{ExitStatus, ScriptPath, diagnostics, project};
-use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
+use uv_cli_output::printer::Printer;
+use uv_cli_output::reporters::{PythonDownloadReporter, ResolverReporter};
 
 /// Add one or more packages to the project requirements.
 #[expect(clippy::fn_params_excessive_bools)]

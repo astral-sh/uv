@@ -4,7 +4,7 @@ use std::fmt::Write;
 use uv_auth::{PyxTokenStore, Service, TextCredentialStore, is_default_pyx_domain};
 use uv_fs::Simplified;
 
-use crate::printer::Printer;
+use uv_cli_output::printer::Printer;
 
 /// Show the credentials directory.
 pub(crate) fn dir(service: Option<&Service>, printer: Printer) -> anyhow::Result<()> {

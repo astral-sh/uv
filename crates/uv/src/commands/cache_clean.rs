@@ -8,9 +8,9 @@ use uv_cache::{Cache, Removal};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 
-use crate::commands::reporters::{CleaningDirectoryReporter, CleaningPackageReporter};
 use crate::commands::{ExitStatus, human_readable_bytes};
-use crate::printer::Printer;
+use uv_cli_output::printer::Printer;
+use uv_cli_output::reporters::{CleaningDirectoryReporter, CleaningPackageReporter};
 
 /// Clear the cache, removing all entries or those linked to specific packages.
 pub(crate) async fn cache_clean(

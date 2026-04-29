@@ -21,8 +21,8 @@ use uv_python::{
 };
 
 use crate::commands::ExitStatus;
-use crate::printer::Printer;
 use crate::settings::PythonListKinds;
+use uv_cli_output::printer::Printer;
 
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord)]
 enum Kind {

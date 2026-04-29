@@ -12,7 +12,7 @@ use uv_shell::Shell;
 use uv_tool::tool_executable_dir;
 
 use crate::commands::ExitStatus;
-use crate::printer::Printer;
+use uv_cli_output::printer::Printer;
 
 /// Ensure that the executable directory is in PATH.
 pub(crate) async fn update_shell(printer: Printer) -> Result<ExitStatus> {

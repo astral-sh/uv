@@ -16,7 +16,7 @@ use uv_pep508::VerbatimUrl;
 use uv_preview::Preview;
 
 use crate::commands::ExitStatus;
-use crate::printer::Printer;
+use uv_cli_output::printer::Printer;
 
 // We retry no more than this many times when polling for login status.
 const STATUS_RETRY_LIMIT: u32 = 60;

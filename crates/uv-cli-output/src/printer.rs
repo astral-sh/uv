@@ -2,7 +2,7 @@ use anstream::{eprint, print};
 use indicatif::ProgressDrawTarget;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Printer {
+pub enum Printer {
     /// A printer that suppresses all output.
     Silent,
     /// A printer that suppresses most output, but preserves "important" stdout.
@@ -17,7 +17,7 @@ pub(crate) enum Printer {
 
 impl Printer {
     /// Return the [`ProgressDrawTarget`] for this printer.
-    pub(crate) fn target(self) -> ProgressDrawTarget {
+    pub fn target(self) -> ProgressDrawTarget {
         match self {
             Self::Silent => ProgressDrawTarget::hidden(),
             Self::Quiet => ProgressDrawTarget::hidden(),
@@ -31,7 +31,7 @@ impl Printer {
 
     /// Return the [`Stdout`] for this printer.
     #[allow(dead_code, reason = "to be adopted incrementally")]
-    pub(crate) fn stdout_important(self) -> Stdout {
+    pub fn stdout_important(self) -> Stdout {
         match self {
             Self::Silent => Stdout::Disabled,
             Self::Quiet => Stdout::Enabled,
@@ -42,7 +42,7 @@ impl Printer {
     }
 
     /// Return the [`Stdout`] for this printer.
-    pub(crate) fn stdout(self) -> Stdout {
+    pub fn stdout(self) -> Stdout {
         match self {
             Self::Silent => Stdout::Disabled,
             Self::Quiet => Stdout::Disabled,
@@ -54,7 +54,7 @@ impl Printer {
 
     /// Return the [`Stderr`] for this printer.
     #[allow(dead_code)] // Only used with the optional self-update feature.
-    pub(crate) fn stderr_important(self) -> Stderr {
+    pub fn stderr_important(self) -> Stderr {
         match self {
             Self::Silent => Stderr::Disabled,
             Self::Quiet => Stderr::Enabled,
@@ -65,7 +65,7 @@ impl Printer {
     }
 
     /// Return the [`Stderr`] for this printer.
-    pub(crate) fn stderr(self) -> Stderr {
+    pub fn stderr(self) -> Stderr {
         match self {
             Self::Silent => Stderr::Disabled,
             Self::Quiet => Stderr::Disabled,
@@ -77,7 +77,7 @@ impl Printer {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Stdout {
+pub enum Stdout {
     Enabled,
     Disabled,
 }
@@ -96,7 +96,7 @@ impl std::fmt::Write for Stdout {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Stderr {
+pub enum Stderr {
     Enabled,
     Disabled,
 }

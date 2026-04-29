@@ -9,7 +9,7 @@ use uv_normalize::PackageName;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
 use crate::commands::ExitStatus;
-use crate::printer::Printer;
+use uv_cli_output::printer::Printer;
 
 /// Print the path to the workspace dir
 pub(crate) async fn dir(

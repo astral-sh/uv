@@ -35,8 +35,8 @@ use crate::commands::project::{
     WorkspacePython, default_dependency_groups,
 };
 use crate::commands::{ExitStatus, diagnostics, project};
-use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
+use uv_cli_output::printer::Printer;
 
 /// Remove one or more packages from the project requirements.
 pub(crate) async fn remove(

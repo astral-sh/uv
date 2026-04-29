@@ -20,7 +20,7 @@ use crate::commands::{
     ExitStatus,
     project::{ScriptInterpreter, WorkspacePython, validate_project_requires_python},
 };
-use crate::printer::Printer;
+use uv_cli_output::printer::Printer;
 
 /// Find a Python interpreter.
 #[expect(clippy::fn_params_excessive_bools)]

@@ -35,8 +35,8 @@ use uv_workspace::{DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceCache,
 
 use crate::commands::ExitStatus;
 use crate::commands::project::{find_requires_python, init_script_python_requirement};
-use crate::commands::reporters::PythonDownloadReporter;
-use crate::printer::Printer;
+use uv_cli_output::printer::Printer;
+use uv_cli_output::reporters::PythonDownloadReporter;
 
 /// Add one or more packages to the project requirements.
 #[expect(clippy::single_match_else, clippy::fn_params_excessive_bools)]

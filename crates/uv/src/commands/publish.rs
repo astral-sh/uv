@@ -22,9 +22,9 @@ use uv_redacted::DisplaySafeUrl;
 use uv_settings::EnvironmentOptions;
 use uv_warnings::{warn_user_once, write_error_chain};
 
-use crate::commands::reporters::PublishReporter;
 use crate::commands::{ExitStatus, human_readable_bytes};
-use crate::printer::Printer;
+use uv_cli_output::printer::Printer;
+use uv_cli_output::reporters::PublishReporter;
 
 pub(crate) async fn publish(
     paths: Vec<String>,

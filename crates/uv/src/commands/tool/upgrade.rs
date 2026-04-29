@@ -32,11 +32,12 @@ use crate::commands::pip::operations::Modifications;
 use crate::commands::project::{
     EnvironmentUpdate, PlatformState, resolve_environment, sync_environment, update_environment,
 };
-use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::remove_entrypoints;
-use crate::commands::{ExitStatus, conjunction, tool::common::finalize_tool_install};
-use crate::printer::Printer;
+use crate::commands::{ExitStatus, tool::common::finalize_tool_install};
 use crate::settings::ResolverInstallerSettings;
+use uv_cli_output::format::conjunction;
+use uv_cli_output::printer::Printer;
+use uv_cli_output::reporters::PythonDownloadReporter;
 
 /// Upgrade a tool.
 pub(crate) async fn upgrade(

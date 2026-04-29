@@ -30,9 +30,10 @@ use crate::commands::project::{
     ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, WorkspacePython,
     default_dependency_groups, detect_conflicts,
 };
-use crate::commands::{ExitStatus, OutputWriter, diagnostics};
-use crate::printer::Printer;
+use crate::commands::{ExitStatus, diagnostics};
 use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
+use uv_cli_output::printer::Printer;
+use uv_cli_output::writer::OutputWriter;
 
 #[derive(Debug, Clone)]
 #[expect(clippy::large_enum_variant)]

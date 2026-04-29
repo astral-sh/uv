@@ -50,11 +50,11 @@ use crate::commands::project::{
     script_specification, update_environment,
 };
 use crate::commands::{ExitStatus, diagnostics};
-use crate::printer::Printer;
 use crate::settings::{
     FrozenSource, InstallerSettingsRef, LockCheck, LockCheckSource, ResolverInstallerSettings,
     ResolverSettings,
 };
+use uv_cli_output::printer::Printer;
 
 /// Sync the project environment.
 pub(crate) async fn sync(

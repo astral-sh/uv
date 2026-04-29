@@ -14,7 +14,8 @@ use uv_preview::{Preview, PreviewFeature};
 use uv_redacted::DisplaySafeUrl;
 use uv_warnings::warn_user;
 
-use crate::{commands::ExitStatus, printer::Printer};
+use crate::commands::ExitStatus;
+use uv_cli_output::printer::Printer;
 
 /// Request format for the Bazel credential helper protocol.
 #[derive(Debug, Deserialize)]

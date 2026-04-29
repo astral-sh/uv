@@ -15,8 +15,8 @@ use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceEr
 
 use crate::child::run_to_completion;
 use crate::commands::ExitStatus;
-use crate::commands::reporters::BinaryDownloadReporter;
-use crate::printer::Printer;
+use uv_cli_output::printer::Printer;
+use uv_cli_output::reporters::BinaryDownloadReporter;
 
 /// Run the formatter.
 #[expect(clippy::fn_params_excessive_bools)]

@@ -11,8 +11,9 @@ use uv_distribution_types::Name;
 use uv_normalize::PackageName;
 
 use crate::commands::pip::operations::{Changelog, ShortSpecifier};
-use crate::commands::{ChangeEvent, ChangeEventKind, elapsed};
-use crate::printer::Printer;
+use crate::commands::{ChangeEvent, ChangeEventKind};
+use uv_cli_output::format::elapsed;
+use uv_cli_output::printer::Printer;
 
 /// A trait to handle logging during install operations.
 pub(crate) trait InstallLogger {

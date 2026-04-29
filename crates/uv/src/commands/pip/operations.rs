@@ -49,8 +49,8 @@ use uv_warnings::warn_user;
 
 use crate::commands::compile_bytecode;
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
-use crate::commands::reporters::{InstallReporter, PrepareReporter, ResolverReporter};
-use crate::printer::Printer;
+use uv_cli_output::printer::Printer;
+use uv_cli_output::reporters::{InstallReporter, PrepareReporter, ResolverReporter};
 
 /// Consolidate the requirements for an installation.
 pub(crate) async fn read_requirements(

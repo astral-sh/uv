@@ -52,19 +52,18 @@ use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
 use crate::commands::{ExitStatus, ParsedRunCommand, RunCommand, ScriptPath, ToolRunCommand};
-use crate::printer::Printer;
 use crate::settings::{
     CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
     PipInstallSettings, PipListSettings, PipShowSettings, PipSyncSettings, PipUninstallSettings,
     PublishSettings, resolve_color,
 };
+use uv_cli_output::printer::Printer;
 
 pub(crate) mod child;
 pub(crate) mod commands;
 #[cfg(not(feature = "self-update"))]
 mod install_source;
 pub(crate) mod logging;
-pub(crate) mod printer;
 pub(crate) mod settings;
 
 #[instrument(skip_all)]

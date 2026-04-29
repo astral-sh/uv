@@ -10,7 +10,7 @@ use uv_preview::Preview;
 
 use crate::commands::ExitStatus;
 use crate::commands::auth::login;
-use crate::printer::Printer;
+use uv_cli_output::printer::Printer;
 
 /// Show the token that will be used for a service.
 pub(crate) async fn token(

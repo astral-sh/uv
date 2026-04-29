@@ -7,8 +7,8 @@ use crate::commands::pip::operations::Modifications;
 use crate::commands::project::{
     EnvironmentSpecification, PlatformState, ProjectError, resolve_environment, sync_environment,
 };
-use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
+use uv_cli_output::printer::Printer;
 
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_info::CacheInfo;

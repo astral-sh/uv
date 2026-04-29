@@ -45,9 +45,9 @@ use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::operations::{report_interpreter, report_target_environment};
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
 use crate::commands::pylock::{read_pylock_toml, resolve_pylock_toml};
-use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, diagnostics};
-use crate::printer::Printer;
+use uv_cli_output::printer::Printer;
+use uv_cli_output::reporters::PythonDownloadReporter;
 
 /// Install a set of locked requirements into the current Python environment.
 #[expect(clippy::fn_params_excessive_bools)]

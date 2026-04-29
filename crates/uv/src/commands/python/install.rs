@@ -37,10 +37,11 @@ use uv_shell::Shell;
 use uv_trampoline_builder::{Launcher, LauncherKind};
 use uv_warnings::{warn_user, write_error_chain};
 
+use crate::commands::ExitStatus;
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
-use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, elapsed};
-use crate::printer::Printer;
+use uv_cli_output::format::elapsed;
+use uv_cli_output::printer::Printer;
+use uv_cli_output::reporters::PythonDownloadReporter;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct InstallRequest<'a> {

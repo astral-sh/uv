@@ -51,16 +51,17 @@ use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::pyproject::{ExtraBuildDependency, PyProjectToml};
 use uv_workspace::{RequiresPythonSources, Workspace, WorkspaceCache};
 
+use crate::commands::pip;
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::{Changelog, Modifications};
 use crate::commands::project::install_target::InstallTarget;
-use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{capitalize, conjunction, pip};
-use crate::printer::Printer;
 use crate::settings::{
     FrozenSource, InstallerSettingsRef, LockCheckSource, ResolverInstallerSettings,
     ResolverSettings,
 };
+use uv_cli_output::format::{capitalize, conjunction};
+use uv_cli_output::printer::Printer;
+use uv_cli_output::reporters::{PythonDownloadReporter, ResolverReporter};
 
 pub(crate) mod add;
 pub(crate) mod audit;

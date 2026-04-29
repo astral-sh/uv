@@ -55,9 +55,10 @@ use uv_workspace::pyproject::ExtraBuildDependencies;
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
-use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, OutputWriter, diagnostics};
-use crate::printer::Printer;
+use crate::commands::{ExitStatus, diagnostics};
+use uv_cli_output::printer::Printer;
+use uv_cli_output::reporters::PythonDownloadReporter;
+use uv_cli_output::writer::OutputWriter;
 
 /// Resolve a set of requirements into a set of pinned versions.
 #[expect(clippy::fn_params_excessive_bools)]

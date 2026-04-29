@@ -4,8 +4,8 @@ use anyhow::Result;
 use diskus::DiskUsage;
 
 use crate::commands::{ExitStatus, human_readable_bytes};
-use crate::printer::Printer;
 use uv_cache::Cache;
+use uv_cli_output::printer::Printer;
 use uv_preview::{Preview, PreviewFeature};
 use uv_warnings::warn_user;
 

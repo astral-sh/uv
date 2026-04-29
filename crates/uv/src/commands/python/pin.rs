@@ -19,10 +19,9 @@ use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user_once;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
-use crate::commands::{
-    ExitStatus, project::find_requires_python, reporters::PythonDownloadReporter,
-};
-use crate::printer::Printer;
+use crate::commands::{ExitStatus, project::find_requires_python};
+use uv_cli_output::printer::Printer;
+use uv_cli_output::reporters::PythonDownloadReporter;
 
 /// Pin to a specific Python version.
 #[expect(clippy::fn_params_excessive_bools)]

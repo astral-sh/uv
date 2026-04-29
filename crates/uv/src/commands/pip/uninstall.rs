@@ -19,9 +19,10 @@ use uv_python::{EnvironmentPreference, PythonPreference};
 use uv_python::{Prefix, PythonEnvironment, Target};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 
+use crate::commands::ExitStatus;
 use crate::commands::pip::operations::report_target_environment;
-use crate::commands::{ExitStatus, elapsed};
-use crate::printer::Printer;
+use uv_cli_output::format::elapsed;
+use uv_cli_output::printer::Printer;
 
 /// Uninstall packages from the current environment.
 pub(crate) async fn pip_uninstall(

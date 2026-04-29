@@ -8,7 +8,7 @@ use uv_fs::Simplified;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
 use crate::commands::ExitStatus;
-use crate::printer::Printer;
+use uv_cli_output::printer::Printer;
 
 /// List workspace members
 pub(crate) async fn list(

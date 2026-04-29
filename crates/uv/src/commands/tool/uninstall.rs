@@ -10,7 +10,7 @@ use uv_normalize::PackageName;
 use uv_tool::{InstalledTools, Tool, ToolEntrypoint};
 
 use crate::commands::ExitStatus;
-use crate::printer::Printer;
+use uv_cli_output::printer::Printer;
 
 /// Uninstall a tool.
 pub(crate) async fn uninstall(name: Vec<PackageName>, printer: Printer) -> Result<ExitStatus> {
