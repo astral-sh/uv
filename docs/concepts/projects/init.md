@@ -2,15 +2,15 @@
 
 uv supports creating a project with `uv init`.
 
-By default, uv creates uses a packaged layout in which the source files are under
-`src/<module_name>/`. Packaged layouts are suitable for both applications (`--app`, the default) and
-libraries (`--lib`). You can use `--no-package` for a flat, unpackaged layout instead.
+By default, uv uses a packaged layout where the source files are under `src/<module_name>/`.
+Packaged layouts are suitable for both applications (`--app`, the default) and libraries (`--lib`).
+You can use `--no-package` for a flat, unpackaged layout instead.
 
 !!! note
 
     Prior to v0.12.0, uv would use a flat layout for applications and packaged layout for libraries.
     By using the packaged layout for both, the differences between the library and application
-    layout are now small.
+    layouts are now small.
 
 When creating projects, uv supports two basic templates: [**applications**](#applications) and
 [**libraries**](#libraries). By default, uv will create a project for an application. The `--lib`

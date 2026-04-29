@@ -32,15 +32,18 @@ uv will create the following files and directories:
 ├── .git/
 ├── .gitignore
 ├── .python-version
+├── pyproject.toml
 ├── README.md
-├── main.py
-└── pyproject.toml
+└── src
+    └── foo
+        └── __init__.py
 ```
 
-The `main.py` file contains a simple "Hello world" program. Try it out with `uv run`:
+The `pyproject.toml` defines a `hello-world` entrypoint referring to a simple "Hello world" program
+in `__init__.py`. Try it out with `uv run`:
 
 ```console
-$ uv run main.py
+$ uv run hello-world
 Hello from hello-world!
 ```
 
@@ -57,13 +60,15 @@ A complete listing would look like:
 .
 ├── .git/
 ├── .venv/
-│   ├── bin
-│   ├── lib
-│   └── pyvenv.cfg
+│   ├── bin
+│   ├── lib
+│   └── pyvenv.cfg
 ├── .gitignore
 ├── .python-version
 ├── README.md
-├── main.py
+├── src
+│   └── foo
+│       └── __init__.py
 ├── pyproject.toml
 └── uv.lock
 ```
@@ -78,7 +83,18 @@ name = "hello-world"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
+authors = [
+  { name = "ferris", email = "ferris@example.org" }
+]
+requires-python = ">=3.14"
 dependencies = []
+
+[project.scripts]
+hello-world = "hello_world:main"
+
+[build-system]
+requires = ["uv_build>=0.11.8,<0.12.0"]
+build-backend = "uv_build"
 ```
 
 You'll use this file to specify dependencies, as well as details about the project such as its
