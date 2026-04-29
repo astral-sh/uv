@@ -343,23 +343,27 @@ fn display_with_redacted_credentials(
     url: &Url,
     f: &mut std::fmt::Formatter<'_>,
 ) -> std::fmt::Result {
-    write!(f, "{}://", url.scheme())?;
+    write!(f, "{}:", url.scheme())?;
 
-    if url.username() != "" && url.password().is_some() {
-        write!(f, "{}", url.username())?;
-        write!(f, ":****@")?;
-    } else if url.username() != "" && is_ssh_git_username(url) {
-        write!(f, "{}@", url.username())?;
-    } else if url.username() != "" {
-        write!(f, "****@")?;
-    } else if url.password().is_some() {
-        write!(f, ":****@")?;
-    }
+    if url.has_authority() {
+        write!(f, "//")?;
 
-    write!(f, "{}", url.host_str().unwrap_or(""))?;
+        if url.username() != "" && url.password().is_some() {
+            write!(f, "{}", url.username())?;
+            write!(f, ":****@")?;
+        } else if url.username() != "" && is_ssh_git_username(url) {
+            write!(f, "{}@", url.username())?;
+        } else if url.username() != "" {
+            write!(f, "****@")?;
+        } else if url.password().is_some() {
+            write!(f, ":****@")?;
+        }
 
-    if let Some(port) = url.port() {
-        write!(f, ":{port}")?;
+        write!(f, "{}", url.host_str().unwrap_or(""))?;
+
+        if let Some(port) = url.port() {
+            write!(f, ":{port}")?;
+        }
     }
 
     write!(f, "{}", url.path())?;
@@ -551,6 +555,36 @@ mod tests {
         assert_eq!(
             log_safe_url.to_string(),
             "https://bucket.s3.amazonaws.com/dist.whl?token=secret"
+        );
+    }
+
+    #[test]
+    fn does_not_add_authority_to_urls_without_authority() {
+        let log_safe_url = DisplaySafeUrl::parse("c:/home/ferris/projects/foo").unwrap();
+
+        assert_eq!(log_safe_url.to_string(), "c:/home/ferris/projects/foo");
+    }
+
+    #[test]
+    fn redacts_query_values_in_urls_without_authority() {
+        let log_safe_url =
+            DisplaySafeUrl::parse("c:/home/ferris/projects/foo?X-Amz-Signature=signature").unwrap();
+
+        assert_eq!(
+            log_safe_url.to_string(),
+            "c:/home/ferris/projects/foo?X-Amz-Signature=****"
+        );
+    }
+
+    #[test]
+    fn redacts_query_values_in_cannot_be_a_base_urls() {
+        let log_safe_url =
+            DisplaySafeUrl::parse("mailto:ferris@example.com?X-Amz-Signature=signature").unwrap();
+
+        assert!(log_safe_url.cannot_be_a_base());
+        assert_eq!(
+            log_safe_url.to_string(),
+            "mailto:ferris@example.com?X-Amz-Signature=****"
         );
     }
 
