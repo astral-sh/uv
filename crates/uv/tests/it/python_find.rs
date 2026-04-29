@@ -1596,13 +1596,13 @@ fn python_find_search_path() {
     ");
 }
 
-/// When `requires-python` uses `==`, we should find the correct interpreter even
-/// when only a version-specific executable (e.g., `python3.12`) is available.
+/// When `requires-python` constrains to a minor version, we should find the correct interpreter
+/// even when only a version-specific executable (e.g., `python3.12`) is available.
 ///
 /// This is a regression test for <https://github.com/astral-sh/uv/issues/9695>.
 #[test]
 #[cfg(unix)]
-fn python_find_project_requires_python_equal() {
+fn python_find_project_requires_python_minor_range() {
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
 
     // Set up a directory where the Python 3.12 executable is named `python3.12` (not `python3`).
@@ -1636,5 +1636,45 @@ fn python_find_project_requires_python_equal() {
 
     ----- stderr -----
     warning: The resolved Python interpreter (Python 3.12.[X]) is incompatible with the project's Python requirement: `==3.12` (from `project.requires-python`)
+    "#);
+
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = "==3.12.*"
+        dependencies = []
+    "#})
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.python_find()
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, child.path()), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/child/python3.12
+
+    ----- stderr -----
+    "#);
+
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = "~=3.12.0"
+        dependencies = []
+    "#})
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.python_find()
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, child.path()), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/child/python3.12
+
+    ----- stderr -----
     "#);
 }
