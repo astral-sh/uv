@@ -20,6 +20,7 @@ uv-cache-info = { workspace = true }
 uv-cache-key = { workspace = true }
 uv-dirs = { workspace = true }
 uv-distribution-types = { workspace = true }
+uv-fastid = { workspace = true, features = ["serde"] }
 uv-fs = { workspace = true, features = ["tokio"] }
 uv-normalize = { workspace = true }
 uv-pypi-types = { workspace = true }
@@ -28,7 +29,6 @@ uv-static = { workspace = true }
 
 clap = { workspace = true, features = ["derive", "env"], optional = true }
 fs-err = { workspace = true, features = ["tokio"] }
-nanoid = { workspace = true }
 rmp-serde = { workspace = true }
 rustc-hash = { workspace = true }
 same-file = { workspace = true }
