@@ -33759,6 +33759,52 @@ fn lock_exclude_newer_package() -> Result<()> {
     Ok(())
 }
 
+/// Regression test for <https://github.com/astral-sh/uv/issues/19207>.
+#[test]
+fn lock_exclude_newer_multiple_packages() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["requests"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--exclude-newer-package")
+        .arg("requests=2030-01-01T00:00:00Z")
+        .arg("--exclude-newer-package")
+        .arg("urllib3=2030-01-01T00:00:00Z"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolving despite existing lockfile due to 2 changes: addition of exclude newer `2030-01-01T00:00:00Z` for package `requests`; addition of exclude newer `2030-01-01T00:00:00Z` for package `urllib3`
+    Resolved 6 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Test that the resolver emits a hint when all versions are excluded by `--exclude-newer`.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/18014>

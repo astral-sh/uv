@@ -75,7 +75,7 @@ pub enum ExcludeNewerChange {
     GlobalChanged(ExcludeNewerValueChange),
     GlobalAdded(ExcludeNewerValue),
     GlobalRemoved,
-    Package(ExcludeNewerPackageChange),
+    Packages(Vec<ExcludeNewerPackageChange>),
 }
 
 impl ExcludeNewerChange {
@@ -84,7 +84,9 @@ impl ExcludeNewerChange {
         match self {
             Self::GlobalChanged(change) => change.is_relative_timestamp_change(),
             Self::GlobalAdded(_) | Self::GlobalRemoved => false,
-            Self::Package(change) => change.is_relative_timestamp_change(),
+            Self::Packages(changes) => changes
+                .iter()
+                .all(ExcludeNewerPackageChange::is_relative_timestamp_change),
         }
     }
 }
@@ -99,8 +101,18 @@ impl std::fmt::Display for ExcludeNewerChange {
                 write!(f, "addition of global exclude newer {value}")
             }
             Self::GlobalRemoved => write!(f, "removal of global exclude newer"),
-            Self::Package(change) => {
-                write!(f, "{change}")
+            Self::Packages(changes) => {
+                if changes.len() > 1 {
+                    write!(f, "{} changes: ", changes.len())?;
+                }
+                let mut changes = changes.iter();
+                if let Some(change) = changes.next() {
+                    write!(f, "{change}")?;
+                }
+                for change in changes {
+                    write!(f, "; {change}")?;
+                }
+                Ok(())
             }
         }
     }
@@ -114,6 +126,14 @@ pub enum ExcludeNewerPackageChange {
 }
 
 impl ExcludeNewerPackageChange {
+    fn package(&self) -> &PackageName {
+        match self {
+            Self::PackageAdded(package, _)
+            | Self::PackageRemoved(package)
+            | Self::PackageChanged(package, _) => package,
+        }
+    }
+
     pub fn is_relative_timestamp_change(&self) -> bool {
         match self {
             Self::PackageAdded(_, _) | Self::PackageRemoved(_) => false,
@@ -348,7 +368,9 @@ impl ExcludeNewerPackage {
         self.0.is_empty()
     }
 
-    pub fn compare(&self, other: &Self) -> Option<ExcludeNewerPackageChange> {
+    pub fn compare(&self, other: &Self) -> Vec<ExcludeNewerPackageChange> {
+        let mut changes = Vec::new();
+
         for (package, setting) in self {
             match (setting, other.get(package)) {
                 (
@@ -358,7 +380,7 @@ impl ExcludeNewerPackage {
                     if let Some(change) =
                         compare_exclude_newer_value(self_timestamp, other_timestamp)
                     {
-                        return Some(ExcludeNewerPackageChange::PackageChanged(
+                        changes.push(ExcludeNewerPackageChange::PackageChanged(
                             package.clone(),
                             Box::new(ExcludeNewerOverrideChange::TimestampChanged(change)),
                         ));
@@ -368,7 +390,7 @@ impl ExcludeNewerPackage {
                     ExcludeNewerOverride::Enabled(self_timestamp),
                     Some(ExcludeNewerOverride::Disabled),
                 ) => {
-                    return Some(ExcludeNewerPackageChange::PackageChanged(
+                    changes.push(ExcludeNewerPackageChange::PackageChanged(
                         package.clone(),
                         Box::new(ExcludeNewerOverrideChange::Disabled {
                             was: self_timestamp.as_ref().clone(),
@@ -379,7 +401,7 @@ impl ExcludeNewerPackage {
                     ExcludeNewerOverride::Disabled,
                     Some(ExcludeNewerOverride::Enabled(other_timestamp)),
                 ) => {
-                    return Some(ExcludeNewerPackageChange::PackageChanged(
+                    changes.push(ExcludeNewerPackageChange::PackageChanged(
                         package.clone(),
                         Box::new(ExcludeNewerOverrideChange::Enabled {
                             now: other_timestamp.as_ref().clone(),
@@ -388,21 +410,22 @@ impl ExcludeNewerPackage {
                 }
                 (ExcludeNewerOverride::Disabled, Some(ExcludeNewerOverride::Disabled)) => {}
                 (_, None) => {
-                    return Some(ExcludeNewerPackageChange::PackageRemoved(package.clone()));
+                    changes.push(ExcludeNewerPackageChange::PackageRemoved(package.clone()));
                 }
             }
         }
 
         for (package, value) in other {
             if !self.contains_key(package) {
-                return Some(ExcludeNewerPackageChange::PackageAdded(
+                changes.push(ExcludeNewerPackageChange::PackageAdded(
                     package.clone(),
                     value.clone(),
                 ));
             }
         }
 
-        None
+        changes.sort_by(|left, right| left.package().cmp(right.package()));
+        changes
     }
 }
 
@@ -523,9 +546,10 @@ impl ExcludeNewer {
             (Some(_), None) => return Some(ExcludeNewerChange::GlobalRemoved),
             (None, None) => (),
         }
-        self.package
-            .compare(&other.package)
-            .map(ExcludeNewerChange::Package)
+        match self.package.compare(&other.package).as_slice() {
+            [] => None,
+            changes => Some(ExcludeNewerChange::Packages(changes.to_vec())),
+        }
     }
 }
 
