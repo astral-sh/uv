@@ -35,7 +35,7 @@ uv will create the following files and directories:
 ├── pyproject.toml
 ├── README.md
 └── src
-    └── foo
+    └── hello_world
         └── __init__.py
 ```
 
@@ -67,7 +67,7 @@ A complete listing would look like:
 ├── .python-version
 ├── README.md
 ├── src
-│   └── foo
+│   └── hello_world
 │       └── __init__.py
 ├── pyproject.toml
 └── uv.lock
@@ -285,8 +285,8 @@ artifacts in a `dist/` subdirectory:
 ```console
 $ uv build
 $ ls dist/
-hello-world-0.1.0-py3-none-any.whl
-hello-world-0.1.0.tar.gz
+hello_world-0.1.0-py3-none-any.whl
+hello_world-0.1.0.tar.gz
 ```
 
 See the documentation on [building projects](../concepts/projects/build.md) for more details.

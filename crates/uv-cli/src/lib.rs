@@ -3383,9 +3383,9 @@ pub struct InitArgs {
 
     /// Do not set up the project to be built as a Python package.
     ///
-    /// Does not include a `[build-system]` for the project.
-    ///
-    /// This is the default behavior when using `--app`.
+    /// This option creates a flat project structure without an importable module and without
+    /// a `[build-system]` for the project. It can be used for applications that are not expected to
+    /// be distributed as a package.
     #[arg(long, overrides_with = "package", conflicts_with_all = ["lib", "build_backend"])]
     pub r#no_package: bool,
 
@@ -3394,10 +3394,6 @@ pub struct InitArgs {
     /// This is the default behavior if `--lib` is not requested.
     ///
     /// This project kind is for web servers, scripts, and command-line interfaces.
-    ///
-    /// By default, an application is not intended to be built and distributed as a Python package.
-    /// The `--package` option can be used to create an application that is distributable, e.g., if
-    /// you want to distribute a command-line interface via PyPI.
     #[arg(long, alias = "application", conflicts_with_all = ["lib", "script"])]
     pub r#app: bool,
 

@@ -2,11 +2,10 @@
 
 uv supports creating a project with `uv init`.
 
-By default, uv uses a packaged layout where the source files are under `src/<module_name>/`.
-Packaged layouts are suitable for both basic templates: [**applications**](#applications) and
-[**libraries**](#libraries). By default, uv will create a project for packaged application. The
-`--lib` flag can be used to create a project for a library instead, and `--no-package` can be used
-for a flat, unpackaged layout instead.
+By default, uv uses a packaged layout where the source files are under `src/<module_name>/`. The
+packaged layout is used for both basic templates: [**applications**](#applications) and
+[**libraries**](#libraries). By default, uv will create a packaged application. The `--lib` flag can
+be used to create a library instead, and `--no-package` can be used for a flat, unpackaged layout.
 
 !!! note
 
@@ -26,7 +25,7 @@ with an error.
 
 Application projects are suitable for web servers, scripts, and command-line interfaces.
 
-Applications are the default target for `uv init`, but can also be specified with the `--app` flag.
+Applications are the default target for `uv init`:
 
 ```console
 $ uv init example-app
@@ -186,7 +185,7 @@ pin file (`.python-version`).
 
 ```console
 $ tree example-app
-example-app
+example-app/
 ├── .python-version
 ├── README.md
 ├── main.py
