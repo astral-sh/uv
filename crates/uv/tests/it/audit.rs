@@ -1,6 +1,6 @@
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use serde_json::json;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -37,7 +37,6 @@ async fn audit_no_vulnerabilities() {
 
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--frozen")
         .arg("--preview")
         .arg("--service-url")
         .arg(server.uri()), @"
@@ -46,6 +45,7 @@ async fn audit_no_vulnerabilities() {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 2 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
 }
@@ -103,7 +103,6 @@ async fn audit_vulnerability_found() {
 
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--frozen")
         .arg("--preview")
         .arg("--service-url")
         .arg(server.uri()), @"
@@ -123,6 +122,7 @@ async fn audit_vulnerability_found() {
 
 
     ----- stderr -----
+    Resolved 2 packages in [TIME]
     Found 1 known vulnerability and no adverse project statuses in 1 package
     ");
 }
@@ -151,7 +151,6 @@ async fn audit_no_dependencies() {
 
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--frozen")
         .arg("--preview")
         .arg("--service-url")
         .arg(server.uri()), @"
@@ -160,6 +159,7 @@ async fn audit_no_dependencies() {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 0 packages
     ");
 }
@@ -207,7 +207,6 @@ async fn audit_best_id_selection() {
     // The output should show PYSEC-2023-0042 as the display ID (PYSEC preferred over GHSA, CVE).
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--frozen")
         .arg("--preview")
         .arg("--service-url")
         .arg(server.uri()), @"
@@ -227,6 +226,7 @@ async fn audit_best_id_selection() {
 
 
     ----- stderr -----
+    Resolved 2 packages in [TIME]
     Found 1 known vulnerability and no adverse project statuses in 1 package
     ");
 }
@@ -271,7 +271,6 @@ async fn audit_no_fix_versions() {
 
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--frozen")
         .arg("--preview")
         .arg("--service-url")
         .arg(server.uri()), @"
@@ -291,6 +290,7 @@ async fn audit_no_fix_versions() {
 
 
     ----- stderr -----
+    Resolved 2 packages in [TIME]
     Found 1 known vulnerability and no adverse project statuses in 1 package
     ");
 }
@@ -371,7 +371,6 @@ async fn audit_multiple_vulnerabilities_same_package() {
 
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--frozen")
         .arg("--preview")
         .arg("--service-url")
         .arg(server.uri()), @"
@@ -397,6 +396,7 @@ async fn audit_multiple_vulnerabilities_same_package() {
 
 
     ----- stderr -----
+    Resolved 2 packages in [TIME]
     Found 2 known vulnerabilities and no adverse project statuses in 1 package
     ");
 }
@@ -435,7 +435,6 @@ async fn audit_no_dev() {
     // With --no-dev, only "iniconfig" should be audited (not "typing-extensions").
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--frozen")
         .arg("--preview")
         .arg("--no-dev")
         .arg("--service-url")
@@ -445,13 +444,13 @@ async fn audit_no_dev() {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 3 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
 
     // Without --no-dev, both packages should be audited.
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--frozen")
         .arg("--preview")
         .arg("--service-url")
         .arg(server.uri()), @"
@@ -460,6 +459,7 @@ async fn audit_no_dev() {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 3 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 2 packages
     ");
 }
@@ -498,7 +498,6 @@ async fn audit_extras() {
     // By default, extras are included: both iniconfig and typing-extensions are audited.
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--frozen")
         .arg("--preview")
         .arg("--service-url")
         .arg(server.uri()), @"
@@ -507,13 +506,13 @@ async fn audit_extras() {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 3 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 2 packages
     ");
 
     // With --no-extra web, only iniconfig should be audited.
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--frozen")
         .arg("--preview")
         .arg("--no-extra")
         .arg("web")
@@ -524,6 +523,7 @@ async fn audit_extras() {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 3 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
 }
@@ -564,7 +564,6 @@ async fn audit_dependency_groups() {
     // Default: all groups are included (iniconfig + typing-extensions + sniffio = 3).
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--frozen")
         .arg("--preview")
         .arg("--service-url")
         .arg(server.uri()), @"
@@ -573,13 +572,13 @@ async fn audit_dependency_groups() {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 4 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 3 packages
     ");
 
     // --no-dev: excludes the dev group (iniconfig + sniffio = 2).
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--frozen")
         .arg("--preview")
         .arg("--no-dev")
         .arg("--service-url")
@@ -589,13 +588,13 @@ async fn audit_dependency_groups() {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 4 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 2 packages
     ");
 
     // --no-group lint: excludes the lint group (iniconfig + typing-extensions = 2).
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--frozen")
         .arg("--preview")
         .arg("--no-group")
         .arg("lint")
@@ -606,13 +605,13 @@ async fn audit_dependency_groups() {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 4 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 2 packages
     ");
 
     // --only-group lint: only the "lint" group, project deps omitted (sniffio = 1).
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--frozen")
         .arg("--preview")
         .arg("--only-group")
         .arg("lint")
@@ -623,6 +622,7 @@ async fn audit_dependency_groups() {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 4 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
 }
@@ -677,7 +677,6 @@ async fn audit_ignore_by_id() {
     // Without --ignore, the vulnerability is reported.
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--frozen")
         .arg("--preview")
         .arg("--service-url")
         .arg(server.uri()), @"
@@ -697,13 +696,13 @@ async fn audit_ignore_by_id() {
 
 
     ----- stderr -----
+    Resolved 2 packages in [TIME]
     Found 1 known vulnerability and no adverse project statuses in 1 package
     ");
 
     // With --ignore, the vulnerability is suppressed.
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--frozen")
         .arg("--preview")
         .arg("--ignore")
         .arg("PYSEC-2023-0001")
@@ -714,6 +713,7 @@ async fn audit_ignore_by_id() {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 2 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
 }
@@ -760,7 +760,6 @@ async fn audit_ignore_by_alias() {
     // Ignoring by alias (CVE-2023-9999) should suppress the vulnerability.
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--frozen")
         .arg("--preview")
         .arg("--ignore")
         .arg("CVE-2023-9999")
@@ -771,6 +770,7 @@ async fn audit_ignore_by_alias() {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 2 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
 }
@@ -817,7 +817,6 @@ async fn audit_ignore_until_fixed() {
     // With --ignore-until-fixed and no fix versions, the vulnerability is suppressed.
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--frozen")
         .arg("--preview")
         .arg("--ignore-until-fixed")
         .arg("VULN-NO-FIX")
@@ -828,6 +827,7 @@ async fn audit_ignore_until_fixed() {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 2 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
 }
@@ -883,7 +883,6 @@ async fn audit_ignore_until_fixed_with_fix() {
     // With --ignore-until-fixed but a fix IS available, the vulnerability is still reported.
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--frozen")
         .arg("--preview")
         .arg("--ignore-until-fixed")
         .arg("PYSEC-2023-0001")
@@ -905,6 +904,7 @@ async fn audit_ignore_until_fixed_with_fix() {
 
 
     ----- stderr -----
+    Resolved 2 packages in [TIME]
     Found 1 known vulnerability and no adverse project statuses in 1 package
     ");
 }
@@ -962,7 +962,6 @@ async fn audit_ignore_config() {
     // The vulnerability is suppressed by the config.
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--frozen")
         .arg("--preview")
         .arg("--service-url")
         .arg(server.uri()), @"
@@ -971,6 +970,7 @@ async fn audit_ignore_config() {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 2 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
 }
@@ -1019,7 +1019,6 @@ async fn audit_ignore_until_fixed_config() {
     // The vulnerability is suppressed because no fix is available.
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--frozen")
         .arg("--preview")
         .arg("--service-url")
         .arg(server.uri()), @"
@@ -1028,6 +1027,7 @@ async fn audit_ignore_until_fixed_config() {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 2 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
 }
@@ -1101,7 +1101,6 @@ async fn audit_ignore_partial() {
     // Ignoring VULN-A should still report VULN-B.
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--frozen")
         .arg("--preview")
         .arg("--ignore")
         .arg("VULN-A")
@@ -1123,6 +1122,7 @@ async fn audit_ignore_partial() {
 
 
     ----- stderr -----
+    Resolved 2 packages in [TIME]
     Found 1 known vulnerability and no adverse project statuses in 1 package
     ");
 }
@@ -1158,7 +1158,6 @@ async fn audit_ignore_unmatched() {
     // Ignoring a non-existent vulnerability should warn.
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--frozen")
         .arg("--preview")
         .arg("--ignore")
         .arg("CVE-XXXX-YYYY")
@@ -1169,6 +1168,7 @@ async fn audit_ignore_unmatched() {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 2 packages in [TIME]
     warning: Ignored vulnerability `CVE-XXXX-YYYY` does not match any vulnerability in the project
     Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
@@ -1205,7 +1205,6 @@ async fn audit_ignore_until_fixed_unmatched() {
     // Ignoring a non-existent vulnerability with --ignore-until-fixed should warn.
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--frozen")
         .arg("--preview")
         .arg("--ignore-until-fixed")
         .arg("CVE-XXXX-YYYY")
@@ -1216,6 +1215,7 @@ async fn audit_ignore_until_fixed_unmatched() {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 2 packages in [TIME]
     warning: Ignored vulnerability `CVE-XXXX-YYYY` does not match any vulnerability in the project
     Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
@@ -1272,7 +1272,6 @@ async fn audit_ignore_mixed_matched_unmatched() {
     // and the non-existent one triggers a warning.
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--frozen")
         .arg("--preview")
         .arg("--ignore")
         .arg("PYSEC-2023-0001")
@@ -1285,6 +1284,7 @@ async fn audit_ignore_mixed_matched_unmatched() {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 2 packages in [TIME]
     warning: Ignored vulnerability `CVE-DOES-NOT-EXIST` does not match any vulnerability in the project
     Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
@@ -1315,6 +1315,9 @@ async fn audit_script_no_vulnerabilities() {
         revision = 3
         requires-python = ">=3.12"
 
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
         [manifest]
         requirements = [{ name = "iniconfig", specifier = "==2.0.0" }]
 
@@ -1341,7 +1344,6 @@ async fn audit_script_no_vulnerabilities() {
 
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--frozen")
         .arg("--preview")
         .arg("--script")
         .arg("script.py")
@@ -1352,6 +1354,7 @@ async fn audit_script_no_vulnerabilities() {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
 }
@@ -1380,6 +1383,9 @@ async fn audit_script_vulnerability_found() {
         version = 1
         revision = 3
         requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
         requirements = [{ name = "iniconfig", specifier = "==2.0.0" }]
@@ -1430,7 +1436,6 @@ async fn audit_script_vulnerability_found() {
 
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--frozen")
         .arg("--preview")
         .arg("--script")
         .arg("script.py")
@@ -1452,6 +1457,7 @@ async fn audit_script_vulnerability_found() {
 
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Found 1 known vulnerability and no adverse project statuses in 1 package
     ");
 }
@@ -1479,6 +1485,9 @@ async fn audit_script_no_dependencies() {
         revision = 3
         requires-python = ">=3.12"
 
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
         [manifest]
         requirements = []
     "#})
@@ -1488,7 +1497,6 @@ async fn audit_script_no_dependencies() {
 
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--frozen")
         .arg("--preview")
         .arg("--script")
         .arg("script.py")
@@ -1499,6 +1507,7 @@ async fn audit_script_no_dependencies() {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 0 packages
     ");
 }
@@ -1567,6 +1576,9 @@ async fn audit_script_multiple_dependencies() {
         revision = 3
         requires-python = ">=3.12"
 
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
         [manifest]
         requirements = [
             { name = "iniconfig", specifier = "==2.0.0" },
@@ -1605,7 +1617,6 @@ async fn audit_script_multiple_dependencies() {
 
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--frozen")
         .arg("--preview")
         .arg("--script")
         .arg("script.py")
@@ -1616,6 +1627,7 @@ async fn audit_script_multiple_dependencies() {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 2 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 2 packages
     ");
 }
@@ -1648,6 +1660,9 @@ async fn audit_script_extras() {
         version = 1
         revision = 3
         requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
         requirements = [{ name = "iniconfig", extras = ["test"] }]
@@ -1688,11 +1703,9 @@ async fn audit_script_extras() {
         .mount(&server)
         .await;
 
-    // With --frozen, the synthetic lockfile is used directly.
     // typing-extensions (reachable only via the `test` extra) should be audited.
     uv_snapshot!(context.filters(), context
         .audit()
-        .arg("--frozen")
         .arg("--preview")
         .arg("--script")
         .arg("script.py")
@@ -1703,6 +1716,290 @@ async fn audit_script_extras() {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 2 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 2 packages
+    ");
+}
+
+/// Audit a project whose index reports an adverse PEP 792 status (deprecated
+/// with reason) for a lockfile dependency.
+#[tokio::test]
+async fn audit_project_status_deprecated_with_reason() {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#, proxy.url("/status/deprecated/reason/no-longer-maintained/simple")})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview")
+        .arg("--service-url")
+        .arg(server.uri()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    Adverse statuses:
+
+    - iniconfig is deprecated: no-longer-maintained
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Found no known vulnerabilities and 1 adverse project status in 1 package
+    ");
+}
+
+/// Audit a project whose index reports an archived status without a reason.
+#[tokio::test]
+async fn audit_project_status_archived_no_reason() {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#, proxy.url("/status/archived/simple")})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview")
+        .arg("--service-url")
+        .arg(server.uri()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    Adverse statuses:
+
+    - iniconfig is archived
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Found no known vulnerabilities and 1 adverse project status in 1 package
+    ");
+}
+
+/// Audit a project whose index reports a quarantined status.
+#[tokio::test]
+async fn audit_project_status_quarantined() {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#, proxy.url("/status/quarantined/reason/suspected-malware/simple")})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview")
+        .arg("--service-url")
+        .arg(server.uri()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    Adverse statuses:
+
+    - iniconfig is quarantined: suspected-malware
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Found no known vulnerabilities and 1 adverse project status in 1 package
+    ");
+}
+
+/// An `active` status is not an adverse status and should not be reported.
+#[tokio::test]
+async fn audit_project_status_active_not_reported() {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#, proxy.url("/status/active/simple")})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Found no known vulnerabilities and no adverse project statuses in 1 package
+    ");
+}
+
+/// A vulnerable project that also has an adverse status should surface both
+/// findings in the same audit run.
+#[tokio::test]
+async fn audit_vulnerability_and_project_status() {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#, proxy.url("/status/archived/simple")})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": [{"id": "PYSEC-2023-0001"}]}]
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/vulns/PYSEC-2023-0001"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "PYSEC-2023-0001",
+            "modified": "2026-01-01T00:00:00Z",
+            "summary": "A test vulnerability in iniconfig",
+            "affected": [{
+                "ranges": [{
+                    "type": "ECOSYSTEM",
+                    "events": [
+                        {"introduced": "0"},
+                        {"fixed": "2.1.0"}
+                    ]
+                }]
+            }]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview")
+        .arg("--service-url")
+        .arg(server.uri()), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    Vulnerabilities:
+
+    iniconfig 2.0.0 has 1 known vulnerability:
+
+    - PYSEC-2023-0001: A test vulnerability in iniconfig
+
+      Fixed in: 2.1.0
+
+      Advisory information: https://osv.dev/vulnerability/PYSEC-2023-0001
+
+
+    Adverse statuses:
+
+    - iniconfig is archived
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Found 1 known vulnerability and 1 adverse project status in 1 package
     ");
 }

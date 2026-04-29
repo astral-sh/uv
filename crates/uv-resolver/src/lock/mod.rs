@@ -803,17 +803,51 @@ impl Lock {
         )
     }
 
-    /// Returns the set of packages that should be audited, respecting the given
-    /// extras and dependency groups filters.
+    /// Return the set of packages that should be audited, respecting the
+    /// given extras and dependency group filters.
     ///
-    /// Workspace members and packages without version information are excluded
-    /// unconditionally, since neither can be meaningfully looked up in a
-    /// vulnerability database.
-    pub fn packages_for_audit<'lock>(
+    /// Workspace members and packages without version information are
+    /// excluded unconditionally, since neither can be meaningfully looked up
+    /// in an external audit source.
+    pub fn auditable<'lock>(
         &'lock self,
         extras: &'lock ExtrasSpecificationWithDefaults,
         groups: &'lock DependencyGroupsWithDefaults,
-    ) -> Vec<(&'lock PackageName, &'lock Version)> {
+    ) -> Auditable<'lock> {
+        // Dedupe and sort by `(name, version)` during the walk itself. Keep
+        // the first `Package` reference we see for each key so that
+        // downstream views (e.g. index lookup) have access to the lockfile
+        // package.
+        let mut by_name_version: BTreeMap<(&PackageName, &Version), &Package> = BTreeMap::default();
+        self.walk_auditable(extras, groups, |package, version| {
+            by_name_version
+                .entry((package.name(), version))
+                .or_insert(package);
+        });
+        let packages = by_name_version
+            .into_iter()
+            .map(|((_, version), package)| (package, version))
+            .collect();
+        Auditable { packages }
+    }
+
+    /// Walk the auditable dependency graph, invoking `visit` once per
+    /// non-workspace package with version information.
+    ///
+    /// The traversal is seeded from workspace members, lock-level requirements
+    /// (e.g. PEP 723 scripts), and lock-level dependency groups, then follows
+    /// each reachable dependency exactly once per `(package, extra)` pair,
+    /// respecting the provided extras and dependency-group filters. The same
+    /// package may be visited more than once if it is reached through multiple
+    /// extras — callers should deduplicate as appropriate.
+    fn walk_auditable<'lock, F>(
+        &'lock self,
+        extras: &'lock ExtrasSpecificationWithDefaults,
+        groups: &'lock DependencyGroupsWithDefaults,
+        mut visit: F,
+    ) where
+        F: FnMut(&'lock Package, &'lock Version),
+    {
         // Enqueue a dependency for auditability checks: base package (no extra) first, then each activated extra.
         fn enqueue_dep<'lock>(
             lock: &'lock Lock,
@@ -905,15 +939,13 @@ impl Lock {
             }
         }
 
-        let mut auditable: BTreeSet<(&PackageName, &Version)> = BTreeSet::default();
-
         while let Some((package, extra)) = queue.pop_front() {
             let is_member = workspace_member_ids.contains(&package.id);
 
             // Collect non-workspace packages that have version information.
             if !is_member {
                 if let Some(version) = package.version() {
-                    auditable.insert((package.name(), version));
+                    visit(package, version);
                 } else {
                     trace!(
                         "Skipping audit for `{}` because it has no version information",
@@ -950,8 +982,6 @@ impl Lock {
                 enqueue_dep(self, &mut seen, &mut queue, dep);
             }
         }
-
-        auditable.into_iter().collect()
     }
 
     /// Return the workspace root used to generate this lock.
@@ -2243,6 +2273,54 @@ impl Lock {
         }
 
         Ok(SatisfiesResult::Satisfied)
+    }
+}
+
+/// The set of lockfile packages that should be audited, materialized from a
+/// single traversal of the dependency graph.
+///
+/// Created via [`Lock::auditable`]. Exposes multiple views so that different
+/// audit sources (e.g. per-version vulnerability databases and per-project
+/// status markers) can share one walk rather than each re-traversing the
+/// lockfile.
+#[derive(Debug)]
+pub struct Auditable<'lock> {
+    /// Packages deduplicated by `(name, version)` and sorted by the same key.
+    packages: Vec<(&'lock Package, &'lock Version)>,
+}
+
+impl<'lock> Auditable<'lock> {
+    /// Return the number of distinct `(name, version)` pairs to audit.
+    pub fn len(&self) -> usize {
+        self.packages.len()
+    }
+
+    /// Return `true` if there are no packages to audit.
+    pub fn is_empty(&self) -> bool {
+        self.packages.is_empty()
+    }
+
+    /// Iterate over the distinct `(name, version)` pairs to audit, sorted by that key.
+    pub fn packages(&self) -> impl Iterator<Item = (&'lock PackageName, &'lock Version)> + '_ {
+        self.packages
+            .iter()
+            .map(|(package, version)| (package.name(), *version))
+    }
+
+    /// Return the distinct registry-hosted projects among the auditable
+    /// packages, deduplicated by `(name, index URL)`. Non-registry sources
+    /// (Git, direct URL, path, editable) are excluded.
+    pub fn projects(&self, root: &Path) -> Result<Vec<(&'lock PackageName, IndexUrl)>, LockError> {
+        let mut seen: FxHashSet<(&PackageName, String)> = FxHashSet::default();
+        let mut projects: Vec<(&PackageName, IndexUrl)> = Vec::with_capacity(self.packages.len());
+        for (package, _version) in &self.packages {
+            if let Some(index) = package.index(root)?
+                && seen.insert((package.name(), index.url().to_string()))
+            {
+                projects.push((package.name(), index));
+            }
+        }
+        Ok(projects)
     }
 }
 
