@@ -9,8 +9,11 @@ mod ctrl_handler;
 mod job;
 #[cfg(feature = "std")]
 mod spawn;
+mod wine;
 
 pub use ctrl_handler::{CtrlHandlerError, install_ctrl_handler};
 pub use job::{Job, JobError};
 #[cfg(feature = "std")]
 pub use spawn::spawn_child;
+#[cfg(feature = "std")]
+pub use wine::is_wine;

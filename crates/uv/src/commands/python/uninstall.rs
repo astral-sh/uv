@@ -214,7 +214,7 @@ async fn do_uninstall(
     // Remove minor version links (symlinks on Unix, junctions on Windows) for minor
     // versions that will have no remaining installations. This must happen before
     // removing the installation directories so that the link targets still exist,
-    // which is required by `junction::get_target` on Windows.
+    // which is required when reading link targets on Windows.
     for installation in &matching_installations {
         if !anticipated_remaining_minor_versions.contains_key(installation.minor_version_key()) {
             if let Some(minor_version_link) =

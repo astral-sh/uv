@@ -6574,6 +6574,7 @@ dependencies = [
  "tracing",
  "uv-static",
  "uv-warnings",
+ "uv-windows",
  "walkdir",
  "windows",
 ]
@@ -6982,7 +6983,6 @@ dependencies = [
  "indoc",
  "insta",
  "itertools 0.14.0",
- "junction",
  "owo-colors",
  "ref-cast",
  "regex",
