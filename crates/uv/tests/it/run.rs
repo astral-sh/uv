@@ -5911,6 +5911,29 @@ fn detect_infinite_recursion() -> Result<()> {
 }
 
 #[test]
+fn run_invalid_recursion_depth_env_var() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .run()
+            .env(EnvVars::UV_RUN_RECURSION_DEPTH, "invalid")
+            .arg("--")
+            .arg("python")
+            .arg("--version"),
+        @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse environment variable `UV_RUN_RECURSION_DEPTH` with invalid value `invalid`: invalid digit found in string
+    "#
+    );
+}
+
+#[test]
 fn run_uv_variable() {
     let context = uv_test::test_context!("3.12");
 

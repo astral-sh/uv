@@ -2204,6 +2204,7 @@ async fn run_project(
                 printer,
                 args.env_file,
                 globals.preview,
+                args.recursion_depth,
                 args.max_recursion_depth,
             ))
             .await
