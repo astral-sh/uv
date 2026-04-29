@@ -1595,3 +1595,46 @@ fn python_find_search_path() {
     ----- stderr -----
     ");
 }
+
+/// When `requires-python` uses `==`, we should find the correct interpreter even
+/// when only a version-specific executable (e.g., `python3.12`) is available.
+///
+/// This is a regression test for <https://github.com/astral-sh/uv/issues/9695>.
+#[test]
+#[cfg(unix)]
+fn python_find_project_requires_python_equal() {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
+
+    // Set up a directory where the Python 3.12 executable is named `python3.12` (not `python3`).
+    // This simulates the scenario from the original issue where `python3` points to a different
+    // version and only `python3.12` is available for the desired version.
+    let child = context.temp_dir.child("child");
+    child.create_dir_all().unwrap();
+
+    let python_3_12 = &context.python_versions.last().unwrap().1;
+    fs_err::os::unix::fs::symlink(python_3_12, child.join("python3.12")).unwrap();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = "==3.12"
+        dependencies = []
+    "#})
+        .unwrap();
+
+    // Without the `==` special-casing, this would only search for `python3` and `python`,
+    // missing the `python3.12` executable entirely.
+    uv_snapshot!(context.filters(), context.python_find()
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, child.path()), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/child/python3.12
+
+    ----- stderr -----
+    warning: The resolved Python interpreter (Python 3.12.[X]) is incompatible with the project's Python requirement: `==3.12` (from `project.requires-python`)
+    "#);
+}

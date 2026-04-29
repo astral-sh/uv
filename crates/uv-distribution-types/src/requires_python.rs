@@ -279,6 +279,11 @@ impl RequiresPython {
         &self.specifiers
     }
 
+    /// Consumes `self` and returns the [`VersionSpecifiers`] for the `Requires-Python` specifier.
+    pub fn into_specifiers(self) -> VersionSpecifiers {
+        self.specifiers
+    }
+
     /// Returns `true` if the `Requires-Python` specifier is unbounded.
     pub fn is_unbounded(&self) -> bool {
         self.range.lower().as_ref() == Bound::Unbounded
