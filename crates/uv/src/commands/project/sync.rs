@@ -932,7 +932,7 @@ async fn check_malware(
     // indices, which is a tradeoff we'll need to reconsider.
     let auditable = target
         .lock()
-        .auditable(extras, groups, |package| package.is_from_pypi_registry());
+        .auditable(extras, groups, uv_resolver::Package::is_from_pypi_registry);
     if auditable.is_empty() {
         return Ok(());
     }
