@@ -930,9 +930,10 @@ async fn check_malware(
     // information leak (of potentially private package names).
     // This effectively excludes public packages that are mirrored onto private
     // indices, which is a tradeoff we'll need to reconsider.
-    let auditable = target
-        .lock()
-        .auditable(extras, groups, uv_resolver::Package::is_from_pypi_registry);
+    let auditable =
+        target
+            .lock()
+            .auditable(extras, groups, uv_resolver::Package::is_from_pypi_registry);
     if auditable.is_empty() {
         return Ok(());
     }
