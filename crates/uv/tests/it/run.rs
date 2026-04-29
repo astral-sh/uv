@@ -4799,6 +4799,41 @@ fn run_remote_pep723_script() {
     ");
 }
 
+#[test]
+fn run_remote_pep723_requirements_fetch_error_does_not_leak_credentials() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filter((
+        r"(?m)^  Caused by: .*(Connection refused|No connection could be made).*$",
+        "  Caused by: [CONNECTION_REFUSED]",
+    ));
+
+    let script = context.temp_dir.child("main.py");
+    script.write_str("print('hello')")?;
+
+    let listener = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))?;
+    let port = listener.local_addr()?.port();
+    drop(listener);
+    let url = format!("http://username:password@127.0.0.1:{port}/requirements.py");
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--with-requirements")
+        .arg(url)
+        .arg(script.as_os_str())
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Request failed after 3 retries
+      Caused by: error sending request for url (http://[LOCALHOST]/requirements.py)
+      Caused by: client error (Connect)
+      Caused by: tcp connect error
+      Caused by: [CONNECTION_REFUSED]
+    ");
+
+    Ok(())
+}
+
 #[cfg(unix)] // A URL could be a valid filepath on Unix but not on Windows
 #[test]
 fn run_url_like_with_local_file_priority() -> Result<()> {
