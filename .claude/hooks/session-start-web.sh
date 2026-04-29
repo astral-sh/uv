@@ -7,8 +7,6 @@ if ! command -v gh &> /dev/null; then
     apt-get install -y -qq gh
 fi
 
-rustup update
-
 # Install clippy and rustfmt for the active toolchain.
 rustup component add clippy rustfmt
 
