@@ -397,7 +397,7 @@ struct RecordEntry {
     /// The urlsafe-base64-nopad encoded SHA256 of the files.
     hash: String,
     /// The size of the file in bytes.
-    size: usize,
+    size: u64,
 }
 
 /// Read the input file and write it both to the hasher and the target file.
@@ -410,7 +410,7 @@ fn write_hashed(
     writer: &mut dyn Write,
 ) -> Result<RecordEntry, io::Error> {
     let mut hasher = Sha256::new();
-    let mut size = 0;
+    let mut size: u64 = 0;
     // 8KB is the default defined in `std::sys_common::io`.
     let mut buffer = vec![0; 8 * 1024];
     loop {
@@ -425,7 +425,7 @@ fn write_hashed(
         }
         hasher.update(&buffer[..read]);
         writer.write_all(&buffer[..read])?;
-        size += read;
+        size += read as u64;
     }
     Ok(RecordEntry {
         path: path.to_string(),
@@ -736,7 +736,7 @@ impl<W: Write + Seek> DirectoryWriter for ZipDirectoryWriter<W> {
         self.record.push(RecordEntry {
             path: path.to_string(),
             hash,
-            size: bytes.len(),
+            size: bytes.len() as u64,
         });
 
         Ok(())
@@ -816,7 +816,7 @@ impl DirectoryWriter for FilesystemWriter {
         self.record.push(RecordEntry {
             path: path.to_string(),
             hash,
-            size: bytes.len(),
+            size: bytes.len() as u64,
         });
 
         Ok(fs_err::write(self.root.join(path), bytes)?)

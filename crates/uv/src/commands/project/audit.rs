@@ -11,7 +11,7 @@ use crate::commands::project::default_dependency_groups;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
+    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, WorkspacePython,
 };
 use crate::commands::reporters::AuditReporter;
 use crate::printer::Printer;
@@ -114,24 +114,32 @@ pub(crate) async fn audit(
             )
             .await?
             .into_interpreter(),
-            LockTarget::Workspace(workspace) => ProjectInterpreter::discover(
-                workspace,
-                project_dir,
-                &groups,
-                None,
-                &client_builder,
-                python_preference,
-                python_downloads,
-                &install_mirrors,
-                false,
-                no_config,
-                Some(false),
-                &cache,
-                printer,
-                preview,
-            )
-            .await?
-            .into_interpreter(),
+            LockTarget::Workspace(workspace) => {
+                let workspace_python = WorkspacePython::from_request(
+                    None,
+                    Some(workspace),
+                    &groups,
+                    project_dir,
+                    no_config,
+                )
+                .await?;
+                ProjectInterpreter::discover(
+                    workspace,
+                    &groups,
+                    workspace_python,
+                    &client_builder,
+                    python_preference,
+                    python_downloads,
+                    &install_mirrors,
+                    false,
+                    Some(false),
+                    &cache,
+                    printer,
+                    preview,
+                )
+                .await?
+                .into_interpreter()
+            }
         })
     };
 
@@ -211,7 +219,7 @@ pub(crate) async fn audit(
                 let client = base_client.for_host(&osv_url).raw_client().clone();
                 let service = osv::Osv::new(client, Some(osv_url), concurrency);
                 trace!("Auditing {n} dependencies against OSV", n = auditable.len());
-                service.query_batch(&dependencies).await?
+                service.query_batch(&dependencies, osv::Filter::All).await?
             }
         }
     };

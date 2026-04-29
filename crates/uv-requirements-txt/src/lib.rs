@@ -46,7 +46,7 @@ use unscanny::{Pattern, Scanner};
 use url::Url;
 
 #[cfg(feature = "http")]
-use uv_client::BaseClient;
+use uv_client::{BaseClient, ClientBuildError};
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{NoBinary, NoBuild, PackageNameSpecifier};
 use uv_distribution_types::{
@@ -302,7 +302,7 @@ impl RequirementsTxt {
                     .build()
                     .map_err(|err| RequirementsTxtFileError {
                         file: requirements_txt.to_path_buf(),
-                        error: RequirementsTxtParserError::from_reqwest(url, err),
+                        error: RequirementsTxtParserError::ClientBuild(url.clone(), Box::new(err)),
                     })?;
                 let content = read_url_to_string(&requirements_txt, client)
                     .await
@@ -1209,6 +1209,8 @@ pub enum RequirementsTxtParserError {
     #[cfg(feature = "http")]
     Reqwest(DisplaySafeUrl, reqwest_middleware::Error),
     #[cfg(feature = "http")]
+    ClientBuild(DisplaySafeUrl, Box<ClientBuildError>),
+    #[cfg(feature = "http")]
     InvalidUrl(String, DisplaySafeUrlError),
 }
 
@@ -1280,6 +1282,10 @@ impl Display for RequirementsTxtParserError {
                 write!(f, "Error while accessing remote requirements file: `{url}`")
             }
             #[cfg(feature = "http")]
+            Self::ClientBuild(url, _err) => {
+                write!(f, "Error while accessing remote requirements file: `{url}`")
+            }
+            #[cfg(feature = "http")]
             Self::InvalidUrl(url, err) => {
                 match err {
                     DisplaySafeUrlError::Url(err) => write!(f, "Not a valid URL, {err}: `{url}`"),
@@ -1317,6 +1323,8 @@ impl std::error::Error for RequirementsTxtParserError {
             Self::NonUnicodeUrl { .. } => None,
             #[cfg(feature = "http")]
             Self::Reqwest(_, err) => err.source(),
+            #[cfg(feature = "http")]
+            Self::ClientBuild(_, err) => Some(err.as_ref()),
             #[cfg(feature = "http")]
             Self::InvalidUrl(_, err) => err.source(),
         }
@@ -1445,6 +1453,10 @@ impl Display for RequirementsTxtFileError {
             }
             #[cfg(feature = "http")]
             RequirementsTxtParserError::Reqwest(url, _err) => {
+                write!(f, "Error while accessing remote requirements file: `{url}`")
+            }
+            #[cfg(feature = "http")]
+            RequirementsTxtParserError::ClientBuild(url, _err) => {
                 write!(f, "Error while accessing remote requirements file: `{url}`")
             }
             #[cfg(feature = "http")]

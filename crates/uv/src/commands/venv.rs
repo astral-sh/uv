@@ -28,7 +28,9 @@ use uv_python::{
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
 use uv_shell::{Shell, shlex_posix, shlex_windows};
-use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
+use uv_types::{
+    AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy, SourceTreeEditablePolicy,
+};
 use uv_virtualenv::OnExisting;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
@@ -272,6 +274,7 @@ pub(crate) async fn venv(
             &build_hasher,
             exclude_newer,
             sources,
+            SourceTreeEditablePolicy::Project,
             workspace_cache.clone(),
             concurrency,
             preview,
@@ -297,12 +300,12 @@ pub(crate) async fn venv(
         //
         // Since the virtual environment is empty, and the set of requirements is trivial (no
         // constraints, no editables, etc.), we can use the build dispatch APIs directly.
-        let resolution = build_dispatch
+        let requirements = build_dispatch
             .resolve(&requirements, &build_stack)
             .await
             .map_err(|err| VenvError::Seed(err.into()))?;
         let installed = build_dispatch
-            .install(&resolution, &venv, &build_stack)
+            .install(&requirements, &venv, &build_stack)
             .await
             .map_err(|err| VenvError::Seed(err.into()))?;
 

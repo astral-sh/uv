@@ -274,6 +274,9 @@ pub enum Error {
     #[error("Failed to query installed Python versions from the Windows registry")]
     RegistryError(#[from] windows::core::Error),
 
+    #[error(transparent)]
+    InvalidEnvironmentVariable(#[from] uv_static::InvalidEnvironmentVariable),
+
     /// An invalid version request was given
     #[error("Invalid version request: {0}")]
     InvalidVersionRequest(String),
@@ -441,49 +444,50 @@ fn python_executables_from_installed<'a>(
     })
     .flatten();
 
-    let from_windows_registry = iter::once_with(move || {
-        #[cfg(windows)]
-        {
-            // Skip interpreter probing if we already know the version doesn't match.
-            let version_filter = move |entry: &WindowsPython| {
-                if let Some(found) = &entry.version {
-                    // Some distributions emit the patch version (example: `SysVersion: 3.9`)
-                    if found.string.chars().filter(|c| *c == '.').count() == 1 {
-                        version.matches_major_minor(found.major(), found.minor())
+    #[cfg(windows)]
+    let from_windows_registry: Box<
+        dyn Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a,
+    > = match uv_static::parse_boolish_environment_variable(EnvVars::UV_PYTHON_NO_REGISTRY) {
+        Ok(Some(true)) => Box::new(iter::empty()),
+        Ok(Some(false) | None) => Box::new(
+            iter::once_with(move || {
+                // Skip interpreter probing if we already know the version doesn't match.
+                let version_filter = move |entry: &WindowsPython| {
+                    if let Some(found) = &entry.version {
+                        // Some distributions emit the patch version (example: `SysVersion: 3.9`)
+                        if found.string.chars().filter(|c| *c == '.').count() == 1 {
+                            version.matches_major_minor(found.major(), found.minor())
+                        } else {
+                            version.matches_version(found)
+                        }
                     } else {
-                        version.matches_version(found)
+                        true
                     }
-                } else {
-                    true
-                }
-            };
+                };
 
-            env::var_os(EnvVars::UV_TEST_PYTHON_PATH)
-                .is_none()
-                .then(|| {
-                    registry_pythons()
-                        .map(|entries| {
-                            entries
-                                .into_iter()
-                                .filter(version_filter)
-                                .map(|entry| (PythonSource::Registry, entry.path))
-                                .chain(
-                                    find_microsoft_store_pythons()
-                                        .filter(version_filter)
-                                        .map(|entry| (PythonSource::MicrosoftStore, entry.path)),
-                                )
-                        })
-                        .map_err(Error::from)
-                })
-                .into_iter()
-                .flatten_ok()
-        }
-        #[cfg(not(windows))]
-        {
-            Vec::new()
-        }
-    })
-    .flatten();
+                registry_pythons()
+                    .map(|entries| {
+                        entries
+                            .into_iter()
+                            .filter(version_filter)
+                            .map(|entry| (PythonSource::Registry, entry.path))
+                            .chain(
+                                find_microsoft_store_pythons()
+                                    .filter(version_filter)
+                                    .map(|entry| (PythonSource::MicrosoftStore, entry.path)),
+                            )
+                    })
+                    .map_err(Error::from)
+            })
+            .flatten_ok(),
+        ),
+        Err(err) => Box::new(iter::once(Err(Error::from(err)))),
+    };
+
+    #[cfg(not(windows))]
+    let from_windows_registry: Box<
+        dyn Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a,
+    > = Box::new(iter::empty());
 
     match preference {
         PythonPreference::OnlyManaged => {
@@ -584,8 +588,8 @@ fn python_executables_from_search_path<'a>(
     version: &'a VersionRequest,
     implementation: Option<&'a ImplementationName>,
 ) -> impl Iterator<Item = PathBuf> + 'a {
-    // `UV_TEST_PYTHON_PATH` can be used to override `PATH` to limit Python executable availability in the test suite
-    let search_path = env::var_os(EnvVars::UV_TEST_PYTHON_PATH)
+    // `UV_PYTHON_SEARCH_PATH` can be used to override `PATH` for Python executable discovery
+    let search_path = env::var_os(EnvVars::UV_PYTHON_SEARCH_PATH)
         .unwrap_or(env::var_os(EnvVars::PATH).unwrap_or_default());
 
     let possible_names: Vec<_> = version
@@ -1749,6 +1753,19 @@ impl PythonVariant {
     }
 }
 impl PythonRequest {
+    /// Create a request from a `Requires-Python` constraint.
+    pub fn from_requires_python(requires_python: RequiresPython) -> Option<Self> {
+        let specifiers = requires_python.into_specifiers();
+        if specifiers.is_empty() {
+            return None;
+        }
+
+        Some(Self::Version(VersionRequest::from_specifiers(
+            specifiers,
+            PythonVariant::Default,
+        )))
+    }
+
     /// Create a request from a string.
     ///
     /// This cannot fail, which means weird inputs will be parsed as [`PythonRequest::File`] or
@@ -2621,6 +2638,21 @@ impl fmt::Display for ExecutableName {
 }
 
 impl VersionRequest {
+    /// Create a [`VersionRequest`] from [`VersionSpecifiers`].
+    ///
+    /// If the specifiers consist of a single `==` constraint, the version is parsed as a
+    /// concrete version request (e.g., `MajorMinorPatch`) rather than a range.
+    pub fn from_specifiers(specifiers: VersionSpecifiers, variant: PythonVariant) -> Self {
+        if let [specifier] = specifiers.iter().as_slice() {
+            if specifier.operator() == &uv_pep440::Operator::Equal {
+                if let Ok(request) = Self::from_str(&specifier.version().to_string()) {
+                    return request;
+                }
+            }
+        }
+        Self::Range(specifiers, variant)
+    }
+
     /// Drop any patch or prerelease information from the version request.
     #[must_use]
     pub fn only_minor(self) -> Self {
@@ -3324,12 +3356,7 @@ fn parse_version_specifiers_request(
     if specifiers.is_empty() {
         return Err(Error::InvalidVersionRequest(s.to_string()));
     }
-    if let [specifier] = specifiers.iter().as_slice() {
-        if specifier.operator() == &uv_pep440::Operator::Equal {
-            return VersionRequest::from_str(&specifier.version().to_string());
-        }
-    }
-    Ok(VersionRequest::Range(specifiers, variant))
+    Ok(VersionRequest::from_specifiers(specifiers, variant))
 }
 
 impl From<&PythonVersion> for VersionRequest {
@@ -4136,6 +4163,71 @@ mod tests {
             VersionRequest::from_str("3.13tt"),
             Err(Error::InvalidVersionRequest(_))
         ));
+
+        // `==` specifiers are parsed as concrete version requests via `from_specifiers`
+        assert_eq!(
+            VersionRequest::from_str("==3.12").unwrap(),
+            VersionRequest::MajorMinor(3, 12, PythonVariant::Default)
+        );
+        assert_eq!(
+            VersionRequest::from_str("==3.12.1").unwrap(),
+            VersionRequest::MajorMinorPatch(3, 12, 1, PythonVariant::Default)
+        );
+    }
+
+    #[test]
+    fn version_request_from_specifiers() {
+        // A single `==` specifier is parsed as a concrete version request
+        assert_eq!(
+            VersionRequest::from_specifiers(
+                VersionSpecifiers::from_str("==3.12").unwrap(),
+                PythonVariant::Default
+            ),
+            VersionRequest::MajorMinor(3, 12, PythonVariant::Default)
+        );
+        assert_eq!(
+            VersionRequest::from_specifiers(
+                VersionSpecifiers::from_str("==3.12.1").unwrap(),
+                PythonVariant::Default
+            ),
+            VersionRequest::MajorMinorPatch(3, 12, 1, PythonVariant::Default)
+        );
+
+        // Wildcard `==` specifiers remain as ranges
+        assert_eq!(
+            VersionRequest::from_specifiers(
+                VersionSpecifiers::from_str("==3.12.*").unwrap(),
+                PythonVariant::Default
+            ),
+            VersionRequest::Range(
+                VersionSpecifiers::from_str("==3.12.*").unwrap(),
+                PythonVariant::Default
+            )
+        );
+
+        // Range specifiers remain as ranges
+        assert_eq!(
+            VersionRequest::from_specifiers(
+                VersionSpecifiers::from_str(">=3.12").unwrap(),
+                PythonVariant::Default
+            ),
+            VersionRequest::Range(
+                VersionSpecifiers::from_str(">=3.12").unwrap(),
+                PythonVariant::Default
+            )
+        );
+
+        // Multi-specifier constraints remain as ranges
+        assert_eq!(
+            VersionRequest::from_specifiers(
+                VersionSpecifiers::from_str(">=3.12,<3.14").unwrap(),
+                PythonVariant::Default
+            ),
+            VersionRequest::Range(
+                VersionSpecifiers::from_str(">=3.12,<3.14").unwrap(),
+                PythonVariant::Default
+            )
+        );
     }
 
     #[test]

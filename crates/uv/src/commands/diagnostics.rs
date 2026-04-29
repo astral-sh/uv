@@ -136,7 +136,7 @@ impl OperationDiagnostic {
                 system_certs_hint(err);
                 None
             }
-            pip::operations::Error::OutdatedEnvironment => {
+            err @ pip::operations::Error::OutdatedEnvironment(..) => {
                 anstream::eprintln!("{}", err);
                 None
             }

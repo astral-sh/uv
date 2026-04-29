@@ -196,6 +196,9 @@ pub enum Error {
 
     #[error("Hash-checking is not supported for Git repositories: `{0}`")]
     HashesNotSupportedGit(String),
+
+    #[error(transparent)]
+    InstallWheelError(uv_install_wheel::Error),
 }
 
 impl From<reqwest::Error> for Error {

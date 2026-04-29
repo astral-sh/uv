@@ -40,6 +40,32 @@ pub(crate) struct Tools {
     pub(crate) uv: Option<Options>,
 }
 
+/// A `pyproject.toml` with an (optional) `[tool.uv.required-version]`.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub(crate) struct PyProjectRequiredVersionToml {
+    pub(crate) tool: Option<RequiredVersionTools>,
+}
+
+/// A `[tool]` section containing only the fields required for `required-version` discovery.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub(crate) struct RequiredVersionTools {
+    pub(crate) uv: Option<RequiredVersionOptions>,
+}
+
+/// The minimal `[tool.uv]` subset required to enforce `required-version` before full parsing.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) struct RequiredVersionOptions {
+    pub(crate) required_version: Option<RequiredVersion>,
+}
+
+/// A `uv.toml` containing only the fields required for `required-version` discovery.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) struct UvRequiredVersionToml {
+    pub(crate) required_version: Option<RequiredVersion>,
+}
+
 /// A `[tool.uv]` section.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Default, Deserialize, CombineOptions, OptionsMetadata)]
@@ -499,25 +525,6 @@ pub struct ResolverInstallerOptions {
     pub no_binary_package: Option<Vec<PackageName>>,
 }
 
-impl ResolverInstallerOptions {
-    /// Recompute any relative exclude-newer values against the current time.
-    #[must_use]
-    pub fn recompute_exclude_newer(mut self) -> Self {
-        let exclude_newer = ExcludeNewer::new(
-            self.exclude_newer.take(),
-            self.exclude_newer_package.take().unwrap_or_default(),
-        )
-        .recompute();
-        self.exclude_newer = exclude_newer.global;
-        self.exclude_newer_package = if exclude_newer.package.is_empty() {
-            None
-        } else {
-            Some(exclude_newer.package)
-        };
-        self
-    }
-}
-
 impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
     fn from(value: ResolverInstallerSchema) -> Self {
         let ResolverInstallerSchema {
@@ -661,7 +668,7 @@ pub struct ResolverInstallerSchema {
     /// ```toml
     /// [[tool.uv.index]]
     /// name = "pytorch"
-    /// url = "https://download.pytorch.org/whl/cu121"
+    /// url = "https://download.pytorch.org/whl/cu130"
     /// explicit = true
     ///
     /// [tool.uv.sources]
@@ -677,7 +684,7 @@ pub struct ResolverInstallerSchema {
         example = r#"
             [[tool.uv.index]]
             name = "pytorch"
-            url = "https://download.pytorch.org/whl/cu121"
+            url = "https://download.pytorch.org/whl/cu130"
         "#
     )]
     pub index: Option<Vec<Index>>,
@@ -2228,8 +2235,10 @@ impl From<ResolverInstallerOptions> for ToolOptions {
 impl From<ToolOptionsWire> for ToolOptions {
     fn from(value: ToolOptionsWire) -> Self {
         let exclude_newer = value.exclude_newer.map(|exclude_newer| {
-            if exclude_newer.span().is_none() {
-                ExcludeNewerValue::new(exclude_newer.timestamp(), value.exclude_newer_span)
+            if let Some(span) = value.exclude_newer_span
+                && exclude_newer.span().is_none()
+            {
+                ExcludeNewerValue::relative(span)
             } else {
                 exclude_newer
             }
@@ -2269,12 +2278,14 @@ impl From<ToolOptionsWire> for ToolOptions {
 
 impl From<ToolOptions> for ToolOptionsWire {
     fn from(value: ToolOptions) -> Self {
-        let (exclude_newer, exclude_newer_span) = value
-            .exclude_newer
-            .map(ExcludeNewerValue::into_parts)
-            .map_or((None, None), |(timestamp, span)| {
-                (Some(ExcludeNewerValue::from(timestamp)), span)
-            });
+        let (exclude_newer, exclude_newer_span) = match &value.exclude_newer {
+            Some(value @ ExcludeNewerValue::Absolute(_)) => (Some(value.clone()), None),
+            Some(value @ ExcludeNewerValue::Relative(span)) => (
+                Some(ExcludeNewerValue::absolute(value.timestamp())),
+                Some(*span),
+            ),
+            None => (None, None),
+        };
 
         Self {
             index: value.index,

@@ -41,6 +41,7 @@ use uv_scripts::{Pep723Error, Pep723Item, Pep723Metadata, Pep723Script};
 use uv_settings::{EnvironmentOptions, FilesystemOptions, PythonInstallMirrors};
 use uv_shell::runnable::WindowsRunnable;
 use uv_static::EnvVars;
+use uv_types::SourceTreeEditablePolicy;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
 
@@ -144,10 +145,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             RequirementsSource::SetupCfg(_) => {
                 bail!("Adding requirements from a `setup.cfg` is not supported in `uv run`");
             }
-            RequirementsSource::Extensionless(path) => {
-                if path == Path::new("-") {
-                    requirements_from_stdin = true;
-                }
+            RequirementsSource::Extensionless(path) if path == Path::new("-") => {
+                requirements_from_stdin = true;
             }
             _ => {}
         }
@@ -456,6 +455,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     spec,
                     modifications,
                     python_platform.as_ref(),
+                    SourceTreeEditablePolicy::Project,
                     build_constraints.unwrap_or_default(),
                     script_extra_build_requires,
                     &settings,
@@ -1303,20 +1303,14 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             .as_ref()
             .map(PythonEnvironment::scripts)
             .into_iter()
-            .chain(
-                requirements_env
-                    .as_ref()
-                    .map(PythonEnvironment::scripts)
-                    .into_iter(),
-            )
+            .chain(requirements_env.as_ref().map(PythonEnvironment::scripts))
             .chain(std::iter::once(base_interpreter.scripts()))
             .chain(
                 // On Windows, non-virtual Python distributions put `python.exe` in the top-level
                 // directory, rather than in the `Scripts` subdirectory.
                 cfg!(windows)
                     .then(|| base_interpreter.sys_executable().parent())
-                    .flatten()
-                    .into_iter(),
+                    .flatten(),
             )
             .dedup()
             .map(PathBuf::from)

@@ -14,7 +14,7 @@ fn python_find() {
         uv_test::test_context_with_versions!(&["3.11", "3.12"]).with_filtered_python_sources();
 
     // No interpreters on the path
-    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_TEST_PYTHON_PATH, ""), @"
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_PYTHON_SEARCH_PATH, ""), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -724,7 +724,7 @@ fn python_find_venv() {
 
     // Or at the front of the PATH
     #[cfg(not(windows))]
-    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_TEST_PYTHON_PATH, child_dir.join(".venv").join("bin").as_os_str()), @"
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_PYTHON_SEARCH_PATH, child_dir.join(".venv").join("bin").as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -743,7 +743,7 @@ fn python_find_venv() {
         ])
         .unwrap();
 
-        uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_TEST_PYTHON_PATH, path.as_os_str()), @"
+        uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_PYTHON_SEARCH_PATH, path.as_os_str()), @"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -762,7 +762,7 @@ fn python_find_venv() {
         )
         .unwrap();
 
-        uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_TEST_PYTHON_PATH, path.as_os_str()), @"
+        uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_PYTHON_SEARCH_PATH, path.as_os_str()), @"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -994,7 +994,7 @@ fn python_required_python_major_minor() {
         .unwrap();
 
     // Find `python3.11`, which is `>=3.11.4`.
-    uv_snapshot!(context.filters(), context.python_find().arg(">=3.11.4, <3.12").env(EnvVars::UV_TEST_PYTHON_PATH, context.temp_dir.child("child").path()), @"
+    uv_snapshot!(context.filters(), context.python_find().arg(">=3.11.4, <3.12").env(EnvVars::UV_PYTHON_SEARCH_PATH, context.temp_dir.child("child").path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1004,7 +1004,7 @@ fn python_required_python_major_minor() {
     ");
 
     // Find `python3.11`, which is `>3.11.4`.
-    uv_snapshot!(context.filters(), context.python_find().arg(">3.11.4, <3.12").env(EnvVars::UV_TEST_PYTHON_PATH, context.temp_dir.child("child").path()), @"
+    uv_snapshot!(context.filters(), context.python_find().arg(">3.11.4, <3.12").env(EnvVars::UV_PYTHON_SEARCH_PATH, context.temp_dir.child("child").path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1014,7 +1014,7 @@ fn python_required_python_major_minor() {
     ");
 
     // Fail to find any matching Python interpreter.
-    uv_snapshot!(context.filters(), context.python_find().arg(">3.11.255, <3.12").env(EnvVars::UV_TEST_PYTHON_PATH, context.temp_dir.child("child").path()), @"
+    uv_snapshot!(context.filters(), context.python_find().arg(">3.11.255, <3.12").env(EnvVars::UV_PYTHON_SEARCH_PATH, context.temp_dir.child("child").path()), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1167,7 +1167,7 @@ fn python_find_show_version() {
         uv_test::test_context_with_versions!(&["3.11", "3.12"]).with_filtered_python_sources();
 
     // No interpreters found
-    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_TEST_PYTHON_PATH, "").arg("--show-version"), @"
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_PYTHON_SEARCH_PATH, "").arg("--show-version"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1535,4 +1535,146 @@ fn python_find_equal() {
 
     ----- stderr -----
     "###);
+}
+
+/// Test that `UV_PYTHON_SEARCH_PATH` overrides `PATH` for Python discovery.
+#[test]
+fn python_find_search_path() {
+    let context =
+        uv_test::test_context_with_versions!(&["3.11", "3.12"]).with_filtered_python_sources();
+
+    // When `UV_PYTHON_SEARCH_PATH` is empty, no interpreters are found
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_PYTHON_SEARCH_PATH, ""), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found in [PYTHON SOURCES]
+    ");
+
+    // When `UV_PYTHON_SEARCH_PATH` is set, it is used instead of `PATH`
+    uv_snapshot!(context.filters(), context.python_find(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.11]
+
+    ----- stderr -----
+    ");
+
+    // We can use `UV_PYTHON_SEARCH_PATH` to control which Python versions are visible
+    let python_path_3_12_only = std::env::join_paths(
+        std::env::split_paths(&context.python_path())
+            .filter(|p| p.to_string_lossy().contains("3.12")),
+    )
+    .unwrap();
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_PYTHON_SEARCH_PATH, python_path_3_12_only.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.12]
+
+    ----- stderr -----
+    ");
+
+    // We can use `UV_PYTHON_SEARCH_PATH` to control the order of Python versions
+    let reversed_path = std::env::join_paths(
+        std::env::split_paths(&context.python_path())
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev(),
+    )
+    .unwrap();
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_PYTHON_SEARCH_PATH, reversed_path.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.12]
+
+    ----- stderr -----
+    ");
+}
+
+/// When `requires-python` constrains to a minor version, we should find the correct interpreter
+/// even when only a version-specific executable (e.g., `python3.12`) is available.
+///
+/// This is a regression test for <https://github.com/astral-sh/uv/issues/9695>.
+#[test]
+#[cfg(unix)]
+fn python_find_project_requires_python_minor_range() {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
+
+    // Set up a directory where the Python 3.12 executable is named `python3.12` (not `python3`).
+    // This simulates the scenario from the original issue where `python3` points to a different
+    // version and only `python3.12` is available for the desired version.
+    let child = context.temp_dir.child("child");
+    child.create_dir_all().unwrap();
+
+    let python_3_12 = &context.python_versions.last().unwrap().1;
+    fs_err::os::unix::fs::symlink(python_3_12, child.join("python3.12")).unwrap();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = "==3.12"
+        dependencies = []
+    "#})
+        .unwrap();
+
+    // Without the `==` special-casing, this would only search for `python3` and `python`,
+    // missing the `python3.12` executable entirely.
+    uv_snapshot!(context.filters(), context.python_find()
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, child.path()), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/child/python3.12
+
+    ----- stderr -----
+    warning: The resolved Python interpreter (Python 3.12.[X]) is incompatible with the project's Python requirement: `==3.12` (from `project.requires-python`)
+    "#);
+
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = "==3.12.*"
+        dependencies = []
+    "#})
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.python_find()
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, child.path()), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/child/python3.12
+
+    ----- stderr -----
+    "#);
+
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = "~=3.12.0"
+        dependencies = []
+    "#})
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.python_find()
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, child.path()), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/child/python3.12
+
+    ----- stderr -----
+    "#);
 }

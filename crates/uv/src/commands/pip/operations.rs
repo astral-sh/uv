@@ -806,8 +806,9 @@ async fn execute_plan(
     if !uninstalls.is_empty() {
         let start = std::time::Instant::now();
 
+        let layout = venv.interpreter().layout();
         for dist_info in &uninstalls {
-            match uv_installer::uninstall(dist_info).await {
+            match uv_installer::uninstall(dist_info, &layout).await {
                 Ok(summary) => {
                     debug!(
                         "Uninstalled {} ({} file{}, {} director{})",
@@ -1045,7 +1046,7 @@ fn report_dry_run(
     logger.on_complete(&changelog, printer, dry_run)?;
 
     if matches!(dry_run, DryRun::Check) {
-        return Err(Error::OutdatedEnvironment);
+        return Err(Error::OutdatedEnvironment(Box::new(changelog)));
     }
 
     Ok(changelog)
@@ -1123,5 +1124,5 @@ pub(crate) enum Error {
     Anyhow(#[from] anyhow::Error),
 
     #[error("The environment is outdated; run `{}` to update the environment", "uv sync".cyan())]
-    OutdatedEnvironment,
+    OutdatedEnvironment(Box<Changelog>),
 }

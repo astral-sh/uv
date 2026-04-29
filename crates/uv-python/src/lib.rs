@@ -88,7 +88,7 @@ pub enum Error {
     Download(#[from] downloads::Error),
 
     #[error(transparent)]
-    Reqwest(#[from] reqwest::Error),
+    ClientBuild(#[from] uv_client::ClientBuildError),
 
     // TODO(zanieb) We might want to ensure this is always wrapped in another type
     #[error(transparent)]
@@ -219,7 +219,9 @@ mod tests {
 
             let mut run_vars = vec![
                 // Ensure `PATH` is used
-                (EnvVars::UV_TEST_PYTHON_PATH, None),
+                (EnvVars::UV_PYTHON_SEARCH_PATH, None),
+                // Keep discovery hermetic by disabling registry-based sources unless a test opts in.
+                (EnvVars::UV_PYTHON_NO_REGISTRY, Some(OsStr::new("1"))),
                 // Ignore active virtual environments (i.e. that the dev is using)
                 (EnvVars::VIRTUAL_ENV, None),
                 (EnvVars::PATH, path.as_deref()),

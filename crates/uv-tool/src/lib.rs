@@ -11,7 +11,7 @@ use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_dirs::user_executable_directory;
 use uv_fs::{LockedFile, LockedFileError, LockedFileMode, Simplified};
-use uv_install_wheel::read_record_file;
+use uv_install_wheel::read_record;
 use uv_installer::SitePackages;
 use uv_normalize::{InvalidNameError, PackageName};
 use uv_pep440::Version;
@@ -459,7 +459,7 @@ pub fn entrypoint_paths(
     );
 
     // Read the RECORD file.
-    let record = read_record_file(&mut File::open(dist_info_path.join("RECORD"))?)?;
+    let record = read_record(File::open(dist_info_path.join("RECORD"))?)?;
 
     // The RECORD file uses relative paths, so we're looking for the relative path to be a prefix.
     let layout = site_packages.interpreter().layout();

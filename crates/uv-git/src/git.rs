@@ -44,12 +44,32 @@ pub enum GitError {
     TransportNotAllowed,
 }
 
-/// A global cache of the result of `which git`.
-pub static GIT: LazyLock<Result<PathBuf, GitError>> = LazyLock::new(|| {
-    which::which("git").map_err(|err| match err {
+/// A global cache of the result of `which git` as a command
+///
+/// Caching the command allows us to avoid needing to remove environment
+/// variables everywhere.
+pub static GIT: LazyLock<Result<ProcessBuilder, GitError>> = LazyLock::new(|| {
+    let path = which::which("git").map_err(|err| match err {
         which::Error::CannotFindBinaryPath => GitError::GitNotFound,
         err => GitError::Other(err),
-    })
+    })?;
+
+    let mut cmd = ProcessBuilder::new(path);
+
+    // Certain git environment variables never make sense to inherit because
+    // they affect what the current command will act on.
+
+    // This can cause problems if for example uv is ran by git (for example, the
+    // `exec` command in `git rebase`), the GIT_DIR is set by git and will point
+    // to the wrong location (this takes precedence over the cwd).
+    cmd.env_remove(EnvVars::GIT_DIR)
+        .env_remove(EnvVars::GIT_WORK_TREE)
+        .env_remove(EnvVars::GIT_INDEX_FILE)
+        .env_remove(EnvVars::GIT_OBJECT_DIRECTORY)
+        .env_remove(EnvVars::GIT_ALTERNATE_OBJECT_DIRECTORIES)
+        .env_remove(EnvVars::GIT_COMMON_DIR);
+
+    Ok(cmd)
 });
 
 /// Strategy when fetching refspecs for a [`GitReference`]
@@ -175,7 +195,8 @@ impl GitRepository {
     /// Opens an existing Git repository at `path`.
     pub(crate) fn open(path: &Path) -> Result<Self> {
         // Make sure there is a Git repository at the specified path.
-        ProcessBuilder::new(GIT.as_ref()?)
+        GIT.as_ref()
+            .cloned()?
             .arg("rev-parse")
             .cwd(path)
             .exec_with_output()?;
@@ -194,7 +215,8 @@ impl GitRepository {
         // opts.external_template(false);
 
         // Initialize the repository.
-        ProcessBuilder::new(GIT.as_ref()?)
+        GIT.as_ref()
+            .cloned()?
             .arg("init")
             .cwd(path)
             .exec_with_output()?;
@@ -206,7 +228,9 @@ impl GitRepository {
 
     /// Returns the configured Git remotes for this repository.
     fn remotes(&self) -> Result<Vec<String>> {
-        let output = ProcessBuilder::new(GIT.as_ref()?)
+        let output = GIT
+            .as_ref()
+            .cloned()?
             .arg("remote")
             .cwd(&self.path)
             .exec_with_output()?;
@@ -238,7 +262,8 @@ impl GitRepository {
         let remotes = self.remotes()?;
 
         if remotes.iter().any(|existing| existing == remote) {
-            ProcessBuilder::new(GIT.as_ref()?)
+            GIT.as_ref()
+                .cloned()?
                 .arg("remote")
                 .arg("set-url")
                 .arg(remote)
@@ -246,7 +271,8 @@ impl GitRepository {
                 .cwd(&self.path)
                 .exec_with_output()?;
         } else {
-            ProcessBuilder::new(GIT.as_ref()?)
+            GIT.as_ref()
+                .cloned()?
                 .arg("remote")
                 .arg("add")
                 .arg(remote)
@@ -255,14 +281,16 @@ impl GitRepository {
                 .exec_with_output()?;
         }
 
-        ProcessBuilder::new(GIT.as_ref()?)
+        GIT.as_ref()
+            .cloned()?
             .arg("config")
             .arg(format!("remote.{remote}.promisor"))
             .arg("true")
             .cwd(&self.path)
             .exec_with_output()?;
 
-        ProcessBuilder::new(GIT.as_ref()?)
+        GIT.as_ref()
+            .cloned()?
             .arg("config")
             .arg(format!("remote.{remote}.partialclonefilter"))
             .arg(PARTIAL_CLONE_FILTER)
@@ -280,7 +308,9 @@ impl GitRepository {
                 continue;
             };
             if without_credentials(&existing_url) == url {
-                let result = ProcessBuilder::new(GIT.as_ref()?)
+                let result = GIT
+                    .as_ref()
+                    .cloned()?
                     .arg("config")
                     .arg("--remove-section")
                     .arg(format!("remote.{existing}"))
@@ -297,7 +327,9 @@ impl GitRepository {
 
     /// Parses the object ID of the given `refname`.
     fn rev_parse(&self, refname: &str) -> Result<GitOid> {
-        let result = ProcessBuilder::new(GIT.as_ref()?)
+        let result = GIT
+            .as_ref()
+            .cloned()?
             .arg("rev-parse")
             .arg(refname)
             // Avoid triggering dynamic object fetches when we are only checking
@@ -501,7 +533,9 @@ impl GitDatabase {
 
     /// Get a short OID for a `revision`, usually 7 chars or more if ambiguous.
     pub(crate) fn to_short_id(&self, revision: GitOid) -> Result<String> {
-        let output = ProcessBuilder::new(GIT.as_ref()?)
+        let output = GIT
+            .as_ref()
+            .cloned()?
             .arg("rev-parse")
             .arg("--short")
             .arg(revision.as_str())
@@ -559,7 +593,9 @@ impl GitCheckout {
         // Perform a local clone of the repository, which will attempt to use
         // hardlinks to set up the repository. This should speed up the clone operation
         // quite a bit if it works.
-        let res = ProcessBuilder::new(GIT.as_ref()?)
+        let res = GIT
+            .as_ref()
+            .cloned()?
             .arg("clone")
             .arg("--local")
             // Make sure to pass the local file path and not a file://... url. If given a url,
@@ -572,7 +608,8 @@ impl GitCheckout {
         if let Err(e) = res {
             debug!("Cloning git repo with --local failed, retrying without hardlinks: {e}");
 
-            ProcessBuilder::new(GIT.as_ref()?)
+            GIT.as_ref()
+                .cloned()?
                 .arg("clone")
                 .arg("--no-hardlinks")
                 .arg(database.repo.path.simplified_display().to_string())
@@ -650,7 +687,7 @@ impl GitCheckout {
         debug!("Reset {} to {}", self.repo.path.display(), self.revision);
 
         // Perform the hard reset.
-        let mut reset = ProcessBuilder::new(GIT.as_ref()?);
+        let mut reset = GIT.as_ref().cloned()?;
         if let Some(remote_url) = remote_url {
             apply_url_rewrite(&mut reset, remote_url);
         }
@@ -678,7 +715,7 @@ impl GitCheckout {
         })?;
 
         // Update submodules (`git submodule update --recursive`).
-        let mut submodule_update = ProcessBuilder::new(GIT.as_ref()?);
+        let mut submodule_update = GIT.as_ref().cloned()?;
         if let Some(remote_url) = remote_url {
             apply_url_rewrite(&mut submodule_update, remote_url);
         }
@@ -926,7 +963,7 @@ fn fetch_refspecs(
 ) -> Result<()> {
     repo.configure_promisor_remote(CHECKOUT_REMOTE, url)?;
 
-    let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
+    let mut cmd = GIT.as_ref().cloned()?;
     // Disable interactive prompts in the terminal, as they'll be erased by the progress bar
     // animation and the process will "hang". Interactive prompts via the GUI like `SSH_ASKPASS`
     // are still usable.
@@ -954,17 +991,6 @@ fn fetch_refspecs(
         .arg(format!("--filter={PARTIAL_CLONE_FILTER}"))
         .arg(CHECKOUT_REMOTE)
         .args(refspecs)
-        // If cargo is run by git (for example, the `exec` command in `git
-        // rebase`), the GIT_DIR is set by git and will point to the wrong
-        // location (this takes precedence over the cwd). Make sure this is
-        // unset so git will look at cwd for the repo.
-        .env_remove(EnvVars::GIT_DIR)
-        // The reset of these may not be necessary, but I'm including them
-        // just to be extra paranoid and avoid any issues.
-        .env_remove(EnvVars::GIT_WORK_TREE)
-        .env_remove(EnvVars::GIT_INDEX_FILE)
-        .env_remove(EnvVars::GIT_OBJECT_DIRECTORY)
-        .env_remove(EnvVars::GIT_ALTERNATE_OBJECT_DIRECTORIES)
         .cwd(&repo.path);
 
     // We capture the output to avoid streaming it to the user's console during clones.
@@ -996,7 +1022,7 @@ pub static GIT_LFS: LazyLock<Result<ProcessBuilder>> = LazyLock::new(|| {
         return Err(anyhow!("Git LFS extension has been forcefully disabled."));
     }
 
-    let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
+    let mut cmd = GIT.as_ref()?.clone();
     cmd.arg("lfs");
 
     // Run a simple command to verify LFS is installed
@@ -1034,12 +1060,6 @@ fn fetch_lfs(
         .arg(url.as_str())
         .arg(revision.as_str())
         .env(EnvVars::GIT_TERMINAL_PROMPT, "0")
-        // These variables are unset for the same reason as in `fetch_refspecs`.
-        .env_remove(EnvVars::GIT_DIR)
-        .env_remove(EnvVars::GIT_WORK_TREE)
-        .env_remove(EnvVars::GIT_INDEX_FILE)
-        .env_remove(EnvVars::GIT_OBJECT_DIRECTORY)
-        .env_remove(EnvVars::GIT_ALTERNATE_OBJECT_DIRECTORIES)
         // We should not support requesting LFS artifacts with skip smudge being set.
         // While this may not be necessary, it's added to avoid any potential future issues.
         .env_remove(EnvVars::GIT_LFS_SKIP_SMUDGE)

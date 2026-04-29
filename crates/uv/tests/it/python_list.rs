@@ -15,7 +15,7 @@ fn python_list() {
         .with_filtered_python_keys()
         .with_collapsed_whitespace();
 
-    uv_snapshot!(context.filters(), context.python_list().env(EnvVars::UV_TEST_PYTHON_PATH, ""), @"
+    uv_snapshot!(context.filters(), context.python_list().env(EnvVars::UV_PYTHON_SEARCH_PATH, ""), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -303,7 +303,7 @@ fn python_list_duplicate_path_entries() {
     )
     .unwrap();
 
-    uv_snapshot!(context.filters(), context.python_list().env(EnvVars::UV_TEST_PYTHON_PATH, &path), @"
+    uv_snapshot!(context.filters(), context.python_list().env(EnvVars::UV_PYTHON_SEARCH_PATH, &path), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -325,7 +325,7 @@ fn python_list_duplicate_path_entries() {
         ))
         .unwrap();
 
-        uv_snapshot!(context.filters(), context.python_list().env(EnvVars::UV_TEST_PYTHON_PATH, &path), @"
+        uv_snapshot!(context.filters(), context.python_list().env(EnvVars::UV_PYTHON_SEARCH_PATH, &path), @"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -346,7 +346,7 @@ fn python_list_duplicate_path_entries() {
         )
         .unwrap();
 
-        uv_snapshot!(context.filters(), context.python_list().env(EnvVars::UV_TEST_PYTHON_PATH, &path), @"
+        uv_snapshot!(context.filters(), context.python_list().env(EnvVars::UV_PYTHON_SEARCH_PATH, &path), @"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -527,7 +527,7 @@ fn python_list_managed_symlinks() {
         .arg("3.10")
         .arg("--only-installed")
         .arg("--no-managed-python")
-        .env(EnvVars::UV_TEST_PYTHON_PATH, &bin_dir), @"
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, &bin_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -540,7 +540,7 @@ fn python_list_managed_symlinks() {
         .arg("3.10")
         .arg("--only-installed")
         .arg("--managed-python")
-        .env(EnvVars::UV_TEST_PYTHON_PATH, &bin_dir), @"
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, &bin_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----

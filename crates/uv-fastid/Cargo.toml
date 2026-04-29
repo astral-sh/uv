@@ -1,0 +1,27 @@
+[package]
+name = "uv-fastid"
+description = "This is an internal component crate of uv"
+version = "0.0.41"
+edition.workspace = true
+rust-version.workspace = true
+homepage.workspace = true
+repository.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[lib]
+doctest = false
+
+[dependencies]
+rand = { workspace = true }
+fastrand = { workspace = true }
+serde = { workspace = true, optional = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[features]
+default = []
+
+[lints]
+workspace = true

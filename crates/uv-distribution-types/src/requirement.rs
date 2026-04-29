@@ -6,7 +6,7 @@ use std::str::FromStr;
 use thiserror::Error;
 use uv_cache_key::{CacheKey, CacheKeyHasher};
 use uv_distribution_filename::DistExtension;
-use uv_fs::{CWD, PortablePath, PortablePathBuf, try_relative_to_if};
+use uv_fs::{CWD, PortablePath, PortablePathBuf, normalize_path, try_relative_to_if};
 use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError, OidParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
@@ -725,7 +725,9 @@ impl RequirementSource {
                 ext,
                 url,
             } => Self::Path {
-                install_path: uv_fs::normalize_path_buf(root.join(install_path)).into_boxed_path(),
+                install_path: normalize_path(root.join(install_path))
+                    .into_owned()
+                    .into_boxed_path(),
                 ext,
                 url,
             },
@@ -736,7 +738,9 @@ impl RequirementSource {
                 url,
                 ..
             } => Self::Directory {
-                install_path: uv_fs::normalize_path_buf(root.join(install_path)).into_boxed_path(),
+                install_path: normalize_path(root.join(install_path))
+                    .into_owned()
+                    .into_boxed_path(),
                 editable,
                 r#virtual,
                 url,
@@ -1024,8 +1028,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
             // URL field or make it optional.
             RequirementSourceWire::Path { path } => {
                 let path = Box::<Path>::from(path);
-                let url =
-                    VerbatimUrl::from_normalized_path(uv_fs::normalize_path_buf(CWD.join(&path)))?;
+                let url = VerbatimUrl::from_normalized_path(normalize_path(CWD.join(&path)))?;
                 Ok(Self::Path {
                     ext: DistExtension::from_path(&path).map_err(|err| {
                         ParsedUrlError::MissingExtensionPath(path.to_path_buf(), err)
@@ -1036,9 +1039,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
             }
             RequirementSourceWire::Directory { directory } => {
                 let directory = Box::<Path>::from(directory);
-                let url = VerbatimUrl::from_normalized_path(uv_fs::normalize_path_buf(
-                    CWD.join(&directory),
-                ))?;
+                let url = VerbatimUrl::from_normalized_path(normalize_path(CWD.join(&directory)))?;
                 Ok(Self::Directory {
                     install_path: directory,
                     editable: Some(false),
@@ -1048,9 +1049,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
             }
             RequirementSourceWire::Editable { editable } => {
                 let editable = Box::<Path>::from(editable);
-                let url = VerbatimUrl::from_normalized_path(uv_fs::normalize_path_buf(
-                    CWD.join(&editable),
-                ))?;
+                let url = VerbatimUrl::from_normalized_path(normalize_path(CWD.join(&editable)))?;
                 Ok(Self::Directory {
                     install_path: editable,
                     editable: Some(true),
@@ -1060,9 +1059,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
             }
             RequirementSourceWire::Virtual { r#virtual } => {
                 let r#virtual = Box::<Path>::from(r#virtual);
-                let url = VerbatimUrl::from_normalized_path(uv_fs::normalize_path_buf(
-                    CWD.join(&r#virtual),
-                ))?;
+                let url = VerbatimUrl::from_normalized_path(normalize_path(CWD.join(&r#virtual)))?;
                 Ok(Self::Directory {
                     install_path: r#virtual,
                     editable: Some(false),

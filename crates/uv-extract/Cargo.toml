@@ -1,6 +1,6 @@
 [package]
 name = "uv-extract"
-version = "0.0.37"
+version = "0.0.41"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -34,14 +34,12 @@ regex = { workspace = true }
 reqwest = { workspace = true }
 rustc-hash = { workspace = true }
 sha2 = { workspace = true }
-tar = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
 xz2 = { workspace = true }
 zip = { workspace = true }
-zstd = { workspace = true }
 
 [features]
 default = []

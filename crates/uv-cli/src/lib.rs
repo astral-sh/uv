@@ -236,8 +236,8 @@ pub struct GlobalArgs {
     )]
     pub color: Option<ColorChoice>,
 
-    /// Whether to load TLS certificates from the platform's native certificate store [env:
-    /// UV_NATIVE_TLS=]
+    /// (Deprecated: use `--system-certs` instead.) Whether to load TLS certificates from the
+    /// platform's native certificate store [env: UV_NATIVE_TLS=]
     ///
     /// By default, uv uses bundled Mozilla root certificates. When enabled, this flag loads
     /// certificates from the platform's native certificate store instead.
@@ -2551,7 +2551,7 @@ pub struct PipUninstallArgs {
     pub dry_run: bool,
 
     #[command(flatten)]
-    pub compat_args: compat::PipGlobalCompatArgs,
+    pub compat_args: compat::PipUninstallCompatArgs,
 }
 
 #[derive(Args)]
@@ -3115,7 +3115,12 @@ pub struct VenvArgs {
     /// By default, uv searches for projects in the current directory or any parent directory to
     /// determine the default path of the virtual environment and check for Python version
     /// constraints, if any.
-    #[arg(long, alias = "no-workspace")]
+    #[arg(
+        long,
+        alias = "no-workspace",
+        env = EnvVars::UV_NO_PROJECT,
+        value_parser = clap::builder::BoolishValueParser::new()
+    )]
     pub no_project: bool,
 
     /// Install seed packages (one or more of: `pip`, `setuptools`, and `wheel`) into the virtual
@@ -3751,7 +3756,13 @@ pub struct RunArgs {
     ///
     /// If a virtual environment is active or found in a current or parent directory, it will be
     /// used as if there was no project or workspace.
-    #[arg(long, alias = "no_workspace", conflicts_with = "package")]
+    #[arg(
+        long,
+        alias = "no_workspace",
+        env = EnvVars::UV_NO_PROJECT,
+        value_parser = clap::builder::BoolishValueParser::new(),
+        conflicts_with = "package"
+    )]
     pub no_project: bool,
 
     /// The Python interpreter to use for the run environment.
@@ -5133,7 +5144,11 @@ pub struct FormatArgs {
     /// Instead of running the formatter in the context of the current project, run it in the
     /// context of the current directory. This is useful when the current directory is not a
     /// project.
-    #[arg(long)]
+    #[arg(
+        long,
+        env = EnvVars::UV_NO_PROJECT,
+        value_parser = clap::builder::BoolishValueParser::new()
+    )]
     pub no_project: bool,
 
     /// Display the version of Ruff that will be used for formatting.
@@ -6599,7 +6614,12 @@ pub struct PythonFindArgs {
     ///
     /// Otherwise, when no request is provided, the Python requirement of a project in the current
     /// directory or parent directories will be used.
-    #[arg(long, alias = "no_workspace")]
+    #[arg(
+        long,
+        alias = "no_workspace",
+        env = EnvVars::UV_NO_PROJECT,
+        value_parser = clap::builder::BoolishValueParser::new()
+    )]
     pub no_project: bool,
 
     /// Only find system Python interpreters.
@@ -6677,7 +6697,12 @@ pub struct PythonPinArgs {
     /// By default, a project or workspace is discovered in the current directory or any parent
     /// directory. If a workspace is found, the Python pin is validated against the workspace's
     /// `requires-python` constraint.
-    #[arg(long, alias = "no-workspace")]
+    #[arg(
+        long,
+        alias = "no-workspace",
+        env = EnvVars::UV_NO_PROJECT,
+        value_parser = clap::builder::BoolishValueParser::new()
+    )]
     pub no_project: bool,
 
     /// Update the global Python version pin.
@@ -6693,6 +6718,10 @@ pub struct PythonPinArgs {
     /// Remove the Python version pin.
     #[arg(long, conflicts_with = "request", conflicts_with = "resolved")]
     pub rm: bool,
+
+    /// URL pointing to JSON of custom Python installations.
+    #[arg(long, value_hint = ValueHint::Other)]
+    pub python_downloads_json_url: Option<String>,
 }
 
 #[derive(Args)]

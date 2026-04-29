@@ -10,8 +10,7 @@ use std::{
 use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_distribution_types::Requirement;
-use uv_distribution_types::{InstalledDist, Name};
+use uv_distribution_types::{InstalledDist, Name, Requirement};
 use uv_fs::Simplified;
 #[cfg(unix)]
 use uv_fs::replace_symlink;
@@ -130,7 +129,7 @@ pub(crate) async fn refine_interpreter(
         Bound::Unbounded => unreachable!("`requires-python` should never be unbounded"),
     };
 
-    let requires_python_request = PythonRequest::Version(VersionRequest::Range(
+    let requires_python_request = PythonRequest::Version(VersionRequest::from_specifiers(
         VersionSpecifiers::from_iter([lower_bound, upper_bound]),
         PythonVariant::default(),
     ));

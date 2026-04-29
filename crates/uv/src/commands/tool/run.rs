@@ -1110,7 +1110,7 @@ async fn get_or_create_environment(
             .collect(),
         constraints: constraints
             .into_iter()
-            .chain(latest.into_iter())
+            .chain(latest)
             .map(NameRequirementSpecification::from)
             .collect(),
         overrides: overrides

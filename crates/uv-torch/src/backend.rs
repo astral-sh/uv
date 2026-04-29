@@ -344,6 +344,8 @@ impl TorchStrategy {
                         | "torchtune"
                         | "torchvision"
                         | "triton"
+                        | "triton-rocm"
+                        | "triton-xpu"
                         | "xformers"
                 )
             }
@@ -379,6 +381,8 @@ impl TorchStrategy {
                         | "torchtune"
                         | "torchvision"
                         | "triton"
+                        | "triton-rocm"
+                        | "triton-xpu"
                         | "vllm"
                         | "xformers"
                 )

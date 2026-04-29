@@ -600,6 +600,76 @@ fn sync_json() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn sync_json_check_outdated_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--check")
+        .arg("--output-format").arg("json"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "target": "project",
+      "project": {
+        "path": "[TEMP_DIR]/",
+        "workspace": {
+          "path": "[TEMP_DIR]/"
+        }
+      },
+      "sync": {
+        "environment": {
+          "path": "[VENV]/",
+          "python": {
+            "path": "[VENV]/[BIN]/[PYTHON]",
+            "version": "3.12.[X]",
+            "implementation": "cpython"
+          }
+        },
+        "action": "check",
+        "changes": [
+          {
+            "name": "iniconfig",
+            "version": "2.0.0",
+            "action": "installed"
+          }
+        ]
+      },
+      "lock": {
+        "path": "[TEMP_DIR]/uv.lock",
+        "action": "create"
+      },
+      "dry_run": true
+    }
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Would download 1 package
+    Would install 1 package
+     + iniconfig==2.0.0
+    The environment is outdated; run `uv sync` to update the environment
+    "#);
+
+    Ok(())
+}
+
 /// Test --dry json output
 #[test]
 fn sync_dry_json() -> Result<()> {
@@ -1256,6 +1326,87 @@ fn sync_non_project_frozen() -> Result<()> {
      + typing-extensions==4.10.0
     ");
 
+    Ok(())
+}
+
+/// Sync dependency groups in a non-project workspace root.
+///
+/// Here instead of leaning on `tool.uv.workspace` we use the
+/// officially blessed "pyproject.toml with no `[project]` that
+/// declares `[dependency-groups]`".
+#[test]
+fn sync_non_project_group_standard() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [dependency-groups]
+        dev = ["anyio"]
+        bar = ["typing-extensions"]
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("src")
+        .child("albatross")
+        .child("__init__.py")
+        .touch()?;
+
+    uv_snapshot!(context.filters(), context.sync(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("bar"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--only-group").arg("bar"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 4 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+     - anyio==4.3.0
+     - idna==3.6
+     - sniffio==1.3.1
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 4 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+     - typing-extensions==4.10.0
+    ");
     Ok(())
 }
 

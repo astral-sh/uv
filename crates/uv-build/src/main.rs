@@ -63,8 +63,10 @@ fn main() -> Result<()> {
     } else if preview.any_enabled() {
         debug!("The following preview features are enabled: {preview}");
     }
-    uv_preview::init(preview)
+    uv_preview::set(preview)
         .expect("Global preview features should not have been initialised already");
+    // Errors returned by finalize are self-describing, but should also be impossible.
+    uv_preview::finalize().unwrap();
 
     match command.as_str() {
         "build-sdist" => {

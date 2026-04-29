@@ -266,6 +266,11 @@ impl<'lock> LockTarget<'lock> {
         }
     }
 
+    /// Return the filename of the lockfile, for use in user-facing messages.
+    pub(crate) fn lock_filename(self) -> PathBuf {
+        PathBuf::from(self.lock_path().file_name().unwrap())
+    }
+
     /// Return the path to the lockfile.
     pub(crate) fn lock_path(self) -> PathBuf {
         match self {

@@ -48,7 +48,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
     requires-python = ">=3.12"
 
     [options]
-    exclude-newer = "2024-04-10T00:00:00Z"
+    exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
     exclude-newer-span = "P3W"
 
     [[package]]
@@ -89,6 +89,8 @@ fn lock_exclude_newer_relative() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
+    assert_eq!(context.read("uv.lock"), lock);
+
     // Changing the span to 2 weeks should cause a new resolution.
     // 2 weeks before 2024-05-01 is 2024-04-17, which is after idna 3.7 (released 2024-04-11).
     uv_snapshot!(context.filters(), context
@@ -116,7 +118,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
     requires-python = ">=3.12"
 
     [options]
-    exclude-newer = "2024-04-17T00:00:00Z"
+    exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
     exclude-newer-span = "P2W"
 
     [[package]]
@@ -165,7 +167,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
     requires-python = ">=3.12"
 
     [options]
-    exclude-newer = "2024-05-18T00:00:00Z"
+    exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
     exclude-newer-span = "P2W"
 
     [[package]]
@@ -371,7 +373,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     [options]
 
     [options.exclude-newer-package]
-    idna = { timestamp = "2024-04-10T00:00:00Z", span = "P3W" }
+    idna = { timestamp = "0001-01-01T00:00:00Z", span = "P3W" }
 
     [[package]]
     name = "idna"
@@ -440,7 +442,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     [options]
 
     [options.exclude-newer-package]
-    idna = { timestamp = "2024-04-17T00:00:00Z", span = "P2W" }
+    idna = { timestamp = "0001-01-01T00:00:00Z", span = "P2W" }
 
     [[package]]
     name = "idna"
@@ -480,7 +482,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    // And the `exclude-newer-package` timestamp value in the lockfile should be changed
+    // The `exclude-newer-package` span is unchanged; the timestamp is a placeholder
     let lock = context.read("uv.lock");
     assert_snapshot!(lock, @r#"
     version = 1
@@ -490,7 +492,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     [options]
 
     [options.exclude-newer-package]
-    idna = { timestamp = "2024-05-18T00:00:00Z", span = "P2W" }
+    idna = { timestamp = "0001-01-01T00:00:00Z", span = "P2W" }
 
     [[package]]
     name = "idna"
@@ -560,7 +562,7 @@ fn lock_exclude_newer_relative_pyproject() -> Result<()> {
     requires-python = ">=3.12"
 
     [options]
-    exclude-newer = "2024-04-10T00:00:00Z"
+    exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
     exclude-newer-span = "P3W"
 
     [[package]]
@@ -633,7 +635,7 @@ fn lock_exclude_newer_package_relative_pyproject() -> Result<()> {
     [options]
 
     [options.exclude-newer-package]
-    idna = { timestamp = "2024-04-10T00:00:00Z", span = "P3W" }
+    idna = { timestamp = "0001-01-01T00:00:00Z", span = "P3W" }
 
     [[package]]
     name = "idna"
@@ -714,11 +716,11 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     requires-python = ">=3.12"
 
     [options]
-    exclude-newer = "2024-04-10T00:00:00Z"
+    exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
     exclude-newer-span = "P3W"
 
     [options.exclude-newer-package]
-    typing-extensions = { timestamp = "2024-04-17T00:00:00Z", span = "P2W" }
+    typing-extensions = { timestamp = "0001-01-01T00:00:00Z", span = "P2W" }
 
     [[package]]
     name = "idna"
@@ -842,7 +844,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     exclude-newer = "2024-05-20T00:00:00Z"
 
     [options.exclude-newer-package]
-    typing-extensions = { timestamp = "2024-04-17T00:00:00Z", span = "P2W" }
+    typing-extensions = { timestamp = "0001-01-01T00:00:00Z", span = "P2W" }
 
     [[package]]
     name = "idna"
@@ -907,7 +909,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     requires-python = ">=3.12"
 
     [options]
-    exclude-newer = "2024-04-10T00:00:00Z"
+    exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
     exclude-newer-span = "P3W"
 
     [options.exclude-newer-package]
@@ -1136,7 +1138,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
       ╰─▶ Because there are no versions of iniconfig and iniconfig==2.0.0 was published after the exclude newer time, we can conclude that all versions of iniconfig cannot be used.
           And because your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2006-12-02T02:07:43Z. Consider using `exclude-newer-package` to override the cutoff for this package.
+          hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2006-12-02T02:07:43Z. The latest version satisfying the requirement is v2.0.0, published at 2023-01-07T11:08:09.864Z. Consider using `exclude-newer-package` to override the cutoff for this package.
     ");
 
     uv_snapshot!(context.filters(), context
@@ -1194,6 +1196,211 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
 
     For more information, try '--help'.
     "#);
+
+    Ok(())
+}
+
+#[test]
+fn lock_exclude_newer_relative_no_timestamp_in_lockfile() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["idna"]
+
+        [tool.uv]
+        exclude-newer = "3 weeks"
+        "#,
+    )?;
+
+    let current_timestamp = "2024-05-01T00:00:00Z";
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert_snapshot!(lock, @r#"
+    version = 1
+    revision = 3
+    requires-python = ">=3.12"
+
+    [options]
+    exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
+    exclude-newer-span = "P3W"
+
+    [[package]]
+    name = "idna"
+    version = "3.6"
+    source = { registry = "https://pypi.org/simple" }
+    sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
+    wheels = [
+        { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
+    ]
+
+    [[package]]
+    name = "project"
+    version = "0.1.0"
+    source = { virtual = "." }
+    dependencies = [
+        { name = "idna" },
+    ]
+
+    [package.metadata]
+    requires-dist = [{ name = "idna" }]
+    "#);
+
+    // Manually remove the exclude-newer timestamp from the lockfile, leaving the span.
+    let lock = lock.replace("exclude-newer = \"0001-01-01T00:00:00Z\" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.\n", "");
+    context.temp_dir.child("uv.lock").write_str(&lock)?;
+
+    // The lockfile now has no exclude-newer timestamp, but the span is still present.
+    // Since the span matches the `pyproject.toml` configuration, the lockfile is still
+    // treated as valid — the missing timestamp alone does not trigger re-resolution.
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // The lockfile retains the span but the timestamp is not restored or updated.
+    let lock = context.read("uv.lock");
+    assert_snapshot!(lock, @r#"
+    version = 1
+    revision = 3
+    requires-python = ">=3.12"
+
+    [options]
+    exclude-newer-span = "P3W"
+
+    [[package]]
+    name = "idna"
+    version = "3.6"
+    source = { registry = "https://pypi.org/simple" }
+    sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
+    wheels = [
+        { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
+    ]
+
+    [[package]]
+    name = "project"
+    version = "0.1.0"
+    source = { virtual = "." }
+    dependencies = [
+        { name = "idna" },
+    ]
+
+    [package.metadata]
+    requires-dist = [{ name = "idna" }]
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn lock_exclude_newer_package_relative_no_timestamp_in_lockfile() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["idna"]
+
+        [tool.uv]
+        exclude-newer-package = { idna = "3 weeks" }
+        "#,
+    )?;
+
+    let current_timestamp = "2024-05-01T00:00:00Z";
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert_snapshot!(lock, @r#"
+    version = 1
+    revision = 3
+    requires-python = ">=3.12"
+
+    [options]
+
+    [options.exclude-newer-package]
+    idna = { timestamp = "0001-01-01T00:00:00Z", span = "P3W" }
+
+    [[package]]
+    name = "idna"
+    version = "3.6"
+    source = { registry = "https://pypi.org/simple" }
+    sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
+    wheels = [
+        { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
+    ]
+
+    [[package]]
+    name = "project"
+    version = "0.1.0"
+    source = { virtual = "." }
+    dependencies = [
+        { name = "idna" },
+    ]
+
+    [package.metadata]
+    requires-dist = [{ name = "idna" }]
+    "#);
+
+    // Manually remove the per-package exclude-newer timestamp from the lockfile, leaving the span.
+    let lock = lock.replace(
+        "idna = { timestamp = \"0001-01-01T00:00:00Z\", span = \"P3W\" }",
+        "idna = { span = \"P3W\" }",
+    );
+    context.temp_dir.child("uv.lock").write_str(&lock)?;
+
+    // Unlike the global case, a per-package entry with only a span (no timestamp) fails to
+    // deserialize.
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `uv.lock`
+      Caused by: TOML parse error at line 5, column 1
+      |
+    5 | [options]
+      | ^^^^^^^^^
+    data did not match any variant of untagged enum Helper
+    ");
 
     Ok(())
 }
@@ -1322,6 +1529,67 @@ fn lock_exclude_newer_relative_values_pyproject() -> Result<()> {
 
     Resolved 2 packages in [TIME]
     "#);
+
+    Ok(())
+}
+
+/// When a relative span is configured for `exclude-newer-package`, the lockfile
+/// should use a fixed no-op sentinel for the stored timestamp.
+#[test]
+fn lock_exclude_newer_package_relative_noop_timestamp() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["idna"]
+        "#,
+    )?;
+
+    let current_timestamp = "2024-05-01T00:00:00Z";
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .arg("--exclude-newer-package")
+        .arg("idna=3 weeks"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // The lockfile stores the no-op sentinel timestamp alongside the span.
+    let lock = context.read("uv.lock");
+    assert!(
+        lock.contains(r#"idna = { timestamp = "0001-01-01T00:00:00Z", span = "P3W" }"#),
+        "expected no-op sentinel in lockfile, got:\n{lock}"
+    );
+
+    // Locking again at a later time should yield an identical lockfile, even
+    // without `--locked`, because the span is unchanged and the stored
+    // timestamp is a fixed sentinel.
+    let later_timestamp = "2024-06-01T00:00:00Z";
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, later_timestamp)
+        .arg("--exclude-newer-package")
+        .arg("idna=3 weeks"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    assert_eq!(context.read("uv.lock"), lock);
 
     Ok(())
 }

@@ -1,15 +1,22 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
+use std::fmt::Display;
 use std::path::{Component, Path, PathBuf};
+use std::sync::{LazyLock, Mutex, OnceLock};
 
-use std::sync::{LazyLock, Mutex};
 use tracing::trace;
-use uv_fs::write_atomic_sync;
 
-use crate::Error;
-use crate::wheel::read_record_file;
+use uv_fs::write_atomic_sync;
+use uv_warnings::warn_user;
+
+use crate::wheel::read_record;
+use crate::{Error, Layout};
 
 /// Uninstall the wheel represented by the given `.dist-info` directory.
-pub fn uninstall_wheel(dist_info: &Path) -> Result<Uninstall, Error> {
+pub fn uninstall_wheel(
+    dist_info: &Path,
+    distribution: impl Display,
+    layout: &Layout,
+) -> Result<Uninstall, Error> {
     let Some(site_packages) = dist_info.parent() else {
         return Err(Error::BrokenVenv(
             "dist-info directory is not in a site-packages directory".to_string(),
@@ -26,7 +33,7 @@ pub fn uninstall_wheel(dist_info: &Path) -> Result<Uninstall, Error> {
             }
             Err(err) => return Err(err.into()),
         };
-        read_record_file(&mut record_file)?
+        read_record(&mut record_file)?
     };
 
     let mut file_count = 0usize;
@@ -39,6 +46,10 @@ pub fn uninstall_wheel(dist_info: &Path) -> Result<Uninstall, Error> {
     let mut visited = BTreeSet::new();
     for entry in &record {
         let path = site_packages.join(&entry.path);
+
+        if !is_path_in_scheme(&entry.path, site_packages, &distribution, layout) {
+            continue;
+        }
 
         // On Windows, deleting the current executable is a special case.
         #[cfg(windows)]
@@ -148,10 +159,65 @@ pub fn uninstall_wheel(dist_info: &Path) -> Result<Uninstall, Error> {
     })
 }
 
+static WARNED_FOR_PACKAGE: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+
+/// Check if the path is inside the venv or a system interpreter path, and warn if it isn't.
+///
+/// Returns `false` is a path is outside the paths that files from a wheel can be installed into,
+/// so that the caller can reject RECORD entries that escape site-packages via path traversal (e.g.,
+/// `../../../etc/passwd`). A malicious wheel could otherwise include such entries to cause deletion
+/// of arbitrary files on uninstall.
+fn is_path_in_scheme(
+    path: &str,
+    site_packages: &Path,
+    distribution: impl Display,
+    layout: &Layout,
+) -> bool {
+    let normalized = normalize_path(&site_packages.join(path));
+
+    // `purelib` or `platlib` are site-packages (depending on `Root-Is-Purelib`). As
+    // `.data/*` goes into the directories of `scheme`, `.dist-info` goes into site-packages
+    // and all other content goes into site-packages, the condition below covers all valid
+    // directories, in venvs, system interpreters and custom installation schemes.
+    //
+    // For a venv, `data` is the venv root: A wheel can write into the entire venv through
+    // `.data/data`. For a system environment, wheels are allowed to write to
+    // whole system directories, for example `data` is `/usr/local` for system Python on
+    // Ubuntu 24.04.
+    if normalized.starts_with(&layout.scheme.data)
+        || normalized.starts_with(&layout.scheme.purelib)
+        || normalized.starts_with(&layout.scheme.platlib)
+        || normalized.starts_with(&layout.scheme.scripts)
+        || normalized.starts_with(&layout.scheme.include)
+    {
+        true
+    } else {
+        // A package that does this is malformed to the point of being a risk to the user, be
+        // annoying about it, but only once per package.
+        if WARNED_FOR_PACKAGE
+            .get_or_init(|| Mutex::new(HashSet::new()))
+            .lock()
+            .expect("The mutex is broken, did some other thread panic?")
+            .insert(distribution.to_string())
+        {
+            warn_user!(
+                "Invalid RECORD entry in {} that escapes the Python environment, skipping: {}",
+                distribution,
+                path
+            );
+        }
+        false
+    }
+}
+
 /// Uninstall the egg represented by the `.egg-info` directory.
 ///
 /// See: <https://github.com/pypa/pip/blob/41587f5e0017bcd849f42b314dc8a34a7db75621/src/pip/_internal/req/req_uninstall.py#L483>
-pub fn uninstall_egg(egg_info: &Path) -> Result<Uninstall, Error> {
+pub fn uninstall_egg(
+    egg_info: &Path,
+    distribution: impl Display,
+    layout: &Layout,
+) -> Result<Uninstall, Error> {
     let mut file_count = 0usize;
     let mut dir_count = 0usize;
 
@@ -193,6 +259,10 @@ pub fn uninstall_egg(egg_info: &Path) -> Result<Uninstall, Error> {
     // Remove everything in `top_level.txt`.
     for entry in top_level {
         let path = dist_location.join(&entry);
+
+        if !is_path_in_scheme(&entry, dist_location, &distribution, layout) {
+            continue;
+        }
 
         // Remove as a directory.
         match fs_err::remove_dir_all(&path) {
@@ -346,4 +416,123 @@ fn normalize_path(path: &Path) -> PathBuf {
         }
     }
     ret
+}
+
+#[cfg(test)]
+mod tests {
+    use assert_fs::prelude::*;
+
+    use uv_pypi_types::Scheme;
+
+    use crate::Layout;
+    use crate::uninstall::{uninstall_egg, uninstall_wheel};
+
+    /// Uninstall must not remove files outside the install scheme.
+    #[test]
+    fn test_uninstall_record_path_traversal() {
+        let venv = assert_fs::TempDir::new().unwrap();
+        let site_packages = venv.child("lib/python3.12/site-packages");
+        let outside_dir = assert_fs::TempDir::new().unwrap();
+
+        // Create a file outside site-packages that a malicious RECORD might target.
+        let target_file = outside_dir.child("traversal_target.txt");
+        target_file.write_str("I should not be deleted").unwrap();
+
+        // Build a relative traversal path from site-packages to the target file.
+        let dist_info = site_packages.child("evilpkg-0.1.0.dist-info");
+        dist_info.create_dir_all().unwrap();
+        let target_path = pathdiff::diff_paths(target_file.path(), site_packages.path()).unwrap();
+        assert!(site_packages.join(&target_path).exists());
+
+        // Add the invalid path to the RECORD.
+        let record_content = format!(
+            "evilpkg/__init__.py,,0\n\
+             evilpkg-0.1.0.dist-info/METADATA,,0\n\
+             evilpkg-0.1.0.dist-info/RECORD,,\n\
+             {},,0\n",
+            target_path.display()
+        );
+        dist_info
+            .child("RECORD")
+            .write_str(&record_content)
+            .unwrap();
+
+        // Also create the legitimate files so uninstall can remove them.
+        let init_py = site_packages.child("evilpkg/__init__.py");
+        init_py.touch().unwrap();
+        let metadata = dist_info.child("METADATA");
+        metadata.touch().unwrap();
+
+        // Something that looks sufficiently like a Unix venv.
+        let layout = Layout {
+            sys_executable: venv.path().join("bin/python"),
+            python_version: (3, 13),
+            os_name: "posix".to_string(),
+            scheme: Scheme {
+                purelib: site_packages.to_path_buf(),
+                platlib: site_packages.to_path_buf(),
+                scripts: venv.path().join("bin"),
+                data: venv.path().to_path_buf(),
+                include: venv.path().join("include/python3.12"),
+            },
+        };
+
+        uninstall_wheel(dist_info.path(), "evilpkg 0.1.0", &layout).unwrap();
+
+        // The regular package files have been removed, while the file outside the scheme still
+        // exists.
+        assert!(target_file.exists());
+        assert!(!metadata.exists());
+        assert!(!init_py.exists());
+    }
+
+    #[test]
+    fn test_uninstall_egg_info_path_traversal() {
+        let venv = assert_fs::TempDir::new().unwrap();
+        let site_packages = venv.child("lib/python3.12/site-packages");
+        let outside_dir = assert_fs::TempDir::new().unwrap();
+
+        // Create a directory outside site-packages that a malicious top_level.txt might target.
+        let target_dir = outside_dir.child("traversal_target");
+        let target_file = target_dir.child("secret.txt");
+        target_file.write_str("I should not be deleted").unwrap();
+
+        // Build a relative traversal path from site-packages to the target directory.
+        let egg_info = site_packages.child("evilpkg-0.1.0.egg-info");
+        egg_info.create_dir_all().unwrap();
+        let target_path = pathdiff::diff_paths(target_dir.path(), site_packages.path()).unwrap();
+        assert!(site_packages.join(&target_path).exists());
+
+        // Create a fake egg-info directory with a top_level.txt containing a path traversal entry.
+        egg_info
+            .child("top_level.txt")
+            .write_str(&format!("evilpkg\n{}\n", target_path.display()))
+            .unwrap();
+
+        // Also create the legitimate package directory so uninstall can remove it.
+        let init_py = site_packages.child("evilpkg").child("__init__.py");
+        init_py.touch().unwrap();
+
+        // Something that looks sufficiently like a Unix venv.
+        let layout = Layout {
+            sys_executable: venv.path().join("bin/python"),
+            python_version: (3, 13),
+            os_name: "posix".to_string(),
+            scheme: Scheme {
+                purelib: site_packages.to_path_buf(),
+                platlib: site_packages.to_path_buf(),
+                scripts: venv.path().join("bin"),
+                data: venv.path().to_path_buf(),
+                include: venv.path().join("include/python3.12"),
+            },
+        };
+
+        uninstall_egg(egg_info.path(), "evilpkg 0.1.0", &layout).unwrap();
+
+        // The regular package directory has been removed, while the directory outside the scheme still exists.
+        assert!(target_dir.exists());
+        assert!(target_file.exists());
+        assert!(!init_py.exists());
+        assert!(!egg_info.exists());
+    }
 }

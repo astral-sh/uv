@@ -21,6 +21,7 @@ use uv_python::{
 use uv_requirements::RequirementsSpecification;
 use uv_settings::{Combine, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::{InstalledTools, Tool};
+use uv_types::SourceTreeEditablePolicy;
 use uv_warnings::write_error_chain;
 use uv_workspace::WorkspaceCache;
 
@@ -318,7 +319,6 @@ async fn upgrade_tool(
     // Resolve the appropriate settings, preferring: CLI > receipt > user.
     let options = args.clone().combine(
         ResolverInstallerOptions::from(existing_tool_receipt.options().clone())
-            .recompute_exclude_newer()
             .combine(filesystem.clone()),
     );
     let settings = ResolverInstallerSettings::from(options.clone());
@@ -338,7 +338,6 @@ async fn upgrade_tool(
         existing_tool_receipt.overrides().to_vec(),
         existing_tool_receipt.excludes().to_vec(),
     );
-
     // Initialize any shared state.
     let state = PlatformState::default();
 
@@ -352,6 +351,7 @@ async fn upgrade_tool(
             spec.into(),
             interpreter,
             python_platform,
+            SourceTreeEditablePolicy::Tool,
             build_constraints.clone(),
             &settings.resolver,
             client_builder,
@@ -397,6 +397,7 @@ async fn upgrade_tool(
             spec,
             Modifications::Exact,
             python_platform,
+            SourceTreeEditablePolicy::Tool,
             build_constraints,
             ExtraBuildRequires::default(),
             &settings,

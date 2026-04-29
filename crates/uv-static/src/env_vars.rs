@@ -110,6 +110,7 @@ impl EnvVars {
     /// Equivalent to the `--native-tls` command-line argument. If set to `true`, uv will
     /// load TLS certificates from the platform's native certificate store instead of the
     /// bundled Mozilla root certificates.
+    /// (Deprecated: use `UV_SYSTEM_CERTS` instead.)
     #[attr_added_in("0.1.19")]
     pub const UV_NATIVE_TLS: &'static str = "UV_NATIVE_TLS";
 
@@ -215,7 +216,8 @@ impl EnvVars {
     pub const UV_PYTHON_DOWNLOADS: &'static str = "UV_PYTHON_DOWNLOADS";
 
     /// Overrides the environment-determined libc on linux systems when filling in the current platform
-    /// within Python version requests. Options are: `gnu`, `gnueabi`, `gnueabihf`, `musl`, and `none`.
+    /// within Python version requests. Options are: `gnu`, `gnueabi`, `gnueabihf`, `musl`,
+    /// `musleabi`, `musleabihf`, and `none`.
     #[attr_added_in("0.7.22")]
     pub const UV_LIBC: &'static str = "UV_LIBC";
 
@@ -420,6 +422,14 @@ impl EnvVars {
     #[attr_added_in("0.8.0")]
     pub const UV_PYTHON_INSTALL_REGISTRY: &'static str = "UV_PYTHON_INSTALL_REGISTRY";
 
+    /// Disable use of the Windows registry for Python discovery and registration.
+    ///
+    /// When set, uv will not discover Python interpreters from the Windows registry or Microsoft
+    /// Store locations, and managed Python installations will not be registered in the Windows
+    /// registry.
+    #[attr_added_in("0.11.8")]
+    pub const UV_PYTHON_NO_REGISTRY: &'static str = "UV_PYTHON_NO_REGISTRY";
+
     /// Managed Python installations information is hardcoded in the `uv` binary.
     ///
     /// This variable can be set to a local path or URL pointing to
@@ -496,10 +506,12 @@ impl EnvVars {
     #[attr_added_in("0.5.21")]
     pub const UV_VENV_SEED: &'static str = "UV_VENV_SEED";
 
-    /// Used to override `PATH` to limit Python executable availability in the test suite.
-    #[attr_hidden]
-    #[attr_added_in("0.0.5")]
-    pub const UV_TEST_PYTHON_PATH: &'static str = "UV_TEST_PYTHON_PATH";
+    /// Used to override `PATH` for Python executable discovery.
+    ///
+    /// When set, uv will search for Python interpreters in the directories specified by this
+    /// variable instead of `PATH`.
+    #[attr_added_in("0.11.8")]
+    pub const UV_PYTHON_SEARCH_PATH: &'static str = "UV_PYTHON_SEARCH_PATH";
 
     /// Include resolver and installer output related to environment modifications.
     #[attr_hidden]
@@ -919,6 +931,12 @@ impl EnvVars {
     #[attr_added_in("0.4.29")]
     pub const GIT_CEILING_DIRECTORIES: &'static str = "GIT_CEILING_DIRECTORIES";
 
+    /// Cleared for uv's git invocations to ensure git behaves correctly in
+    /// spite of an odd environment.
+    #[attr_hidden]
+    #[attr_added_in("0.11.8")]
+    pub const GIT_COMMON_DIR: &'static str = "GIT_COMMON_DIR";
+
     /// Indicates that the current process is running in GitHub Actions.
     ///
     /// `uv publish` may attempt trusted publishing flows when set
@@ -1174,6 +1192,19 @@ impl EnvVars {
     #[attr_added_in("0.9.8")]
     pub const UV_TEST_CURRENT_TIMESTAMP: &'static str = "UV_TEST_CURRENT_TIMESTAMP";
 
+    /// When set to a timestamp, applies an `exclude-newer` filter to the versions
+    /// considered available from indexes.
+    ///
+    /// This is used for reproducible resolver error messages. When `exclude-newer`
+    /// is used, we retain information about the available versions to improve error
+    /// messages. In contrast, versions published after this cutoff are considered
+    /// non-existent.
+    ///
+    /// Should be set to an RFC 3339 timestamp (e.g., `2024-03-25T00:00:00Z`).
+    #[attr_hidden]
+    #[attr_added_in("0.11.7")]
+    pub const UV_TEST_AVAILABLE_VERSION_CUTOFF: &'static str = "UV_TEST_AVAILABLE_VERSION_CUTOFF";
+
     /// `.env` files from which to load environment variables when executing `uv run` commands.
     #[attr_added_in("0.4.30")]
     pub const UV_ENV_FILE: &'static str = "UV_ENV_FILE";
@@ -1257,6 +1288,10 @@ impl EnvVars {
     /// Equivalent to the `--project` command-line argument.
     #[attr_added_in("0.4.4")]
     pub const UV_PROJECT: &'static str = "UV_PROJECT";
+
+    /// Equivalent to the `--no-project` command-line argument.
+    #[attr_added_in("0.11.8")]
+    pub const UV_NO_PROJECT: &'static str = "UV_NO_PROJECT";
 
     /// Equivalent to the `--directory` command-line argument. `UV_WORKING_DIRECTORY` (added in
     /// v0.9.1) is also supported for backwards compatibility.

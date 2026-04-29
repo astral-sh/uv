@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::fmt::Formatter;
+use std::hash::{Hash, Hasher};
 use std::ops::Bound;
 use std::str::FromStr;
 
@@ -276,7 +277,7 @@ impl VersionSpecifiersParseError {
 impl std::error::Error for VersionSpecifiersParseError {}
 
 /// A version range such as `>1.2.3`, `<=4!5.6.7-a8.post9.dev0` or `== 4.1.*`. Parse with
-/// `VersionSpecifier::from_str`
+/// [`VersionSpecifier::from_str`].
 ///
 /// ```rust
 /// use std::str::FromStr;
@@ -286,7 +287,12 @@ impl std::error::Error for VersionSpecifiersParseError {}
 /// let version_specifier = VersionSpecifier::from_str("== 1.*").unwrap();
 /// assert!(version_specifier.contains(&version));
 /// ```
-#[derive(Eq, Ord, PartialEq, PartialOrd, Debug, Clone, Hash)]
+///
+/// [`PartialEq`], [`Hash`] and [`Ord`] distinguish `~=` specifiers by their
+/// release segment count, since `~=10.1.0` (`>=10.1.0, <10.2`) and `~=10.1`
+/// (`>=10.1, <11`) match different version sets per PEP 440. For other
+/// operators, trailing zeros are insignificant.
+#[derive(Debug, Clone)]
 #[cfg_attr(
     feature = "rkyv",
     derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
@@ -297,6 +303,60 @@ pub struct VersionSpecifier {
     pub(crate) operator: Operator,
     /// The whole version part behind the operator
     pub(crate) version: Version,
+}
+
+impl PartialEq for VersionSpecifier {
+    fn eq(&self, other: &Self) -> bool {
+        if self.operator != other.operator {
+            return false;
+        }
+        // `~=` semantics depend on the exact release segment count.
+        if self.operator == Operator::TildeEqual
+            && self.version.release().len() != other.version.release().len()
+        {
+            return false;
+        }
+        self.version == other.version
+    }
+}
+
+impl Eq for VersionSpecifier {}
+
+impl Hash for VersionSpecifier {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.operator.hash(state);
+        // Include the release length for `~=` so that `~=10.1` and `~=10.1.0`
+        // hash differently, matching our `PartialEq`.
+        if self.operator == Operator::TildeEqual {
+            self.version.release().len().hash(state);
+        }
+        self.version.hash(state);
+    }
+}
+
+impl PartialOrd for VersionSpecifier {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for VersionSpecifier {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.operator
+            .cmp(&other.operator)
+            .then_with(|| self.version.cmp(&other.version))
+            .then_with(|| {
+                // Break `~=` ties on release length to stay consistent with `PartialEq`.
+                if self.operator == Operator::TildeEqual {
+                    self.version
+                        .release()
+                        .len()
+                        .cmp(&other.version.release().len())
+                } else {
+                    Ordering::Equal
+                }
+            })
+    }
 }
 
 impl<'de> Deserialize<'de> for VersionSpecifier {
@@ -2066,6 +2126,40 @@ Failed to parse version: Unexpected end of version specifier, expected operator.
             err.to_string(),
             "The ~= operator requires at least two segments in the release version"
         );
+    }
+
+    /// PEP 440 states that trailing zeros in `~=` specifiers control forward
+    /// compatibility, so `~=2.2` ≠ `~=2.2.0`. Non-`~=` specifiers are unaffected.
+    #[test]
+    fn trailing_zero_equality() {
+        let equal = [
+            // Non-`~=` operators: trailing zeros are insignificant.
+            (">=3.3", ">=3.3.0"),
+            ("<2", "<2.0.0"),
+            ("==1.2", "==1.2.0"),
+            // Identical `~=` specifiers.
+            ("~=2.2.0", "~=2.2.0"),
+        ];
+        for (a, b) in equal {
+            let a = VersionSpecifier::from_str(a).unwrap();
+            let b = VersionSpecifier::from_str(b).unwrap();
+            assert_eq!(a, b);
+        }
+
+        let not_equal = [
+            // PEP 440 forward-compat examples.
+            ("~=2.2", "~=2.2.0"),
+            ("~=1.4.5", "~=1.4.5.0"),
+            // Same release, different suffix.
+            ("~=2.2.post3", "~=2.2.post5"),
+            // Different release length with matching suffix.
+            ("~=2.2.post3", "~=2.2.0.post3"),
+        ];
+        for (a, b) in not_equal {
+            let a = VersionSpecifier::from_str(a).unwrap();
+            let b = VersionSpecifier::from_str(b).unwrap();
+            assert_ne!(a, b);
+        }
     }
 
     /// Do not panic with `u64::MAX` causing an `u64::MAX + 1` overflow.

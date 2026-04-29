@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.11.4"
+version = "0.11.8"
 description = "A Python package and project manager"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -70,8 +70,8 @@ uv-workspace = { workspace = true, features = ["clap"] }
 anstream = { workspace = true }
 anyhow = { workspace = true }
 axoupdater = { workspace = true, features = [
-    "github_releases",
-    "tokio",
+  "github_releases",
+  "tokio",
 ], optional = true }
 clap = { workspace = true, features = ["derive", "string", "wrap_help"] }
 console = { workspace = true }
@@ -79,6 +79,7 @@ ctrlc = { workspace = true }
 diskus = { workspace = true }
 dotenvy = { workspace = true }
 dunce = { workspace = true }
+etcetera = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 http = { workspace = true }
@@ -115,10 +116,8 @@ which = { workspace = true }
 zip = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-arrayvec = { workspace = true }
 self-replace = { workspace = true }
 uv-windows = { workspace = true }
-windows = { workspace = true }
 
 [build-dependencies]
 uv-static = { workspace = true }
@@ -151,7 +150,6 @@ tar = { workspace = true }
 tempfile = { workspace = true }
 tokio-stream = { workspace = true }
 tokio-util = { workspace = true }
-whoami = { workspace = true }
 wiremock = { workspace = true }
 zip = { workspace = true }
 
@@ -175,16 +173,16 @@ tracing-durations-export = ["dep:tracing-durations-export", "uv-resolver/tracing
 
 # Features that only apply when running tests, no-ops otherwise.
 test-defaults = [
-    "test-crates-io",
-    "test-git",
-    "test-git-lfs",
-    "test-pypi",
-    "test-r2",
-    "test-python",
-    "test-python-managed",
-    "test-python-eol",
-    "test-slow",
-    "test-ecosystem"
+  "test-crates-io",
+  "test-git",
+  "test-git-lfs",
+  "test-pypi",
+  "test-r2",
+  "test-python",
+  "test-python-managed",
+  "test-python-eol",
+  "test-slow",
+  "test-ecosystem"
 ]
 # Introduces a testing dependency on crates.io.
 test-crates-io = []
@@ -208,6 +206,10 @@ test-python-managed = []
 test-slow = []
 # Includes test cases that require ecosystem packages
 test-ecosystem = []
+# Includes test cases that write to the Windows registry. These tests mutate
+# global state (the Windows registry).
+# We don't run these tests by default locally; the CI for Windows enables them.
+test-windows-registry = []
 # Build uvw binary on Windows
 windows-gui-bin = []
 

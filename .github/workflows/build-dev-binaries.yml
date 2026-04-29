@@ -35,7 +35,7 @@ jobs:
         run: cargo build --profile no-debug
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: uv-linux-libc-${{ github.sha }}
           path: |
@@ -63,7 +63,7 @@ jobs:
         run: cargo build --profile no-debug
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: uv-linux-aarch64-${{ github.sha }}
           path: |
@@ -99,7 +99,7 @@ jobs:
         run: cargo build --profile no-debug --target armv7-unknown-linux-gnueabihf --bin uv --bin uvx
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: uv-linux-armv7-gnueabihf-${{ github.sha }}
           path: |
@@ -132,7 +132,7 @@ jobs:
         run: cargo build --profile no-debug --target x86_64-unknown-linux-musl --bin uv --bin uvx
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: uv-linux-musl-${{ github.sha }}
           path: |
@@ -156,7 +156,7 @@ jobs:
         run: cargo build --profile no-debug --bin uv --bin uvx
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: uv-macos-aarch64-${{ github.sha }}
           path: |
@@ -180,7 +180,7 @@ jobs:
         run: cargo build --profile no-debug --bin uv --bin uvx
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: uv-macos-x86_64-${{ github.sha }}
           path: |
@@ -215,7 +215,7 @@ jobs:
         run: cargo build --profile no-debug --bin uv --bin uvx
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: uv-windows-x86_64-${{ github.sha }}
           path: |
@@ -250,7 +250,7 @@ jobs:
         run: cargo build --profile no-debug --bin uv --bin uvx
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: uv-windows-aarch64-${{ github.sha }}
           path: |
@@ -327,7 +327,7 @@ jobs:
         run: cargo build --profile no-debug --target aarch64-linux-android --bin uv --bin uvx
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: uv-android-aarch64-${{ github.sha }}
           path: |
@@ -356,7 +356,7 @@ jobs:
           cross build --target x86_64-unknown-freebsd --profile no-debug
 
       - name: Test in Firecracker VM
-        uses: acj/freebsd-firecracker-action@1cc93bd507a8376bddcd15a2b9c660394dc60456 # v0.9.0
+        uses: acj/freebsd-firecracker-action@bab3e77871573c7943b80816f1641b6c1ce36896 # v0.9.1
         with:
           verbose: false
           checkout: false

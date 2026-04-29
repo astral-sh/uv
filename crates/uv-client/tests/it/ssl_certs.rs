@@ -45,17 +45,16 @@ impl TestCertificate {
         Self::persist(ca, server, &client)
     }
 
-    /// Generate a fresh certificate set whose CA contains an unsupported
-    /// critical extension.
-    fn new_with_unsupported_critical_ca_extension() -> Result<Self> {
-        let mut unsupported_extension = CustomExtension::from_oid_content(
-            &[1, 2, 3, 4],
-            [vec![0x0c, 0x0b], b"unsupported".to_vec()].concat(),
-        );
-        unsupported_extension.set_criticality(true);
+    /// Generate a fresh certificate set whose CA contains a duplicate
+    /// `basicConstraints` extension, which webpki rejects as an invalid trust
+    /// anchor.
+    fn new_with_duplicate_basic_constraints_ca_extension() -> Result<Self> {
+        let duplicate_basic_constraints =
+            CustomExtension::from_oid_content(&[2, 5, 29, 19], vec![0x30, 0x00]);
 
-        let (ca, server, client) =
-            generate_self_signed_certs_with_ca_custom_extensions(vec![unsupported_extension])?;
+        let (ca, server, client) = generate_self_signed_certs_with_ca_custom_extensions(vec![
+            duplicate_basic_constraints,
+        ])?;
         Self::persist(ca, server, &client)
     }
 
@@ -453,27 +452,15 @@ async fn test_ssl_cert_file_valid() -> Result<()> {
     Ok(())
 }
 
-/// An unsupported critical extension in `SSL_CERT_FILE` returns a builder
-/// error instead of panicking.
+/// If `SSL_CERT_FILE` contains only an invalid trust anchor, the invalid
+/// certificate is ignored and the client falls back to webpki roots.
 #[tokio::test]
-async fn test_ssl_cert_file_unsupported_critical_extension_returns_error() -> Result<()> {
-    let cert = TestCertificate::new_with_unsupported_critical_ca_extension()?;
-    let test_client = client().ssl_cert_file(&cert.trust_path);
-    let vars = test_client.ssl_vars();
-
-    async_with_vars(vars, async {
-        let err = BaseClientBuilder::default()
-            .build()
-            .expect_err("expected client build to fail");
-
-        assert!(err.is_builder(), "expected builder error, got: {err:?}");
-        assert!(
-            format!("{err:?}").contains("UnsupportedCriticalExtension"),
-            "expected error to mention UnsupportedCriticalExtension, got: {err:?}"
-        );
-    })
-    .await;
-
+async fn test_ssl_cert_file_invalid_trust_anchor_falls_back() -> Result<()> {
+    let cert = TestCertificate::new_with_duplicate_basic_constraints_ca_extension()?;
+    client()
+        .ssl_cert_file(&cert.trust_path)
+        .expect_https_connect_fails(&cert)
+        .await;
     Ok(())
 }
 
@@ -485,6 +472,28 @@ async fn test_ssl_cert_file_bundle() -> Result<()> {
     client()
         .ssl_cert_file(bundle.path())
         .expect_https_connect_succeeds(&cert)
+        .await;
+    Ok(())
+}
+
+/// Invalid certificates in `SSL_CERT_FILE` are ignored when valid
+/// certificates are also present, and the valid certificates remain trusted.
+#[tokio::test]
+async fn test_ssl_cert_file_bundle_ignores_invalid_trust_anchor() -> Result<()> {
+    let valid_cert = TestCertificate::new()?;
+    let invalid_cert = TestCertificate::new_with_duplicate_basic_constraints_ca_extension()?;
+
+    let mut bundle = NamedTempFile::new()?;
+    write!(
+        bundle,
+        "{}\n{}",
+        invalid_cert.ca.public.pem(),
+        valid_cert.ca.public.pem()
+    )?;
+
+    client()
+        .ssl_cert_file(bundle.path())
+        .expect_https_connect_succeeds(&valid_cert)
         .await;
     Ok(())
 }
@@ -512,6 +521,24 @@ async fn test_ssl_cert_dir_bundle_files() -> Result<()> {
     client()
         .ssl_cert_dir(dir.path())
         .expect_https_connect_succeeds(&cert)
+        .await;
+    Ok(())
+}
+
+/// Invalid certificates in `SSL_CERT_DIR` are ignored when valid
+/// certificates are also present, and the valid certificates remain trusted.
+#[tokio::test]
+async fn test_ssl_cert_dir_ignores_invalid_trust_anchor() -> Result<()> {
+    let valid_cert = TestCertificate::new()?;
+    let invalid_cert = TestCertificate::new_with_duplicate_basic_constraints_ca_extension()?;
+
+    let dir = TempDir::new()?;
+    fs_err::write(dir.path().join("valid.pem"), valid_cert.ca.public.pem())?;
+    fs_err::write(dir.path().join("invalid.pem"), invalid_cert.ca.public.pem())?;
+
+    client()
+        .ssl_cert_dir(dir.path())
+        .expect_https_connect_succeeds(&valid_cert)
         .await;
     Ok(())
 }

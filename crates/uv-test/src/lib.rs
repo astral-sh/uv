@@ -33,8 +33,8 @@ use uv_python::{
 };
 use uv_static::EnvVars;
 
-// Exclude any packages uploaded after this date.
-static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
+// Shared test timestamp for deterministic package availability and relative times.
+static TEST_TIMESTAMP: &str = "2024-03-25T00:00:00Z";
 
 pub const PACKSE_VERSION: &str = "0.3.59";
 pub const DEFAULT_PYTHON_VERSION: &str = "3.12";
@@ -138,7 +138,7 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
 ///
 /// * Set the current directory to a temporary directory (`temp_dir`).
 /// * Set the cache dir to a different temporary directory (`cache_dir`).
-/// * Set a cutoff for versions used in the resolution so the snapshots don't change after a new release.
+/// * Set a shared test timestamp so snapshots don't change after a new release.
 /// * Set the venv to a fresh `.venv` in `temp_dir`
 pub struct TestContext {
     pub root: ChildPath,
@@ -1183,7 +1183,7 @@ impl TestContext {
     ///   but snapshotted to a string.
     /// * Use a fake `HOME` to avoid accidentally changing the developer's machine.
     /// * Hide other Pythons with `UV_PYTHON_INSTALL_DIR` and installed interpreters with
-    ///   `UV_TEST_PYTHON_PATH` and an active venv (if applicable) by removing `VIRTUAL_ENV`.
+    ///   `UV_PYTHON_SEARCH_PATH` and an active venv (if applicable) by removing `VIRTUAL_ENV`.
     /// * Increase the stack size to avoid stack overflows on windows due to large async functions.
     pub fn add_shared_options(&self, command: &mut Command, activate_venv: bool) {
         self.add_shared_args(command);
@@ -1232,12 +1232,13 @@ impl TestContext {
             .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
             // Installations are not allowed by default; see `Self::with_managed_python_dirs`
             .env(EnvVars::UV_PYTHON_DOWNLOADS, "never")
-            .env(EnvVars::UV_TEST_PYTHON_PATH, self.python_path())
-            // Lock to a point in time view of the world
-            .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
-            .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, EXCLUDE_NEWER)
-            // When installations are allowed, we don't want to write to global state, like the
-            // Windows registry
+            .env(EnvVars::UV_PYTHON_SEARCH_PATH, self.python_path())
+            .env(EnvVars::UV_EXCLUDE_NEWER, TEST_TIMESTAMP)
+            .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, TEST_TIMESTAMP)
+            .env(EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF, TEST_TIMESTAMP)
+            // Keep Python discovery hermetic and avoid mutating global state, like the Windows
+            // registry, unless a test opts in explicitly.
+            .env(EnvVars::UV_PYTHON_NO_REGISTRY, "1")
             .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "0")
             // Since downloads, fetches and builds run in parallel, their message output order is
             // non-deterministic, so can't capture them in test output.
@@ -2067,7 +2068,7 @@ pub fn create_venv_from_executable<P: AsRef<Path>>(
 
 /// Create a `PATH` with the requested Python versions available in order.
 ///
-/// Generally this should be used with `UV_TEST_PYTHON_PATH`.
+/// Generally this should be used with `UV_PYTHON_SEARCH_PATH`.
 pub fn python_path_with_versions(
     temp_dir: &ChildPath,
     python_versions: &[&str],
@@ -2082,7 +2083,7 @@ pub fn python_path_with_versions(
 
 /// Returns a list of Python executables for the given versions.
 ///
-/// Generally this should be used with `UV_TEST_PYTHON_PATH`.
+/// Generally this should be used with `UV_PYTHON_SEARCH_PATH`.
 pub fn python_installations_for_versions(
     temp_dir: &ChildPath,
     python_versions: &[&str],

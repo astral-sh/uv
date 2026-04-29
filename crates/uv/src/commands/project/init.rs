@@ -1,7 +1,7 @@
 use std::fmt::Write;
 use std::iter;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::str::FromStr;
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -462,14 +462,14 @@ async fn init_project(
         if let Some(python_request) = python_pin {
             if PythonVersionFile::discover(path, &VersionFileDiscoveryOptions::default())
                 .await?
-                .filter(|file| {
+                .as_ref()
+                .is_none_or(|file| !{
                     file.version()
                         .is_some_and(|version| *version == python_request)
                         && file.path().parent().is_some_and(|parent| {
                             parent == workspace.install_path() || parent == path
                         })
                 })
-                .is_none()
             {
                 PythonVersionFile::new(path.join(".python-version"))
                     .with_versions(vec![python_request.clone()])
@@ -483,8 +483,8 @@ async fn init_project(
             if PythonVersionFile::discover(path, &VersionFileDiscoveryOptions::default())
                 .await?
                 .filter(|file| file.version().is_some())
-                .filter(|file| file.path().parent().is_some_and(|parent| parent == path))
-                .is_none()
+                .as_ref()
+                .is_none_or(|file| file.path().parent().is_none_or(|parent| parent != path))
             {
                 PythonVersionFile::new(path.join(".python-version"))
                     .with_versions(vec![python_request.clone()])
@@ -652,10 +652,8 @@ async fn determine_requires_python(
         .flatten()
     {
         // (3) `requires-python` from the workspace
-        let python_request = PythonRequest::Version(VersionRequest::Range(
-            requires_python.specifiers().clone(),
-            PythonVariant::Default,
-        ));
+        let python_request = PythonRequest::from_requires_python(requires_python.clone())
+            .unwrap_or(PythonRequest::Default);
 
         // Pin to the minor version.
         let python_pin = if pin_python {
@@ -1299,7 +1297,8 @@ fn detect_git_repository(path: &Path) -> GitDiscoveryResult {
     let Ok(git) = GIT.as_ref() else {
         return GitDiscoveryResult::NoGit;
     };
-    let Ok(output) = Command::new(git)
+    let Ok(output) = git
+        .build_command()
         .arg("rev-parse")
         .arg("--is-inside-work-tree")
         .env(EnvVars::LC_ALL, "C")
@@ -1402,7 +1401,8 @@ fn get_author_from_git(path: &Path) -> Result<Author> {
     let mut name = None;
     let mut email = None;
 
-    let output = Command::new(git)
+    let output = git
+        .build_command()
         .arg("config")
         .arg("--get")
         .arg("user.name")
@@ -1414,7 +1414,8 @@ fn get_author_from_git(path: &Path) -> Result<Author> {
         name = Some(String::from_utf8_lossy(&output.stdout).trim().to_string());
     }
 
-    let output = Command::new(git)
+    let output = git
+        .build_command()
         .arg("config")
         .arg("--get")
         .arg("user.email")

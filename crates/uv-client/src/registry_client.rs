@@ -37,7 +37,7 @@ use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 use uv_torch::TorchStrategy;
 
-use crate::base_client::{BaseClientBuilder, ExtraMiddleware, RedirectPolicy};
+use crate::base_client::{BaseClientBuilder, ClientBuildError, ExtraMiddleware, RedirectPolicy};
 use crate::cached_client::CacheControl;
 use crate::flat_index::FlatIndexEntry;
 use crate::html::SimpleDetailHTML;
@@ -163,7 +163,7 @@ impl<'a> RegistryClientBuilder<'a> {
         }
     }
 
-    pub fn build(mut self) -> reqwest::Result<RegistryClient> {
+    pub fn build(mut self) -> Result<RegistryClient, ClientBuildError> {
         self.cache_index_credentials();
         let index_urls = self.index_locations.index_urls();
 

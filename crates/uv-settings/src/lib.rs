@@ -1,13 +1,16 @@
 use std::num::NonZeroUsize;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::time::Duration;
 use tracing::info_span;
 use uv_client::{DEFAULT_CONNECT_TIMEOUT, DEFAULT_READ_TIMEOUT, DEFAULT_READ_TIMEOUT_UPLOAD};
+use uv_configuration::RequiredVersion;
 use uv_dirs::{system_config_file, user_config_dir};
 use uv_distribution_types::Origin;
 use uv_flags::EnvironmentFlags;
 use uv_fs::Simplified;
+use uv_pep440::Version;
 use uv_static::{EnvVars, InvalidEnvironmentVariable, parse_boolish_environment_variable};
 use uv_warnings::warn_user;
 
@@ -123,7 +126,13 @@ impl FilesystemOptions {
                 let options =
                     info_span!("toml::from_str filesystem options uv.toml", path = %path.display())
                         .in_scope(|| toml::from_str::<Options>(&content))
-                        .map_err(|err| Error::UvToml(path.clone(), Box::new(err)))?
+                        .map_err(|err| {
+                            check_uv_toml_required_version(
+                                &path,
+                                &content,
+                                Error::UvToml(path.clone(), Box::new(err)),
+                            )
+                        })?
                         .relative_to(&std::path::absolute(dir)?)?;
 
                 // If the directory also contains a `[tool.uv]` table in a `pyproject.toml` file,
@@ -155,7 +164,9 @@ impl FilesystemOptions {
                 let pyproject =
                     info_span!("toml::from_str filesystem options pyproject.toml", path = %path.display())
                         .in_scope(|| toml::from_str::<PyProjectToml>(&content))
-                        .map_err(|err| Error::PyprojectToml(path.clone(), Box::new(err)))?;
+                        .map_err(|err| {
+                            check_pyproject_required_version(&path, &content, err)
+                        })?;
                 let Some(tool) = pyproject.tool else {
                     tracing::debug!(
                         "Skipping `pyproject.toml` in `{}` (no `[tool]` section)",
@@ -205,7 +216,13 @@ fn read_file(path: &Path) -> Result<Options, Error> {
     let content = fs_err::read_to_string(path)?;
     let options = info_span!("toml::from_str filesystem options uv.toml", path = %path.display())
         .in_scope(|| toml::from_str::<Options>(&content))
-        .map_err(|err| Error::UvToml(path.to_path_buf(), Box::new(err)))?;
+        .map_err(|err| {
+            check_uv_toml_required_version(
+                path,
+                &content,
+                Error::UvToml(path.to_path_buf(), Box::new(err)),
+            )
+        })?;
     let options = if let Some(parent) = std::path::absolute(path)?.parent() {
         options.relative_to(parent)?
     } else {
@@ -214,8 +231,60 @@ fn read_file(path: &Path) -> Result<Options, Error> {
     Ok(options)
 }
 
+/// If `required_version` is set and incompatible with the running uv, return the corresponding
+/// [`Error::RequiredVersion`].
+fn required_version_mismatch(required_version: Option<RequiredVersion>) -> Option<Error> {
+    let required_version = required_version?;
+    let package_version = Version::from_str(uv_version::version())
+        .expect("uv crate version to be a valid PEP 440 version");
+    if required_version.contains(&package_version) {
+        None
+    } else {
+        Some(Error::RequiredVersion {
+            required_version,
+            package_version,
+        })
+    }
+}
+
+/// On a `pyproject.toml` settings parse error, check whether `tool.uv.required-version` should
+/// take precedence over that error.
+fn check_pyproject_required_version(path: &Path, content: &str, source: toml::de::Error) -> Error {
+    let fallback = || Error::PyprojectToml(path.to_path_buf(), Box::new(source));
+    let Ok(pyproject) = info_span!(
+        "toml::from_str filesystem required-version pyproject.toml",
+        path = %path.display()
+    )
+    .in_scope(|| toml::from_str::<PyProjectRequiredVersionToml>(content)) else {
+        return fallback();
+    };
+
+    let required_version = pyproject
+        .tool
+        .and_then(|tool| tool.uv)
+        .and_then(|uv| uv.required_version);
+    required_version_mismatch(required_version).unwrap_or_else(fallback)
+}
+
+/// On a `uv.toml` settings parse or schema error, check whether top-level `required-version`
+/// should take precedence over that error.
+fn check_uv_toml_required_version(path: &Path, content: &str, source: Error) -> Error {
+    let Ok(uv_toml) = info_span!(
+        "toml::from_str filesystem required-version uv.toml",
+        path = %path.display()
+    )
+    .in_scope(|| toml::from_str::<UvRequiredVersionToml>(content)) else {
+        return source;
+    };
+    required_version_mismatch(uv_toml.required_version).unwrap_or(source)
+}
+
 /// Validate that an [`Options`] schema is compatible with `uv.toml`.
 fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
+    // A `required-version` mismatch takes precedence over a schema error.
+    if let Some(err) = required_version_mismatch(options.globals.required_version.clone()) {
+        return Err(err);
+    }
     let Options {
         globals: _,
         top_level: _,
@@ -600,6 +669,14 @@ pub enum Error {
     )]
     PyprojectOnlyField(PathBuf, &'static str),
 
+    #[error(
+        "Required uv version `{required_version}` does not match the running version `{package_version}`"
+    )]
+    RequiredVersion {
+        required_version: RequiredVersion,
+        package_version: Version,
+    },
+
     #[error(transparent)]
     InvalidEnvironmentVariable(#[from] InvalidEnvironmentVariable),
 }
@@ -640,6 +717,7 @@ pub struct EnvironmentOptions {
     pub hide_build_output: Option<bool>,
     pub python_install_bin: Option<bool>,
     pub python_install_registry: Option<bool>,
+    pub python_no_registry: EnvFlag,
     pub install_mirrors: PythonInstallMirrors,
     pub log_context: Option<bool>,
     pub lfs: Option<bool>,
@@ -703,6 +781,7 @@ impl EnvironmentOptions {
             python_install_registry: parse_boolish_environment_variable(
                 EnvVars::UV_PYTHON_INSTALL_REGISTRY,
             )?,
+            python_no_registry: EnvFlag::new(EnvVars::UV_PYTHON_NO_REGISTRY)?,
             concurrency: Concurrency {
                 downloads: parse_integer_environment_variable(
                     EnvVars::UV_CONCURRENT_DOWNLOADS,
