@@ -1600,8 +1600,6 @@ fn python_find_search_path() {
 /// when only a version-specific executable (e.g., `python3.12`) is available.
 ///
 /// This is a regression test for <https://github.com/astral-sh/uv/issues/9695>.
-/// The `==` specifier must be converted to a concrete `VersionRequest` (e.g., `MajorMinor`)
-/// so that version-specific executable names like `python3.12` are included during discovery.
 #[test]
 #[cfg(unix)]
 fn python_find_project_requires_python_equal() {
