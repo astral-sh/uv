@@ -4799,6 +4799,29 @@ fn run_remote_pep723_script() {
     ");
 }
 
+#[test]
+fn run_remote_requirements_offline_redacts_credentials() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let script = context.temp_dir.child("main.py");
+    script.write_str("print('hello')")?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--offline")
+        .arg("--with-requirements")
+        .arg("http://username:password@example.com/requirements.txt")
+        .arg(script.as_os_str()), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Network connectivity is disabled, but a remote requirements file was requested: http://username:****@example.com/requirements.txt
+    ");
+
+    Ok(())
+}
+
 #[cfg(unix)] // A URL could be a valid filepath on Unix but not on Windows
 #[test]
 fn run_url_like_with_local_file_priority() -> Result<()> {
