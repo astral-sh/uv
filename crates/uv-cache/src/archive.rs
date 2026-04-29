@@ -1,3 +1,4 @@
+use std::convert::Infallible;
 use std::path::Path;
 use std::str::FromStr;
 
@@ -35,9 +36,9 @@ impl std::fmt::Display for ArchiveId {
 }
 
 impl FromStr for ArchiveId {
-    type Err = <uv_fastid::Id as FromStr>::Err;
+    type Err = Infallible;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        uv_fastid::Id::from_str(s).map(|id| Self(id.to_string()))
+        Ok(Self(s.to_string()))
     }
 }
