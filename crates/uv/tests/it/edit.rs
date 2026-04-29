@@ -17,7 +17,7 @@ use std::path::Path;
 use url::Url;
 use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method, matchers::path};
 
-#[cfg(feature = "test-git-lfs")]
+#[cfg(feature = "test-git")]
 use uv_cache_key::{RepositoryUrl, cache_digest};
 use uv_fs::Simplified;
 use uv_static::EnvVars;
@@ -900,6 +900,178 @@ fn add_git_lfs() -> Result<()> {
     Resolved 2 packages in [TIME]
     Checked 1 package in [TIME]
     ");
+
+    Ok(())
+}
+
+#[test]
+#[cfg(all(feature = "test-git", feature = "test-pypi"))]
+fn add_git_cache_compat_branch_and_tag() -> Result<()> {
+    fn run(reference_arg: &str, reference_value: &str) -> Result<()> {
+        let context = uv_test::test_context!("3.12")
+            // The old `uv` binary is installed from PyPI by `uv tool run`.
+            .with_exclude_newer("2026-04-29T00:00:00Z");
+
+        let pyproject_toml = context.temp_dir.child("pyproject.toml");
+        pyproject_toml.write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+        "#})?;
+
+        let repo_url = RepositoryUrl::parse("https://github.com/astral-test/uv-public-pypackage")?;
+        let git_cache = context.cache_dir.child("git-v0");
+        let db_root = git_cache.child("db").child(cache_digest(&repo_url));
+        let db_config = db_root.child(".git").child("config");
+        let checkout_root = git_cache
+            .child("checkouts")
+            .child(cache_digest(&repo_url))
+            .child("0dacfd6");
+        let ok_checkout_file = checkout_root.child(".ok");
+
+        let mut old_uv = context.command();
+        old_uv
+            .arg("tool")
+            .arg("run")
+            .arg("uv@0.11.4")
+            .arg("add")
+            .arg("--cache-dir")
+            .arg(context.cache_dir.path())
+            .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage")
+            .arg(reference_arg)
+            .arg(reference_value)
+            .assert()
+            .success();
+
+        // Verify this is an actual old cache: uv 0.11.4 populated a full Git database
+        // without partial-clone promisor metadata, and left a fresh checkout behind.
+        let db_config_contents = fs_err::read_to_string(&db_config)?;
+        assert!(!db_config_contents.contains("promisor = true"));
+        assert!(!db_config_contents.contains("partialclonefilter = tree:0"));
+        assert!(ok_checkout_file.exists());
+
+        // Remove the built Git distribution so the next invocation must consume
+        // the old Git cache. Keep registry wheels for build requirements.
+        for entry in fs_err::read_dir(context.cache_dir.path())? {
+            let entry = entry?;
+            let file_name = entry.file_name();
+            let file_name = file_name.to_string_lossy();
+            if file_name.starts_with("sdists-v") {
+                fs_err::remove_dir_all(entry.path())?;
+            }
+        }
+
+        context
+            .sync()
+            .arg("--offline")
+            .arg("--reinstall")
+            .assert()
+            .success();
+
+        context
+            .python_command()
+            .arg("-c")
+            .arg("import uv_public_pypackage")
+            .assert()
+            .success();
+        assert!(ok_checkout_file.exists());
+
+        Ok(())
+    }
+
+    run("--branch", "test-branch")?;
+    run("--tag", "test-tag")?;
+
+    Ok(())
+}
+
+#[test]
+#[cfg(all(feature = "test-git-lfs", feature = "test-pypi"))]
+fn add_git_cache_compat_lfs() -> Result<()> {
+    let context = uv_test::test_context!("3.13")
+        // The old `uv` binary is installed from PyPI by `uv tool run`.
+        .with_exclude_newer("2026-04-29T00:00:00Z")
+        .with_git_lfs_config();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = []
+    "#})?;
+
+    let repo_url = RepositoryUrl::parse("https://github.com/astral-sh/test-lfs-repo")?;
+    let git_cache = context.cache_dir.child("git-v0");
+    let db_root = git_cache.child("db").child(cache_digest(&repo_url));
+    let db_config = db_root.child(".git").child("config");
+    let checkout_root = git_cache
+        .child("checkouts")
+        .child(cache_digest(&repo_url.with_lfs(Some(true))))
+        .child("261c828");
+    let lfs_checkout_objects = checkout_root.child(".git").child("lfs");
+    let ok_checkout_file = checkout_root.child(".ok");
+
+    let mut old_uv = context.command();
+    old_uv
+        .arg("tool")
+        .arg("run")
+        .arg("uv@0.11.4")
+        .arg("add")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .arg("test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo")
+        .arg("--rev")
+        .arg("261c828b8e05251f3a3e4f6b47b149d691c7efbb")
+        .arg("--lfs")
+        .assert()
+        .success();
+
+    // Verify this is an actual old cache: uv 0.11.4 populated a full Git database
+    // with LFS artifacts, without partial-clone promisor metadata.
+    let db_config_contents = fs_err::read_to_string(&db_config)?;
+    assert!(!db_config_contents.contains("promisor = true"));
+    assert!(!db_config_contents.contains("partialclonefilter = tree:0"));
+    assert!(db_root.child(".git").child("lfs").exists());
+    assert!(ok_checkout_file.exists());
+
+    // Remove built distributions so the next invocation must consume the old Git cache.
+    for entry in fs_err::read_dir(context.cache_dir.path())? {
+        let entry = entry?;
+        let file_name = entry.file_name();
+        let file_name = file_name.to_string_lossy();
+        if file_name.starts_with("sdists-v") || file_name.starts_with("wheels-v") {
+            fs_err::remove_dir_all(entry.path())?;
+        }
+    }
+
+    // Simulate an interrupted or incomplete checkout from the old cache.
+    fs_err::remove_file(&ok_checkout_file)?;
+    fs_err::remove_dir_all(&lfs_checkout_objects)?;
+
+    context
+        .add()
+        .arg("--offline")
+        .arg("--reinstall")
+        .arg("git+https://github.com/astral-sh/test-lfs-repo")
+        .arg("--rev")
+        .arg("261c828b8e05251f3a3e4f6b47b149d691c7efbb")
+        .arg("--lfs")
+        .assert()
+        .success();
+
+    context
+        .python_command()
+        .arg("-c")
+        .arg("import test_lfs_repo.lfs_module")
+        .assert()
+        .success();
+
+    assert!(ok_checkout_file.exists());
+    assert!(lfs_checkout_objects.exists());
 
     Ok(())
 }
