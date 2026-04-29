@@ -34992,7 +34992,7 @@ fn lock_rewrite() -> Result<()> {
 }
 
 #[test]
-fn lock_rewrite_conflicts_locked_env() -> Result<()> {
+fn lock_rewrite_conflicts_locked_env() {
     let context = uv_test::test_context!("3.12");
 
     // Running `UV_LOCKED=1 uv lock --rewrite` should fail.
@@ -35004,8 +35004,6 @@ fn lock_rewrite_conflicts_locked_env() -> Result<()> {
         ----- stderr -----
         error: the argument `--rewrite` cannot be used with `UV_LOCKED` (environment variable)
         ");
-
-    Ok(())
 }
 
 #[test]
