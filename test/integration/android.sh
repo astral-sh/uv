@@ -34,3 +34,9 @@ echo "== uv pip install in venv =="
 
 echo "== uv run with venv python =="
 ./uv run -p .venv/bin/python python -c "import anyio; print(anyio.__name__)"
+
+# Exercise a mandatory file lock on Android. Environment locks are treated as
+# best-effort in the commands above, but cache cleaning requires an exclusive
+# lock and should reproduce unsupported file-lock behavior.
+echo "== uv cache clean =="
+./uv cache clean
