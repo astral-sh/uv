@@ -3374,10 +3374,7 @@ pub struct InitArgs {
     ///
     /// Defines a `[build-system]` for the project.
     ///
-    /// This is the default behavior, the option exists for backwards compatibility.
-    ///
-    /// When using `--app`, this will include a `[project.scripts]` entrypoint and use a `src/`
-    /// project structure.
+    /// This is the default behavior.
     #[arg(long, overrides_with = "no_package")]
     pub r#package: bool,
 
