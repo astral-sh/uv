@@ -2,8 +2,12 @@ use std::path::Path;
 use std::str::FromStr;
 
 /// A unique identifier for an archive (unzipped wheel) in the cache.
+///
+/// Note: for compatibility with the existing `archive-v0` bucket, this is a newtype
+/// around a `String` instead of a newtype around `uv_fastid::Id`. In the future,
+/// we may want to bump to `archive-v1` and switch to using `uv_fastid::Id` directly.
 #[derive(Debug, Clone, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
-pub struct ArchiveId(uv_fastid::Id);
+pub struct ArchiveId(String);
 
 impl Default for ArchiveId {
     fn default() -> Self {
@@ -14,7 +18,7 @@ impl Default for ArchiveId {
 impl ArchiveId {
     /// Generate a new unique identifier for an archive.
     pub fn new() -> Self {
-        Self(uv_fastid::insecure())
+        Self(uv_fastid::insecure().to_string())
     }
 }
 
@@ -34,6 +38,6 @@ impl FromStr for ArchiveId {
     type Err = <uv_fastid::Id as FromStr>::Err;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        uv_fastid::Id::from_str(s).map(Self)
+        uv_fastid::Id::from_str(s).map(|id| Self(id.to_string()))
     }
 }
