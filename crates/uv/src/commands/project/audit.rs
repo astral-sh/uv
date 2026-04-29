@@ -420,12 +420,13 @@ impl AuditResults {
                 };
                 let name = status.name.bold();
                 if let Some(reason) = &status.reason {
-                    writeln!(self.printer.stdout_important(), "{name} is {label}:")?;
-                    writeln!(self.printer.stdout_important(), "  Reason: {reason}")?;
+                    writeln!(
+                        self.printer.stdout_important(),
+                        "- {name} is {label}: {reason}"
+                    )?;
                 } else {
-                    writeln!(self.printer.stdout_important(), "{name} is {label}")?;
+                    writeln!(self.printer.stdout_important(), "- {name} is {label}")?;
                 }
-                writeln!(self.printer.stdout_important())?;
             }
         }
 

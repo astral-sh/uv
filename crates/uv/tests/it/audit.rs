@@ -1753,9 +1753,7 @@ async fn audit_project_status_deprecated_with_reason() {
 
     Adverse statuses:
 
-    iniconfig is deprecated:
-      Reason: no-longer-maintained
-
+    - iniconfig is deprecated: no-longer-maintained
 
     ----- stderr -----
     Found no known vulnerabilities and 1 adverse project status in 1 package
@@ -1807,8 +1805,7 @@ async fn audit_project_status_archived_no_reason() {
 
     Adverse statuses:
 
-    iniconfig is archived
-
+    - iniconfig is archived
 
     ----- stderr -----
     Found no known vulnerabilities and 1 adverse project status in 1 package
@@ -1860,9 +1857,7 @@ async fn audit_project_status_quarantined() {
 
     Adverse statuses:
 
-    iniconfig is quarantined:
-      Reason: suspected-malware
-
+    - iniconfig is quarantined: suspected-malware
 
     ----- stderr -----
     Found no known vulnerabilities and 1 adverse project status in 1 package
@@ -1993,8 +1988,7 @@ async fn audit_vulnerability_and_project_status() {
 
     Adverse statuses:
 
-    iniconfig is archived
-
+    - iniconfig is archived
 
     ----- stderr -----
     Found 1 known vulnerability and 1 adverse project status in 1 package
