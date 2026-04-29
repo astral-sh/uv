@@ -29,8 +29,9 @@ impl Deref for Id {
 
     #[inline]
     fn deref(&self) -> &str {
-        // SAFETY: `Id` is only constructed via `secure()` or `insecure()`, whose
-        // bytes are always ASCII via `reduce()`.
+        // SAFETY: every `Id` constructor (`secure`, `insecure`, `FromStr`, and
+        // transitively `serde::Deserialize`) guarantees the bytes are drawn from
+        // `ALPHABET`, which is entirely ASCII. The bytes are therefore valid UTF-8.
         #[allow(unsafe_code)]
         unsafe {
             std::str::from_utf8_unchecked(&self.0)
@@ -77,6 +78,10 @@ impl<'de> serde::Deserialize<'de> for Id {
     }
 }
 
+/// Generate an [`Id`] from a cryptographically secure RNG.
+///
+/// The resulting ID is suitable for use in contexts where uniqueness is needed and
+/// the risk of an adversarial collision is non-negligible.
 pub fn secure() -> Id {
     let mut raw = [0u8; 16];
     let mut rng = rand::rng();
@@ -84,6 +89,10 @@ pub fn secure() -> Id {
     Id(reduce(&raw))
 }
 
+/// Generate an [`Id`] from a fast, non-cryptographically secure RNG.
+///
+/// The resulting ID is suitable for use in contexts where uniqueness is needed
+/// but the risk of an adversarial collision is negligible (such as local cache keys).
 pub fn insecure() -> Id {
     let mut raw = [0u8; 16];
     fastrand::fill(&mut raw);
