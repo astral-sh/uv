@@ -1154,7 +1154,7 @@ pub enum ProjectCommand {
     /// present, its contents will be used as preferences for the resolution.
     ///
     /// If there are no changes to the project's dependencies, locking will have no effect unless
-    /// the `--upgrade` flag is provided.
+    /// the `--upgrade` or `--rewrite` flag is provided.
     #[command(
         after_help = "Use `uv help lock` for more details.",
         after_long_help = ""
@@ -4193,6 +4193,11 @@ pub struct LockArgs {
         conflicts_with = "locked"
     )]
     pub dry_run: bool,
+
+    /// Require a re-resolution and rewrite of the lockfile, even if the dependencies
+    /// or requirements have not changed.
+    #[arg(long, conflicts_with_all = ["check", "locked", "check_exists", "dry_run"])]
+    pub rewrite: bool,
 
     /// Lock the specified Python script, rather than the current project.
     ///
