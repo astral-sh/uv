@@ -1753,19 +1753,6 @@ impl PythonVariant {
     }
 }
 impl PythonRequest {
-    /// Create a request from a `Requires-Python` constraint.
-    pub fn from_requires_python(requires_python: RequiresPython) -> Option<Self> {
-        let specifiers = requires_python.into_specifiers();
-        if specifiers.is_empty() {
-            return None;
-        }
-
-        Some(Self::Version(VersionRequest::from_specifiers(
-            specifiers,
-            PythonVariant::Default,
-        )))
-    }
-
     /// Create a request from a string.
     ///
     /// This cannot fail, which means weird inputs will be parsed as [`PythonRequest::File`] or
@@ -1968,6 +1955,19 @@ impl PythonRequest {
         // The @ was not present, so if the version fails to parse just return Ok(None). For
         // example, python3stuff.
         Ok(rest.parse().ok())
+    }
+
+    /// Create a request from a `Requires-Python` constraint.
+    pub fn from_requires_python(requires_python: &RequiresPython) -> Option<Self> {
+        let specifiers = requires_python.specifiers();
+        if specifiers.is_empty() {
+            return None;
+        }
+
+        Some(Self::Version(VersionRequest::from_specifiers(
+            specifiers.clone(),
+            PythonVariant::Default,
+        )))
     }
 
     /// Check if this request includes a specific patch version.
@@ -4470,6 +4470,44 @@ mod tests {
             PythonRequest::Version(VersionRequest::from_str(">=3.10").unwrap()).as_pep440_version(),
             None
         );
+    }
+
+    #[test]
+    fn python_request_from_requires_python() {
+        let requires_python =
+            RequiresPython::from_specifiers(&VersionSpecifiers::from_str(">=3.11,<3.13").unwrap());
+
+        let request = PythonRequest::from_requires_python(&requires_python).unwrap();
+        assert_eq!(
+            request,
+            PythonRequest::Version(VersionRequest::Range(
+                VersionSpecifiers::from_str(">=3.11,<3.13").unwrap(),
+                PythonVariant::Default,
+            ))
+        );
+    }
+
+    #[test]
+    fn python_request_from_upper_bound_only_requires_python() {
+        let requires_python =
+            RequiresPython::from_specifiers(&VersionSpecifiers::from_str("<3.12").unwrap());
+
+        let request = PythonRequest::from_requires_python(&requires_python).unwrap();
+        assert_eq!(
+            request,
+            PythonRequest::Version(VersionRequest::Range(
+                VersionSpecifiers::from_str("<3.12").unwrap(),
+                PythonVariant::Default,
+            ))
+        );
+    }
+
+    #[test]
+    fn python_request_from_unbounded_requires_python() {
+        let requires_python = RequiresPython::from_specifiers(&VersionSpecifiers::empty());
+
+        let request = PythonRequest::from_requires_python(&requires_python);
+        assert!(request.is_none());
     }
 
     #[test]
