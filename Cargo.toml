@@ -34,6 +34,7 @@ uv-distribution = { version = "0.0.41", path = "crates/uv-distribution" }
 uv-distribution-filename = { version = "0.0.41", path = "crates/uv-distribution-filename" }
 uv-distribution-types = { version = "0.0.41", path = "crates/uv-distribution-types" }
 uv-extract = { version = "0.0.41", path = "crates/uv-extract" }
+uv-fastid = { version = "0.0.41", path = "crates/uv-fastid" }
 uv-flags = { version = "0.0.41", path = "crates/uv-flags" }
 uv-fs = { version = "0.0.41", path = "crates/uv-fs", features = [
   "serde",
@@ -95,7 +96,7 @@ anstream = { version = "1.0.0" }
 anyhow = { version = "1.0.89" }
 arcstr = { version = "1.2.0" }
 arrayvec = { version = "0.7.6" }
-astral-tokio-tar = { version = "0.6.0" }
+astral-tokio-tar = { version = "0.6.1" }
 async-channel = { version = "2.3.1" }
 async-compression = { version = "0.4.12", features = [
   "bzip2",
@@ -175,7 +176,6 @@ mailparse = { version = "0.16.0" }
 md-5 = { version = "0.10.6" }
 memchr = { version = "2.7.4" }
 miette = { version = "7.2.0", features = ["fancy-no-backtrace"] }
-nanoid = { version = "0.4.0" }
 nix = { version = "0.31.2", features = ["resource", "signal"] }
 open = { version = "5.3.2" }
 owo-colors = { version = "4.1.0" }
@@ -187,6 +187,7 @@ proc-macro2 = { version = "1.0.86" }
 procfs = { version = "0.18.0", default-features = false, features = ["flate2"] }
 pubgrub = { version = "0.3.3", package = "astral-pubgrub" }
 quote = { version = "1.0.37" }
+rand = { version = "0.9.2" }
 rayon = { version = "1.10.0" }
 ref-cast = { version = "1.0.24" }
 reflink-copy = { version = "0.1.19" }

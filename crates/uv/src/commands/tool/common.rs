@@ -129,7 +129,7 @@ pub(crate) async fn refine_interpreter(
         Bound::Unbounded => unreachable!("`requires-python` should never be unbounded"),
     };
 
-    let requires_python_request = PythonRequest::Version(VersionRequest::Range(
+    let requires_python_request = PythonRequest::Version(VersionRequest::from_specifiers(
         VersionSpecifiers::from_iter([lower_bound, upper_bound]),
         PythonVariant::default(),
     ));

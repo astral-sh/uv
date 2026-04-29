@@ -110,6 +110,7 @@ impl EnvVars {
     /// Equivalent to the `--native-tls` command-line argument. If set to `true`, uv will
     /// load TLS certificates from the platform's native certificate store instead of the
     /// bundled Mozilla root certificates.
+    /// (Deprecated: use `UV_SYSTEM_CERTS` instead.)
     #[attr_added_in("0.1.19")]
     pub const UV_NATIVE_TLS: &'static str = "UV_NATIVE_TLS";
 
@@ -626,12 +627,6 @@ impl EnvVars {
     #[attr_hidden]
     #[attr_added_in("0.9.15")]
     pub const UV_INTERNAL__TEST_LFS_DISABLED: &'static str = "UV_INTERNAL__TEST_LFS_DISABLED";
-
-    /// Marker variable to track whether `PYTHONHOME` was set by uv.
-    /// Used by the Windows trampoline to distinguish uv-set values from user-set values.
-    #[attr_hidden]
-    #[attr_added_in("0.9.29")]
-    pub const UV_INTERNAL__PYTHONHOME: &'static str = "UV_INTERNAL__PYTHONHOME";
 
     /// Path to system-level configuration directory on Unix systems.
     #[attr_added_in("0.4.26")]

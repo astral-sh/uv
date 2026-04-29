@@ -77531,10 +77531,10 @@
     "minor": 11,
     "patch": 15,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.21-macos_arm64.tar.bz2",
-    "sha256": "a43f97ff9f6016aac09ee75eb626d806e8ad865608e7d8bc4d3c2fc37c2b4799",
+    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.22-macos_arm64.tar.bz2",
+    "sha256": "5de96e2b68a8b347fb24f8b3f5345ce0724605d4122ce194e1decce4dab8d5a0",
     "variant": null,
-    "build": "7.3.21"
+    "build": "7.3.22"
   },
   "pypy-3.11.15-darwin-x86_64-none": {
     "name": "pypy",
@@ -77548,10 +77548,10 @@
     "minor": 11,
     "patch": 15,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.21-macos_x86_64.tar.bz2",
-    "sha256": "60dfb37dda85d548cd6a4d7bdb12ff26e19162042001b741fd9b6a8ecee802a6",
+    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.22-macos_x86_64.tar.bz2",
+    "sha256": "26adf960b6f57cacb39a9f0e8fd87e9de7986762b467c75b3aaf94177aa7af87",
     "variant": null,
-    "build": "7.3.21"
+    "build": "7.3.22"
   },
   "pypy-3.11.15-linux-aarch64-gnu": {
     "name": "pypy",
@@ -77565,10 +77565,10 @@
     "minor": 11,
     "patch": 15,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.21-aarch64.tar.bz2",
-    "sha256": "6141f5c64dd96faf87e0a3f7f362521eadd26d5e3f851f90fc386a72208f8c18",
+    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.22-aarch64.tar.bz2",
+    "sha256": "c29a8933e2084f52df74c829aa0d8f5652b9d5919f68e9fb89cab3afe35dd884",
     "variant": null,
-    "build": "7.3.21"
+    "build": "7.3.22"
   },
   "pypy-3.11.15-linux-i686-gnu": {
     "name": "pypy",
@@ -77582,10 +77582,10 @@
     "minor": 11,
     "patch": 15,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.21-linux32.tar.bz2",
-    "sha256": "0c449ff3f20589e331f163807a0200a9bf5dd375c95f513a0f60bf7524795f02",
+    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.22-linux32.tar.bz2",
+    "sha256": "6fdad58d6d376810cf6291be1d396032f4da8109517357de0091adc3874f04c9",
     "variant": null,
-    "build": "7.3.21"
+    "build": "7.3.22"
   },
   "pypy-3.11.15-linux-x86_64-gnu": {
     "name": "pypy",
@@ -77599,10 +77599,10 @@
     "minor": 11,
     "patch": 15,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.21-linux64.tar.bz2",
-    "sha256": "43f27af8ee6673932493f2696ab407321cbf79dbed94c03d8b39e603f8f5f765",
+    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.22-linux64.tar.bz2",
+    "sha256": "c0c239a6b0d381338bcccf852d0690b9daca632e0216389a3796f8817fd66e0e",
     "variant": null,
-    "build": "7.3.21"
+    "build": "7.3.22"
   },
   "pypy-3.11.15-windows-x86_64-none": {
     "name": "pypy",
@@ -77616,10 +77616,10 @@
     "minor": 11,
     "patch": 15,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.21-win64.zip",
-    "sha256": "a1a2b069533b838f465157025e58933199f311f5f3f58549ccaf9872ee90fa53",
+    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.22-win64.zip",
+    "sha256": "748f393e69726f32c908bfd8d778dda267482c0b15b2d4957c97f0842f37d33f",
     "variant": null,
-    "build": "7.3.21"
+    "build": "7.3.22"
   },
   "pypy-3.11.13-darwin-aarch64-none": {
     "name": "pypy",

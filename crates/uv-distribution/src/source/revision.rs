@@ -56,16 +56,16 @@ impl Hashed for Revision {
 
 /// A unique identifier for a revision of a source distribution.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub(crate) struct RevisionId(String);
+pub(crate) struct RevisionId(uv_fastid::Id);
 
 impl RevisionId {
     /// Generate a new unique identifier for an archive.
     fn new() -> Self {
-        Self(nanoid::nanoid!())
+        Self(uv_fastid::insecure())
     }
 
     pub(crate) fn as_str(&self) -> &str {
-        self.0.as_str()
+        &self.0
     }
 }
 
