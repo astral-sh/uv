@@ -2641,8 +2641,7 @@ impl VersionRequest {
     /// Create a [`VersionRequest`] from [`VersionSpecifiers`].
     ///
     /// If the specifiers consist of a single `==` constraint, the version is parsed as a
-    /// concrete version request (e.g., `MajorMinorPatch`) rather than a range. This ensures that
-    /// version-specific executable names (like `python3.12`) are included during discovery.
+    /// concrete version request (e.g., `MajorMinorPatch`) rather than a range.
     pub fn from_specifiers(specifiers: VersionSpecifiers, variant: PythonVariant) -> Self {
         if let [specifier] = specifiers.iter().as_slice() {
             if specifier.operator() == &uv_pep440::Operator::Equal {
