@@ -37,6 +37,6 @@ echo "== uv run with venv python =="
 
 # Exercise a mandatory file lock on Android. Environment locks are treated as
 # best-effort in the commands above, but cache cleaning requires an exclusive
-# lock and should reproduce unsupported file-lock behavior.
+# lock, guarding against regressions for https://github.com/rust-lang/rust/issues/148325.
 echo "== uv cache clean =="
 ./uv cache clean
