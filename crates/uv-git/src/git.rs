@@ -1,6 +1,7 @@
 //! Git support is derived from Cargo's implementation.
 //! Cargo is dual-licensed under either Apache 2.0 or MIT, at the user's choice.
 //! Source: <https://github.com/rust-lang/cargo/blob/23eb492cf920ce051abfc56bbaf838514dc8365c/src/cargo/sources/git/utils.rs>
+use std::env;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::str::{self};
@@ -203,12 +204,8 @@ impl GitRepository {
         })
     }
 
-    /// Returns the upstream promisor remote for this repository, if any.
-    ///
-    /// Partial clones fetched directly from a URL are recorded as a remote whose
-    /// name is that URL, so `git remote` is sufficient to recover the original
-    /// upstream without depending on the checkout clone's `origin` remote.
-    fn promisor_remote(&self) -> Result<Option<DisplaySafeUrl>> {
+    /// Returns the configured Git remotes for this repository.
+    fn remotes(&self) -> Result<Vec<String>> {
         let output = ProcessBuilder::new(GIT.as_ref()?)
             .arg("remote")
             .cwd(&self.path)
@@ -219,18 +216,44 @@ impl GitRepository {
             .lines()
             .map(str::trim)
             .filter(|remote| !remote.is_empty())
+            .map(ToString::to_string)
+            .collect())
+    }
+
+    /// Returns the upstream promisor remote for this repository, if any.
+    ///
+    /// Partial clones fetched directly from a URL are recorded as a remote whose
+    /// name is that URL, so `git remote` is sufficient to recover the original
+    /// upstream without depending on the checkout clone's `origin` remote.
+    fn promisor_remote(&self) -> Result<Option<DisplaySafeUrl>> {
+        Ok(self
+            .remotes()?
+            .into_iter()
             .find_map(|remote| remote.parse().ok()))
     }
 
     /// Configures the given remote as the promisor remote for this repository.
     fn configure_promisor_remote(&self, remote: &str, url: &DisplaySafeUrl) -> Result<()> {
-        ProcessBuilder::new(GIT.as_ref()?)
-            .arg("remote")
-            .arg("set-url")
-            .arg(remote)
-            .arg(url.as_str())
-            .cwd(&self.path)
-            .exec_with_output()?;
+        let url = without_credentials(url);
+        let remotes = self.remotes()?;
+
+        if remotes.iter().any(|existing| existing == remote) {
+            ProcessBuilder::new(GIT.as_ref()?)
+                .arg("remote")
+                .arg("set-url")
+                .arg(remote)
+                .arg(url.as_str())
+                .cwd(&self.path)
+                .exec_with_output()?;
+        } else {
+            ProcessBuilder::new(GIT.as_ref()?)
+                .arg("remote")
+                .arg("add")
+                .arg(remote)
+                .arg(url.as_str())
+                .cwd(&self.path)
+                .exec_with_output()?;
+        }
 
         ProcessBuilder::new(GIT.as_ref()?)
             .arg("config")
@@ -245,6 +268,29 @@ impl GitRepository {
             .arg(PARTIAL_CLONE_FILTER)
             .cwd(&self.path)
             .exec_with_output()?;
+
+        // Git creates a promisor remote whose name is the fetch URL when fetching
+        // with `--filter` from a URL. Remove any such URL-named remotes so we
+        // don't persist credentials in `.git/config`.
+        for existing in remotes {
+            if existing == remote {
+                continue;
+            }
+            let Ok(existing_url) = existing.parse::<DisplaySafeUrl>() else {
+                continue;
+            };
+            if without_credentials(&existing_url) == url {
+                let result = ProcessBuilder::new(GIT.as_ref()?)
+                    .arg("config")
+                    .arg("--remove-section")
+                    .arg(format!("remote.{existing}"))
+                    .cwd(&self.path)
+                    .exec_with_output();
+                if let Err(err) = result {
+                    debug!("Failed to remove URL-named Git remote `{existing}`: {err}");
+                }
+            }
+        }
 
         Ok(())
     }
@@ -388,7 +434,9 @@ impl GitRemote {
         let has_promisor_remote = repo.promisor_remote()?.is_some();
         let promisor_remote = Some(self.url.clone());
 
-        if !has_promisor_remote {
+        if has_promisor_remote {
+            repo.configure_promisor_remote(CHECKOUT_REMOTE, &self.url)?;
+        } else {
             // Older uv versions populated the shared Git database without recording
             // promisor metadata. Keep using the current remote URL as a fallback so
             // checkout clones can still recover missing trees and Git LFS objects
@@ -603,11 +651,15 @@ impl GitCheckout {
 
         // Perform the hard reset.
         let mut reset = ProcessBuilder::new(GIT.as_ref()?);
+        if let Some(remote_url) = remote_url {
+            apply_url_rewrite(&mut reset, remote_url);
+        }
         reset
             .arg("reset")
             .arg("--hard")
             .arg(self.revision.as_str())
             .env(EnvVars::GIT_LFS_SKIP_SMUDGE, lfs_skip_smudge)
+            .env(EnvVars::GIT_TERMINAL_PROMPT, "0")
             .cwd(&self.repo.path);
         if disable_ssl {
             debug!("Disabling SSL verification for Git reset via `GIT_SSL_NO_VERIFY`");
@@ -627,12 +679,16 @@ impl GitCheckout {
 
         // Update submodules (`git submodule update --recursive`).
         let mut submodule_update = ProcessBuilder::new(GIT.as_ref()?);
+        if let Some(remote_url) = remote_url {
+            apply_url_rewrite(&mut submodule_update, remote_url);
+        }
         submodule_update
             .arg("submodule")
             .arg("update")
             .arg("--recursive")
             .arg("--init")
             .env(EnvVars::GIT_LFS_SKIP_SMUDGE, lfs_skip_smudge)
+            .env(EnvVars::GIT_TERMINAL_PROMPT, "0")
             .cwd(&self.repo.path);
         if disable_ssl {
             debug!("Disabling SSL verification for Git submodule update via `GIT_SSL_NO_VERIFY`");
@@ -681,6 +737,28 @@ impl GitCheckout {
         }
 
         Ok(lfs_validation)
+    }
+}
+
+/// Returns the URL without embedded credentials for persistence in Git config.
+fn without_credentials(url: &DisplaySafeUrl) -> DisplaySafeUrl {
+    DisplaySafeUrl::from_url(url.without_credentials().into_owned())
+}
+
+/// Adds a one-shot Git URL rewrite so commands that perform lazy fetches can
+/// authenticate without storing credentials in the repository config.
+fn apply_url_rewrite(cmd: &mut ProcessBuilder, url: &DisplaySafeUrl) {
+    let url_without_credentials = without_credentials(url);
+    if url_without_credentials != *url {
+        let config_index = env::var("GIT_CONFIG_COUNT")
+            .ok()
+            .and_then(|count| count.parse::<usize>().ok())
+            .unwrap_or(0);
+        let key_var = format!("GIT_CONFIG_KEY_{config_index}");
+        let value_var = format!("GIT_CONFIG_VALUE_{config_index}");
+        cmd.env("GIT_CONFIG_COUNT", (config_index + 1).to_string())
+            .env(&key_var, format!("url.{}.insteadOf", url.as_str()))
+            .env(&value_var, url_without_credentials.as_str());
     }
 }
 
@@ -846,11 +924,14 @@ fn fetch_refspecs(
     disable_ssl: bool,
     offline: bool,
 ) -> Result<()> {
+    repo.configure_promisor_remote(CHECKOUT_REMOTE, url)?;
+
     let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
     // Disable interactive prompts in the terminal, as they'll be erased by the progress bar
     // animation and the process will "hang". Interactive prompts via the GUI like `SSH_ASKPASS`
     // are still usable.
     cmd.env(EnvVars::GIT_TERMINAL_PROMPT, "0");
+    apply_url_rewrite(&mut cmd, url);
 
     cmd.arg("fetch");
     if tags {
@@ -871,7 +952,7 @@ fn fetch_refspecs(
         // setuptools-scm may require access to git history, but we only
         // need the contents of the specific commit we are fetching.
         .arg(format!("--filter={PARTIAL_CLONE_FILTER}"))
-        .arg(url.as_str())
+        .arg(CHECKOUT_REMOTE)
         .args(refspecs)
         // If cargo is run by git (for example, the `exec` command in `git
         // rebase`), the GIT_DIR is set by git and will point to the wrong
@@ -952,6 +1033,7 @@ fn fetch_lfs(
     cmd.arg("fetch")
         .arg(url.as_str())
         .arg(revision.as_str())
+        .env(EnvVars::GIT_TERMINAL_PROMPT, "0")
         // These variables are unset for the same reason as in `fetch_refspecs`.
         .env_remove(EnvVars::GIT_DIR)
         .env_remove(EnvVars::GIT_WORK_TREE)
