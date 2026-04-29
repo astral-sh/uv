@@ -219,12 +219,9 @@ mod tests {
 
             let mut run_vars = vec![
                 // Ensure `PATH` is used
-                (EnvVars::UV_TEST_PYTHON_PATH, None),
+                (EnvVars::UV_PYTHON_SEARCH_PATH, None),
                 // Keep discovery hermetic by disabling registry-based sources unless a test opts in.
-                (
-                    EnvVars::UV_PYTHON_NO_REGISTRY,
-                    Some(std::ffi::OsStr::new("1")),
-                ),
+                (EnvVars::UV_PYTHON_NO_REGISTRY, Some(OsStr::new("1"))),
                 // Ignore active virtual environments (i.e. that the dev is using)
                 (EnvVars::VIRTUAL_ENV, None),
                 (EnvVars::PATH, path.as_deref()),

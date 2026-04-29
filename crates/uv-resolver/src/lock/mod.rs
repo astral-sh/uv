@@ -803,40 +803,53 @@ impl Lock {
         )
     }
 
-    /// Returns the set of packages that should be audited, respecting the given
-    /// extras and dependency groups filters.
+    /// Return the set of packages that should be audited, respecting the
+    /// given extras and dependency group filters.
     ///
-    /// Workspace members and packages without version information are excluded
-    /// unconditionally, since neither can be meaningfully looked up in a
-    /// vulnerability database.
-    pub fn packages_for_audit<'lock>(
-        &'lock self,
-        extras: &'lock ExtrasSpecificationWithDefaults,
-        groups: &'lock DependencyGroupsWithDefaults,
-    ) -> Vec<(&'lock PackageName, &'lock Version)> {
-        self.collect_auditable_packages(extras, groups, |_| true)
-    }
-
-    /// Like [`Lock::packages_for_audit`], but only includes packages sourced from the
-    /// PyPI registry (`https://pypi.org/simple`).
-    pub fn pypi_packages_for_audit<'lock>(
-        &'lock self,
-        extras: &'lock ExtrasSpecificationWithDefaults,
-        groups: &'lock DependencyGroupsWithDefaults,
-    ) -> Vec<(&'lock PackageName, &'lock Version)> {
-        self.collect_auditable_packages(extras, groups, |package| {
-            package.id.source.is_pypi_registry()
-        })
-    }
-
-    /// Traverse the lockfile dependency graph and collect auditable packages, applying
-    /// `collect_filter` to decide which non-workspace packages to include.
-    fn collect_auditable_packages<'lock>(
+    /// Workspace members and packages without version information are
+    /// excluded unconditionally, since neither can be meaningfully looked up
+    /// in an external audit source.
+    pub fn auditable<'lock>(
         &'lock self,
         extras: &'lock ExtrasSpecificationWithDefaults,
         groups: &'lock DependencyGroupsWithDefaults,
         collect_filter: impl Fn(&Package) -> bool,
-    ) -> Vec<(&'lock PackageName, &'lock Version)> {
+    ) -> Auditable<'lock> {
+        // Dedupe and sort by `(name, version)` during the walk itself. Keep
+        // the first `Package` reference we see for each key so that
+        // downstream views (e.g. index lookup) have access to the lockfile
+        // package.
+        let mut by_name_version: BTreeMap<(&PackageName, &Version), &Package> = BTreeMap::default();
+        self.walk_auditable(extras, groups, collect_filter, |package, version| {
+            by_name_version
+                .entry((package.name(), version))
+                .or_insert(package);
+        });
+        let packages = by_name_version
+            .into_iter()
+            .map(|((_, version), package)| (package, version))
+            .collect();
+        Auditable { packages }
+    }
+
+    /// Walk the auditable dependency graph, invoking `visit` once per
+    /// non-workspace package with version information.
+    ///
+    /// The traversal is seeded from workspace members, lock-level requirements
+    /// (e.g. PEP 723 scripts), and lock-level dependency groups, then follows
+    /// each reachable dependency exactly once per `(package, extra)` pair,
+    /// respecting the provided extras and dependency-group filters. The same
+    /// package may be visited more than once if it is reached through multiple
+    /// extras — callers should deduplicate as appropriate.
+    fn walk_auditable<'lock, F>(
+        &'lock self,
+        extras: &'lock ExtrasSpecificationWithDefaults,
+        groups: &'lock DependencyGroupsWithDefaults,
+        collect_filter: impl Fn(&Package) -> bool,
+        mut visit: F,
+    ) where
+        F: FnMut(&'lock Package, &'lock Version),
+    {
         // Enqueue a dependency for auditability checks: base package (no extra) first, then each activated extra.
         fn enqueue_dep<'lock>(
             lock: &'lock Lock,
@@ -928,8 +941,6 @@ impl Lock {
             }
         }
 
-        let mut auditable: BTreeSet<(&PackageName, &Version)> = BTreeSet::default();
-
         while let Some((package, extra)) = queue.pop_front() {
             let is_member = workspace_member_ids.contains(&package.id);
 
@@ -937,7 +948,7 @@ impl Lock {
             // and pass the caller's filter.
             if !is_member && collect_filter(package) {
                 if let Some(version) = package.version() {
-                    auditable.insert((package.name(), version));
+                    visit(package, version);
                 } else {
                     trace!(
                         "Skipping audit for `{}` because it has no version information",
@@ -974,8 +985,6 @@ impl Lock {
                 enqueue_dep(self, &mut seen, &mut queue, dep);
             }
         }
-
-        auditable.into_iter().collect()
     }
 
     /// Return the workspace root used to generate this lock.
@@ -1189,7 +1198,7 @@ impl Lock {
                         // When a relative span is present, write a no-op timestamp to avoid
                         // merge conflicts in the lockfile. In a future version of uv, we'll drop
                         // this field entirely but it's retained for backwards compatibility for now.
-                        let mut noop = value("0001-01-01T00:00:00Z");
+                        let mut noop = value(ExcludeNewerValue::PLACEHOLDER);
                         if let Item::Value(ref mut v) = noop {
                             v.decor_mut().set_suffix(" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.");
                         }
@@ -1207,12 +1216,12 @@ impl Lock {
                         match setting {
                             ExcludeNewerOverride::Enabled(exclude_newer_value) => {
                                 if let Some(span) = exclude_newer_value.span() {
-                                    // Serialize as inline table with timestamp and span
+                                    // When a relative span is present, write a no-op timestamp
+                                    // for backwards compatibility. This matches treatment for
+                                    // the global `exclude-newer`.
                                     let mut inline = toml_edit::InlineTable::new();
-                                    inline.insert(
-                                        "timestamp",
-                                        exclude_newer_value.timestamp().to_string().into(),
-                                    );
+                                    inline
+                                        .insert("timestamp", ExcludeNewerValue::PLACEHOLDER.into());
                                     inline.insert("span", span.to_string().into());
                                     package_table.insert(name.as_ref(), Item::Value(inline.into()));
                                 } else {
@@ -2270,6 +2279,54 @@ impl Lock {
     }
 }
 
+/// The set of lockfile packages that should be audited, materialized from a
+/// single traversal of the dependency graph.
+///
+/// Created via [`Lock::auditable`]. Exposes multiple views so that different
+/// audit sources (e.g. per-version vulnerability databases and per-project
+/// status markers) can share one walk rather than each re-traversing the
+/// lockfile.
+#[derive(Debug)]
+pub struct Auditable<'lock> {
+    /// Packages deduplicated by `(name, version)` and sorted by the same key.
+    packages: Vec<(&'lock Package, &'lock Version)>,
+}
+
+impl<'lock> Auditable<'lock> {
+    /// Return the number of distinct `(name, version)` pairs to audit.
+    pub fn len(&self) -> usize {
+        self.packages.len()
+    }
+
+    /// Return `true` if there are no packages to audit.
+    pub fn is_empty(&self) -> bool {
+        self.packages.is_empty()
+    }
+
+    /// Iterate over the distinct `(name, version)` pairs to audit, sorted by that key.
+    pub fn packages(&self) -> impl Iterator<Item = (&'lock PackageName, &'lock Version)> + '_ {
+        self.packages
+            .iter()
+            .map(|(package, version)| (package.name(), *version))
+    }
+
+    /// Return the distinct registry-hosted projects among the auditable
+    /// packages, deduplicated by `(name, index URL)`. Non-registry sources
+    /// (Git, direct URL, path, editable) are excluded.
+    pub fn projects(&self, root: &Path) -> Result<Vec<(&'lock PackageName, IndexUrl)>, LockError> {
+        let mut seen: FxHashSet<(&PackageName, String)> = FxHashSet::default();
+        let mut projects: Vec<(&PackageName, IndexUrl)> = Vec::with_capacity(self.packages.len());
+        for (package, _version) in &self.packages {
+            if let Some(index) = package.index(root)?
+                && seen.insert((package.name(), index.url().to_string()))
+            {
+                projects.push((package.name(), index));
+            }
+        }
+        Ok(projects)
+    }
+}
+
 #[derive(Debug, Copy, Clone)]
 enum TagPolicy<'tags> {
     /// Exclusively consider wheels that match the specified platform tags.
@@ -2382,8 +2439,13 @@ struct ExcludeNewerWire {
 impl From<ExcludeNewerWire> for ExcludeNewer {
     fn from(wire: ExcludeNewerWire) -> Self {
         let global = match (wire.exclude_newer, wire.exclude_newer_span) {
-            (Some(timestamp), span) => Some(ExcludeNewerValue::new(timestamp, span)),
-            (None, Some(span)) => Some(ExcludeNewerValue::new(Timestamp::UNIX_EPOCH, Some(span))),
+            (Some(timestamp), None) => Some(ExcludeNewerValue::absolute(timestamp)),
+            // We're phasing out writing a timestamp when spans are used. uv writes a dummy
+            // timestamp for backwards compatibility that we can ignore on deserialization.
+            (Some(_), Some(span)) => Some(ExcludeNewerValue::relative(span)),
+            // A future version of uv will remove the timestamp entirely, so for forwards
+            // compatibility we ignore a missing value.
+            (None, Some(span)) => Some(ExcludeNewerValue::relative(span)),
             (None, None) => None,
         };
         Self {
@@ -2395,10 +2457,11 @@ impl From<ExcludeNewerWire> for ExcludeNewer {
 
 impl From<ExcludeNewer> for ExcludeNewerWire {
     fn from(exclude_newer: ExcludeNewer) -> Self {
-        let (timestamp, span) = exclude_newer
-            .global
-            .map(ExcludeNewerValue::into_parts)
-            .map_or((None, None), |(t, s)| (Some(t), s));
+        let (timestamp, span) = match exclude_newer.global {
+            Some(ExcludeNewerValue::Absolute(timestamp)) => (Some(timestamp), None),
+            Some(ExcludeNewerValue::Relative(span)) => (None, Some(span)),
+            None => (None, None),
+        };
         Self {
             exclude_newer: timestamp,
             exclude_newer_span: span,
@@ -2581,12 +2644,16 @@ impl TryFrom<LockWire> for Lock {
             .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
             .map(UniversalMarker::from_combined)
             .collect();
+        let mut options = wire.options;
+        if options.exclude_newer.exclude_newer_span.is_some() {
+            options.exclude_newer.exclude_newer = None;
+        }
         let lock = Self::new(
             wire.version,
             wire.revision.unwrap_or(0),
             packages,
             wire.requires_python,
-            wire.options,
+            options,
             wire.manifest,
             wire.conflicts.unwrap_or_else(Conflicts::empty),
             supported_environments,
@@ -2636,6 +2703,10 @@ pub struct Package {
 }
 
 impl Package {
+    pub fn is_from_pypi_registry(&self) -> bool {
+        self.id.source.is_pypi_registry()
+    }
+
     fn from_annotated_dist(
         annotated_dist: &AnnotatedDist,
         fork_markers: Vec<UniversalMarker>,

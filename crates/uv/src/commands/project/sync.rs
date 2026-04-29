@@ -930,13 +930,15 @@ async fn check_malware(
     // information leak (of potentially private package names).
     // This effectively excludes public packages that are mirrored onto private
     // indices, which is a tradeoff we'll need to reconsider.
-    let auditable = target.lock().pypi_packages_for_audit(extras, groups);
+    let auditable = target
+        .lock()
+        .auditable(extras, groups, |package| package.is_from_pypi_registry());
     if auditable.is_empty() {
         return Ok(());
     }
 
     let dependencies: Vec<Dependency> = auditable
-        .iter()
+        .packages()
         .map(|(name, version)| Dependency::new((*name).clone(), (*version).clone()))
         .collect();
 

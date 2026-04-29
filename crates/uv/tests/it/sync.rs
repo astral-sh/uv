@@ -1333,6 +1333,87 @@ fn sync_non_project_frozen() -> Result<()> {
 }
 
 /// Sync dependency groups in a non-project workspace root.
+///
+/// Here instead of leaning on `tool.uv.workspace` we use the
+/// officially blessed "pyproject.toml with no `[project]` that
+/// declares `[dependency-groups]`".
+#[test]
+fn sync_non_project_group_standard() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [dependency-groups]
+        dev = ["anyio"]
+        bar = ["typing-extensions"]
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("src")
+        .child("albatross")
+        .child("__init__.py")
+        .touch()?;
+
+    uv_snapshot!(context.filters(), context.sync(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("bar"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--only-group").arg("bar"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 4 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+     - anyio==4.3.0
+     - idna==3.6
+     - sniffio==1.3.1
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 4 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+     - typing-extensions==4.10.0
+    ");
+    Ok(())
+}
+
+/// Sync dependency groups in a non-project workspace root.
 #[test]
 fn sync_non_project_group() -> Result<()> {
     let context = uv_test::test_context!("3.12");

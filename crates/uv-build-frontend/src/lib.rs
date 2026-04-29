@@ -33,7 +33,6 @@ use uv_configuration::{BuildKind, BuildOutput, NoSources};
 use uv_distribution::BuildRequires;
 use uv_distribution_types::{
     ConfigSettings, ExtraBuildRequirement, ExtraBuildRequires, IndexLocations, Requirement,
-    Resolution,
 };
 use uv_fs::{LockedFile, LockedFileMode};
 use uv_fs::{PythonExt, Simplified};
@@ -42,7 +41,9 @@ use uv_pep440::Version;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_static::EnvVars;
-use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, SourceBuildTrait};
+use uv_types::{
+    AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, ResolvedRequirements, SourceBuildTrait,
+};
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
 
@@ -219,7 +220,7 @@ impl Pep517Backend {
 #[derive(Debug, Clone)]
 pub struct SourceBuildContext {
     /// An in-memory resolution of the default backend's requirements for PEP 517 builds.
-    default_resolution: Arc<Mutex<Option<Resolution>>>,
+    default_resolution: Arc<Mutex<Option<ResolvedRequirements>>>,
     /// A shared semaphore to limit the number of concurrent builds.
     concurrent_build_slots: Arc<Semaphore>,
 }
@@ -522,7 +523,7 @@ impl SourceBuild {
         pep517_backend: &Pep517Backend,
         extra_build_dependencies: Vec<Requirement>,
         build_stack: &BuildStack,
-    ) -> Result<Resolution, Error> {
+    ) -> Result<ResolvedRequirements, Error> {
         Ok(
             if pep517_backend.requirements == DEFAULT_BACKEND.requirements
                 && extra_build_dependencies.is_empty()

@@ -236,8 +236,8 @@ pub struct GlobalArgs {
     )]
     pub color: Option<ColorChoice>,
 
-    /// Whether to load TLS certificates from the platform's native certificate store [env:
-    /// UV_NATIVE_TLS=]
+    /// (Deprecated: use `--system-certs` instead.) Whether to load TLS certificates from the
+    /// platform's native certificate store [env: UV_NATIVE_TLS=]
     ///
     /// By default, uv uses bundled Mozilla root certificates. When enabled, this flag loads
     /// certificates from the platform's native certificate store instead.
@@ -6718,6 +6718,10 @@ pub struct PythonPinArgs {
     /// Remove the Python version pin.
     #[arg(long, conflicts_with = "request", conflicts_with = "resolved")]
     pub rm: bool,
+
+    /// URL pointing to JSON of custom Python installations.
+    #[arg(long, value_hint = ValueHint::Other)]
+    pub python_downloads_json_url: Option<String>,
 }
 
 #[derive(Args)]

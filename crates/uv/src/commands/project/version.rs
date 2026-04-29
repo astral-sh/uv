@@ -35,7 +35,8 @@ use crate::commands::project::add::{AddTarget, PythonTarget};
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::{
-    ProjectEnvironment, ProjectError, ProjectInterpreter, UniversalState, default_dependency_groups,
+    ProjectEnvironment, ProjectError, ProjectInterpreter, UniversalState, WorkspacePython,
+    default_dependency_groups,
 };
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
@@ -470,17 +471,24 @@ async fn print_frozen_version(
     preview: Preview,
 ) -> Result<ExitStatus> {
     // Discover the interpreter (this is the same interpreter --no-sync uses).
+    let groups = DependencyGroupsWithDefaults::none();
+    let workspace_python = WorkspacePython::from_request(
+        python.as_deref().map(PythonRequest::parse),
+        Some(project.workspace()),
+        &groups,
+        project_dir,
+        no_config,
+    )
+    .await?;
     let interpreter = ProjectInterpreter::discover(
         project.workspace(),
-        project_dir,
-        &DependencyGroupsWithDefaults::none(),
-        python.as_deref().map(PythonRequest::parse),
+        &groups,
+        workspace_python,
         &client_builder,
         python_preference,
         python_downloads,
         &install_mirrors,
         false,
-        no_config,
         active,
         cache,
         printer,
@@ -585,17 +593,23 @@ async fn lock_and_sync(
     // Convert to an `AddTarget` by attaching the appropriate interpreter or environment.
     let target = if no_sync {
         // Discover the interpreter.
+        let workspace_python = WorkspacePython::from_request(
+            python.as_deref().map(PythonRequest::parse),
+            Some(project.workspace()),
+            &groups,
+            project_dir,
+            no_config,
+        )
+        .await?;
         let interpreter = ProjectInterpreter::discover(
             project.workspace(),
-            project_dir,
             &groups,
-            python.as_deref().map(PythonRequest::parse),
+            workspace_python,
             &client_builder,
             python_preference,
             python_downloads,
             &install_mirrors,
             false,
-            no_config,
             active,
             cache,
             printer,

@@ -12,14 +12,14 @@ use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     CachedDist, ConfigSettings, DependencyMetadata, DistributionId, ExtraBuildRequires,
     ExtraBuildVariables, IndexCapabilities, IndexLocations, InstalledDist, IsBuildBackendError,
-    PackageConfigSettings, Requirement, Resolution, SourceDist,
+    PackageConfigSettings, Requirement, SourceDist,
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_workspace::WorkspaceCache;
 
-use crate::{BuildArena, BuildIsolation};
+use crate::{BuildArena, BuildIsolation, ResolvedRequirements};
 
 /// Controls how source tree requirements influence workspace-member editability during lowering.
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
@@ -151,13 +151,13 @@ pub trait BuildContext {
         &'a self,
         requirements: &'a [Requirement],
         build_stack: &'a BuildStack,
-    ) -> impl Future<Output = Result<Resolution, impl IsBuildBackendError>> + 'a;
+    ) -> impl Future<Output = Result<ResolvedRequirements, impl IsBuildBackendError>> + 'a;
 
     /// Install the given set of package versions into the virtual environment. The environment must
     /// use the same base Python as [`BuildContext::interpreter`]
     fn install<'a>(
         &'a self,
-        resolution: &'a Resolution,
+        requirements: &'a ResolvedRequirements,
         venv: &'a PythonEnvironment,
         build_stack: &'a BuildStack,
     ) -> impl Future<Output = Result<Vec<CachedDist>, impl IsBuildBackendError>> + 'a;

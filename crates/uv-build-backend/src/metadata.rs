@@ -168,16 +168,17 @@ pub fn check_direct_build(
             // We can't validate the url.
             return Err(DirectBuildIncompatibility::UrlRequirement);
         }
-        Some(VersionOrUrl::VersionSpecifier(specifier)) => {
+        Some(VersionOrUrl::VersionSpecifier(specifier))
             // If the user doesn't set an upper bound, we don't help them by not using the fast
             // path, their build may equally fail if the index version of `uv_build`, so we allow
             // missing upper bounds.
-            if !compatible.iter().any(|version| specifier.contains(version)) {
-                return Err(DirectBuildIncompatibility::IncompatibleRange(
-                    specifier.clone(),
-                ));
-            }
+            if !compatible.iter().any(|version| specifier.contains(version)) =>
+        {
+            return Err(DirectBuildIncompatibility::IncompatibleRange(
+                specifier.clone(),
+            ));
         }
+        Some(VersionOrUrl::VersionSpecifier(_)) => {}
     }
 
     Ok(())
@@ -1860,5 +1861,30 @@ mod tests {
             check_direct_build(temp_dir.path(), "0.10.0").unwrap_err(),
             @"`uv_build>=0.5.0, <0.6` is not a known compatible range"
         );
+    }
+
+    #[test]
+    fn update_compatibility_for_breaking_release() {
+        // Handle the case where we made a breaking change to the build backend.
+        // Feel free to update the heuristic if it doesn't suit the current compatibility rules
+        // anymore.
+        if COMPATIBLE_VERSIONS.is_empty() {
+            return;
+        }
+
+        let current_version = Version::from_str(uv_version::version()).unwrap();
+        // Versions are ordered from oldest to latest
+        let last_compatible =
+            Version::from_str(COMPATIBLE_VERSIONS[COMPATIBLE_VERSIONS.len() - 1]).unwrap();
+        if last_compatible.release()[0] != current_version.release()[0]
+            && last_compatible.release()[0] != current_version.release()[1]
+        {
+            panic!(
+                "Please update the list of compatible versions for the uv build backend: \
+                If there was no breaking change in uv-build, add the last release before the \
+                breaking release to `COMPATIBLE_VERSIONS`, otherwise reset `COMPATIBLE_VERSIONS` \
+                to an empty list"
+            );
+        }
     }
 }

@@ -2259,6 +2259,69 @@ fn group_default() -> Result<()> {
     Ok(())
 }
 
+/// This tests conflicting groups in a virtual pyproject.toml
+///
+/// (One with no `[project]` which is allowed for specifically dependency-groups).
+/// Currently this isn't supported, as we require a `PackageName` when representing
+/// Conflicts internally.
+#[test]
+fn group_virtual() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // First we test that resolving with two groups that have
+    // conflicting dependencies fails.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [dependency-groups]
+        group1 = ["sortedcontainers==2.3.0"]
+        group2 = ["sortedcontainers==2.4.0"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+      × No solution found when resolving dependencies:
+      ╰─▶ Because you require sortedcontainers==2.3.0 and sortedcontainers==2.4.0, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    // And now with the same group configuration, we tell uv about
+    // the conflicting groups, which forces it to resolve each in
+    // their own fork.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv]
+        conflicts = [
+            [
+              { group = "group1" },
+              { group = "group2" },
+            ],
+        ]
+
+        [dependency-groups]
+        group1 = ["sortedcontainers==2.3.0"]
+        group2 = ["sortedcontainers==2.4.0"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Expected `package` field in conflicting entry: { group = "group1" }
+    "#);
+
+    Ok(())
+}
+
 /// Ref: <https://github.com/astral-sh/uv/issues/18428>
 #[test]
 fn groups_respect_supported_environments_when_filtering_wheels() -> Result<()> {

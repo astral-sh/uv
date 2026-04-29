@@ -136,7 +136,7 @@ pub struct Index {
     /// ```toml
     /// [[tool.uv.index]]
     /// name = "pytorch"
-    /// url = "https://download.pytorch.org/whl/cu121"
+    /// url = "https://download.pytorch.org/whl/cu130"
     ///
     /// [tool.uv.sources]
     /// torch = { index = "pytorch" }
@@ -154,7 +154,7 @@ pub struct Index {
     /// ```toml
     /// [[tool.uv.index]]
     /// name = "pytorch"
-    /// url = "https://download.pytorch.org/whl/cu121"
+    /// url = "https://download.pytorch.org/whl/cu130"
     /// explicit = true
     ///
     /// [tool.uv.sources]

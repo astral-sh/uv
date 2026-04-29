@@ -33,7 +33,7 @@ use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     ProjectEnvironment, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
-    default_dependency_groups,
+    WorkspacePython, default_dependency_groups,
 };
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
@@ -216,17 +216,23 @@ pub(crate) async fn remove(
         RemoveTarget::Project(project) => {
             if no_sync {
                 // Discover the interpreter.
+                let workspace_python = WorkspacePython::from_request(
+                    python.as_deref().map(PythonRequest::parse),
+                    Some(project.workspace()),
+                    &groups,
+                    project_dir,
+                    no_config,
+                )
+                .await?;
                 let interpreter = ProjectInterpreter::discover(
                     project.workspace(),
-                    project_dir,
                     &groups,
-                    python.as_deref().map(PythonRequest::parse),
+                    workspace_python,
                     &client_builder,
                     python_preference,
                     python_downloads,
                     &install_mirrors,
                     false,
-                    no_config,
                     active,
                     cache,
                     printer,

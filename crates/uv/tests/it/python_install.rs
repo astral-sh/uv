@@ -333,7 +333,7 @@ fn python_install_automatic() {
         uv_snapshot!(context.filters(), context.run()
             .env_remove(EnvVars::VIRTUAL_ENV)
             // In tests, we ignore `PATH` during Python discovery so we need to add the context `bin`
-            .env(EnvVars::UV_TEST_PYTHON_PATH, context.bin_dir.as_os_str())
+            .env(EnvVars::UV_PYTHON_SEARCH_PATH, context.bin_dir.as_os_str())
             .arg("-p").arg("3.11")
             .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @"
         success: true
@@ -1269,7 +1269,7 @@ fn python_install_freethreaded_and_gil_list() {
 
     // List installed versions with registry discovery enabled.
     // We remove `UV_PYTHON_NO_REGISTRY` to opt back into registry discovery, and remove
-    // `UV_TEST_PYTHON_PATH` so the test can discover the installed bin trampolines.
+    // `UV_PYTHON_SEARCH_PATH` so the test can discover the installed bin trampolines.
     //
     // Both the GIL and freethreaded variants should show entries from:
     // - The registry (patch-versioned managed directory path)
@@ -1280,7 +1280,7 @@ fn python_install_freethreaded_and_gil_list() {
         .arg("--only-installed")
         .arg("--managed-python")
         .env_remove(EnvVars::UV_PYTHON_NO_REGISTRY)
-        .env_remove(EnvVars::UV_TEST_PYTHON_PATH)
+        .env_remove(EnvVars::UV_PYTHON_SEARCH_PATH)
         .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "1"), @"
     success: true
     exit_code: 0
@@ -1297,7 +1297,7 @@ fn python_install_freethreaded_and_gil_list() {
         .arg("--only-installed")
         .arg("--managed-python")
         .env_remove(EnvVars::UV_PYTHON_NO_REGISTRY)
-        .env_remove(EnvVars::UV_TEST_PYTHON_PATH)
+        .env_remove(EnvVars::UV_PYTHON_SEARCH_PATH)
         .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "1"), @"
     success: true
     exit_code: 0
@@ -1349,7 +1349,7 @@ fn python_install_registry_takes_precedence_over_no_registry() {
         .arg("--only-installed")
         .arg("--managed-python")
         .env_remove(EnvVars::UV_PYTHON_NO_REGISTRY)
-        .env(EnvVars::UV_TEST_PYTHON_PATH, "")
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, "")
         .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "1"), @"
     success: true
     exit_code: 0

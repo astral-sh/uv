@@ -182,6 +182,27 @@ fn python_pin() {
     }
 }
 
+#[test]
+fn python_pin_uses_python_downloads_json_url() {
+    let context = uv_test::test_context_with_versions!(&[]).with_filtered_python_sources();
+    let metadata = context.temp_dir.child("empty-download-metadata.json");
+    metadata.write_str("{}").unwrap();
+
+    uv_snapshot!(context.filters(), context
+        .python_pin()
+        .arg("--resolved")
+        .arg("3.12")
+        .arg("--python-downloads-json-url")
+        .arg(metadata.path()), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for Python 3.12 in [PYTHON SOURCES]
+    ");
+}
+
 // If there is no project-level `.python-version` file, respect the global pin.
 #[test]
 fn python_pin_global_if_no_local() -> Result<()> {

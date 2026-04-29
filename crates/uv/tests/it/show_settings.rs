@@ -9047,6 +9047,7 @@ fn system_certs_cli_aliases_override_env() {
     }
 
     ----- stderr -----
+    warning: The `--no-native-tls` flag is deprecated and will be removed in a future release. Use `--no-system-certs` instead.
     "#
     );
 
@@ -9173,6 +9174,7 @@ fn system_certs_cli_aliases_override_env() {
     }
 
     ----- stderr -----
+    warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
     "#
     );
 }
@@ -9438,6 +9440,7 @@ fn system_certs_config_aliases() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
+    warning: The `native-tls` setting is deprecated and will be removed in a future release. Use `system-certs` instead.
     "#
     );
 

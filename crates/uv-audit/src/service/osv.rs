@@ -409,7 +409,7 @@ impl Osv {
         Ok(vuln)
     }
 
-    /// Convert an OSV Vulnerability record to a Finding.
+    /// Convert an OSV-specific [`Vulnerability`] record to a [`types::Finding`].
     fn vulnerability_to_finding(
         dependency: &types::Dependency,
         vuln: Vulnerability,

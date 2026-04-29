@@ -923,7 +923,7 @@ fn create_venv_unknown_python_minor() {
         .arg("--python")
         .arg("3.100")
         // Unset this variable to force what the user would see
-        .env_remove(EnvVars::UV_TEST_PYTHON_PATH);
+        .env_remove(EnvVars::UV_PYTHON_SEARCH_PATH);
 
     uv_snapshot!(context.filters(), &mut command, @"
     success: false
@@ -949,7 +949,7 @@ fn create_venv_unknown_python_patch() {
         .arg("--python")
         .arg("3.12.100")
         // Unset this variable to force what the user would see
-        .env_remove(EnvVars::UV_TEST_PYTHON_PATH);
+        .env_remove(EnvVars::UV_PYTHON_SEARCH_PATH);
 
     uv_snapshot!(context.filters(), &mut command, @"
     success: false
@@ -1211,7 +1211,7 @@ fn windows_shims() -> Result<()> {
     // Create a virtual environment at `.venv` with the shim
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
-        .env(EnvVars::UV_TEST_PYTHON_PATH, format!("{};{}", shim_path.display(), context.python_path().to_string_lossy())), @r###"
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, format!("{};{}", shim_path.display(), context.python_path().to_string_lossy())), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

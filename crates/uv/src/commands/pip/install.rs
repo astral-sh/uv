@@ -1,9 +1,8 @@
 use std::collections::BTreeSet;
 
-use anyhow::Context;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use tracing::{Level, debug, enabled, info_span, warn};
+use tracing::{Level, debug, enabled, warn};
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -31,8 +30,8 @@ use uv_python::{
 };
 use uv_requirements::{GroupsSpecification, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
-    DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PylockToml,
-    PythonRequirement, ResolutionMode, ResolverEnvironment,
+    DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PythonRequirement,
+    ResolutionMode, ResolverEnvironment,
 };
 use uv_settings::PythonInstallMirrors;
 use uv_torch::{TorchMode, TorchSource, TorchStrategy};
@@ -45,6 +44,7 @@ use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::operations::{report_interpreter, report_target_environment};
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
+use crate::commands::pylock::{read_pylock_toml, resolve_pylock_toml};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
@@ -493,44 +493,7 @@ pub(crate) async fn pip_install(
     );
 
     let (resolution, hasher) = if let Some(pylock) = pylock {
-        // Read the `pylock.toml` from disk or URL, and deserialize it from TOML.
-        let (install_path, content) =
-            if pylock.starts_with("http://") || pylock.starts_with("https://") {
-                // Fetch the `pylock.toml` over HTTP(S).
-                let url = uv_redacted::DisplaySafeUrl::parse(&pylock.to_string_lossy())?;
-                let client = client_builder.build()?;
-                let response = client
-                    .for_host(&url)
-                    .get(url::Url::from(url.clone()))
-                    .send()
-                    .await?;
-                response.error_for_status_ref()?;
-                let content = response.text().await?;
-                // Use the current working directory as the install path for remote lock files.
-                let install_path = std::env::current_dir()?;
-                (install_path, content)
-            } else {
-                let install_path = std::path::absolute(&pylock)?;
-                let install_path = install_path.parent().unwrap().to_path_buf();
-                let content = fs_err::tokio::read_to_string(&pylock).await?;
-                (install_path, content)
-            };
-        let lock = info_span!("toml::from_str pip install", path = %pylock.display())
-            .in_scope(|| toml::from_str::<PylockToml>(&content))
-            .with_context(|| {
-                format!("Not a valid `pylock.toml` file: {}", pylock.user_display())
-            })?;
-
-        // Verify that the Python version is compatible with the lock file.
-        if let Some(requires_python) = lock.requires_python.as_ref() {
-            if !requires_python.contains(interpreter.python_version()) {
-                return Err(anyhow::anyhow!(
-                    "The requested interpreter resolved to Python {}, which is incompatible with the `pylock.toml`'s Python requirement: `{}`",
-                    interpreter.python_version(),
-                    requires_python,
-                ));
-            }
-        }
+        let (install_path, lock) = read_pylock_toml(&pylock, &client_builder).await?;
 
         // Convert the extras and groups specifications into a concrete form.
         let extras = extras.with_defaults(DefaultExtras::default());
@@ -549,17 +512,16 @@ pub(crate) async fn pip_install(
             .cloned()
             .collect::<Vec<_>>();
 
-        let resolution = lock.to_resolution(
+        resolve_pylock_toml(
+            lock,
             &install_path,
-            marker_env.markers(),
+            interpreter,
+            python_version.as_ref(),
+            python_platform.as_ref(),
             &extras,
             &groups,
-            &tags,
             &build_options,
-        )?;
-        let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
-
-        (resolution, hasher)
+        )?
     } else {
         // When resolving, don't take any external preferences into account.
         let preferences = Vec::default();

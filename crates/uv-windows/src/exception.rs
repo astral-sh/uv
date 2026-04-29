@@ -304,8 +304,8 @@ unsafe extern "system" fn unhandled_exception_filter(
     EXCEPTION_CONTINUE_SEARCH
 }
 
-/// Set up our handler for unhandled exceptions.
-pub(crate) fn setup() {
+/// Install a handler for unhandled exceptions.
+pub fn install_unhandled_exception_handler() {
     // SAFETY: winapi call, argument is a mostly async-signal-safe function
     unsafe {
         SetUnhandledExceptionFilter(Some(unhandled_exception_filter));

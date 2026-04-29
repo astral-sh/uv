@@ -890,16 +890,19 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .await
                     .map_err(Error::CacheWrite)?;
 
-                // If no hashes are required, parallelize the unzip operation.
+                // If no hashes are required, extract the wheel without hashing.
                 let (files, hashes) = if hashes.is_none() {
-                    // Unzip the wheel into a temporary directory.
-                    let file = file.into_std().await;
                     let target = temp_dir.path().to_owned();
-                    let files = tokio::task::spawn_blocking(move || match extension {
-                        WheelExtension::Whl => uv_extract::unzip(file, &target),
-                        WheelExtension::WhlZst => uv_extract::stream::untar_zst_file(file, &target),
-                    })
-                    .await?
+                    let files = match extension {
+                        WheelExtension::Whl => {
+                            let file = file.into_std().await;
+                            tokio::task::spawn_blocking(move || uv_extract::unzip(file, &target))
+                                .await?
+                        }
+                        WheelExtension::WhlZst => {
+                            uv_extract::stream::untar_zst(file, &target).await
+                        }
+                    }
                     .map_err(|err| Error::Extract(filename.to_string(), err))?;
 
                     (files, HashDigests::empty())

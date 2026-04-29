@@ -29,7 +29,7 @@ pin file (`.python-version`).
 
 ```console
 $ tree example-app
-example-app
+example-app/
 ├── .python-version
 ├── README.md
 ├── main.py
@@ -88,7 +88,7 @@ The source code is moved into a `src` directory with a module directory and an `
 
 ```console
 $ tree example-pkg
-example-pkg
+example-pkg/
 ├── .python-version
 ├── README.md
 ├── pyproject.toml
@@ -113,7 +113,7 @@ dependencies = []
 example-pkg = "example_pkg:main"
 
 [build-system]
-requires = ["uv_build>=0.11.7,<0.12"]
+requires = ["uv_build>=0.11.8,<0.12"]
 build-backend = "uv_build"
 ```
 
@@ -136,7 +136,7 @@ dependencies = []
 example-pkg = "example_pkg:main"
 
 [build-system]
-requires = ["uv_build>=0.11.7,<0.12"]
+requires = ["uv_build>=0.11.8,<0.12"]
 build-backend = "uv_build"
 ```
 
@@ -168,7 +168,7 @@ marker is included to indicate to consumers that types can be read from the libr
 
 ```console
 $ tree example-lib
-example-lib
+example-lib/
 ├── .python-version
 ├── README.md
 ├── pyproject.toml
@@ -197,7 +197,7 @@ requires-python = ">=3.11"
 dependencies = []
 
 [build-system]
-requires = ["uv_build>=0.11.7,<0.12"]
+requires = ["uv_build>=0.11.8,<0.12"]
 build-backend = "uv_build"
 ```
 
@@ -250,7 +250,7 @@ files:
 
 ```console
 $ tree example-ext
-example-ext
+example-ext/
 ├── .python-version
 ├── Cargo.toml
 ├── README.md

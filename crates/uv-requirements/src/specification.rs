@@ -658,7 +658,7 @@ impl RequirementsSpecification {
                     }
                 }
             }
-            spec.excludes.extend(source.excludes.into_iter());
+            spec.excludes.extend(source.excludes);
         }
 
         Ok(spec)

@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.11.7"
+version = "0.11.8"
 description = "A Python package and project manager"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -116,10 +116,8 @@ which = { workspace = true }
 zip = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-arrayvec = { workspace = true }
 self-replace = { workspace = true }
 uv-windows = { workspace = true }
-windows = { workspace = true }
 
 [build-dependencies]
 uv-static = { workspace = true }
@@ -152,7 +150,6 @@ tar = { workspace = true }
 tempfile = { workspace = true }
 tokio-stream = { workspace = true }
 tokio-util = { workspace = true }
-whoami = { workspace = true }
 wiremock = { workspace = true }
 zip = { workspace = true }
 

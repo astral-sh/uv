@@ -95,35 +95,13 @@ impl GlobalSettings {
     ) -> Self {
         let network_settings = NetworkSettings::resolve(args, workspace, environment);
         let python_preference = resolve_python_preference(args, workspace, environment);
+        let color = resolve_color(args);
         Self {
             required_version: workspace
                 .and_then(|workspace| workspace.globals.required_version.clone()),
             quiet: args.quiet,
             verbose: args.verbose,
-            color: if let Some(color_choice) = args.color {
-                // If `--color` is passed explicitly, use its value.
-                color_choice
-            } else if args.no_color {
-                // If `--no-color` is passed explicitly, disable color output.
-                ColorChoice::Never
-            } else if std::env::var_os(EnvVars::NO_COLOR)
-                .filter(|v| !v.is_empty())
-                .is_some()
-            {
-                // If the `NO_COLOR` is set, disable color output.
-                ColorChoice::Never
-            } else if std::env::var_os(EnvVars::FORCE_COLOR)
-                .filter(|v| !v.is_empty())
-                .is_some()
-                || std::env::var_os(EnvVars::CLICOLOR_FORCE)
-                    .filter(|v| !v.is_empty())
-                    .is_some()
-            {
-                // If `FORCE_COLOR` or `CLICOLOR_FORCE` is set, always enable color output.
-                ColorChoice::Always
-            } else {
-                ColorChoice::Auto
-            },
+            color,
             network_settings,
             concurrency: Concurrency::new(
                 environment
@@ -173,6 +151,34 @@ impl GlobalSettings {
             )
             .is_enabled(),
         }
+    }
+}
+
+/// Resolve the color choice from CLI arguments and environment variables.
+pub(crate) fn resolve_color(args: &GlobalArgs) -> ColorChoice {
+    if let Some(color_choice) = args.color {
+        // If `--color` is passed explicitly, use its value.
+        color_choice
+    } else if args.no_color {
+        // If `--no-color` is passed explicitly, disable color output.
+        ColorChoice::Never
+    } else if std::env::var_os(EnvVars::NO_COLOR)
+        .as_ref()
+        .is_some_and(|v| !v.is_empty())
+    {
+        // If the `NO_COLOR` is set, disable color output.
+        ColorChoice::Never
+    } else if std::env::var_os(EnvVars::FORCE_COLOR)
+        .as_ref()
+        .is_some_and(|v| !v.is_empty())
+        || std::env::var_os(EnvVars::CLICOLOR_FORCE)
+            .as_ref()
+            .is_some_and(|v| !v.is_empty())
+    {
+        // If `FORCE_COLOR` or `CLICOLOR_FORCE` is set, always enable color output.
+        ColorChoice::Always
+    } else {
+        ColorChoice::Auto
     }
 }
 
@@ -286,6 +292,30 @@ impl NetworkSettings {
         } else {
             Connectivity::Online
         };
+
+        if args.native_tls {
+            warn_user_once!(
+                "The `--native-tls` flag is deprecated and will be removed in a future release. Use `--system-certs` instead."
+            );
+        }
+        if args.no_native_tls {
+            warn_user_once!(
+                "The `--no-native-tls` flag is deprecated and will be removed in a future release. Use `--no-system-certs` instead."
+            );
+        }
+        if environment.native_tls.value.is_some() {
+            warn_user_once!(
+                "The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead."
+            );
+        }
+        if workspace
+            .and_then(|workspace| workspace.globals.native_tls)
+            .is_some()
+        {
+            warn_user_once!(
+                "The `native-tls` setting is deprecated and will be removed in a future release. Use `system-certs` instead."
+            );
+        }
 
         // Resolve whether to use system certificates.
         //
@@ -1591,11 +1621,19 @@ impl PythonPinSettings {
             no_project,
             global,
             rm,
+            python_downloads_json_url,
         } = args;
 
         let filesystem_install_mirrors = filesystem
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
+
+        let install_mirrors = PythonInstallMirrors {
+            python_downloads_json_url,
+            ..Default::default()
+        }
+        .combine(environment.install_mirrors)
+        .combine(filesystem_install_mirrors);
 
         Self {
             request,
@@ -1603,9 +1641,7 @@ impl PythonPinSettings {
             no_project,
             global,
             rm,
-            install_mirrors: environment
-                .install_mirrors
-                .combine(filesystem_install_mirrors),
+            install_mirrors,
         }
     }
 }

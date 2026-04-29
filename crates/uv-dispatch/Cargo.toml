@@ -1,6 +1,6 @@
 [package]
 name = "uv-dispatch"
-version = "0.0.40"
+version = "0.0.41"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -32,6 +32,7 @@ uv-platform-tags = { workspace = true }
 uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
+uv-requirements = { workspace = true }
 uv-resolver = { workspace = true }
 uv-types = { workspace = true }
 uv-version = { workspace = true }
