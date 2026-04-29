@@ -2,9 +2,16 @@
 
 uv supports creating a project with `uv init`.
 
-When creating projects, uv supports two basic templates: [**applications**](#applications) and
-[**libraries**](#libraries). By default, uv will create a project for an application. The `--lib`
-flag can be used to create a project for a library instead.
+By default, uv uses a packaged layout where the source files are under `src/<module_name>/`. The
+packaged layout is used for both basic templates: [**applications**](#applications) and
+[**libraries**](#libraries). By default, uv will create a packaged application. The `--lib` flag can
+be used to create a library instead, and `--no-package` can be used for a flat, unpackaged layout.
+
+!!! note
+
+    Prior to v0.12.0, uv would use a flat layout for applications and packaged layout for libraries.
+    By using the packaged layout for both, the differences between the library and application
+    layouts are now small.
 
 ## Target directory
 
@@ -18,10 +25,159 @@ with an error.
 
 Application projects are suitable for web servers, scripts, and command-line interfaces.
 
-Applications are the default target for `uv init`, but can also be specified with the `--app` flag.
+Applications are the default target for `uv init`:
 
 ```console
 $ uv init example-app
+```
+
+The source code lives in a `src` directory with a module directory and an `__init__.py` file:
+
+```console
+$ tree example-app
+example-app/
+├── .python-version
+├── README.md
+├── pyproject.toml
+└── src
+    └── example_app
+        └── __init__.py
+```
+
+A [build system](./config.md#build-systems) is defined, so the project will be installed into the
+environment:
+
+```toml title="pyproject.toml" hl_lines="12-14"
+[project]
+name = "example-app"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+example-app = "example_app:main"
+
+[build-system]
+requires = ["uv_build>=0.11.8,<0.12"]
+build-backend = "uv_build"
+```
+
+!!! tip
+
+    The `--build-backend` option can be used to request an alternative build system.
+
+A [command](./config.md#entry-points) definition is included:
+
+```toml title="pyproject.toml" hl_lines="9 10"
+[project]
+name = "example-app"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+example-app = "example_app:main"
+
+[build-system]
+requires = ["uv_build>=0.11.8,<0.12"]
+build-backend = "uv_build"
+```
+
+The command can be executed with `uv run`:
+
+```console
+$ cd example-app
+$ uv run example-app
+Hello from example-app!
+```
+
+## Libraries
+
+A library provides functions and objects for other projects to consume. Libraries are intended to be
+built and distributed, e.g., by uploading them to PyPI.
+
+Libraries can be created by using the `--lib` flag:
+
+```console
+$ uv init --lib example-lib
+```
+
+!!! note
+
+    Libraries always require a packaged project.
+
+A `py.typed` marker is included to indicate to consumers that types can be read from the library:
+
+```console
+$ tree example-lib
+example-lib/
+├── .python-version
+├── README.md
+├── pyproject.toml
+└── src
+    └── example_lib
+        ├── py.typed
+        └── __init__.py
+```
+
+!!! note
+
+    A `src` layout is particularly valuable when developing libraries. It ensures that the library
+    is isolated from any `python` invocations in the project root and that distributed library code
+    is well separated from the rest of the project source.
+
+A [build system](./config.md#build-systems) is defined, so the project will be installed into the
+environment:
+
+```toml title="pyproject.toml" hl_lines="12-14"
+[project]
+name = "example-lib"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[build-system]
+requires = ["uv_build>=0.11.8,<0.12"]
+build-backend = "uv_build"
+```
+
+!!! tip
+
+    You can select a different build backend template by using `--build-backend` with `hatchling`,
+    `uv_build`, `flit-core`, `pdm-backend`, `setuptools`, `maturin`, or `scikit-build-core`. An
+    alternative backend is required if you want to create a [library with extension modules](#projects-with-extension-modules).
+
+The created module defines a simple API function:
+
+```python title="__init__.py"
+def hello() -> str:
+    return "Hello from example-lib!"
+```
+
+And you can import and execute it using `uv run`:
+
+```console
+$ cd example-lib
+$ uv run python -c "import example_lib; print(example_lib.hello())"
+Hello from example-lib!
+```
+
+## Unpackaged applications
+
+Many use-cases require a [package](./config.md#project-packaging). For example, if you are creating
+a command-line interface that will be published to PyPI or if you want to define tests in a
+dedicated directory. In other cases, a flat directory of Python files is simpler.
+
+The `--no-package` flag can be used to create an unpackaged application:
+
+```console
+$ uv init --no-package example-app
 ```
 
 The project includes a `pyproject.toml`, a sample file (`main.py`), a readme, and a Python version
@@ -69,157 +225,7 @@ Python files can be executed with `uv run`:
 ```console
 $ cd example-app
 $ uv run main.py
-Hello from example-project!
-```
-
-## Packaged applications
-
-Many use-cases require a [package](./config.md#project-packaging). For example, if you are creating
-a command-line interface that will be published to PyPI or if you want to define tests in a
-dedicated directory.
-
-The `--package` flag can be used to create a packaged application:
-
-```console
-$ uv init --package example-pkg
-```
-
-The source code is moved into a `src` directory with a module directory and an `__init__.py` file:
-
-```console
-$ tree example-pkg
-example-pkg/
-├── .python-version
-├── README.md
-├── pyproject.toml
-└── src
-    └── example_pkg
-        └── __init__.py
-```
-
-A [build system](./config.md#build-systems) is defined, so the project will be installed into the
-environment:
-
-```toml title="pyproject.toml" hl_lines="12-14"
-[project]
-name = "example-pkg"
-version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
-requires-python = ">=3.11"
-dependencies = []
-
-[project.scripts]
-example-pkg = "example_pkg:main"
-
-[build-system]
-requires = ["uv_build>=0.11.8,<0.12"]
-build-backend = "uv_build"
-```
-
-!!! tip
-
-    The `--build-backend` option can be used to request an alternative build system.
-
-A [command](./config.md#entry-points) definition is included:
-
-```toml title="pyproject.toml" hl_lines="9 10"
-[project]
-name = "example-pkg"
-version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
-requires-python = ">=3.11"
-dependencies = []
-
-[project.scripts]
-example-pkg = "example_pkg:main"
-
-[build-system]
-requires = ["uv_build>=0.11.8,<0.12"]
-build-backend = "uv_build"
-```
-
-The command can be executed with `uv run`:
-
-```console
-$ cd example-pkg
-$ uv run example-pkg
-Hello from example-pkg!
-```
-
-## Libraries
-
-A library provides functions and objects for other projects to consume. Libraries are intended to be
-built and distributed, e.g., by uploading them to PyPI.
-
-Libraries can be created by using the `--lib` flag:
-
-```console
-$ uv init --lib example-lib
-```
-
-!!! note
-
-    Using `--lib` implies `--package`. Libraries always require a packaged project.
-
-As with a [packaged application](#packaged-applications), a `src` layout is used. A `py.typed`
-marker is included to indicate to consumers that types can be read from the library:
-
-```console
-$ tree example-lib
-example-lib/
-├── .python-version
-├── README.md
-├── pyproject.toml
-└── src
-    └── example_lib
-        ├── py.typed
-        └── __init__.py
-```
-
-!!! note
-
-    A `src` layout is particularly valuable when developing libraries. It ensures that the library is
-    isolated from any `python` invocations in the project root and that distributed library code is
-    well separated from the rest of the project source.
-
-A [build system](./config.md#build-systems) is defined, so the project will be installed into the
-environment:
-
-```toml title="pyproject.toml" hl_lines="12-14"
-[project]
-name = "example-lib"
-version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
-requires-python = ">=3.11"
-dependencies = []
-
-[build-system]
-requires = ["uv_build>=0.11.8,<0.12"]
-build-backend = "uv_build"
-```
-
-!!! tip
-
-    You can select a different build backend template by using `--build-backend` with `hatchling`,
-    `uv_build`, `flit-core`, `pdm-backend`, `setuptools`, `maturin`, or `scikit-build-core`. An
-    alternative backend is required if you want to create a [library with extension modules](#projects-with-extension-modules).
-
-The created module defines a simple API function:
-
-```python title="__init__.py"
-def hello() -> str:
-    return "Hello from example-lib!"
-```
-
-And you can import and execute it using `uv run`:
-
-```console
-$ cd example-lib
-$ uv run python -c "import example_lib; print(example_lib.hello())"
-Hello from example-lib!
+Hello from example-app!
 ```
 
 ## Projects with extension modules
