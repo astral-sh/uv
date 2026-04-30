@@ -102,6 +102,24 @@ fn workspace_metadata_simple() {
 }
 
 #[test]
+fn workspace_metadata_dry_run_sync_conflict() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.workspace_metadata().arg("--dry-run").arg("--sync"), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--dry-run' cannot be used with '--sync'
+
+    Usage: uv workspace metadata --cache-dir [CACHE_DIR] --dry-run --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    "#);
+}
+
+#[test]
 fn workspace_metadata_module_owners_from_locked_wheels() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
