@@ -861,7 +861,7 @@ pub(super) async fn do_sync(
     );
 
     // Run a malware check against OSV before installing.
-    if malware_settings.malware_check {
+    if malware_settings.enabled {
         if !preview.is_enabled(PreviewFeature::MalwareCheck) {
             warn_user!(
                 "Malware checks are experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
