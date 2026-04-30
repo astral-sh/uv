@@ -33,7 +33,7 @@ pub(crate) async fn metadata(
     frozen: Option<FrozenSource>,
     dry_run: DryRun,
     refresh: Refresh,
-    module_owners: bool,
+    sync: bool,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
@@ -124,7 +124,7 @@ pub(crate) async fn metadata(
         Ok(lock) => {
             let lock = lock.into_lock();
             let mut export = Metadata::from_lock(virtual_project.workspace(), &lock)?;
-            if module_owners {
+            if sync {
                 let environment = ProjectEnvironment::get_or_init(
                     virtual_project.workspace(),
                     &groups,
