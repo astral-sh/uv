@@ -7,6 +7,7 @@ use uv_configuration::{
     Concurrency, DependencyGroups, DryRun, ExtrasSpecification, InstallOptions, Reinstall,
 };
 use uv_distribution_types::Name;
+use uv_fs::PortablePathBuf;
 use uv_installer::SitePackages;
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
@@ -40,17 +41,7 @@ pub(crate) async fn collect_module_owners(
     let marker_env = resolution_markers(None, None, venv.interpreter());
     let tags = resolution_tags(None, None, venv.interpreter())?;
     let extras = ExtrasSpecification::from_all_extras().with_defaults(DefaultExtras::default());
-    let groups = DependencyGroups::from_args(
-        false,
-        false,
-        false,
-        Vec::new(),
-        Vec::new(),
-        false,
-        Vec::new(),
-        true,
-    )
-    .with_defaults(DefaultGroups::default());
+    let groups = DependencyGroups::from_all_groups().with_defaults(DefaultGroups::default());
 
     let resolution = target.to_resolution(
         &marker_env,
@@ -64,12 +55,13 @@ pub(crate) async fn collect_module_owners(
         return Ok(BTreeMap::new());
     }
 
-    let mut package_ids = BTreeMap::<PackageName, BTreeSet<String>>::new();
+    let workspace_root = PortablePathBuf::from(workspace.install_path().as_path());
+    let mut package_ids = BTreeMap::<PackageName, String>::new();
     for dist in resolution.distributions() {
-        package_ids
-            .entry(dist.name().clone())
-            .or_default()
-            .insert(Metadata::package_node_id(workspace, dist)?);
+        package_ids.insert(
+            dist.name().clone(),
+            Metadata::package_node_id(&workspace_root, dist)?,
+        );
     }
 
     let reinstall = Reinstall::None;
@@ -116,14 +108,11 @@ pub(crate) async fn collect_module_owners(
 
     let mut owners = BTreeMap::<ModuleName, BTreeSet<String>>::new();
     for dist in SitePackages::from_environment(venv)?.iter() {
-        let Some(package_ids) = package_ids.get(dist.name()) else {
+        let Some(package_id) = package_ids.get(dist.name()) else {
             continue;
         };
         for module in dist.read_modules()? {
-            owners
-                .entry(module)
-                .or_default()
-                .extend(package_ids.iter().cloned());
+            owners.entry(module).or_default().insert(package_id.clone());
         }
     }
 

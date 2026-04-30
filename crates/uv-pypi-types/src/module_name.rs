@@ -34,13 +34,7 @@ impl ModuleName {
         }
 
         for component in module.split('.') {
-            Identifier::new(component.to_string()).map_err(|err| {
-                ModuleNameParseError::InvalidComponent {
-                    component: component.to_string().into_boxed_str(),
-                    module: module.clone(),
-                    err,
-                }
-            })?;
+            Self::validate_component(&module, component)?;
         }
 
         Ok(Self(module))
@@ -54,7 +48,33 @@ impl ModuleName {
             return Err(ModuleNameParseError::Empty);
         }
 
-        Self::new(components.join("."))
+        let module = components.join(".").into_boxed_str();
+        for component in components {
+            Self::validate_component(&module, component)?;
+        }
+
+        Ok(Self(module))
+    }
+
+    /// Iterate over this module and its parent modules.
+    ///
+    /// For example, `foo.bar.baz` yields `foo`, `foo.bar`, and `foo.bar.baz`.
+    pub fn prefixes(&self) -> impl Iterator<Item = Self> + '_ {
+        self.0
+            .match_indices('.')
+            .map(|(index, _)| Self(Box::from(&self.0[..index])))
+            .chain(std::iter::once(self.clone()))
+    }
+
+    fn validate_component(module: &str, component: &str) -> Result<(), ModuleNameParseError> {
+        Identifier::new(component.to_string()).map_err(|err| {
+            ModuleNameParseError::InvalidComponent {
+                component: component.to_string().into_boxed_str(),
+                module: module.into(),
+                err,
+            }
+        })?;
+        Ok(())
     }
 }
 
@@ -62,7 +82,7 @@ impl FromStr for ModuleName {
     type Err = ModuleNameParseError;
 
     fn from_str(module: &str) -> Result<Self, Self::Err> {
-        Self::new(module.to_string())
+        Self::new(module)
     }
 }
 
@@ -137,5 +157,16 @@ mod tests {
             ModuleName::from_str("foo.").unwrap_err(),
             @"Invalid module name component `` in `foo.`"
         );
+    }
+
+    #[test]
+    fn prefixes() {
+        let prefixes = ModuleName::from_str("foo.bar.baz")
+            .expect("valid module name")
+            .prefixes()
+            .map(|module| module.to_string())
+            .collect::<Vec<_>>();
+
+        assert_eq!(prefixes, ["foo", "foo.bar", "foo.bar.baz"]);
     }
 }
