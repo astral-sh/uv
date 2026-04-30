@@ -122,6 +122,16 @@ impl GlobalSettings {
                     .combine(workspace.and_then(|workspace| workspace.globals.concurrent_installs))
                     .map(NonZeroUsize::get)
                     .unwrap_or_else(Concurrency::threads),
+                environment
+                    .concurrency
+                    .uploads
+                    .map(NonZeroUsize::get)
+                    .unwrap_or(Concurrency::DEFAULT_UPLOADS),
+                environment
+                    .concurrency
+                    .pyx_wheel_validations
+                    .map(NonZeroUsize::get)
+                    .unwrap_or(Concurrency::DEFAULT_PYX_WHEEL_VALIDATIONS),
             ),
             show_settings: args.show_settings,
             preview: Preview::from_args(
