@@ -7769,6 +7769,7 @@ fn deduplicate_resolution_markers() -> Result<()> {
 ///
 /// Ref: <https://github.com/astral-sh/uv/issues/11133>
 #[test]
+#[ignore = "lightning is currently quarantined on PyPI"]
 fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-02-07T00:00Z");
 
@@ -10519,6 +10520,7 @@ fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<(
 ///
 /// Ref: <https://github.com/astral-sh/uv/issues/11479>
 #[test]
+#[ignore = "lightning is currently quarantined on PyPI"]
 fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-02-14T00:00Z");
 
