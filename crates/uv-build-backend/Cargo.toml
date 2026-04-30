@@ -25,6 +25,7 @@ uv-platform-tags = { workspace = true }
 uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-version = { workspace = true }
+uv-toml = { workspace = true }
 uv-warnings = { workspace = true }
 
 astral-tokio-tar = { workspace = true }
