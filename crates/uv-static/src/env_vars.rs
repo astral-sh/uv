@@ -527,12 +527,12 @@ impl EnvVars {
     #[attr_added_in("0.0.5")]
     pub const UV_NO_WRAP: &'static str = "UV_NO_WRAP";
 
-    /// Set to `1` to disable the automatic malware check that runs after `uv sync`.
+    /// Set to `1` to enable the automatic malware check that runs after `uv sync`.
     ///
-    /// By default, uv performs a lightweight check against the OSV database for known
-    /// malware advisories after every lockfile sync. Set this variable to opt out.
+    /// When enabled, uv performs a lightweight check against the OSV database for known
+    /// malware advisories after every lockfile sync. Set this variable to `0` to opt out.
     #[attr_added_in("next release")]
-    pub const UV_NO_MALWARE_CHECK: &'static str = "UV_NO_MALWARE_CHECK";
+    pub const UV_MALWARE_CHECK: &'static str = "UV_MALWARE_CHECK";
 
     /// Override the vulnerability service URL for the automatic malware check.
     ///

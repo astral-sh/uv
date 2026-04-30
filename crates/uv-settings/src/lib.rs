@@ -752,7 +752,7 @@ pub struct EnvironmentOptions {
     pub venv_clear: EnvFlag,
     pub venv_relocatable: EnvFlag,
     pub init_bare: EnvFlag,
-    pub no_malware_check: EnvFlag,
+    pub malware_check: EnvFlag,
     pub malware_check_url: Option<DisplaySafeUrl>,
 }
 
@@ -850,7 +850,7 @@ impl EnvironmentOptions {
             venv_clear: EnvFlag::new(EnvVars::UV_VENV_CLEAR)?,
             venv_relocatable: EnvFlag::new(EnvVars::UV_VENV_RELOCATABLE)?,
             init_bare: EnvFlag::new(EnvVars::UV_INIT_BARE)?,
-            no_malware_check: EnvFlag::new(EnvVars::UV_NO_MALWARE_CHECK)?,
+            malware_check: EnvFlag::new(EnvVars::UV_MALWARE_CHECK)?,
             malware_check_url: parse_string_environment_variable(EnvVars::UV_MALWARE_CHECK_URL)?
                 .map(|value| {
                     value.parse::<DisplaySafeUrl>().map_err(|err| {

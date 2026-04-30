@@ -15270,6 +15270,7 @@ async fn add_malware_detected() {
         .add()
         .arg("iniconfig==2.0.0")
         .arg("--preview-features").arg("malware-check")
+        .env(EnvVars::UV_MALWARE_CHECK, "1")
         .env(EnvVars::UV_MALWARE_CHECK_URL, server.uri()), @"
     success: false
     exit_code: 2
@@ -15277,7 +15278,7 @@ async fn add_malware_detected() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    error: Malware detected in locked dependencies; aborting sync. Set `UV_NO_MALWARE_CHECK=1` to bypass this check.
+    error: Malware detected in locked dependencies; aborting sync. Set `UV_MALWARE_CHECK=0` to bypass this check.
       - `iniconfig==2.0.0`: MAL-2026-1234 (https://osv.dev/vulnerability/MAL-2026-1234)
     ");
 }

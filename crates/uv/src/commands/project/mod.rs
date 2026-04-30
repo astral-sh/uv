@@ -268,7 +268,7 @@ pub(crate) enum ProjectError {
     Pep723ScriptTomlParse(#[source] toml::de::Error),
 
     #[error(
-        "Malware detected in locked dependencies; aborting sync. Set `UV_NO_MALWARE_CHECK=1` to bypass this check.\n{0}"
+        "Malware detected in locked dependencies; aborting sync. Set `UV_MALWARE_CHECK=0` to bypass this check.\n{0}"
     )]
     MalwareFound(String),
 

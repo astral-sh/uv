@@ -16310,6 +16310,7 @@ async fn sync_malware_detected() {
     uv_snapshot!(context.filters(), context
         .sync()
         .arg("--preview-features").arg("malware-check")
+        .env(EnvVars::UV_MALWARE_CHECK, "1")
         .env(EnvVars::UV_MALWARE_CHECK_URL, server.uri()), @"
     success: false
     exit_code: 2
@@ -16317,7 +16318,7 @@ async fn sync_malware_detected() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    error: Malware detected in locked dependencies; aborting sync. Set `UV_NO_MALWARE_CHECK=1` to bypass this check.
+    error: Malware detected in locked dependencies; aborting sync. Set `UV_MALWARE_CHECK=0` to bypass this check.
       - `iniconfig==2.0.0`: MAL-2026-1234 (https://osv.dev/vulnerability/MAL-2026-1234)
     ");
 }
@@ -16353,6 +16354,7 @@ async fn sync_malware_check_clean() {
     uv_snapshot!(context.filters(), context
         .sync()
         .arg("--preview-features").arg("malware-check")
+        .env(EnvVars::UV_MALWARE_CHECK, "1")
         .env(EnvVars::UV_MALWARE_CHECK_URL, server.uri()), @"
     success: true
     exit_code: 0
@@ -16412,6 +16414,7 @@ async fn sync_malware_check_skips_non_mal() {
     uv_snapshot!(context.filters(), context
         .sync()
         .arg("--preview-features").arg("malware-check")
+        .env(EnvVars::UV_MALWARE_CHECK, "1")
         .env(EnvVars::UV_MALWARE_CHECK_URL, server.uri()), @"
     success: false
     exit_code: 2
@@ -16419,12 +16422,12 @@ async fn sync_malware_check_skips_non_mal() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    error: Malware detected in locked dependencies; aborting sync. Set `UV_NO_MALWARE_CHECK=1` to bypass this check.
+    error: Malware detected in locked dependencies; aborting sync. Set `UV_MALWARE_CHECK=0` to bypass this check.
       - `iniconfig==2.0.0`: MAL-2026-5678 (https://osv.dev/vulnerability/MAL-2026-5678)
     ");
 }
 
-/// Ensure that `UV_NO_MALWARE_CHECK=1` disables the malware check even when the preview
+/// Ensure that `UV_MALWARE_CHECK=0` keeps the malware check disabled even when the preview
 /// feature is enabled.
 #[tokio::test]
 async fn sync_malware_check_disabled() {
@@ -16445,14 +16448,13 @@ async fn sync_malware_check_disabled() {
 
     let server = MockServer::start().await;
 
-    // Even though the preview feature is enabled and malware exists, the check is
-    // disabled via env var so no request should be made.
-    // (No mocks are mounted, so any request would fail.)
+    // Even though the preview feature is enabled, the check is explicitly disabled via env
+    // var so no request should be made. (No mocks are mounted, so any request would fail.)
 
     uv_snapshot!(context.filters(), context
         .sync()
         .arg("--preview-features").arg("malware-check")
-        .env(EnvVars::UV_NO_MALWARE_CHECK, "1")
+        .env(EnvVars::UV_MALWARE_CHECK, "0")
         .env(EnvVars::UV_MALWARE_CHECK_URL, server.uri()), @"
     success: true
     exit_code: 0
@@ -16496,6 +16498,7 @@ async fn sync_malware_check_network_error() {
     uv_snapshot!(context.filters(), context
         .sync()
         .arg("--preview-features").arg("malware-check")
+        .env(EnvVars::UV_MALWARE_CHECK, "1")
         .env(EnvVars::UV_MALWARE_CHECK_URL, server.uri()), @"
     success: false
     exit_code: 2
