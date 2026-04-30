@@ -9,6 +9,8 @@ use thiserror::Error;
 use tracing::{debug, error, info, trace, warn};
 
 use uv_static::EnvVars;
+#[cfg(windows)]
+use windows::Win32::Foundation::ERROR_LOCK_VIOLATION;
 
 use crate::{Simplified, is_known_already_locked_error};
 
@@ -422,13 +424,24 @@ impl LockedFile {
 #[cfg(feature = "tokio")]
 impl Drop for LockedFile {
     fn drop(&mut self) {
-        if let Err(err) = self.unlock() {
-            error!(
-                "Failed to unlock resource at `{}`; program may be stuck: {err}",
-                self.0.path().display()
-            );
-        } else {
-            trace!("Released lock at `{}`", self.0.path().display());
+        match self.unlock() {
+            Ok(()) => {
+                trace!("Released lock at `{}`", self.0.path().display());
+            }
+            // See <https://bugs.winehq.org/show_bug.cgi?id=59711>
+            #[cfg(windows)]
+            Err(err)
+                if uv_windows::is_wine()
+                    && err.raw_os_error() == Some(ERROR_LOCK_VIOLATION.0.cast_signed()) =>
+            {
+                trace!("Released lock at `{}`", self.0.path().display());
+            }
+            Err(err) => {
+                error!(
+                    "Failed to unlock resource at `{}`; program may be stuck: {err}",
+                    self.0.path().display()
+                );
+            }
         }
     }
 }
