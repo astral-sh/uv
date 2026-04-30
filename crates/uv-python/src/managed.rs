@@ -873,9 +873,8 @@ impl PythonMinorVersionLink {
 
     /// Read the target of the minor version link.
     ///
-    /// On Unix, this reads the symlink target. On Windows, this reads the junction target
-    /// using the `junction` crate which properly handles the `\??\` prefix that Windows
-    /// uses internally for junction targets.
+    /// On Unix, this reads the symlink target. On Windows, this reads the directory link
+    /// target, whether uv created it as a junction or as a directory symlink under Wine.
     pub fn read_target(&self) -> Option<PathBuf> {
         #[cfg(unix)]
         {
@@ -883,7 +882,7 @@ impl PythonMinorVersionLink {
         }
         #[cfg(windows)]
         {
-            junction::get_target(&self.symlink_directory).ok()
+            uv_fs::read_link(&self.symlink_directory).ok()
         }
     }
 }

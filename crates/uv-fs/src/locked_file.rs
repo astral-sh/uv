@@ -98,6 +98,12 @@ pub enum LockedFileMode {
 impl LockedFileMode {
     /// Try to lock the file and return an error if the lock is already acquired by another process
     /// and cannot be acquired immediately.
+    ///
+    /// On Android, [`std::fs::File::try_lock`] is not supported
+    /// (see [rust-lang/rust#148325]), so we use [`rustix::fs::flock`] directly.
+    ///
+    /// [rust-lang/rust#148325]: https://github.com/rust-lang/rust/issues/148325
+    #[cfg(not(target_os = "android"))]
     fn try_lock(self, file: &fs_err::File) -> Result<(), std::fs::TryLockError> {
         match self {
             Self::Exclusive => file.try_lock()?,
@@ -106,13 +112,63 @@ impl LockedFileMode {
         Ok(())
     }
 
+    /// Try to lock the file and return an error if the lock is already acquired by another process
+    /// and cannot be acquired immediately.
+    ///
+    /// Android-specific implementation using [`rustix::fs::flock`] because
+    /// [`std::fs::File::try_lock`] always returns `Unsupported` on Android
+    /// (see [rust-lang/rust#148325]).
+    ///
+    /// [rust-lang/rust#148325]: https://github.com/rust-lang/rust/issues/148325
+    #[cfg(target_os = "android")]
+    fn try_lock(self, file: &fs_err::File) -> Result<(), std::fs::TryLockError> {
+        use std::os::fd::AsFd;
+
+        let operation = match self {
+            Self::Exclusive => rustix::fs::FlockOperation::NonBlockingLockExclusive,
+            Self::Shared => rustix::fs::FlockOperation::NonBlockingLockShared,
+        };
+        rustix::fs::flock(file.as_fd(), operation).map_err(|errno| {
+            if errno == rustix::io::Errno::WOULDBLOCK {
+                std::fs::TryLockError::WouldBlock
+            } else {
+                std::fs::TryLockError::Error(io::Error::from_raw_os_error(errno.raw_os_error()))
+            }
+        })
+    }
+
     /// Lock the file, blocking until the lock becomes available if necessary.
+    ///
+    /// On Android, [`std::fs::File::lock`] is not supported
+    /// (see [rust-lang/rust#148325]), so we use [`rustix::fs::flock`] directly.
+    ///
+    /// [rust-lang/rust#148325]: https://github.com/rust-lang/rust/issues/148325
+    #[cfg(not(target_os = "android"))]
     fn lock(self, file: &fs_err::File) -> Result<(), io::Error> {
         match self {
             Self::Exclusive => file.lock()?,
             Self::Shared => file.lock_shared()?,
         }
         Ok(())
+    }
+
+    /// Lock the file, blocking until the lock becomes available if necessary.
+    ///
+    /// Android-specific implementation using [`rustix::fs::flock`] because
+    /// [`std::fs::File::lock`] always returns `Unsupported` on Android
+    /// (see [rust-lang/rust#148325]).
+    ///
+    /// [rust-lang/rust#148325]: https://github.com/rust-lang/rust/issues/148325
+    #[cfg(target_os = "android")]
+    fn lock(self, file: &fs_err::File) -> Result<(), io::Error> {
+        use std::os::fd::AsFd;
+
+        let operation = match self {
+            Self::Exclusive => rustix::fs::FlockOperation::LockExclusive,
+            Self::Shared => rustix::fs::FlockOperation::LockShared,
+        };
+        rustix::fs::flock(file.as_fd(), operation)
+            .map_err(|errno| io::Error::from_raw_os_error(errno.raw_os_error()))
     }
 }
 
@@ -335,13 +391,38 @@ impl LockedFile {
             .open(path.as_ref())
             .map_err(Into::into)
     }
+
+    /// Unlock the file.
+    ///
+    /// On Android, [`std::fs::File::unlock`] is not supported
+    /// (see [rust-lang/rust#148325]), so we use [`rustix::fs::flock`] directly.
+    ///
+    /// [rust-lang/rust#148325]: https://github.com/rust-lang/rust/issues/148325
+    #[cfg(not(target_os = "android"))]
+    fn unlock(&self) -> Result<(), io::Error> {
+        self.0.unlock()
+    }
+
+    /// Unlock the file.
+    ///
+    /// Android-specific implementation using [`rustix::fs::flock`] because
+    /// [`std::fs::File::unlock`] always returns `Unsupported` on Android
+    /// (see [rust-lang/rust#148325]).
+    ///
+    /// [rust-lang/rust#148325]: https://github.com/rust-lang/rust/issues/148325
+    #[cfg(target_os = "android")]
+    fn unlock(&self) -> Result<(), io::Error> {
+        use std::os::fd::AsFd;
+
+        rustix::fs::flock(self.0.as_fd(), rustix::fs::FlockOperation::Unlock)
+            .map_err(|errno| io::Error::from_raw_os_error(errno.raw_os_error()))
+    }
 }
 
 #[cfg(feature = "tokio")]
 impl Drop for LockedFile {
-    /// Unlock the file.
     fn drop(&mut self) {
-        if let Err(err) = self.0.unlock() {
+        if let Err(err) = self.unlock() {
             error!(
                 "Failed to unlock resource at `{}`; program may be stuck: {err}",
                 self.0.path().display()
