@@ -1955,4 +1955,95 @@ mod tests {
         build-backend = "uv_build"
         "#);
     }
+
+    /// Test that TOML 1.1 features in pyproject.toml trigger auto-detection and rewrite to TOML
+    /// 1.0, even without explicitly enabling `PreviewFeature::TomlBackwardsCompatibility`.
+    #[test]
+    fn toml_1_1_backward_compatibility_auto_detection() {
+        let _preview = uv_preview::test::with_features(&[]);
+        let src = TempDir::new().unwrap();
+
+        // A `pyproject.toml` with a TOML 1.1 feature, trailing commas in inline tables.
+        let pyproject_toml = indoc! {r#"
+            [project]
+            name = "toml11-project"
+            version = "0.1.0"
+            description = "A test package using TOML 1.1 features"
+            requires-python = ">=3.12"
+            # TOML 1.1 feature: Trailing comma in inline table
+            authors = [
+                { name = "Ferris", email = "ferris@example.com", },
+                { name = "Platypus", email = "platypus@example.com", },
+            ]
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6.0"]
+            build-backend = "uv_build"
+        "#};
+
+        fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
+        fs_err::create_dir_all(src.path().join("src").join("toml11_project")).unwrap();
+        File::create(
+            src.path()
+                .join("src")
+                .join("toml11_project")
+                .join("__init__.py"),
+        )
+        .unwrap();
+
+        let dist = TempDir::new().unwrap();
+        let build = build(src.path(), dist.path()).unwrap();
+
+        // Check that both `pyproject.toml` and `pyproject.toml.orig` are in the sdist.
+        assert_snapshot!(build.source_dist_contents.join("\n"), @"
+        toml11_project-0.1.0/
+        toml11_project-0.1.0/PKG-INFO
+        toml11_project-0.1.0/pyproject.toml
+        toml11_project-0.1.0/pyproject.toml.orig
+        toml11_project-0.1.0/src
+        toml11_project-0.1.0/src/toml11_project
+        toml11_project-0.1.0/src/toml11_project/__init__.py
+        ");
+
+        // Extract the sdist to verify the contents of both files.
+        let source_dist_path = dist.path().join(build.source_dist_filename.to_string());
+        let sdist_reader = BufReader::new(File::open(&source_dist_path).unwrap());
+        let mut source_dist = tar::Archive::new(GzDecoder::new(sdist_reader));
+
+        let mut pyproject_toml_content = String::new();
+        let mut pyproject_toml_orig_content = String::new();
+        for entry in source_dist.entries().unwrap() {
+            let mut entry = entry.unwrap();
+            let path = entry.path().unwrap().to_string_lossy().to_string();
+
+            if path.ends_with("pyproject.toml") {
+                entry.read_to_string(&mut pyproject_toml_content).unwrap();
+            } else if path.ends_with("pyproject.toml.orig") {
+                entry
+                    .read_to_string(&mut pyproject_toml_orig_content)
+                    .unwrap();
+            }
+        }
+
+        assert_eq!(pyproject_toml_orig_content, pyproject_toml);
+        assert_snapshot!(pyproject_toml_content, @r#"
+        [project]
+        name = "toml11-project"
+        version = "0.1.0"
+        description = "A test package using TOML 1.1 features"
+        requires-python = ">=3.12"
+
+        [[project.authors]]
+        name = "Ferris"
+        email = "ferris@example.com"
+
+        [[project.authors]]
+        name = "Platypus"
+        email = "platypus@example.com"
+
+        [build-system]
+        requires = ["uv_build>=0.5.15,<0.6.0"]
+        build-backend = "uv_build"
+        "#);
+    }
 }

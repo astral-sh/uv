@@ -17,6 +17,7 @@ use uv_distribution_filename::{SourceDistExtension, SourceDistFilename};
 use uv_fs::{Simplified, normalize_path};
 use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_preview::PreviewFeature;
+use uv_toml::has_toml11_features;
 use uv_warnings::warn_user_once;
 use walkdir::WalkDir;
 
@@ -236,11 +237,26 @@ fn write_source_dist(
     //
     // To work around this, we do a best-effort rewrite of `pyproject.toml` to TOML 1.0. We also
     // add the original `pyproject.toml` as `pyproject.toml.orig` for reference.
+    //
+    // The feature is enabled either explicitly via the preview flag, or automatically when the
+    // `pyproject.toml` is detected to contain TOML 1.1-only syntax.
+    let pyproject_path = source_tree.join("pyproject.toml");
+    let pyproject_contents = fs_err::read_to_string(&pyproject_path)?;
     let toml_backwards_compatibility =
-        uv_preview::is_enabled(PreviewFeature::TomlBackwardsCompatibility);
+        if uv_preview::is_enabled(PreviewFeature::TomlBackwardsCompatibility) {
+            true
+        } else if has_toml11_features(&pyproject_contents) {
+            warn_user_once!(
+                "`pyproject.toml` uses TOML 1.1 features; rewriting to TOML 1.0 for \
+                compatibility with older build tools. Use `--preview-feature \
+                {feature}` to suppress this warning.",
+                feature = PreviewFeature::TomlBackwardsCompatibility
+            );
+            true
+        } else {
+            false
+        };
     if toml_backwards_compatibility {
-        let pyproject_path = source_tree.join("pyproject.toml");
-        let pyproject_contents = fs_err::read_to_string(&pyproject_path)?;
         let pyproject_value: toml::Value = toml::from_str(&pyproject_contents)
             .map_err(|err| Error::Toml(pyproject_path.clone(), err))?;
         // See https://github.com/toml-rs/toml/issues/1088 for `to_string_pretty`.
