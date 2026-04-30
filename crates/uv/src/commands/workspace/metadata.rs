@@ -61,35 +61,37 @@ pub(crate) async fn metadata(
 
     // Don't enable any groups' requires-python for interpreter discovery.
     let groups = DependencyGroupsWithDefaults::none();
-    let workspace_python = WorkspacePython::from_request(
-        python.as_deref().map(PythonRequest::parse),
-        Some(virtual_project.workspace()),
-        &groups,
-        project_dir,
-        no_config,
-    )
-    .await?;
-    let interpreter = ProjectInterpreter::discover(
-        virtual_project.workspace(),
-        &groups,
-        workspace_python,
-        &client_builder,
-        python_preference,
-        python_downloads,
-        &install_mirrors,
-        false,
-        Some(false),
-        cache,
-        printer,
-        preview,
-    )
-    .await?
-    .into_interpreter();
 
     // Determine the lock mode.
+    let interpreter;
     let mode = if let Some(frozen_source) = frozen {
         LockMode::Frozen(frozen_source.into())
     } else {
+        let workspace_python = WorkspacePython::from_request(
+            python.as_deref().map(PythonRequest::parse),
+            Some(virtual_project.workspace()),
+            &groups,
+            project_dir,
+            no_config,
+        )
+        .await?;
+        interpreter = ProjectInterpreter::discover(
+            virtual_project.workspace(),
+            &groups,
+            workspace_python,
+            &client_builder,
+            python_preference,
+            python_downloads,
+            &install_mirrors,
+            false,
+            Some(false),
+            cache,
+            printer,
+            preview,
+        )
+        .await?
+        .into_interpreter();
+
         if let LockCheck::Enabled(lock_check) = lock_check {
             LockMode::Locked(&interpreter, lock_check)
         } else if dry_run.enabled() {
