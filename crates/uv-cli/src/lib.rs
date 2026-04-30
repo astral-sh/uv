@@ -8028,12 +8028,12 @@ pub struct MetadataArgs {
     #[command(flatten)]
     pub refresh: RefreshArgs,
 
-    /// Include module ownership metadata in the output.
+    /// Sync the environment to include module ownership metadata in the output.
     ///
     /// This adds a mapping from importable module names to the package names that provide
     /// them. To do this, the venv will be synced in inexact mode.
     #[arg(long)]
-    pub module_owners: bool,
+    pub sync: bool,
 
     /// The Python interpreter to use during resolution.
     ///

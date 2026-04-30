@@ -151,7 +151,7 @@ dependencies = [
     let mut filters = context.filters();
     filters.push((r#""sha256": "[0-9a-f]{64}""#, r#""sha256": "[SHA256]""#));
 
-    uv_snapshot!(filters, context.workspace_metadata().arg("--module-owners"), @r#"
+    uv_snapshot!(filters, context.workspace_metadata().arg("--sync"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -304,7 +304,7 @@ dependencies = [
     context.lock().assert().success();
     fs_err::remove_file(gpu_a.path())?;
 
-    uv_snapshot!(context.filters(), context.workspace_metadata().arg("--frozen").arg("--module-owners"), @r#"
+    uv_snapshot!(context.filters(), context.workspace_metadata().arg("--frozen").arg("--sync"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
