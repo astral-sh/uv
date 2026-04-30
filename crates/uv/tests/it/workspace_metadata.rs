@@ -184,26 +184,26 @@ dependencies = [
       },
       "module_owners": {
         "bytecode": [
-          "typing-extensions"
+          "typing-extensions==0.1.0@path+[TEMP_DIR]/typing_extensions-0.1.0-py3-none-any.whl"
         ],
         "bytecode.compiled": [
-          "typing-extensions"
+          "typing-extensions==0.1.0@path+[TEMP_DIR]/typing_extensions-0.1.0-py3-none-any.whl"
         ],
         "café": [
-          "typing-extensions"
+          "typing-extensions==0.1.0@path+[TEMP_DIR]/typing_extensions-0.1.0-py3-none-any.whl"
         ],
         "gpu": [
-          "gpu-a",
-          "gpu-b"
+          "gpu-a==0.1.0@path+[TEMP_DIR]/gpu_a-0.1.0-py3-none-any.whl",
+          "gpu-b==0.1.0@path+[TEMP_DIR]/gpu_b-0.1.0-py3-none-any.whl"
         ],
         "gpu.a": [
-          "gpu-a"
+          "gpu-a==0.1.0@path+[TEMP_DIR]/gpu_a-0.1.0-py3-none-any.whl"
         ],
         "gpu.b": [
-          "gpu-b"
+          "gpu-b==0.1.0@path+[TEMP_DIR]/gpu_b-0.1.0-py3-none-any.whl"
         ],
         "typing_extensions": [
-          "typing-extensions"
+          "typing-extensions==0.1.0@path+[TEMP_DIR]/typing_extensions-0.1.0-py3-none-any.whl"
         ]
       },
       "members": [
@@ -291,6 +291,71 @@ dependencies = [
     warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
     Resolved 4 packages in [TIME]
     "#);
+
+    Ok(())
+}
+
+#[test]
+fn workspace_metadata_module_owners_use_installed_package_id() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let py311_dir = context.temp_dir.child("py311");
+    fs_err::create_dir_all(py311_dir.path())?;
+    let module_owner_311 = py311_dir.child("module_owner-0.1.0-py3-none-any.whl");
+    write_wheel(
+        module_owner_311.path(),
+        "module-owner",
+        "module_owner-0.1.0",
+        &[("shared.py", "")],
+    )?;
+
+    let py312_dir = context.temp_dir.child("py312");
+    fs_err::create_dir_all(py312_dir.path())?;
+    let module_owner_312 = py312_dir.child("module_owner-0.1.0-py3-none-any.whl");
+    write_wheel(
+        module_owner_312.path(),
+        "module-owner",
+        "module_owner-0.1.0",
+        &[("shared.py", "")],
+    )?;
+
+    let module_owner_311_url = Url::from_file_path(module_owner_311.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
+    let module_owner_312_url = Url::from_file_path(module_owner_312.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"[project]
+name = "module-owner-root"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+  "module-owner @ {module_owner_311_url} ; python_version < '3.12'",
+  "module-owner @ {module_owner_312_url} ; python_version >= '3.12'",
+]
+"#
+        ))?;
+
+    let assert = context
+        .workspace_metadata()
+        .arg("--sync")
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    let module_owners = serde_json::to_string_pretty(&metadata["module_owners"])?;
+
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_snapshot!(module_owners, @r#"
+        {
+          "shared": [
+            "module-owner==0.1.0@path+[TEMP_DIR]/py312/module_owner-0.1.0-py3-none-any.whl"
+          ]
+        }
+        "#);
+    });
 
     Ok(())
 }

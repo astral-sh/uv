@@ -12,7 +12,7 @@ use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_pypi_types::ModuleName;
 use uv_python::PythonEnvironment;
-use uv_resolver::{Installable, Lock};
+use uv_resolver::{Installable, Lock, Metadata};
 use uv_workspace::{Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::DefaultInstallLogger;
@@ -35,7 +35,7 @@ pub(crate) async fn collect_module_owners(
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     preview: Preview,
-) -> Result<BTreeMap<ModuleName, Vec<PackageName>>> {
+) -> Result<BTreeMap<ModuleName, Vec<String>>> {
     let target = InstallTarget::Workspace { workspace, lock };
     let marker_env = resolution_markers(None, None, venv.interpreter());
     let tags = resolution_tags(None, None, venv.interpreter())?;
@@ -64,10 +64,13 @@ pub(crate) async fn collect_module_owners(
         return Ok(BTreeMap::new());
     }
 
-    let package_names = resolution
-        .distributions()
-        .map(|dist| dist.name().clone())
-        .collect::<BTreeSet<_>>();
+    let mut package_ids = BTreeMap::<PackageName, BTreeSet<String>>::new();
+    for dist in resolution.distributions() {
+        package_ids
+            .entry(dist.name().clone())
+            .or_default()
+            .insert(Metadata::package_node_id(workspace, dist)?);
+    }
 
     let reinstall = Reinstall::None;
     let installer_settings = InstallerSettingsRef {
@@ -111,16 +114,16 @@ pub(crate) async fn collect_module_owners(
     )
     .await?;
 
-    let mut owners = BTreeMap::<ModuleName, BTreeSet<PackageName>>::new();
-    for dist in SitePackages::from_environment(venv)?
-        .iter()
-        .filter(|dist| package_names.contains(dist.name()))
-    {
+    let mut owners = BTreeMap::<ModuleName, BTreeSet<String>>::new();
+    for dist in SitePackages::from_environment(venv)?.iter() {
+        let Some(package_ids) = package_ids.get(dist.name()) else {
+            continue;
+        };
         for module in dist.read_modules()? {
             owners
                 .entry(module)
                 .or_default()
-                .insert(dist.name().clone());
+                .extend(package_ids.iter().cloned());
         }
     }
 
