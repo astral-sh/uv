@@ -357,14 +357,16 @@ impl Osv {
             .await?;
 
         // Build findings in dependency order (preserved by IndexMap).
-        let mut findings = Vec::new();
-        for (dep, vuln_ids) in &dep_vuln_ids {
-            for vuln_id in vuln_ids {
-                if let Some(vuln) = vuln_details.get(vuln_id) {
-                    findings.push(Self::vulnerability_to_finding(dep, vuln.clone()));
-                }
-            }
-        }
+        let findings = dep_vuln_ids
+            .iter()
+            .flat_map(|(dep, vuln_ids)| {
+                vuln_ids.iter().filter_map(|vuln_id| {
+                    vuln_details
+                        .get(vuln_id)
+                        .map(|vuln| Self::vulnerability_to_finding(dep, vuln.clone()))
+                })
+            })
+            .collect();
 
         Ok(findings)
     }
