@@ -8253,8 +8253,10 @@ fn preview_features() {
             compile_bytecode: false,
             reinstall: None,
         },
-        no_malware_check: false,
-        malware_check_url: None,
+        malware_settings: MalwareCheckSettings {
+            enabled: false,
+            malware_check_url: None,
+        },
     }
 
     ----- stderr -----
@@ -9042,8 +9044,10 @@ fn system_certs_cli_aliases_override_env() {
             compile_bytecode: false,
             reinstall: None,
         },
-        no_malware_check: false,
-        malware_check_url: None,
+        malware_settings: MalwareCheckSettings {
+            enabled: false,
+            malware_check_url: None,
+        },
     }
 
     ----- stderr -----
@@ -9306,8 +9310,10 @@ fn system_certs_config_aliases() -> anyhow::Result<()> {
             compile_bytecode: false,
             reinstall: None,
         },
-        no_malware_check: false,
-        malware_check_url: None,
+        malware_settings: MalwareCheckSettings {
+            enabled: false,
+            malware_check_url: None,
+        },
     }
 
     ----- stderr -----
