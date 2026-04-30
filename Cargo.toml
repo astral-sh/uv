@@ -77,6 +77,7 @@ uv-small-str = { version = "0.0.40", path = "crates/uv-small-str" }
 uv-state = { version = "0.0.40", path = "crates/uv-state" }
 uv-static = { version = "0.0.40", path = "crates/uv-static" }
 uv-test = { version = "0.0.40", path = "crates/uv-test" }
+uv-toml = { version = "0.0.40", path = "crates/uv-toml" }
 uv-tool = { version = "0.0.40", path = "crates/uv-tool" }
 uv-torch = { version = "0.0.40", path = "crates/uv-torch" }
 uv-trampoline-builder = { version = "0.0.40", path = "crates/uv-trampoline-builder" }
@@ -269,6 +270,7 @@ tokio-stream = { version = "0.1.16" }
 tokio-util = { version = "0.7.12", features = ["compat", "io"] }
 toml = { version = "1.1.0", features = ["fast_hash"] }
 toml_edit = { version = "0.25.8", features = ["serde"] }
+toml_parser = { version = "1.1.0" }
 tracing = { version = "0.1.40" }
 tracing-durations-export = { version = "0.3.0", features = ["plot"] }
 tracing-subscriber = { version = "0.3.18" } # Default feature set for uv_build, uv activates extra features
