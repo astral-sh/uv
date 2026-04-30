@@ -1,5 +1,11 @@
 on:
   workflow_call:
+    inputs:
+      trampoline-build:
+        description: "Whether to check the committed trampoline binaries"
+        required: false
+        type: string
+        default: "false"
 
 permissions: {}
 
@@ -25,15 +31,14 @@ jobs:
       - name: "Check windows crate versions match"
         run: uv run --no-project scripts/check-trampoline-version-consistency.py
 
-  # Verify committed trampolines match a reproducible Docker build
-  windows-trampoline-reproducible:
-    # uv version bumps (e.g., https://github.com/astral-sh/uv/pull/18805) cause the reproducible
-    # check to fail and these are not regenerated as a part of the release process so we temporarily
-    # disable this job
-    if: false
+  # Verify committed trampolines were built with the Docker image
+  windows-trampoline-check-binary:
+    # Only run when trampoline sources changed or the `build:windows-trampoline`
+    # label is set, as otherwise uv version bumps cause the check to fail.
+    if: ${{ inputs.trampoline-build == 'true' }}
     timeout-minutes: 30
     runs-on: ubuntu-latest
-    name: "check reproducible build"
+    name: "check binary"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
