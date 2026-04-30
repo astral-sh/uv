@@ -8,6 +8,7 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, trace, warn};
 use uv_audit::service::osv;
+use uv_audit::types::{Dependency, VulnerabilityID};
 use uv_auth::CredentialsCache;
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
@@ -270,7 +271,7 @@ pub(crate) enum ProjectError {
     #[error(
         "Malware detected in locked dependencies; aborting sync. Set `UV_MALWARE_CHECK=0` to bypass this check.\n{0}"
     )]
-    MalwareFound(String),
+    MalwareFound(MalwareFindings),
 
     #[error("Malware check failed due to an error from OSV")]
     Osv(#[from] osv::Error),
@@ -355,6 +356,33 @@ pub(crate) enum ProjectError {
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
+}
+
+/// Vulnerability identifiers grouped by dependency.
+#[derive(Debug)]
+pub(crate) struct MalwareFindings(pub(crate) Vec<(Dependency, Vec<VulnerabilityID>)>);
+
+impl std::fmt::Display for MalwareFindings {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut first = true;
+        for (dependency, vuln_ids) in &self.0 {
+            for vuln_id in vuln_ids {
+                if !first {
+                    writeln!(f)?;
+                }
+                first = false;
+                write!(
+                    f,
+                    "  - `{}=={}`: {} (https://osv.dev/vulnerability/{})",
+                    dependency.name(),
+                    dependency.version(),
+                    vuln_id.as_str(),
+                    vuln_id.as_str(),
+                )?;
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug)]

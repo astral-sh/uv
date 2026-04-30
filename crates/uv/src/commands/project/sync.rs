@@ -48,9 +48,9 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    EnvironmentUpdate, PlatformState, ProjectEnvironment, ProjectError, ScriptEnvironment,
-    UniversalState, default_dependency_groups, detect_conflicts, script_extra_build_requires,
-    script_specification, update_environment,
+    EnvironmentUpdate, MalwareFindings, PlatformState, ProjectEnvironment, ProjectError,
+    ScriptEnvironment, UniversalState, default_dependency_groups, detect_conflicts,
+    script_extra_build_requires, script_specification, update_environment,
 };
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
@@ -964,25 +964,18 @@ async fn check_malware(
         .query_identifiers(&dependencies, Filter::Malware)
         .await?;
 
-    let malware_details: Vec<_> = identifiers
-        .iter()
-        .flat_map(|(dependency, vuln_ids)| {
-            vuln_ids.iter().map(move |vuln_id| {
-                format!(
-                    "  - `{}=={}`: {} (https://osv.dev/vulnerability/{})",
-                    dependency.name(),
-                    dependency.version(),
-                    vuln_id.as_str(),
-                    vuln_id.as_str(),
-                )
-            })
-        })
+    let malware_findings: Vec<_> = identifiers
+        .into_iter()
+        .filter(|(_, vuln_ids)| !vuln_ids.is_empty())
+        .map(|(dependency, vuln_ids)| (dependency.clone(), vuln_ids.into_iter().collect()))
         .collect();
 
-    if malware_details.is_empty() {
+    if malware_findings.is_empty() {
         Ok(())
     } else {
-        Err(ProjectError::MalwareFound(malware_details.join("\n")))
+        Err(ProjectError::MalwareFound(MalwareFindings(
+            malware_findings,
+        )))
     }
 }
 
