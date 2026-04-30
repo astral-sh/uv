@@ -24,7 +24,7 @@ use uv_pep440::Version;
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 
 pub static API_BASE: LazyLock<DisplaySafeUrl> = LazyLock::new(|| {
-    DisplaySafeUrl::parse("https://api.osv.dev/").expect("impossible: embedded URL is invalid")
+    DisplaySafeUrl::parse("https://api.osv.dev/").expect("embedded OSV URL is a valid URL")
 });
 
 /// Errors during OSV service interactions.

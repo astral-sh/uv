@@ -16466,7 +16466,7 @@ async fn sync_malware_check_disabled() {
     ");
 }
 
-/// Ensure that a network error during the malware check does not fail the sync.
+/// Ensure that a network error during the malware check fails the sync.
 #[tokio::test]
 async fn sync_malware_check_network_error() {
     let context = uv_test::test_context!("3.12");
