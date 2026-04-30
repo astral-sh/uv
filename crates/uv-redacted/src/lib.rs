@@ -252,8 +252,7 @@ impl Display for DisplaySafeUrl {
 
 impl Debug for DisplaySafeUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let url = url_with_redacted_sensitive_query_values(&self.0);
-        let url = url.as_ref();
+        let url = &self.0;
         // For URLs that use the `git` convention (i.e., `ssh://git@github.com/...`), avoid masking the
         // username.
         let (username, password) = if is_ssh_git_username(url) {
@@ -276,7 +275,11 @@ impl Debug for DisplaySafeUrl {
             .field("host", &url.host())
             .field("port", &url.port())
             .field("path", &url.path())
-            .field("query", &url.query())
+            .field(
+                "query",
+                &url.query()
+                    .map(|query| redacted_query(query, url.query_pairs())),
+            )
             .field("fragment", &url.fragment())
             .finish()
     }
@@ -314,63 +317,58 @@ fn is_sensitive_query_parameter(key: &str) -> bool {
         .any(|sensitive| key.eq_ignore_ascii_case(sensitive))
 }
 
-fn url_with_redacted_sensitive_query_values(url: &Url) -> Cow<'_, Url> {
-    if !url
-        .query_pairs()
-        .any(|(key, _value)| is_sensitive_query_parameter(&key))
-    {
-        return Cow::Borrowed(url);
+fn redacted_query<'a>(
+    query: &'a str,
+    query_pairs: impl Iterator<Item = (Cow<'a, str>, Cow<'a, str>)>,
+) -> Cow<'a, str> {
+    let mut redacted = false;
+    let mut serializer = url::form_urlencoded::Serializer::new(String::new());
+    for (key, value) in query_pairs {
+        if is_sensitive_query_parameter(&key) {
+            serializer.append_pair(&key, "****");
+            redacted = true;
+        } else {
+            serializer.append_pair(&key, &value);
+        }
     }
 
-    let query_pairs: Vec<_> = url
-        .query_pairs()
-        .map(|(key, value)| {
-            let value = if is_sensitive_query_parameter(&key) {
-                Cow::Borrowed("****")
-            } else {
-                value
-            };
-            (key, value)
-        })
-        .collect();
-
-    let mut url = url.clone();
-    url.query_pairs_mut().clear().extend_pairs(query_pairs);
-    Cow::Owned(url)
+    if redacted {
+        Cow::Owned(serializer.finish())
+    } else {
+        Cow::Borrowed(query)
+    }
 }
 
 fn display_with_redacted_credentials(
     url: &Url,
     f: &mut std::fmt::Formatter<'_>,
 ) -> std::fmt::Result {
-    let url = url_with_redacted_sensitive_query_values(url);
-    let url = url.as_ref();
-    // For URLs that use the `git` convention (i.e., `ssh://git@github.com/...`), avoid dropping the
-    // username.
-    if is_ssh_git_username(url) || (url.username().is_empty() && url.password().is_none()) {
-        return write!(f, "{url}");
-    }
+    write!(f, "{}:", url.scheme())?;
 
-    write!(f, "{}://", url.scheme())?;
+    if url.has_authority() {
+        write!(f, "//")?;
 
-    if url.username() != "" && url.password().is_some() {
-        write!(f, "{}", url.username())?;
-        write!(f, ":****@")?;
-    } else if url.username() != "" {
-        write!(f, "****@")?;
-    } else if url.password().is_some() {
-        write!(f, ":****@")?;
-    }
+        if url.username() != "" && url.password().is_some() {
+            write!(f, "{}", url.username())?;
+            write!(f, ":****@")?;
+        } else if url.username() != "" && is_ssh_git_username(url) {
+            write!(f, "{}@", url.username())?;
+        } else if url.username() != "" {
+            write!(f, "****@")?;
+        } else if url.password().is_some() {
+            write!(f, ":****@")?;
+        }
 
-    write!(f, "{}", url.host_str().unwrap_or(""))?;
+        write!(f, "{}", url.host_str().unwrap_or(""))?;
 
-    if let Some(port) = url.port() {
-        write!(f, ":{port}")?;
+        if let Some(port) = url.port() {
+            write!(f, ":{port}")?;
+        }
     }
 
     write!(f, "{}", url.path())?;
     if let Some(query) = url.query() {
-        write!(f, "?{query}")?;
+        write!(f, "?{}", redacted_query(query, url.query_pairs()))?;
     }
     if let Some(fragment) = url.fragment() {
         write!(f, "#{fragment}")?;
@@ -557,6 +555,36 @@ mod tests {
         assert_eq!(
             log_safe_url.to_string(),
             "https://bucket.s3.amazonaws.com/dist.whl?token=secret"
+        );
+    }
+
+    #[test]
+    fn does_not_add_authority_to_urls_without_authority() {
+        let log_safe_url = DisplaySafeUrl::parse("c:/home/ferris/projects/foo").unwrap();
+
+        assert_eq!(log_safe_url.to_string(), "c:/home/ferris/projects/foo");
+    }
+
+    #[test]
+    fn redacts_query_values_in_urls_without_authority() {
+        let log_safe_url =
+            DisplaySafeUrl::parse("c:/home/ferris/projects/foo?X-Amz-Signature=signature").unwrap();
+
+        assert_eq!(
+            log_safe_url.to_string(),
+            "c:/home/ferris/projects/foo?X-Amz-Signature=****"
+        );
+    }
+
+    #[test]
+    fn redacts_query_values_in_cannot_be_a_base_urls() {
+        let log_safe_url =
+            DisplaySafeUrl::parse("mailto:ferris@example.com?X-Amz-Signature=signature").unwrap();
+
+        assert!(log_safe_url.cannot_be_a_base());
+        assert_eq!(
+            log_safe_url.to_string(),
+            "mailto:ferris@example.com?X-Amz-Signature=****"
         );
     }
 
