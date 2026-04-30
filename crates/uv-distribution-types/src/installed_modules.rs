@@ -127,15 +127,11 @@ fn has_extension(path: impl AsRef<Path>, extension: &str) -> bool {
 }
 
 fn add_module_components(components: &[&str], modules: &mut BTreeSet<ModuleName>) {
-    if ModuleName::from_components(components.iter().copied()).is_err() {
+    let Ok(module) = ModuleName::from_components(components.iter().copied()) else {
         return;
-    }
+    };
 
-    for index in 1..=components.len() {
-        if let Ok(module) = ModuleName::from_components(components[..index].iter().copied()) {
-            modules.insert(module);
-        }
-    }
+    modules.extend(module.prefixes());
 }
 
 #[cfg(test)]

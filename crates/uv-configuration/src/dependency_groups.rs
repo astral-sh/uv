@@ -140,6 +140,14 @@ impl DependencyGroups {
         })
     }
 
+    /// Helper to make a spec from just --all-groups.
+    pub fn from_all_groups() -> Self {
+        Self::from_history(DependencyGroupsHistory {
+            all_groups: true,
+            ..Default::default()
+        })
+    }
+
     /// Apply defaults to a base [`DependencyGroups`].
     ///
     /// This is appropriate in projects, where the `dev` group is synced by default.

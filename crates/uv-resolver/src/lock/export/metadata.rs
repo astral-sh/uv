@@ -832,17 +832,9 @@ impl Metadata {
     }
 
     pub fn package_node_id(
-        workspace: &Workspace,
-        dist: &ResolvedDist,
-    ) -> Result<String, MetadataError> {
-        let workspace_root = PortablePathBuf::from(workspace.install_path().as_path());
-        Self::package_node_id_with_root(&workspace_root, dist)
-    }
-
-    fn package_node_id_with_root(
         workspace_root: &PortablePathBuf,
         dist: &ResolvedDist,
-    ) -> Result<MetadataNodeIdFlat, MetadataError> {
+    ) -> Result<String, MetadataError> {
         let source = Source::from_resolved_dist(dist, workspace_root.as_ref())?;
         Ok(MetadataNodeId {
             name: dist.name().clone(),
