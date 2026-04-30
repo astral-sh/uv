@@ -391,6 +391,34 @@ impl PyProjectTomlMut {
         Ok(edit)
     }
 
+    /// Adds a constraint to `[tool.uv].constraint-dependencies`.
+    ///
+    /// The requirement is written using uv's normalized requirement formatting instead of
+    /// preserving the exact original text from an input constraints file.
+    ///
+    /// Returns an [`ArrayEdit`] indicating whether the constraint was added or updated.
+    pub fn add_constraint_dependency(&mut self, req: &Requirement) -> Result<ArrayEdit, Error> {
+        // Get or create `tool.uv.constraint-dependencies`.
+        let constraint_dependencies = self
+            .doc
+            .entry("tool")
+            .or_insert(implicit())
+            .as_table_mut()
+            .ok_or(Error::MalformedSources)?
+            .entry("uv")
+            .or_insert(Item::Table(Table::new()))
+            .as_table_mut()
+            .ok_or(Error::MalformedSources)?
+            .entry("constraint-dependencies")
+            .or_insert(Item::Value(Value::Array(Array::new())))
+            .as_array_mut()
+            .ok_or(Error::MalformedDependencies)?;
+
+        let edit = add_dependency(req, constraint_dependencies, false, false)?;
+
+        Ok(edit)
+    }
+
     /// Add an [`Index`] to `tool.uv.index`.
     pub fn add_index(&mut self, index: &Index) -> Result<(), Error> {
         let size = self.doc.len();

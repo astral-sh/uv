@@ -4252,17 +4252,21 @@ pub struct AddArgs {
     )]
     pub requirements: Vec<PathBuf>,
 
-    /// Constrain versions using the given requirements files.
+    /// Constrain versions using the given requirements files or URLs.
     ///
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
-    /// requirement that's installed. The constraints will _not_ be added to the project's
-    /// `pyproject.toml` file, but _will_ be respected during dependency resolution.
+    /// requirement that's installed. When used on their own, the constraints _will_ be imported
+    /// into `[tool.uv].constraint-dependencies` in `pyproject.toml`. When used _with_ packages or
+    /// `-r/--requirements`, the constraints _will_ be respected during dependency resolution but
+    /// _will not_ be added to the project's `pyproject.toml` file.
     ///
-    /// This is equivalent to pip's `--constraint` option.
+    /// When used with packages or `-r/--requirements`, this is equivalent to pip's `--constraint`
+    /// option.
     #[arg(
         long,
         short,
         alias = "constraint",
+        group = "sources",
         env = EnvVars::UV_CONSTRAINT,
         value_delimiter = ' ',
         value_parser = parse_maybe_file_path,

@@ -366,6 +366,18 @@ $ uv add -r requirements.in -c requirements.txt
 
 Your existing versions will be retained when producing a `uv.lock` file.
 
+If you want to persist those constraints in the project configuration for future locks and syncs,
+you can also import them directly from a local file or URL into `[tool.uv].constraint-dependencies`:
+
+```console
+$ uv add -c requirements.txt
+$ uv add -c https://example.com/requirements.txt
+```
+
+When `--constraints` is used on its own, uv imports the constraints into
+`[tool.uv].constraint-dependencies`. When it is combined with packages or `--requirements`, the
+constraints are only used during resolution and are not added to `pyproject.toml`.
+
 #### Importing platform-specific constraints
 
 If your platform-specific dependencies have been compiled into separate files, you can still
