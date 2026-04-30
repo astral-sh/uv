@@ -6,7 +6,7 @@ use uv_client::BaseClientBuilder;
 use uv_configuration::{
     Concurrency, DependencyGroups, DryRun, ExtrasSpecification, InstallOptions, Reinstall,
 };
-use uv_distribution_types::Name;
+use uv_distribution_types::{Dist, Name, ResolvedDist};
 use uv_fs::PortablePathBuf;
 use uv_installer::SitePackages;
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
@@ -57,7 +57,7 @@ pub(crate) async fn collect_module_owners(
 
     let workspace_root = PortablePathBuf::from(workspace.install_path().as_path());
     let mut package_ids = BTreeMap::<PackageName, String>::new();
-    for dist in resolution.distributions() {
+    for dist in resolution.distributions().filter(|dist| !is_virtual(dist)) {
         package_ids.insert(
             dist.name().clone(),
             Metadata::package_node_id(&workspace_root, dist)?,
@@ -111,6 +111,8 @@ pub(crate) async fn collect_module_owners(
         let Some(package_id) = package_ids.get(dist.name()) else {
             continue;
         };
+        // TODO: Editable installs often only record a `.pth` file; we'll
+        // need to handle them specially.
         for module in dist.read_modules()? {
             owners.entry(module).or_default().insert(package_id.clone());
         }
@@ -120,4 +122,14 @@ pub(crate) async fn collect_module_owners(
         .into_iter()
         .map(|(module, owners)| (module, owners.into_iter().collect()))
         .collect())
+}
+
+fn is_virtual(dist: &ResolvedDist) -> bool {
+    let ResolvedDist::Installable { dist, .. } = dist else {
+        return false;
+    };
+    let Dist::Source(source) = dist.as_ref() else {
+        return false;
+    };
+    source.is_virtual()
 }

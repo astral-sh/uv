@@ -361,6 +361,54 @@ dependencies = [
 }
 
 #[test]
+fn workspace_metadata_module_owners_ignore_stale_virtual_package() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let stale_owner = context
+        .temp_dir
+        .child("module_owner_root-0.1.0-py3-none-any.whl");
+    write_wheel(
+        stale_owner.path(),
+        "module-owner-root",
+        "module_owner_root-0.1.0",
+        &[("stale.py", "")],
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"[project]
+name = "module-owner-root"
+version = "0.1.0"
+requires-python = ">=3.12"
+
+[tool.uv]
+package = false
+"#,
+    )?;
+
+    context
+        .pip_install()
+        .arg(stale_owner.path())
+        .assert()
+        .success();
+
+    let assert = context
+        .workspace_metadata()
+        .arg("--sync")
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    let module_owners = if let Some(module_owners) = metadata.get("module_owners") {
+        serde_json::to_string_pretty(module_owners)?
+    } else {
+        "<missing>".to_string()
+    };
+
+    insta::assert_snapshot!(module_owners, @"<missing>");
+
+    Ok(())
+}
+
+#[test]
 fn workspace_metadata_module_owners_failure_is_error() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
