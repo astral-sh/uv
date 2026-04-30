@@ -34,7 +34,7 @@ use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequ
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{FlatIndex, ForkStrategy, Installable, Lock, PrereleaseMode, ResolutionMode};
 use uv_scripts::Pep723Script;
-use uv_settings::PythonInstallMirrors;
+use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user;
 use uv_workspace::pyproject::Source;
@@ -60,7 +60,6 @@ use crate::settings::{
 };
 
 /// Sync the project environment.
-#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn sync(
     project_dir: &Path,
     lock_check: LockCheck,
@@ -90,8 +89,7 @@ pub(crate) async fn sync(
     printer: Printer,
     preview: Preview,
     output_format: SyncFormat,
-    no_malware_check: bool,
-    malware_check_url: Option<DisplaySafeUrl>,
+    malware_settings: MalwareCheckSettings,
 ) -> Result<ExitStatus> {
     if preview.is_enabled(PreviewFeature::JsonOutput) && matches!(output_format, SyncFormat::Json) {
         warn_user!(
@@ -442,8 +440,7 @@ pub(crate) async fn sync(
         dry_run,
         printer,
         preview,
-        no_malware_check,
-        malware_check_url,
+        &malware_settings,
     )
     .await
     {
@@ -658,8 +655,7 @@ pub(super) async fn do_sync(
     dry_run: DryRun,
     printer: Printer,
     preview: Preview,
-    no_malware_check: bool,
-    malware_check_url: Option<DisplaySafeUrl>,
+    malware_settings: &MalwareCheckSettings,
 ) -> Result<Changelog, ProjectError> {
     // Extract the project settings.
     let InstallerSettingsRef {
@@ -865,14 +861,14 @@ pub(super) async fn do_sync(
     );
 
     // Run a malware check against OSV before installing.
-    if preview.is_enabled(PreviewFeature::MalwareCheck) && !no_malware_check {
+    if preview.is_enabled(PreviewFeature::MalwareCheck) && !malware_settings.no_malware_check {
         check_malware(
             &target,
             extras,
             groups,
             malware_check_client_builder,
             concurrency,
-            malware_check_url.clone(),
+            malware_settings.malware_check_url.clone(),
             cache,
         )
         .await?;

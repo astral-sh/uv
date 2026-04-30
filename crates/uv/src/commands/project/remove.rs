@@ -17,9 +17,8 @@ use uv_normalize::PackageName;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups};
 use uv_preview::Preview;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
-use uv_redacted::DisplaySafeUrl;
 use uv_scripts::{Pep723Metadata, Pep723Script};
-use uv_settings::PythonInstallMirrors;
+use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::DependencyType;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
@@ -40,7 +39,6 @@ use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
 /// Remove one or more packages from the project requirements.
-#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn remove(
     project_dir: &Path,
     lock_check: LockCheck,
@@ -63,8 +61,7 @@ pub(crate) async fn remove(
     cache: &Cache,
     printer: Printer,
     preview: Preview,
-    no_malware_check: bool,
-    malware_check_url: Option<DisplaySafeUrl>,
+    malware_settings: MalwareCheckSettings,
 ) -> Result<ExitStatus> {
     let target = if let Some(script) = script {
         // If we found a PEP 723 script and the user provided a project-only setting, warn.
@@ -380,8 +377,7 @@ pub(crate) async fn remove(
         DryRun::Disabled,
         printer,
         preview,
-        no_malware_check,
-        malware_check_url,
+        &malware_settings,
     )
     .await
     {

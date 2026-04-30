@@ -54,8 +54,9 @@ use uv_resolver::{
     PrereleaseMode, ResolutionMode,
 };
 use uv_settings::{
-    Combine, EnvironmentOptions, FilesystemOptions, Options, PipOptions, PublishOptions,
-    PythonInstallMirrors, ResolverInstallerOptions, ResolverInstallerSchema, ResolverOptions,
+    Combine, EnvironmentOptions, FilesystemOptions, MalwareCheckSettings, Options, PipOptions,
+    PublishOptions, PythonInstallMirrors, ResolverInstallerOptions, ResolverInstallerSchema,
+    ResolverOptions,
 };
 use uv_static::EnvVars;
 use uv_torch::TorchMode;
@@ -605,8 +606,7 @@ pub(crate) struct RunSettings {
     pub(crate) settings: ResolverInstallerSettings,
     pub(crate) env_file: EnvFile,
     pub(crate) max_recursion_depth: u32,
-    pub(crate) no_malware_check: bool,
-    pub(crate) malware_check_url: Option<DisplaySafeUrl>,
+    pub(crate) malware_settings: MalwareCheckSettings,
 }
 
 impl RunSettings {
@@ -687,6 +687,8 @@ impl RunSettings {
         let show_resolution = show_resolution || environment.show_resolution.value == Some(true);
         let no_env_file = no_env_file || environment.no_env_file.value == Some(true);
 
+        let malware_settings = MalwareCheckSettings::from(&environment);
+
         Self {
             lock_check: resolve_lock_check(locked),
             frozen: resolve_frozen(frozen),
@@ -746,8 +748,7 @@ impl RunSettings {
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
             max_recursion_depth: max_recursion_depth.unwrap_or(Self::DEFAULT_MAX_RECURSION_DEPTH),
-            no_malware_check: environment.no_malware_check.value == Some(true),
-            malware_check_url: environment.malware_check_url.clone(),
+            malware_settings,
         }
     }
 }
@@ -1668,8 +1669,7 @@ pub(crate) struct SyncSettings {
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
     pub(crate) output_format: SyncFormat,
-    pub(crate) no_malware_check: bool,
-    pub(crate) malware_check_url: Option<DisplaySafeUrl>,
+    pub(crate) malware_settings: MalwareCheckSettings,
 }
 
 impl SyncSettings {
@@ -1749,6 +1749,8 @@ impl SyncSettings {
         let no_dev = no_dev || environment.no_dev.value == Some(true);
         let no_editable = no_editable || environment.no_editable.value == Some(true);
 
+        let malware_settings = MalwareCheckSettings::from(&environment);
+
         Self {
             output_format,
             lock_check: resolve_lock_check(locked),
@@ -1800,8 +1802,7 @@ impl SyncSettings {
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
-            no_malware_check: environment.no_malware_check.value == Some(true),
-            malware_check_url: environment.malware_check_url.clone(),
+            malware_settings,
         }
     }
 }
@@ -1962,8 +1963,7 @@ pub(crate) struct AddSettings {
     pub(crate) refresh: Refresh,
     pub(crate) indexes: Vec<Index>,
     pub(crate) settings: ResolverInstallerSettings,
-    pub(crate) no_malware_check: bool,
-    pub(crate) malware_check_url: Option<DisplaySafeUrl>,
+    pub(crate) malware_settings: MalwareCheckSettings,
 }
 
 impl AddSettings {
@@ -2106,6 +2106,8 @@ impl AddSettings {
         // Check for conflicts between no_sync and frozen.
         check_conflicts(no_sync, frozen);
 
+        let malware_settings = MalwareCheckSettings::from(&environment);
+
         Self {
             lock_check: resolve_lock_check(locked),
             frozen: resolve_frozen(frozen),
@@ -2148,8 +2150,7 @@ impl AddSettings {
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
-            no_malware_check: environment.no_malware_check.value == Some(true),
-            malware_check_url: environment.malware_check_url.clone(),
+            malware_settings,
         }
     }
 }
@@ -2170,8 +2171,7 @@ pub(crate) struct RemoveSettings {
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
-    pub(crate) no_malware_check: bool,
-    pub(crate) malware_check_url: Option<DisplaySafeUrl>,
+    pub(crate) malware_settings: MalwareCheckSettings,
 }
 
 impl RemoveSettings {
@@ -2233,6 +2233,8 @@ impl RemoveSettings {
         // Check for conflicts between no_sync and frozen.
         check_conflicts(no_sync, frozen);
 
+        let malware_settings = MalwareCheckSettings::from(&environment);
+
         Self {
             lock_check: resolve_lock_check(locked),
             frozen: resolve_frozen(frozen),
@@ -2251,8 +2253,7 @@ impl RemoveSettings {
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
-            no_malware_check: environment.no_malware_check.value == Some(true),
-            malware_check_url: environment.malware_check_url.clone(),
+            malware_settings,
         }
     }
 }
@@ -2274,8 +2275,7 @@ pub(crate) struct VersionSettings {
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
-    pub(crate) no_malware_check: bool,
-    pub(crate) malware_check_url: Option<DisplaySafeUrl>,
+    pub(crate) malware_settings: MalwareCheckSettings,
 }
 
 impl VersionSettings {
@@ -2319,6 +2319,8 @@ impl VersionSettings {
         // Check for conflicts between no_sync and frozen.
         check_conflicts(no_sync, frozen);
 
+        let malware_settings = MalwareCheckSettings::from(&environment);
+
         Self {
             value,
             bump,
@@ -2339,8 +2341,7 @@ impl VersionSettings {
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
-            no_malware_check: environment.no_malware_check.value == Some(true),
-            malware_check_url: environment.malware_check_url,
+            malware_settings,
         }
     }
 }
