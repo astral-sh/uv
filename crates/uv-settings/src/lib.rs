@@ -751,6 +751,7 @@ pub struct EnvironmentOptions {
     pub venv_clear: EnvFlag,
     pub venv_relocatable: EnvFlag,
     pub init_bare: EnvFlag,
+    pub max_recursion_depth: Option<u32>,
 }
 
 impl EnvironmentOptions {
@@ -847,6 +848,10 @@ impl EnvironmentOptions {
             venv_clear: EnvFlag::new(EnvVars::UV_VENV_CLEAR)?,
             venv_relocatable: EnvFlag::new(EnvVars::UV_VENV_RELOCATABLE)?,
             init_bare: EnvFlag::new(EnvVars::UV_INIT_BARE)?,
+            max_recursion_depth: parse_integer_environment_variable(
+                EnvVars::UV_RUN_MAX_RECURSION_DEPTH,
+                None,
+            )?,
         })
     }
 }
