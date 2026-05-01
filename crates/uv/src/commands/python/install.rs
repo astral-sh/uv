@@ -25,7 +25,7 @@ use uv_python::downloads::{
     PythonDownloadRequest,
 };
 use uv_python::managed::{
-    ManagedPythonInstallation, ManagedPythonInstallations, PythonMinorVersionLink,
+    LauncherTarget, ManagedPythonInstallation, ManagedPythonInstallations, PythonMinorVersionLink,
     compare_build_versions, create_link_to_executable, python_executable_dir,
 };
 use uv_python::{
@@ -1013,7 +1013,7 @@ fn create_bin_links(
             installation.executable(false)
         };
 
-        match create_link_to_executable(&target, &executable) {
+        match create_link_to_executable(&target, &LauncherTarget::console(&executable)) {
             Ok(()) => {
                 debug!(
                     "Installed executable at `{}` for {}",
@@ -1170,7 +1170,9 @@ fn create_bin_links(
                         .remove(&target);
                 }
 
-                if let Err(err) = create_link_to_executable(&target, &executable) {
+                if let Err(err) =
+                    create_link_to_executable(&target, &LauncherTarget::console(&executable))
+                {
                     errors.push((
                         InstallErrorKind::Bin,
                         installation.key().clone(),
