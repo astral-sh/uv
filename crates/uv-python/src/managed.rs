@@ -938,8 +938,7 @@ pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), E
     } else if cfg!(windows) {
         use uv_trampoline_builder::windows_python_launcher;
 
-        // TODO(zanieb): Install GUI launchers as well
-        let launcher = windows_python_launcher(executable, false)?;
+        let launcher = windows_python_launcher(executable, is_windowed_python_launcher(link))?;
 
         // OK to use `std::fs` here, `fs_err` does not support `File::create_new` and we attach
         // error context anyway
@@ -968,12 +967,18 @@ pub fn replace_link_to_executable(link: &Path, executable: &Path) -> Result<(), 
     } else if cfg!(windows) {
         use uv_trampoline_builder::windows_python_launcher;
 
-        let launcher = windows_python_launcher(executable, false)?;
+        let launcher = windows_python_launcher(executable, is_windowed_python_launcher(link))?;
 
         uv_fs::write_atomic_sync(link, &*launcher).map_err(Error::LinkExecutable)
     } else {
         unimplemented!("Only Windows and Unix are supported.")
     }
+}
+
+fn is_windowed_python_launcher(link: &Path) -> bool {
+    link.file_stem()
+        .map(|stem| stem.to_string_lossy().to_ascii_lowercase())
+        .is_some_and(|stem| stem.starts_with("pythonw"))
 }
 
 // TODO(zanieb): Only used in tests now.
@@ -1007,10 +1012,18 @@ mod tests {
     use crate::implementation::LenientImplementationName;
     use crate::installation::PythonInstallationKey;
     use crate::{ImplementationName, PythonVariant};
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::str::FromStr;
     use uv_pep440::{Prerelease, PrereleaseKind};
     use uv_platform::Platform;
+
+    #[test]
+    fn test_windowed_python_launcher_detection() {
+        assert!(!is_windowed_python_launcher(Path::new("python.exe")));
+        assert!(!is_windowed_python_launcher(Path::new("python3.14.exe")));
+        assert!(is_windowed_python_launcher(Path::new("pythonw.exe")));
+        assert!(is_windowed_python_launcher(Path::new("pythonw3.14t.exe")));
+    }
 
     fn create_test_installation(
         implementation: ImplementationName,
