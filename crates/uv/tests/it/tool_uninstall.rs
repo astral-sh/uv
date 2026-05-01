@@ -114,6 +114,54 @@ fn tool_uninstall_multiple_names() {
 }
 
 #[test]
+fn tool_uninstall_multiple_names_continues_after_missing_receipt() {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    context
+        .tool_install()
+        .arg("black==24.2.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    context
+        .tool_install()
+        .arg("ruff==0.3.4")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    fs_err::remove_file(tool_dir.join("black").join("uv-receipt.toml")).unwrap();
+
+    uv_snapshot!(context.filters(), context.tool_uninstall().arg("black").arg("ruff")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Removed dangling environment for `black`
+    Uninstalled 1 executable: ruff
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_list()
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    No tools installed
+    ");
+}
+
+#[test]
 fn tool_uninstall_not_installed() {
     let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
