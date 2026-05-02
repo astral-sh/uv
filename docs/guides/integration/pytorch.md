@@ -215,8 +215,11 @@ Next, update the `pyproject.toml` to point `torch` and `torchvision` to the desi
     torchvision = [
       { index = "pytorch-rocm", marker = "sys_platform == 'linux'" },
     ]
-    # ROCm support relies on `triton-rocm`, which should also be installed from the PyTorch index
-    # (and included in `project.dependencies`).
+    # ROCm support relies on both Triton packages, which should also be installed from
+    # the PyTorch index (and included in `project.dependencies`).
+    pytorch-triton-rocm = [
+      { index = "pytorch-rocm", marker = "sys_platform == 'linux'" },
+    ]
     triton-rocm = [
       { index = "pytorch-rocm", marker = "sys_platform == 'linux'" },
     ]
@@ -319,6 +322,7 @@ requires-python = ">=3.14.0"
 dependencies = [
   "torch>=2.11.0",
   "torchvision>=0.26.0",
+  "pytorch-triton-rocm>=3.5.1 ; sys_platform == 'linux'",
   "triton-rocm>=3.6.0 ; sys_platform == 'linux'",
 ]
 
@@ -327,6 +331,9 @@ torch = [
   { index = "pytorch-rocm", marker = "sys_platform == 'linux'" },
 ]
 torchvision = [
+  { index = "pytorch-rocm", marker = "sys_platform == 'linux'" },
+]
+pytorch-triton-rocm = [
   { index = "pytorch-rocm", marker = "sys_platform == 'linux'" },
 ]
 triton-rocm = [
