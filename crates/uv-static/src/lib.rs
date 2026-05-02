@@ -29,9 +29,10 @@ pub fn parse_boolish_environment_variable(
 
     // Converts a string literal representation of truth to true or false.
     //
+    // `true` values are `y`, `yes`, `t`, `true`, `on`, and `1` (case insensitive).
     // `false` values are `n`, `no`, `f`, `false`, `off`, and `0` (case insensitive).
     //
-    // Any other value will be considered as `true`.
+    // Any other value will result in a parsing error, usually fatal.
     fn str_to_bool(val: impl AsRef<str>) -> Option<bool> {
         let pat: &str = &val.as_ref().to_lowercase();
         if TRUE_LITERALS.contains(&pat) {
