@@ -24,6 +24,7 @@ uv-fs = { workspace = true, features = ["tokio", "schemars"] }
 uv-git-types = { workspace = true }
 uv-macros = { workspace = true }
 uv-normalize = { workspace = true }
+uv-once-map = { workspace = true }
 uv-options-metadata = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
