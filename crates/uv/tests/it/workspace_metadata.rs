@@ -183,12 +183,6 @@ dependencies = [
         "sets": []
       },
       "module_owners": {
-        "bytecode": [
-          "typing-extensions==0.1.0@path+[TEMP_DIR]/typing_extensions-0.1.0-py3-none-any.whl"
-        ],
-        "bytecode.compiled": [
-          "typing-extensions==0.1.0@path+[TEMP_DIR]/typing_extensions-0.1.0-py3-none-any.whl"
-        ],
         "café": [
           "typing-extensions==0.1.0@path+[TEMP_DIR]/typing_extensions-0.1.0-py3-none-any.whl"
         ],
