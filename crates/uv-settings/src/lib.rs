@@ -849,6 +849,14 @@ impl EnvironmentOptions {
             init_bare: EnvFlag::new(EnvVars::UV_INIT_BARE)?,
         })
     }
+
+    /// Parse the maximum recursion depth configured for `uv run`.
+    ///
+    /// The value is scoped to `uv run`, so invalid command-specific environment variables do not
+    /// affect unrelated commands.
+    pub fn run_max_recursion_depth(&self) -> Result<Option<u32>, Error> {
+        parse_integer_environment_variable(EnvVars::UV_RUN_MAX_RECURSION_DEPTH, None)
+    }
 }
 
 /// Parse a string environment variable.

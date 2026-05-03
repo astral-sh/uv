@@ -2140,7 +2140,7 @@ async fn run_project(
         }
         ProjectCommand::Run(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::RunSettings::resolve(args, filesystem, environment);
+            let args = settings::RunSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.

@@ -619,7 +619,7 @@ impl RunSettings {
         args: RunArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
-    ) -> Self {
+    ) -> Result<Self, uv_settings::Error> {
         let RunArgs {
             extra,
             all_extras,
@@ -684,8 +684,9 @@ impl RunSettings {
         let isolated = isolated || environment.isolated.value == Some(true);
         let show_resolution = show_resolution || environment.show_resolution.value == Some(true);
         let no_env_file = no_env_file || environment.no_env_file.value == Some(true);
+        let max_recursion_depth = max_recursion_depth.or(environment.run_max_recursion_depth()?);
 
-        Self {
+        Ok(Self {
             lock_check: resolve_lock_check(locked),
             frozen: resolve_frozen(frozen),
             extras: ExtrasSpecification::from_args(
@@ -744,7 +745,7 @@ impl RunSettings {
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
             max_recursion_depth: max_recursion_depth.unwrap_or(Self::DEFAULT_MAX_RECURSION_DEPTH),
-        }
+        })
     }
 }
 
