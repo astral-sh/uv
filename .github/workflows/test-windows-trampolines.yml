@@ -34,7 +34,9 @@ jobs:
   # Verify committed trampolines were built with the Docker image
   windows-trampoline-check-binary:
     # Only run when trampoline sources changed or the `build:windows-trampoline`
-    # label is set, as otherwise uv version bumps cause the check to fail.
+    # label is set. Dependency bumps would otherwise force a trampoline rebuild
+    # on every uv update (the workspace crate versions are normalized in the
+    # Docker build, but external dep versions are not).
     if: ${{ inputs.trampoline-build == 'true' }}
     timeout-minutes: 30
     runs-on: ubuntu-latest
