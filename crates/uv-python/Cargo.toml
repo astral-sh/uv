@@ -66,6 +66,7 @@ tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
 url = { workspace = true }
 which = { workspace = true }
+rayon = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-registry = { workspace = true }
