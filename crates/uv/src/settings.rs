@@ -605,6 +605,7 @@ pub(crate) struct RunSettings {
     pub(crate) settings: ResolverInstallerSettings,
     pub(crate) env_file: EnvFile,
     pub(crate) max_recursion_depth: u32,
+    pub(crate) no_wait: bool,
 }
 
 impl RunSettings {
@@ -662,6 +663,7 @@ impl RunSettings {
             env_file,
             no_env_file,
             max_recursion_depth,
+            no_wait,
         } = args;
 
         let filesystem_install_mirrors = filesystem
@@ -744,6 +746,7 @@ impl RunSettings {
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
             max_recursion_depth: max_recursion_depth.unwrap_or(Self::DEFAULT_MAX_RECURSION_DEPTH),
+            no_wait,
         }
     }
 }
