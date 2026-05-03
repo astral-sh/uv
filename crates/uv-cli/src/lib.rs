@@ -3358,6 +3358,8 @@ pub struct InitArgs {
     /// Disables creating extra files like `README.md`, the `src/` tree, `.python-version` files,
     /// etc.
     ///
+    /// A `[build-system]` table is only created with `--package` or `--build-backend`.
+    ///
     /// When combined with `--script`, the script will only contain the inline metadata header.
     #[arg(long)]
     pub bare: bool,
@@ -3372,7 +3374,7 @@ pub struct InitArgs {
     ///
     /// Defines a `[build-system]` for the project.
     ///
-    /// This is the default behavior when using `--lib` or `--build-backend`.
+    /// This is the default behavior, the option exists for backwards compatibility.
     ///
     /// When using `--app`, this will include a `[project.scripts]` entrypoint and use a `src/`
     /// project structure.
