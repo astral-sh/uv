@@ -140,6 +140,17 @@ impl ProgressReporter {
             // See: https://github.com/astral-sh/uv/issues/3887.
             ProgressMode::Single
         } else {
+            // Route warning output through `MultiProgress::suspend()` to avoid
+            // indicatif's line management from truncating warning messages.
+            // See: https://github.com/astral-sh/uv/issues/18626.
+            if !multi_progress.is_hidden() {
+                let mp = multi_progress.clone();
+                uv_warnings::set_printer(Box::new(move |line| {
+                    mp.suspend(|| {
+                        anstream::eprintln!("{line}");
+                    });
+                }));
+            }
             ProgressMode::Multi {
                 state: Arc::default(),
                 multi_progress,
@@ -435,6 +446,16 @@ impl ProgressReporter {
             let _ = writeln!(self.printer.stderr(), "{message}");
         }
         progress.finish_with_message(message);
+    }
+}
+
+impl Drop for ProgressReporter {
+    fn drop(&mut self) {
+        if let ProgressMode::Multi { multi_progress, .. } = &self.mode {
+            if !multi_progress.is_hidden() {
+                uv_warnings::clear_printer();
+            }
+        }
     }
 }
 
