@@ -92,6 +92,8 @@ impl PortableGlobParser {
     /// These rules mean that matching the backslash (`\`) is forbidden, which avoid collisions with the windows path separator.
     pub fn parse(&self, glob: &str) -> Result<Glob, PortableGlobError> {
         self.check(glob)?;
+        // Normalize out any trailing slash; `GlobDirFilter` will handle the directory-inclusion semantics.
+        let glob = glob.strip_suffix('/').unwrap_or(glob);
         Ok(GlobBuilder::new(glob)
             .literal_separator(true)
             // No need to support Windows-style paths, so the backslash can be used a escape.

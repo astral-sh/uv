@@ -76,6 +76,7 @@ fn source_dist_matcher(
     // File and directories to include in the source directory
     let mut include_globs = Vec::new();
     let mut includes: Vec<String> = settings.source_include;
+
     // pyproject.toml is always included.
     includes.push(globset::escape("pyproject.toml"));
 
