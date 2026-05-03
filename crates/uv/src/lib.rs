@@ -508,7 +508,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         globals.network_settings.connectivity,
         globals.network_settings.system_certs,
         globals.network_settings.allow_insecure_host.clone(),
-        globals.preview,
         globals.network_settings.read_timeout,
         globals.network_settings.connect_timeout,
         globals.network_settings.retries,

@@ -1507,7 +1507,6 @@ impl ParsedRunCommand {
                     settings.network_settings.connectivity,
                     settings.network_settings.system_certs,
                     settings.network_settings.allow_insecure_host,
-                    settings.preview,
                     settings.network_settings.read_timeout,
                     settings.network_settings.connect_timeout,
                     settings.network_settings.retries,
