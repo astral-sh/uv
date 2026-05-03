@@ -1421,28 +1421,31 @@ fn can_skip_ephemeral(
 }
 
 #[derive(Debug)]
+pub(crate) struct ExtraPythonArgs(Vec<OsString>);
+
+#[derive(Debug)]
 pub(crate) enum RunCommand {
     /// Execute `python`.
     Python(Vec<OsString>),
     /// Execute a `python` script.
-    PythonScript(PathBuf, Vec<OsString>),
+    PythonScript(PathBuf, Vec<OsString>, ExtraPythonArgs),
     /// Search `sys.path` for the named module and execute its contents as the `__main__` module.
     /// Equivalent to `python -m module`.
-    PythonModule(OsString, Vec<OsString>),
+    PythonModule(OsString, Vec<OsString>, ExtraPythonArgs),
     /// Execute a `pythonw` GUI script.
-    PythonGuiScript(PathBuf, Vec<OsString>),
+    PythonGuiScript(PathBuf, Vec<OsString>, ExtraPythonArgs),
     /// Execute a Python package containing a `__main__.py` file.
     /// If an entrypoint with the target name is installed in the environment, it is preferred.
-    PythonPackage(OsString, PathBuf, Vec<OsString>),
+    PythonPackage(OsString, PathBuf, Vec<OsString>, ExtraPythonArgs),
     /// Execute a Python [zipapp].
     /// [zipapp]: <https://docs.python.org/3/library/zipapp.html>
-    PythonZipapp(PathBuf, Vec<OsString>),
+    PythonZipapp(PathBuf, Vec<OsString>, ExtraPythonArgs),
     /// Execute a `python` script provided via `stdin`.
-    PythonStdin(Vec<u8>, Vec<OsString>),
+    PythonStdin(Vec<u8>, Vec<OsString>, ExtraPythonArgs),
     /// Execute a `pythonw` script provided via `stdin`.
-    PythonGuiStdin(Vec<u8>, Vec<OsString>),
+    PythonGuiStdin(Vec<u8>, Vec<OsString>, ExtraPythonArgs),
     /// Execute a Python script downloaded from a remote URL.
-    PythonRemote(tempfile::NamedTempFile, Vec<OsString>),
+    PythonRemote(tempfile::NamedTempFile, Vec<OsString>, ExtraPythonArgs),
     /// Execute an external command.
     External(OsString, Vec<OsString>),
     /// Execute an empty command (in practice, `python` with no arguments).
@@ -1524,15 +1527,20 @@ impl ParsedRunCommand {
                     Err(Pep723Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => None,
                     Err(err) => return Err(err.into()),
                 };
-
-                Ok((script, RunCommand::PythonRemote(downloaded_script, args)))
+                let py_args = ExtraPythonArgs(vec![]);
+                Ok((
+                    script,
+                    RunCommand::PythonRemote(downloaded_script, args, py_args),
+                ))
             }
         }
     }
 
     /// Determine the [`ParsedRunCommand`] for a given set of arguments.
+    #[expect(clippy::fn_params_excessive_bools)]
     pub(crate) fn from_args(
         command: &ExternalCommand,
+        interactive: bool,
         module: bool,
         script: bool,
         gui_script: bool,
@@ -1542,6 +1550,12 @@ impl ParsedRunCommand {
             return Ok(Self::Ready(RunCommand::Empty));
         };
 
+        let py_args = ExtraPythonArgs(if interactive {
+            vec!["-i".into()]
+        } else {
+            vec![]
+        });
+
         if target.eq_ignore_ascii_case("-") {
             let mut buf = Vec::with_capacity(1024);
             std::io::stdin().read_to_end(&mut buf)?;
@@ -1549,9 +1563,17 @@ impl ParsedRunCommand {
             return if module {
                 Err(anyhow!("Cannot run a Python module from stdin"))
             } else if gui_script {
-                Ok(Self::Ready(RunCommand::PythonGuiStdin(buf, args.to_vec())))
+                Ok(Self::Ready(RunCommand::PythonGuiStdin(
+                    buf,
+                    args.to_vec(),
+                    py_args,
+                )))
             } else {
-                Ok(Self::Ready(RunCommand::PythonStdin(buf, args.to_vec())))
+                Ok(Self::Ready(RunCommand::PythonStdin(
+                    buf,
+                    args.to_vec(),
+                    py_args,
+                )))
             };
         }
 
@@ -1576,16 +1598,19 @@ impl ParsedRunCommand {
             return Ok(Self::Ready(RunCommand::PythonModule(
                 target.clone(),
                 args.to_vec(),
+                py_args,
             )));
         } else if gui_script {
             return Ok(Self::Ready(RunCommand::PythonGuiScript(
                 target.clone().into(),
                 args.to_vec(),
+                py_args,
             )));
         } else if script {
             return Ok(Self::Ready(RunCommand::PythonScript(
                 target.clone().into(),
                 args.to_vec(),
+                py_args,
             )));
         }
 
@@ -1603,6 +1628,7 @@ impl ParsedRunCommand {
             Ok(Self::Ready(RunCommand::PythonScript(
                 target_path,
                 args.to_vec(),
+                py_args,
             )))
         } else if target_path
             .extension()
@@ -1612,17 +1638,20 @@ impl ParsedRunCommand {
             Ok(Self::Ready(RunCommand::PythonGuiScript(
                 target_path,
                 args.to_vec(),
+                py_args,
             )))
         } else if is_dir && target_path.join("__main__.py").is_file() {
             Ok(Self::Ready(RunCommand::PythonPackage(
                 target.clone(),
                 target_path,
                 args.to_vec(),
+                py_args,
             )))
         } else if is_file && is_python_zipapp(&target_path) {
             Ok(Self::Ready(RunCommand::PythonZipapp(
                 target_path,
                 args.to_vec(),
+                py_args,
             )))
         } else {
             Ok(Self::Ready(RunCommand::External(
@@ -1684,7 +1713,7 @@ impl RunCommand {
     /// Read any inline PEP 723 metadata associated with this command target.
     async fn read_pep723_item(&self) -> Result<Option<Pep723Item>, Pep723Error> {
         match self {
-            Self::PythonScript(script, _) | Self::PythonGuiScript(script, _) => {
+            Self::PythonScript(script, _, _) | Self::PythonGuiScript(script, _, _) => {
                 match Pep723Script::read(script).await {
                     Ok(Some(script)) => Ok(Some(Pep723Item::Script(script))),
                     Ok(None) => Ok(None),
@@ -1694,7 +1723,7 @@ impl RunCommand {
                     Err(err) => Err(err),
                 }
             }
-            Self::PythonStdin(contents, _) | Self::PythonGuiStdin(contents, _) => {
+            Self::PythonStdin(contents, _, _) | Self::PythonGuiStdin(contents, _, _) => {
                 Pep723Metadata::parse(contents).map(|metadata| metadata.map(Pep723Item::Stdin))
             }
             Self::Python(_)
@@ -1746,7 +1775,7 @@ impl RunCommand {
                 process.args(args);
                 process
             }
-            Self::PythonPackage(target, path, args) => {
+            Self::PythonPackage(target, path, args, ExtraPythonArgs(py_args)) => {
                 let name = PathBuf::from(target).with_extension(std::env::consts::EXE_EXTENSION);
                 let entrypoint = interpreter.scripts().join(name);
 
@@ -1758,31 +1787,36 @@ impl RunCommand {
                 // Otherwise, invoke `python <module>`
                 } else {
                     let mut process = Command::new(interpreter.sys_executable());
+                    process.args(py_args);
                     process.arg(path);
                     process.args(args);
                     process
                 }
             }
-            Self::PythonScript(target, args) | Self::PythonZipapp(target, args) => {
+            Self::PythonScript(target, args, ExtraPythonArgs(py_args))
+            | Self::PythonZipapp(target, args, ExtraPythonArgs(py_args)) => {
                 let mut process = Command::new(interpreter.sys_executable());
+                process.args(py_args);
                 process.arg(target);
                 process.args(args);
                 process
             }
-            Self::PythonRemote(downloaded_script, args) => {
+            Self::PythonRemote(downloaded_script, args, ExtraPythonArgs(py_args)) => {
                 let mut process = Command::new(interpreter.sys_executable());
+                process.args(py_args);
                 process.arg(downloaded_script.path());
                 process.args(args);
                 process
             }
-            Self::PythonModule(module, args) => {
+            Self::PythonModule(module, args, ExtraPythonArgs(py_args)) => {
                 let mut process = Command::new(interpreter.sys_executable());
+                process.args(py_args);
                 process.arg("-m");
                 process.arg(module);
                 process.args(args);
                 process
             }
-            Self::PythonGuiScript(target, args) => {
+            Self::PythonGuiScript(target, args, ExtraPythonArgs(py_args)) => {
                 let python_executable = interpreter.sys_executable();
 
                 // Use `pythonw.exe` if it exists, otherwise fall back to `python.exe`.
@@ -1797,12 +1831,14 @@ impl RunCommand {
                     .unwrap_or_else(|| python_executable.to_path_buf());
 
                 let mut process = Command::new(&pythonw_executable);
+                process.args(py_args);
                 process.arg(target);
                 process.args(args);
                 process
             }
-            Self::PythonStdin(script, args) => {
+            Self::PythonStdin(script, args, ExtraPythonArgs(py_args)) => {
                 let mut process = Command::new(interpreter.sys_executable());
+                process.args(py_args);
                 process.arg("-c");
 
                 #[cfg(unix)]
@@ -1820,7 +1856,7 @@ impl RunCommand {
 
                 process
             }
-            Self::PythonGuiStdin(script, args) => {
+            Self::PythonGuiStdin(script, args, ExtraPythonArgs(py_args)) => {
                 let python_executable = interpreter.sys_executable();
 
                 // Use `pythonw.exe` if it exists, otherwise fall back to `python.exe`.
@@ -1835,6 +1871,7 @@ impl RunCommand {
                     .unwrap_or_else(|| python_executable.to_path_buf());
 
                 let mut process = Command::new(&pythonw_executable);
+                process.args(py_args);
                 process.arg("-c");
 
                 #[cfg(unix)]
@@ -1868,10 +1905,10 @@ impl RunCommand {
     /// Return the directory containing the script, if any.
     pub(crate) fn script_dir(&self) -> Option<&Path> {
         let parent = match self {
-            Self::PythonScript(target, _)
-            | Self::PythonGuiScript(target, _)
-            | Self::PythonZipapp(target, _) => target.parent(),
-            Self::PythonPackage(_, path, _) => path.parent(),
+            Self::PythonScript(target, _, _)
+            | Self::PythonGuiScript(target, _, _)
+            | Self::PythonZipapp(target, _, _) => target.parent(),
+            Self::PythonPackage(_, path, _, _) => path.parent(),
             Self::Python(_)
             | Self::PythonModule(..)
             | Self::PythonStdin(..)
@@ -1895,30 +1932,42 @@ impl std::fmt::Display for RunCommand {
                 }
                 Ok(())
             }
-            Self::PythonPackage(target, _path, args) => {
+            Self::PythonPackage(target, _path, args, ExtraPythonArgs(_py_args)) => {
                 write!(f, "{}", target.to_string_lossy())?;
                 for arg in args {
                     write!(f, " {}", arg.to_string_lossy())?;
                 }
                 Ok(())
             }
-            Self::PythonScript(target, args) | Self::PythonZipapp(target, args) => {
-                write!(f, "python {}", target.display())?;
+            Self::PythonScript(target, args, ExtraPythonArgs(py_args))
+            | Self::PythonZipapp(target, args, ExtraPythonArgs(py_args)) => {
+                write!(f, "python")?;
+                for arg in py_args {
+                    write!(f, " {}", arg.to_string_lossy())?;
+                }
+                write!(f, " {}", target.display())?;
                 for arg in args {
                     write!(f, " {}", arg.to_string_lossy())?;
                 }
                 Ok(())
             }
-            Self::PythonModule(module, args) => {
-                write!(f, "python -m")?;
-                write!(f, " {}", module.to_string_lossy())?;
+            Self::PythonModule(module, args, ExtraPythonArgs(py_args)) => {
+                write!(f, "python")?;
+                for arg in py_args {
+                    write!(f, " {}", arg.to_string_lossy())?;
+                }
+                write!(f, " -m {}", module.display())?;
                 for arg in args {
                     write!(f, " {}", arg.to_string_lossy())?;
                 }
                 Ok(())
             }
-            Self::PythonGuiScript(target, args) => {
-                write!(f, "pythonw {}", target.display())?;
+            Self::PythonGuiScript(target, args, ExtraPythonArgs(py_args)) => {
+                write!(f, "pythonw")?;
+                for arg in py_args {
+                    write!(f, " {}", arg.to_string_lossy())?;
+                }
+                write!(f, " {}", target.display())?;
                 for arg in args {
                     write!(f, " {}", arg.to_string_lossy())?;
                 }

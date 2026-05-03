@@ -633,6 +633,7 @@ impl RunSettings {
             only_group,
             all_groups,
             module: _,
+            interactive: _,
             only_dev,
             editable,
             no_editable,
