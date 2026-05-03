@@ -256,6 +256,7 @@ pub enum PreviewFeature {
     Audit = 1 << 26,
     ProjectDirectoryMustExist = 1 << 27,
     IndexExcludeNewer = 1 << 28,
+    ToolRequiresPython = 1 << 29,
 }
 
 impl PreviewFeature {
@@ -291,6 +292,7 @@ impl PreviewFeature {
             Self::Audit => "audit",
             Self::ProjectDirectoryMustExist => "project-directory-must-exist",
             Self::IndexExcludeNewer => "index-exclude-newer",
+            Self::ToolRequiresPython => "tool-requires-python",
         }
     }
 }
@@ -339,6 +341,7 @@ impl FromStr for PreviewFeature {
             "audit" => Self::Audit,
             "project-directory-must-exist" => Self::ProjectDirectoryMustExist,
             "index-exclude-newer" => Self::IndexExcludeNewer,
+            "tool-requires-python" => Self::ToolRequiresPython,
             _ => return Err(PreviewFeatureParseError),
         })
     }
@@ -591,6 +594,10 @@ mod tests {
         assert_eq!(
             PreviewFeature::IndexExcludeNewer.as_str(),
             "index-exclude-newer"
+        );
+        assert_eq!(
+            PreviewFeature::ToolRequiresPython.as_str(),
+            "tool-requires-python"
         );
     }
 
