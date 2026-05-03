@@ -544,11 +544,19 @@ requires-dist = ["torch", "einops"]
 
 ## Editable mode
 
-By default, the project will be installed in editable mode, such that changes to the source code are
-immediately reflected in the environment. `uv sync` and `uv run` both accept a `--no-editable` flag,
-which instructs uv to install the project in non-editable mode. `--no-editable` is intended for
-deployment use-cases, such as building a Docker container, in which the project should be included
-in the deployed environment without a dependency on the originating source code.
+By default, the project (and any other [workspace members](./workspaces.md)) is installed in
+editable mode during [syncing](./sync.md), such that changes to the source code are immediately
+reflected in the environment without re-syncing.
+
+`uv sync` and `uv run` both accept a `--no-editable` flag, which instructs uv to install the project
+in non-editable mode. `--no-editable` is intended for deployment use-cases, such as building a
+Docker container, in which the project should be included in the deployed environment without a
+dependency on the originating source code.
+
+!!! note
+
+    If the project does not define a build system, it will not be installed. See the
+    [build systems](#build-systems) documentation for details.
 
 ## Conflicting dependencies
 
