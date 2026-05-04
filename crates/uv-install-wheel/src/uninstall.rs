@@ -248,7 +248,7 @@ pub fn uninstall_egg(
     // with a trailing newline even when the package has no top-level modules, which
     // `str::lines` yields as an empty string. Joining that onto `dist_location` would
     // resolve back to `dist_location` itself (site-packages), and a subsequent
-    // `remove_dir_all` would wipe out every installed package. See #19113.
+    // `remove_dir_all` would wipe out every installed package.
     let top_level = {
         let top_level_path = egg_info.join("top_level.txt");
         match fs_err::read_to_string(&top_level_path) {
