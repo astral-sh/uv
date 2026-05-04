@@ -173,7 +173,7 @@ itertools = { version = "0.14.0" }
 jiff = { version = "0.2.0", features = ["serde"] }
 junction = { version = "1.4.2" }
 mailparse = { version = "0.16.0" }
-md-5 = { version = "0.10.6" }
+md-5 = { version = "0.11.0" }
 memchr = { version = "2.7.4" }
 miette = { version = "7.2.0", features = ["fancy-no-backtrace"] }
 nix = { version = "0.31.2", features = ["resource", "signal"] }
