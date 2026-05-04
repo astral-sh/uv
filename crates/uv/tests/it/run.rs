@@ -3068,6 +3068,85 @@ fn run_requirements_txt_arguments() -> Result<()> {
     Ok(())
 }
 
+/// Read `--with-requirements` from a `pylock.toml` file.
+#[test]
+fn run_pylock_toml() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Create the base project.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["sniffio"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#
+    })?;
+    context
+        .temp_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
+
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! { r"
+        import iniconfig
+        import sniffio
+       "
+    })?;
+
+    // Create a secondary project whose lockfile we'll export to a `pylock.toml`.
+    let locked = context.temp_dir.child("locked");
+    locked.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "locked"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#
+    })?;
+
+    context
+        .export()
+        .arg("--project")
+        .arg("locked")
+        .arg("-o")
+        .arg("pylock.toml")
+        .assert()
+        .success();
+
+    // `iniconfig` is installed into the ephemeral `--with` environment from the `pylock.toml`,
+    // layered on top of the base project env.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--preview-features")
+        .arg("pylock")
+        .arg("--with-requirements")
+        .arg("pylock.toml")
+        .arg("main.py"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
 /// Ensure that we can import from the root project when layering `--with` requirements.
 #[test]
 fn run_editable() -> Result<()> {

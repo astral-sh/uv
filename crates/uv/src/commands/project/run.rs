@@ -1370,6 +1370,12 @@ fn can_skip_ephemeral(
         return false;
     }
 
+    // A `pylock.toml` provides a pre-computed set of packages that must be installed into
+    // the ephemeral environment, independent of `spec.requirements`.
+    if spec.pylock.is_some() {
+        return false;
+    }
+
     // Determine the markers and tags to use for resolution.
     let markers = interpreter.resolver_marker_environment();
     let Ok(tags) = interpreter.tags() else {
