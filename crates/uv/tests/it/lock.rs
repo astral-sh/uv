@@ -34018,6 +34018,45 @@ fn lock_exclude_newer_hint_pinned_version() -> Result<()> {
     Ok(())
 }
 
+/// Test that `~=` requirements don't emit a misleading pre-release hint when the compatible
+/// release upper bound is excluded by `--exclude-newer`.
+///
+/// See: <https://github.com/astral-sh/uv/issues/19266>
+#[test]
+fn lock_exclude_newer_hint_compatible_release() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig~=2.0"]
+        "#,
+    )?;
+
+    // Use a cutoff that excludes `iniconfig 2.0.0` (2023-01-07) but not `1.1.1` (2020-10-18).
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--exclude-newer")
+        .arg("2022-01-01T00:00:00Z"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only iniconfig<=1.1.1 is available and your project depends on iniconfig>=2.0,<3.dev0, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2022-01-01T00:00:00Z. The latest version satisfying the requirement is v2.0.0, published at 2023-01-07T11:08:09.864Z. Consider using `exclude-newer-package` to override the cutoff for this package.
+    ");
+
+    Ok(())
+}
+
 /// Test that lockfile validation includes explicit indexes from path dependencies.
 /// <https://github.com/astral-sh/uv/issues/11419>
 #[tokio::test]
