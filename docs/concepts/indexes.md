@@ -50,6 +50,21 @@ $ uv lock --index pytorch=https://download.pytorch.org/whl/cpu
 $ UV_INDEX=pytorch=https://download.pytorch.org/whl/cpu uv lock
 ```
 
+Additionally, `--index` can reference a named index defined in a configuration file by passing the
+index name instead of a URL.
+
+For backwards compatibility, if a directory with the same name as an index exists in the working
+directory, uv will search the directory for packages instead. Names are looked up in the project's
+`pyproject.toml`, then the workspace's `pyproject.toml` (if in a workspace), and finally the user's
+and system's `uv.toml` files. Indexes marked as `explicit = true` cannot be referenced this way,
+since explicit indexes are only usable via `tool.uv.sources`.
+
+!!! note
+
+    In a future release, uv will require disambiguation (e.g., `./name`) to prefer a local
+    directory over a matching index name. To enable this behavior now, enable the
+    `index-assume-name` preview feature in [preview](preview.md).
+
 ## Pinning a package to an index
 
 A package can be pinned to a specific index by specifying the index in its `tool.uv.sources` entry.

@@ -20,6 +20,7 @@ use owo_colors::OwoColorize;
 use settings::PipTreeSettings;
 use tokio::task::spawn_blocking;
 use tracing::{debug, instrument, trace};
+use uv_distribution_types::Index;
 
 #[cfg(not(feature = "self-update"))]
 use crate::install_source::InstallSource;
@@ -49,7 +50,7 @@ use uv_scripts::{Pep723Error, Pep723Item, Pep723Script};
 use uv_settings::{Combine, EnvironmentOptions, FilesystemOptions, Options};
 use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
-use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
+use uv_workspace::{DiscoveryOptions, ProjectWorkspace, Workspace, WorkspaceCache};
 
 use crate::commands::{ExitStatus, ParsedRunCommand, RunCommand, ScriptPath, ToolRunCommand};
 use crate::printer::Printer;
@@ -239,6 +240,8 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         false
     };
 
+    let mut package_indexes = None;
+
     // Load configuration from the filesystem, prioritizing (in order):
     // 1. The configuration file specified on the command-line.
     // 2. The nearest configuration file (`uv.toml` or `pyproject.toml`) above the workspace root.
@@ -266,6 +269,52 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     } else if let Ok(workspace) =
         Workspace::discover(&project_dir, &DiscoveryOptions::default(), &workspace_cache).await
     {
+        // Extract the `--package` argument from commands that support it, to load indexes
+        // from the workspace member's `pyproject.toml` for named index resolution.
+        if let Commands::Project(command) = &*cli.command {
+            package_indexes = if let Some(package) = command.package() {
+                workspace
+                    .packages()
+                    .get(package)
+                    .map(|member| {
+                        member
+                            .pyproject_toml()
+                            .tool
+                            .as_ref()
+                            .and_then(|tool| tool.uv.as_ref())
+                            .and_then(|uv| uv.index.clone())
+                            .into_iter()
+                            .flatten()
+                            .map(|index| index.relative_to(member.root()))
+                            .collect::<Result<Vec<_>, _>>()
+                    })
+                    .transpose()?
+            } else if let Ok(project_workspace) = ProjectWorkspace::discover(
+                &project_dir,
+                &DiscoveryOptions::default(),
+                &workspace_cache,
+            )
+            .await
+            {
+                let member = project_workspace.current_project();
+                member
+                    .pyproject_toml()
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|uv| uv.index.clone())
+                    .map(|indexes| {
+                        indexes
+                            .into_iter()
+                            .map(|index| index.relative_to(member.root()))
+                            .collect::<Result<Vec<_>, _>>()
+                    })
+                    .transpose()?
+            } else {
+                None
+            };
+        }
+
         let project =
             FilesystemOptions::find(workspace.install_path()).map_err(map_settings_error)?;
         let system = FilesystemOptions::system().map_err(map_settings_error)?;
@@ -277,6 +326,8 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         let user = FilesystemOptions::user().map_err(map_settings_error)?;
         project.combine(user).combine(system)
     };
+
+    let package_indexes = package_indexes.unwrap_or_default();
 
     // If the target is a remote script, download it.
     // If the target is a PEP 723 script, parse it.
@@ -601,7 +652,13 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipCompileSettings::resolve(args, filesystem, environment);
+            let args = PipCompileSettings::resolve(
+                args,
+                filesystem,
+                environment,
+                package_indexes,
+                globals.preview,
+            );
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
@@ -717,7 +774,13 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipSyncSettings::resolve(args, filesystem, environment);
+            let args = PipSyncSettings::resolve(
+                args,
+                filesystem,
+                environment,
+                package_indexes,
+                globals.preview,
+            );
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
@@ -804,7 +867,13 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let mut args = PipInstallSettings::resolve(args, filesystem, environment);
+            let mut args = PipInstallSettings::resolve(
+                args,
+                filesystem,
+                environment,
+                package_indexes,
+                globals.preview,
+            );
             show_settings!(args);
 
             let mut requirements = Vec::with_capacity(
@@ -1026,7 +1095,13 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipListSettings::resolve(args, filesystem, environment);
+            let args = PipListSettings::resolve(
+                args,
+                filesystem,
+                environment,
+                package_indexes,
+                globals.preview,
+            );
             show_settings!(args);
 
             // Initialize the cache.
@@ -1084,7 +1159,13 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             command: PipCommand::Tree(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipTreeSettings::resolve(args, filesystem, environment);
+            let args = PipTreeSettings::resolve(
+                args,
+                filesystem,
+                environment,
+                package_indexes,
+                globals.preview,
+            );
 
             // Initialize the cache.
             let cache = cache.init().await?;
@@ -1161,7 +1242,13 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         }) => commands::cache_size(&cache, args.human, printer, globals.preview),
         Commands::Build(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::BuildSettings::resolve(args, filesystem, environment);
+            let args = settings::BuildSettings::resolve(
+                args,
+                filesystem,
+                environment,
+                package_indexes,
+                globals.preview,
+            );
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
@@ -1229,7 +1316,13 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             }
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::VenvSettings::resolve(args, filesystem, environment);
+            let args = settings::VenvSettings::resolve(
+                args,
+                filesystem,
+                environment,
+                package_indexes,
+                globals.preview,
+            );
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
@@ -1309,6 +1402,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 cache,
                 &workspace_cache,
                 printer,
+                package_indexes,
             ))
             .await
         }
@@ -1403,6 +1497,8 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 filesystem,
                 invocation_source,
                 environment,
+                package_indexes,
+                globals.preview,
             );
             show_settings!(args);
 
@@ -1494,7 +1590,13 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             command: ToolCommand::Install(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::ToolInstallSettings::resolve(args, filesystem, environment);
+            let args = settings::ToolInstallSettings::resolve(
+                args,
+                filesystem,
+                environment,
+                package_indexes,
+                globals.preview,
+            );
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
@@ -1620,7 +1722,13 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             command: ToolCommand::Upgrade(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::ToolUpgradeSettings::resolve(args, filesystem, &environment);
+            let args = settings::ToolUpgradeSettings::resolve(
+                args,
+                filesystem,
+                &environment,
+                package_indexes,
+                globals.preview,
+            );
             show_settings!(args);
 
             // Initialize the cache.
@@ -1921,7 +2029,12 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         Commands::Workspace(WorkspaceNamespace { command }) => match command {
             WorkspaceCommand::Metadata(args) => {
                 // Resolve the settings from the command-line arguments and workspace configuration.
-                let args = settings::MetadataSettings::resolve(args, filesystem, environment);
+                let args = settings::MetadataSettings::resolve(
+                    args,
+                    filesystem,
+                    environment,
+                    package_indexes,
+                );
                 show_settings!(args);
 
                 // Check for conflicts between offline and refresh.
@@ -2065,6 +2178,7 @@ async fn run_project(
     cache: Cache,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
+    package_indexes: Vec<Index>,
 ) -> Result<ExitStatus> {
     // Write out any resolved settings.
     macro_rules! show_settings {
@@ -2140,7 +2254,13 @@ async fn run_project(
         }
         ProjectCommand::Run(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::RunSettings::resolve(args, filesystem, environment);
+            let args = settings::RunSettings::resolve(
+                args,
+                filesystem,
+                environment,
+                package_indexes,
+                globals.preview,
+            );
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
@@ -2210,7 +2330,13 @@ async fn run_project(
         }
         ProjectCommand::Sync(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::SyncSettings::resolve(args, filesystem, environment);
+            let args = settings::SyncSettings::resolve(
+                args,
+                filesystem,
+                environment,
+                package_indexes,
+                globals.preview,
+            );
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
@@ -2266,7 +2392,13 @@ async fn run_project(
         }
         ProjectCommand::Lock(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::LockSettings::resolve(args, filesystem, environment);
+            let args = settings::LockSettings::resolve(
+                args,
+                filesystem,
+                environment,
+                package_indexes,
+                globals.preview,
+            );
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
@@ -2318,7 +2450,13 @@ async fn run_project(
         }
         ProjectCommand::Add(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let mut args = settings::AddSettings::resolve(args, filesystem, environment);
+            let mut args = settings::AddSettings::resolve(
+                args,
+                filesystem,
+                environment,
+                package_indexes,
+                globals.preview,
+            );
             show_settings!(args);
 
             // If the script already exists, use it; otherwise, propagate the file path and we'll
@@ -2452,7 +2590,13 @@ async fn run_project(
         }
         ProjectCommand::Remove(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::RemoveSettings::resolve(args, filesystem, environment);
+            let args = settings::RemoveSettings::resolve(
+                args,
+                filesystem,
+                environment,
+                package_indexes,
+                globals.preview,
+            );
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
@@ -2501,7 +2645,13 @@ async fn run_project(
         }
         ProjectCommand::Version(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::VersionSettings::resolve(args, filesystem, environment);
+            let args = settings::VersionSettings::resolve(
+                args,
+                filesystem,
+                environment,
+                package_indexes,
+                globals.preview,
+            );
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
@@ -2547,7 +2697,13 @@ async fn run_project(
         }
         ProjectCommand::Tree(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::TreeSettings::resolve(args, filesystem, environment);
+            let args = settings::TreeSettings::resolve(
+                args,
+                filesystem,
+                environment,
+                package_indexes,
+                globals.preview,
+            );
             show_settings!(args);
 
             // Initialize the cache.
@@ -2592,7 +2748,13 @@ async fn run_project(
         }
         ProjectCommand::Export(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::ExportSettings::resolve(args, filesystem, environment);
+            let args = settings::ExportSettings::resolve(
+                args,
+                filesystem,
+                environment,
+                package_indexes,
+                globals.preview,
+            );
             show_settings!(args);
 
             // Initialize the cache.
@@ -2663,7 +2825,13 @@ async fn run_project(
             .await
         }
         ProjectCommand::Audit(audit_args) => {
-            let args = settings::AuditSettings::resolve(audit_args, filesystem, environment);
+            let args = settings::AuditSettings::resolve(
+                audit_args,
+                filesystem,
+                environment,
+                package_indexes,
+                globals.preview,
+            );
             show_settings!(args);
 
             // Initialize the cache.

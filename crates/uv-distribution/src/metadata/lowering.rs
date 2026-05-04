@@ -8,7 +8,8 @@ use thiserror::Error;
 use uv_auth::CredentialsCache;
 use uv_distribution_filename::DistExtension;
 use uv_distribution_types::{
-    Index, IndexLocations, IndexMetadata, IndexName, Origin, Requirement, RequirementSource,
+    Index, IndexLocations, IndexMetadata, IndexName, Origin, ProjectOrigin, Requirement,
+    RequirementSource,
 };
 use uv_fs::normalize_path;
 use uv_git_types::{GitLfs, GitReference, GitUrl, GitUrlParseError};
@@ -602,8 +603,13 @@ fn missing_index_hint(locations: &IndexLocations, index: &IndexName) -> Option<S
         let source = match idx.origin {
             Some(Origin::User) => "a user-level `uv.toml`",
             Some(Origin::System) => "a system-level `uv.toml`",
-            Some(Origin::Project) => "a project-level `uv.toml`",
-            Some(Origin::Cli | Origin::RequirementsTxt) | None => return None,
+            Some(Origin::Project(ProjectOrigin::UvToml)) => "a project-level `uv.toml`",
+            Some(
+                Origin::Project(ProjectOrigin::PyprojectToml)
+                | Origin::Cli
+                | Origin::RequirementsTxt,
+            )
+            | None => return None,
         };
         Some(format!(
             "Index `{index}` was found in {source}, but indexes \
