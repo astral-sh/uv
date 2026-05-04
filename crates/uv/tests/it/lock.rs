@@ -9898,6 +9898,86 @@ fn lock_no_workspace_source() -> Result<()> {
     Ok(())
 }
 
+/// When a workspace member declares a non-workspace source (e.g., Git, path) for another workspace
+/// member, but the workspace root declares `workspace = true` for that same member, the workspace
+/// root's source should take precedence. This supports the pattern where members declare
+/// non-workspace sources (e.g., Git, path) for standalone use, while the workspace root overrides
+/// them as workspace sources.
+///
+/// See: <https://github.com/astral-sh/uv/issues/18232>
+#[test]
+fn lock_member_non_workspace_source_with_root_workspace_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let root_pyproject = context.temp_dir.child("pyproject.toml");
+    root_pyproject.write_str(
+        r#"
+        [project]
+        name = "monorepo"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["app-a", "lib-x"]
+
+        [tool.uv.sources]
+        app-a = { workspace = true }
+        lib-x = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["packages/app-a", "packages/lib-x"]
+        "#,
+    )?;
+
+    let app_a = context.temp_dir.child("packages").child("app-a");
+    fs_err::create_dir_all(&app_a)?;
+
+    let app_a_pyproject = app_a.child("pyproject.toml");
+    app_a_pyproject.write_str(
+        r#"
+        [project]
+        name = "app-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["lib-x"]
+
+        [tool.uv.sources]
+        lib-x = { path = "../../packages/lib-x", editable = false }
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+
+    let lib_x = context.temp_dir.child("packages").child("lib-x");
+    fs_err::create_dir_all(&lib_x)?;
+
+    let lib_x_pyproject = lib_x.child("pyproject.toml");
+    lib_x_pyproject.write_str(
+        r#"
+        [project]
+        name = "lib-x"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Lock a workspace with a member that's a peer to the root.
 #[test]
 fn lock_peer_member() -> Result<()> {
