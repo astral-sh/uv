@@ -493,7 +493,7 @@ jobs:
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
       # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
-      - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
+      - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
         name: "Test wheel"
         with:
           arch: ${{ matrix.platform.arch == 'arm' && 'armv6' || matrix.platform.arch }}
@@ -551,7 +551,7 @@ jobs:
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
       # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
-      - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
+      - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
         name: "Test wheel uv-build"
         with:
           arch: ${{ matrix.platform.arch == 'arm' && 'armv6' || matrix.platform.arch }}
@@ -615,7 +615,7 @@ jobs:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
 
       # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
-      - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
+      - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
         name: "Test wheel"
         with:
           arch: ${{ matrix.platform.arch }}
@@ -673,7 +673,7 @@ jobs:
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
       # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
-      - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
+      - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
         name: "Test wheel uv-build"
         with:
           arch: ${{ matrix.platform.arch }}
@@ -842,7 +842,7 @@ jobs:
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
       # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
-      - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
+      - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
         name: "Test wheel"
         with:
           arch: ${{ matrix.platform.arch }}
@@ -901,7 +901,7 @@ jobs:
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
       # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
-      - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
+      - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
         name: "Test wheel uv-build"
         with:
           arch: ${{ matrix.platform.arch }}
@@ -1072,7 +1072,7 @@ jobs:
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
       # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
-      - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
+      - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
         name: "Test wheel"
         with:
           arch: ${{ matrix.platform.arch }}
@@ -1090,7 +1090,7 @@ jobs:
             PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
             MODULE_NAME: ${{ env.MODULE_NAME }}
       # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
-      - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
+      - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
         name: "Test wheel (manylinux)"
         if: matrix.platform.arch == 'aarch64'
         with:
@@ -1151,7 +1151,7 @@ jobs:
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
       # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
-      - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
+      - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
         name: "Test wheel"
         with:
           arch: ${{ matrix.platform.arch }}
@@ -1168,7 +1168,7 @@ jobs:
             PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
             MODULE_NAME: ${{ env.MODULE_NAME }}
       # TODO(zanieb): Find an alternative for this action; it uses EOL Node 20
-      - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
+      - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
         name: "Test wheel (manylinux)"
         if: matrix.platform.arch == 'aarch64'
         with:
