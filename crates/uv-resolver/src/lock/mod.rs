@@ -30,8 +30,8 @@ use uv_distribution_filename::{
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
     Dist, FileLocation, GitSourceDist, Identifier, IndexLocations, IndexMetadata, IndexUrl, Name,
-    PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
-    RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
+    PYPI_URL, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
+    RegistrySourceDist, RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
     SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
@@ -813,13 +813,14 @@ impl Lock {
         &'lock self,
         extras: &'lock ExtrasSpecificationWithDefaults,
         groups: &'lock DependencyGroupsWithDefaults,
+        collect_filter: impl Fn(&Package) -> bool,
     ) -> Auditable<'lock> {
         // Dedupe and sort by `(name, version)` during the walk itself. Keep
         // the first `Package` reference we see for each key so that
         // downstream views (e.g. index lookup) have access to the lockfile
         // package.
         let mut by_name_version: BTreeMap<(&PackageName, &Version), &Package> = BTreeMap::default();
-        self.walk_auditable(extras, groups, |package, version| {
+        self.walk_auditable(extras, groups, collect_filter, |package, version| {
             by_name_version
                 .entry((package.name(), version))
                 .or_insert(package);
@@ -844,6 +845,7 @@ impl Lock {
         &'lock self,
         extras: &'lock ExtrasSpecificationWithDefaults,
         groups: &'lock DependencyGroupsWithDefaults,
+        collect_filter: impl Fn(&Package) -> bool,
         mut visit: F,
     ) where
         F: FnMut(&'lock Package, &'lock Version),
@@ -942,8 +944,9 @@ impl Lock {
         while let Some((package, extra)) = queue.pop_front() {
             let is_member = workspace_member_ids.contains(&package.id);
 
-            // Collect non-workspace packages that have version information.
-            if !is_member {
+            // Collect non-workspace packages that have version information
+            // and pass the caller's filter.
+            if !is_member && collect_filter(package) {
                 if let Some(version) = package.version() {
                     visit(package, version);
                 } else {
@@ -2700,6 +2703,10 @@ pub struct Package {
 }
 
 impl Package {
+    pub fn is_from_pypi_registry(&self) -> bool {
+        self.id.source.is_pypi_registry()
+    }
+
     fn from_annotated_dist(
         annotated_dist: &AnnotatedDist,
         fork_markers: Vec<UniversalMarker>,
@@ -3988,6 +3995,14 @@ impl Source {
                 subdirectory: git_dist.subdirectory.clone(),
                 lfs: git_dist.git.lfs(),
             },
+        )
+    }
+
+    /// Returns `true` if the source is a registry entry pointing at PyPI (`https://pypi.org/simple`).
+    fn is_pypi_registry(&self) -> bool {
+        matches!(
+            self,
+            Self::Registry(RegistrySource::Url(url)) if url.as_ref() == PYPI_URL.as_str()
         )
     }
 

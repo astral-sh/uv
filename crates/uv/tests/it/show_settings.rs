@@ -8165,6 +8165,7 @@ fn preview_features() {
                 Audit,
                 ProjectDirectoryMustExist,
                 IndexExcludeNewer,
+                MalwareCheck,
             ],
         },
         python_preference: Managed,
@@ -8251,6 +8252,10 @@ fn preview_features() {
             },
             compile_bytecode: false,
             reinstall: None,
+        },
+        malware_settings: MalwareCheckSettings {
+            enabled: false,
+            malware_check_url: None,
         },
     }
 
@@ -8373,6 +8378,10 @@ fn preview_features() {
             compile_bytecode: false,
             reinstall: None,
         },
+        malware_settings: MalwareCheckSettings {
+            enabled: false,
+            malware_check_url: None,
+        },
     }
 
     ----- stderr -----
@@ -8437,6 +8446,7 @@ fn preview_features() {
                 Audit,
                 ProjectDirectoryMustExist,
                 IndexExcludeNewer,
+                MalwareCheck,
             ],
         },
         python_preference: Managed,
@@ -8523,6 +8533,10 @@ fn preview_features() {
             },
             compile_bytecode: false,
             reinstall: None,
+        },
+        malware_settings: MalwareCheckSettings {
+            enabled: false,
+            malware_check_url: None,
         },
     }
 
@@ -8648,6 +8662,10 @@ fn preview_features() {
             compile_bytecode: false,
             reinstall: None,
         },
+        malware_settings: MalwareCheckSettings {
+            enabled: false,
+            malware_check_url: None,
+        },
     }
 
     ----- stderr -----
@@ -8772,6 +8790,10 @@ fn preview_features() {
             compile_bytecode: false,
             reinstall: None,
         },
+        malware_settings: MalwareCheckSettings {
+            enabled: false,
+            malware_check_url: None,
+        },
     }
 
     ----- stderr -----
@@ -8894,6 +8916,10 @@ fn preview_features() {
             },
             compile_bytecode: false,
             reinstall: None,
+        },
+        malware_settings: MalwareCheckSettings {
+            enabled: false,
+            malware_check_url: None,
         },
     }
 
@@ -9028,6 +9054,10 @@ fn system_certs_cli_aliases_override_env() {
             compile_bytecode: false,
             reinstall: None,
         },
+        malware_settings: MalwareCheckSettings {
+            enabled: false,
+            malware_check_url: None,
+        },
     }
 
     ----- stderr -----
@@ -9152,6 +9182,10 @@ fn system_certs_cli_aliases_override_env() {
             },
             compile_bytecode: false,
             reinstall: None,
+        },
+        malware_settings: MalwareCheckSettings {
+            enabled: false,
+            malware_check_url: None,
         },
     }
 
@@ -9288,6 +9322,10 @@ fn system_certs_config_aliases() -> anyhow::Result<()> {
             compile_bytecode: false,
             reinstall: None,
         },
+        malware_settings: MalwareCheckSettings {
+            enabled: false,
+            malware_check_url: None,
+        },
     }
 
     ----- stderr -----
@@ -9414,6 +9452,10 @@ fn system_certs_config_aliases() -> anyhow::Result<()> {
             },
             compile_bytecode: false,
             reinstall: None,
+        },
+        malware_settings: MalwareCheckSettings {
+            enabled: false,
+            malware_check_url: None,
         },
     }
 

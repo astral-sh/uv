@@ -2737,3 +2737,20 @@ pub struct AuditOptions {
     )]
     pub ignore_until_fixed: Option<Vec<String>>,
 }
+
+#[derive(Debug, Clone)]
+pub struct MalwareCheckSettings {
+    /// Whether the malware check is enabled.
+    pub enabled: bool,
+    /// The OSV-shaped service URL to use for malware checks.
+    pub malware_check_url: Option<DisplaySafeUrl>,
+}
+
+impl From<&crate::EnvironmentOptions> for MalwareCheckSettings {
+    fn from(options: &crate::EnvironmentOptions) -> Self {
+        Self {
+            enabled: options.malware_check.value == Some(true),
+            malware_check_url: options.malware_check_url.clone(),
+        }
+    }
+}

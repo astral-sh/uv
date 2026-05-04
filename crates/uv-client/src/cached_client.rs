@@ -217,34 +217,6 @@ impl CachedClient {
         &self.0
     }
 
-    /// Make a cached request with a custom response transformation
-    /// while using serde to (de)serialize cached responses.
-    ///
-    /// If a new response was received (no prior cached response or modified
-    /// on the remote), the response is passed through `response_callback` and
-    /// only the result is cached and returned. The `response_callback` is
-    /// allowed to make subsequent requests, e.g. through the uncached client.
-    #[instrument(skip_all)]
-    pub async fn get_serde<
-        Payload: Serialize + DeserializeOwned + Send + 'static,
-        CallBackError: std::error::Error + 'static,
-        Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,
-    >(
-        &self,
-        req: Request,
-        cache_entry: &CacheEntry,
-        cache_control: CacheControl,
-        response_callback: Callback,
-    ) -> Result<Payload, CachedClientError<CallBackError>> {
-        let payload = self
-            .get_cacheable(req, cache_entry, cache_control, async |resp| {
-                let payload = response_callback(resp).await?;
-                Ok(SerdeCacheable { inner: payload })
-            })
-            .await?;
-        Ok(payload)
-    }
-
     /// Make a cached request with a custom response transformation while using
     /// the `Cacheable` trait to (de)serialize cached responses.
     ///

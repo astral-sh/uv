@@ -38,7 +38,9 @@ use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{Installable, Lock, Preference};
 use uv_scripts::{Pep723Error, Pep723Item, Pep723Metadata, Pep723Script};
-use uv_settings::{EnvironmentOptions, FilesystemOptions, PythonInstallMirrors};
+use uv_settings::{
+    EnvironmentOptions, FilesystemOptions, MalwareCheckSettings, PythonInstallMirrors,
+};
 use uv_shell::runnable::WindowsRunnable;
 use uv_static::EnvVars;
 use uv_types::SourceTreeEditablePolicy;
@@ -115,6 +117,7 @@ pub(crate) async fn run(
     env_file: EnvFile,
     preview: Preview,
     max_recursion_depth: u32,
+    malware_settings: MalwareCheckSettings,
 ) -> anyhow::Result<ExitStatus> {
     // Check if max recursion depth was exceeded. This most commonly happens
     // for scripts with a shebang line like `#!/usr/bin/env -S uv run`, so try
@@ -338,6 +341,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 DryRun::Disabled,
                 printer,
                 preview,
+                &malware_settings,
             )
             .await
             {
@@ -889,6 +893,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     DryRun::Disabled,
                     printer,
                     preview,
+                    &malware_settings,
                 )
                 .await
                 {
