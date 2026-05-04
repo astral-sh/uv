@@ -187,7 +187,7 @@ proc-macro2 = { version = "1.0.86" }
 procfs = { version = "0.18.0", default-features = false, features = ["flate2"] }
 pubgrub = { version = "0.3.3", package = "astral-pubgrub" }
 quote = { version = "1.0.37" }
-rand = { version = "0.9.2" }
+rand = { version = "0.9.4" }
 rayon = { version = "1.10.0" }
 ref-cast = { version = "1.0.24" }
 reflink-copy = { version = "0.1.19" }
