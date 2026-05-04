@@ -408,7 +408,7 @@ async fn perform_install(
             PythonUpgrade::Enabled(PythonUpgradeSource::Upgrade) => {
                 writeln!(
                     printer.stderr(),
-                    "There are no installed versions to upgrade"
+                    "No managed Python installations were found to upgrade"
                 )?;
             }
             PythonUpgrade::Enabled(PythonUpgradeSource::Install) => {
@@ -756,7 +756,7 @@ async fn perform_install(
         {
             writeln!(
                 printer.stderr(),
-                "There are no installed versions to upgrade"
+                "No managed Python installations were found to upgrade"
             )?;
         } else if let [request] = requests.as_slice() {
             // Convert to the inner request
