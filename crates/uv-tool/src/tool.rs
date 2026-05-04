@@ -28,6 +28,8 @@ pub struct Tool {
     excludes: Vec<PackageName>,
     /// The build constraints requested by the user during installation.
     build_constraints: Vec<Requirement>,
+    /// The system site packages access requested by the user during installation.
+    system_site_packages: bool,
     /// The Python requested by the user during installation.
     python: Option<PythonRequest>,
     /// A mapping of entry point names to their metadata.
@@ -49,6 +51,8 @@ struct ToolWire {
     excludes: Vec<PackageName>,
     #[serde(default)]
     build_constraint_dependencies: Vec<Requirement>,
+    #[serde(default)]
+    system_site_packages: bool,
     python: Option<PythonRequest>,
     entrypoints: Vec<ToolEntrypoint>,
     #[serde(default)]
@@ -77,6 +81,7 @@ impl From<Tool> for ToolWire {
             overrides: tool.overrides,
             excludes: tool.excludes,
             build_constraint_dependencies: tool.build_constraints,
+            system_site_packages: tool.system_site_packages,
             python: tool.python,
             entrypoints: tool.entrypoints,
             options: tool.options.into(),
@@ -101,6 +106,7 @@ impl TryFrom<ToolWire> for Tool {
             overrides: tool.overrides,
             excludes: tool.excludes,
             build_constraints: tool.build_constraint_dependencies,
+            system_site_packages: tool.system_site_packages,
             python: tool.python,
             entrypoints: tool.entrypoints,
             options: tool.options.into(),
@@ -177,6 +183,7 @@ impl Tool {
         overrides: Vec<Requirement>,
         excludes: Vec<PackageName>,
         build_constraints: Vec<Requirement>,
+        system_site_packages: bool,
         python: Option<PythonRequest>,
         entrypoints: impl IntoIterator<Item = ToolEntrypoint>,
         options: ToolOptions,
@@ -189,6 +196,7 @@ impl Tool {
             overrides,
             excludes,
             build_constraints,
+            system_site_packages,
             python,
             entrypoints,
             options,
@@ -315,6 +323,17 @@ impl Tool {
             });
         }
 
+        if self.system_site_packages {
+            let system_site_packages = self.system_site_packages;
+            table.insert(
+                "system-site-packages",
+                value(serde::Serialize::serialize(
+                    &system_site_packages,
+                    toml_edit::ser::ValueSerializer::new(),
+                )?),
+            );
+        }
+
         if let Some(ref python) = self.python {
             table.insert(
                 "python",
@@ -378,6 +397,10 @@ impl Tool {
 
     pub fn build_constraints(&self) -> &[Requirement] {
         &self.build_constraints
+    }
+
+    pub fn system_site_packages(&self) -> &bool {
+        &self.system_site_packages
     }
 
     pub fn python(&self) -> &Option<PythonRequest> {
