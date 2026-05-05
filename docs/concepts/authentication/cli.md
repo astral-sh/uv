@@ -62,18 +62,10 @@ For token-based credentials, no username is required:
 $ uv auth logout example.com
 ```
 
-When `--username` is omitted, uv first tries to remove the default token entry for the service, suc
-that means `uv auth logout example.com` works naturally for credentials that were stored with
-`--token`.
-
-For username and password credentials, `--username` should usually be provided. If the default
-plaintext credential store is in use, uv can also remove the only matching credential when the
-choice is unambiguous. If multiple usernames match the same service, uv will ask you to specify
-which one to remove with `--username`.
-
-When the system-native storage backend is enabled with `UV_PREVIEW_FEATURES=native-auth`, uv cannot
-infer an arbitrary username from the service alone, so `--username` is required for
-username/password credentials.
+When `--username` is omitted, uv first tries to remove token credentials for the service. If the
+plaintext credential store is in use, uv can also remove username and password credentials when only
+one set of credentials exists for the service. If multiple usernames match the same service, uv will
+ask you to specify the credentials to remove with `--username`.
 
 !!! note
 
