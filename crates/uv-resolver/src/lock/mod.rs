@@ -1208,8 +1208,14 @@ impl Lock {
 
                 // Serialize package-specific exclusions as a separate field
                 if !exclude_newer.package.is_empty() {
+                    let resolved_names: FxHashSet<&PackageName> =
+                        self.packages.iter().map(Package::name).collect();
+
                     let mut package_table = toml_edit::Table::new();
                     for (name, setting) in &exclude_newer.package {
+                        if !resolved_names.contains(name) {
+                            continue;
+                        }
                         match setting {
                             ExcludeNewerOverride::Enabled(exclude_newer_value) => {
                                 if let Some(span) = exclude_newer_value.span() {
@@ -1234,7 +1240,9 @@ impl Lock {
                             }
                         }
                     }
-                    options_table.insert("exclude-newer-package", Item::Table(package_table));
+                    if !package_table.is_empty() {
+                        options_table.insert("exclude-newer-package", Item::Table(package_table));
+                    }
                 }
             }
 
