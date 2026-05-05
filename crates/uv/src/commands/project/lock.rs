@@ -230,7 +230,7 @@ pub(crate) async fn lock(
                     }
                     FrozenSource::Env | FrozenSource::Configuration => {
                         warn_user!(
-                            "The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because {} was provided; use `--no-frozen` or `--check` instead",
+                            "The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because {} was provided; use `--check` instead",
                             MissingLockfileSource::from(frozen_source)
                         );
                     }
