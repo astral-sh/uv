@@ -26,11 +26,10 @@ jobs:
           persist-credentials: false
       - uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe # v1.0.4
         id: auth
-      - name: Install pinned nightly toolchain
+      - name: Install nightly toolchain
         # Nightly is required for the unstable `-Zpublish-timeout` flag, which lets us
         # raise the per-crate wait above the 60s default. crates.io indexing has been
-        # known to lag long enough to exceed that during workspace publishes. The pin
-        # keeps the publish job reproducible; bump it deliberately when needed.
+        # known to lag long enough to exceed that during workspace publishes.
         run: rustup toolchain install nightly-2026-04-15 --profile minimal --no-self-update
       - name: Publish workspace crates
         # Note `--no-verify` is safe because we do a publish dry-run elsewhere in CI
