@@ -1,10 +1,12 @@
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use assert_cmd::prelude::*;
 use assert_fs::{fixture::ChildPath, prelude::*};
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
+use std::process::Command;
 use tempfile::tempdir_in;
+use url::Url;
 
 use uv_fs::Simplified;
 use uv_static::EnvVars;
@@ -10996,6 +10998,153 @@ fn sync_git_path_dependency() -> Result<()> {
      + package1==0.1.0 (from git+https://github.com/astral-sh/uv-path-dependency-test.git@28781b32cf1f260cdb2c8040628079eb265202bd#subdirectory=package1)
      + package2==0.1.0 (from git+https://github.com/astral-sh/uv-path-dependency-test.git@28781b32cf1f260cdb2c8040628079eb265202bd#subdirectory=package2)
     ");
+
+    Ok(())
+}
+
+/// Lock a Git repository with Poetry metadata that depends on a package within the same repository
+/// via a `path` dependency.
+///
+/// See: <https://github.com/astral-sh/uv/issues/19152>
+#[test]
+#[cfg(feature = "test-git")]
+fn lock_git_poetry_path_dependency() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    let repository = context.temp_dir.child("repository");
+    repository.child("root/root").create_dir_all()?;
+    repository.child("root/root/__init__.py").touch()?;
+    repository
+        .child("root/pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.poetry]
+        name = "root"
+        version = "0.1.0"
+        description = ""
+        authors = []
+        packages = [{ include = "root" }]
+
+        [tool.poetry.dependencies]
+        python = ">=3.13"
+        child = { path = "../child" }
+
+        [build-system]
+        requires = ["poetry-core"]
+        build-backend = "poetry.core.masonry.api"
+    "#})?;
+
+    repository.child("child/child").create_dir_all()?;
+    repository.child("child/child/__init__.py").touch()?;
+    repository
+        .child("child/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+
+    Command::new("git")
+        .arg("init")
+        .arg(repository.path())
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .arg("add")
+        .arg(".")
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .arg("-c")
+        .arg("user.name=Example")
+        .arg("-c")
+        .arg("user.email=example@example.com")
+        .arg("commit")
+        .arg("-m")
+        .arg("Initial commit")
+        .env("GIT_AUTHOR_DATE", "2000-01-01T00:00:00Z")
+        .env("GIT_COMMITTER_DATE", "2000-01-01T00:00:00Z")
+        .assert()
+        .success();
+
+    let repository_url = Url::from_directory_path(repository.path())
+        .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["root"]
+
+        [tool.uv.sources]
+        root = {{ git = "{repository_url}", subdirectory = "root" }}
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    let mut filters = context.filters();
+    filters.push((r"#[0-9a-f]{40}", "#[COMMIT]"));
+
+    insta::with_settings!(
+        {
+            filters => filters,
+        },
+        {
+            assert_snapshot!(
+                lock, @r#"
+            version = 1
+            revision = 3
+            requires-python = ">=3.13"
+
+            [options]
+            exclude-newer = "2024-03-25T00:00:00Z"
+
+            [[package]]
+            name = "child"
+            version = "0.1.0"
+            source = { git = "file://[TEMP_DIR]/repository/?subdirectory=child#[COMMIT]" }
+
+            [[package]]
+            name = "project"
+            version = "0.1.0"
+            source = { virtual = "." }
+            dependencies = [
+                { name = "root" },
+            ]
+
+            [package.metadata]
+            requires-dist = [{ name = "root", git = "file://[TEMP_DIR]/repository/?subdirectory=root" }]
+
+            [[package]]
+            name = "root"
+            version = "0.1.0"
+            source = { git = "file://[TEMP_DIR]/repository/?subdirectory=root#[COMMIT]" }
+            dependencies = [
+                { name = "child" },
+            ]
+            "#
+            );
+        }
+    );
 
     Ok(())
 }

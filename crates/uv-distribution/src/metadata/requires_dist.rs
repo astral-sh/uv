@@ -70,7 +70,7 @@ impl RequiresDist {
         let Some(project_workspace) =
             ProjectWorkspace::from_maybe_project_root(install_path, &discovery, cache).await?
         else {
-            return Ok(Self::from_metadata23(metadata));
+            return Self::from_metadata23_with_source_context(metadata, git_member);
         };
 
         Self::from_project_workspace(
@@ -82,6 +82,28 @@ impl RequiresDist {
             editable,
             credentials_cache,
         )
+    }
+
+    fn from_metadata23_with_source_context(
+        metadata: uv_pypi_types::RequiresDist,
+        git_member: Option<&GitWorkspaceMember<'_>>,
+    ) -> Result<Self, MetadataError> {
+        let requires_dist = Box::into_iter(metadata.requires_dist)
+            .map(|requirement| {
+                let requirement_name = requirement.name.clone();
+                LoweredRequirement::preserve_git_source(requirement, git_member)
+                    .map(LoweredRequirement::into_inner)
+                    .map_err(|err| MetadataError::LoweringError(requirement_name, Box::new(err)))
+            })
+            .collect::<Result<Box<_>, _>>()?;
+
+        Ok(Self {
+            name: metadata.name,
+            requires_dist,
+            provides_extra: metadata.provides_extra,
+            dependency_groups: BTreeMap::default(),
+            dynamic: metadata.dynamic,
+        })
     }
 
     fn from_project_workspace(
