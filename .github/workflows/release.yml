@@ -313,7 +313,7 @@ jobs:
     # "host" however must run to completion, no skipping allowed!
     # `custom-publish-crates` is allowed to fail without blocking the announcement
     # so that a crates.io hiccup doesn't hold up the GitHub Release and downstream
-    # docs/versions/mirror publishing; it can be re-run manually if it fails.
+    # docs/versions/mirror publishing.
     if: ${{ always() && needs.host.result == 'success' && needs.release-gate.result == 'success' && (needs.custom-publish-pypi.result == 'skipped' || needs.custom-publish-pypi.result == 'success') && (needs.custom-publish-crates.result == 'skipped' || needs.custom-publish-crates.result == 'success' || needs.custom-publish-crates.result == 'failure') }}
     runs-on: "depot-ubuntu-latest-4"
     environment:
