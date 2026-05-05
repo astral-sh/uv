@@ -26,8 +26,13 @@ jobs:
           persist-credentials: false
       - uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe # v1.0.4
         id: auth
+      - name: Install nightly toolchain
+        # Nightly is required for the unstable `-Zpublish-timeout` flag, which lets us
+        # raise the per-crate wait above the 60s default. crates.io indexing has been
+        # known to lag long enough to exceed that during workspace publishes.
+        run: rustup toolchain install nightly-2026-04-15 --profile minimal --no-self-update
       - name: Publish workspace crates
         # Note `--no-verify` is safe because we do a publish dry-run elsewhere in CI
-        run: cargo publish --workspace --no-verify
+        run: cargo +nightly-2026-04-15 publish --workspace --no-verify -Zpublish-timeout --config 'publish.timeout=600'
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
