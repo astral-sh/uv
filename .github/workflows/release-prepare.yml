@@ -56,12 +56,10 @@ jobs:
       - name: "Create Pull Request"
         run: |
           branch="$(git branch --show-current)"
-          version="$(uv version --short)"
           git push -u origin "$branch"
           gh pr create \
             --base main \
             --head "$branch" \
-            --title "Bump version to $version" \
-            --body "Automated version bump to $version."
+            --fill
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
