@@ -415,6 +415,58 @@ fn python_find_project() {
 }
 
 #[test]
+fn python_find_project_outside_directory() {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
+
+    let project_dir = context.temp_dir.child("project_outside");
+    project_dir.create_dir_all().unwrap();
+    project_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project-outside"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+        "#})
+        .unwrap();
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .venv()
+            .arg("--python")
+            .arg("3.12")
+            .arg("-q")
+            .current_dir(&project_dir),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "
+    );
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .python_find()
+            .arg("--show-version")
+            .arg("--project")
+            .arg("project_outside")
+            .current_dir(&context.temp_dir),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12.[X]
+
+    ----- stderr -----
+    "
+    );
+}
+
+#[test]
 fn virtual_empty() {
     // testing how `uv python find` reacts to a pyproject with no `[project]` and nothing useful to it
     let context = uv_test::test_context_with_versions!(&["3.10", "3.11", "3.12"]);
