@@ -663,7 +663,7 @@ async fn logout_native_auth() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: No matching entry found for http://[LOCALHOST]/basic-auth. If the credentials were stored with a username, pass `--username` to `uv auth logout`.
+    error: No token credentials found for http://[LOCALHOST]/basic-auth. To remove username and password credentials, pass `--username`.
     ");
 
     // Logout before logging in (with a username)
@@ -698,7 +698,7 @@ async fn logout_native_auth() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: No matching entry found for http://[LOCALHOST]/basic-auth. If the credentials were stored with a username, pass `--username` to `uv auth logout`.
+    error: No token credentials found for http://[LOCALHOST]/basic-auth. To remove username and password credentials, pass `--username`.
     ");
 
     // Logout with a username
@@ -1778,7 +1778,7 @@ fn logout_text_store_without_username_requires_username_on_ambiguity() {
         .arg("https://example.com/simple"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Multiple credentials found for https://example.com/. Pass `--username` to `uv auth logout` to select which credentials to remove.
+    error: Multiple credentials found for https://example.com/. Pass `--username` to `uv auth logout` to select which credentials to remove: user1, user2
     "
     );
 }
