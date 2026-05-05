@@ -1838,6 +1838,8 @@ async fn read_url(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use crate::PythonVariant;
     use crate::implementation::LenientImplementationName;
     use crate::installation::PythonInstallationKey;
@@ -2373,5 +2375,22 @@ mod tests {
         );
         let err = Error::NetworkError(url, wrapped);
         assert!(err.should_try_next_url());
+    }
+
+    /// Every [`PythonVersion`] in the embedded download metadata must be convertible
+    /// to a [`VersionRequest`] to avoid runtime panics.
+    #[test]
+    fn embedded_download_versions_convert_to_version_requests() {
+        let downloads = ManagedPythonDownloadList::new_only_embedded()
+            .expect("embedded download metadata should load");
+
+        let unique_versions: HashSet<PythonVersion> = downloads
+            .iter_all()
+            .map(ManagedPythonDownload::python_version)
+            .collect();
+
+        for version in &unique_versions {
+            let _ = VersionRequest::from(version);
+        }
     }
 }
