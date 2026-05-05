@@ -1838,6 +1838,8 @@ async fn read_url(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+
     use crate::PythonVariant;
     use crate::implementation::LenientImplementationName;
     use crate::installation::PythonInstallationKey;
@@ -2373,5 +2375,31 @@ mod tests {
         );
         let err = Error::NetworkError(url, wrapped);
         assert!(err.should_try_next_url());
+    }
+
+    /// Every Python version in the embedded download metadata must round-trip through
+    /// [`VersionRequest::from_str`]. The `From<&PythonVersion> for VersionRequest`
+    /// conversion in `discovery.rs` `expect()`s this, so any failure here causes
+    /// `uv python upgrade` to panic (issue #19277).
+    #[test]
+    fn embedded_download_versions_parse_as_version_requests() {
+        let downloads = ManagedPythonDownloadList::new_only_embedded()
+            .expect("embedded download metadata should load");
+
+        let unique_versions: BTreeSet<String> = downloads
+            .iter_all()
+            .map(|download| download.python_version().to_string())
+            .collect();
+
+        let bad: Vec<&String> = unique_versions
+            .iter()
+            .filter(|version| VersionRequest::from_str(version).is_err())
+            .collect();
+
+        assert!(
+            bad.is_empty(),
+            "Python versions in the embedded download metadata that fail to parse as a \
+             `VersionRequest` (would panic in `From<&PythonVersion>`): {bad:?}",
+        );
     }
 }
