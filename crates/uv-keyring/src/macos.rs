@@ -33,6 +33,7 @@ ignores all the others. so clients can't use it to access or update any attribut
 use crate::credential::{Credential, CredentialApi, CredentialBuilder, CredentialBuilderApi};
 use crate::error::{Error as ErrorCode, Result, decode_password};
 use security_framework::base::Error;
+use security_framework::item::{ItemClass, ItemSearchOptions, SearchResult};
 use security_framework::os::macos::keychain::{SecKeychain, SecPreferencesDomain};
 use security_framework::os::macos::passwords::find_generic_password;
 
@@ -331,6 +332,54 @@ pub fn decode_error(err: Error) -> ErrorCode {
     }
 }
 
+/// Search for a generic password credential by service name only (without account).
+///
+/// Uses the modern `SecItemCopyMatching` API to search by service attribute,
+/// returning the first matching credential's (account, password) pair.
+///
+/// Returns `Ok(None)` if no matching credential is found.
+pub(crate) async fn find_credential_by_service(service: &str) -> Result<Option<(String, String)>> {
+    let service = service.to_string();
+    crate::blocking::spawn_blocking(move || {
+        let keychain = get_keychain(MacKeychainDomain::User)?;
+        let results = ItemSearchOptions::new()
+            .keychains(&[keychain])
+            .class(ItemClass::generic_password())
+            .service(&service)
+            .load_attributes(true)
+            .load_data(true)
+            .search();
+
+        let results = match results {
+            Ok(results) => results,
+            Err(err) => {
+                let decoded = decode_error(err);
+                if matches!(decoded, ErrorCode::NoEntry) {
+                    return Ok(None);
+                }
+                return Err(decoded);
+            }
+        };
+
+        for result in &results {
+            if let SearchResult::Dict(_) = result {
+                if let Some(attrs) = result.simplify_dict() {
+                    if let (Some(account), Some(password)) =
+                        (attrs.get("acct"), attrs.get("v_Data"))
+                    {
+                        if !account.is_empty() {
+                            return Ok(Some((account.clone(), password.clone())));
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(None)
+    })
+    .await
+}
+
 #[cfg(feature = "native-auth")]
 #[cfg(not(miri))]
 #[cfg(test)]
@@ -427,6 +476,44 @@ mod tests {
     #[tokio::test]
     async fn test_get_update_attributes() {
         crate::tests::test_noop_get_update_attributes(entry_new).await;
+    }
+
+    #[tokio::test]
+    async fn test_find_credential_by_service_without_account() {
+        let service = generate_random_string();
+        let user = generate_random_string();
+        let password = "test-password-for-search";
+
+        // Store a credential using the normal Entry API
+        let entry = entry_new(&service, &user);
+        entry
+            .set_password(password)
+            .await
+            .expect("Can't set password for search test");
+
+        // Search by service name only (no account) — this is the capability
+        // that was missing, causing native-auth credential lookups to fail
+        // during `uv sync` when the username is not known upfront.
+        let result = super::find_credential_by_service(&service)
+            .await
+            .expect("Search should not error");
+        assert_eq!(
+            result,
+            Some((user.clone(), password.to_string())),
+            "Should find credential by service name alone"
+        );
+
+        // Search for a non-existent service returns None
+        let missing = super::find_credential_by_service("nonexistent-service-name")
+            .await
+            .expect("Search for missing service should not error");
+        assert_eq!(missing, None, "Should return None for missing service");
+
+        // Clean up
+        entry
+            .delete_credential()
+            .await
+            .expect("Couldn't delete after search test");
     }
 
     #[test]

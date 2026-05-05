@@ -357,19 +357,32 @@ impl KeyringProvider {
         username: Option<&str>,
     ) -> Option<(String, String)> {
         let prefixed_service = format!("{UV_SERVICE_PREFIX}{service}");
-        let username = username?;
-        let Ok(entry) = uv_keyring::Entry::new(&prefixed_service, username) else {
-            return None;
-        };
-        match entry.get_password().await {
-            Ok(password) => return Some((username.to_string(), password)),
-            Err(uv_keyring::Error::NoEntry) => {
-                debug!("No entry found in system keyring for {service}");
+        if let Some(username) = username {
+            let Ok(entry) = uv_keyring::Entry::new(&prefixed_service, username) else {
+                return None;
+            };
+            match entry.get_password().await {
+                Ok(password) => return Some((username.to_string(), password)),
+                Err(uv_keyring::Error::NoEntry) => {
+                    debug!("No entry found in system keyring for {service}");
+                }
+                Err(err) => {
+                    warn_user_once!(
+                        "Unable to fetch credentials for {service} from system keyring: {err}"
+                    );
+                }
             }
-            Err(err) => {
-                warn_user_once!(
-                    "Unable to fetch credentials for {service} from system keyring: {err}"
-                );
+        } else {
+            match uv_keyring::find_credential_by_service(&prefixed_service).await {
+                Ok(Some(credentials)) => return Some(credentials),
+                Ok(None) => {
+                    debug!("No entry found in system keyring for {service}");
+                }
+                Err(err) => {
+                    warn_user_once!(
+                        "Unable to search credentials for {service} in system keyring: {err}"
+                    );
+                }
             }
         }
         None
