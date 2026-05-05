@@ -7,12 +7,9 @@
 
 Released on 2026-05-05.
 
-### Other changes
+### Bug fixes
 
-- Add job to prepare a release branch ([#19292](https://github.com/astral-sh/uv/pull/19292))
 - Allow pre-release Python requests with non-zero patch versions ([#19286](https://github.com/astral-sh/uv/pull/19286))
-- Allow releases to continue on failure to publish to crates.io ([#19291](https://github.com/astral-sh/uv/pull/19291))
-- Fix pre-release handling in the manual release script ([#19276](https://github.com/astral-sh/uv/pull/19276))
 
 ## 0.11.9
 
