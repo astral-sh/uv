@@ -203,6 +203,7 @@ pub enum VersionRequest {
     MajorMinor(u8, u8, PythonVariant),
     MajorMinorPatch(u8, u8, u8, PythonVariant),
     MajorMinorPrerelease(u8, u8, Prerelease, PythonVariant),
+    MajorMinorPatchPrerelease(u8, u8, u8, Prerelease, PythonVariant),
     Range(VersionSpecifiers, PythonVariant),
 }
 
@@ -729,7 +730,8 @@ fn find_all_minor(
         }
         VersionRequest::MajorMinor(_, _, _)
         | VersionRequest::MajorMinorPatch(_, _, _, _)
-        | VersionRequest::MajorMinorPrerelease(_, _, _, _) => Either::Right(iter::empty()),
+        | VersionRequest::MajorMinorPrerelease(_, _, _, _)
+        | VersionRequest::MajorMinorPatchPrerelease(_, _, _, _, _) => Either::Right(iter::empty()),
     }
 }
 
@@ -2669,7 +2671,8 @@ impl VersionRequest {
             Self::Major(..) => self,
             Self::MajorMinor(..) => self,
             Self::MajorMinorPatch(major, minor, _, variant)
-            | Self::MajorMinorPrerelease(major, minor, _, variant) => {
+            | Self::MajorMinorPrerelease(major, minor, _, variant)
+            | Self::MajorMinorPatchPrerelease(major, minor, _, _, variant) => {
                 Self::MajorMinor(major, minor, variant)
             }
         }
@@ -2680,11 +2683,13 @@ impl VersionRequest {
         &self,
         implementation: Option<&ImplementationName>,
     ) -> Vec<ExecutableName> {
-        let prerelease = if let Self::MajorMinorPrerelease(_, _, prerelease, _) = self {
-            // Include the prerelease version, e.g., `python3.8a`
-            Some(prerelease)
-        } else {
-            None
+        let prerelease = match self {
+            Self::MajorMinorPrerelease(_, _, prerelease, _)
+            | Self::MajorMinorPatchPrerelease(_, _, _, prerelease, _) => {
+                // Include the prerelease version, e.g., `python3.8a`
+                Some(prerelease)
+            }
+            _ => None,
         };
 
         // Push a default one
@@ -2772,6 +2777,7 @@ impl VersionRequest {
             Self::MajorMinor(major, _, _) => Some(*major),
             Self::MajorMinorPatch(major, _, _, _) => Some(*major),
             Self::MajorMinorPrerelease(major, _, _, _) => Some(*major),
+            Self::MajorMinorPatchPrerelease(major, _, _, _, _) => Some(*major),
         }
     }
 
@@ -2783,6 +2789,7 @@ impl VersionRequest {
             Self::MajorMinor(_, minor, _) => Some(*minor),
             Self::MajorMinorPatch(_, minor, _, _) => Some(*minor),
             Self::MajorMinorPrerelease(_, minor, _, _) => Some(*minor),
+            Self::MajorMinorPatchPrerelease(_, minor, _, _, _) => Some(*minor),
         }
     }
 
@@ -2794,6 +2801,7 @@ impl VersionRequest {
             Self::MajorMinor(_, _, _) => None,
             Self::MajorMinorPatch(_, _, patch, _) => Some(*patch),
             Self::MajorMinorPrerelease(_, _, _, _) => None,
+            Self::MajorMinorPatchPrerelease(_, _, patch, _, _) => Some(*patch),
         }
     }
 
@@ -2805,6 +2813,7 @@ impl VersionRequest {
             Self::MajorMinor(_, _, _) => None,
             Self::MajorMinorPatch(_, _, _, _) => None,
             Self::MajorMinorPrerelease(_, _, prerelease, _) => Some(prerelease),
+            Self::MajorMinorPatchPrerelease(_, _, _, prerelease, _) => Some(prerelease),
         }
     }
 
@@ -2839,6 +2848,13 @@ impl VersionRequest {
                 if (*major, *minor) < (3, 6) {
                     return Err(format!(
                         "Python <3.6 is not supported but {major}.{minor}{prerelease} was requested."
+                    ));
+                }
+            }
+            Self::MajorMinorPatchPrerelease(major, minor, patch, prerelease, _) => {
+                if (*major, *minor) < (3, 6) {
+                    return Err(format!(
+                        "Python <3.6 is not supported but {major}.{minor}.{patch}{prerelease} was requested."
                     ));
                 }
             }
@@ -2933,6 +2949,19 @@ impl VersionRequest {
                 ) == (*major, *minor, *prerelease)
                     && variant.matches_interpreter(interpreter)
             }
+            Self::MajorMinorPatchPrerelease(major, minor, patch, prerelease, variant) => {
+                let version = interpreter.python_version();
+                let Some(interpreter_prerelease) = version.pre() else {
+                    return false;
+                };
+                (
+                    interpreter.python_major(),
+                    interpreter.python_minor(),
+                    interpreter.python_patch(),
+                    interpreter_prerelease,
+                ) == (*major, *minor, *patch, *prerelease)
+                    && variant.matches_interpreter(interpreter)
+            }
         }
     }
 
@@ -2967,6 +2996,14 @@ impl VersionRequest {
             Self::MajorMinorPrerelease(major, minor, prerelease, _) => {
                 (version.major(), version.minor(), version.pre())
                     == (*major, *minor, Some(*prerelease))
+            }
+            Self::MajorMinorPatchPrerelease(major, minor, patch, prerelease, _) => {
+                (
+                    version.major(),
+                    version.minor(),
+                    version.patch(),
+                    version.pre(),
+                ) == (*major, *minor, Some(*patch), Some(*prerelease))
             }
         }
     }
@@ -3007,6 +3044,9 @@ impl VersionRequest {
             Self::MajorMinorPrerelease(self_major, self_minor, _, _) => {
                 (*self_major, *self_minor) == (major, minor)
             }
+            Self::MajorMinorPatchPrerelease(self_major, self_minor, _, _, _) => {
+                (*self_major, *self_minor) == (major, minor)
+            }
         }
     }
 
@@ -3039,9 +3079,23 @@ impl VersionRequest {
                     .with_pre(prerelease),
             ),
             Self::MajorMinorPrerelease(self_major, self_minor, self_prerelease, _) => {
-                // Pre-releases of Python versions are always for the zero patch version
+                // Pre-releases without a patch in the request match the zero patch version
                 (*self_major, *self_minor, 0, Some(*self_prerelease))
                     == (major, minor, patch, prerelease)
+            }
+            Self::MajorMinorPatchPrerelease(
+                self_major,
+                self_minor,
+                self_patch,
+                self_prerelease,
+                _,
+            ) => {
+                (
+                    *self_major,
+                    *self_minor,
+                    *self_patch,
+                    Some(*self_prerelease),
+                ) == (major, minor, patch, prerelease)
             }
         }
     }
@@ -3062,6 +3116,7 @@ impl VersionRequest {
             Self::MajorMinor(..) => false,
             Self::MajorMinorPatch(..) => true,
             Self::MajorMinorPrerelease(..) => false,
+            Self::MajorMinorPatchPrerelease(..) => true,
             Self::Range(_, _) => false,
         }
     }
@@ -3082,6 +3137,9 @@ impl VersionRequest {
             Self::MajorMinorPrerelease(major, minor, prerelease, variant) => {
                 Self::MajorMinorPrerelease(major, minor, prerelease, variant)
             }
+            Self::MajorMinorPatchPrerelease(major, minor, _, prerelease, variant) => {
+                Self::MajorMinorPrerelease(major, minor, prerelease, variant)
+            }
             Self::Range(_, _) => self,
         }
     }
@@ -3095,6 +3153,7 @@ impl VersionRequest {
             Self::MajorMinor(..) => false,
             Self::MajorMinorPatch(..) => false,
             Self::MajorMinorPrerelease(..) => true,
+            Self::MajorMinorPatchPrerelease(..) => true,
             Self::Range(specifiers, _) => specifiers.iter().any(VersionSpecifier::any_prerelease),
         }
     }
@@ -3107,6 +3166,7 @@ impl VersionRequest {
             | Self::MajorMinor(_, _, variant)
             | Self::MajorMinorPatch(_, _, _, variant)
             | Self::MajorMinorPrerelease(_, _, _, variant)
+            | Self::MajorMinorPatchPrerelease(_, _, _, _, variant)
             | Self::Range(_, variant) => variant.is_debug(),
         }
     }
@@ -3119,6 +3179,7 @@ impl VersionRequest {
             | Self::MajorMinor(_, _, variant)
             | Self::MajorMinorPatch(_, _, _, variant)
             | Self::MajorMinorPrerelease(_, _, _, variant)
+            | Self::MajorMinorPatchPrerelease(_, _, _, _, variant)
             | Self::Range(_, variant) => variant.is_freethreaded(),
         }
     }
@@ -3142,6 +3203,15 @@ impl VersionRequest {
             Self::MajorMinorPrerelease(major, minor, prerelease, _) => {
                 Self::MajorMinorPrerelease(major, minor, prerelease, PythonVariant::Default)
             }
+            Self::MajorMinorPatchPrerelease(major, minor, patch, prerelease, _) => {
+                Self::MajorMinorPatchPrerelease(
+                    major,
+                    minor,
+                    patch,
+                    prerelease,
+                    PythonVariant::Default,
+                )
+            }
             Self::Range(specifiers, _) => Self::Range(specifiers, PythonVariant::Default),
         }
     }
@@ -3155,6 +3225,7 @@ impl VersionRequest {
             | Self::MajorMinor(_, _, variant)
             | Self::MajorMinorPatch(_, _, _, variant)
             | Self::MajorMinorPrerelease(_, _, _, variant)
+            | Self::MajorMinorPatchPrerelease(_, _, _, _, variant)
             | Self::Range(_, variant) => Some(*variant),
         }
     }
@@ -3174,9 +3245,13 @@ impl VersionRequest {
                 u64::from(*minor),
                 u64::from(*patch),
             ])),
-            // Pre-releases of Python versions are always for the zero patch version
+            // Pre-releases without a patch use the zero patch version
             Self::MajorMinorPrerelease(major, minor, prerelease, _) => Some(
                 Version::new([u64::from(*major), u64::from(*minor), 0]).with_pre(Some(*prerelease)),
+            ),
+            Self::MajorMinorPatchPrerelease(major, minor, patch, prerelease, _) => Some(
+                Version::new([u64::from(*major), u64::from(*minor), u64::from(*patch)])
+                    .with_pre(Some(*prerelease)),
             ),
         }
     }
@@ -3206,6 +3281,12 @@ impl VersionRequest {
             Self::MajorMinorPrerelease(major, minor, prerelease, _) => {
                 Some(VersionSpecifiers::from(VersionSpecifier::equals_version(
                     Version::new([u64::from(*major), u64::from(*minor), 0])
+                        .with_pre(Some(*prerelease)),
+                )))
+            }
+            Self::MajorMinorPatchPrerelease(major, minor, patch, prerelease, _) => {
+                Some(VersionSpecifiers::from(VersionSpecifier::equals_version(
+                    Version::new([u64::from(*major), u64::from(*minor), u64::from(*patch)])
                         .with_pre(Some(*prerelease)),
                 )))
             }
@@ -3298,16 +3379,16 @@ impl FromStr for VersionRequest {
                 }
                 Ok(Self::MajorMinor(*major, *minor, variant))
             }
-            // e.g. `3.12.1` or `3.13.0rc1`
+            // e.g. `3.12.1`, `3.13.0rc1`, or `3.14.5rc1`
             [major, minor, patch] => {
                 if let Some(prerelease) = prerelease {
-                    // Prereleases are only allowed for the first patch version, e.g, 3.12.2rc1
-                    // isn't a proper Python release
-                    if *patch != 0 {
-                        return Err(Error::InvalidVersionRequest(s.to_string()));
+                    if *patch == 0 {
+                        return Ok(Self::MajorMinorPrerelease(
+                            *major, *minor, prerelease, variant,
+                        ));
                     }
-                    return Ok(Self::MajorMinorPrerelease(
-                        *major, *minor, prerelease, variant,
+                    return Ok(Self::MajorMinorPatchPrerelease(
+                        *major, *minor, *patch, prerelease, variant,
                     ));
                 }
                 Ok(Self::MajorMinorPatch(*major, *minor, *patch, variant))
@@ -3380,6 +3461,13 @@ impl fmt::Display for VersionRequest {
             }
             Self::MajorMinorPrerelease(major, minor, prerelease, variant) => {
                 write!(f, "{major}.{minor}{prerelease}{}", variant.display_suffix())
+            }
+            Self::MajorMinorPatchPrerelease(major, minor, patch, prerelease, variant) => {
+                write!(
+                    f,
+                    "{major}.{minor}.{patch}{prerelease}{}",
+                    variant.display_suffix()
+                )
             }
             Self::Range(specifiers, _) => write!(f, "{specifiers}"),
         }
@@ -3941,6 +4029,12 @@ mod tests {
         );
 
         assert_eq!(
+            PythonRequest::Version(VersionRequest::from_str("3.14.5rc1").unwrap())
+                .to_canonical_string(),
+            "3.14.5rc1"
+        );
+
+        assert_eq!(
             PythonRequest::ExecutableName("foo".to_string()).to_canonical_string(),
             "foo"
         );
@@ -4091,12 +4185,32 @@ mod tests {
             ),
             "Pre-release version requests require a minor version"
         );
-        assert!(
-            matches!(
-                VersionRequest::from_str("3.13.2rc1"),
-                Err(Error::InvalidVersionRequest(_))
+        assert_eq!(
+            VersionRequest::from_str("3.14.5rc1").unwrap(),
+            VersionRequest::MajorMinorPatchPrerelease(
+                3,
+                14,
+                5,
+                Prerelease {
+                    kind: PrereleaseKind::Rc,
+                    number: 1
+                },
+                PythonVariant::Default
             ),
-            "Pre-release version requests require a patch version of zero"
+            "Pre-release version requests with a non-zero patch are allowed (e.g., `3.14.5rc1`)"
+        );
+        assert_eq!(
+            VersionRequest::from_str("3.13.2rc1").unwrap(),
+            VersionRequest::MajorMinorPatchPrerelease(
+                3,
+                13,
+                2,
+                Prerelease {
+                    kind: PrereleaseKind::Rc,
+                    number: 1
+                },
+                PythonVariant::Default
+            )
         );
         assert!(
             matches!(

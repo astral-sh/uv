@@ -2620,6 +2620,17 @@ fn python_install_prerelease() {
     Installed Python 3.15.0a2 in [TIME]
      + cpython-3.15.0a2-[PLATFORM]
     ");
+
+    // Install a release candidate for a non-zero patch version
+    uv_snapshot!(context.filters(), context.python_install().arg("3.14.5rc1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.14.5rc1 in [TIME]
+     + cpython-3.14.5rc1-[PLATFORM] (python3.14)
+    ");
 }
 
 #[test]
