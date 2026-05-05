@@ -2377,10 +2377,8 @@ mod tests {
         assert!(err.should_try_next_url());
     }
 
-    /// Every [`PythonVersion`] in the embedded download metadata must convert to a
-    /// [`VersionRequest`]. The `From<&PythonVersion> for VersionRequest` conversion
-    /// in `discovery.rs` `expect()`s this, so any failure here causes
-    /// `uv python upgrade` to panic (issue #19277).
+    /// Every [`PythonVersion`] in the embedded download metadata must be convertable
+    /// to a [`VersionRequest`] to avoid runtime panics.
     #[test]
     fn embedded_download_versions_convert_to_version_requests() {
         let downloads = ManagedPythonDownloadList::new_only_embedded()
