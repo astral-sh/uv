@@ -8484,6 +8484,55 @@ fn tool_uv_sources_is_in_preview() -> Result<()> {
     Ok(())
 }
 
+/// Installing a local package should not reintroduce unrequested dependency
+/// groups while resolving its sourced dependencies.
+#[test]
+fn tool_uv_sources_ignore_unrequested_dependency_groups_for_path_install() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+
+    let package = context.temp_dir.child("pkg");
+    package.create_dir_all()?;
+    let pyproject_toml = package.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "pkg"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["jinja2>=3.1.5"]
+
+        [dependency-groups]
+        cu118 = ["jinja2>=3.1.5"]
+
+        [tool.uv.sources]
+        jinja2 = [
+            { index = "torch-cu118", group = "cu118" },
+        ]
+
+        [[tool.uv.index]]
+        name = "torch-cu118"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu118"
+        explicit = true
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(package.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + jinja2==3.1.5
+     + markupsafe==3.0.2
+     + pkg==0.1.0 (from file://[TEMP_DIR]/pkg)
+    "
+    );
+
+    Ok(())
+}
+
 /// Allow transitive URLs via recursive extras.
 #[test]
 fn recursive_extra_transitive_url() -> Result<()> {
