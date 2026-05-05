@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
@@ -126,7 +127,7 @@ pub enum BearerAuthError {
 #[derive(Debug, Error, PartialEq)]
 pub enum LookupError {
     #[error("Multiple credentials found for URL '{0}', specify which username to use")]
-    AmbiguousUsername(DisplaySafeUrl),
+    AmbiguousUsername(DisplaySafeUrl, Vec<String>),
 }
 
 /// A single credential entry in a TOML credentials file.
@@ -334,14 +335,14 @@ impl TextCredentialStore {
         Ok(())
     }
 
-    /// Get credentials for a given URL and username.
+    /// Get the credential entry for a given URL and username.
     ///
     /// The most specific URL prefix match in the same [`Realm`] is returned, if any.
-    pub fn get_credentials(
+    pub fn get_credential_entry(
         &self,
         url: &DisplaySafeUrl,
         username: Option<&str>,
-    ) -> Result<Option<&Credentials>, LookupError> {
+    ) -> Result<Option<(Cow<'_, Service>, &Credentials)>, LookupError> {
         let request_realm = Realm::from(url);
 
         // Perform an exact lookup first
@@ -352,12 +353,13 @@ impl TextCredentialStore {
                 url_service.clone(),
                 Username::from(username.map(str::to_string)),
             )) {
-                return Ok(Some(credential));
+                return Ok(Some((Cow::Owned(url_service), credential)));
             }
         }
 
         // If that fails, iterate through to find a prefix match
         let mut best: Option<(usize, &Service, &Credentials)> = None;
+        let mut ambiguous_usernames: Vec<String> = Vec::new();
 
         for ((service, stored_username), credential) in &self.credentials {
             let service_realm = Realm::from(service.url().deref());
@@ -383,17 +385,48 @@ impl TextCredentialStore {
             let specificity = service.url().path().len();
             if best.is_none_or(|(best_specificity, _, _)| specificity > best_specificity) {
                 best = Some((specificity, service, credential));
+                ambiguous_usernames.clear();
             } else if best.is_some_and(|(best_specificity, _, _)| specificity == best_specificity) {
-                return Err(LookupError::AmbiguousUsername(url.clone()));
+                if ambiguous_usernames.is_empty()
+                    && let Some((_, _, best_credential)) = best
+                    && let Some(username) = best_credential.username()
+                {
+                    ambiguous_usernames.push(username.to_string());
+                }
+                if let Some(username) = stored_username.as_deref() {
+                    ambiguous_usernames.push(username.to_string());
+                }
             }
         }
 
+        if !ambiguous_usernames.is_empty() {
+            ambiguous_usernames.sort();
+            ambiguous_usernames.dedup();
+            return Err(LookupError::AmbiguousUsername(
+                url.clone(),
+                ambiguous_usernames,
+            ));
+        }
+
         // Return the most specific match
-        if let Some((_, _, credential)) = best {
-            return Ok(Some(credential));
+        if let Some((_, service, credential)) = best {
+            return Ok(Some((Cow::Borrowed(service), credential)));
         }
 
         Ok(None)
+    }
+
+    /// Get credentials for a given URL and username.
+    ///
+    /// The most specific URL prefix match in the same [`Realm`] is returned, if any.
+    pub fn get_credentials(
+        &self,
+        url: &DisplaySafeUrl,
+        username: Option<&str>,
+    ) -> Result<Option<&Credentials>, LookupError> {
+        Ok(self
+            .get_credential_entry(url, username)?
+            .map(|(.., credential)| credential))
     }
 
     /// Store credentials for a given service.
@@ -714,7 +747,13 @@ password = "pass2"
         // When no username is specified, should return an error because there are multiple matches with same specificity
         let result = store.get_credentials(&url, None);
         assert!(result.is_err());
-        assert_eq!(result, Err(LookupError::AmbiguousUsername(url.clone())));
+        assert_eq!(
+            result,
+            Err(LookupError::AmbiguousUsername(
+                url.clone(),
+                vec!["user1".to_string(), "user2".to_string()]
+            ))
+        );
 
         // When a specific username is provided, should return the correct credentials
         let result = store.get_credentials(&url, Some("user1")).unwrap();
