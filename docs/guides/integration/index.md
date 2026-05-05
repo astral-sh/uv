@@ -9,6 +9,7 @@ Learn how to integrate uv with other software:
 - [Using in GitHub Actions](./github.md)
 - [Using in GitLab CI/CD](./gitlab.md)
 - [Installing PyTorch](./pytorch.md)
+- [Using with MLflow](./mlflow.md)
 - [Building a FastAPI application](./fastapi.md)
 - [Using with Azure Artifacts](./azure.md)
 - [Using with Google Artifact Registry](./google.md)
