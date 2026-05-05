@@ -2391,15 +2391,12 @@ mod tests {
             .map(|download| download.python_version().to_string())
             .collect();
 
-        let bad: Vec<&String> = unique_versions
-            .iter()
-            .filter(|version| VersionRequest::from_str(version).is_err())
-            .collect();
-
-        assert!(
-            bad.is_empty(),
-            "Python versions in the embedded download metadata that fail to parse as a \
-             `VersionRequest` (would panic in `From<&PythonVersion>`): {bad:?}",
-        );
+        for version in &unique_versions {
+            assert!(
+                VersionRequest::from_str(version).is_ok(),
+                "Embedded download version `{version}` does not parse as a \
+                 `VersionRequest` (would panic in `From<&PythonVersion>`)",
+            );
+        }
     }
 }
