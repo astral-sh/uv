@@ -1838,7 +1838,7 @@ async fn read_url(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
+    use std::collections::HashSet;
 
     use crate::PythonVariant;
     use crate::implementation::LenientImplementationName;
@@ -2377,26 +2377,22 @@ mod tests {
         assert!(err.should_try_next_url());
     }
 
-    /// Every Python version in the embedded download metadata must round-trip through
-    /// [`VersionRequest::from_str`]. The `From<&PythonVersion> for VersionRequest`
-    /// conversion in `discovery.rs` `expect()`s this, so any failure here causes
+    /// Every [`PythonVersion`] in the embedded download metadata must convert to a
+    /// [`VersionRequest`]. The `From<&PythonVersion> for VersionRequest` conversion
+    /// in `discovery.rs` `expect()`s this, so any failure here causes
     /// `uv python upgrade` to panic (issue #19277).
     #[test]
-    fn embedded_download_versions_parse_as_version_requests() {
+    fn embedded_download_versions_convert_to_version_requests() {
         let downloads = ManagedPythonDownloadList::new_only_embedded()
             .expect("embedded download metadata should load");
 
-        let unique_versions: BTreeSet<String> = downloads
+        let unique_versions: HashSet<PythonVersion> = downloads
             .iter_all()
-            .map(|download| download.python_version().to_string())
+            .map(ManagedPythonDownload::python_version)
             .collect();
 
         for version in &unique_versions {
-            assert!(
-                VersionRequest::from_str(version).is_ok(),
-                "Embedded download version `{version}` does not parse as a \
-                 `VersionRequest` (would panic in `From<&PythonVersion>`)",
-            );
+            let _ = VersionRequest::from(version);
         }
     }
 }
