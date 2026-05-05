@@ -1307,6 +1307,39 @@ fn verify_pyvenv_cfg_relocatable() {
     activate_csh.assert(predicates::path::missing());
 }
 
+/// Regression test for #19181: with csh + `--relocatable`, uv must warn instead of
+/// pointing the user at the (intentionally absent) `activate.csh`.
+#[test]
+#[cfg(unix)]
+fn relocatable_csh_emits_warning_instead_of_activation() {
+    let context = uv_test::test_context!("3.12");
+
+    // Force `Shell::from_env` past the shell-version probes so it falls through to `SHELL`.
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--clear")
+        .arg("--python")
+        .arg("3.12")
+        .arg("--relocatable")
+        .env_remove(EnvVars::BASH_VERSION)
+        .env_remove(EnvVars::ZSH_VERSION)
+        .env_remove(EnvVars::FISH_VERSION)
+        .env_remove(EnvVars::NU_VERSION)
+        .env_remove(EnvVars::KSH_VERSION)
+        .env_remove(EnvVars::PS_MODULE_PATH)
+        .env(EnvVars::SHELL, "/bin/csh"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    warning: csh activation is not supported for relocatable virtual environments; activate from a POSIX shell with `source .venv/bin/activate` instead
+    "
+    );
+}
+
 /// With `UV_VENV_RELOCATABLE=1`, the virtual environment is relocatable.
 #[test]
 fn verify_pyvenv_cfg_relocatable_env_var() {
