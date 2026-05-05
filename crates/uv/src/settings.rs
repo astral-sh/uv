@@ -1804,6 +1804,7 @@ pub(crate) struct LockSettings {
     pub(crate) lock_check: LockCheck,
     pub(crate) frozen: Option<FrozenSource>,
     pub(crate) dry_run: DryRun,
+    pub(crate) rewrite: bool,
     pub(crate) script: Option<PathBuf>,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
@@ -1823,6 +1824,7 @@ impl LockSettings {
             locked,
             check_exists,
             dry_run,
+            rewrite,
             script,
             resolver,
             build,
@@ -1842,6 +1844,16 @@ impl LockSettings {
         // Check for conflicts between locked and frozen.
         check_conflicts(locked, frozen);
 
+        // Check for conflicts between rewrite (CLI only for now) and locked, and rewrite and frozen.
+        let rewrite_flag = if rewrite {
+            Flag::from_cli("rewrite")
+        } else {
+            Flag::Disabled
+        };
+
+        check_conflicts(rewrite_flag, locked);
+        check_conflicts(rewrite_flag, frozen);
+
         let lock_check = if check {
             LockCheck::Enabled(LockCheckSource::Check)
         } else {
@@ -1852,6 +1864,7 @@ impl LockSettings {
             lock_check,
             frozen: resolve_frozen(frozen),
             dry_run: DryRun::from_args(dry_run),
+            rewrite,
             script,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),

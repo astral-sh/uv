@@ -87,6 +87,7 @@ pub(crate) async fn lock(
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
     dry_run: DryRun,
+    rewrite: bool,
     refresh: Refresh,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
@@ -216,6 +217,7 @@ pub(crate) async fn lock(
             preview,
         )
         .with_refresh(&refresh)
+        .with_rewrite(rewrite)
         .execute(target),
     )
     .await
@@ -308,6 +310,7 @@ pub(crate) struct LockOperation<'env> {
     workspace_cache: &'env WorkspaceCache,
     printer: Printer,
     preview: Preview,
+    rewrite: bool,
 }
 
 impl<'env> LockOperation<'env> {
@@ -337,6 +340,7 @@ impl<'env> LockOperation<'env> {
             workspace_cache,
             printer,
             preview,
+            rewrite: false,
         }
     }
 
@@ -354,6 +358,13 @@ impl<'env> LockOperation<'env> {
     #[must_use]
     pub(crate) fn with_refresh(mut self, refresh: &'env Refresh) -> Self {
         self.refresh = Some(refresh);
+        self
+    }
+
+    /// Set the rewrite strategy for the [`LockOperation`].
+    #[must_use]
+    pub(crate) fn with_rewrite(mut self, rewrite: bool) -> Self {
+        self.rewrite = rewrite;
         self
     }
 
@@ -405,6 +416,7 @@ impl<'env> LockOperation<'env> {
                     self.workspace_cache,
                     self.printer,
                     self.preview,
+                    self.rewrite,
                 ))
                 .await?;
 
@@ -449,6 +461,7 @@ impl<'env> LockOperation<'env> {
                     self.workspace_cache,
                     self.printer,
                     self.preview,
+                    self.rewrite,
                 ))
                 .await?;
 
@@ -481,6 +494,7 @@ async fn do_lock(
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
+    rewrite: bool,
 ) -> Result<LockResult, ProjectError> {
     let start = std::time::Instant::now();
 
@@ -849,6 +863,7 @@ async fn do_lock(
             state.index(),
             &database,
             printer,
+            rewrite,
         )
         .await
         {
@@ -1064,6 +1079,7 @@ impl ValidatedLock {
         index: &InMemoryIndex,
         database: &DistributionDatabase<'_, Context>,
         printer: Printer,
+        rewrite: bool,
     ) -> Result<Self, ProjectError> {
         // Perform checks in a deliberate order, such that the most extreme conditions are tested
         // first (i.e., every check that returns `Self::Unusable`, followed by every check that
@@ -1241,6 +1257,12 @@ impl ValidatedLock {
         } else {
             Some(index_locations)
         };
+
+        // If the user specified `--rewrite`, then we have to re-resolve.
+        if rewrite {
+            debug!("Resolving with existing lockfile due to `--rewrite`");
+            return Ok(Self::Preferable(lock));
+        }
 
         // Determine whether the lockfile satisfies the workspace requirements.
         match lock
