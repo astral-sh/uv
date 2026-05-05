@@ -43,15 +43,17 @@ jobs:
 
       - name: "Bump version"
         run: |
-          if [ -n "${{ inputs.version }}" ]; then
-            ./scripts/release.sh --version "${{ inputs.version }}"
-          elif [ -n "${{ inputs.bump }}" ]; then
-            ./scripts/release.sh --bump "${{ inputs.bump }}"
+          if [ -n "$INPUT_VERSION" ]; then
+            ./scripts/release.sh --version "$INPUT_VERSION"
+          elif [ -n "$INPUT_BUMP" ]; then
+            ./scripts/release.sh --bump "$INPUT_BUMP"
           else
             ./scripts/release.sh
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_BUMP: ${{ inputs.bump }}
 
       - name: "Create Pull Request"
         run: |
