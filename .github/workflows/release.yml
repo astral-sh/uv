@@ -311,10 +311,10 @@ jobs:
     # use "always() && ..." to allow us to wait for all publish jobs while
     # still allowing individual publish jobs to skip themselves (for prereleases).
     # "host" however must run to completion, no skipping allowed!
-    # `custom-publish-crates` is allowed to fail without blocking the announcement
-    # so that a crates.io hiccup doesn't hold up the GitHub Release and downstream
+    # `custom-publish-crates` is intentionally not gated on its result so that
+    # a crates.io hiccup doesn't hold up the GitHub Release and downstream
     # docs/versions/mirror publishing.
-    if: ${{ always() && needs.host.result == 'success' && needs.release-gate.result == 'success' && (needs.custom-publish-pypi.result == 'skipped' || needs.custom-publish-pypi.result == 'success') && (needs.custom-publish-crates.result == 'skipped' || needs.custom-publish-crates.result == 'success' || needs.custom-publish-crates.result == 'failure') }}
+    if: ${{ always() && needs.host.result == 'success' && needs.release-gate.result == 'success' && (needs.custom-publish-pypi.result == 'skipped' || needs.custom-publish-pypi.result == 'success') }}
     runs-on: "depot-ubuntu-latest-4"
     environment:
       name: release
