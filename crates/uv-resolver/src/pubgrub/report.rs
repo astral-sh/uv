@@ -1157,7 +1157,9 @@ impl PubGrubReportFormatter<'_> {
 
             let is_pre2 = match end {
                 Bound::Included(version) => version.any_prerelease(),
-                Bound::Excluded(version) => version.any_prerelease(),
+                Bound::Excluded(version) => {
+                    version.any_prerelease() && !is_compatible_release_upper_bound(version)
+                }
                 Bound::Unbounded => false,
             };
             if is_pre2 {
@@ -1207,6 +1209,14 @@ impl PubGrubReportFormatter<'_> {
             }
         }
     }
+}
+
+/// Return `true` for the excluded `.dev0` upper bounds used to desugar compatible releases.
+///
+/// For example, `~=3.6` becomes `>=3.6,<4.dev0`. The `<4.dev0` boundary preserves PEP 440's
+/// ordering semantics, but it does not mean the user requested pre-releases.
+fn is_compatible_release_upper_bound(version: &Version) -> bool {
+    version.dev() == Some(0) && !version.is_pre() && !version.is_post() && !version.is_local()
 }
 
 #[derive(Debug, Clone)]
