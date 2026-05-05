@@ -2629,7 +2629,7 @@ fn python_install_prerelease() {
 
     ----- stderr -----
     Installed Python 3.14.5rc1 in [TIME]
-     + cpython-3.14.5rc1-[PLATFORM]
+     + cpython-3.14.5rc1-[PLATFORM] (python3.14)
     ");
 }
 
