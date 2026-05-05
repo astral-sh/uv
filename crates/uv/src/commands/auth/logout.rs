@@ -17,7 +17,8 @@ use crate::{commands::ExitStatus, printer::Printer};
 
 /// Logout from a service.
 ///
-/// If no username is provided, uv tries the default token entry first.
+/// If no username is provided, uv removes token credentials first, then username and password
+/// credentials if only one matching entry exists.
 pub(crate) async fn logout(
     service: Service,
     username: Option<String>,
@@ -75,7 +76,10 @@ pub(crate) async fn logout(
                 })?;
                 url_without_credentials.to_string()
             } else {
-                bail!("{}", missing_username_hint(&url_without_credentials));
+                bail!(
+                    "{}",
+                    missing_token_credentials_hint(&url_without_credentials)
+                );
             }
         }
         AuthBackend::TextStore(mut store, _lock) => {
@@ -116,9 +120,12 @@ pub(crate) async fn logout(
                         }
                         display_url
                     }
-                    Ok(None) => bail!("{}", missing_username_hint(&url_without_credentials)),
-                    Err(LookupError::AmbiguousUsername(..)) => {
-                        bail!("{}", ambiguous_username_hint(&url_without_credentials))
+                    Ok(None) => bail!("{}", missing_credentials_hint(&url_without_credentials)),
+                    Err(LookupError::AmbiguousUsername(_, usernames)) => {
+                        bail!(
+                            "{}",
+                            ambiguous_username_hint(&url_without_credentials, &usernames)
+                        )
                     }
                 }
             };
@@ -148,15 +155,26 @@ fn format_display_url(url: &Url, username: Option<&str>) -> String {
     }
 }
 
-fn missing_username_hint(display_url: &Url) -> String {
+fn missing_credentials_hint(display_url: &Url) -> String {
+    format!("No matching credentials found for {display_url}")
+}
+
+fn missing_token_credentials_hint(display_url: &Url) -> String {
     format!(
-        "No matching entry found for {display_url}. If the credentials were stored with a username, pass `--username` to `uv auth logout`."
+        "No token credentials found for {display_url}. To remove username and password credentials, pass `--username`."
     )
 }
 
-fn ambiguous_username_hint(display_url: &Url) -> String {
+fn ambiguous_username_hint(display_url: &Url, usernames: &[String]) -> String {
+    if usernames.is_empty() {
+        return format!(
+            "Multiple credentials found for {display_url}. Pass `--username` to `uv auth logout` to select which credentials to remove."
+        );
+    }
+
     format!(
-        "Multiple credentials found for {display_url}. Pass `--username` to `uv auth logout` to select which credentials to remove."
+        "Multiple credentials found for {display_url}. Pass `--username` to `uv auth logout` to select which credentials to remove: {}",
+        usernames.join(", ")
     )
 }
 
