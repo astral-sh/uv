@@ -13515,7 +13515,7 @@ fn git_source_missing_tag() -> Result<()> {
       ├─▶ Git operation failed
       ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
       ├─▶ failed to fetch tag `missing`
-      ╰─▶ process didn't exit successfully: `git fetch --force --update-head-ok 'https://github.com/astral-test/uv-public-pypackage' '+refs/tags/missing:refs/remotes/origin/tags/missing'` (exit status: 128)
+      ╰─▶ process didn't exit successfully: `git fetch --force --update-head-ok '--filter=tree:0' origin '+refs/tags/missing:refs/remotes/origin/tags/missing'` (exit status: 128)
           --- stderr
           fatal: couldn't find remote ref refs/tags/missing
     ");
