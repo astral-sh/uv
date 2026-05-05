@@ -104,6 +104,7 @@ mod index;
 mod index_name;
 mod index_url;
 mod installed;
+mod installed_modules;
 mod known_platform;
 mod origin;
 mod pip_index;

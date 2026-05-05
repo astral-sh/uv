@@ -1,8 +1,54 @@
+use std::io::Write;
+use std::path::Path;
+
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
-use assert_fs::fixture::PathChild;
+use assert_fs::fixture::{FileWriteStr, PathChild};
+use fs_err::File;
+use url::Url;
+use zip::ZipWriter;
+use zip::write::SimpleFileOptions;
 
 use uv_test::{copy_dir_ignore, uv_snapshot};
+
+fn write_wheel(
+    path: &Path,
+    name: &str,
+    dist_info_prefix: &str,
+    files: &[(&str, &str)],
+) -> Result<()> {
+    let mut writer = ZipWriter::new(File::create(path)?);
+    let options = SimpleFileOptions::default();
+    let mut record = Vec::new();
+
+    for (file_path, contents) in files {
+        writer.start_file(file_path, options)?;
+        writer.write_all(contents.as_bytes())?;
+        record.push(format!("{file_path},,"));
+    }
+
+    let metadata_path = format!("{dist_info_prefix}.dist-info/METADATA");
+    writer.start_file(&metadata_path, options)?;
+    writer
+        .write_all(format!("Metadata-Version: 2.1\nName: {name}\nVersion: 0.1.0\n").as_bytes())?;
+    record.push(format!("{metadata_path},,"));
+
+    let wheel_path = format!("{dist_info_prefix}.dist-info/WHEEL");
+    writer.start_file(&wheel_path, options)?;
+    writer.write_all(
+        b"Wheel-Version: 1.0\nGenerator: uv-test\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+    )?;
+    record.push(format!("{wheel_path},,"));
+
+    let record_path = format!("{dist_info_prefix}.dist-info/RECORD");
+    record.push(format!("{record_path},,"));
+    writer.start_file(&record_path, options)?;
+    writer.write_all(record.join("\n").as_bytes())?;
+    writer.write_all(b"\n")?;
+
+    writer.finish()?;
+    Ok(())
+}
 
 /// Test basic metadata output for a simple workspace with one member.
 #[test]
@@ -53,6 +99,349 @@ fn workspace_metadata_simple() {
     Resolved 1 package in [TIME]
     "#
     );
+}
+
+#[test]
+fn workspace_metadata_dry_run_sync_conflict() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.workspace_metadata().arg("--dry-run").arg("--sync"), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--dry-run' cannot be used with '--sync'
+
+    Usage: uv workspace metadata --cache-dir [CACHE_DIR] --dry-run --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    "#);
+}
+
+#[test]
+fn workspace_metadata_module_owners_from_locked_wheels() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let gpu_a = context.temp_dir.child("gpu_a-0.1.0-py3-none-any.whl");
+    write_wheel(gpu_a.path(), "gpu-a", "gpu_a-0.1.0", &[("gpu/a.py", "")])?;
+
+    let gpu_b = context.temp_dir.child("gpu_b-0.1.0-py3-none-any.whl");
+    write_wheel(gpu_b.path(), "gpu-b", "gpu_b-0.1.0", &[("gpu/b.py", "")])?;
+
+    let typing_extensions = context
+        .temp_dir
+        .child("typing_extensions-0.1.0-py3-none-any.whl");
+    write_wheel(
+        typing_extensions.path(),
+        "typing-extensions",
+        "typing_extensions-0.1.0",
+        &[
+            ("typing_extensions.py", ""),
+            ("café.py", ""),
+            ("bytecode/__pycache__/compiled.cpython-312.pyc", ""),
+        ],
+    )?;
+
+    let gpu_a_url = Url::from_file_path(gpu_a.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
+    let gpu_b_url = Url::from_file_path(gpu_b.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
+    let typing_extensions_url = Url::from_file_path(typing_extensions.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"[project]
+name = "module-owner-root"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "gpu-a @ {gpu_a_url}",
+  "gpu-b @ {gpu_b_url}",
+  "typing-extensions @ {typing_extensions_url}",
+]
+"#
+        ))?;
+
+    let mut filters = context.filters();
+    filters.push((r#""sha256": "[0-9a-f]{64}""#, r#""sha256": "[SHA256]""#));
+
+    uv_snapshot!(filters, context.workspace_metadata().arg("--sync"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "workspace_root": "[TEMP_DIR]/",
+      "requires_python": ">=3.12",
+      "conflicts": {
+        "sets": []
+      },
+      "module_owners": {
+        "café": [
+          "typing-extensions==0.1.0@path+[TEMP_DIR]/typing_extensions-0.1.0-py3-none-any.whl"
+        ],
+        "gpu": [
+          "gpu-a==0.1.0@path+[TEMP_DIR]/gpu_a-0.1.0-py3-none-any.whl",
+          "gpu-b==0.1.0@path+[TEMP_DIR]/gpu_b-0.1.0-py3-none-any.whl"
+        ],
+        "gpu.a": [
+          "gpu-a==0.1.0@path+[TEMP_DIR]/gpu_a-0.1.0-py3-none-any.whl"
+        ],
+        "gpu.b": [
+          "gpu-b==0.1.0@path+[TEMP_DIR]/gpu_b-0.1.0-py3-none-any.whl"
+        ],
+        "typing_extensions": [
+          "typing-extensions==0.1.0@path+[TEMP_DIR]/typing_extensions-0.1.0-py3-none-any.whl"
+        ]
+      },
+      "members": [
+        {
+          "name": "module-owner-root",
+          "path": "[TEMP_DIR]/",
+          "id": "module-owner-root==0.1.0@virtual+[TEMP_DIR]/"
+        }
+      ],
+      "resolution": {
+        "gpu-a==0.1.0@path+[TEMP_DIR]/gpu_a-0.1.0-py3-none-any.whl": {
+          "name": "gpu-a",
+          "version": "0.1.0",
+          "source": {
+            "path": "[TEMP_DIR]/gpu_a-0.1.0-py3-none-any.whl"
+          },
+          "kind": "package",
+          "dependencies": [],
+          "wheels": [
+            {
+              "hashes": {
+                "sha256": "[SHA256]"
+              },
+              "filename": "gpu_a-0.1.0-py3-none-any.whl"
+            }
+          ]
+        },
+        "gpu-b==0.1.0@path+[TEMP_DIR]/gpu_b-0.1.0-py3-none-any.whl": {
+          "name": "gpu-b",
+          "version": "0.1.0",
+          "source": {
+            "path": "[TEMP_DIR]/gpu_b-0.1.0-py3-none-any.whl"
+          },
+          "kind": "package",
+          "dependencies": [],
+          "wheels": [
+            {
+              "hashes": {
+                "sha256": "[SHA256]"
+              },
+              "filename": "gpu_b-0.1.0-py3-none-any.whl"
+            }
+          ]
+        },
+        "module-owner-root==0.1.0@virtual+[TEMP_DIR]/": {
+          "name": "module-owner-root",
+          "version": "0.1.0",
+          "source": {
+            "virtual": "[TEMP_DIR]/"
+          },
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "gpu-a==0.1.0@path+[TEMP_DIR]/gpu_a-0.1.0-py3-none-any.whl"
+            },
+            {
+              "id": "gpu-b==0.1.0@path+[TEMP_DIR]/gpu_b-0.1.0-py3-none-any.whl"
+            },
+            {
+              "id": "typing-extensions==0.1.0@path+[TEMP_DIR]/typing_extensions-0.1.0-py3-none-any.whl"
+            }
+          ]
+        },
+        "typing-extensions==0.1.0@path+[TEMP_DIR]/typing_extensions-0.1.0-py3-none-any.whl": {
+          "name": "typing-extensions",
+          "version": "0.1.0",
+          "source": {
+            "path": "[TEMP_DIR]/typing_extensions-0.1.0-py3-none-any.whl"
+          },
+          "kind": "package",
+          "dependencies": [],
+          "wheels": [
+            {
+              "hashes": {
+                "sha256": "[SHA256]"
+              },
+              "filename": "typing_extensions-0.1.0-py3-none-any.whl"
+            }
+          ]
+        }
+      }
+    }
+
+    ----- stderr -----
+    warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
+    Resolved 4 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn workspace_metadata_module_owners_use_installed_package_id() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let py311_dir = context.temp_dir.child("py311");
+    fs_err::create_dir_all(py311_dir.path())?;
+    let module_owner_311 = py311_dir.child("module_owner-0.1.0-py3-none-any.whl");
+    write_wheel(
+        module_owner_311.path(),
+        "module-owner",
+        "module_owner-0.1.0",
+        &[("shared.py", "")],
+    )?;
+
+    let py312_dir = context.temp_dir.child("py312");
+    fs_err::create_dir_all(py312_dir.path())?;
+    let module_owner_312 = py312_dir.child("module_owner-0.1.0-py3-none-any.whl");
+    write_wheel(
+        module_owner_312.path(),
+        "module-owner",
+        "module_owner-0.1.0",
+        &[("shared.py", "")],
+    )?;
+
+    let module_owner_311_url = Url::from_file_path(module_owner_311.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
+    let module_owner_312_url = Url::from_file_path(module_owner_312.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"[project]
+name = "module-owner-root"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+  "module-owner @ {module_owner_311_url} ; python_version < '3.12'",
+  "module-owner @ {module_owner_312_url} ; python_version >= '3.12'",
+]
+"#
+        ))?;
+
+    let assert = context
+        .workspace_metadata()
+        .arg("--sync")
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    let module_owners = serde_json::to_string_pretty(&metadata["module_owners"])?;
+
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_snapshot!(module_owners, @r#"
+        {
+          "shared": [
+            "module-owner==0.1.0@path+[TEMP_DIR]/py312/module_owner-0.1.0-py3-none-any.whl"
+          ]
+        }
+        "#);
+    });
+
+    Ok(())
+}
+
+#[test]
+fn workspace_metadata_module_owners_ignore_stale_virtual_package() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let stale_owner = context
+        .temp_dir
+        .child("module_owner_root-0.1.0-py3-none-any.whl");
+    write_wheel(
+        stale_owner.path(),
+        "module-owner-root",
+        "module_owner_root-0.1.0",
+        &[("stale.py", "")],
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"[project]
+name = "module-owner-root"
+version = "0.1.0"
+requires-python = ">=3.12"
+
+[tool.uv]
+package = false
+"#,
+    )?;
+
+    context
+        .pip_install()
+        .arg(stale_owner.path())
+        .assert()
+        .success();
+
+    let assert = context
+        .workspace_metadata()
+        .arg("--sync")
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    let module_owners = if let Some(module_owners) = metadata.get("module_owners") {
+        serde_json::to_string_pretty(module_owners)?
+    } else {
+        "<missing>".to_string()
+    };
+
+    insta::assert_snapshot!(module_owners, @"<missing>");
+
+    Ok(())
+}
+
+#[test]
+fn workspace_metadata_module_owners_failure_is_error() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let gpu_a = context.temp_dir.child("gpu_a-0.1.0-py3-none-any.whl");
+    write_wheel(gpu_a.path(), "gpu-a", "gpu_a-0.1.0", &[("gpu/a.py", "")])?;
+
+    let gpu_a_url = Url::from_file_path(gpu_a.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"[project]
+name = "module-owner-root"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "gpu-a @ {gpu_a_url}",
+]
+"#
+        ))?;
+
+    context.lock().assert().success();
+    fs_err::remove_file(gpu_a.path())?;
+
+    uv_snapshot!(context.filters(), context.workspace_metadata().arg("--frozen").arg("--sync"), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
+    error: Failed to collect module owners
+      Caused by: Failed to determine installation plan
+      Caused by: Distribution not found at: file://[TEMP_DIR]/gpu_a-0.1.0-py3-none-any.whl
+    "#);
+
+    Ok(())
 }
 
 /// Test metadata for a root workspace (workspace with a root package).

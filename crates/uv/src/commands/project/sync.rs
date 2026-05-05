@@ -630,7 +630,7 @@ impl Deref for SyncEnvironment {
 }
 
 /// Sync a lockfile with an environment.
-pub(super) async fn do_sync(
+pub(crate) async fn do_sync(
     target: InstallTarget<'_>,
     venv: &PythonEnvironment,
     extras: &ExtrasSpecificationWithDefaults,
