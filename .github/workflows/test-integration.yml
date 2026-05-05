@@ -792,6 +792,93 @@ jobs:
             ghcr.io/astral-sh/termux-python:latest \
             /entrypoint.sh bash /test-termux.sh
 
+  integration-test-python-android:
+    name: "python on android"
+    timeout-minutes: 45
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+
+      - name: "Enable KVM group perms"
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-android-x86_64-${{ inputs.sha }}
+          path: uv-android
+
+      - name: "Prepare Android runtime"
+        run: |
+          rm -rf android-runtime
+          mkdir -p android-runtime/python
+
+          cp ./uv-android/uv android-runtime/uv
+          chmod +x android-runtime/uv
+          cp ./test/integration/android.sh android-runtime/android.sh
+          chmod +x android-runtime/android.sh
+
+          curl -LsSf https://www.python.org/ftp/python/3.14.3/python-3.14.3-x86_64-linux-android.tar.gz | tar -xzf - -C android-runtime/python
+
+          # adb push can fail on symlinks under /data/local/tmp, so flatten them.
+          rsync -aL android-runtime/python/prefix/ android-runtime/python/prefix-real/
+          rm -rf android-runtime/python/prefix
+          mv android-runtime/python/prefix-real android-runtime/python/prefix
+
+          sdkmanager --install 'ndk;27.3.13750724'
+          TOOLCHAIN="$ANDROID_HOME/ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-x86_64"
+          mkdir -p android-runtime/python/prefix/bin
+          "$TOOLCHAIN/bin/x86_64-linux-android24-clang" \
+            -fPIE -pie \
+            -Iandroid-runtime/python/prefix/include/python3.14 \
+            test/integration/android-python-launcher.c \
+            -Landroid-runtime/python/prefix/lib \
+            -lpython3.14 -ldl -lm -llog \
+            -o android-runtime/python/prefix/bin/python
+          chmod +x android-runtime/python/prefix/bin/python
+
+      - name: "AVD cache"
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-32-x86_64
+
+      - name: "Create AVD and generate snapshot for caching"
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0
+        with:
+          api-level: 32
+          arch: x86_64
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: false
+          script: echo "Generated AVD snapshot for caching."
+
+      - name: "Run Android integration checks"
+        uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0
+        with:
+          api-level: 32
+          arch: x86_64
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            adb wait-for-device
+            adb shell 'rm -rf /data/local/tmp/android-runtime'
+            adb push ./android-runtime /data/local/tmp/
+            adb shell 'chmod +x /data/local/tmp/android-runtime/uv /data/local/tmp/android-runtime/android.sh /data/local/tmp/android-runtime/python/prefix/bin/python'
+            adb shell 'cd /data/local/tmp/android-runtime && sh ./android.sh'
+
   integration-test-github-actions:
     name: "github actions"
     timeout-minutes: 10
