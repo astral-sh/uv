@@ -41,7 +41,7 @@ pub const DEFAULT_PYTHON_VERSION: &str = "3.12";
 
 // The expected latest patch version for each Python minor version.
 pub const LATEST_PYTHON_3_15: &str = "3.15.0a8";
-pub const LATEST_PYTHON_3_14: &str = "3.14.5rc1";
+pub const LATEST_PYTHON_3_14: &str = "3.14.4";
 pub const LATEST_PYTHON_3_13: &str = "3.13.13";
 pub const LATEST_PYTHON_3_12: &str = "3.12.13";
 pub const LATEST_PYTHON_3_11: &str = "3.11.15";
