@@ -41,13 +41,7 @@ pub const DEFAULT_PYTHON_VERSION: &str = "3.12";
 
 // The expected latest patch version for each Python minor version.
 pub const LATEST_PYTHON_3_15: &str = "3.15.0a8";
-pub const LATEST_PYTHON_3_14: &str = "3.14.5rc1";
-// The expected latest stable patch version for Python 3.14.
-// When a pre-release of the next patch is available (e.g., 3.14.5rc1), the latest stable
-// (e.g., 3.14.4) may differ from `LATEST_PYTHON_3_14`. `uv python install` installs the
-// latest stable, while `uv python upgrade` from a pre-release may install the latest
-// pre-release. Both are normalized to `3.14.[LATEST]` in test snapshots.
-pub const LATEST_STABLE_PYTHON_3_14: &str = "3.14.4";
+pub const LATEST_PYTHON_3_14: &str = "3.14.4";
 pub const LATEST_PYTHON_3_13: &str = "3.13.13";
 pub const LATEST_PYTHON_3_12: &str = "3.12.13";
 pub const LATEST_PYTHON_3_11: &str = "3.11.15";
@@ -559,16 +553,6 @@ impl TestContext {
             // Match the full version in various contexts (cpython-X.Y.Z, Python X.Y.Z, etc.)
             let pattern = format!(r"(\b){minor}\.{patch}(\b)");
             let replacement = format!("${{1}}{minor}.[LATEST]${{2}}");
-            self.filters.push((pattern, replacement));
-        }
-        // When the latest 3.14 is a pre-release (e.g., 3.14.5rc1) but the latest stable is older
-        // (e.g., 3.14.4), also filter the stable version to the same [LATEST] placeholder.
-        // This handles cases where `uv python install` (installs stable) and `uv python upgrade`
-        // from a pre-release (installs latest including pre-release) produce different versions.
-        if LATEST_STABLE_PYTHON_3_14 != LATEST_PYTHON_3_14 {
-            let patch = LATEST_STABLE_PYTHON_3_14.strip_prefix("3.14.").unwrap();
-            let pattern = format!(r"(\b)3\.14\.{patch}(\b)");
-            let replacement = format!("${{1}}3.14.[LATEST]${{2}}");
             self.filters.push((pattern, replacement));
         }
         self
