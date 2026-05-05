@@ -33,6 +33,6 @@ jobs:
         run: rustup toolchain install nightly-2026-04-15 --profile minimal --no-self-update
       - name: Publish workspace crates
         # Note `--no-verify` is safe because we do a publish dry-run elsewhere in CI
-        run: cargo +nightly-2026-04-15 publish --workspace --no-verify -Zpublish-timeout --config 'publish.timeout=600'
+        run: python3 scripts/publish-crates.py --cargo cargo +nightly-2026-04-15 --no-verify -- -Zpublish-timeout --config 'publish.timeout=600'
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
