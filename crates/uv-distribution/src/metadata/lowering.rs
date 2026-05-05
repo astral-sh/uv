@@ -10,12 +10,12 @@ use uv_distribution_filename::DistExtension;
 use uv_distribution_types::{
     Index, IndexLocations, IndexMetadata, IndexName, Origin, Requirement, RequirementSource,
 };
-use uv_fs::normalize_path;
+use uv_fs::{Simplified, normalize_absolute_path, normalize_path};
 use uv_git_types::{GitLfs, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerTree, VerbatimUrl, VersionOrUrl, looks_like_git_repository};
-use uv_pypi_types::{ConflictItem, ParsedGitUrl, ParsedUrlError, VerbatimParsedUrl};
+use uv_pypi_types::{ConflictItem, ParsedGitUrl, ParsedUrl, ParsedUrlError, VerbatimParsedUrl};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_workspace::Workspace;
 use uv_workspace::pyproject::{PyProjectToml, Source, Sources};
@@ -137,7 +137,10 @@ impl LoweredRequirement {
         }
 
         let Some(sources) = sources else {
-            return Either::Left(std::iter::once(Ok(Self(Requirement::from(requirement)))));
+            return Either::Left(std::iter::once(Self::preserve_git_source(
+                requirement,
+                git_member,
+            )));
         };
 
         // Determine whether the markers cover the full space for the requirement. If not, fill the
@@ -509,6 +512,40 @@ impl LoweredRequirement {
         )
     }
 
+    /// Preserve the Git origin for direct path dependencies discovered while lowering metadata from
+    /// a checked-out Git repository.
+    pub(crate) fn preserve_git_source(
+        requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
+        git_member: Option<&GitWorkspaceMember>,
+    ) -> Result<Self, LoweringError> {
+        let Some(git_member) = git_member else {
+            return Ok(Self(Requirement::from(requirement)));
+        };
+
+        let Some(VersionOrUrl::Url(url)) = &requirement.version_or_url else {
+            return Ok(Self(Requirement::from(requirement)));
+        };
+
+        let ParsedUrl::Directory(directory) = &url.parsed_url else {
+            return Ok(Self(Requirement::from(requirement)));
+        };
+
+        let install_path = git_path(&directory.install_path)?;
+        let fetch_root = git_path(git_member.fetch_root)?;
+        if !install_path.starts_with(&fetch_root) {
+            return Ok(Self(Requirement::from(requirement)));
+        }
+
+        Ok(Self(Requirement {
+            name: requirement.name,
+            groups: Box::new([]),
+            extras: requirement.extras,
+            marker: requirement.marker,
+            source: git_source_from_path(&install_path, git_member)?,
+            origin: requirement.origin,
+        }))
+    }
+
     /// Convert back into a [`Requirement`].
     pub fn into_inner(self) -> Requirement {
         self.0
@@ -757,24 +794,7 @@ fn path_source(
     };
     if is_dir {
         if let Some(git_member) = git_member {
-            let git = git_member.git_source.git.clone();
-            let subdirectory = uv_fs::relative_to(install_path, git_member.fetch_root)
-                .expect("Workspace member must be relative");
-            let subdirectory = normalize_path(subdirectory);
-            let subdirectory = if subdirectory == PathBuf::new() {
-                None
-            } else {
-                Some(subdirectory.into_owned().into_boxed_path())
-            };
-            let url = DisplaySafeUrl::from(ParsedGitUrl {
-                url: git.clone(),
-                subdirectory: subdirectory.clone(),
-            });
-            return Ok(RequirementSource::Git {
-                git,
-                subdirectory,
-                url: VerbatimUrl::from_url(url),
-            });
+            return git_source_from_path(install_path, git_member);
         }
 
         if editable == Some(true) {
@@ -826,4 +846,36 @@ fn path_source(
             url,
         })
     }
+}
+
+fn git_source_from_path(
+    install_path: impl AsRef<Path>,
+    git_member: &GitWorkspaceMember,
+) -> Result<RequirementSource, LoweringError> {
+    let git = git_member.git_source.git.clone();
+    let install_path = git_path(install_path.as_ref())?;
+    let fetch_root = git_path(git_member.fetch_root)?;
+    let subdirectory =
+        uv_fs::relative_to(install_path, fetch_root).map_err(LoweringError::RelativeTo)?;
+    let subdirectory = normalize_path(subdirectory);
+    let subdirectory = if subdirectory == PathBuf::new() {
+        None
+    } else {
+        Some(subdirectory.into_owned().into_boxed_path())
+    };
+    let url = DisplaySafeUrl::from(ParsedGitUrl {
+        url: git.clone(),
+        subdirectory: subdirectory.clone(),
+    });
+    Ok(RequirementSource::Git {
+        git,
+        subdirectory,
+        url: VerbatimUrl::from_url(url),
+    })
+}
+
+fn git_path(path: &Path) -> Result<PathBuf, LoweringError> {
+    path.simple_canonicalize()
+        .or_else(|_| normalize_absolute_path(path))
+        .map_err(LoweringError::RelativeTo)
 }
