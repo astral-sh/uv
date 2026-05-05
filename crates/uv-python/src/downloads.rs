@@ -2377,7 +2377,7 @@ mod tests {
         assert!(err.should_try_next_url());
     }
 
-    /// Every [`PythonVersion`] in the embedded download metadata must be convertable
+    /// Every [`PythonVersion`] in the embedded download metadata must be convertible
     /// to a [`VersionRequest`] to avoid runtime panics.
     #[test]
     fn embedded_download_versions_convert_to_version_requests() {
