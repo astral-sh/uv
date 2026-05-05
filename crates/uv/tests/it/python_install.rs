@@ -2373,6 +2373,62 @@ fn python_install_unknown() {
     ");
 }
 
+#[test]
+fn python_install_patch_prerelease_request() {
+    let platform_key = platform_key_from_env().unwrap();
+    let mut platform_parts = platform_key.split('-');
+    let os = platform_parts.next().unwrap();
+    let arch = platform_parts.next().unwrap();
+    let libc = platform_parts.next().unwrap();
+
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_managed_python_dirs();
+
+    let downloads_json = context.temp_dir.child("downloads.json");
+    downloads_json
+        .write_str(&format!(
+            r#"{{
+        "cpython-3.14.5rc1-{platform_key}": {{
+            "name": "cpython",
+            "arch": {{
+                "family": "{arch}",
+                "variant": null
+            }},
+            "os": "{os}",
+            "libc": "{libc}",
+            "major": 3,
+            "minor": 14,
+            "patch": 5,
+            "prerelease": "rc1",
+            "url": "https://custom.com/cpython-3.14.5rc1-{platform_key}.tar.gz",
+            "sha256": null,
+            "variant": null,
+            "build": null
+        }}
+    }}"#
+        ))
+        .unwrap();
+
+    let python_cache = context.temp_dir.child("python-cache");
+
+    uv_snapshot!(context.filters(), context
+        .python_install()
+        .arg("3.14.5rc1")
+        .arg("--offline")
+        .arg("--python-downloads-json-url")
+        .arg(downloads_json.path())
+        .env(EnvVars::UV_PYTHON_CACHE_DIR, python_cache.as_ref()), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to install cpython-3.14.5rc1-[PLATFORM]
+      Caused by: An offline Python installation was requested, but cpython-3.14.5rc1-[PLATFORM] (from https://custom.com/cpython-3.14.5rc1-[PLATFORM].tar.gz) is missing in python-cache
+    ");
+}
+
 #[cfg(unix)]
 #[test]
 fn python_install_broken_link() {

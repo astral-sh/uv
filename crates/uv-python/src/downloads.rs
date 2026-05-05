@@ -1974,6 +1974,27 @@ mod tests {
         assert_eq!(request.os, None);
         assert_eq!(request.arch, None);
         assert_eq!(request.libc, None);
+
+        let request = PythonDownloadRequest::from_str("cpython-3.14.5rc1-macos-aarch64-none")
+            .expect("Test request should be parsed");
+
+        assert_eq!(request.implementation, Some(ImplementationName::CPython));
+        assert_eq!(
+            request.version,
+            Some(VersionRequest::from_str("3.14.5rc1").unwrap())
+        );
+        assert_eq!(
+            request.os,
+            Some(Os::new(target_lexicon::OperatingSystem::Darwin(None)))
+        );
+        assert_eq!(
+            request.arch,
+            Some(ArchRequest::Explicit(Arch::new(
+                target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
+                None
+            )))
+        );
+        assert_eq!(request.libc, Some(Libc::None));
     }
 
     /// We fail on extra parts in the request.
