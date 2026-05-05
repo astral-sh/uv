@@ -7,6 +7,8 @@
 
 Released on 2026-05-04.
 
+_Note due to a [timeout publishing to crates.io](https://github.com/astral-sh/uv/actions/runs/25359185135/job/74362183138), the GitHub portion of this release was published manually by a maintainer using the artifacts built in CI. This release will not be fully published to crates.io, and there will not be any GitHub attestations available for it. There should be no other effect._
+
 This release includes a special release candidate for the next Python 3.14 patch release. Python 3.14 included a new garbage collection implementation, which reduced pause times but caused significant unexpected memory pressure in production environments. In 3.14.5 and 3.15, the previous garbage collection implementation will be restored.
 
 We would greatly appreciate if you tested the 3.14.5rc1 version included in this release. The stable version is expected to be released soon and any feedback on potential issues would be helpful to the Python development team.
