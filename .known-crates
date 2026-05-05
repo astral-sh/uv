@@ -19,6 +19,7 @@ uv-distribution
 uv-distribution-filename
 uv-distribution-types
 uv-extract
+uv-fastid
 uv-flags
 uv-fs
 uv-git
