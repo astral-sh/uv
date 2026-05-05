@@ -26,6 +26,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
@@ -58,7 +59,7 @@ jobs:
       - name: "Create Pull Request"
         run: |
           branch="$(git branch --show-current)"
-          git push -u origin "$branch"
+          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:"$branch"
           gh pr create \
             --base main \
             --head "$branch" \
