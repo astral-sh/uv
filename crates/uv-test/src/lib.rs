@@ -278,6 +278,19 @@ impl TestContext {
         self
     }
 
+    /// Filter `(compiled: yes)` and `(compiled: no)` to a consistent value.
+    ///
+    /// Useful when `--python-platform` forces a cross-platform resolution so the
+    /// installed wheel may or may not be native depending on the host.
+    #[must_use]
+    pub fn with_filtered_compiled(mut self) -> Self {
+        self.filters.push((
+            r"compiled: (yes|no)".to_string(),
+            "compiled: [COMPILED]".to_string(),
+        ));
+        self
+    }
+
     /// Add extra standard filtering for Python interpreter sources
     #[must_use]
     pub fn with_filtered_python_sources(mut self) -> Self {
