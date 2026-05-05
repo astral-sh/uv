@@ -28,6 +28,6 @@ jobs:
         id: auth
       - name: Publish workspace crates
         # Note `--no-verify` is safe because we do a publish dry-run elsewhere in CI
-        run: cargo publish --workspace --no-verify
+        run: python3 scripts/publish-crates.py --no-verify
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
