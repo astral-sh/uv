@@ -22,6 +22,7 @@ use tokio_util::compat::FuturesAsyncReadCompatExt;
 use url::Url;
 use uv_client::retryable_on_request_failure;
 use uv_distribution_filename::SourceDistExtension;
+use uv_static::{astral_mirror_base_url, astral_mirror_url_from_env, custom_astral_mirror_url};
 
 use uv_cache::{Cache, CacheBucket, CacheEntry, Error as CacheError};
 use uv_client::{BaseClient, RetriableError, fetch_with_url_fallback};
@@ -72,69 +73,96 @@ impl Binary {
         platform: &str,
         format: ArchiveFormat,
     ) -> Result<Vec<DisplaySafeUrl>, Error> {
+        let custom_astral_mirror = astral_mirror_url_from_env();
+        (*self).download_urls_with_astral_mirror(
+            version,
+            platform,
+            format,
+            custom_astral_mirror.as_deref(),
+        )
+    }
+
+    fn download_urls_with_astral_mirror(
+        self,
+        version: &Version,
+        platform: &str,
+        format: ArchiveFormat,
+        astral_mirror_url: Option<&str>,
+    ) -> Result<Vec<DisplaySafeUrl>, Error> {
+        let astral_mirror_url = custom_astral_mirror_url(astral_mirror_url);
         match self {
             Self::Ruff => {
                 let suffix = format!("{version}/ruff-{platform}.{}", format.extension());
-                let canonical = format!("{RUFF_GITHUB_URL_PREFIX}{suffix}");
-                let mirror = format!("{RUFF_DEFAULT_MIRROR}{suffix}");
-                Ok(vec![
-                    DisplaySafeUrl::parse(&mirror).map_err(|err| Error::UrlParse {
-                        url: mirror,
-                        source: err,
-                    })?,
-                    DisplaySafeUrl::parse(&canonical).map_err(|err| Error::UrlParse {
-                        url: canonical,
-                        source: err,
-                    })?,
-                ])
+                let mirror_base = astral_mirror_base_url(astral_mirror_url);
+                let mirror = format!("{mirror_base}{RUFF_MIRROR_SUFFIX}{suffix}");
+                let mut urls = vec![parse_url(mirror)?];
+                // When using the default mirror, also fall back to GitHub.
+                if astral_mirror_url.is_none() {
+                    let canonical = format!("{RUFF_GITHUB_URL_PREFIX}{suffix}");
+                    urls.push(parse_url(canonical)?);
+                }
+                Ok(urls)
             }
             Self::Uv => {
                 let canonical = format!(
                     "{UV_GITHUB_URL_PREFIX}{version}/uv-{platform}.{}",
                     format.extension()
                 );
-                Ok(vec![DisplaySafeUrl::parse(&canonical).map_err(|err| {
-                    Error::UrlParse {
-                        url: canonical,
-                        source: err,
-                    }
-                })?])
+                Ok(vec![parse_url(canonical)?])
             }
         }
     }
 
     /// Return the ordered list of manifest URLs to try for this binary.
-    fn manifest_urls(self) -> Vec<DisplaySafeUrl> {
+    fn manifest_urls(self) -> Result<Vec<DisplaySafeUrl>, Error> {
+        let custom_astral_mirror = astral_mirror_url_from_env();
+        self.manifest_urls_with_astral_mirror(custom_astral_mirror.as_deref())
+    }
+
+    fn manifest_urls_with_astral_mirror(
+        self,
+        astral_mirror_url: Option<&str>,
+    ) -> Result<Vec<DisplaySafeUrl>, Error> {
+        let astral_mirror_url = custom_astral_mirror_url(astral_mirror_url);
         let name = self.name();
-        match self {
-            // These are static strings so parsing cannot fail.
-            Self::Ruff => vec![
-                DisplaySafeUrl::parse(&format!("{VERSIONS_MANIFEST_MIRROR}/{name}.ndjson"))
-                    .unwrap(),
-                DisplaySafeUrl::parse(&format!("{VERSIONS_MANIFEST_URL}/{name}.ndjson")).unwrap(),
-            ],
-            Self::Uv => vec![
-                DisplaySafeUrl::parse(&format!("{VERSIONS_MANIFEST_MIRROR}/{name}.ndjson"))
-                    .unwrap(),
-                DisplaySafeUrl::parse(&format!("{VERSIONS_MANIFEST_URL}/{name}.ndjson")).unwrap(),
-            ],
+        let mirror_base = astral_mirror_base_url(astral_mirror_url);
+        let mirror = format!("{mirror_base}{VERSIONS_MANIFEST_MIRROR_SUFFIX}/{name}.ndjson");
+        let mut urls = vec![parse_url(mirror)?];
+        // When using the default mirror, also fall back to the canonical raw GitHub URL.
+        if astral_mirror_url.is_none() {
+            let canonical = format!("{VERSIONS_MANIFEST_URL}/{name}.ndjson");
+            urls.push(parse_url(canonical)?);
         }
+        Ok(urls)
     }
 
     /// Given a canonical artifact URL (e.g., from the versions manifest), return the ordered list
     /// of URLs to try for this binary.
-    fn mirror_urls(self, canonical_url: DisplaySafeUrl) -> Vec<DisplaySafeUrl> {
+    fn mirror_urls(self, canonical_url: DisplaySafeUrl) -> Result<Vec<DisplaySafeUrl>, Error> {
+        let custom_astral_mirror = astral_mirror_url_from_env();
+        self.mirror_urls_with_astral_mirror(canonical_url, custom_astral_mirror.as_deref())
+    }
+
+    fn mirror_urls_with_astral_mirror(
+        self,
+        canonical_url: DisplaySafeUrl,
+        astral_mirror_url: Option<&str>,
+    ) -> Result<Vec<DisplaySafeUrl>, Error> {
+        let astral_mirror_url = custom_astral_mirror_url(astral_mirror_url);
         match self {
             Self::Ruff => {
                 if let Some(suffix) = canonical_url.as_str().strip_prefix(RUFF_GITHUB_URL_PREFIX) {
-                    let mirror_str = format!("{RUFF_DEFAULT_MIRROR}{suffix}");
-                    if let Ok(mirror_url) = DisplaySafeUrl::parse(&mirror_str) {
-                        return vec![mirror_url, canonical_url];
+                    let mirror_base = astral_mirror_base_url(astral_mirror_url);
+                    let mirror = format!("{mirror_base}{RUFF_MIRROR_SUFFIX}{suffix}");
+                    let mirror_url = parse_url(mirror)?;
+                    if astral_mirror_url.is_some() {
+                        return Ok(vec![mirror_url]);
                     }
+                    return Ok(vec![mirror_url, canonical_url]);
                 }
-                vec![canonical_url]
+                Ok(vec![canonical_url])
             }
-            Self::Uv => vec![canonical_url],
+            Self::Uv => Ok(vec![canonical_url]),
         }
     }
 
@@ -223,17 +251,18 @@ const RUFF_GITHUB_URL_PREFIX: &str = "https://github.com/astral-sh/ruff/releases
 /// The canonical GitHub URL prefix for uv releases.
 const UV_GITHUB_URL_PREFIX: &str = "https://github.com/astral-sh/uv/releases/download/";
 
-/// The default Astral mirror for Ruff releases.
-///
-/// This mirror is tried first for Ruff downloads. If it fails, uv falls back to the canonical
-/// GitHub URL.
-const RUFF_DEFAULT_MIRROR: &str = "https://releases.astral.sh/github/ruff/releases/download/";
+/// The suffix appended to the Astral mirror base for Ruff releases.
+const RUFF_MIRROR_SUFFIX: &str = "/github/ruff/releases/download/";
+
+/// The suffix appended to the Astral mirror base for the versions manifest.
+const VERSIONS_MANIFEST_MIRROR_SUFFIX: &str = "/github/versions/main/v1";
 
 /// The canonical base URL for the versions manifest.
 const VERSIONS_MANIFEST_URL: &str = "https://raw.githubusercontent.com/astral-sh/versions/main/v1";
 
-/// The default Astral mirror for the versions manifest.
-const VERSIONS_MANIFEST_MIRROR: &str = "https://releases.astral.sh/github/versions/main/v1";
+fn parse_url(url: String) -> Result<DisplaySafeUrl, Error> {
+    DisplaySafeUrl::parse(&url).map_err(|source| Error::UrlParse { url, source })
+}
 
 /// Binary version information from the versions manifest.
 #[derive(Debug, Deserialize)]
@@ -452,8 +481,10 @@ pub async fn find_matching_version(
     let platform = Platform::from_env()?;
     let platform_name = platform.as_cargo_dist_triple();
 
+    let manifest_urls = binary.manifest_urls()?;
+
     fetch_with_url_fallback(
-        &binary.manifest_urls(),
+        &manifest_urls,
         *retry_policy,
         &format!("manifest for `{binary}`"),
         |url| {
@@ -506,13 +537,13 @@ async fn fetch_and_find_matching_version(
             return Ok(None);
         }
         let version_info: BinVersionInfo = serde_json::from_str(line_str)?;
-        Ok(check_version_match(
+        check_version_match(
             binary,
             &version_info,
             constraints,
             exclude_newer,
             platform_name,
-        ))
+        )
     };
 
     // Stream the response line by line
@@ -559,27 +590,27 @@ async fn fetch_and_find_matching_version(
 
 /// Check if a version matches the constraints and find the artifact for the platform.
 ///
-/// Returns `Some(resolved)` if the version matches and an artifact is found,
-/// `None` if the version doesn't match or no artifact is available for the platform.
+/// Returns `Ok(Some(resolved))` if the version matches and an artifact is found,
+/// `Ok(None)` if the version doesn't match or no artifact is available for the platform.
 fn check_version_match(
     binary: Binary,
     version_info: &BinVersionInfo,
     constraints: Option<&uv_pep440::VersionSpecifiers>,
     exclude_newer: Option<jiff::Timestamp>,
     platform_name: &str,
-) -> Option<ResolvedVersion> {
+) -> Result<Option<ResolvedVersion>, Error> {
     // Skip versions newer than the exclude_newer cutoff
     if let Some(cutoff) = exclude_newer
         && version_info.date > cutoff
     {
-        return None;
+        return Ok(None);
     }
 
     // Skip versions that don't match the constraints
     if let Some(constraints) = constraints
         && !constraints.contains(&version_info.version)
     {
-        return None;
+        return Ok(None);
     }
 
     // Find an artifact matching the platform, trusting whichever archive format the
@@ -599,14 +630,14 @@ fn check_version_match(
             _ => continue,
         };
 
-        return Some(ResolvedVersion {
+        return Ok(Some(ResolvedVersion {
             version: version_info.version.clone(),
-            artifact_urls: binary.mirror_urls(canonical_url),
+            artifact_urls: binary.mirror_urls(canonical_url)?,
             archive_format,
-        });
+        }));
     }
 
-    None
+    Ok(None)
 }
 
 /// Install the given binary from a [`ResolvedVersion`].
@@ -952,6 +983,129 @@ mod tests {
                     .to_string(),
             ]
         );
+    }
+
+    #[test]
+    fn test_ruff_download_urls_custom_astral_mirror() {
+        let urls = Binary::Ruff
+            .download_urls_with_astral_mirror(
+                &Version::new([0, 15, 1]),
+                "x86_64-unknown-linux-gnu",
+                ArchiveFormat::TarGz,
+                Some("https://nexus.example.com/repository/releases.astral.sh/"),
+            )
+            .expect("ruff download URLs should be valid");
+
+        let urls = urls
+            .into_iter()
+            .map(|url| url.to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            urls,
+            vec![
+                "https://nexus.example.com/repository/releases.astral.sh/github/ruff/releases/download/0.15.1/ruff-x86_64-unknown-linux-gnu.tar.gz"
+                    .to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_ruff_download_urls_empty_astral_mirror_uses_default() {
+        let default_urls = Binary::Ruff
+            .download_urls_with_astral_mirror(
+                &Version::new([0, 15, 1]),
+                "x86_64-unknown-linux-gnu",
+                ArchiveFormat::TarGz,
+                None,
+            )
+            .expect("ruff download URLs should be valid");
+        let empty_urls = Binary::Ruff
+            .download_urls_with_astral_mirror(
+                &Version::new([0, 15, 1]),
+                "x86_64-unknown-linux-gnu",
+                ArchiveFormat::TarGz,
+                Some(""),
+            )
+            .expect("ruff download URLs should be valid");
+
+        assert_eq!(default_urls, empty_urls);
+    }
+
+    #[test]
+    fn test_manifest_urls_custom_astral_mirror() {
+        for (binary, filename) in [(Binary::Ruff, "ruff.ndjson"), (Binary::Uv, "uv.ndjson")] {
+            let urls = binary
+                .manifest_urls_with_astral_mirror(Some(
+                    "https://nexus.example.com/repository/releases.astral.sh/",
+                ))
+                .expect("manifest URLs should be valid");
+
+            let urls = urls
+                .into_iter()
+                .map(|url| url.to_string())
+                .collect::<Vec<_>>();
+            assert_eq!(
+                urls,
+                vec![format!(
+                    "https://nexus.example.com/repository/releases.astral.sh/github/versions/main/v1/{filename}"
+                )]
+            );
+        }
+    }
+
+    #[test]
+    fn test_ruff_mirror_urls_custom_astral_mirror() {
+        let canonical_url = DisplaySafeUrl::parse(
+            "https://github.com/astral-sh/ruff/releases/download/0.15.1/ruff-x86_64-unknown-linux-gnu.tar.gz",
+        )
+        .unwrap();
+        let urls = Binary::Ruff
+            .mirror_urls_with_astral_mirror(
+                canonical_url,
+                Some("https://nexus.example.com/repository/releases.astral.sh/"),
+            )
+            .expect("mirror URLs should be valid");
+
+        let urls = urls
+            .into_iter()
+            .map(|url| url.to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            urls,
+            vec![
+                "https://nexus.example.com/repository/releases.astral.sh/github/ruff/releases/download/0.15.1/ruff-x86_64-unknown-linux-gnu.tar.gz"
+                    .to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_manifest_urls_empty_astral_mirror_uses_default() {
+        for binary in [Binary::Ruff, Binary::Uv] {
+            let default_urls = binary
+                .manifest_urls_with_astral_mirror(None)
+                .expect("manifest URLs should be valid");
+            let empty_urls = binary
+                .manifest_urls_with_astral_mirror(Some(""))
+                .expect("manifest URLs should be valid");
+            assert_eq!(default_urls, empty_urls);
+        }
+    }
+
+    #[test]
+    fn test_ruff_mirror_urls_empty_astral_mirror_uses_default() {
+        let canonical_url = DisplaySafeUrl::parse(
+            "https://github.com/astral-sh/ruff/releases/download/0.15.1/ruff-x86_64-unknown-linux-gnu.tar.gz",
+        )
+        .unwrap();
+        let default_urls = Binary::Ruff
+            .mirror_urls_with_astral_mirror(canonical_url.clone(), None)
+            .expect("mirror URLs should be valid");
+        let empty_urls = Binary::Ruff
+            .mirror_urls_with_astral_mirror(canonical_url, Some(""))
+            .expect("mirror URLs should be valid");
+
+        assert_eq!(default_urls, empty_urls);
     }
 
     #[tokio::test]

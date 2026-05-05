@@ -20,15 +20,42 @@ use uv_client::{BaseClientBuilder, RetriableError, WrappedReqwestError, fetch_wi
 use uv_fs::Simplified;
 use uv_pep440::{Version as Pep440Version, VersionSpecifier, VersionSpecifiers};
 use uv_redacted::DisplaySafeUrl;
-use uv_static::EnvVars;
+use uv_static::{
+    EnvVars, astral_mirror_base_url, astral_mirror_url_from_env, custom_astral_mirror_url,
+};
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 const UV_GITHUB_RELEASES_DOWNLOAD_PREFIX: &str =
     "https://github.com/astral-sh/uv/releases/download/";
-const UV_MIRROR_RELEASES_DOWNLOAD_PREFIX: &str =
-    "https://releases.astral.sh/github/uv/releases/download/";
+
+/// The suffix appended to the Astral mirror base for uv release downloads.
+const UV_MIRROR_SUFFIX: &str = "/github/uv/releases/download/";
+
+/// Return the effective Astral mirror prefix for uv release downloads.
+fn effective_uv_mirror_prefix(astral_mirror_url: Option<&str>) -> String {
+    format!(
+        "{}{UV_MIRROR_SUFFIX}",
+        astral_mirror_base_url(astral_mirror_url)
+    )
+}
+
+/// Return the `UV_DOWNLOAD_URL` value for the standalone installer when a custom Astral mirror is
+/// configured.
+fn installer_download_url(
+    target_version: &Pep440Version,
+    astral_mirror_url: Option<&str>,
+) -> Option<String> {
+    let mirror = custom_astral_mirror_url(astral_mirror_url)?;
+    Some(format!(
+        "{}{}{}",
+        mirror.trim_end_matches('/'),
+        UV_MIRROR_SUFFIX,
+        target_version
+    ))
+}
+
 const AXOUPDATER_CONFIG_PATH: &str = "AXOUPDATER_CONFIG_PATH";
 const AXOUPDATER_CONFIG_WORKING_DIR: &str = "AXOUPDATER_CONFIG_WORKING_DIR";
 
@@ -318,7 +345,9 @@ async fn run_official_updater(
     client_builder: BaseClientBuilder<'_>,
     github_token: Option<&str>,
 ) -> Result<ExitStatus> {
-    let installer_urls = official_installer_urls(target_version)?;
+    let custom_astral_mirror = astral_mirror_url_from_env();
+    let installer_urls =
+        official_installer_urls_with_mirror(target_version, custom_astral_mirror.as_deref())?;
     let temp_dir = TempDir::new()?;
     let installer_path = temp_dir.path().join(installer_filename());
     let install_prefix = PathBuf::from(updater.install_prefix_root()?.as_str());
@@ -335,7 +364,14 @@ async fn run_official_updater(
     )
     .await?;
 
-    execute_official_installer(&installer_path, &install_prefix, modify_path).await?;
+    execute_official_installer(
+        &installer_path,
+        &install_prefix,
+        modify_path,
+        target_version,
+        custom_astral_mirror.as_deref(),
+    )
+    .await?;
 
     let direction = if current_version > target_version {
         "Downgraded"
@@ -368,19 +404,31 @@ fn installer_filename() -> &'static str {
 }
 
 /// Build the mirror-first URL list for the official standalone installer.
-fn official_installer_urls(version: &Pep440Version) -> Result<Vec<DisplaySafeUrl>> {
+fn official_installer_urls_with_mirror(
+    version: &Pep440Version,
+    astral_mirror_url: Option<&str>,
+) -> Result<Vec<DisplaySafeUrl>> {
+    let astral_mirror_url = custom_astral_mirror_url(astral_mirror_url);
     let filename = installer_filename();
-    let mirror = format!("{UV_MIRROR_RELEASES_DOWNLOAD_PREFIX}{version}/{filename}");
-    let canonical = format!("{UV_GITHUB_RELEASES_DOWNLOAD_PREFIX}{version}/{filename}");
+    let mirror_prefix = effective_uv_mirror_prefix(astral_mirror_url);
+    let mirror = format!("{mirror_prefix}{version}/{filename}");
 
-    Ok(vec![
+    let mut urls = vec![
         DisplaySafeUrl::parse(&mirror).with_context(|| format!("Failed to parse `{mirror}`"))?,
-        DisplaySafeUrl::parse(&canonical)
-            .with_context(|| format!("Failed to parse `{canonical}`"))?,
-    ])
+    ];
+
+    // When using the default mirror, also fall back to the canonical GitHub URL.
+    if astral_mirror_url.is_none() {
+        let canonical = format!("{UV_GITHUB_RELEASES_DOWNLOAD_PREFIX}{version}/{filename}");
+        urls.push(
+            DisplaySafeUrl::parse(&canonical)
+                .with_context(|| format!("Failed to parse `{canonical}`"))?,
+        );
+    }
+    Ok(urls)
 }
 
-/// Download the official installer from the mirror first, then fall back to GitHub.
+/// Download the official installer from the provided mirror/canonical URL list.
 async fn download_installer_from_urls(
     urls: &[DisplaySafeUrl],
     installer_path: &Path,
@@ -459,10 +507,16 @@ fn installer_download_github_token<'a>(
 
 /// Execute the standalone installer while preserving the existing install location and PATH
 /// behavior.
+///
+/// When [`UV_ASTRAL_MIRROR_URL`](EnvVars::UV_ASTRAL_MIRROR_URL) is set, the installer is also
+/// given `UV_DOWNLOAD_URL` pointing at the mirror's uv release directory so the installer itself
+/// fetches the uv archive from the mirror.
 async fn execute_official_installer(
     installer_path: &Path,
     install_prefix: &Path,
     modify_path: bool,
+    target_version: &Pep440Version,
+    astral_mirror_url: Option<&str>,
 ) -> Result<(), AxoupdateError> {
     let mut command = if cfg!(windows) {
         let mut command = Command::new("powershell");
@@ -487,6 +541,11 @@ async fn execute_official_installer(
     command.env_remove(EnvVars::PS_MODULE_PATH);
     command.env("CARGO_DIST_FORCE_INSTALL_DIR", install_prefix);
     command.env(EnvVars::UV_INSTALL_DIR, install_prefix);
+    // When a custom Astral mirror is configured, point the installer at the mirrored
+    // uv release directory so it downloads the archive from the mirror too.
+    if let Some(download_url) = installer_download_url(target_version, astral_mirror_url) {
+        command.env(EnvVars::UV_DOWNLOAD_URL, download_url);
+    }
     if !modify_path {
         let app_name_env_var = app_name_to_env_var("uv");
         command.env(format!("{app_name_env_var}_NO_MODIFY_PATH"), "1");
@@ -929,7 +988,7 @@ mod tests {
 
     #[test]
     fn test_official_installer_urls() {
-        let urls = official_installer_urls(&Pep440Version::new([1, 2, 3]))
+        let urls = official_installer_urls_with_mirror(&Pep440Version::new([1, 2, 3]), None)
             .unwrap()
             .into_iter()
             .map(|url| url.to_string())
@@ -946,6 +1005,56 @@ mod tests {
                     installer_filename()
                 ),
             ]
+        );
+    }
+
+    #[test]
+    fn test_official_installer_urls_custom_astral_mirror() {
+        let urls = official_installer_urls_with_mirror(
+            &Pep440Version::new([1, 2, 3]),
+            Some("https://nexus.example.com/repository/releases.astral.sh/"),
+        )
+        .unwrap()
+        .into_iter()
+        .map(|url| url.to_string())
+        .collect::<Vec<_>>();
+        assert_eq!(
+            urls,
+            vec![format!(
+                "https://nexus.example.com/repository/releases.astral.sh/github/uv/releases/download/1.2.3/{}",
+                installer_filename()
+            )]
+        );
+    }
+
+    #[test]
+    fn test_official_installer_urls_empty_astral_mirror_uses_default() {
+        let default_urls =
+            official_installer_urls_with_mirror(&Pep440Version::new([1, 2, 3]), None).unwrap();
+        let empty_urls =
+            official_installer_urls_with_mirror(&Pep440Version::new([1, 2, 3]), Some("")).unwrap();
+        assert_eq!(default_urls, empty_urls);
+    }
+
+    #[test]
+    fn test_installer_download_url_custom_astral_mirror() {
+        assert_eq!(
+            installer_download_url(
+                &Pep440Version::new([1, 2, 3]),
+                Some("https://nexus.example.com/repository/releases.astral.sh/")
+            )
+            .as_deref(),
+            Some(
+                "https://nexus.example.com/repository/releases.astral.sh/github/uv/releases/download/1.2.3"
+            )
+        );
+    }
+
+    #[test]
+    fn test_installer_download_url_empty_astral_mirror_uses_default() {
+        assert_eq!(
+            installer_download_url(&Pep440Version::new([1, 2, 3]), Some("")),
+            None
         );
     }
 
@@ -1053,9 +1162,15 @@ mod tests {
         .unwrap();
         fs_err::set_permissions(&installer_path, std::fs::Permissions::from_mode(0o744)).unwrap();
 
-        let err = execute_official_installer(&installer_path, &install_prefix, true)
-            .await
-            .expect_err("failing installer should return an error");
+        let err = execute_official_installer(
+            &installer_path,
+            &install_prefix,
+            true,
+            &Pep440Version::new([1, 2, 3]),
+            None,
+        )
+        .await
+        .expect_err("failing installer should return an error");
         let AxoupdateError::InstallFailed {
             status,
             stdout,
@@ -1090,9 +1205,15 @@ mod tests {
         .unwrap();
         fs_err::set_permissions(&installer_path, std::fs::Permissions::from_mode(0o744)).unwrap();
 
-        execute_official_installer(&installer_path, &install_prefix, false)
-            .await
-            .unwrap();
+        execute_official_installer(
+            &installer_path,
+            &install_prefix,
+            false,
+            &Pep440Version::new([1, 2, 3]),
+            None,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(
             fs_err::read_to_string(&output_path).unwrap(),
@@ -1101,6 +1222,42 @@ mod tests {
                 install_prefix.display(),
                 install_prefix.display(),
             )
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn test_execute_official_installer_sets_download_url_for_astral_mirror() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp_dir = TempDir::new().unwrap();
+        let output_path = temp_dir.path().join("env.txt");
+        let installer_path = temp_dir.path().join("installer.sh");
+        let install_prefix = temp_dir.path().join("install-prefix");
+
+        fs_err::write(
+            &installer_path,
+            format!(
+                "#!/bin/sh\nset -eu\n{{\nprintf 'UV_DOWNLOAD_URL=%s\\n' \"${{UV_DOWNLOAD_URL-}}\"\n}} > \"{}\"\n",
+                output_path.display()
+            ),
+        )
+        .unwrap();
+        fs_err::set_permissions(&installer_path, std::fs::Permissions::from_mode(0o744)).unwrap();
+
+        execute_official_installer(
+            &installer_path,
+            &install_prefix,
+            true,
+            &Pep440Version::new([1, 2, 3]),
+            Some("https://nexus.example.com/repository/releases.astral.sh/"),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            fs_err::read_to_string(&output_path).unwrap(),
+            "UV_DOWNLOAD_URL=https://nexus.example.com/repository/releases.astral.sh/github/uv/releases/download/1.2.3\n"
         );
     }
 
@@ -1124,9 +1281,15 @@ mod tests {
         .unwrap();
         fs_err::set_permissions(&installer_path, std::fs::Permissions::from_mode(0o744)).unwrap();
 
-        execute_official_installer(&installer_path, &install_prefix, true)
-            .await
-            .unwrap();
+        execute_official_installer(
+            &installer_path,
+            &install_prefix,
+            true,
+            &Pep440Version::new([1, 2, 3]),
+            None,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(
             fs_err::read_to_string(&output_path).unwrap(),
