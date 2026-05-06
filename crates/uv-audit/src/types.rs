@@ -1,6 +1,7 @@
 //! Types for interacting with dependency audits.
 
 use jiff::Timestamp;
+use std::fmt::{Display, Formatter, Result as FmtResult};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_redacted::DisplaySafeUrl;
@@ -66,6 +67,16 @@ pub enum AdverseStatus {
     Quarantined,
     /// The project is considered obsolete, and may have been superseded by another project.
     Deprecated,
+}
+
+impl Display for AdverseStatus {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        formatter.write_str(match self {
+            Self::Archived => "archived",
+            Self::Quarantined => "quarantined",
+            Self::Deprecated => "deprecated",
+        })
+    }
 }
 
 /// A vulnerability within a dependency.

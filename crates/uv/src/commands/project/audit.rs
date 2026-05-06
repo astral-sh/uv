@@ -1,5 +1,6 @@
 use itertools::Itertools as _;
 use owo_colors::OwoColorize;
+use serde::Serialize;
 use std::fmt::Write as _;
 use std::path::Path;
 
@@ -22,8 +23,11 @@ use rustc_hash::FxHashSet;
 use tracing::trace;
 use uv_audit::service::project_status::ProjectStatusAudit;
 use uv_audit::service::{VulnerabilityServiceFormat, osv};
-use uv_audit::types::{AdverseStatus, Dependency, Finding, VulnerabilityID};
+use uv_audit::types::{
+    AdverseStatus, Dependency, Finding, ProjectStatus, Vulnerability, VulnerabilityID,
+};
 use uv_cache::Cache;
+use uv_cli::AuditOutputFormat;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{Concurrency, DependencyGroups, ExtrasSpecification, TargetTriple};
 use uv_distribution_types::{IndexCapabilities, IndexUrl};
@@ -54,6 +58,7 @@ pub(crate) async fn audit(
     cache: Cache,
     printer: Printer,
     preview: Preview,
+    output_format: AuditOutputFormat,
     service: VulnerabilityServiceFormat,
     service_url: Option<String>,
     ignore: Vec<VulnerabilityID>,
@@ -64,6 +69,14 @@ pub(crate) async fn audit(
         warn_user!(
             "`uv audit` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
             PreviewFeature::Audit
+        );
+    }
+    if matches!(output_format, AuditOutputFormat::Json)
+        && !preview.is_enabled(PreviewFeature::JsonOutput)
+    {
+        warn_user!(
+            "The `--output-format json` option is experimental and the schema may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::JsonOutput
         );
     }
 
@@ -297,6 +310,7 @@ pub(crate) async fn audit(
     let display = AuditResults {
         printer,
         n_packages: auditable.len(),
+        output_format,
         findings: all_findings,
     };
     display.render()
@@ -305,20 +319,52 @@ pub(crate) async fn audit(
 struct AuditResults {
     printer: Printer,
     n_packages: usize,
+    output_format: AuditOutputFormat,
     findings: Vec<Finding>,
 }
 
 impl AuditResults {
     fn render(&self) -> Result<ExitStatus> {
-        let (vulns, statuses): (Vec<_>, Vec<_>) =
-            self.findings.iter().partition_map(|finding| match finding {
-                Finding::Vulnerability(vuln) => itertools::Either::Left(vuln),
-                Finding::ProjectStatus(status) => itertools::Either::Right(status),
-            });
+        match self.output_format {
+            AuditOutputFormat::Text => self.render_text(),
+            AuditOutputFormat::Json => self.render_json(),
+        }
+    }
 
-        let vuln_banner = if !vulns.is_empty() {
-            let s = if vulns.len() == 1 { "y" } else { "ies" };
-            format!("{} known vulnerabilit{s}", vulns.len())
+    fn split_findings(&self) -> (Vec<&Vulnerability>, Vec<&ProjectStatus>) {
+        self.findings.iter().partition_map(|finding| match finding {
+            Finding::Vulnerability(vulnerability) => {
+                itertools::Either::Left(vulnerability.as_ref())
+            }
+            Finding::ProjectStatus(status) => itertools::Either::Right(status),
+        })
+    }
+
+    fn exit_status(&self) -> ExitStatus {
+        // NOTE: intentional: we don't currently fail if there are any adverse statuses,
+        // only when there are vulnerabilities. We will likely change this once we allow users
+        // to ignore adverse statuses and configure policies.
+        if self
+            .findings
+            .iter()
+            .any(|finding| matches!(finding, Finding::Vulnerability(_)))
+        {
+            ExitStatus::Failure
+        } else {
+            ExitStatus::Success
+        }
+    }
+
+    fn render_text(&self) -> Result<ExitStatus> {
+        let (vulnerabilities, statuses) = self.split_findings();
+
+        let vulnerability_banner = if !vulnerabilities.is_empty() {
+            let suffix = if vulnerabilities.len() == 1 {
+                "y"
+            } else {
+                "ies"
+            };
+            format!("{} known vulnerabilit{suffix}", vulnerabilities.len())
                 .yellow()
                 .to_string()
         } else {
@@ -338,7 +384,7 @@ impl AuditResults {
 
         writeln!(
             self.printer.stderr(),
-            "Found {vuln_banner} and {status_banner} in {packages}",
+            "Found {vulnerability_banner} and {status_banner} in {packages}",
             packages = format!(
                 "{npackages} {label}",
                 npackages = self.n_packages,
@@ -351,37 +397,45 @@ impl AuditResults {
             .bold()
         )?;
 
-        let has_vulnerabilities = !vulns.is_empty();
-
-        if !vulns.is_empty() {
+        if !vulnerabilities.is_empty() {
             writeln!(self.printer.stdout_important(), "\nVulnerabilities:\n")?;
 
             // Group vulnerabilities by (dependency name, version).
-            let groups = vulns
-                .into_iter()
-                .chunk_by(|vuln| (vuln.dependency.name(), vuln.dependency.version()));
+            let groups = vulnerabilities.into_iter().chunk_by(|vulnerability| {
+                (
+                    vulnerability.dependency.name(),
+                    vulnerability.dependency.version(),
+                )
+            });
 
-            for (dependency, vulns) in &groups {
-                let vulns: Vec<_> = vulns.collect();
+            for (dependency, vulnerabilities) in &groups {
+                let vulnerabilities: Vec<_> = vulnerabilities.collect();
                 let (name, version) = dependency;
 
                 writeln!(
                     self.printer.stdout_important(),
                     "{name_version} has {n} known vulnerabilit{ies}:\n",
                     name_version = format!("{name} {version}").bold(),
-                    n = vulns.len(),
-                    ies = if vulns.len() == 1 { "y" } else { "ies" },
+                    n = vulnerabilities.len(),
+                    ies = if vulnerabilities.len() == 1 {
+                        "y"
+                    } else {
+                        "ies"
+                    },
                 )?;
 
-                for vuln in vulns {
+                for vulnerability in vulnerabilities {
                     writeln!(
                         self.printer.stdout_important(),
                         "- {id}: {description}",
-                        id = vuln.best_id().as_str().bold(),
-                        description = vuln.summary.as_deref().unwrap_or("No summary provided"),
+                        id = vulnerability.best_id().as_str().bold(),
+                        description = vulnerability
+                            .summary
+                            .as_deref()
+                            .unwrap_or("No summary provided"),
                     )?;
 
-                    if vuln.fix_versions.is_empty() {
+                    if vulnerability.fix_versions.is_empty() {
                         writeln!(
                             self.printer.stdout_important(),
                             "\n  No fix versions available\n"
@@ -390,7 +444,8 @@ impl AuditResults {
                         writeln!(
                             self.printer.stdout_important(),
                             "\n  Fixed in: {}\n",
-                            vuln.fix_versions
+                            vulnerability
+                                .fix_versions
                                 .iter()
                                 .map(std::string::ToString::to_string)
                                 .join(", ")
@@ -398,7 +453,7 @@ impl AuditResults {
                         )?;
                     }
 
-                    if let Some(link) = &vuln.link {
+                    if let Some(link) = &vulnerability.link {
                         writeln!(
                             self.printer.stdout_important(),
                             "  Advisory information: {link}\n",
@@ -413,10 +468,11 @@ impl AuditResults {
             writeln!(self.printer.stdout_important(), "\nAdverse statuses:\n")?;
 
             for status in statuses {
-                let label = match status.status {
-                    AdverseStatus::Archived => "archived".yellow().to_string(),
-                    AdverseStatus::Deprecated => "deprecated".yellow().to_string(),
-                    AdverseStatus::Quarantined => "quarantined".red().to_string(),
+                let label = match &status.status {
+                    AdverseStatus::Archived | AdverseStatus::Deprecated => {
+                        status.status.to_string().yellow().to_string()
+                    }
+                    AdverseStatus::Quarantined => status.status.to_string().red().to_string(),
                 };
                 let name = status.name.bold();
                 if let Some(reason) = &status.reason {
@@ -430,13 +486,171 @@ impl AuditResults {
             }
         }
 
-        // NOTE: intentional: we don't currently fail if there are any adverse statuses,
-        // only when there are vulnerabilities. We will likely change this once we allow users
-        // to ignore adverse statuses and configure policies.
-        if has_vulnerabilities {
-            Ok(ExitStatus::Failure)
-        } else {
-            Ok(ExitStatus::Success)
+        Ok(self.exit_status())
+    }
+
+    fn render_json(&self) -> Result<ExitStatus> {
+        let (vulnerabilities, statuses) = self.split_findings();
+        let report = JsonReport::from_findings(self.n_packages, &vulnerabilities, &statuses);
+
+        writeln!(
+            self.printer.stdout_important(),
+            "{}",
+            serde_json::to_string_pretty(&report)?
+        )?;
+
+        Ok(self.exit_status())
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct JsonReport {
+    schema: JsonSchema,
+    summary: JsonSummary,
+    vulnerabilities: Vec<JsonVulnerability>,
+    adverse_statuses: Vec<JsonAdverseStatus>,
+}
+
+impl JsonReport {
+    fn from_findings(
+        n_packages: usize,
+        vulnerabilities: &[&Vulnerability],
+        statuses: &[&ProjectStatus],
+    ) -> Self {
+        let mut vulnerabilities = vulnerabilities
+            .iter()
+            .copied()
+            .map(JsonVulnerability::from)
+            .collect::<Vec<_>>();
+        vulnerabilities.sort_by(|first, second| {
+            first
+                .dependency
+                .name
+                .cmp(&second.dependency.name)
+                .then_with(|| first.dependency.version.cmp(&second.dependency.version))
+                .then_with(|| first.display_id.cmp(&second.display_id))
+        });
+
+        let mut adverse_statuses = statuses
+            .iter()
+            .copied()
+            .map(JsonAdverseStatus::from)
+            .collect::<Vec<_>>();
+        adverse_statuses.sort_by(|first, second| {
+            first
+                .name
+                .cmp(&second.name)
+                .then_with(|| first.status.cmp(&second.status))
+        });
+
+        Self {
+            schema: JsonSchema::default(),
+            summary: JsonSummary {
+                audited_packages: n_packages,
+                vulnerabilities: vulnerabilities.len(),
+                adverse_statuses: adverse_statuses.len(),
+            },
+            vulnerabilities,
+            adverse_statuses,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Default)]
+struct JsonSchema {
+    version: JsonSchemaVersion,
+}
+
+#[derive(Debug, Serialize, Default)]
+#[serde(rename_all = "snake_case")]
+enum JsonSchemaVersion {
+    #[default]
+    Preview,
+}
+
+#[derive(Debug, Serialize)]
+struct JsonSummary {
+    audited_packages: usize,
+    vulnerabilities: usize,
+    adverse_statuses: usize,
+}
+
+#[derive(Debug, Serialize)]
+struct JsonDependency {
+    name: String,
+    version: String,
+}
+
+impl From<&Dependency> for JsonDependency {
+    fn from(dependency: &Dependency) -> Self {
+        Self {
+            name: dependency.name().to_string(),
+            version: dependency.version().to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct JsonVulnerability {
+    dependency: JsonDependency,
+    id: String,
+    display_id: String,
+    aliases: Vec<String>,
+    summary: Option<String>,
+    description: Option<String>,
+    link: Option<String>,
+    fix_versions: Vec<String>,
+    published: Option<String>,
+    modified: Option<String>,
+}
+
+impl From<&Vulnerability> for JsonVulnerability {
+    fn from(vulnerability: &Vulnerability) -> Self {
+        Self {
+            dependency: JsonDependency::from(&vulnerability.dependency),
+            id: vulnerability.id.as_str().to_string(),
+            display_id: vulnerability.best_id().as_str().to_string(),
+            aliases: vulnerability
+                .aliases
+                .iter()
+                .map(|id| id.as_str().to_string())
+                .collect(),
+            summary: vulnerability.summary.clone(),
+            description: vulnerability.description.clone(),
+            link: vulnerability
+                .link
+                .as_ref()
+                .map(|link| link.as_str().to_string()),
+            fix_versions: vulnerability
+                .fix_versions
+                .iter()
+                .map(std::string::ToString::to_string)
+                .collect(),
+            published: vulnerability
+                .published
+                .as_ref()
+                .map(std::string::ToString::to_string),
+            modified: vulnerability
+                .modified
+                .as_ref()
+                .map(std::string::ToString::to_string),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct JsonAdverseStatus {
+    name: String,
+    status: String,
+    reason: Option<String>,
+}
+
+impl From<&ProjectStatus> for JsonAdverseStatus {
+    fn from(status: &ProjectStatus) -> Self {
+        Self {
+            name: status.name.to_string(),
+            status: status.status.to_string(),
+            reason: status.reason.clone(),
         }
     }
 }

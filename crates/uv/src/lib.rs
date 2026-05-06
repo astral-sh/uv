@@ -2697,6 +2697,7 @@ async fn run_project(
                 cache,
                 printer,
                 globals.preview,
+                args.output_format,
                 args.service_format,
                 args.service_url,
                 args.ignore,
