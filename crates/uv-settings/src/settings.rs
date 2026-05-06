@@ -651,16 +651,16 @@ impl ResolverInstallerSchema {
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ResolverInstallerSchema {
-    /// The package indexes to use when resolving dependencies.
+    /// A package index to use when resolving dependencies.
     ///
-    /// Accepts either a repository compliant with [PEP 503](https://peps.python.org/pep-0503/)
-    /// (the simple repository API), or a local directory laid out in the same format.
+    /// Accepts a URL or a local directory with a repository compliant with
+    /// [PEP 503](https://peps.python.org/pep-0503/) (the simple repository API).
     ///
-    /// Indexes are considered in the order in which they're defined, such that the first-defined
-    /// index has the highest priority. Further, the indexes provided by this setting are given
-    /// higher priority than any indexes specified via [`index_url`](#index-url) or
-    /// [`extra_index_url`](#extra-index-url). uv will only consider the first index that contains
-    /// a given package, unless an alternative [index strategy](#index-strategy) is specified.
+    /// More than one index may be defined, and indexes are considered in the order in which they're defined, such that 
+    /// the first-defined index has the highest priority and the default index has the lowest priority. The default index 
+    /// is PyPI unless overridden. Further, the indexes provided by this setting are given higher priority than any 
+    /// indexes specified via [`index_url`](#index-url) or [`extra_index_url`](#extra-index-url). uv will only consider 
+    /// the first index that contains a given package, unless an alternative [index strategy](#index-strategy) is specified.
     ///
     /// If an index is marked as `explicit = true`, it will be used exclusively for those
     /// dependencies that select it explicitly via `[tool.uv.sources]`, as in:
@@ -676,8 +676,8 @@ pub struct ResolverInstallerSchema {
     /// ```
     ///
     /// If an index is marked as `default = true`, it will be moved to the end of the prioritized list, such that it is
-    /// given the lowest priority when resolving packages. Additionally, marking an index as default will disable the
-    /// PyPI default index.
+    /// given the lowest priority when resolving packages. Additionally, marking an index as default will override
+    /// PyPI as the default index.
     #[option(
         default = "\"[]\"",
         value_type = "dict",
