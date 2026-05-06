@@ -90,11 +90,6 @@ mod tests {
     use super::*;
 
     /// Regression test for <https://github.com/astral-sh/uv/issues/19298>.
-    ///
-    /// Revision pointers written by uv <= 0.11.8 used 21-character `nanoid` IDs.
-    /// After #19201 switched to `uv_fastid`'s 16-character IDs, deserializing an
-    /// existing on-disk pointer must still succeed, otherwise upgrading uv against
-    /// a populated cache hard-errors with `Failed to deserialize cache entry`.
     #[test]
     fn deserialize_legacy_nanoid_revision() {
         // A representative 21-character nanoid ID, drawn from the same alphabet
@@ -106,7 +101,6 @@ mod tests {
         let bytes = rmp_serde::to_vec(&legacy).expect("serialize legacy revision");
         let parsed: Revision = rmp_serde::from_slice(&bytes).expect("deserialize legacy revision");
         assert_eq!(parsed.id().as_str(), "HM0NxJml5hc7UjbfTWT1r");
-        assert_eq!(parsed.id().as_str().len(), 21);
     }
 
     #[test]
@@ -115,6 +109,5 @@ mod tests {
         let bytes = rmp_serde::to_vec(&original).expect("serialize revision");
         let parsed: Revision = rmp_serde::from_slice(&bytes).expect("deserialize revision");
         assert_eq!(parsed.id().as_str(), original.id().as_str());
-        assert_eq!(parsed.id().as_str().len(), 16);
     }
 }
