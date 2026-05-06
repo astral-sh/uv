@@ -131,9 +131,6 @@ async fn audit_json_no_vulnerabilities() {
     exit_code: 0
     ----- stdout -----
     {
-      "schema": {
-        "version": "preview"
-      },
       "summary": {
         "audited_packages": 1,
         "vulnerabilities": 0,
@@ -177,9 +174,6 @@ async fn audit_json_preview_warning() {
     exit_code: 0
     ----- stdout -----
     {
-      "schema": {
-        "version": "preview"
-      },
       "summary": {
         "audited_packages": 1,
         "vulnerabilities": 0,
@@ -2201,9 +2195,6 @@ async fn audit_json_vulnerability_and_project_status() {
     exit_code: 1
     ----- stdout -----
     {
-      "schema": {
-        "version": "preview"
-      },
       "summary": {
         "audited_packages": 1,
         "vulnerabilities": 1,
