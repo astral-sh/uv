@@ -1597,7 +1597,7 @@ fn install_editable() {
 }
 
 #[test]
-fn install_no_editable() -> Result<()> {
+fn install_no_editable() {
     let context = uv_test::test_context!("3.12");
     let package = context.workspace_root.join("test/packages/executable_file");
 
@@ -1619,8 +1619,6 @@ fn install_no_editable() -> Result<()> {
 
     let path = context.site_packages().join("executable_file.pth");
     assert!(!path.exists());
-
-    Ok(())
 }
 
 #[test]
