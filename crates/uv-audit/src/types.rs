@@ -1,7 +1,6 @@
 //! Types for interacting with dependency audits.
 
 use jiff::Timestamp;
-use std::fmt::{Display, Formatter, Result as FmtResult};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_redacted::DisplaySafeUrl;
@@ -69,8 +68,8 @@ pub enum AdverseStatus {
     Deprecated,
 }
 
-impl Display for AdverseStatus {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+impl std::fmt::Display for AdverseStatus {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.write_str(match self {
             Self::Archived => "archived",
             Self::Quarantined => "quarantined",
