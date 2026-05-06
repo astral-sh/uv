@@ -55,13 +55,18 @@ impl Hashed for Revision {
 }
 
 /// A unique identifier for a revision of a source distribution.
+///
+/// Note: for compatibility with revision pointers written by older uv versions (which used
+/// 21-character `nanoid` IDs), this is a newtype around a `String` rather than a newtype
+/// around `uv_fastid::Id`. New IDs are still generated via `uv_fastid::insecure()`, but
+/// existing on-disk entries continue to deserialize regardless of length.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub(crate) struct RevisionId(uv_fastid::Id);
+pub(crate) struct RevisionId(String);
 
 impl RevisionId {
     /// Generate a new unique identifier for an archive.
     fn new() -> Self {
-        Self(uv_fastid::insecure())
+        Self(uv_fastid::insecure().to_string())
     }
 
     pub(crate) fn as_str(&self) -> &str {
@@ -78,5 +83,39 @@ impl AsRef<str> for RevisionId {
 impl AsRef<Path> for RevisionId {
     fn as_ref(&self) -> &Path {
         self.0.as_ref()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Regression test for <https://github.com/astral-sh/uv/issues/19298>.
+    ///
+    /// Revision pointers written by uv <= 0.11.8 used 21-character `nanoid` IDs.
+    /// After #19201 switched to `uv_fastid`'s 16-character IDs, deserializing an
+    /// existing on-disk pointer must still succeed, otherwise upgrading uv against
+    /// a populated cache hard-errors with `Failed to deserialize cache entry`.
+    #[test]
+    fn deserialize_legacy_nanoid_revision() {
+        // A representative 21-character nanoid ID, drawn from the same alphabet
+        // used by both the old `nanoid` crate and `uv_fastid`.
+        let legacy = Revision {
+            id: RevisionId("HM0NxJml5hc7UjbfTWT1r".to_string()),
+            hashes: HashDigests::empty(),
+        };
+        let bytes = rmp_serde::to_vec(&legacy).expect("serialize legacy revision");
+        let parsed: Revision = rmp_serde::from_slice(&bytes).expect("deserialize legacy revision");
+        assert_eq!(parsed.id().as_str(), "HM0NxJml5hc7UjbfTWT1r");
+        assert_eq!(parsed.id().as_str().len(), 21);
+    }
+
+    #[test]
+    fn round_trip_current_revision() {
+        let original = Revision::new();
+        let bytes = rmp_serde::to_vec(&original).expect("serialize revision");
+        let parsed: Revision = rmp_serde::from_slice(&bytes).expect("deserialize revision");
+        assert_eq!(parsed.id().as_str(), original.id().as_str());
+        assert_eq!(parsed.id().as_str().len(), 16);
     }
 }
