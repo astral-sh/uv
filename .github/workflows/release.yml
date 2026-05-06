@@ -364,6 +364,10 @@ jobs:
     needs:
       - plan
       - announce
+    # Use `always() && ...` so this job is not skipped when an unrelated
+    # upstream job (e.g., `custom-publish-crates`) fails. `announce` itself
+    # tolerates a `custom-publish-crates` failure, so we mirror that here.
+    if: ${{ always() && needs.announce.result == 'success' }}
     uses: ./.github/workflows/publish-docs.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
@@ -373,6 +377,7 @@ jobs:
     needs:
       - plan
       - announce
+    if: ${{ always() && needs.announce.result == 'success' }}
     uses: ./.github/workflows/publish-versions.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
@@ -382,6 +387,7 @@ jobs:
     needs:
       - plan
       - announce
+    if: ${{ always() && needs.announce.result == 'success' }}
     uses: ./.github/workflows/publish-mirror.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
