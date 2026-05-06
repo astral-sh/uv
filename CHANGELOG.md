@@ -9,7 +9,7 @@ Released on 2026-05-06.
 
 ### Bug fixes
 
-- fix(cache): accept legacy ID format from pre-0.11.9 cache entries (#19298) ([#19301](https://github.com/astral-sh/uv/pull/19301))
+- Accept legacy ID format from pre-0.11.9 cache entries ([#19301](https://github.com/astral-sh/uv/pull/19301))
 
 ## 0.11.10
 
