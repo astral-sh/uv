@@ -56,13 +56,9 @@ impl Hashed for Revision {
 
 /// A unique identifier for a revision of a source distribution.
 ///
-/// Note: for compatibility with the existing `sdists-v9` bucket, where revision pointers
-/// written by older uv versions used 21-character `nanoid` IDs, this is a newtype around a
-/// `String` rather than a newtype around `uv_fastid::Id`. New IDs are still generated via
-/// `uv_fastid::insecure()`, but existing on-disk entries in the `SourceDistributions`
-/// bucket continue to deserialize regardless of length. In the future, we may want to bump
-/// to `sdists-v10` and switch to using `uv_fastid::Id` directly (mirroring the path
-/// proposed for `ArchiveId` + the `archive-v0` bucket).
+/// Note: for compatibility with the existing `sdists-v9` bucket, this is a newtype around a
+/// `String` rather than a newtype around `uv_fastid::Id`. In the future, we may want to bump
+/// to `sdists-v10` and switch to using `uv_fastid::Id` directly.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(crate) struct RevisionId(String);
 
