@@ -9,9 +9,7 @@ use syn::{Attribute, DeriveInput, ImplItem, ItemImpl, LitStr, parse_macro_input}
 pub fn derive_options_metadata(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
-    options_metadata::derive_impl(input)
-        .unwrap_or_else(syn::Error::into_compile_error)
-        .into()
+    options_metadata::derive_impl(input).unwrap_or_else(|err| err.into_compile_error().into())
 }
 
 #[proc_macro_derive(CombineOptions)]
