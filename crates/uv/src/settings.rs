@@ -3033,6 +3033,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) package: Vec<String>,
     pub(crate) requirements: Vec<PathBuf>,
     pub(crate) editables: Vec<String>,
+    pub(crate) editable: Option<EditableMode>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
     pub(crate) excludes: Vec<PathBuf>,
@@ -3058,6 +3059,7 @@ impl PipInstallSettings {
             package,
             requirements,
             editable,
+            no_editable,
             constraints,
             overrides,
             excludes,
@@ -3176,6 +3178,11 @@ impl PipInstallSettings {
                 Modifications::Exact
             } else {
                 Modifications::Sufficient
+            },
+            editable: if no_editable || environment.no_editable.value == Some(true) {
+                Some(EditableMode::NonEditable)
+            } else {
+                None
             },
             refresh: Refresh::from(refresh),
             settings: PipSettings::combine(

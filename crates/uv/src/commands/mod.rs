@@ -83,6 +83,7 @@ mod cache_dir;
 mod cache_prune;
 mod cache_size;
 mod diagnostics;
+mod editable;
 mod help;
 pub(crate) mod pip;
 mod project;

@@ -1,7 +1,6 @@
 use std::fmt::Write;
 use std::ops::Deref;
 use std::path::Path;
-use std::sync::Arc;
 
 use anyhow::Result;
 use itertools::Itertools;
@@ -19,9 +18,7 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::LoweredExtraBuildDependencies;
-use uv_distribution_types::{
-    DirectorySourceDist, Dist, Index, Name, Requirement, Resolution, ResolvedDist, SourceDist,
-};
+use uv_distribution_types::{Dist, Index, Name, Requirement, Resolution, ResolvedDist, SourceDist};
 use uv_fs::{PortablePathBuf, Simplified};
 use uv_installer::{InstallationStrategy, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
@@ -37,6 +34,7 @@ use uv_warnings::warn_user;
 use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
+use crate::commands::editable::apply_editable_mode;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations::{ChangedDist, Changelog, Modifications};
 use crate::commands::pip::resolution_markers;
@@ -880,70 +878,6 @@ pub(super) async fn do_sync(
     .await?;
 
     Ok(changelog)
-}
-
-/// If necessary, convert any editable requirements to non-editable.
-fn apply_editable_mode(resolution: Resolution, editable: Option<EditableMode>) -> Resolution {
-    match editable {
-        // No modifications are necessary for editable mode; retain any editable distributions.
-        None => resolution,
-
-        // Filter out any non-editable distributions.
-        Some(EditableMode::Editable) => resolution.map(|dist| {
-            let ResolvedDist::Installable { dist, version } = dist else {
-                return None;
-            };
-            let Dist::Source(SourceDist::Directory(DirectorySourceDist {
-                name,
-                install_path,
-                editable: None | Some(false),
-                r#virtual,
-                url,
-            })) = dist.as_ref()
-            else {
-                return None;
-            };
-
-            Some(ResolvedDist::Installable {
-                dist: Arc::new(Dist::Source(SourceDist::Directory(DirectorySourceDist {
-                    name: name.clone(),
-                    install_path: install_path.clone(),
-                    editable: Some(true),
-                    r#virtual: *r#virtual,
-                    url: url.clone(),
-                }))),
-                version: version.clone(),
-            })
-        }),
-
-        // If a package is editable, map it to a non-editable distribution.
-        Some(EditableMode::NonEditable) => resolution.map(|dist| {
-            let ResolvedDist::Installable { dist, version } = dist else {
-                return None;
-            };
-            let Dist::Source(SourceDist::Directory(DirectorySourceDist {
-                name,
-                install_path,
-                editable: None | Some(true),
-                r#virtual,
-                url,
-            })) = dist.as_ref()
-            else {
-                return None;
-            };
-
-            Some(ResolvedDist::Installable {
-                dist: Arc::new(Dist::Source(SourceDist::Directory(DirectorySourceDist {
-                    name: name.clone(),
-                    install_path: install_path.clone(),
-                    editable: Some(false),
-                    r#virtual: *r#virtual,
-                    url: url.clone(),
-                }))),
-                version: version.clone(),
-            })
-        }),
-    }
 }
 
 /// Filter out any virtual workspace members.

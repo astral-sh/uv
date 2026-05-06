@@ -2111,6 +2111,10 @@ pub struct PipInstallArgs {
     #[arg(long, short, group = "sources")]
     pub editable: Vec<String>,
 
+    /// Install any editable dependencies as non-editable [env: UV_NO_EDITABLE=]
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new())]
+    pub no_editable: bool,
+
     /// Constrain versions using the given requirements files.
     ///
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a

@@ -1597,6 +1597,88 @@ fn install_editable() {
 }
 
 #[test]
+fn install_no_editable() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let package = context.workspace_root.join("test/packages/executable_file");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-e")
+        .arg(&package)
+        .arg("--no-editable"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + executable-file==1.0.0 (from file://[WORKSPACE]/test/packages/executable_file)
+    "
+    );
+
+    let path = context.site_packages().join("executable_file.pth");
+    assert!(!path.exists());
+
+    Ok(())
+}
+
+#[test]
+fn install_no_editable_requirements_txt() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let package = context.workspace_root.join("test/packages/executable_file");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&format!("-e {}", package.simplified_display()))?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--no-editable"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + executable-file==1.0.0 (from file://[WORKSPACE]/test/packages/executable_file)
+    "
+    );
+
+    let path = context.site_packages().join("executable_file.pth");
+    assert!(!path.exists());
+
+    Ok(())
+}
+
+#[test]
+fn install_no_editable_env_var() {
+    let context = uv_test::test_context!("3.12");
+    let package = context.workspace_root.join("test/packages/executable_file");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::UV_NO_EDITABLE, "1")
+        .arg("-e")
+        .arg(&package), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + executable-file==1.0.0 (from file://[WORKSPACE]/test/packages/executable_file)
+    "
+    );
+
+    let path = context.site_packages().join("executable_file.pth");
+    assert!(!path.exists());
+}
+
+#[test]
 fn install_editable_and_registry() {
     let context = uv_test::test_context!("3.12");
 
