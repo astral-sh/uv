@@ -505,6 +505,7 @@ impl AuditResults {
 
 #[derive(Debug, Serialize)]
 struct JsonReport {
+    schema: JsonSchema,
     summary: JsonSummary,
     vulnerabilities: Vec<JsonVulnerability>,
     adverse_statuses: Vec<JsonAdverseStatus>,
@@ -543,6 +544,7 @@ impl JsonReport {
         });
 
         Self {
+            schema: JsonSchema::default(),
             summary: JsonSummary {
                 audited_packages: n_packages,
                 vulnerabilities: vulnerabilities.len(),
@@ -552,6 +554,18 @@ impl JsonReport {
             adverse_statuses,
         }
     }
+}
+
+#[derive(Debug, Serialize, Default)]
+struct JsonSchema {
+    version: JsonSchemaVersion,
+}
+
+#[derive(Debug, Serialize, Default)]
+#[serde(rename_all = "snake_case")]
+enum JsonSchemaVersion {
+    #[default]
+    Preview,
 }
 
 #[derive(Debug, Serialize)]
