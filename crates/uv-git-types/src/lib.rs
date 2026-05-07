@@ -311,6 +311,21 @@ mod tests {
     }
 
     #[test]
+    fn parse_ssh_url_with_username_and_percent_encoded_reference()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let url = DisplaySafeUrl::parse("ssh://git@github.com/example/example.git@abc%401.2.3")?;
+        let git = GitUrl::try_from(url)?;
+
+        assert_eq!(
+            git.url().as_str(),
+            "ssh://git@github.com/example/example.git"
+        );
+        assert_eq!(git.reference().as_str(), Some("abc@1.2.3"));
+
+        Ok(())
+    }
+
+    #[test]
     fn reject_ambiguous_reference() -> Result<(), Box<dyn std::error::Error>> {
         let url = DisplaySafeUrl::parse("https://example.com/pkg.git@dev@1.2.3")?;
         let err = GitUrl::try_from(url).unwrap_err();
