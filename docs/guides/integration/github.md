@@ -356,7 +356,7 @@ functional and we didn't miss any files. This step is recommended, but optional.
 
 First, add a release workflow to your project:
 
-```yaml title=".github/workflows/publish.yml"
+```yaml title=".github/workflows/release.yml"
 name: "Publish"
 
 on:
