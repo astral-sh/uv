@@ -357,7 +357,7 @@ functional and we didn't miss any files. This step is recommended, but optional.
 First, add a release workflow to your project:
 
 ```yaml title=".github/workflows/release.yml"
-name: "Publish"
+name: "Publish release to PyPI"
 
 on:
   push:
