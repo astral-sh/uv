@@ -145,10 +145,7 @@ fn is_extension_module_tag(tag: &str) -> bool {
     let Some(rest) = tag.strip_prefix("cp") else {
         return false;
     };
-    let digit_count = rest
-        .chars()
-        .take_while(|char| char.is_ascii_digit())
-        .count();
+    let digit_count = rest.chars().take_while(char::is_ascii_digit).count();
     if digit_count == 0 {
         return false;
     }
