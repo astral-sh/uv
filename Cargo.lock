@@ -6593,6 +6593,7 @@ dependencies = [
 name = "uv-git-types"
 version = "0.0.44"
 dependencies = [
+ "percent-encoding",
  "serde",
  "thiserror 2.0.18",
  "tracing",

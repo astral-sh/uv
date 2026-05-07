@@ -344,7 +344,7 @@ impl Display for Requirement {
                 subdirectory,
             } => {
                 write!(f, " @ git+{}", git.url())?;
-                if let Some(reference) = git.reference().as_str() {
+                if let Some(reference) = git.reference().as_url_rev() {
                     write!(f, "@{reference}")?;
                 }
                 if let Some(subdirectory) = subdirectory {
@@ -771,7 +771,7 @@ impl Display for RequirementSource {
                 subdirectory,
             } => {
                 write!(f, " git+{}", git.url())?;
-                if let Some(reference) = git.reference().as_str() {
+                if let Some(reference) = git.reference().as_url_rev() {
                     write!(f, "@{reference}")?;
                 }
                 if let Some(subdirectory) = subdirectory {
@@ -981,7 +981,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
 
                 // Create a PEP 508-compatible URL.
                 let mut url = DisplaySafeUrl::parse(&format!("git+{repository}"))?;
-                if let Some(rev) = reference.as_str() {
+                if let Some(rev) = reference.as_url_rev() {
                     let path = format!("{}@{}", url.path(), rev);
                     url.set_path(&path);
                 }
