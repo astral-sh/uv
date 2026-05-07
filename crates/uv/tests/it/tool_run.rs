@@ -2394,6 +2394,22 @@ fn tool_run_hint_version_not_available() {
 
     hint: A managed Python download is available for Python 3.12, but the Python preference is set to 'only system'
     ");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--no-managed-python")
+        .arg("python@3.12")
+        .env(EnvVars::UV_PYTHON_DOWNLOADS, "auto")
+        .env(EnvVars::UV_OFFLINE, "true")
+        .env(EnvVars::UV_MANAGED_PYTHON, "true"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for Python 3.12 in [PYTHON SOURCES]
+
+    hint: A managed Python download is available for Python 3.12, but the Python preference is set to 'only system'
+    ");
 }
 
 #[test]
