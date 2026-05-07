@@ -229,37 +229,12 @@ fn write_wheel(
         )?;
     }
 
-    // Add the data files
-    for (name, directory) in settings.data.iter() {
-        debug!(
-            "Adding {name} data files from: {}",
-            directory.user_display()
-        );
-        if directory
-            .components()
-            .next()
-            .is_some_and(|component| !matches!(component, Component::CurDir | Component::Normal(_)))
-        {
-            return Err(Error::InvalidDataRoot {
-                name: name.to_string(),
-                path: directory.to_path_buf(),
-            });
-        }
-        let data_dir = format!(
-            "{}-{}.data/{}/",
-            pyproject_toml.name().as_dist_info_name(),
-            pyproject_toml.version(),
-            name
-        );
-
-        wheel_subdir_from_globs(
-            &source_tree.join(directory),
-            &data_dir,
-            &["**".to_string()],
-            &mut wheel_writer,
-            &format!("tool.uv.build-backend.data.{name}"),
-        )?;
-    }
+    write_data_files(
+        source_tree,
+        pyproject_toml,
+        settings.data.iter(),
+        &mut wheel_writer,
+    )?;
 
     debug!("Adding metadata files to wheel");
     let dist_info_dir = write_dist_info(
@@ -330,6 +305,13 @@ pub fn build_editable(
         src_root.as_os_str().as_encoded_bytes(),
     )?;
 
+    write_data_files(
+        source_tree,
+        &pyproject_toml,
+        settings.data.iter(),
+        &mut wheel_writer,
+    )?;
+
     debug!("Adding metadata files to: {}", wheel_path.user_display());
     let dist_info_dir = write_dist_info(
         &mut wheel_writer,
@@ -345,6 +327,47 @@ pub fn build_editable(
         .map_err(|err| Error::Persist(wheel_path.clone(), err.error))?;
 
     Ok(filename)
+}
+
+/// Add files configured via `tool.uv.build-backend.data` to a wheel.
+fn write_data_files<'data>(
+    source_tree: &Path,
+    pyproject_toml: &PyProjectToml,
+    data: impl Iterator<Item = (&'static str, &'data Path)>,
+    wheel_writer: &mut impl DirectoryWriter,
+) -> Result<(), Error> {
+    for (name, directory) in data {
+        debug!(
+            "Adding {name} data files from: {}",
+            directory.user_display()
+        );
+        if directory
+            .components()
+            .next()
+            .is_some_and(|component| !matches!(component, Component::CurDir | Component::Normal(_)))
+        {
+            return Err(Error::InvalidDataRoot {
+                name: name.to_string(),
+                path: directory.to_path_buf(),
+            });
+        }
+        let data_dir = format!(
+            "{}-{}.data/{}/",
+            pyproject_toml.name().as_dist_info_name(),
+            pyproject_toml.version(),
+            name
+        );
+
+        wheel_subdir_from_globs(
+            &source_tree.join(directory),
+            &data_dir,
+            &["**".to_string()],
+            wheel_writer,
+            &format!("tool.uv.build-backend.data.{name}"),
+        )?;
+    }
+
+    Ok(())
 }
 
 /// Write the dist-info directory to the output directory without building the wheel.
