@@ -6720,6 +6720,7 @@ dependencies = [
 name = "uv-logging"
 version = "0.0.44"
 dependencies = [
+ "anstream",
  "jiff",
  "owo-colors",
  "tracing",

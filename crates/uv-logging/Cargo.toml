@@ -11,12 +11,12 @@ license = { workspace = true }
 
 [lib]
 doctest = false
-test = false
 
 [lints]
 workspace = true
 
 [dependencies]
+anstream = { workspace = true }
 jiff = { workspace = true }
 owo-colors = { workspace = true }
 tracing-subscriber = { workspace = true }
