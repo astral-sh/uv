@@ -15,15 +15,15 @@ use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations,
-    NameRequirementSpecification, Origin, PackageConfigSettings, Requirement, RequirementSource,
-    Resolution, UnresolvedRequirement, UnresolvedRequirementSpecification,
+    NameRequirementSpecification, Origin, PackageConfigSettings, Requirement, Resolution,
+    UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::{Preview, PreviewFeature};
-use uv_pypi_types::{Conflicts, ParsedUrl};
+use uv_pypi_types::Conflicts;
 use uv_python::{
     EnvironmentPreference, Prefix, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVersion, Target,
@@ -147,12 +147,6 @@ pub(crate) async fn pip_install(
             );
         }
     }
-
-    let requirements = if matches!(editable, Some(EditableMode::NonEditable)) {
-        ensure_requirements_non_editable(requirements)
-    } else {
-        requirements
-    };
 
     let constraints: Vec<NameRequirementSpecification> = constraints
         .iter()
@@ -674,45 +668,4 @@ pub(crate) async fn pip_install(
     }
 
     Ok(ExitStatus::Success)
-}
-
-/// Mark any editable directory requirements as non-editable before resolution.
-fn ensure_requirements_non_editable(
-    requirements: Vec<UnresolvedRequirementSpecification>,
-) -> Vec<UnresolvedRequirementSpecification> {
-    requirements
-        .into_iter()
-        .map(|requirement| {
-            let UnresolvedRequirementSpecification {
-                requirement,
-                hashes,
-            } = requirement;
-
-            let requirement = match requirement {
-                UnresolvedRequirement::Named(mut requirement) => {
-                    if let RequirementSource::Directory { editable, .. } = &mut requirement.source
-                        && *editable != Some(false)
-                    {
-                        *editable = Some(false);
-                    }
-
-                    UnresolvedRequirement::Named(requirement)
-                }
-                UnresolvedRequirement::Unnamed(mut requirement) => {
-                    if let ParsedUrl::Directory(directory) = &mut requirement.url.parsed_url
-                        && directory.editable != Some(false)
-                    {
-                        directory.editable = Some(false);
-                    }
-
-                    UnresolvedRequirement::Unnamed(requirement)
-                }
-            };
-
-            UnresolvedRequirementSpecification {
-                requirement,
-                hashes,
-            }
-        })
-        .collect()
 }
