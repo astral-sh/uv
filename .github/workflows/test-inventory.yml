@@ -17,6 +17,7 @@ permissions:
 
 jobs:
   nextest-inventory:
+    name: Generate nextest inventory
     timeout-minutes: 10
     runs-on: depot-ubuntu-24.04-16
     name: "nextest inventory"
