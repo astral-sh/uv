@@ -1,5 +1,5 @@
 # test-inventory.yml: take an inventory of our unit and integration tests
-# using `cargo nextest list --all-features --all-targets -T json`
+# using `cargo nextest list --workspace --all-features --tests -T json`
 # and upload it as an artifact for diffing in PRs.
 # 
 # This workflow is *not* responsible for leaving comments; it only collects
@@ -36,7 +36,7 @@ jobs:
           tool: cargo-nextest
 
       - name: "Generate nextest inventory"
-        run: argo nextest list --all-features --tests  -T json > nextest-inventory.json
+        run: cargo nextest list --workspace --all-features --tests -T json > nextest-inventory.json
 
       - name: "Upload nextest inventory"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
