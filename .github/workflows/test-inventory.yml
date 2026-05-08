@@ -1,7 +1,7 @@
 # test-inventory.yml: take an inventory of our unit and integration tests
 # using `cargo nextest list --workspace --all-features --tests -T json`
 # and upload it as an artifact for diffing in PRs.
-# 
+#
 # This workflow is *not* responsible for leaving comments; it only collects
 # the inventory. astral-bot is subsequently responsible for retrieving
 # the inventory and leaving comments on PRs.
@@ -29,7 +29,7 @@ jobs:
         run: ./scripts/install-mold.sh
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-      
+
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@cf525cb33f51aca27cd6fa02034117ab963ff9f1 # v2.75.22
         with:
