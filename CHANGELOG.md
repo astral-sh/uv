@@ -3,6 +3,28 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.11.12
+
+Released on 2026-05-08.
+
+### Enhancements
+
+- fix(lock): warning suggests non-existent --no-frozen flag (#19290) ([#19294](https://github.com/astral-sh/uv/pull/19294))
+
+### Bug fixes
+
+- Respect `--no-dev` over `UV_DEV=1` ([#19313](https://github.com/astral-sh/uv/pull/19313))
+
+### Documentation
+
+- Fix bug from inconsistent workflow name in GHA-PyPI guide example ([#19309](https://github.com/astral-sh/uv/pull/19309))
+
+### Other changes
+
+- Add `--no-editable` support to `uv pip install` ([#19306](https://github.com/astral-sh/uv/pull/19306))
+- Require git refs in URLs to be percent-encoded ([#19320](https://github.com/astral-sh/uv/pull/19320))
+- Sync latest Python releases ([#19322](https://github.com/astral-sh/uv/pull/19322))
+
 ## 0.11.11
 
 Released on 2026-05-06.
