@@ -19,7 +19,7 @@ impl Default for ArchiveId {
 impl ArchiveId {
     /// Generate a new unique identifier for an archive.
     pub fn new() -> Self {
-        Self(uv_fastid::insecure().to_string())
+        Self(uv_fastid::Id::insecure().to_string())
     }
 }
 

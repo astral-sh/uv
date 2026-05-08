@@ -78,30 +78,32 @@ impl<'de> serde::Deserialize<'de> for Id {
     }
 }
 
-/// Generate an [`Id`] from a cryptographically secure RNG.
-///
-/// The resulting ID is suitable for use in contexts where uniqueness is needed and
-/// the risk of an adversarial collision is non-negligible.
-pub fn secure() -> Id {
-    let mut raw = [0u8; 16];
-    let mut rng = rand::rng();
-    rng.fill_bytes(raw.as_mut());
-    Id(reduce(&raw))
-}
+impl Id {
+    /// Generate an [`Id`] from a cryptographically secure RNG.
+    ///
+    /// The resulting ID is suitable for use in contexts where uniqueness is needed and
+    /// the risk of an adversarial collision is non-negligible.
+    pub fn secure() -> Self {
+        let mut raw = [0u8; 16];
+        let mut rng = rand::rng();
+        rng.fill_bytes(raw.as_mut());
+        Self(Self::reduce(&raw))
+    }
 
-/// Generate an [`Id`] from a fast, non-cryptographically secure RNG.
-///
-/// The resulting ID is suitable for use in contexts where uniqueness is needed
-/// but the risk of an adversarial collision is negligible (such as local cache keys).
-pub fn insecure() -> Id {
-    let mut raw = [0u8; 16];
-    fastrand::fill(&mut raw);
-    Id(reduce(&raw))
-}
+    /// Generate an [`Id`] from a fast, non-cryptographically secure RNG.
+    ///
+    /// The resulting ID is suitable for use in contexts where uniqueness is needed
+    /// but the risk of an adversarial collision is negligible (such as local cache keys).
+    pub fn insecure() -> Self {
+        let mut raw = [0u8; 16];
+        fastrand::fill(&mut raw);
+        Self(Self::reduce(&raw))
+    }
 
-/// Reduce a 16-byte array of random bytes to a 16-byte array of ASCII characters in our ID alphabet.
-fn reduce(raw: &[u8; 16]) -> [u8; 16] {
-    raw.map(|byte| ALPHABET[(byte & MASK) as usize])
+    /// Reduce a 16-byte array of random bytes to a 16-byte array of ASCII characters in our ID alphabet.
+    fn reduce(raw: &[u8; 16]) -> [u8; 16] {
+        raw.map(|byte| ALPHABET[(byte & MASK) as usize])
+    }
 }
 
 #[cfg(test)]
@@ -128,7 +130,7 @@ mod tests {
                 "_-0123456789abcd",
             ),
         ] {
-            let bytes = reduce(&raw);
+            let bytes = Id::reduce(&raw);
             let actual = std::str::from_utf8(&bytes).expect("reduce produces ASCII");
             assert_eq!(actual, expected, "reduce({raw:?}) should be {expected}");
         }
@@ -136,14 +138,14 @@ mod tests {
 
     #[test]
     fn test_secure() {
-        let id = secure();
+        let id = Id::secure();
         assert_eq!(id.len(), 16);
         assert!(id.bytes().all(|byte| ALPHABET.contains(&byte)));
     }
 
     #[test]
     fn test_insecure() {
-        let id = insecure();
+        let id = Id::insecure();
         assert_eq!(id.len(), 16);
         assert!(id.bytes().all(|byte| ALPHABET.contains(&byte)));
     }
@@ -166,12 +168,12 @@ mod tests {
 
         #[test]
         fn round_trip() {
-            let id = secure();
+            let id = Id::secure();
             let json = serde_json::to_string(&id).unwrap();
             let parsed: Id = serde_json::from_str(&json).unwrap();
             assert_eq!(id, parsed);
 
-            let id = insecure();
+            let id = Id::insecure();
             let json = serde_json::to_string(&id).unwrap();
             let parsed: Id = serde_json::from_str(&json).unwrap();
             assert_eq!(id, parsed);
