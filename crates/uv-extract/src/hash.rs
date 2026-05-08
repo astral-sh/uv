@@ -88,10 +88,17 @@ impl std::fmt::Display for Blake3Digest {
     }
 }
 
+/// Compute the Blake3 hash of a file using multi-threaded, memory-mapped I/O.
+pub(crate) fn blake3_hash(path: &std::path::Path) -> Result<Blake3Digest, std::io::Error> {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update_mmap_rayon(path)?;
+    Ok(Blake3Digest::new(hasher.finalize().to_hex().to_string()))
+}
+
 pub struct HashReader<'a, R> {
     reader: R,
     hashers: &'a mut [Hasher],
-    blake3: blake3::Hasher,
+    blake3: Box<blake3::Hasher>,
 }
 
 impl<'a, R> HashReader<'a, R>
@@ -102,7 +109,7 @@ where
         HashReader {
             reader,
             hashers,
-            blake3: blake3::Hasher::new(),
+            blake3: Box::new(blake3::Hasher::new()),
         }
     }
 

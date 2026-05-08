@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use uv_cache::{Cache, CacheEntry, LATEST};
+use uv_cache::{Cache, CacheBucket, CacheEntry};
 use uv_cache_info::CacheInfo;
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
@@ -81,28 +81,19 @@ impl CachedWheel {
         let cache_info = pointer.to_cache_info();
         let build_info = pointer.to_build_info();
         let archive = pointer.into_archive();
-        let Archive {
-            id,
-            version,
-            hashes,
-            ..
-        } = archive;
-
-        // Ignore out-of-date versions.
-        if version != LATEST {
-            return None;
-        }
 
         // Ignore stale pointers.
-        let path = cache.archive(&id);
-        if !path.exists() {
+        if !archive.exists(cache) {
             return None;
         }
+
+        let Archive { id, hashes, .. } = archive;
+        let entry = cache.entry(CacheBucket::Archive, "", id);
 
         // Convert to a cached wheel.
         Some(Self {
             filename: archive.filename,
-            entry: CacheEntry::from_path(path),
+            entry,
             hashes,
             cache_info,
             build_info,
@@ -118,28 +109,19 @@ impl CachedWheel {
         let cache_info = pointer.to_cache_info();
         let build_info = pointer.to_build_info();
         let archive = pointer.into_archive();
-        let Archive {
-            id,
-            version,
-            hashes,
-            ..
-        } = archive;
-
-        // Ignore out-of-date versions.
-        if version != LATEST {
-            return None;
-        }
 
         // Ignore stale pointers.
-        let path = cache.archive(&id);
-        if !path.exists() {
+        if !archive.exists(cache) {
             return None;
         }
+
+        let Archive { id, hashes, .. } = archive;
+        let entry = cache.entry(CacheBucket::Archive, "", id);
 
         // Convert to a cached wheel.
         Some(Self {
             filename: archive.filename,
-            entry: CacheEntry::from_path(path),
+            entry,
             hashes,
             cache_info,
             build_info,

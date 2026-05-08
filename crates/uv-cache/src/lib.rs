@@ -21,7 +21,7 @@ use crate::removal::Remover;
 pub use crate::removal::{Removal, rm_rf};
 pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
-pub use archive::{ArchiveId, ArchiveVersion, LATEST};
+pub use archive::ArchiveId;
 
 mod archive;
 mod by_timestamp;
@@ -387,12 +387,13 @@ impl Cache {
         blake3_digest: &str,
     ) -> io::Result<ArchiveId> {
         // Move the temporary directory into the directory store.
-        let id = ArchiveId::from_blake3(blake3_digest);
-        let archive_entry = self.bucket(CacheBucket::Archive).join(id.as_ref());
-        if let Some(parent) = archive_entry.parent() {
-            fs_err::create_dir_all(parent)?;
-        }
-        match uv_fs::rename_with_retry(temp_dir.as_ref(), &archive_entry).await {
+        let id = match ArchiveId::from_str(&blake3_digest[..30]) {
+            Ok(id) => id,
+            Err(err) => match err {},
+        };
+        let archive_entry = self.entry(CacheBucket::Archive, "", &id);
+        fs_err::create_dir_all(archive_entry.dir())?;
+        match uv_fs::rename_with_retry(temp_dir.as_ref(), archive_entry.path()).await {
             Ok(()) => {}
             Err(err)
                 if err.kind() == io::ErrorKind::AlreadyExists
@@ -400,7 +401,7 @@ impl Cache {
             {
                 debug!(
                     "Archive already exists at {}; skipping extraction",
-                    archive_entry.display()
+                    archive_entry.path().display()
                 );
                 fs_err::tokio::remove_dir_all(temp_dir.as_ref()).await?;
             }
@@ -824,7 +825,7 @@ impl Cache {
         let link = Link::from_str(&contents)?;
 
         // Ignore stale links.
-        if link.version != LATEST {
+        if link.version != ARCHIVE_VERSION {
             return Err(io::Error::new(
                 io::ErrorKind::NotFound,
                 "The link target does not exist.",
@@ -881,7 +882,7 @@ struct Link {
     /// The unique ID of the entry in the archive bucket.
     id: ArchiveId,
     /// The version of the archive bucket.
-    version: ArchiveVersion,
+    version: u8,
 }
 
 #[allow(unused)]
@@ -890,7 +891,7 @@ impl Link {
     fn new(id: ArchiveId) -> Self {
         Self {
             id,
-            version: ArchiveVersion::V0,
+            version: ARCHIVE_VERSION,
         }
     }
 }
@@ -919,10 +920,10 @@ impl FromStr for Link {
         let version = version
             .strip_prefix("archive-v")
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing version prefix"))?;
-        let version = ArchiveVersion::from_str(version).map_err(|()| {
+        let version = u8::from_str(version).map_err(|err| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("failed to parse version: {version}"),
+                format!("failed to parse version: {err}"),
             )
         })?;
 
@@ -1456,14 +1457,15 @@ impl Refresh {
 
 #[cfg(test)]
 mod tests {
-    use crate::ArchiveId;
     use std::str::FromStr;
+
+    use crate::ArchiveId;
 
     use super::Link;
 
     #[test]
     fn test_link_round_trip() {
-        let id = ArchiveId::from_blake3(&"a".repeat(64));
+        let id = ArchiveId::new();
         let link = Link::new(id);
         let s = link.to_string();
         let parsed = Link::from_str(&s).unwrap();
@@ -1476,5 +1478,6 @@ mod tests {
         assert!(Link::from_str("archive-v0/foo").is_ok());
         assert!(Link::from_str("archive/foo").is_err());
         assert!(Link::from_str("v1/foo").is_err());
+        assert!(Link::from_str("archive-v0/").is_err());
     }
 }

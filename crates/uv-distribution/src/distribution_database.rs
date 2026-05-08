@@ -11,9 +11,8 @@ use tokio::sync::Semaphore;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{Instrument, info_span, instrument, warn};
 use url::Url;
-use walkdir::WalkDir;
 
-use uv_cache::{ArchiveId, CacheBucket, CacheEntry, LATEST, WheelCache};
+use uv_cache::{ArchiveId, CacheBucket, CacheEntry, WheelCache};
 use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
@@ -765,7 +764,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         WheelExtension::WhlZst => {
                             uv_extract::stream::untar_zst(&mut hasher, temp_dir.path())
                                 .await
-                            .map_err(|err| Error::Extract(filename.to_string(), err))?
+                                .map_err(|err| Error::Extract(filename.to_string(), err))?
                         }
                     },
                 };
@@ -783,7 +782,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .map_err(Error::InstallWheelError)?;
 
                 // Persist the temporary directory to the directory store.
-                self.build_context
+                let id = self
+                    .build_context
                     .cache()
                     .persist(temp_dir.keep(), wheel_entry.path(), blake3_digest.as_str())
                     .await
@@ -793,11 +793,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     reporter.on_download_complete(dist.name(), progress);
                 }
 
-                Ok(Archive::new(
-                    blake3_digest.as_str(),
-                    hash_digests,
-                    filename.clone(),
-                ))
+                Ok(Archive::new(id, hash_digests, filename.clone()))
             }
             .instrument(info_span!("wheel", wheel = %dist))
         };
@@ -845,8 +841,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // If the archive is missing the required hashes, or has since been removed, force a refresh.
         let archive = Some(archive)
             .filter(|archive| archive.has_digests(hashes))
-            .filter(|archive| archive.version == LATEST)
-            .filter(|archive| self.build_context.cache().archive(&archive.id).exists());
+            .filter(|archive| archive.exists(self.build_context.cache()));
 
         let archive = if let Some(archive) = archive {
             archive
@@ -977,7 +972,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .map_err(Error::InstallWheelError)?;
 
                 // Persist the temporary directory to the directory store.
-                self.build_context
+                let id = self
+                    .build_context
                     .cache()
                     .persist(temp_dir.keep(), wheel_entry.path(), blake3_digest.as_str())
                     .await
@@ -987,11 +983,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     reporter.on_download_complete(dist.name(), progress);
                 }
 
-                Ok(Archive::new(
-                    blake3_digest.as_str(),
-                    hash_digests,
-                    filename.clone(),
-                ))
+                Ok(Archive::new(id, hash_digests, filename.clone()))
             }
             .instrument(info_span!("wheel", wheel = %dist))
         };
@@ -1039,8 +1031,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // If the archive is missing the required hashes, or has since been removed, force a refresh.
         let archive = Some(archive)
             .filter(|archive| archive.has_digests(hashes))
-            .filter(|archive| archive.version == LATEST)
-            .filter(|archive| self.build_context.cache().archive(&archive.id).exists());
+            .filter(|archive| archive.exists(self.build_context.cache()));
 
         let archive = if let Some(archive) = archive {
             archive
@@ -1150,14 +1141,15 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 .map_err(Error::InstallWheelError)?;
 
             // Persist the temporary directory to the directory store.
-            self.build_context
+            let id = self
+                .build_context
                 .cache()
                 .persist(temp_dir.keep(), wheel_entry.path(), blake3_digest.as_str())
                 .await
                 .map_err(Error::CacheWrite)?;
 
             // Create an archive.
-            let archive = Archive::new(blake3_digest.as_str(), hash_digests, filename.clone());
+            let archive = Archive::new(id, hash_digests, filename.clone());
 
             // Write the archive pointer to the cache.
             let pointer = PathArchivePointer {
@@ -1182,44 +1174,23 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     }
 
     /// Unzip a wheel into the cache, returning the path to the unzipped directory.
-    ///
-    /// Uses synchronous parallel extraction with rayon and blake3 multi-threaded hashing, since
-    /// the wheel is already on disk (locally built).
     async fn unzip_wheel(
         &self,
         path: &Path,
         target: &Path,
         dist: DistRef<'_>,
     ) -> Result<ArchiveId, Error> {
-        // Unzip the wheel in parallel and compute the blake3 hash using mmap.
-        let path = path.to_path_buf();
-        let cache_root = self.build_context.cache().root().to_path_buf();
-        let (temp_dir, blake3_digest) = tokio::task::spawn_blocking(move || {
-            let temp_dir = tempfile::tempdir_in(&cache_root)?;
-            let blake3_digest = uv_extract::sync::unzip(&path, temp_dir.path());
-            Ok::<_, io::Error>((temp_dir, blake3_digest))
-        })
-        .await
-        .map_err(|err| Error::Extract(String::new(), uv_extract::Error::Io(err.into())))?
-        .map_err(Error::CacheWrite)?;
-        let blake3_digest = blake3_digest.map_err(|err| Error::Extract(String::new(), err))?;
-
-        // Reconstruct the unpacked file listing for RECORD validation after sync extraction.
-        let mut files = Vec::new();
-        for entry in WalkDir::new(temp_dir.path()) {
-            let entry = entry.map_err(Error::CacheWalk)?;
-            if !entry.file_type().is_file() {
-                continue;
+        let (temp_dir, files, blake3_digest) = tokio::task::spawn_blocking({
+            let path = path.to_owned();
+            let root = self.build_context.cache().root().to_path_buf();
+            move || -> Result<_, Error> {
+                let temp_dir = tempfile::tempdir_in(root).map_err(Error::CacheWrite)?;
+                let (files, blake3_digest) = uv_extract::unzip_and_hash(&path, temp_dir.path())
+                    .map_err(|err| Error::Extract(path.to_string_lossy().into_owned(), err))?;
+                Ok((temp_dir, files, blake3_digest))
             }
-
-            let relative = entry
-                .path()
-                .strip_prefix(temp_dir.path())
-                .expect("walkdir starts with root")
-                .to_path_buf();
-            let size = entry.metadata().map_err(Error::CacheRead)?.len();
-            files.push((relative, size));
-        }
+        })
+        .await??;
 
         // Before we make the wheel accessible by persisting it, ensure that the RECORD is valid.
         validate_and_heal_record(temp_dir.path(), files.iter(), dist)
