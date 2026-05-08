@@ -15491,6 +15491,36 @@ fn add_no_install_project() -> Result<()> {
         );
     });
 
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").env(EnvVars::UV_NO_INSTALL_PROJECT, "1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
+    ");
+
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--frozen").env(EnvVars::UV_NO_INSTALL_PROJECT, "1"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument `UV_NO_INSTALL_PROJECT` (environment variable) cannot be used with `--frozen`
+    ");
+
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--frozen").env(EnvVars::UV_ONLY_INSTALL_PROJECT, "1"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument `UV_ONLY_INSTALL_PROJECT` (environment variable) cannot be used with `--frozen`
+    ");
+
     Ok(())
 }
 
