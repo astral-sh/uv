@@ -1925,7 +1925,7 @@ mod tests {
             let mut entry = entry.unwrap();
             let path = entry.path().unwrap().to_string_lossy().to_string();
 
-            if path.ends_with("pyproject.toml") && !path.eq_ignore_ascii_case(".orig") {
+            if path.ends_with("pyproject.toml") {
                 entry.read_to_string(&mut pyproject_toml_content).unwrap();
             } else if path.ends_with("pyproject.toml.orig") {
                 entry
