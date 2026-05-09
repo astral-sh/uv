@@ -432,6 +432,7 @@ pub(crate) async fn pip_sync(
             &extras,
             &groups,
             &build_options,
+            hash_checking,
         )?
     } else {
         // When resolving, don't take any external preferences into account.

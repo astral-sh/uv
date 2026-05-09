@@ -523,6 +523,7 @@ pub(crate) async fn pip_install(
             &extras,
             &groups,
             &build_options,
+            hash_checking,
         )?
     } else {
         // When resolving, don't take any external preferences into account.
