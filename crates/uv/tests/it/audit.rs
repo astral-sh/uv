@@ -1952,6 +1952,7 @@ async fn audit_script_extras() {
         .audit()
         .arg("--preview-features")
         .arg("audit")
+        .arg("--frozen")
         .arg("--script")
         .arg("script.py")
         .arg("--service-url")
@@ -1961,7 +1962,6 @@ async fn audit_script_extras() {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 2 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 2 packages
     ");
 }

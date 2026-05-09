@@ -9,6 +9,7 @@ use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use tracing::debug;
 
+use uv_build_backend::check_direct_build;
 use uv_cache::{Cache, Refresh};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -1130,11 +1131,19 @@ async fn resolve_all_possible_builds(
         let mut resolved_from_pyproject = false;
 
         if let SourceDist::Directory(directory) = &source_dist {
+            let extra_build_dependencies = build_dispatch
+                .extra_build_requires()
+                .get(&key.name)
+                .cloned()
+                .unwrap_or_default();
+            let direct_build = check_direct_build(&directory.install_path, uv_version::version())
+                .is_ok_and(|()| extra_build_dependencies.is_empty());
             let pyproject_path = directory.install_path.join("pyproject.toml");
             if let Ok(contents) = fs_err::read_to_string(&pyproject_path)
                 && let Ok(pyproject) =
                     uv_workspace::pyproject::PyProjectToml::from_string(contents, &pyproject_path)
                 && let Some(build_system) = pyproject.build_system
+                && !direct_build
             {
                 let requirements: Vec<Requirement> = build_system
                     .requires
