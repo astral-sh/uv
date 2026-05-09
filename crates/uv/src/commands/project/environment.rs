@@ -1,12 +1,14 @@
 use std::path::Path;
 
 use tracing::debug;
+use uv_warnings::warn_user;
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::{
     EnvironmentSpecification, PlatformState, ProjectError, resolve_environment, sync_environment,
 };
+use crate::commands::pylock::{read_pylock_toml, resolve_pylock_toml};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
@@ -19,7 +21,7 @@ use uv_distribution_types::{
     BuiltDist, Dist, Identifier, Node, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::PythonExt;
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_python::{Interpreter, PythonEnvironment, canonicalize_executable};
 use uv_types::SourceTreeEditablePolicy;
 use uv_workspace::WorkspaceCache;
@@ -136,26 +138,52 @@ impl CachedEnvironment {
     ) -> Result<Self, ProjectError> {
         let interpreter = Self::base_interpreter(interpreter, cache)?;
 
-        // Resolve the requirements with the interpreter.
-        let resolution = Resolution::from(
-            resolve_environment(
-                spec,
+        // If a `pylock.toml` was provided, derive the [`Resolution`] from it directly, bypassing
+        // the resolver; otherwise, resolve the requirements with the interpreter.
+        let (resolution, pylock_hasher) = if let Some(pylock) = spec.requirements.pylock.clone() {
+            if !preview.is_enabled(PreviewFeature::Pylock) {
+                warn_user!(
+                    "The `pylock.toml` format is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                    PreviewFeature::Pylock
+                );
+            }
+            let (install_path, lock) = read_pylock_toml(&pylock, client_builder)
+                .await
+                .map_err(ProjectError::Anyhow)?;
+            let (resolution, hasher) = resolve_pylock_toml(
+                lock,
+                &install_path,
                 &interpreter,
+                None,
                 python_platform,
-                SourceTreeEditablePolicy::Project,
-                build_constraints.clone(),
-                &settings.resolver,
-                client_builder,
-                state,
-                resolve,
-                concurrency,
-                cache,
-                workspace_cache,
-                printer,
-                preview,
+                &[],
+                &[],
+                &settings.resolver.build_options,
             )
-            .await?,
-        );
+            .map_err(ProjectError::Anyhow)?;
+            (resolution, Some(hasher))
+        } else {
+            let resolution = Resolution::from(
+                resolve_environment(
+                    spec,
+                    &interpreter,
+                    python_platform,
+                    SourceTreeEditablePolicy::Project,
+                    build_constraints.clone(),
+                    &settings.resolver,
+                    client_builder,
+                    state,
+                    resolve,
+                    concurrency,
+                    cache,
+                    workspace_cache,
+                    printer,
+                    preview,
+                )
+                .await?,
+            );
+            (resolution, None)
+        };
 
         // Hash the resolution by hashing the generated lockfile.
         let resolution_hash = {
@@ -228,6 +256,7 @@ impl CachedEnvironment {
         sync_environment(
             venv,
             &resolution,
+            pylock_hasher.as_ref(),
             Modifications::Exact,
             build_constraints,
             settings.into(),

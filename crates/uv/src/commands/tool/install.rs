@@ -722,6 +722,7 @@ pub(crate) async fn install(
         match sync_environment(
             environment,
             &resolution.into(),
+            None,
             Modifications::Exact,
             Constraints::from_requirements(build_constraints.iter().cloned()),
             (&settings).into(),

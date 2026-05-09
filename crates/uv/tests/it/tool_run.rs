@@ -1282,6 +1282,62 @@ fn tool_run_requirements_txt_arguments() {
     ");
 }
 
+/// Read requirements from a `pylock.toml` file via `--with-requirements`.
+#[test]
+fn tool_run_pylock_toml() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["flask"]
+    "#})?;
+
+    context
+        .export()
+        .arg("-o")
+        .arg("pylock.toml")
+        .assert()
+        .success();
+
+    // The full set of locked dependencies (Flask and its transitive dependencies) is installed
+    // from the `pylock.toml`, bypassing the resolver.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--preview-features")
+        .arg("pylock")
+        .arg("--with-requirements")
+        .arg("pylock.toml")
+        .arg("flask")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.2
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.1
+    ");
+
+    Ok(())
+}
+
 /// List installed tools when no command arg is given (e.g. `uv tool run`).
 #[test]
 fn tool_run_list_installed() {
