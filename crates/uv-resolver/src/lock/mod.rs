@@ -29,11 +29,11 @@ use uv_distribution_filename::{
 };
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
-    Dist, FileLocation, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist, Identifier,
-    IndexLocations, IndexMetadata, IndexUrl, Name, Node, PYPI_URL, PathBuiltDist, PathSourceDist,
-    RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Requirement,
-    RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree, StaticMetadata,
-    ToUrlError, UrlString,
+    Dist, ExtraBuildRequires, FileLocation, GitDirectorySourceDist, GitPathBuiltDist,
+    GitPathSourceDist, Identifier, IndexLocations, IndexMetadata, IndexUrl, Name, Node, PYPI_URL,
+    PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
+    RemoteSource, Requirement, RequirementSource, RequiresPython, Resolution, ResolvedDist,
+    SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString,
 };
 use uv_fs::{
     PortablePath, PortablePathBuf, Simplified, normalize_path, relative_to, try_relative_to_if,
@@ -299,6 +299,17 @@ fn build_key_for_package(package: &Package, root: &Path) -> BuildPackageKey {
     } else {
         build_key_from_package_id(&package.id)
     }
+}
+
+fn package_id_from_resolved_dist(
+    resolved_dist: &ResolvedDist,
+    root: &Path,
+) -> Result<PackageId, LockError> {
+    Ok(PackageId {
+        name: resolved_dist.name().clone(),
+        version: resolved_dist.version().cloned(),
+        source: Source::from_resolved_dist(resolved_dist, root)?,
+    })
 }
 
 fn lookup_build_key_value<'a, T>(
@@ -764,24 +775,18 @@ impl Lock {
         mut self,
         build_resolutions: &BTreeMap<BuildPackageKey, uv_types::BuildResolutionGraph>,
         packages: &BTreeMap<PackageName, WorkspaceMember>,
+        extra_build_requires: &ExtraBuildRequires,
         root: &Path,
     ) -> Result<Self, LockError> {
         // Bump the revision to indicate the lockfile contains build dependencies.
         self.revision = BUILD_DEPENDENCIES_REVISION;
 
-        // Build a set of existing (name, version) pairs for dedup.
-        let mut existing_packages: FxHashSet<(PackageName, Version)> = self
-            .packages
-            .iter()
-            .filter_map(|p| {
-                p.id.version
-                    .as_ref()
-                    .map(|v| (p.id.name.clone(), v.clone()))
-            })
-            .collect();
+        // Build a set of existing package IDs for source-aware deduplication.
+        let mut existing_packages: FxHashSet<PackageId> =
+            self.packages.iter().map(|p| p.id.clone()).collect();
 
         // Track which packages are newly created (need dependency population).
-        let mut newly_created: FxHashSet<(PackageName, Version)> = FxHashSet::default();
+        let mut newly_created: FxHashSet<PackageId> = FxHashSet::default();
 
         // Collect direct build dep refs per parent, and new packages to add.
         let mut build_dep_refs: BTreeMap<BuildPackageKey, Vec<BuildDependency>> = BTreeMap::new();
@@ -797,18 +802,13 @@ impl Lock {
                 let resolved_dist = &entry.dist;
                 let hashes = &entry.hashes;
 
-                let Some(version) = resolved_dist.version() else {
+                let Ok(package) = Package::from_resolved_dist(resolved_dist, hashes, root) else {
                     continue;
                 };
 
-                let key = (resolved_dist.name().clone(), version.clone());
-                if existing_packages.contains(&key) {
-                    continue;
-                }
-
-                if let Ok(package) = Package::from_resolved_dist(resolved_dist, hashes, root) {
-                    existing_packages.insert(key.clone());
-                    newly_created.insert(key);
+                let package_id = package.id.clone();
+                if existing_packages.insert(package_id.clone()) {
+                    newly_created.insert(package_id);
                     new_packages.push(package);
                 }
             }
@@ -819,7 +819,7 @@ impl Lock {
                 let resolved_dist = &root_dep.dist;
                 let marker = &root_dep.marker;
 
-                let Some(version) = resolved_dist.version() else {
+                let Ok(package_id) = package_id_from_resolved_dist(resolved_dist, root) else {
                     continue;
                 };
 
@@ -829,22 +829,19 @@ impl Lock {
                     .map(|_| simplified.as_simplified_marker_tree());
 
                 deps.push(BuildDependency::new(
-                    resolved_dist.name().clone(),
-                    version.clone(),
+                    package_id,
+                    root_dep.extras.clone(),
                     marker_opt,
                 ));
             }
             build_dep_refs.insert(parent_key.clone(), deps);
         }
 
-        // Extract build-system.requires to store in metadata for satisfies() checks.
+        // Extract the build requirements to store in metadata for satisfies() checks.
         // Use already-loaded workspace members when available; read from disk for
         // non-workspace source trees (e.g. path dependencies outside the workspace).
         for package in &self.packages {
             let key = build_key_for_package(package, root);
-            if lookup_build_key_value(&build_dep_refs, package, root).is_none() {
-                continue;
-            }
 
             let requires = if let Some(member) = packages.get(&package.id.name) {
                 member
@@ -864,15 +861,32 @@ impl Lock {
                 None
             };
 
-            if let Some(requires) = requires {
-                let build_requires: BTreeSet<Requirement> = requires
-                    .into_iter()
-                    .map(|req| {
-                        Requirement::from(req)
-                            .relative_to(root)
-                            .map_err(LockErrorKind::RequirementRelativePath)
-                    })
-                    .collect::<Result<_, _>>()?;
+            let mut build_requires = BTreeSet::new();
+            for req in requires.into_iter().flatten() {
+                let requirement = match Requirement::from(req).relative_to(root) {
+                    Ok(requirement) => requirement,
+                    Err(err) => {
+                        return Err(LockErrorKind::RequirementRelativePath(err).into());
+                    }
+                };
+                build_requires.insert(requirement);
+            }
+            for req in extra_build_requires
+                .get(&package.id.name)
+                .into_iter()
+                .flatten()
+                .cloned()
+                .map(Requirement::from)
+            {
+                let requirement = match req.relative_to(root) {
+                    Ok(requirement) => requirement,
+                    Err(err) => {
+                        return Err(LockErrorKind::RequirementRelativePath(err).into());
+                    }
+                };
+                build_requires.insert(requirement);
+            }
+            if !build_requires.is_empty() {
                 build_requires_map.insert(key, build_requires);
             }
         }
@@ -880,67 +894,83 @@ impl Lock {
         // Add new packages to the lock so we can look up PackageIds.
         self.packages.extend(new_packages);
 
-        // Build a (name, version) → PackageId map for resolving dependency edges.
-        let package_id_map: FxHashMap<(PackageName, Version), PackageId> = self
-            .packages
-            .iter()
-            .filter_map(|p| {
-                p.id.version
-                    .as_ref()
-                    .map(|v| ((p.id.name.clone(), v.clone()), p.id.clone()))
-            })
-            .collect();
+        // Build a source-aware PackageId set for resolving dependency edges.
+        let package_ids: FxHashSet<PackageId> =
+            self.packages.iter().map(|p| p.id.clone()).collect();
 
-        // Second pass: populate dependencies on newly created packages.
-        // Collect updates keyed by (name, version) to apply afterward.
-        let mut dep_updates: FxHashMap<(PackageName, Version), Vec<Dependency>> =
+        // Second pass: populate dependencies on newly created packages and
+        // optional dependency edges captured through build requirement extras.
+        // Collect updates keyed by PackageId to apply afterward.
+        let mut dep_updates: FxHashMap<PackageId, Vec<Dependency>> = FxHashMap::default();
+        let mut optional_dep_updates: FxHashMap<PackageId, BTreeMap<ExtraName, Vec<Dependency>>> =
             FxHashMap::default();
 
         for info in build_resolutions.values() {
             for entry in &info.packages {
                 let resolved_dist = &entry.dist;
-                let Some(version) = resolved_dist.version() else {
+                let Ok(key) = package_id_from_resolved_dist(resolved_dist, root) else {
                     continue;
                 };
 
-                let key = (resolved_dist.name().clone(), version.clone());
-
-                // Only populate deps for packages we newly created for build
-                // isolation. Pre-existing packages (those already in the lock
-                // from the user's dependency resolution) keep their existing
-                // dependency edges.
-                if !newly_created.contains(&key) || dep_updates.contains_key(&key) {
-                    continue;
+                if newly_created.contains(&key) && !dep_updates.contains_key(&key) {
+                    let mut deps = Vec::new();
+                    for dep_edge in &entry.dependencies {
+                        let Ok(dep_id) = package_id_from_resolved_dist(&dep_edge.dist, root) else {
+                            continue;
+                        };
+                        if !package_ids.contains(&dep_id) {
+                            continue;
+                        }
+                        let simplified =
+                            SimplifiedMarkerTree::new(&self.requires_python, dep_edge.marker);
+                        let complexified = simplified.into_marker(&self.requires_python);
+                        deps.push(Dependency {
+                            package_id: dep_id,
+                            extra: dep_edge.extras.clone(),
+                            simplified_marker: simplified,
+                            complexified_marker: UniversalMarker::from_combined(complexified),
+                        });
+                    }
+                    deps.sort();
+                    deps.dedup();
+                    dep_updates.insert(key.clone(), deps);
                 }
 
-                let mut deps = Vec::new();
-                for dep_edge in &entry.dependencies {
-                    let dep_key = (dep_edge.name.clone(), dep_edge.version.clone());
-                    let Some(dep_id) = package_id_map.get(&dep_key) else {
-                        continue;
-                    };
-                    let simplified =
-                        SimplifiedMarkerTree::new(&self.requires_python, dep_edge.marker);
-                    let complexified = simplified.into_marker(&self.requires_python);
-                    deps.push(Dependency {
-                        package_id: dep_id.clone(),
-                        extra: BTreeSet::default(),
-                        simplified_marker: simplified,
-                        complexified_marker: UniversalMarker::from_combined(complexified),
-                    });
+                let optional_updates = optional_dep_updates.entry(key).or_default();
+                for (extra, dependencies) in &entry.optional_dependencies {
+                    let deps = optional_updates.entry(extra.clone()).or_default();
+                    for dep_edge in dependencies {
+                        let Ok(dep_id) = package_id_from_resolved_dist(&dep_edge.dist, root) else {
+                            continue;
+                        };
+                        if !package_ids.contains(&dep_id) {
+                            continue;
+                        }
+                        let simplified =
+                            SimplifiedMarkerTree::new(&self.requires_python, dep_edge.marker);
+                        let complexified = simplified.into_marker(&self.requires_python);
+                        deps.push(Dependency {
+                            package_id: dep_id,
+                            extra: dep_edge.extras.clone(),
+                            simplified_marker: simplified,
+                            complexified_marker: UniversalMarker::from_combined(complexified),
+                        });
+                    }
                 }
-                deps.sort();
-                deps.dedup();
-                dep_updates.insert(key, deps);
             }
         }
 
         // Apply dependency updates to packages.
         for package in &mut self.packages {
-            if let Some(version) = &package.id.version {
-                let key = (package.id.name.clone(), version.clone());
-                if let Some(deps) = dep_updates.remove(&key) {
-                    package.dependencies = deps;
+            if let Some(deps) = dep_updates.remove(&package.id) {
+                package.dependencies = deps;
+            }
+            if let Some(optional_deps) = optional_dep_updates.remove(&package.id) {
+                for (extra, mut deps) in optional_deps {
+                    let package_deps = package.optional_dependencies.entry(extra).or_default();
+                    package_deps.append(&mut deps);
+                    package_deps.sort();
+                    package_deps.dedup();
                 }
             }
         }
@@ -962,6 +992,15 @@ impl Lock {
             package.build_dependencies.dedup();
         }
 
+        self.packages
+            .sort_by(|dist1, dist2| dist1.id.cmp(&dist2.id));
+        self.by_id = self
+            .packages
+            .iter()
+            .enumerate()
+            .map(|(index, package)| (package.id.clone(), index))
+            .collect();
+
         Ok(self)
     }
 
@@ -980,6 +1019,92 @@ impl Lock {
         Ok(sources)
     }
 
+    fn package_by_id(&self) -> FxHashMap<PackageId, &Package> {
+        self.packages
+            .iter()
+            .map(|package| (package.id.clone(), package))
+            .collect()
+    }
+
+    /// Walk the build dependency graph for a package, optionally filtering
+    /// marker-controlled edges for a concrete environment.
+    fn build_dependency_package_ids(
+        &self,
+        package: &Package,
+        package_by_id: &FxHashMap<PackageId, &Package>,
+        markers: Option<&MarkerEnvironment>,
+    ) -> Option<Vec<PackageId>> {
+        let mut dependency_ids = Vec::new();
+        let mut emitted: FxHashSet<PackageId> = FxHashSet::default();
+        let mut seen: FxHashSet<(PackageId, Option<ExtraName>)> = FxHashSet::default();
+        let mut queue: VecDeque<(PackageId, Option<ExtraName>)> = VecDeque::new();
+
+        for build_dep in &package.build_dependencies {
+            if let Some(markers) = markers
+                && let Some(marker) = build_dep.marker()
+            {
+                let complexified = self.requires_python.complexify_markers(*marker);
+                if !UniversalMarker::from_combined(complexified).evaluate_no_extras(markers) {
+                    continue;
+                }
+            }
+
+            if seen.insert((build_dep.package_id.clone(), None)) {
+                queue.push_back((build_dep.package_id.clone(), None));
+            }
+            for extra in build_dep.extras() {
+                if seen.insert((build_dep.package_id.clone(), Some(extra.clone()))) {
+                    queue.push_back((build_dep.package_id.clone(), Some(extra.clone())));
+                }
+            }
+        }
+
+        while let Some((dep_id, extra)) = queue.pop_front() {
+            if emitted.insert(dep_id.clone()) {
+                dependency_ids.push(dep_id.clone());
+            }
+
+            let Some(dep_package) = package_by_id.get(&dep_id) else {
+                if markers.is_some() {
+                    debug!(
+                        "Build dependency `{dep_id}` not found in lock for `{}`",
+                        package.id.name
+                    );
+                    return None;
+                }
+                continue;
+            };
+
+            let dependencies = if let Some(extra) = extra {
+                dep_package
+                    .optional_dependencies
+                    .get(&extra)
+                    .map(Vec::as_slice)
+                    .unwrap_or_default()
+            } else {
+                dep_package.dependencies.as_slice()
+            };
+
+            for dep in dependencies {
+                if let Some(markers) = markers
+                    && !dep.complexified_marker.evaluate_no_extras(markers)
+                {
+                    continue;
+                }
+                if seen.insert((dep.package_id.clone(), None)) {
+                    queue.push_back((dep.package_id.clone(), None));
+                }
+                for extra in dep.extra() {
+                    if seen.insert((dep.package_id.clone(), Some(extra.clone()))) {
+                        queue.push_back((dep.package_id.clone(), Some(extra.clone())));
+                    }
+                }
+            }
+        }
+
+        Some(dependency_ids)
+    }
+
     /// Construct all build resolutions for packages that have build dependencies.
     ///
     /// Walks the dependency graph (BFS) from each package's `build-dependencies`
@@ -988,12 +1113,17 @@ impl Lock {
     /// dependencies.
     pub fn all_build_resolutions(
         &self,
+        resolution: &Resolution,
         workspace_root: &Path,
         tags: &Tags,
         build_options: &BuildOptions,
         markers: &MarkerEnvironment,
     ) -> Result<BTreeMap<BuildPackageKey, uv_distribution_types::Resolution>, LockError> {
-        let package_map = self.package_map();
+        let package_by_id = self.package_by_id();
+        let selected_package_ids: FxHashSet<PackageId> = resolution
+            .distributions()
+            .filter_map(|dist| package_id_from_resolved_dist(dist, workspace_root).ok())
+            .collect();
 
         let mut resolutions = BTreeMap::new();
         let tag_policy = TagPolicy::Required(tags);
@@ -1002,40 +1132,20 @@ impl Lock {
             if package.build_dependencies.is_empty() {
                 continue;
             }
-
-            let mut graph = petgraph::graph::DiGraph::new();
-            let mut seen: FxHashSet<(&PackageName, &Version)> = FxHashSet::default();
-            let mut queue: VecDeque<(&PackageName, &Version)> = VecDeque::new();
-            let mut all_deps_found = true;
-
-            // Seed the BFS with direct build dependencies.
-            for build_dep in &package.build_dependencies {
-                // Evaluate the build dep's marker against the current environment.
-                // Build dependencies never have extras, so we use an empty extras list.
-                if let Some(marker) = build_dep.marker() {
-                    let complexified = self.requires_python.complexify_markers(*marker);
-                    if !complexified.evaluate(markers, &[]) {
-                        continue;
-                    }
-                }
-
-                if seen.insert((&build_dep.name, &build_dep.version)) {
-                    queue.push_back((&build_dep.name, &build_dep.version));
-                }
+            if !selected_package_ids.contains(&package.id) {
+                continue;
             }
 
-            while let Some((dep_name, dep_version)) = queue.pop_front() {
-                let dep_package = package_map.get(&(dep_name, Some(dep_version)));
-                let Some(dep_package) = dep_package else {
-                    // This can happen if the lock was partially written or if
-                    // a build-only package was pruned. Skip this package's
-                    // entire build resolution since it would be incomplete.
-                    debug!(
-                        "Build dependency `{dep_name}=={dep_version}` not found in lock for `{}`",
-                        package.id.name
-                    );
-                    all_deps_found = false;
-                    break;
+            let mut graph = petgraph::graph::DiGraph::new();
+            let Some(dependency_ids) =
+                self.build_dependency_package_ids(package, &package_by_id, Some(markers))
+            else {
+                continue;
+            };
+
+            for dep_id in dependency_ids {
+                let Some(dep_package) = package_by_id.get(&dep_id) else {
+                    continue;
                 };
 
                 // Add this package to the resolution graph.
@@ -1051,29 +1161,10 @@ impl Lock {
                     hashes,
                     install: true,
                 });
-
-                // Walk this package's dependencies, evaluating markers.
-                for dep in &dep_package.dependencies {
-                    if !dep.complexified_marker.evaluate_no_extras(markers) {
-                        continue;
-                    }
-                    // Build dependencies always come from registries and have
-                    // versions. Skip any versionless entries (e.g. workspace
-                    // virtual members) which cannot appear as transitive build
-                    // deps in practice.
-                    let Some(transitive_version) = dep.package_id.version.as_ref() else {
-                        continue;
-                    };
-                    if seen.insert((&dep.package_id.name, transitive_version)) {
-                        queue.push_back((&dep.package_id.name, transitive_version));
-                    }
-                }
             }
 
-            if all_deps_found {
-                let key = build_key_for_package(package, workspace_root);
-                resolutions.insert(key, uv_distribution_types::Resolution::new(graph));
-            }
+            let key = build_key_for_package(package, workspace_root);
+            resolutions.insert(key, uv_distribution_types::Resolution::new(graph));
         }
 
         Ok(resolutions)
@@ -1084,7 +1175,7 @@ impl Lock {
     /// `dependencies` edges. Used as resolver preferences during re-lock so that
     /// transitive build dependencies keep their previously resolved versions.
     pub fn build_dependency_preferences(&self) -> BuildDependencyPreferences {
-        let package_map = self.package_map();
+        let package_by_id = self.package_by_id();
 
         let mut result = BTreeMap::new();
 
@@ -1094,28 +1185,15 @@ impl Lock {
             }
 
             let mut deps = Vec::new();
-            let mut seen: FxHashSet<(&PackageName, &Version)> = FxHashSet::default();
-            let mut queue: VecDeque<(&PackageName, &Version)> = VecDeque::new();
+            let dependency_ids = self
+                .build_dependency_package_ids(package, &package_by_id, None)
+                .unwrap_or_default();
 
-            // Seed with direct build dependencies.
-            for build_dep in &package.build_dependencies {
-                if seen.insert((&build_dep.name, &build_dep.version)) {
-                    queue.push_back((&build_dep.name, &build_dep.version));
-                }
-            }
-
-            // BFS through transitive dependencies.
-            while let Some((dep_name, dep_version)) = queue.pop_front() {
-                deps.push((dep_name.clone(), dep_version.clone()));
-
-                if let Some(dep_package) = package_map.get(&(dep_name, Some(dep_version))) {
-                    for dep in &dep_package.dependencies {
-                        if let Some(transitive_version) = dep.package_id.version.as_ref() {
-                            if seen.insert((&dep.package_id.name, transitive_version)) {
-                                queue.push_back((&dep.package_id.name, transitive_version));
-                            }
-                        }
-                    }
+            for dep_id in dependency_ids {
+                // Version preferences can only seed the resolver when a
+                // concrete package version is known.
+                if let Some(dep_version) = dep_id.version.as_ref() {
+                    deps.push((dep_id.name.clone(), dep_version.clone()));
                 }
             }
 
@@ -1149,6 +1227,11 @@ impl Lock {
     pub fn supports_provides_extra(&self) -> bool {
         // `provides-extra` was added in Version 1 Revision 1.
         (self.version(), self.revision()) >= (1, 1)
+    }
+
+    /// Returns whether the lockfile can contain build dependencies.
+    pub fn supports_build_dependencies(&self) -> bool {
+        (self.version(), self.revision()) >= (1, BUILD_DEPENDENCIES_REVISION)
     }
 
     /// Returns `true` if this [`Lock`] includes entries for empty `dependency-group` metadata.
@@ -1186,18 +1269,6 @@ impl Lock {
     /// Returns the supported Python version range for the lockfile, if present.
     pub fn requires_python(&self) -> &RequiresPython {
         &self.requires_python
-    }
-
-    /// Build a lookup map from `(name, optional version)` to package.
-    ///
-    /// This is used by build-dependency methods that need fast lookups by name
-    /// and version. Build dependencies always have versions (they come from
-    /// registries), so lookups always use `Some(version)`.
-    fn package_map(&self) -> FxHashMap<(&PackageName, Option<&Version>), &Package> {
-        self.packages
-            .iter()
-            .map(|p| ((&p.id.name, p.id.version.as_ref()), p))
-            .collect()
     }
 
     /// Returns the resolution mode used to generate this lock.
@@ -2072,21 +2143,17 @@ impl Lock {
         Ok(SatisfiesResult::Satisfied)
     }
 
-    /// Check whether the given `build-system.requires` still match what's stored in the lock's
+    /// Check whether the current build requirements still match what's stored in the lock's
     /// `[package.metadata]`.
     fn satisfies_build_requires<'lock>(
         &self,
-        current_requires: &[uv_pep508::Requirement<uv_pypi_types::VerbatimParsedUrl>],
+        current_requires: BTreeSet<Requirement>,
         package: &'lock Package,
         root: &Path,
     ) -> Result<SatisfiesResult<'lock>, LockError> {
         let current_build_requires: BTreeSet<Requirement> = current_requires
-            .iter()
-            .cloned()
-            .map(|req| {
-                let req = Requirement::from(req);
-                normalize_requirement(req, root, &self.requires_python)
-            })
+            .into_iter()
+            .map(|req| normalize_requirement(req, root, &self.requires_python))
             .collect::<Result<BTreeSet<_>, _>>()?;
 
         let stored_build_requires: BTreeSet<Requirement> = package
@@ -2120,6 +2187,7 @@ impl Lock {
         overrides: &[Requirement],
         excludes: &[PackageName],
         build_constraints: &[Requirement],
+        extra_build_requires: &ExtraBuildRequires,
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         dependency_metadata: &DependencyMetadata,
         indexes: Option<&IndexLocations>,
@@ -2750,10 +2818,10 @@ impl Lock {
                 return Ok(SatisfiesResult::MissingVersion(&package.id.name));
             }
 
-            // Validate that the build-system.requires haven't changed for source trees
-            // that have build dependencies stored in the lock. Use workspace member
+            // Validate that the build requirements haven't changed for source trees
+            // that can store build dependencies in the lock. Use workspace member
             // data when available; fall back to disk for non-workspace source trees.
-            if !package.metadata.build_requires.is_empty() {
+            if self.supports_build_dependencies() || !package.metadata.build_requires.is_empty() {
                 let build_requires = if let Some(member) = packages.get(&package.id.name) {
                     Some(
                         member
@@ -2780,8 +2848,22 @@ impl Lock {
                     None
                 };
 
-                if let Some(requires) = build_requires {
-                    match self.satisfies_build_requires(&requires, package, root) {
+                let extra_build_requires = extra_build_requires.get(&package.id.name);
+
+                if build_requires.is_some() || extra_build_requires.is_some() {
+                    let mut build_requires = build_requires
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(Requirement::from)
+                        .collect::<BTreeSet<_>>();
+                    build_requires.extend(
+                        extra_build_requires
+                            .into_iter()
+                            .flatten()
+                            .cloned()
+                            .map(Requirement::from),
+                    );
+                    match self.satisfies_build_requires(build_requires, package, root) {
                         Ok(SatisfiesResult::Satisfied) => {}
                         Ok(result) => return Ok(result),
                         Err(err) => {
@@ -4107,7 +4189,7 @@ impl Package {
             let deps = each_element_on_its_line_array(
                 self.build_dependencies
                     .iter()
-                    .map(|dep| dep.to_toml().into_inline_table()),
+                    .map(|dep| dep.to_toml(dist_count_by_name).into_inline_table()),
             );
             table.insert("build-dependencies", value(deps));
         }
@@ -4482,7 +4564,7 @@ impl PackageWire {
             build_dependencies: self
                 .build_dependencies
                 .into_iter()
-                .map(BuildDependencyWire::unwire)
+                .map(|dep| dep.unwire(unambiguous_package_ids))
                 .collect::<Result<_, _>>()?,
         })
     }
@@ -6088,29 +6170,29 @@ impl TryFrom<WheelWire> for Wheel {
 /// to build a source distribution.
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub struct BuildDependency {
-    name: PackageName,
-    version: Version,
+    package_id: PackageId,
+    extras: BTreeSet<ExtraName>,
     marker: Option<MarkerTree>,
 }
 
 impl BuildDependency {
     /// Create a new build dependency.
-    pub fn new(name: PackageName, version: Version, marker: Option<MarkerTree>) -> Self {
+    fn new(package_id: PackageId, extras: BTreeSet<ExtraName>, marker: Option<MarkerTree>) -> Self {
         Self {
-            name,
-            version,
+            package_id,
+            extras,
             marker,
         }
     }
 
     /// Returns the package name.
     pub fn name(&self) -> &PackageName {
-        &self.name
+        &self.package_id.name
     }
 
     /// Returns the version.
-    pub fn version(&self) -> &Version {
-        &self.version
+    pub fn version(&self) -> Option<&Version> {
+        self.package_id.version.as_ref()
     }
 
     /// Returns the marker, if any.
@@ -6118,11 +6200,32 @@ impl BuildDependency {
         self.marker.as_ref()
     }
 
+    /// Returns the extras requested for this build dependency.
+    pub fn extras(&self) -> &BTreeSet<ExtraName> {
+        &self.extras
+    }
+
     /// Returns the TOML representation of this build dependency.
-    fn to_toml(&self) -> Table {
+    fn to_toml(&self, dist_count_by_name: &FxHashMap<PackageName, u64>) -> Table {
         let mut table = Table::new();
-        table.insert("name", value(self.name.to_string()));
-        table.insert("version", value(self.version.to_string()));
+        table.insert("name", value(self.package_id.name.to_string()));
+        if let Some(version) = &self.package_id.version {
+            table.insert("version", value(version.to_string()));
+        }
+        if dist_count_by_name
+            .get(&self.package_id.name)
+            .is_some_and(|count| *count > 1)
+        {
+            self.package_id.source.to_toml(&mut table);
+        }
+        if !self.extras.is_empty() {
+            let extra_array = self
+                .extras
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Array>();
+            table.insert("extra", value(extra_array));
+        }
         if let Some(marker) = &self.marker {
             if let Some(marker_str) = marker.try_to_string() {
                 table.insert("marker", value(marker_str));
@@ -6133,16 +6236,21 @@ impl BuildDependency {
 }
 
 /// The wire format for a build dependency.
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, serde::Deserialize)]
 struct BuildDependencyWire {
-    name: PackageName,
-    version: Version,
+    #[serde(flatten)]
+    package_id: PackageIdForDependency,
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    extra: BTreeSet<ExtraName>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     marker: Option<String>,
 }
 
 impl BuildDependencyWire {
-    fn unwire(self) -> Result<BuildDependency, LockError> {
+    fn unwire(
+        self,
+        unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
+    ) -> Result<BuildDependency, LockError> {
         let marker_str = self.marker;
         let marker = marker_str
             .as_ref()
@@ -6153,8 +6261,8 @@ impl BuildDependencyWire {
                 err,
             })?;
         Ok(BuildDependency {
-            name: self.name,
-            version: self.version,
+            package_id: self.package_id.unwire(unambiguous_package_ids)?,
+            extras: self.extra,
             marker,
         })
     }
@@ -6163,8 +6271,8 @@ impl BuildDependencyWire {
 impl From<&BuildDependency> for BuildDependencyWire {
     fn from(dep: &BuildDependency) -> Self {
         Self {
-            name: dep.name.clone(),
-            version: dep.version.clone(),
+            package_id: PackageIdForDependency::from(dep.package_id.clone()),
+            extra: dep.extras.clone(),
             marker: dep.marker.as_ref().and_then(|m| m.try_to_string()),
         }
     }

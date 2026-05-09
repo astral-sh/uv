@@ -823,7 +823,7 @@ async fn do_lock(
     // Use universal resolution for build dependencies when locking, so the
     // resolved build deps work on all platforms.
     let build_dispatch = if preview.is_enabled(PreviewFeature::LockBuildDependencies) {
-        build_dispatch.with_universal_build_resolution()
+        build_dispatch.with_universal_build_resolution(requires_python.clone())
     } else {
         build_dispatch
     };
@@ -848,6 +848,7 @@ async fn do_lock(
             &overrides,
             &excludes,
             &build_constraints,
+            &extra_build_requires,
             &conflicts,
             environments,
             required_environments,
@@ -1054,12 +1055,15 @@ async fn do_lock(
                     );
                 }
 
-                let build_resolutions = build_dispatch.build_resolutions().snapshot();
-                lock = lock.with_build_resolutions(
-                    &build_resolutions,
-                    packages,
-                    target.install_path(),
-                )?;
+                if !build_options.no_build_all() {
+                    let build_resolutions = build_dispatch.build_resolutions().snapshot();
+                    lock = lock.with_build_resolutions(
+                        &build_resolutions,
+                        packages,
+                        build_dispatch.extra_build_requires(),
+                        target.install_path(),
+                    )?;
+                }
             }
 
             if previous.as_ref().is_some_and(|previous| *previous == lock) {
@@ -1223,6 +1227,7 @@ impl ValidatedLock {
         overrides: &[Requirement],
         excludes: &[PackageName],
         build_constraints: &[Requirement],
+        extra_build_requires: &uv_distribution_types::ExtraBuildRequires,
         conflicts: &Conflicts,
         environments: Option<&SupportedEnvironments>,
         required_environments: Option<&SupportedEnvironments>,
@@ -1427,6 +1432,7 @@ impl ValidatedLock {
                 overrides,
                 excludes,
                 build_constraints,
+                extra_build_requires,
                 dependency_groups,
                 dependency_metadata,
                 indexes,

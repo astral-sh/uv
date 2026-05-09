@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
@@ -605,12 +606,11 @@ impl ResolverOutput {
     /// and all packages with their direct dependency edges.
     ///
     /// This preserves the dependency graph structure so that transitive build
-    /// dependencies can be walked at sync time with proper marker evaluation,
-    /// consistent with how [`Lock::all_build_resolutions`] handles regular
-    /// dependencies.
+    /// dependencies can be walked at sync time via
+    /// [`Lock::all_build_resolutions`] with proper marker evaluation.
     pub fn build_resolution_graph(&self) -> BuildResolutionGraph {
-        let mut roots = Vec::new();
-        let mut packages = Vec::new();
+        let mut direct_dependencies = Vec::new();
+        let mut packages = BTreeMap::new();
 
         // Find the root node.
         let root_index = self
@@ -618,36 +618,61 @@ impl ResolverOutput {
             .node_indices()
             .find(|&idx| matches!(self.graph[idx], ResolutionGraphNode::Root));
 
-        // Collect all base packages with their direct dependency edges.
+        let key_for = |dist: &AnnotatedDist| -> (PackageName, Version, DistributionId) {
+            (
+                dist.name.clone(),
+                dist.version.clone(),
+                dist.dist.distribution_id(),
+            )
+        };
+
+        let mut base_dists = BTreeMap::new();
+        for dist in self.dists().filter(|dist| dist.is_base()) {
+            base_dists.insert(key_for(dist), dist);
+        }
+
+        // Collect packages with their direct dependency edges. Extra and group
+        // nodes are folded into the base package so PEP 508 extras from
+        // `build-system.requires` keep their extra-only dependencies.
         for node_index in self.graph.node_indices() {
             let ResolutionGraphNode::Dist(dist) = &self.graph[node_index] else {
                 continue;
             };
-            if !dist.is_base() {
-                continue;
-            }
+            let package_dist = base_dists.get(&key_for(dist)).copied().unwrap_or(dist);
+            let package =
+                packages
+                    .entry(key_for(package_dist))
+                    .or_insert_with(|| BuildDependencyPackage {
+                        dist: package_dist.dist.clone(),
+                        hashes: package_dist.hashes.clone().into_iter().collect(),
+                        dependencies: Vec::new(),
+                        optional_dependencies: BTreeMap::new(),
+                    });
 
-            // Collect this package's outgoing dependency edges.
-            let mut dependencies = Vec::new();
             for edge in self.graph.edges(node_index) {
                 let ResolutionGraphNode::Dist(dep_dist) = &self.graph[edge.target()] else {
                     continue;
                 };
-                if !dep_dist.is_base() {
-                    continue;
-                }
-                dependencies.push(BuildDependencyEdge {
-                    name: dep_dist.name.clone(),
-                    version: dep_dist.version.clone(),
+                let dep_extras = dep_dist.extra.iter().cloned().collect::<BTreeSet<_>>();
+                let dep_dist = base_dists
+                    .get(&key_for(dep_dist))
+                    .copied()
+                    .unwrap_or(dep_dist);
+                let dependency = BuildDependencyEdge {
+                    dist: dep_dist.dist.clone(),
                     marker: edge.weight().pep508(),
-                });
+                    extras: dep_extras,
+                };
+                if let Some(extra) = dist.extra.as_ref() {
+                    package
+                        .optional_dependencies
+                        .entry(extra.clone())
+                        .or_default()
+                        .push(dependency);
+                } else {
+                    package.dependencies.push(dependency);
+                }
             }
-
-            packages.push(BuildDependencyPackage {
-                dist: dist.dist.clone(),
-                hashes: dist.hashes.clone().into_iter().collect(),
-                dependencies,
-            });
         }
 
         // Collect direct build requirements (edges from the resolution root
@@ -657,20 +682,20 @@ impl ResolverOutput {
                 let ResolutionGraphNode::Dist(dist) = &self.graph[edge.target()] else {
                     continue;
                 };
-                if !dist.is_base() {
-                    continue;
-                }
-                roots.push(ResolvedBuildDependency {
+                let extras = dist.extra.iter().cloned().collect();
+                let dist = base_dists.get(&key_for(dist)).copied().unwrap_or(dist);
+                direct_dependencies.push(ResolvedBuildDependency {
                     dist: dist.dist.clone(),
                     hashes: dist.hashes.clone().into_iter().collect(),
                     marker: edge.weight().pep508(),
+                    extras,
                 });
             }
         }
 
         BuildResolutionGraph {
-            direct_dependencies: roots,
-            packages,
+            direct_dependencies,
+            packages: packages.into_values().collect(),
         }
     }
 

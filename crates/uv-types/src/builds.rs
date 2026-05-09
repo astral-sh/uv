@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
@@ -6,7 +6,7 @@ use dashmap::DashMap;
 
 use uv_configuration::{BuildKind, NoSources};
 use uv_distribution_types::{Resolution, ResolvedDist, SourceDist};
-use uv_normalize::PackageName;
+use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::MarkerTree;
 use uv_pypi_types::HashDigest;
@@ -97,17 +97,19 @@ pub struct ResolvedBuildDependency {
     pub hashes: Vec<HashDigest>,
     /// The marker indicating when this dependency is needed.
     pub marker: MarkerTree,
+    /// The extras requested on this direct build requirement.
+    pub extras: BTreeSet<ExtraName>,
 }
 
 /// A dependency edge in the build resolution graph.
 #[derive(Debug, Clone)]
 pub struct BuildDependencyEdge {
-    /// The package name of the dependency.
-    pub name: PackageName,
-    /// The version of the dependency.
-    pub version: Version,
+    /// The resolved distribution.
+    pub dist: ResolvedDist,
     /// The marker for when this dependency is needed.
     pub marker: MarkerTree,
+    /// The extras requested on this dependency edge.
+    pub extras: BTreeSet<ExtraName>,
 }
 
 /// A package in the build resolution graph, with its direct dependencies.
@@ -119,6 +121,8 @@ pub struct BuildDependencyPackage {
     pub hashes: Vec<HashDigest>,
     /// This package's direct dependencies with markers.
     pub dependencies: Vec<BuildDependencyEdge>,
+    /// This package's extra dependencies with markers.
+    pub optional_dependencies: BTreeMap<ExtraName, Vec<BuildDependencyEdge>>,
 }
 
 /// The build resolution graph for a single package: direct build requirements

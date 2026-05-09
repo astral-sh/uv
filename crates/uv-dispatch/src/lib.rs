@@ -26,7 +26,7 @@ use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     CachedDist, ConfigSettings, DependencyMetadata, ExtraBuildRequires, ExtraBuildVariables,
     Identifier, IndexCapabilities, IndexLocations, IsBuildBackendError, Name,
-    PackageConfigSettings, Requirement, Resolution, SourceDist, VersionOrUrlRef,
+    PackageConfigSettings, Requirement, RequiresPython, Resolution, SourceDist, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_installer::{InstallationStrategy, Installer, Plan, Planner, Preparer, SitePackages};
@@ -139,6 +139,8 @@ pub struct BuildDispatch<'a> {
     build_preferences: BuildPreferences,
     /// Whether to use universal resolution for build dependencies (for lock files).
     universal_build_resolution: bool,
+    /// The supported Python range to use when resolving universal build dependencies.
+    universal_build_requires_python: Option<RequiresPython>,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -197,6 +199,7 @@ impl<'a> BuildDispatch<'a> {
             locked_build_resolutions: LockedBuildResolutions::default(),
             build_preferences: BuildPreferences::default(),
             universal_build_resolution: false,
+            universal_build_requires_python: None,
         }
     }
 
@@ -241,8 +244,9 @@ impl<'a> BuildDispatch<'a> {
     /// When enabled, build dependencies are resolved for all platforms rather
     /// than just the current one. This is needed for lock files.
     #[must_use]
-    pub fn with_universal_build_resolution(mut self) -> Self {
+    pub fn with_universal_build_resolution(mut self, requires_python: RequiresPython) -> Self {
         self.universal_build_resolution = true;
+        self.universal_build_requires_python = Some(requires_python);
         self
     }
 
@@ -340,8 +344,16 @@ impl BuildContext for BuildDispatch<'_> {
             }
         }
 
-        let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
         let marker_env = self.interpreter.resolver_marker_environment();
+        let python_requirement = if self.universal_build_resolution {
+            if let Some(requires_python) = self.universal_build_requires_python.clone() {
+                PythonRequirement::from_marker_environment(&marker_env, requires_python)
+            } else {
+                PythonRequirement::from_interpreter(self.interpreter)
+            }
+        } else {
+            PythonRequirement::from_interpreter(self.interpreter)
+        };
         let resolver_env = if self.universal_build_resolution {
             ResolverEnvironment::universal(vec![])
         } else {

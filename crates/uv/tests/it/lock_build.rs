@@ -1031,62 +1031,400 @@ fn lock_build_dependencies_extra() -> Result<()> {
 
     let lock = context.read("uv.lock");
 
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        assert_snapshot!(
-            lock, @r#"
-        version = 1
-        revision = 4
+    let dep = package_section(&lock, "dep");
+    assert!(
+        dep.contains(r#"{ name = "iniconfig", version = "2.0.0" }"#),
+        "{dep}"
+    );
+    assert!(dep.contains(r#"{ name = "setuptools", version = "69.2.0" }"#));
+    assert!(lock.contains(r#"name = "iniconfig""#));
+
+    Ok(())
+}
+
+/// Verify that `extra-build-dependencies` participate in lock freshness checks.
+#[test]
+fn lock_build_dependencies_extra_build_dependencies_invalidate() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        dynamic = ["version"]
         requires-python = ">=3.12"
 
-        [options]
-        exclude-newer = "2024-03-25T00:00:00Z"
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
 
-        [[package]]
-        name = "dep"
-        source = { directory = "dep" }
-        build-dependencies = [
-            { name = "setuptools", version = "69.2.0" },
-        ]
+        [tool.setuptools.dynamic]
+        version = {attr = "dep.__version__"}
+        "#,
+    )?;
+    dep_dir.child("dep").create_dir_all()?;
+    dep_dir
+        .child("dep/__init__.py")
+        .write_str("__version__ = '0.1.0'")?;
 
-        [package.metadata]
-        build-requires = [{ name = "setuptools", specifier = ">=42" }]
-
-        [[package]]
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
         name = "project"
         version = "0.1.0"
-        source = { virtual = "." }
-        dependencies = [
-            { name = "dep" },
-        ]
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
 
-        [package.metadata]
-        requires-dist = [{ name = "dep", directory = "dep" }]
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
 
-        [[package]]
-        name = "setuptools"
-        version = "69.2.0"
-        source = { registry = "https://pypi.org/simple" }
-        build-dependencies = [
-            { name = "wheel", version = "0.43.0" },
-        ]
-        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
-        ]
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        [[package]]
-        name = "wheel"
-        version = "0.43.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
-        ]
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+
+        [tool.uv.extra-build-dependencies]
+        dep = ["iniconfig"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies")
+        .arg("--locked"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Added iniconfig v2.0.0
+    Removed wheel v0.43.0
+    ");
+
+    let lock = context.read("uv.lock");
+    let dep = package_section(&lock, "dep");
+    assert!(dep.contains(r#"{ name = "iniconfig" }"#), "{dep}");
+
+    Ok(())
+}
+
+/// Verify that universal build dependency locks use the project's Python
+/// range, not just the interpreter used to generate the lock.
+#[test]
+fn lock_build_dependencies_use_project_python_range() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let builder_dir = context.temp_dir.child("builder");
+    builder_dir.create_dir_all()?;
+    builder_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "builder"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+    let builder_url = Url::from_directory_path(builder_dir.path()).unwrap();
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(&format!(
+        r#"
+        [project]
+        name = "dep"
+        dynamic = ["version"]
+        requires-python = ">=3.8"
+
+        [build-system]
+        requires = ["setuptools>=42", "builder @ {builder_url}"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.setuptools.dynamic]
+        version = {{attr = "dep.__version__"}}
         "#
-        );
-    });
+    ))?;
+    dep_dir.child("dep").create_dir_all()?;
+    dep_dir
+        .child("dep/__init__.py")
+        .write_str("__version__ = '0.1.0'")?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.8"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to build `dep @ file://[TEMP_DIR]/dep`
+      ├─▶ Failed to resolve requirements from `build-system.requires`
+      ├─▶ No solution found when resolving: `setuptools>=42`, `builder @ file://[TEMP_DIR]/builder`
+      ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.12 and builder==0.1.0 depends on Python>=3.12, we can conclude that builder==0.1.0 cannot be used.
+          And because only builder==0.1.0 is available and you require builder, we can conclude that your requirements are unsatisfiable.
+
+          hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., builder==0.1.0 only supports >=3.12). Consider using a more restrictive `requires-python` value (like >=3.12).
+    ");
+
+    Ok(())
+}
+
+/// Verify that PEP 508 extras in build requirements preserve their extra-only
+/// dependency edges in the locked build environment.
+#[test]
+fn lock_build_dependencies_preserves_pep508_extras() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let leaf_dir = context.temp_dir.child("leaf");
+    leaf_dir.create_dir_all()?;
+    leaf_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+    let leaf_url = Url::from_directory_path(leaf_dir.path()).unwrap();
+
+    let carrier_dir = context.temp_dir.child("carrier");
+    carrier_dir.create_dir_all()?;
+    let carrier_url = Url::from_directory_path(carrier_dir.path()).unwrap();
+    carrier_dir.child("pyproject.toml").write_str(&format!(
+        r#"
+        [project]
+        name = "carrier"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        extra = ["leaf @ {leaf_url}"]
+        "#,
+    ))?;
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(&format!(
+        r#"
+        [project]
+        name = "dep"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools>=42", "carrier[extra] @ {carrier_url}"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.setuptools.dynamic]
+        version = {{attr = "dep.__version__"}}
+        "#,
+    ))?;
+    dep_dir.child("dep").create_dir_all()?;
+    dep_dir
+        .child("dep/__init__.py")
+        .write_str("__version__ = '0.1.0'")?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep", "carrier"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        carrier = { path = "carrier" }
+        leaf = { path = "leaf" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    let dep = package_section(&lock, "dep");
+    assert!(dep.contains(r#"name = "carrier""#), "{dep}");
+    assert!(dep.contains(r#"extra = ["extra"]"#), "{dep}");
+
+    let carrier = package_section(&lock, "carrier");
+    assert!(carrier.contains("[package.optional-dependencies]"));
+    assert!(carrier.contains(r#"{ name = "leaf" }"#));
+    assert!(lock.contains(r#"name = "leaf""#));
+
+    Ok(())
+}
+
+/// Verify that enabling build-dependency locking upgrades an otherwise
+/// up-to-date revision-3 lock instead of returning it unchanged.
+#[test]
+fn lock_build_dependencies_relocks_revision_3() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.setuptools.dynamic]
+        version = {attr = "dep.__version__"}
+        "#,
+    )?;
+    dep_dir.child("dep").create_dir_all()?;
+    dep_dir
+        .child("dep/__init__.py")
+        .write_str("__version__ = '0.1.0'")?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert!(context.read("uv.lock").contains("revision = 3"));
+
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Added setuptools v69.2.0
+    Added wheel v0.43.0
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(lock.contains("revision = 4"));
+    assert!(package_section(&lock, "dep").contains("build-dependencies = ["));
+
+    Ok(())
+}
+
+/// Verify that the shared default-backend cache records the default build
+/// resolution for every source package that reuses it.
+#[test]
+fn lock_build_dependencies_default_backend_cache_records_each_package() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let dep_a_dir = context.temp_dir.child("dep-a");
+    dep_a_dir.create_dir_all()?;
+    dep_a_dir
+        .child("setup.py")
+        .write_str("from setuptools import setup\nsetup(name='dep-a', version='0.1.0')\n")?;
+
+    let dep_b_dir = context.temp_dir.child("dep-b");
+    dep_b_dir.create_dir_all()?;
+    dep_b_dir
+        .child("setup.py")
+        .write_str("from setuptools import setup\nsetup(name='dep-b', version='0.1.0')\n")?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep-a", "dep-b"]
+
+        [tool.uv.sources]
+        dep-a = { path = "dep-a" }
+        dep-b = { path = "dep-b" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(package_section(&lock, "dep-a").contains("build-dependencies = ["));
+    assert!(package_section(&lock, "dep-b").contains("build-dependencies = ["));
 
     Ok(())
 }
@@ -1953,7 +2291,7 @@ fn lock_build_dependencies_no_build_disables_locking() -> Result<()> {
     }, {
         assert_snapshot!(lock, @r#"
         version = 1
-        revision = 4
+        revision = 3
         requires-python = ">=3.12"
 
         [options]
@@ -1980,6 +2318,91 @@ fn lock_build_dependencies_no_build_disables_locking() -> Result<()> {
         requires-dist = [{ name = "iniconfig" }]
         "#);
     });
+
+    Ok(())
+}
+
+/// Verify that a lock created with `--no-build` is not reused when build
+/// dependency locking is later requested without `--no-build`.
+#[test]
+fn lock_build_dependencies_no_build_relocks_without_no_build() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--no-build"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(!lock.contains("revision = 4"));
+    assert!(!lock.contains("build-dependencies = ["));
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--locked"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Added setuptools v69.2.0
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(lock.contains("revision = 4"));
+    assert!(lock.contains("build-dependencies = ["));
 
     Ok(())
 }
@@ -2053,6 +2476,9 @@ fn lock_build_dependencies_no_build_package_skips_selected() -> Result<()> {
         version = "0.1.0"
         source = { directory = "dep" }
 
+        [package.metadata]
+        build-requires = [{ name = "setuptools", specifier = ">=42" }]
+
         [[package]]
         name = "dep2"
         version = "0.1.0"
@@ -2101,6 +2527,99 @@ fn lock_build_dependencies_no_build_package_skips_selected() -> Result<()> {
         ]
         "#);
     });
+
+    Ok(())
+}
+
+/// Verify that sync only reconstructs locked build resolutions for selected
+/// packages, not unselected optional dependencies.
+#[test]
+fn sync_filters_locked_build_resolutions_to_selected_packages() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let helper_dir = context.temp_dir.child("helper");
+    helper_dir.create_dir_all()?;
+    helper_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "helper"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.setuptools.dynamic]
+        version = {attr = "helper.__version__"}
+        "#,
+    )?;
+    helper_dir.child("helper").create_dir_all()?;
+    helper_dir
+        .child("helper/__init__.py")
+        .write_str("__version__ = '0.1.0'")?;
+    let helper_url = Url::from_directory_path(helper_dir.path()).unwrap();
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(&format!(
+        r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["helper @ {helper_url}"]
+        build-backend = "setuptools.build_meta"
+        "#
+    ))?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        helper = { path = "helper" }
+
+        [tool.uv]
+        package = false
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--frozen")
+        .arg("--no-default-groups")
+        .arg("--no-build"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Checked in [TIME]
+    ");
 
     Ok(())
 }
