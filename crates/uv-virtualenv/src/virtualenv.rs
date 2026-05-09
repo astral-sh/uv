@@ -4,6 +4,8 @@ use std::env::consts::EXE_SUFFIX;
 use std::io;
 use std::io::{BufWriter, Write};
 use std::path::Path;
+#[cfg(windows)]
+use std::time::Duration;
 
 use console::Term;
 use fs_err::File;
@@ -612,6 +614,25 @@ fn confirm_clear(location: &Path, name: &'static str) -> Result<Option<bool>, io
 
 /// Perform a safe removal of a virtual environment.
 pub fn remove_virtualenv(location: &Path) -> Result<(), Error> {
+    #[cfg(windows)]
+    fn retry_remove<T>(mut f: impl FnMut() -> Result<T, io::Error>) -> Result<T, io::Error> {
+        const RETRIES: u32 = 5;
+
+        for attempt in 0..RETRIES {
+            match f() {
+                Ok(value) => return Ok(value),
+                Err(err)
+                    if err.kind() == io::ErrorKind::PermissionDenied && attempt + 1 < RETRIES =>
+                {
+                    std::thread::sleep(Duration::from_millis(u64::from((attempt + 1) * 10)));
+                }
+                Err(err) => return Err(err),
+            }
+        }
+
+        unreachable!("retry loop should return on success or final error")
+    }
+
     // On Windows, if the current executable is in the directory, defer self-deletion since Windows
     // won't let you unlink a running executable.
     #[cfg(windows)]
@@ -632,8 +653,14 @@ pub fn remove_virtualenv(location: &Path) -> Result<(), Error> {
             continue;
         }
         if path.is_dir() {
+            #[cfg(windows)]
+            retry_remove(|| fs_err::remove_dir_all(&path))?;
+            #[cfg(not(windows))]
             fs_err::remove_dir_all(&path)?;
         } else {
+            #[cfg(windows)]
+            retry_remove(|| fs_err::remove_file(&path))?;
+            #[cfg(not(windows))]
             fs_err::remove_file(&path)?;
         }
     }
@@ -645,7 +672,12 @@ pub fn remove_virtualenv(location: &Path) -> Result<(), Error> {
     }
 
     // Remove the virtual environment directory itself
-    match fs_err::remove_dir_all(location) {
+    #[cfg(windows)]
+    let remove_result = retry_remove(|| fs_err::remove_dir_all(location));
+    #[cfg(not(windows))]
+    let remove_result = fs_err::remove_dir_all(location);
+
+    match remove_result {
         Ok(()) => {}
         Err(err) if err.kind() == io::ErrorKind::NotFound => {}
         // If the virtual environment is a mounted file system, e.g., in a Docker container, we

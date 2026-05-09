@@ -48,6 +48,7 @@ pub enum InvalidEnvironmentKind {
     NotDirectory,
     Empty,
     MissingExecutable(PathBuf),
+    MissingPyVenvCfg,
 }
 
 impl From<PythonNotFound> for EnvironmentNotFound {
@@ -139,6 +140,7 @@ impl fmt::Display for InvalidEnvironmentKind {
             Self::MissingExecutable(path) => {
                 write!(f, "missing Python executable at `{}`", path.user_display())
             }
+            Self::MissingPyVenvCfg => write!(f, "missing `pyvenv.cfg`"),
             Self::Empty => write!(f, "directory is empty"),
         }
     }
@@ -214,6 +216,17 @@ impl PythonEnvironment {
             return Err(InvalidEnvironment {
                 path: root.as_ref().to_path_buf(),
                 kind: InvalidEnvironmentKind::MissingExecutable(executable.clone()),
+            }
+            .into());
+        }
+
+        // If the environment is missing `pyvenv.cfg`, treat it as invalid before querying the
+        // interpreter. On Windows, the venv launcher may fail with an opaque exit code instead of
+        // surfacing a structured error for this case.
+        if !root.as_ref().join("pyvenv.cfg").is_file() {
+            return Err(InvalidEnvironment {
+                path: root.as_ref().to_path_buf(),
+                kind: InvalidEnvironmentKind::MissingPyVenvCfg,
             }
             .into());
         }
