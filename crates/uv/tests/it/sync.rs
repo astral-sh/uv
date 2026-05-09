@@ -98,6 +98,16 @@ fn locked() -> Result<()> {
     The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
+    // `--quiet` must not suppress the error message (exit code 1, cause must be visible).
+    uv_snapshot!(context.filters(), context.sync().arg("--locked").arg("--quiet"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+
     let updated = context.read("uv.lock");
 
     // And the lockfile should be unchanged.
