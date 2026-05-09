@@ -119,7 +119,7 @@ pub(crate) async fn metadata(
     {
         Ok(lock) => print_lock_as_metadata(virtual_project.workspace(), &lock.into_lock(), printer),
         Err(err @ ProjectError::LockMismatch(..)) => {
-            writeln!(printer.stderr(), "{}", err.to_string().bold())?;
+            writeln!(printer.stderr_important(), "{}", err.to_string().bold())?;
             Ok(ExitStatus::Failure)
         }
         Err(ProjectError::Operation(err)) => {

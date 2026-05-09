@@ -15096,6 +15096,51 @@ fn check_outdated_lock() -> Result<()> {
     Ok(())
 }
 
+/// Ensure that `uv lock --check --quiet` still shows the error message when the lockfile is outdated.
+///
+/// See: <https://github.com/astral-sh/uv/issues/19326>
+#[test]
+fn check_outdated_lock_quiet() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+        "#,
+    )?;
+
+    // Lock the initial requirements.
+    context.lock().assert().success();
+
+    // Update the requirements.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // Running with `--check --quiet` should still show the error message.
+    uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--quiet"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    The lockfile at `uv.lock` needs to be updated, but `--check` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
 /// This checks that markers that normalize to 'false', which are serialized
 /// to the lockfile as `python_full_version < '0'`, get read back as false.
 /// Otherwise `uv lock --check` will always fail.

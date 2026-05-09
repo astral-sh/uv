@@ -374,7 +374,7 @@ pub(crate) async fn sync(
                 Outcome::LockMismatch(prev, cur, lock_source)
             } else {
                 writeln!(
-                    printer.stderr(),
+                    printer.stderr_important(),
                     "{}",
                     ProjectError::LockMismatch(prev, cur, lock_source)
                         .to_string()
@@ -478,7 +478,7 @@ pub(crate) async fn sync(
         Outcome::Success(..) => Ok(ExitStatus::Success),
         Outcome::LockMismatch(prev, cur, lock_source) => {
             writeln!(
-                printer.stderr(),
+                printer.stderr_important(),
                 "{}",
                 ProjectError::LockMismatch(prev, cur, lock_source)
                     .to_string()
