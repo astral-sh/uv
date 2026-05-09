@@ -2044,9 +2044,6 @@ fn test_path_hopping() -> Result<()> {
       },
       "project": {
         "editable": "."
-      },
-      "uv-build": {
-        "registry": "https://pypi.org/simple"
       }
     }
     "#);
