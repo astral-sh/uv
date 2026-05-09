@@ -31,6 +31,8 @@ pub struct TreeDisplay<'env> {
     depth: usize,
     /// Whether to de-duplicate the displayed dependencies.
     no_dedupe: bool,
+    /// Whether the graph edges have been reversed (i.e., `--invert` mode).
+    invert: bool,
     /// Reference to the lock to look up additional metadata (e.g., wheel sizes).
     lock: &'env Lock,
     /// Whether to show sizes in the rendered output.
@@ -410,6 +412,7 @@ impl<'env> TreeDisplay<'env> {
             latest,
             depth,
             no_dedupe,
+            invert,
             lock,
             show_sizes,
         }
@@ -495,12 +498,34 @@ impl<'env> TreeDisplay<'env> {
             line
         };
 
+        // Determine which extras are activated for the current node based on the incoming edge.
+        // `None` means a root context (e.g., workspace members reached directly from the
+        // synthetic root), where all optional children are displayed. `Some(set)` restricts
+        // optional dependencies to those whose activating extra appears in `set`.
+        //
+        // In inverted mode the graph edges are reversed, so an `Optional` outgoing edge means
+        // "this package is required by X via extra Y" — the filter does not apply there.
+        let activated_extras = if self.invert {
+            None
+        } else {
+            edge.and_then(Edge::extras)
+        };
+
         let mut dependencies = self
             .graph
             .edges_directed(cursor.node(), Direction::Outgoing)
             .filter_map(|edge| match self.graph[edge.target()] {
                 Node::Root => None,
-                Node::Package(_) => Some(Cursor::new(edge.target(), edge.id())),
+                Node::Package(_) => {
+                    // Only include extra-conditional dependencies if the activating extra is
+                    // enabled in the current context.
+                    if let Edge::Optional(required_extra, _) = &self.graph[edge.id()] {
+                        if activated_extras.is_some_and(|extras| !extras.contains(required_extra)) {
+                            return None;
+                        }
+                    }
+                    Some(Cursor::new(edge.target(), edge.id()))
+                }
             })
             .collect::<Vec<_>>();
         dependencies.sort_by_key(|cursor| {

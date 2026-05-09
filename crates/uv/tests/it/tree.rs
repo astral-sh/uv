@@ -797,6 +797,88 @@ fn optional_dependencies_inverted() -> Result<()> {
     Ok(())
 }
 
+/// Regression test for <https://github.com/astral-sh/uv/issues/19327>.
+///
+/// When a package is required both as a plain dep and as a dep with extras (e.g., from a
+/// dependency group), `uv tree` should not display extra-conditional dependencies for the plain
+/// occurrence.
+#[test]
+fn dep_and_group_extras() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["flask"]
+
+        [dependency-groups]
+        dev = ["flask[dotenv]"]
+    "#,
+    )?;
+
+    // Plain `flask` should not show `python-dotenv` (which belongs to the `dotenv` extra).
+    // `flask[dotenv]` should be deduplicated as `(*)` because `flask` was already rendered above.
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── flask v3.0.2
+    │   ├── blinker v1.7.0
+    │   ├── click v8.1.7
+    │   │   └── colorama v0.4.6
+    │   ├── itsdangerous v2.1.2
+    │   ├── jinja2 v3.1.3
+    │   │   └── markupsafe v2.1.5
+    │   └── werkzeug v3.0.1
+    │       └── markupsafe v2.1.5
+    └── flask[dotenv] v3.0.2 (group: dev) (*)
+    (*) Package tree already displayed
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    "
+    );
+
+    // With `--no-dedupe`, `flask[dotenv]` is expanded and shows `python-dotenv` as an extra dep,
+    // while plain `flask` still does not show it.
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--no-dedupe"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── flask v3.0.2
+    │   ├── blinker v1.7.0
+    │   ├── click v8.1.7
+    │   │   └── colorama v0.4.6
+    │   ├── itsdangerous v2.1.2
+    │   ├── jinja2 v3.1.3
+    │   │   └── markupsafe v2.1.5
+    │   └── werkzeug v3.0.1
+    │       └── markupsafe v2.1.5
+    └── flask[dotenv] v3.0.2 (group: dev)
+        ├── blinker v1.7.0
+        ├── click v8.1.7
+        │   └── colorama v0.4.6
+        ├── itsdangerous v2.1.2
+        ├── jinja2 v3.1.3
+        │   └── markupsafe v2.1.5
+        ├── werkzeug v3.0.1
+        │   └── markupsafe v2.1.5
+        └── python-dotenv v1.0.1 (extra: dotenv)
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    "
+    );
+
+    Ok(())
+}
+
 #[test]
 fn package() -> Result<()> {
     let context = uv_test::test_context!("3.12");
