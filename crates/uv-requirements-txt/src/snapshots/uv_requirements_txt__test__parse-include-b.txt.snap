@@ -29,6 +29,7 @@ RequirementsTxt {
     extra_index_urls: [],
     find_links: [],
     no_index: false,
+    require_hashes: false,
     no_binary: None,
     only_binary: None,
 }

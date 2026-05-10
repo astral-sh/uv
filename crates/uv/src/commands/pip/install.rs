@@ -151,6 +151,7 @@ pub(crate) async fn pip_install(
         index_url,
         extra_index_urls,
         no_index,
+        require_hashes,
         find_links,
         no_binary,
         no_build,
@@ -167,6 +168,8 @@ pub(crate) async fn pip_install(
     .await?;
 
     override_dependencies.extend(overrides_from_workspace);
+
+    let hash_checking = HashCheckingMode::from_requirements_txt(hash_checking, require_hashes);
 
     if pylock.is_some() {
         if !preview.is_enabled(PreviewFeature::Pylock) {
