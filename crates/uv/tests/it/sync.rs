@@ -107,6 +107,51 @@ fn locked() -> Result<()> {
 }
 
 #[test]
+fn locked_error_shows_with_quiet() -> Result<()> {
+    // Regression test for https://github.com/astral-sh/uv/issues/19326
+    // When `--locked` fails due to lockfile mismatch with `--quiet`, the error
+    // should still be displayed (since it's an error, not normal output).
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+        "#,
+    )?;
+
+    // Create the initial lockfile.
+    context.lock().assert().success();
+
+    // Update the requirements to create a lockfile mismatch.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // Running with `--locked --quiet` should show the error message.
+    uv_snapshot!(context.filters(), context.sync().arg("--locked").arg("--quiet"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn frozen() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
