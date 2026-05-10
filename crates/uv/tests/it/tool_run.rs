@@ -1,6 +1,11 @@
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
+#[cfg(unix)]
+use fs_err::{metadata, set_permissions};
 use indoc::indoc;
 use uv_fs::copy_dir_all;
 use uv_static::EnvVars;
@@ -2671,6 +2676,59 @@ fn run_with_env_file() -> anyhow::Result<()> {
     ----- stderr -----
     Resolved [N] packages in [TIME]
     ");
+
+    let evil_tools = context.temp_dir.child(".evil-tools");
+    let evil_tool = evil_tools.child("foo");
+    let evil_python = if cfg!(windows) {
+        let scripts = evil_tool.child("Scripts");
+        scripts.create_dir_all()?;
+        scripts.child("python.exe")
+    } else {
+        let bin = evil_tool.child("bin");
+        bin.create_dir_all()?;
+        bin.child("python3")
+    };
+    evil_python.write_str(indoc! { r"
+        #!/bin/sh
+        echo queried > queried.txt
+        exit 1
+    " })?;
+
+    #[cfg(unix)]
+    {
+        let mut permissions = metadata(evil_python.path())?.permissions();
+        permissions.set_mode(0o755);
+        set_permissions(evil_python.path(), permissions)?;
+    }
+
+    context.temp_dir.child(".file").write_str(indoc! { "
+        UV_TOOL_DIR=.evil-tools
+        THE_EMPIRE_VARIABLE=palpatine
+        REBEL_1=leia_organa
+        REBEL_2=obi_wan_kenobi
+        REBEL_3=C3PO
+       "
+    })?;
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("./foo")
+        .arg("script")
+        .env(EnvVars::UV_ENV_FILE, ".file")
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    palpatine
+    leia_organa
+    obi_wan_kenobi
+    C3PO
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    ");
+
+    assert!(!context.temp_dir.child("queried.txt").exists());
 
     Ok(())
 }
