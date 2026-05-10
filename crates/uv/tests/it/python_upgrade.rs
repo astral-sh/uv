@@ -86,8 +86,8 @@ fn python_upgrade() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.14.5rc1 in [TIME]
-     + cpython-3.14.5rc1-[PLATFORM] (python3.14)
+    Installed Python 3.14.[LATEST] in [TIME]
+     + cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
     ");
 }
 
