@@ -1649,6 +1649,14 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv cache ls` command.
+    pub fn cache_ls(&self) -> Command {
+        let mut command = self.new_command();
+        command.arg("cache").arg("ls");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
     /// Create a `uv build_backend` command.
     ///
     /// Note that this command is hidden and only invoking it through a build frontend is supported.

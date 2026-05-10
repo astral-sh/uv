@@ -902,6 +902,11 @@ pub enum CacheCommand {
     /// wheels, source distributions, and other cached data. By default, outputs the size in raw
     /// bytes; use `--human` for human-readable output.
     Size(SizeArgs),
+    /// List the contents of the cache.
+    ///
+    /// Lists all packages in the cache, along with their versions. Use `--size` to show the
+    /// size of each package. Use `--format json` to output JSON.
+    Ls(LsArgs),
 }
 
 #[derive(Args, Debug)]
@@ -949,6 +954,32 @@ pub struct SizeArgs {
     /// Display the cache size in human-readable format (e.g., `1.2 GiB` instead of raw bytes).
     #[arg(long = "human", short = 'H', alias = "human-readable")]
     pub human: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct LsArgs {
+    /// Display the size of each package.
+    #[arg(long)]
+    pub size: bool,
+
+    /// Only show the number of cached packages.
+    #[arg(long)]
+    pub count: bool,
+
+    /// Output format.
+    #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
+    pub format: OutputFormat,
+
+    /// Filter by package name.
+    #[arg(value_hint = ValueHint::Other)]
+    pub package: Option<String>,
+}
+
+#[derive(ValueEnum, Clone, Debug, Default)]
+pub enum OutputFormat {
+    #[default]
+    Text,
+    Json,
 }
 
 #[derive(Args)]
