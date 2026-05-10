@@ -5969,6 +5969,7 @@ dependencies = [
  "uv-platform-tags",
  "uv-preview",
  "uv-pypi-types",
+ "uv-toml",
  "uv-version",
  "uv-warnings",
  "walkdir",
@@ -7228,6 +7229,13 @@ dependencies = [
  "uv-python",
  "uv-static",
  "uv-version",
+]
+
+[[package]]
+name = "uv-toml"
+version = "0.0.40"
+dependencies = [
+ "toml_parser",
 ]
 
 [[package]]
