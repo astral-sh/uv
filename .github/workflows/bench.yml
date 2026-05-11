@@ -94,6 +94,48 @@ jobs:
           mode: walltime
           token: ${{ secrets.CODSPEED_TOKEN }}
 
+  benchmarks-walltime-macos:
+    name: "walltime on macos aarch64"
+    runs-on: depot-macos-15
+    if: ${{ github.repository == 'astral-sh/uv' }}
+    timeout-minutes: 20
+    steps:
+      - name: "Checkout Branch"
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+
+      - name: "Install Rust toolchain"
+        run: rustup show
+
+      - name: "Install codspeed"
+        uses: taiki-e/install-action@db5fb34fa772531a3ece57ca434f579eb334e0fb # v2.75.30
+        with:
+          tool: cargo-codspeed
+
+      - name: "Install requirements and prime cache"
+        run: |
+          cargo run --bin uv -- venv --cache-dir .cache
+          cargo run --bin uv -- pip compile test/requirements/jupyter.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
+          cargo run --bin uv -- pip compile test/requirements/airflow.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
+
+      - name: "Build benchmarks"
+        run: cargo codspeed build -m walltime --profile profiling -p uv-bench
+
+      - name: "Create venv"
+        run: ./target/debug/uv venv --cache-dir .cache
+
+      - name: "Run benchmarks"
+        uses: CodSpeedHQ/action@c381be0bfd20e844fb45594f6aa182ffcd94545c # v4.15.0
+        with:
+          run: cargo codspeed run
+          mode: walltime
+          token: ${{ secrets.CODSPEED_TOKEN }}
+
   benchmarks-simulated:
     name: "simulated"
     runs-on: depot-ubuntu-24.04-4
