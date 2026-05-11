@@ -820,8 +820,8 @@ fn dep_and_group_extras() -> Result<()> {
     "#,
     )?;
 
-    // Plain `flask` should not show `python-dotenv` (which belongs to the `dotenv` extra).
-    // `flask[dotenv]` should be deduplicated as `(*)` because `flask` was already rendered above.
+    // Plain `flask` should not show `python-dotenv` (which belongs to the `dotenv` extra),
+    // but the `flask[dotenv]` occurrence should still be expanded in its own extra context.
     uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
     success: true
     exit_code: 0
@@ -836,7 +836,13 @@ fn dep_and_group_extras() -> Result<()> {
     │   │   └── markupsafe v2.1.5
     │   └── werkzeug v3.0.1
     │       └── markupsafe v2.1.5
-    └── flask[dotenv] v3.0.2 (group: dev) (*)
+    └── flask[dotenv] v3.0.2 (group: dev)
+        ├── blinker v1.7.0
+        ├── click v8.1.7 (*)
+        ├── itsdangerous v2.1.2
+        ├── jinja2 v3.1.3 (*)
+        ├── werkzeug v3.0.1 (*)
+        └── python-dotenv v1.0.1 (extra: dotenv)
     (*) Package tree already displayed
 
     ----- stderr -----
@@ -875,6 +881,72 @@ fn dep_and_group_extras() -> Result<()> {
     Resolved 10 packages in [TIME]
     "
     );
+
+    Ok(())
+}
+
+#[test]
+fn dep_and_group_extras_with_extra_only_dependency() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let leaf = context.temp_dir.child("leaf");
+    fs_err::create_dir_all(leaf.path())?;
+    leaf.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+    let leaf_url = Url::from_file_path(leaf.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert leaf path to URL"))?;
+
+    let child = context.temp_dir.child("child");
+    fs_err::create_dir_all(child.path())?;
+    child.child("pyproject.toml").write_str(&formatdoc! {
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        extra = ["leaf @ {}"]
+        "#,
+        leaf_url,
+    })?;
+    let child_url = Url::from_file_path(child.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert child path to URL"))?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child @ {}"]
+
+        [dependency-groups]
+        dev = ["child[extra] @ {}"]
+        "#,
+        child_url,
+        child_url,
+    })?;
+
+    uv_snapshot!(context.filters(), context.tree(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── child v0.1.0
+    └── child[extra] v0.1.0 (group: dev)
+        └── leaf v0.1.0 (extra: extra)
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
 
     Ok(())
 }
