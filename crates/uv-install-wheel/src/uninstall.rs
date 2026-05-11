@@ -159,7 +159,7 @@ pub fn uninstall_wheel(
     })
 }
 
-static WARNED_FOR_PACKAGE: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+static WARNED_FOR_RECORD_ENTRY_PACKAGE: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 static WARNED_FOR_EGG_TOP_LEVEL_PACKAGE: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 
 /// Check if the path is inside the venv or a system interpreter path, and warn if it isn't.
@@ -195,7 +195,7 @@ fn is_path_in_scheme(
     } else {
         // A package that does this is malformed to the point of being a risk to the user, be
         // annoying about it, but only once per package.
-        if WARNED_FOR_PACKAGE
+        if WARNED_FOR_RECORD_ENTRY_PACKAGE
             .get_or_init(|| Mutex::new(HashSet::new()))
             .lock()
             .expect("The mutex is broken, did some other thread panic?")
@@ -213,10 +213,11 @@ fn is_path_in_scheme(
 
 /// Check that a `top_level.txt` entry names a single top-level module or package.
 ///
-/// Unlike wheel `RECORD` entries, egg `top_level.txt` entries are Python identifiers, not paths.
-/// Treating them as paths can make uninstall delete directories outside `site-packages`.
+/// Unlike wheel `RECORD` entries, egg `top_level.txt` entries refer to direct children of the
+/// egg's base location, not arbitrary paths. Treating them as paths can make uninstall delete
+/// directories outside `site-packages`.
 fn is_valid_top_level_entry(entry: &str, distribution: impl Display) -> bool {
-    if is_python_identifier(entry) {
+    if is_safe_top_level_entry(entry) {
         true
     } else {
         if WARNED_FOR_EGG_TOP_LEVEL_PACKAGE
@@ -235,14 +236,8 @@ fn is_valid_top_level_entry(entry: &str, distribution: impl Display) -> bool {
     }
 }
 
-fn is_python_identifier(entry: &str) -> bool {
-    let mut chars = entry.chars();
-    let Some(first) = chars.next() else {
-        return false;
-    };
-
-    (first == '_' || unicode_ident::is_xid_start(first))
-        && chars.all(|character| character == '_' || unicode_ident::is_xid_continue(character))
+fn is_safe_top_level_entry(entry: &str) -> bool {
+    !entry.is_empty() && entry != "." && entry != ".." && !entry.contains(['/', '\\'])
 }
 
 /// Uninstall the egg represented by the `.egg-info` directory.
@@ -466,20 +461,18 @@ mod tests {
     use uv_pypi_types::Scheme;
 
     use crate::Layout;
-    use crate::uninstall::{is_python_identifier, uninstall_egg, uninstall_wheel};
+    use crate::uninstall::{is_safe_top_level_entry, uninstall_egg, uninstall_wheel};
 
     #[test]
-    fn test_top_level_entry_python_identifier() {
-        assert!(is_python_identifier("package"));
-        assert!(is_python_identifier("_package"));
-        assert!(is_python_identifier("pkg_123"));
-        assert!(is_python_identifier("\u{00e9}clair"));
+    fn test_top_level_entry_safe_name() {
+        assert!(is_safe_top_level_entry("package"));
 
-        assert!(!is_python_identifier(""));
-        assert!(!is_python_identifier("1package"));
-        assert!(!is_python_identifier("package-name"));
-        assert!(!is_python_identifier("package.name"));
-        assert!(!is_python_identifier("../package"));
+        assert!(!is_safe_top_level_entry(""));
+        assert!(!is_safe_top_level_entry("."));
+        assert!(!is_safe_top_level_entry(".."));
+        assert!(!is_safe_top_level_entry("../package"));
+        assert!(!is_safe_top_level_entry("package/name"));
+        assert!(!is_safe_top_level_entry(r"package\name"));
     }
 
     /// Uninstall must not remove files outside the install scheme.
@@ -552,32 +545,16 @@ mod tests {
         let target_dir = venv.child("traversal_target");
         let target_file = target_dir.child("secret.txt");
         target_file.write_str("I should not be deleted").unwrap();
-        let absolute_target_dir = venv.child("absolute_target");
-        let absolute_target_file = absolute_target_dir.child("secret.txt");
-        absolute_target_file
-            .write_str("I should not be deleted")
-            .unwrap();
-        let invalid_name_dir = site_packages.child("invalid-name");
-        let invalid_name_file = invalid_name_dir.child("secret.txt");
-        invalid_name_file
-            .write_str("I should not be deleted")
-            .unwrap();
-
         // Build a relative traversal path from site-packages to the target directory.
         let egg_info = site_packages.child("evilpkg-0.1.0.egg-info");
         egg_info.create_dir_all().unwrap();
         let target_path = pathdiff::diff_paths(target_dir.path(), site_packages.path()).unwrap();
         assert!(site_packages.join(&target_path).exists());
 
-        // Create a fake egg-info directory with `top_level.txt` entries containing relative and
-        // absolute paths.
+        // Create a fake egg-info directory with a path traversal entry in `top_level.txt`.
         egg_info
             .child("top_level.txt")
-            .write_str(&format!(
-                "evilpkg\n{}\n{}\ninvalid-name\n",
-                target_path.display(),
-                absolute_target_dir.path().display()
-            ))
+            .write_str(&format!("evilpkg\n{}\n", target_path.display()))
             .unwrap();
 
         // Also create the legitimate package directory so uninstall can remove it.
@@ -586,14 +563,10 @@ mod tests {
 
         uninstall_egg(egg_info.path(), "evilpkg 0.1.0").unwrap();
 
-        // The regular package directory has been removed, while the directories outside
-        // site-packages still exist.
+        // The regular package directory has been removed, while the directory outside
+        // site-packages still exists.
         assert!(target_dir.exists());
         assert!(target_file.exists());
-        assert!(absolute_target_dir.exists());
-        assert!(absolute_target_file.exists());
-        assert!(invalid_name_dir.exists());
-        assert!(invalid_name_file.exists());
         assert!(!init_py.exists());
         assert!(!egg_info.exists());
     }

@@ -275,7 +275,6 @@ tracing-durations-export = { version = "0.3.0", features = ["plot"] }
 tracing-subscriber = { version = "0.3.18" } # Default feature set for uv_build, uv activates extra features
 tracing-test = { version = "0.2.5" }
 tracing-tree = { version = "0.4.0" }
-unicode-ident = { version = "1.0.24" }
 unicode-width = { version = "0.2.0" }
 unscanny = { version = "0.1.0" }
 url = { version = "2.5.2", features = ["serde"] }

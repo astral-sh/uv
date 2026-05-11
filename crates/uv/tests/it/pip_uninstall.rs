@@ -600,9 +600,6 @@ fn uninstall_egg_info_top_level_path_traversal() -> Result<()> {
     let target_dir = context.venv.child("traversal_target");
     let target_file = target_dir.child("secret.txt");
     target_file.write_str("I should not be deleted")?;
-    let invalid_name_dir = site_packages.child("invalid-name");
-    let invalid_name_file = invalid_name_dir.child("secret.txt");
-    invalid_name_file.write_str("I should not be deleted")?;
 
     let depth = context
         .site_packages()
@@ -614,7 +611,7 @@ fn uninstall_egg_info_top_level_path_traversal() -> Result<()> {
 
     egg_info
         .child("top_level.txt")
-        .write_str(&format!("evilpkg\n{traversal_entry}\ninvalid-name\n"))?;
+        .write_str(&format!("evilpkg\n{traversal_entry}\n"))?;
 
     let init_py = site_packages.child("evilpkg").child("__init__.py");
     init_py.touch()?;
@@ -633,8 +630,6 @@ fn uninstall_egg_info_top_level_path_traversal() -> Result<()> {
 
     assert!(target_dir.exists());
     assert!(target_file.exists());
-    assert!(invalid_name_dir.exists());
-    assert!(invalid_name_file.exists());
     assert!(!init_py.exists());
     assert!(!egg_info.exists());
 
