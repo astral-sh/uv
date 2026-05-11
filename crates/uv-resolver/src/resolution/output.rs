@@ -710,7 +710,7 @@ impl ResolverOutput {
     }
 
     fn into_resolution(self, allow_universal: bool) -> uv_distribution_types::Resolution {
-        let ResolverOutput {
+        let Self {
             graph,
             diagnostics,
             fork_markers,
