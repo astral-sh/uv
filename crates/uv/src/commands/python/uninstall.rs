@@ -198,50 +198,6 @@ async fn do_uninstall(
             .insert(executable);
     }
 
-    // Pre-compute which minor versions will have no remaining installations
-    // after all matching installations are removed.
-    let matching_keys: IndexSet<_> = matching_installations
-        .iter()
-        .map(|installation| installation.key().clone())
-        .collect();
-    let anticipated_remaining_minor_versions =
-        PythonInstallationMinorVersionKey::highest_installations_by_minor_version_key(
-            installed_installations
-                .iter()
-                .filter(|installation| !matching_keys.contains(installation.key())),
-        );
-
-    // Remove minor version links (symlinks on Unix, junctions on Windows) for minor
-    // versions that will have no remaining installations. This must happen before
-    // removing the installation directories so that the link targets still exist,
-    // which is required when reading link targets on Windows.
-    for installation in &matching_installations {
-        if !anticipated_remaining_minor_versions.contains_key(installation.minor_version_key()) {
-            if let Some(minor_version_link) =
-                PythonMinorVersionLink::from_installation(installation)
-            {
-                if minor_version_link.exists() {
-                    if cfg!(windows) {
-                        fs_err::remove_dir(minor_version_link.symlink_directory.as_path())?;
-                    } else {
-                        fs_err::remove_file(minor_version_link.symlink_directory.as_path())?;
-                    }
-                    let symlink_term = if cfg!(windows) {
-                        "junction"
-                    } else {
-                        "symlink directory"
-                    };
-                    debug!(
-                        "Removed {}: {}",
-                        symlink_term,
-                        minor_version_link.symlink_directory.to_string_lossy()
-                    );
-                }
-            }
-        }
-    }
-
-    // Remove the installation directories.
     let mut tasks = FuturesUnordered::new();
     for installation in &matching_installations {
         tasks.push(async {
@@ -261,8 +217,9 @@ async fn do_uninstall(
         }
     }
 
-    // Update minor version links for minor versions that still have remaining
-    // installations, ensuring the link points to the new highest patch.
+    // Read all existing managed installations and find the highest installed patch
+    // for each installed minor version. Ensure the minor version link directory
+    // is still valid.
     let uninstalled_minor_versions: IndexSet<_> = uninstalled
         .iter()
         .map(PythonInstallationMinorVersionKey::ref_cast)
@@ -282,6 +239,40 @@ async fn do_uninstall(
         .filter(|(minor_version, _)| uninstalled_minor_versions.contains(minor_version))
     {
         installation.ensure_minor_version_link()?;
+    }
+    // For each uninstalled installation, check if there are no remaining installations
+    // for its minor version. If there are none remaining, remove the symlink directory
+    // (or junction on Windows) if it exists.
+    for installation in &matching_installations {
+        if !remaining_minor_versions.contains_key(installation.minor_version_key()) {
+            if let Some(minor_version_link) =
+                PythonMinorVersionLink::from_installation(installation)
+            {
+                if minor_version_link.exists() {
+                    let result = if cfg!(windows) {
+                        fs_err::remove_dir(minor_version_link.symlink_directory.as_path())
+                    } else {
+                        fs_err::remove_file(minor_version_link.symlink_directory.as_path())
+                    };
+                    if result.is_err() {
+                        return Err(anyhow::anyhow!(
+                            "Failed to remove symlink directory {}",
+                            minor_version_link.symlink_directory.display()
+                        ));
+                    }
+                    let symlink_term = if cfg!(windows) {
+                        "junction"
+                    } else {
+                        "symlink directory"
+                    };
+                    debug!(
+                        "Removed {}: {}",
+                        symlink_term,
+                        minor_version_link.symlink_directory.to_string_lossy()
+                    );
+                }
+            }
+        }
     }
 
     // Report on any uninstalled installations.
