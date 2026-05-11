@@ -62,7 +62,7 @@ pub enum Error {
         err: walkdir::Error,
     },
     #[error("Failed to write wheel zip archive")]
-    Zip(#[from] zip::result::ZipError),
+    AsyncZip(#[from] async_zip::error::ZipError),
     #[error("Failed to write RECORD file")]
     Csv(#[from] csv::Error),
     #[error("Failed to write JSON metadata file")]
@@ -735,7 +735,7 @@ mod tests {
         // Check that the wheel is reproducible across platforms.
         assert_snapshot!(
             format!("{:x}", sha2::Sha256::digest(fs_err::read(&wheel_path).unwrap())),
-            @"dbe56fd8bd52184095b2e0ea3e83c95d1bc8b4aa53cf469cec5af62251b24abb"
+            @"cf5d6cdd49691afa93417491dd3376abc1211894b57cdbdc9d62d47658688cc5"
         );
         assert_snapshot!(build.wheel_contents.join("\n"), @"
         built_by_uv-0.1.0.data/data/

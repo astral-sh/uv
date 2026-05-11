@@ -321,15 +321,14 @@ dependencies = [
 
 [[package]]
 name = "astral_async_zip"
-version = "0.0.17"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab72a761e6085828cc8f0e05ed332b2554701368c5dc54de551bfaec466518ba"
+version = "0.0.18-rc1"
+source = "git+https://github.com/astral-sh/rs-async-zip.git?branch=charlie%2Frestore-zip-writing#c4051722ee7d527ad008d03ea1b218e0aae5dfa1"
 dependencies = [
  "async-compression",
  "crc32fast",
  "futures-lite",
  "pin-project",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
  "tokio",
  "tokio-util",
 ]
@@ -6013,10 +6012,12 @@ name = "uv-build-backend"
 version = "0.0.47"
 dependencies = [
  "astral-version-ranges",
+ "astral_async_zip",
  "base64 0.22.1",
  "csv",
  "flate2",
  "fs-err",
+ "futures-lite",
  "globset",
  "indexmap",
  "indoc",
@@ -7350,7 +7351,9 @@ dependencies = [
  "anyhow",
  "assert_cmd",
  "assert_fs",
+ "astral_async_zip",
  "fs-err",
+ "futures-lite",
  "goblin",
  "rcgen",
  "tempfile",
@@ -7358,7 +7361,6 @@ dependencies = [
  "uv-fs",
  "which",
  "windows",
- "zip",
 ]
 
 [[package]]

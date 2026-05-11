@@ -1,15 +1,20 @@
+use async_zip::base::write::{EntryStreamWriter, ZipFileWriter};
+use async_zip::{Compression, ZipEntryBuilder};
 use base64::{Engine, prelude::BASE64_URL_SAFE_NO_PAD as base64};
 use fs_err::File;
+use futures_lite::future::block_on;
+use futures_lite::io::{AsyncWrite, AsyncWriteExt};
 use globset::{GlobSet, GlobSetBuilder};
 use rustc_hash::FxHashSet;
 use sha2::{Digest, Sha256};
 use std::fmt::{Display, Formatter};
-use std::io::{BufReader, Read, Seek, Write};
+use std::io::{BufReader, Read, Write};
 use std::path::{Component, Path, PathBuf};
+use std::pin::Pin;
+use std::task::{Context, Poll};
 use std::{io, mem};
 use tracing::{debug, trace};
 use walkdir::WalkDir;
-use zip::{CompressionMethod, ZipWriter};
 
 use uv_distribution_filename::WheelFilename;
 use uv_fs::Simplified;
@@ -697,20 +702,75 @@ impl Display for WheelInfo {
     }
 }
 
-/// Zip archive (wheel) writer.
-struct ZipDirectoryWriter<W: Write + Seek> {
-    writer: ZipWriter<W>,
-    compression: CompressionMethod,
+/// ZIP archive (wheel) writer.
+struct ZipDirectoryWriter<W: AsyncWrite + Unpin> {
+    writer: ZipFileWriter<W>,
+    compression: Compression,
     /// The entries in the `RECORD` file.
     record: Vec<RecordEntry>,
 }
 
-impl<W: Write + Seek> ZipDirectoryWriter<W> {
+impl<W: AsyncWrite + Unpin> ZipDirectoryWriter<W> {
+    const REGULAR_FILE_MODE: u16 = 0o100_644;
+    const EXECUTABLE_FILE_MODE: u16 = 0o100_755;
+    const DIRECTORY_MODE: u16 = 0o040_755;
+
+    fn entry(path: &str, compression: Compression, mode: u16) -> ZipEntryBuilder {
+        ZipEntryBuilder::new(path.to_string().into(), compression).unix_permissions(mode)
+    }
+
+    /// Add a file with the given name and return a writer for it.
+    fn new_writer<'slf>(
+        &'slf mut self,
+        path: &str,
+        executable_bit: bool,
+    ) -> Result<EntryWriter<'slf, W>, Error> {
+        // Set file permissions: 644 (rw-r--r--) for regular files, 755 (rwxr-xr-x) for executables
+        let mode = if executable_bit {
+            Self::EXECUTABLE_FILE_MODE
+        } else {
+            Self::REGULAR_FILE_MODE
+        };
+        let entry = Self::entry(path, self.compression, mode);
+        let writer = block_on(self.writer.write_entry_stream(entry))?;
+        Ok(EntryWriter::new(writer))
+    }
+}
+
+struct SyncWriter<W> {
+    writer: W,
+}
+
+impl<W> SyncWriter<W> {
+    fn new(writer: W) -> Self {
+        Self { writer }
+    }
+}
+
+impl<W: Write + Unpin> AsyncWrite for SyncWriter<W> {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        _context: &mut Context<'_>,
+        buffer: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        Poll::Ready(self.get_mut().writer.write(buffer))
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, _context: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Poll::Ready(self.get_mut().writer.flush())
+    }
+
+    fn poll_close(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<io::Result<()>> {
+        self.poll_flush(context)
+    }
+}
+
+impl<W: Write + Unpin> ZipDirectoryWriter<SyncWriter<W>> {
     /// A wheel writer with deflate compression.
     fn new_wheel(writer: W) -> Self {
         Self {
-            writer: ZipWriter::new(writer),
-            compression: CompressionMethod::Deflated,
+            writer: ZipFileWriter::new(SyncWriter::new(writer)),
+            compression: Compression::Deflate,
             record: Vec::new(),
         }
     }
@@ -721,39 +781,57 @@ impl<W: Write + Seek> ZipDirectoryWriter<W> {
     #[expect(dead_code)]
     fn new_editable(writer: W) -> Self {
         Self {
-            writer: ZipWriter::new(writer),
-            compression: CompressionMethod::Stored,
+            writer: ZipFileWriter::new(SyncWriter::new(writer)),
+            compression: Compression::Stored,
             record: Vec::new(),
         }
     }
+}
 
-    /// Add a file with the given name and return a writer for it.
-    fn new_writer<'slf>(
-        &'slf mut self,
-        path: &str,
-        executable_bit: bool,
-    ) -> Result<Box<dyn Write + 'slf>, Error> {
-        // Set file permissions: 644 (rw-r--r--) for regular files, 755 (rwxr-xr-x) for executables
-        let permissions = if executable_bit { 0o755 } else { 0o644 };
-        let options = zip::write::SimpleFileOptions::default()
-            .system(zip::System::Unix)
-            .unix_permissions(permissions)
-            .compression_method(self.compression);
-        self.writer.start_file(path, options)?;
-        Ok(Box::new(&mut self.writer))
+struct EntryWriter<'writer, W: AsyncWrite + Unpin> {
+    writer: Option<EntryStreamWriter<'writer, W>>,
+}
+
+impl<'writer, W: AsyncWrite + Unpin> EntryWriter<'writer, W> {
+    fn new(writer: EntryStreamWriter<'writer, W>) -> Self {
+        Self {
+            writer: Some(writer),
+        }
+    }
+
+    fn close(mut self) -> Result<(), Error> {
+        let Some(writer) = self.writer.take() else {
+            return Ok(());
+        };
+        block_on(writer.close())?;
+        Ok(())
     }
 }
 
-impl<W: Write + Seek> DirectoryWriter for ZipDirectoryWriter<W> {
+impl<W: AsyncWrite + Unpin> Write for EntryWriter<'_, W> {
+    fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+        let Some(writer) = self.writer.as_mut() else {
+            return Err(io::Error::other(
+                "wheel ZIP entry writer was already closed",
+            ));
+        };
+        block_on(writer.write(buffer))
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        let Some(writer) = self.writer.as_mut() else {
+            return Ok(());
+        };
+        block_on(writer.flush())
+    }
+}
+
+impl<W: AsyncWrite + Unpin> DirectoryWriter for ZipDirectoryWriter<W> {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
         trace!("Adding {}", path);
         // Set appropriate permissions for metadata files (644 = rw-r--r--)
-        let options = zip::write::SimpleFileOptions::default()
-            .system(zip::System::Unix)
-            .unix_permissions(0o644)
-            .compression_method(self.compression);
-        self.writer.start_file(path, options)?;
-        self.writer.write_all(bytes)?;
+        let entry = Self::entry(path, self.compression, Self::REGULAR_FILE_MODE);
+        block_on(self.writer.write_entry_whole(entry, bytes))?;
 
         let hash = base64.encode(Sha256::new().chain_update(bytes).finalize());
         self.record.push(RecordEntry {
@@ -779,17 +857,21 @@ impl<W: Write + Seek> DirectoryWriter for ZipDirectoryWriter<W> {
         let executable_bit = false;
         let mut writer = self.new_writer(path, executable_bit)?;
         let record = write_hashed(path, &mut reader, &mut writer)?;
-        drop(writer);
+        writer.close()?;
         self.record.push(record);
         Ok(())
     }
 
     fn write_directory(&mut self, directory: &str) -> Result<(), Error> {
         trace!("Adding directory {}", directory);
-        let options = zip::write::SimpleFileOptions::default()
-            .compression_method(self.compression)
-            .system(zip::System::Unix);
-        Ok(self.writer.add_directory(directory, options)?)
+        let directory = if directory.ends_with('/') {
+            directory.to_string()
+        } else {
+            format!("{directory}/")
+        };
+        let entry = Self::entry(&directory, Compression::Stored, Self::DIRECTORY_MODE);
+        block_on(self.writer.write_entry_whole(entry, &[]))?;
+        Ok(())
     }
 
     /// Write the `RECORD` file and the central directory.
@@ -797,14 +879,13 @@ impl<W: Write + Seek> DirectoryWriter for ZipDirectoryWriter<W> {
         let record_path = format!("{dist_info_dir}/RECORD");
         trace!("Adding {record_path}");
         let record = mem::take(&mut self.record);
-        write_record(
-            &mut self.new_writer(&record_path, false)?,
-            dist_info_dir,
-            record,
-        )?;
+        let mut record_bytes = Vec::new();
+        write_record(&mut record_bytes, dist_info_dir, record)?;
+        let entry = Self::entry(&record_path, self.compression, Self::REGULAR_FILE_MODE);
+        block_on(self.writer.write_entry_whole(entry, &record_bytes))?;
 
         trace!("Adding central directory");
-        self.writer.finish()?;
+        block_on(self.writer.close())?;
         Ok(())
     }
 }

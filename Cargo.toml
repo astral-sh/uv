@@ -106,7 +106,7 @@ async-compression = { version = "0.4.12", features = [
 ] }
 async-trait = { version = "0.1.82" }
 async_http_range_reader = { version = "0.11.0", package = "astral_async_http_range_reader" }
-async_zip = { version = "0.0.17", package = "astral_async_zip", features = [
+async_zip = { git = "https://github.com/astral-sh/rs-async-zip.git", branch = "charlie/restore-zip-writing", package = "astral_async_zip", features = [
   "bzip2",
   "deflate",
   "lzma",
@@ -150,6 +150,7 @@ flate2 = { version = "1.0.33", default-features = false, features = [
 ] }
 fs-err = { version = "3.2.2", features = ["tokio"] }
 futures = { version = "0.3.30" }
+futures-lite = { version = "2.6.1" }
 glob = { version = "0.3.1" }
 globset = { version = "0.4.15" }
 globwalk = { version = "0.9.1" }

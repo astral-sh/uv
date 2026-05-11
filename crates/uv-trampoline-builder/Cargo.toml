@@ -31,9 +31,10 @@ fs-err = {workspace = true }
 goblin = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
-zip = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
+async_zip = { workspace = true }
+futures-lite = { workspace = true }
 windows = { workspace = true }
 
 [dev-dependencies]
