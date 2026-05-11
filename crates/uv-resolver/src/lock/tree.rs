@@ -423,7 +423,7 @@ impl<'env> TreeDisplay<'env> {
         &'env self,
         cursor: Cursor,
         visited: &mut FxHashMap<VisitedNode<'env>, Vec<&'env PackageId>>,
-        path: &mut Vec<&'env PackageId>,
+        path: &mut Vec<VisitedNode<'env>>,
     ) -> Vec<String> {
         // Short-circuit if the current path is longer than the provided depth.
         if path.len() > self.depth {
@@ -487,7 +487,7 @@ impl<'env> TreeDisplay<'env> {
         // Skip the traversal if:
         // 1. The package is in the current traversal path (i.e., a dependency cycle).
         // 2. The package has been visited and de-duplication is enabled (default).
-        if path.contains(&package_id) {
+        if path.contains(&visited_node) {
             return vec![format!("{line} (*)")];
         }
         if !self.no_dedupe
@@ -541,7 +541,7 @@ impl<'env> TreeDisplay<'env> {
         // Only mark as visited if we're going to expand children (not at depth limit).
         if path.len() < self.depth {
             visited.insert(
-                visited_node,
+                visited_node.clone(),
                 dependencies
                     .iter()
                     .filter_map(|node| match self.graph[node.node()] {
@@ -551,7 +551,7 @@ impl<'env> TreeDisplay<'env> {
                     .collect(),
             );
         }
-        path.push(package_id);
+        path.push(visited_node);
 
         for (index, dep) in dependencies.iter().enumerate() {
             // For sub-visited packages, add the prefix to make the tree display user-friendly.

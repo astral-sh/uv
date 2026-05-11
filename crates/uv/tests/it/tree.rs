@@ -952,6 +952,86 @@ fn dep_and_group_extras_with_extra_only_dependency() -> Result<()> {
 }
 
 #[test]
+fn dep_and_group_extras_with_different_extras_in_path() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let leaf = context.temp_dir.child("leaf");
+    fs_err::create_dir_all(leaf.path())?;
+    leaf.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+    let leaf_url = Url::from_file_path(leaf.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert leaf path to URL"))?;
+
+    let a = context.temp_dir.child("a");
+    fs_err::create_dir_all(a.path())?;
+    let b = context.temp_dir.child("b");
+    fs_err::create_dir_all(b.path())?;
+    let b_url = Url::from_file_path(b.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert b path to URL"))?;
+    a.child("pyproject.toml").write_str(&formatdoc! {
+        r#"
+        [project]
+        name = "a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["b[extra2] @ {}"]
+        "#,
+        b_url,
+    })?;
+    let a_url = Url::from_file_path(a.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert a path to URL"))?;
+
+    b.child("pyproject.toml").write_str(&formatdoc! {
+        r#"
+        [project]
+        name = "b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        extra1 = ["a @ {}"]
+        extra2 = ["leaf @ {}"]
+        "#,
+        a_url,
+        leaf_url,
+    })?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["b[extra1] @ {}"]
+        "#,
+        b_url,
+    })?;
+
+    uv_snapshot!(context.filters(), context.tree(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    └── b[extra1] v0.1.0
+        └── a v0.1.0 (extra: extra1)
+            └── b[extra2] v0.1.0
+                └── leaf v0.1.0 (extra: extra2)
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn package() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
