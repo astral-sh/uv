@@ -3,7 +3,6 @@ use std::path::PathBuf;
 
 use owo_colors::OwoColorize;
 use tokio::task::JoinError;
-use zip::result::ZipError;
 
 use crate::metadata::MetadataError;
 use uv_cache::Error as CacheError;
@@ -125,8 +124,6 @@ pub enum Error {
     WheelMetadata(PathBuf, #[source] Box<uv_metadata::Error>),
     #[error("Failed to read metadata from installed package `{0}`")]
     ReadInstalled(Box<InstalledDist>, #[source] InstalledDistError),
-    #[error("Failed to read zip archive from built wheel")]
-    Zip(#[from] ZipError),
     #[error("Failed to extract archive: {0}")]
     Extract(String, #[source] uv_extract::Error),
     #[error("The source distribution is missing a `PKG-INFO` file")]

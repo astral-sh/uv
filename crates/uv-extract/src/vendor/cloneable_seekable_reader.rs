@@ -9,9 +9,11 @@
 #![expect(clippy::cast_sign_loss)]
 
 use std::{
-    io::{BufReader, Cursor, Read, Seek, SeekFrom},
+    io::{BufRead, BufReader, Cursor, Read, Seek, SeekFrom},
     sync::{Arc, Mutex},
 };
+
+const BUFFER_SIZE: usize = 64 * 1024;
 
 /// A trait to represent some reader which has a total length known in
 /// advance. This is roughly equivalent to the nightly
@@ -30,6 +32,9 @@ pub(crate) struct CloneableSeekableReader<R: Read + Seek + HasLength> {
     pos: u64,
     // TODO determine and store this once instead of per cloneable file
     file_length: Option<u64>,
+    buffer: Box<[u8; BUFFER_SIZE]>,
+    buffer_position: usize,
+    buffer_length: usize,
 }
 
 impl<R: Read + Seek + HasLength> Clone for CloneableSeekableReader<R> {
@@ -38,6 +43,9 @@ impl<R: Read + Seek + HasLength> Clone for CloneableSeekableReader<R> {
             file: self.file.clone(),
             pos: self.pos,
             file_length: self.file_length,
+            buffer: Box::new([0; BUFFER_SIZE]),
+            buffer_position: 0,
+            buffer_length: 0,
         }
     }
 }
@@ -53,22 +61,60 @@ impl<R: Read + Seek + HasLength> CloneableSeekableReader<R> {
             file: Arc::new(Mutex::new(file)),
             pos: 0u64,
             file_length: None,
+            buffer: Box::new([0; BUFFER_SIZE]),
+            buffer_position: 0,
+            buffer_length: 0,
         }
     }
 
     /// Determine the length of the underlying stream.
     fn ascertain_file_length(&mut self) -> u64 {
         self.file_length.unwrap_or_else(|| {
-            let len = self.file.lock().unwrap().len();
+            let len = self
+                .file
+                .lock()
+                .expect("cloneable seekable reader mutex should not be poisoned")
+                .len();
             self.file_length = Some(len);
             len
         })
+    }
+
+    fn buffered_len(&self) -> usize {
+        self.buffer_length.saturating_sub(self.buffer_position)
+    }
+
+    fn consume_buffer(&mut self, amount: usize) {
+        let amount = amount.min(self.buffered_len());
+        self.buffer_position += amount;
+        self.pos += amount as u64;
+
+        if self.buffer_position == self.buffer_length {
+            self.buffer_position = 0;
+            self.buffer_length = 0;
+        }
+    }
+
+    fn clear_buffer(&mut self) {
+        self.buffer_position = 0;
+        self.buffer_length = 0;
     }
 }
 
 impl<R: Read + Seek + HasLength> Read for CloneableSeekableReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let mut underlying_file = self.file.lock().expect("Unable to get underlying file");
+        if self.buffered_len() > 0 {
+            let amount = buf.len().min(self.buffered_len());
+            buf[..amount]
+                .copy_from_slice(&self.buffer[self.buffer_position..self.buffer_position + amount]);
+            self.consume_buffer(amount);
+            return Ok(amount);
+        }
+
+        let mut underlying_file = self
+            .file
+            .lock()
+            .map_err(|_| std::io::Error::other("cloneable seekable reader mutex was poisoned"))?;
         // TODO share an object which knows current position to avoid unnecessary
         // seeks
         underlying_file.seek(SeekFrom::Start(self.pos))?;
@@ -106,7 +152,27 @@ impl<R: Read + Seek + HasLength> Seek for CloneableSeekableReader<R> {
             }
         };
         self.pos = new_pos;
+        self.clear_buffer();
         Ok(new_pos)
+    }
+}
+
+impl<R: Read + Seek + HasLength> BufRead for CloneableSeekableReader<R> {
+    fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
+        if self.buffered_len() == 0 {
+            let mut underlying_file = self.file.lock().map_err(|_| {
+                std::io::Error::other("cloneable seekable reader mutex was poisoned")
+            })?;
+            underlying_file.seek(SeekFrom::Start(self.pos))?;
+            self.buffer_length = underlying_file.read(&mut *self.buffer)?;
+            self.buffer_position = 0;
+        }
+
+        Ok(&self.buffer[self.buffer_position..self.buffer_length])
+    }
+
+    fn consume(&mut self, amount: usize) {
+        self.consume_buffer(amount);
     }
 }
 

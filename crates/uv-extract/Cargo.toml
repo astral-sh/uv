@@ -39,7 +39,6 @@ tokio = { workspace = true }
 tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
 xz2 = { workspace = true }
-zip = { workspace = true }
 
 [features]
 default = []

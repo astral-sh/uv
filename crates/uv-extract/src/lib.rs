@@ -58,20 +58,6 @@ impl From<async_zip::Compression> for CompressionMethod {
     }
 }
 
-impl From<zip::CompressionMethod> for CompressionMethod {
-    fn from(value: zip::CompressionMethod) -> Self {
-        match value {
-            zip::CompressionMethod::Stored => Self::Stored,
-            zip::CompressionMethod::Deflated => Self::Deflated,
-            zip::CompressionMethod::Zstd => Self::Zstd,
-            zip::CompressionMethod::Bzip2 => Self::Deprecated("bzip2"),
-            zip::CompressionMethod::Lzma => Self::Deprecated("lzma"),
-            zip::CompressionMethod::Xz => Self::Deprecated("xz"),
-            _ => Self::Deprecated("unknown"),
-        }
-    }
-}
-
 /// Validate that a given filename (e.g. reported by a ZIP archive's
 /// local file entries or central directory entries) is "safe" to use.
 ///

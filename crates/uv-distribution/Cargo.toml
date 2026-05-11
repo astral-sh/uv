@@ -60,7 +60,6 @@ toml = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 walkdir = { workspace = true }
-zip = { workspace = true }
 
 [dev-dependencies]
 indoc = { workspace = true }

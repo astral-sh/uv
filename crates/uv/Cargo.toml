@@ -69,6 +69,7 @@ uv-workspace = { workspace = true, features = ["clap"] }
 
 anstream = { workspace = true }
 anyhow = { workspace = true }
+async_zip = { workspace = true }
 axoupdater = { workspace = true, features = [
   "github_releases",
   "tokio",
@@ -113,7 +114,6 @@ uuid = { workspace = true, features = ["v4"] }
 version-ranges = { workspace = true }
 walkdir = { workspace = true }
 which = { workspace = true }
-zip = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 self-replace = { workspace = true }

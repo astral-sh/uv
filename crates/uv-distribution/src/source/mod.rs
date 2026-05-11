@@ -20,7 +20,6 @@ use reqwest::{Response, StatusCode};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{Instrument, debug, info_span, instrument, warn};
 use url::Url;
-use zip::ZipArchive;
 
 use uv_auth::CredentialsCache;
 use uv_cache::{Cache, CacheBucket, CacheEntry, CacheShard, Removal, WheelCache};
@@ -3161,8 +3160,7 @@ fn read_wheel_metadata(
 ) -> Result<ResolutionMetadata, Error> {
     let file = fs_err::File::open(wheel).map_err(Error::CacheRead)?;
     let reader = std::io::BufReader::new(file);
-    let mut archive = ZipArchive::new(reader)?;
-    let dist_info = read_archive_metadata(filename, &mut archive)
+    let dist_info = read_archive_metadata(filename, reader)
         .map_err(|err| Error::WheelMetadata(wheel.to_path_buf(), Box::new(err)))?;
     Ok(ResolutionMetadata::parse_metadata(&dist_info)?)
 }

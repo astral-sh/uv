@@ -2005,9 +2005,26 @@ async fn resolve_gist_url(
 /// Returns `true` if the target is a ZIP archive containing a `__main__.py` file.
 fn is_python_zipapp(target: &Path) -> bool {
     if let Ok(file) = fs_err::File::open(target) {
-        if let Ok(mut archive) = zip::ZipArchive::new(file) {
-            return archive.by_name("__main__.py").is_ok_and(|f| f.is_file());
-        }
+        let reader = std::io::BufReader::new(file);
+        return futures::executor::block_on(async {
+            let archive = async_zip::base::read::seek::ZipFileReader::new(
+                futures::io::AllowStdIo::new(reader),
+            )
+            .await
+            .ok()?;
+            archive
+                .file()
+                .entries()
+                .iter()
+                .find(|entry| {
+                    entry
+                        .filename()
+                        .as_str()
+                        .is_ok_and(|name| name == "__main__.py")
+                })
+                .map(|entry| entry.dir().is_ok_and(|is_dir| !is_dir))
+        })
+        .unwrap_or(false);
     }
     false
 }
