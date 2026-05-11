@@ -84,8 +84,8 @@ impl Display for ToolRunCommand {
 
 /// Read dotenv files into an overlay for the spawned tool process.
 ///
-/// These values intentionally do not mutate uv's process environment: internal settings like
-/// `UV_TOOL_DIR` must already be fixed before `.env` values are exposed to the requested tool.
+/// These values intentionally do not mutate uv's process environment and cannot mutate
+/// the current uv process' settings.
 fn read_env_files(
     env_file: &[PathBuf],
     no_env_file: bool,
