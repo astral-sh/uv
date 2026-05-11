@@ -1,6 +1,9 @@
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
+use async_zip::base::write::ZipFileWriter;
+use async_zip::{Compression, ZipEntryBuilder};
+use futures::executor::block_on;
 use insta::assert_snapshot;
 use url::Url;
 
@@ -2450,6 +2453,65 @@ fn lock_build_dependencies_no_build_relocks_without_no_build() -> Result<()> {
     let lock = context.read("uv.lock");
     assert!(lock.contains("revision = 4"));
     assert!(lock.contains("build-dependencies = ["));
+
+    Ok(())
+}
+
+/// Verify that path source distributions with static metadata still have
+/// their build requirements locked.
+#[test]
+fn lock_build_dependencies_static_sdist() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let source_dist = context.temp_dir.child("dep-0.1.0.zip");
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("dep-0.1.0/pyproject.toml".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    ))?;
+    let entry = ZipEntryBuilder::new("dep-0.1.0/dep/__init__.py".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(entry, b""))?;
+    fs_err::write(source_dist.path(), block_on(zip.close())?)?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep-0.1.0.zip" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    let dep = package_section(&lock, "dep");
+    assert!(dep.contains("build-dependencies = ["), "{dep}");
+    assert!(dep.contains(r#"{ name = "setuptools", version = "69.2.0" }"#));
 
     Ok(())
 }

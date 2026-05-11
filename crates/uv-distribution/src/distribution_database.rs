@@ -20,7 +20,7 @@ use uv_client::{
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
     BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, File, HashPolicy, Hashed, IndexUrl,
-    InstalledDist, Name, SourceDist, ToUrlError,
+    InstalledDist, Name, Requirement, SourceDist, ToUrlError,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
@@ -171,6 +171,18 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .await
             }
         }
+    }
+
+    /// Return static build requirements from a source distribution, if available.
+    #[instrument(skip_all, fields(%source))]
+    pub async fn get_static_build_requires(
+        &self,
+        source: &SourceDist,
+        hashes: HashPolicy<'_>,
+    ) -> Result<Option<Vec<Requirement>>, Error> {
+        self.builder
+            .download_build_requires(&BuildableSource::Dist(source), hashes, &self.client)
+            .await
     }
 
     /// Fetch a wheel from the cache or download it from the index.

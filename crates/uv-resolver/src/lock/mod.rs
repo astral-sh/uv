@@ -1019,6 +1019,39 @@ impl Lock {
         Ok(sources)
     }
 
+    /// Return source distributions whose build requirements are known, but whose
+    /// locked build dependencies are missing.
+    pub fn source_distributions_missing_build_dependencies(
+        &self,
+        workspace_root: &Path,
+        build_options: &BuildOptions,
+        extra_build_requires: &ExtraBuildRequires,
+    ) -> Result<Vec<(BuildPackageKey, uv_distribution_types::SourceDist)>, LockError> {
+        let mut sources = Vec::new();
+        for package in &self.packages {
+            if !package.build_dependencies.is_empty() {
+                continue;
+            }
+            if build_options.no_build_package(&package.id.name) {
+                continue;
+            }
+            if package.metadata.build_requires.is_empty()
+                && extra_build_requires
+                    .get(&package.id.name)
+                    .is_none_or(Vec::is_empty)
+            {
+                continue;
+            }
+
+            let Some(source_dist) = package.to_source_dist(workspace_root)? else {
+                continue;
+            };
+            let key = build_key_for_package(package, workspace_root);
+            sources.push((key, source_dist));
+        }
+        Ok(sources)
+    }
+
     fn package_by_id(&self) -> FxHashMap<PackageId, &Package> {
         self.packages
             .iter()

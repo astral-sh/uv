@@ -3,6 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt::Write;
 use std::path::Path;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use owo_colors::OwoColorize;
@@ -13,14 +14,14 @@ use uv_build_backend::check_direct_build;
 use uv_cache::{Cache, Refresh};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Reinstall,
-    Upgrade,
+    BuildOptions, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
+    ExtrasSpecification, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
-    BuiltDist, DependencyMetadata, Dist, HashGeneration, Index, IndexLocations, Name,
-    NameRequirementSpecification, Requirement, RequiresPython, ResolvedDist, SourceDist,
+    BuiltDist, DependencyMetadata, Dist, ExtraBuildRequires, HashGeneration, Index, IndexLocations,
+    Name, NameRequirementSpecification, Requirement, RequiresPython, ResolvedDist, SourceDist,
     UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
@@ -898,6 +899,33 @@ async fn do_lock(
         None
     };
 
+    let existing_lock = if preview.is_enabled(PreviewFeature::LockBuildDependencies) {
+        match existing_lock {
+            Some(ValidatedLock::Satisfies(lock)) if !lock.supports_build_dependencies() => {
+                debug!(
+                    "Resolving despite existing lockfile because build-dependency locking is enabled and the lockfile revision does not support build dependencies"
+                );
+                Some(ValidatedLock::Preferable(lock))
+            }
+            Some(ValidatedLock::Satisfies(lock))
+                if lock_missing_build_dependencies(
+                    &lock,
+                    target.install_path(),
+                    build_options,
+                    &extra_build_requires,
+                )? =>
+            {
+                debug!(
+                    "Resolving despite existing lockfile because build-dependency locking is enabled and the lockfile is missing build dependencies"
+                );
+                Some(ValidatedLock::Preferable(lock))
+            }
+            lock => lock,
+        }
+    } else {
+        existing_lock
+    };
+
     match existing_lock {
         // Resolution from the lockfile succeeded.
         Some(ValidatedLock::Satisfies(lock)) => {
@@ -1124,6 +1152,37 @@ fn graph_for_key<'a>(
     }
 }
 
+fn lock_missing_build_dependencies(
+    lock: &Lock,
+    workspace_root: &Path,
+    build_options: &BuildOptions,
+    extra_build_requires: &ExtraBuildRequires,
+) -> Result<bool, ProjectError> {
+    if build_options.no_build_requirement(None) {
+        return Ok(false);
+    }
+
+    for (key, source_dist) in lock.source_distributions_missing_build_dependencies(
+        workspace_root,
+        build_options,
+        extra_build_requires,
+    )? {
+        let extra_build_dependencies = extra_build_requires
+            .get(&key.name)
+            .is_some_and(|requirements| !requirements.is_empty());
+        if let SourceDist::Directory(directory) = &source_dist
+            && check_direct_build(&directory.install_path, uv_version::version()).is_ok()
+            && !extra_build_dependencies
+        {
+            continue;
+        }
+
+        return Ok(true);
+    }
+
+    Ok(false)
+}
+
 async fn resolve_all_possible_builds(
     lock: &Lock,
     workspace_root: &Path,
@@ -1145,40 +1204,89 @@ async fn resolve_all_possible_builds(
             continue;
         }
 
-        let mut resolved_from_pyproject = false;
+        let dist = Dist::Source(source_dist.clone());
+        let extra_build_dependencies = build_dispatch
+            .extra_build_requires()
+            .get(&key.name)
+            .cloned()
+            .unwrap_or_default();
+        let graph_exists = {
+            let snapshot = build_dispatch.build_resolutions().snapshot();
+            graph_for_key(&snapshot, &key).is_some()
+        };
+        let mut resolved_statically = false;
 
-        if let SourceDist::Directory(directory) = &source_dist {
-            let extra_build_dependencies = build_dispatch
-                .extra_build_requires()
-                .get(&key.name)
-                .cloned()
-                .unwrap_or_default();
-            let direct_build = check_direct_build(&directory.install_path, uv_version::version())
-                .is_ok_and(|()| extra_build_dependencies.is_empty());
-            let pyproject_path = directory.install_path.join("pyproject.toml");
-            if let Ok(contents) = fs_err::read_to_string(&pyproject_path)
-                && let Ok(pyproject) =
-                    uv_workspace::pyproject::PyProjectToml::from_string(contents, &pyproject_path)
-                && let Some(build_system) = pyproject.build_system
-                && !direct_build
-            {
-                let requirements: Vec<Requirement> = build_system
-                    .requires
-                    .into_iter()
-                    .map(Requirement::from)
-                    .collect();
+        if !graph_exists || !extra_build_dependencies.is_empty() {
+            let build_requirements = if let SourceDist::Directory(directory) = &source_dist {
+                let direct_build =
+                    check_direct_build(&directory.install_path, uv_version::version())
+                        .is_ok_and(|()| extra_build_dependencies.is_empty());
+                let pyproject_toml = directory.install_path.join("pyproject.toml");
+                if !direct_build {
+                    fs_err::read_to_string(&pyproject_toml)
+                        .ok()
+                        .and_then(|contents| {
+                            uv_workspace::pyproject::PyProjectToml::from_string(
+                                contents,
+                                &pyproject_toml,
+                            )
+                            .ok()
+                        })
+                        .and_then(|pyproject| pyproject.build_system)
+                        .map(|build_system| {
+                            build_system
+                                .requires
+                                .into_iter()
+                                .map(Requirement::from)
+                                .collect()
+                        })
+                } else {
+                    None
+                }
+            } else {
+                database
+                    .get_static_build_requires(&source_dist, build_hasher.get(&dist))
+                    .await?
+            };
+
+            if let Some(mut requirements) = build_requirements {
+                requirements.extend(
+                    extra_build_dependencies
+                        .clone()
+                        .into_iter()
+                        .map(Requirement::from),
+                );
                 if !requirements.is_empty() {
                     let build_stack = BuildStack::default();
                     let _ = build_dispatch
                         .resolve(&requirements, Some(&key), &build_stack)
                         .await?;
-                    resolved_from_pyproject = true;
+                    resolved_statically = true;
                 }
+            }
+
+            let graph_exists = {
+                let snapshot = build_dispatch.build_resolutions().snapshot();
+                graph_for_key(&snapshot, &key).is_some()
+            };
+            if !graph_exists
+                && let SourceDist::Directory(directory) = &source_dist
+                && (directory.install_path.join("setup.py").is_file()
+                    || directory.install_path.join("setup.cfg").is_file())
+            {
+                let mut requirements = vec![Requirement::from(uv_pep508::Requirement::from_str(
+                    "setuptools >= 40.8.0",
+                )?)];
+                requirements.extend(extra_build_dependencies.into_iter().map(Requirement::from));
+                let build_stack = BuildStack::default();
+                let _ = build_dispatch
+                    .resolve(&requirements, Some(&key), &build_stack)
+                    .await?;
+                resolved_statically = true;
             }
         }
 
-        if !resolved_from_pyproject {
-            let dist = Dist::Source(source_dist.clone());
+        if !resolved_statically {
             let hash_policy = build_hasher.get(&dist);
             database
                 .get_or_build_wheel_metadata(&dist, hash_policy)
