@@ -1267,6 +1267,9 @@ fn find_base_python(
     minor: u8,
     suffix: &str,
 ) -> Result<PathBuf, io::Error> {
+    /// Matches Linux's `MAXSYMLINKS`; protects against circular symlinks.
+    const MAX_SYMLINK_HOPS: usize = 40;
+
     /// Returns `true` if `path` is the root directory.
     fn is_root(path: &Path) -> bool {
         let mut components = path.components();
@@ -1288,22 +1291,29 @@ fn find_base_python(
     }
 
     let mut executable = Cow::Borrowed(executable);
+    let mut candidate: Option<PathBuf> = None;
 
-    loop {
+    for _ in 0..MAX_SYMLINK_HOPS {
         debug!(
             "Assessing Python executable as base candidate: {}",
             executable.display()
         );
 
         // Determine whether this executable will produce a valid `home` for a virtual environment.
+        // Keep walking the chain afterwards: an earlier ancestor may be a coincidental match
+        // (e.g., a system Python adjacent to a wrapper symlink), while the real install sits deeper.
         for prefix in executable.ancestors().take_while(|path| !is_root(path)) {
             if is_prefix(prefix, major, minor, suffix) {
-                return Ok(executable.into_owned());
+                candidate = Some(executable.to_path_buf());
+                break;
             }
         }
 
         // If not, resolve the symlink.
-        let resolved = fs_err::read_link(&executable)?;
+        let resolved = match fs_err::read_link(&executable) {
+            Ok(resolved) => resolved,
+            Err(err) => return candidate.ok_or(err),
+        };
 
         // If the symlink is relative, resolve it relative to the executable.
         let resolved = if resolved.is_relative() {
@@ -1317,10 +1327,13 @@ fn find_base_python(
         };
 
         // Normalize the resolved path.
-        let resolved = uv_fs::normalize_absolute_path(&resolved)?;
-
-        executable = Cow::Owned(resolved);
+        executable = Cow::Owned(uv_fs::normalize_absolute_path(&resolved)?);
     }
+
+    Err(io::Error::other(format!(
+        "Exceeded maximum symlink hops ({MAX_SYMLINK_HOPS}) resolving Python executable: {}",
+        executable.display(),
+    )))
 }
 
 /// Parse the `home` key from `pyvenv.cfg`, if any.
@@ -1439,6 +1452,58 @@ mod tests {
         assert_eq!(
             interpreter.markers.python_version().version,
             Version::from_str("3.13").unwrap()
+        );
+    }
+
+    #[test]
+    fn find_base_python_breaks_on_circular_symlinks() {
+        let temp = tempdir().unwrap();
+        let a = temp.path().join("a");
+        let b = temp.path().join("b");
+        fs_err::os::unix::fs::symlink(&b, &a).unwrap();
+        fs_err::os::unix::fs::symlink(&a, &b).unwrap();
+
+        let err = super::find_base_python(&a, 3, 12, "").unwrap_err();
+        assert!(
+            err.to_string().contains("symlink hops"),
+            "unexpected error: {err}",
+        );
+    }
+
+    /// Regression test for <https://github.com/astral-sh/uv/issues/16455>:
+    /// when a *coincidental* Python prefix exists at an ancestor of an early symlink in the
+    /// chain (e.g. the distro's system Python adjacent to a wrapper in `/usr/bin`), keep walking
+    /// the symlink chain and prefer the prefix reached at the actual install location.
+    #[test]
+    fn find_base_python_prefers_resolved_prefix_over_coincidental_match() {
+        let temp = tempdir().unwrap();
+        let root = temp.path();
+
+        // Decoy "system" install: `<root>/sys/lib/python3.12/os.py` makes `<root>/sys` look
+        // like a valid Python prefix to any path under `<root>/sys/bin/...`.
+        fs::create_dir_all(root.join("sys/lib/python3.12")).unwrap();
+        fs::write(root.join("sys/lib/python3.12/os.py"), "").unwrap();
+        fs::create_dir_all(root.join("sys/bin")).unwrap();
+
+        // Real install: `<root>/real/lib/python3.12/os.py` and the actual binary at
+        // `<root>/real/bin/python`.
+        fs::create_dir_all(root.join("real/lib/python3.12")).unwrap();
+        fs::write(root.join("real/lib/python3.12/os.py"), "").unwrap();
+        fs::create_dir_all(root.join("real/bin")).unwrap();
+        let real_python = root.join("real/bin/python");
+        fs::write(&real_python, "").unwrap();
+
+        // Wrapper at `<root>/sys/bin/python` → real install. Ancestors of the wrapper
+        // include `<root>/sys`, which has a valid `lib/python3.12/os.py` (the decoy).
+        let wrapper = root.join("sys/bin/python");
+        fs_err::os::unix::fs::symlink(&real_python, &wrapper).unwrap();
+
+        let resolved = super::find_base_python(&wrapper, 3, 12, "").unwrap();
+        assert_eq!(
+            resolved,
+            real_python,
+            "expected the real install path, not the decoy match via {}",
+            wrapper.display(),
         );
     }
 }
