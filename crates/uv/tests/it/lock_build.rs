@@ -2671,6 +2671,155 @@ fn sync_filters_locked_build_resolutions_to_selected_packages() -> Result<()> {
     Ok(())
 }
 
+/// Verify that source packages reached only through build dependencies are
+/// reconstructed for frozen syncs and validated by locked relocks.
+#[test]
+fn lock_build_dependencies_build_only_source_package() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let builder_dir = context.temp_dir.child("builder");
+    builder_dir.create_dir_all()?;
+    let builder_pyproject = builder_dir.child("pyproject.toml");
+    builder_pyproject.write_str(
+        r#"
+        [project]
+        name = "builder"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.setuptools.dynamic]
+        version = {attr = "builder.__version__"}
+        "#,
+    )?;
+    builder_dir.child("builder").create_dir_all()?;
+    builder_dir
+        .child("builder/__init__.py")
+        .write_str("__version__ = '0.1.0'")?;
+    let builder_url = Url::from_directory_path(builder_dir.path()).unwrap();
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(&format!(
+        r#"
+        [project]
+        name = "dep"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools>=42", "builder @ {builder_url}"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.setuptools.dynamic]
+        version = {{attr = "dep.__version__"}}
+        "#
+    ))?;
+    dep_dir.child("dep").create_dir_all()?;
+    dep_dir
+        .child("dep/__init__.py")
+        .write_str("__version__ = '0.1.0'")?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    let builder = package_section(&lock, "builder");
+    assert!(builder.contains("build-dependencies = ["), "{builder}");
+
+    let missing_url = Url::from_directory_path(context.temp_dir.child("missing").path()).unwrap();
+    builder_pyproject.write_str(&format!(
+        r#"
+        [project]
+        name = "builder"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["missing @ {missing_url}"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.setuptools.dynamic]
+        version = {{attr = "builder.__version__"}}
+        "#
+    ))?;
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--frozen"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + dep==0.1.0 (from file://[TEMP_DIR]/dep)
+    ");
+
+    builder_pyproject.write_str(
+        r#"
+        [project]
+        name = "builder"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.setuptools.dynamic]
+        version = {attr = "builder.__version__"}
+        "#,
+    )?;
+    builder_dir
+        .child("builder/__init__.py")
+        .write_str("__version__ = '0.2.0'")?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--locked"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
 /// Verify that relocking without the preview feature preserves existing
 /// locked build dependencies without churn.
 #[test]

@@ -1124,6 +1124,36 @@ impl Lock {
             .distributions()
             .filter_map(|dist| package_id_from_resolved_dist(dist, workspace_root).ok())
             .collect();
+        let mut build_resolution_roots: FxHashSet<PackageId> = FxHashSet::default();
+        let mut queue: VecDeque<PackageId> = selected_package_ids.iter().cloned().collect();
+
+        while let Some(package_id) = queue.pop_front() {
+            let Some(package) = package_by_id.get(&package_id) else {
+                continue;
+            };
+            if package.build_dependencies.is_empty() {
+                continue;
+            }
+            if !build_resolution_roots.insert(package.id.clone()) {
+                continue;
+            }
+
+            let Some(dependency_ids) =
+                self.build_dependency_package_ids(package, &package_by_id, Some(markers))
+            else {
+                continue;
+            };
+            for dependency_id in dependency_ids {
+                let Some(dependency_package) = package_by_id.get(&dependency_id) else {
+                    continue;
+                };
+                if !dependency_package.build_dependencies.is_empty()
+                    && !build_resolution_roots.contains(&dependency_package.id)
+                {
+                    queue.push_back(dependency_package.id.clone());
+                }
+            }
+        }
 
         let mut resolutions = BTreeMap::new();
         let tag_policy = TagPolicy::Required(tags);
@@ -1132,7 +1162,7 @@ impl Lock {
             if package.build_dependencies.is_empty() {
                 continue;
             }
-            if !selected_package_ids.contains(&package.id) {
+            if !build_resolution_roots.contains(&package.id) {
                 continue;
             }
 
@@ -2515,6 +2545,8 @@ impl Lock {
             }
         }
 
+        let package_by_id = self.package_by_id();
+
         while let Some(package) = queue.pop_front() {
             // If the lockfile references an index that was not provided, we can't validate it.
             if let Source::Registry(index) = &package.id.source {
@@ -2937,6 +2969,20 @@ impl Lock {
                     if seen.insert(&dep.package_id) {
                         let dep_dist = self.find_by_id(&dep.package_id);
                         queue.push_back(dep_dist);
+                    }
+                }
+            }
+
+            if self.supports_build_dependencies()
+                && let Some(dependency_ids) =
+                    self.build_dependency_package_ids(package, &package_by_id, Some(markers))
+            {
+                for dependency_id in dependency_ids {
+                    let Some(dependency_package) = package_by_id.get(&dependency_id) else {
+                        continue;
+                    };
+                    if seen.insert(&dependency_package.id) {
+                        queue.push_back(dependency_package);
                     }
                 }
             }
