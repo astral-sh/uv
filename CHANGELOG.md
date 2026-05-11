@@ -3,6 +3,18 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.11.13
+
+Released on 2026-05-10.
+
+### Bug fixes
+
+- Include data files in editable builds ([#19312](https://github.com/astral-sh/uv/pull/19312))
+- Respect `--require-hashes` when installing from `pylock.toml` files ([#19334](https://github.com/astral-sh/uv/pull/19334))
+
+### Python
+- Add CPython 3.14.5
+
 ## 0.11.12
 
 Released on 2026-05-08.
@@ -19,13 +31,11 @@ Released on 2026-05-08.
 ### Bug fixes
 
 - Respect `--no-dev` over `UV_DEV=1` ([#19313](https://github.com/astral-sh/uv/pull/19313))
-
 - Don't suggest non-existent `--no-frozen` flag (#19290) ([#19294](https://github.com/astral-sh/uv/pull/19294))
 
 ### Documentation
 
 - Fix bug from inconsistent workflow name in GHA-PyPI guide example ([#19309](https://github.com/astral-sh/uv/pull/19309))
-
 
 ## 0.11.11
 
