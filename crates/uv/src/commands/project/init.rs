@@ -142,7 +142,7 @@ pub(crate) async fn init(
                 }
             };
 
-            init_project(
+            Box::pin(init_project(
                 &path,
                 &name,
                 package,
@@ -165,7 +165,7 @@ pub(crate) async fn init(
                 cache,
                 printer,
                 preview,
-            )
+            ))
             .await?;
 
             // Create the `README.md` if it does not already exist.
