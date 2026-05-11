@@ -126,9 +126,6 @@ jobs:
       - name: "Build benchmarks"
         run: cargo codspeed build -m walltime --profile profiling -p uv-bench
 
-      - name: "Create venv"
-        run: ./target/debug/uv venv --cache-dir .cache
-
       - name: "Run benchmarks"
         uses: CodSpeedHQ/action@c381be0bfd20e844fb45594f6aa182ffcd94545c # v4.15.0
         with:
