@@ -3683,6 +3683,7 @@ fn uninstall_last_patch() {
 /// (symlink on Unix, junction on Windows) should be removed.
 ///
 /// Regression test for <https://github.com/astral-sh/uv/issues/18793>.
+/// This now backstops the upgrade to `junction` >=2, which can read dangling junctions.
 #[test]
 fn uninstall_last_patch_removes_minor_version_link() {
     let context = uv_test::test_context_with_versions!(&[])
