@@ -1169,6 +1169,60 @@ fn run_pep723_script_lock() -> Result<()> {
     Ok(())
 }
 
+/// Run a PEP 723 script with `--isolated` should ignore an existing lockfile and use a
+/// temporary virtual environment instead.
+#[test]
+fn run_pep723_script_with_isolated() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "cachetools",
+        # ]
+        # ///
+
+        import cachetools
+        print("Hello from isolated script!")
+        print(cachetools.__version__)
+    "# })?;
+
+    // Create an existing lockfile to simulate the bug scenario.
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("main.py"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Verify the lockfile exists.
+    assert!(context.temp_dir.child("main.py.lock").exists());
+
+    // Running with `--isolated` should use a temporary environment, not the cached one.
+    // The key check is that no lockfile operations happen and a temp venv is used.
+    uv_snapshot!(context.filters(), context.run().arg("--isolated").arg("main.py"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from isolated script!
+    [VERSION]
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: [TEMP_DIR]/.tmp[A-Z0-9]+
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + cachetools==[VERSION]
+    ");
+
+    Ok(())
+}
+
 /// With `managed = false`, we should avoid installing the project itself.
 #[test]
 fn run_managed_false() -> Result<()> {

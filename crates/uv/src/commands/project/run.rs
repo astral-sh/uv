@@ -237,23 +237,59 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             debug!("Found existing lockfile for script");
 
             // Discover the interpreter for the script.
-            let environment = ScriptEnvironment::get_or_init(
-                (&script).into(),
-                python.as_deref().map(PythonRequest::parse),
-                &client_builder,
-                python_preference,
-                python_downloads,
-                &install_mirrors,
-                no_sync,
-                no_config,
-                active.map_or(Some(false), Some),
-                &cache,
-                DryRun::Disabled,
-                printer,
-                preview,
-            )
-            .await?
-            .into_environment()?;
+            let environment = if isolated {
+                // If `--isolated`, create a temporary virtual environment rather than reusing
+                // the cached script environment.
+                debug!("Creating isolated virtual environment for script");
+                let interpreter = ScriptInterpreter::discover(
+                    (&script).into(),
+                    python.as_deref().map(PythonRequest::parse),
+                    &client_builder,
+                    python_preference,
+                    python_downloads,
+                    &install_mirrors,
+                    no_sync,
+                    no_config,
+                    active.map_or(Some(false), Some),
+                    &cache,
+                    printer,
+                    preview,
+                )
+                .await?
+                .into_interpreter();
+
+                temp_dir = cache.venv_dir()?;
+                uv_virtualenv::create_venv(
+                    temp_dir.path(),
+                    interpreter,
+                    uv_virtualenv::Prompt::None,
+                    false,
+                    uv_virtualenv::OnExisting::Remove(
+                        uv_virtualenv::RemovalReason::TemporaryEnvironment,
+                    ),
+                    false,
+                    false,
+                    false,
+                )?
+            } else {
+                ScriptEnvironment::get_or_init(
+                    (&script).into(),
+                    python.as_deref().map(PythonRequest::parse),
+                    &client_builder,
+                    python_preference,
+                    python_downloads,
+                    &install_mirrors,
+                    no_sync,
+                    no_config,
+                    active.map_or(Some(false), Some),
+                    &cache,
+                    DryRun::Disabled,
+                    printer,
+                    preview,
+                )
+                .await?
+                .into_environment()?
+            };
 
             let _lock = environment
                 .lock()
@@ -407,23 +443,59 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     client_builder.credentials_cache(),
                 )?
                 .into_inner();
-                let environment = ScriptEnvironment::get_or_init(
-                    (&script).into(),
-                    python.as_deref().map(PythonRequest::parse),
-                    &client_builder,
-                    python_preference,
-                    python_downloads,
-                    &install_mirrors,
-                    no_sync,
-                    no_config,
-                    active.map_or(Some(false), Some),
-                    &cache,
-                    DryRun::Disabled,
-                    printer,
-                    preview,
-                )
-                .await?
-                .into_environment()?;
+                let environment = if isolated {
+                    // If `--isolated`, create a temporary virtual environment rather than
+                    // reusing the cached script environment.
+                    debug!("Creating isolated virtual environment for script");
+                    let interpreter = ScriptInterpreter::discover(
+                        (&script).into(),
+                        python.as_deref().map(PythonRequest::parse),
+                        &client_builder,
+                        python_preference,
+                        python_downloads,
+                        &install_mirrors,
+                        no_sync,
+                        no_config,
+                        active.map_or(Some(false), Some),
+                        &cache,
+                        printer,
+                        preview,
+                    )
+                    .await?
+                    .into_interpreter();
+
+                    temp_dir = cache.venv_dir()?;
+                    uv_virtualenv::create_venv(
+                        temp_dir.path(),
+                        interpreter,
+                        uv_virtualenv::Prompt::None,
+                        false,
+                        uv_virtualenv::OnExisting::Remove(
+                            uv_virtualenv::RemovalReason::TemporaryEnvironment,
+                        ),
+                        false,
+                        false,
+                        false,
+                    )?
+                } else {
+                    ScriptEnvironment::get_or_init(
+                        (&script).into(),
+                        python.as_deref().map(PythonRequest::parse),
+                        &client_builder,
+                        python_preference,
+                        python_downloads,
+                        &install_mirrors,
+                        no_sync,
+                        no_config,
+                        active.map_or(Some(false), Some),
+                        &cache,
+                        DryRun::Disabled,
+                        printer,
+                        preview,
+                    )
+                    .await?
+                    .into_environment()?
+                };
 
                 let build_constraints = script
                     .metadata()
