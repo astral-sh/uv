@@ -33,7 +33,7 @@ use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreferenc
 use uv_requirements::{ExtrasResolver, LockedRequirements, read_lock_requirements};
 use uv_resolver::{
     FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, Package, PythonRequirement,
-    ResolverEnvironment, ResolverManifest, SatisfiesResult, UniversalMarker,
+    ResolverEnvironment, ResolverManifest, SatisfiesResult, UniversalMarker, UpgradePackages,
 };
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
@@ -789,7 +789,17 @@ async fn do_lock(
     // resolver prefers previously locked build dependency versions.
     let build_preferences = existing_lock
         .as_ref()
-        .map(|lock| BuildPreferences::new(lock.build_dependency_preferences()))
+        .map(|lock| {
+            let mut build_preferences = lock.build_dependency_preferences();
+            if !upgrade.is_none() {
+                let upgrade_packages = UpgradePackages::for_workspace(lock, upgrade);
+                for preferences in build_preferences.values_mut() {
+                    preferences.retain(|(name, _)| !upgrade_packages.contains(name));
+                }
+                build_preferences.retain(|_, preferences| !preferences.is_empty());
+            }
+            BuildPreferences::new(build_preferences)
+        })
         .unwrap_or_default();
 
     // Create a build dispatch.
@@ -1055,7 +1065,7 @@ async fn do_lock(
                     );
                 }
 
-                if !build_options.no_build_all() {
+                if !build_options.no_build_requirement(None) {
                     let build_resolutions = build_dispatch.build_resolutions().snapshot();
                     lock = lock.with_build_resolutions(
                         &build_resolutions,

@@ -1,8 +1,21 @@
 use anyhow::Result;
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
+use url::Url;
 
 use uv_test::uv_snapshot;
+
+fn package_section<'a>(lock: &'a str, name: &str) -> &'a str {
+    let needle = format!("[[package]]\nname = \"{name}\"");
+    let start = lock.find(&needle).expect("package section to exist");
+    let rest = &lock[start..];
+    let end = rest[1..]
+        .find("\n[[package]]")
+        .map(|offset| offset + 1)
+        .unwrap_or(rest.len());
+    &rest[..end]
+}
 
 /// Lock a project with a dependency that requires building from source
 /// (due to dynamic metadata), and verify that build dependencies are captured
@@ -777,66 +790,31 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
         );
     });
 
-    // Re-lock with --upgrade (forces fresh resolution, discarding preferences).
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-build-dependencies").arg("--upgrade"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
-    Removed wheel v0.43.0
-    ");
+    // Re-lock with `--upgrade` and a newer cutoff. The build dependency
+    // preferences from the original lock should not hold `setuptools` back.
+    context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--upgrade")
+        .arg("--exclude-newer")
+        .arg("2025-01-30T00:00:00Z")
+        .assert()
+        .success();
 
     let lock_upgraded = context.read("uv.lock");
-
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        assert_snapshot!(
-            lock_upgraded, @r#"
-        version = 1
-        revision = 4
-        requires-python = ">=3.12"
-
-        [options]
-        exclude-newer = "2024-03-25T00:00:00Z"
-
-        [[package]]
-        name = "dep"
-        source = { directory = "dep" }
-        build-dependencies = [
-            { name = "setuptools", version = "69.2.0" },
-        ]
-
-        [package.metadata]
-        build-requires = [{ name = "setuptools", specifier = ">=42" }]
-
-        [[package]]
-        name = "project"
-        version = "0.1.0"
-        source = { virtual = "." }
-        dependencies = [
-            { name = "dep" },
-        ]
-
-        [package.metadata]
-        requires-dist = [{ name = "dep", directory = "dep" }]
-
-        [[package]]
-        name = "setuptools"
-        version = "69.2.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
-        ]
-        "#
-        );
-    });
+    let dep = package_section(&lock_upgraded, "dep");
+    assert!(
+        dep.contains(r#"{ name = "setuptools", version = "75.8.0" }"#),
+        "{dep}"
+    );
+    assert!(
+        !dep.contains(r#"{ name = "setuptools", version = "69.2.0" }"#),
+        "{dep}"
+    );
 
     // Verify the lock file is valid.
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-build-dependencies").arg("--locked"), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-build-dependencies").arg("--locked").arg("--exclude-newer").arg("2025-01-30T00:00:00Z"), @"
     success: true
     exit_code: 0
     ----- stdout -----
