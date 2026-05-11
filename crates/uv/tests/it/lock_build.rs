@@ -1198,6 +1198,75 @@ fn lock_build_dependencies_use_project_python_range() -> Result<()> {
     Ok(())
 }
 
+/// Verify that universal build dependency locks respect the project's
+/// supported marker environments.
+#[test]
+fn lock_build_dependencies_use_supported_environments() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let builder_dir = context.temp_dir.child("builder");
+    builder_dir.create_dir_all()?;
+    builder_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "builder"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        "#,
+    )?;
+    let builder_url = Url::from_directory_path(builder_dir.path()).unwrap();
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(&format!(
+        r#"
+        [project]
+        name = "dep"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools>=42", "builder @ {builder_url}; sys_platform == 'win32'"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.setuptools.dynamic]
+        version = {{attr = "dep.__version__"}}
+        "#
+    ))?;
+    dep_dir.child("dep").create_dir_all()?;
+    dep_dir
+        .child("dep/__init__.py")
+        .write_str("__version__ = '0.1.0'")?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv]
+        environments = ["sys_platform == 'linux'"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    assert!(!lock.contains("[[package]]\nname = \"builder\""), "{lock}");
+
+    Ok(())
+}
+
 /// Verify that PEP 508 extras in build requirements preserve their extra-only
 /// dependency edges in the locked build environment.
 #[test]

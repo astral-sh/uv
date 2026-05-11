@@ -541,6 +541,11 @@ impl SourceBuild {
             {
                 let mut resolution = source_build_context.default_resolution.lock().await;
                 if let Some(resolved_requirements) = &*resolution {
+                    if let (Some(package), Some(graph)) =
+                        (package, resolved_requirements.build_resolution_graph())
+                    {
+                        build_context.record_build_resolution(package, graph.clone());
+                    }
                     resolved_requirements.clone()
                 } else {
                     let resolved_requirements = build_context

@@ -31,7 +31,7 @@ use uv_distribution_types::{
 use uv_git::GitResolver;
 use uv_installer::{InstallationStrategy, Installer, Plan, Planner, Preparer, SitePackages};
 use uv_preview::Preview;
-use uv_pypi_types::Conflicts;
+use uv_pypi_types::{Conflicts, SupportedEnvironments};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_requirements::LookaheadResolver;
 use uv_resolver::{
@@ -141,6 +141,8 @@ pub struct BuildDispatch<'a> {
     universal_build_resolution: bool,
     /// The supported Python range to use when resolving universal build dependencies.
     universal_build_requires_python: Option<RequiresPython>,
+    /// The supported marker environments to use when resolving universal build dependencies.
+    universal_build_environments: SupportedEnvironments,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -200,6 +202,7 @@ impl<'a> BuildDispatch<'a> {
             build_preferences: BuildPreferences::default(),
             universal_build_resolution: false,
             universal_build_requires_python: None,
+            universal_build_environments: SupportedEnvironments::default(),
         }
     }
 
@@ -244,9 +247,14 @@ impl<'a> BuildDispatch<'a> {
     /// When enabled, build dependencies are resolved for all platforms rather
     /// than just the current one. This is needed for lock files.
     #[must_use]
-    pub fn with_universal_build_resolution(mut self, requires_python: RequiresPython) -> Self {
+    pub fn with_universal_build_resolution(
+        mut self,
+        requires_python: RequiresPython,
+        environments: SupportedEnvironments,
+    ) -> Self {
         self.universal_build_resolution = true;
         self.universal_build_requires_python = Some(requires_python);
+        self.universal_build_environments = environments;
         self
     }
 
@@ -355,7 +363,7 @@ impl BuildContext for BuildDispatch<'_> {
             PythonRequirement::from_interpreter(self.interpreter)
         };
         let resolver_env = if self.universal_build_resolution {
-            ResolverEnvironment::universal(vec![])
+            ResolverEnvironment::universal(self.universal_build_environments.clone().into_markers())
         } else {
             ResolverEnvironment::specific(marker_env)
         };
@@ -449,15 +457,37 @@ impl BuildContext for BuildDispatch<'_> {
 
         // If doing universal resolution, capture the build resolution graph
         // (direct requirements + all packages with their dependency edges).
-        if self.universal_build_resolution {
-            if let Some(package) = package {
-                let graph = resolver_output.build_resolution_graph();
-                self.build_resolutions.insert(package.clone(), graph);
-            }
+        let build_resolution_graph = if self.universal_build_resolution {
+            Some(resolver_output.build_resolution_graph())
+        } else {
+            None
+        };
+
+        if let (Some(package), Some(graph)) = (package, build_resolution_graph.clone()) {
+            self.build_resolutions.insert(package.clone(), graph);
         }
 
-        let resolution = Resolution::from(resolver_output);
-        Ok(ResolvedRequirements::new(resolution, hasher))
+        let resolution = if self.universal_build_resolution {
+            resolver_output.into_build_resolution()
+        } else {
+            Resolution::from(resolver_output)
+        };
+        let requirements = ResolvedRequirements::new(resolution, hasher);
+        Ok(if let Some(graph) = build_resolution_graph {
+            requirements.with_build_resolution_graph(graph)
+        } else {
+            requirements
+        })
+    }
+
+    fn record_build_resolution(
+        &self,
+        package: &BuildPackageKey,
+        graph: uv_types::BuildResolutionGraph,
+    ) {
+        if self.universal_build_resolution {
+            self.build_resolutions.insert(package.clone(), graph);
+        }
     }
 
     #[instrument(

@@ -833,7 +833,10 @@ async fn do_lock(
     // Use universal resolution for build dependencies when locking, so the
     // resolved build deps work on all platforms.
     let build_dispatch = if preview.is_enabled(PreviewFeature::LockBuildDependencies) {
-        build_dispatch.with_universal_build_resolution(requires_python.clone())
+        build_dispatch.with_universal_build_resolution(
+            requires_python.clone(),
+            lock_supported_environments.clone(),
+        )
     } else {
         build_dispatch
     };

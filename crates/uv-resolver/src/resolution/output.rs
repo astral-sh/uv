@@ -699,6 +699,102 @@ impl ResolverOutput {
         }
     }
 
+    /// Convert the resolution into an installable graph for the active build
+    /// environment.
+    ///
+    /// Build dependency locking can resolve across multiple supported marker
+    /// environments, but the current build only needs an installable superset
+    /// of those dependencies to extract metadata.
+    pub fn into_build_resolution(self) -> uv_distribution_types::Resolution {
+        self.into_resolution(true)
+    }
+
+    fn into_resolution(self, allow_universal: bool) -> uv_distribution_types::Resolution {
+        let ResolverOutput {
+            graph,
+            diagnostics,
+            fork_markers,
+            ..
+        } = self;
+
+        assert!(
+            allow_universal || fork_markers.is_empty(),
+            "universal resolutions are not supported"
+        );
+
+        let mut transformed = Graph::with_capacity(graph.node_count(), graph.edge_count());
+        let mut inverse = FxHashMap::with_capacity_and_hasher(graph.node_count(), FxBuildHasher);
+
+        // Create the root node.
+        let root = transformed.add_node(Node::Root);
+
+        // Re-add the nodes to the reduced graph.
+        for index in graph.node_indices() {
+            let ResolutionGraphNode::Dist(dist) = &graph[index] else {
+                continue;
+            };
+
+            if !dist.is_base() {
+                continue;
+            }
+
+            if inverse.contains_key(&dist.name) {
+                // This is guaranteed by `find_conflicting_distributions` when
+                // conflicts are empty. However, when conflicts are non-empty,
+                // we may detect false positives. See the rationale in
+                // `ResolverOutput::from_state` for details.
+                //
+                // When we do see a conflict at this stage, we keep the first
+                // distribution that was inserted. The resolution remains
+                // guarded by its edge markers in the full resolver output; this
+                // reduced representation is only used for the concrete build
+                // environment.
+                continue;
+            }
+
+            let index = transformed.add_node(Node::Dist {
+                dist: dist.dist.clone(),
+                hashes: dist.hashes.clone(),
+                install: true,
+            });
+            inverse.insert(&dist.name, index);
+        }
+
+        // Re-add the edges to the reduced graph.
+        for edge in graph.edge_indices() {
+            let (source, target) = graph.edge_endpoints(edge).unwrap();
+
+            match (&graph[source], &graph[target]) {
+                (ResolutionGraphNode::Root, ResolutionGraphNode::Dist(target_dist)) => {
+                    let target = inverse[&target_dist.name()];
+                    transformed.update_edge(root, target, Edge::Prod);
+                }
+                (
+                    ResolutionGraphNode::Dist(source_dist),
+                    ResolutionGraphNode::Dist(target_dist),
+                ) => {
+                    let source = inverse[&source_dist.name()];
+                    let target = inverse[&target_dist.name()];
+
+                    let edge = if let Some(extra) = source_dist.extra.as_ref() {
+                        Edge::Optional(extra.clone())
+                    } else if let Some(group) = source_dist.group.as_ref() {
+                        Edge::Dev(group.clone())
+                    } else {
+                        Edge::Prod
+                    };
+
+                    transformed.add_edge(source, target, edge);
+                }
+                _ => {
+                    unreachable!("root should not contain incoming edges");
+                }
+            }
+        }
+
+        uv_distribution_types::Resolution::new(transformed).with_diagnostics(diagnostics)
+    }
+
     /// Return the number of distinct packages in the graph.
     pub fn len(&self) -> usize {
         self.dists().filter(|dist| dist.is_base()).count()
@@ -954,74 +1050,7 @@ impl Display for ConflictingDistributionError {
 /// single version of each package to be present in the graph.
 impl From<ResolverOutput> for uv_distribution_types::Resolution {
     fn from(output: ResolverOutput) -> Self {
-        let ResolverOutput {
-            graph,
-            diagnostics,
-            fork_markers,
-            ..
-        } = output;
-
-        assert!(
-            fork_markers.is_empty(),
-            "universal resolutions are not supported"
-        );
-
-        let mut transformed = Graph::with_capacity(graph.node_count(), graph.edge_count());
-        let mut inverse = FxHashMap::with_capacity_and_hasher(graph.node_count(), FxBuildHasher);
-
-        // Create the root node.
-        let root = transformed.add_node(Node::Root);
-
-        // Re-add the nodes to the reduced graph.
-        for index in graph.node_indices() {
-            let ResolutionGraphNode::Dist(dist) = &graph[index] else {
-                continue;
-            };
-            if dist.is_base() {
-                inverse.insert(
-                    &dist.name,
-                    transformed.add_node(Node::Dist {
-                        dist: dist.dist.clone(),
-                        hashes: dist.hashes.clone(),
-                        install: true,
-                    }),
-                );
-            }
-        }
-
-        // Re-add the edges to the reduced graph.
-        for edge in graph.edge_indices() {
-            let (source, target) = graph.edge_endpoints(edge).unwrap();
-
-            match (&graph[source], &graph[target]) {
-                (ResolutionGraphNode::Root, ResolutionGraphNode::Dist(target_dist)) => {
-                    let target = inverse[&target_dist.name()];
-                    transformed.update_edge(root, target, Edge::Prod);
-                }
-                (
-                    ResolutionGraphNode::Dist(source_dist),
-                    ResolutionGraphNode::Dist(target_dist),
-                ) => {
-                    let source = inverse[&source_dist.name()];
-                    let target = inverse[&target_dist.name()];
-
-                    let edge = if let Some(extra) = source_dist.extra.as_ref() {
-                        Edge::Optional(extra.clone())
-                    } else if let Some(group) = source_dist.group.as_ref() {
-                        Edge::Dev(group.clone())
-                    } else {
-                        Edge::Prod
-                    };
-
-                    transformed.add_edge(source, target, edge);
-                }
-                _ => {
-                    unreachable!("root should not contain incoming edges");
-                }
-            }
-        }
-
-        Self::new(transformed).with_diagnostics(diagnostics)
+        output.into_resolution(false)
     }
 }
 
