@@ -174,6 +174,10 @@ pub(crate) async fn audit(
     // Initialize any shared state.
     let state = UniversalState::default();
 
+    // Audits only need the runtime dependency graph. Avoid enabling
+    // build-dependency locking as a side effect of `--preview`.
+    let lock_preview = preview.without(PreviewFeature::LockBuildDependencies);
+
     // Update the lockfile, if necessary.
     let lock = match Box::pin(
         LockOperation::new(
@@ -186,7 +190,7 @@ pub(crate) async fn audit(
             &cache,
             &WorkspaceCache::default(),
             printer,
-            preview,
+            lock_preview,
         )
         .execute(target),
     )

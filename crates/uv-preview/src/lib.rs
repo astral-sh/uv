@@ -434,6 +434,14 @@ impl Preview {
         self.flags.contains(flag)
     }
 
+    /// Return a preview configuration with a single feature disabled.
+    #[must_use]
+    pub fn without(self, flag: PreviewFeature) -> Self {
+        let mut flags = self.flags;
+        flags.remove(flag);
+        Self { flags }
+    }
+
     /// Check if all preview feature rae enabled.
     pub fn all_enabled(&self) -> bool {
         self.flags.is_all()
