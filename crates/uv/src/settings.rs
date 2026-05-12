@@ -667,6 +667,11 @@ impl RunSettings {
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
+        let no_editable_config = filesystem
+            .as_ref()
+            .and_then(|filesystem| filesystem.no_editable)
+            .unwrap_or(false);
+
         // Resolve flags from CLI and environment variables.
         let locked = resolve_flag(locked, "locked", environment.locked);
         let frozen = resolve_flag(frozen, "frozen", environment.frozen);
@@ -692,6 +697,15 @@ impl RunSettings {
             None,
             Some(environment.no_editable),
         );
+
+        let no_editable = if editable.is_enabled() || no_editable.is_enabled() {
+            no_editable
+        } else if no_editable_config {
+            Flag::from_config("no-editable")
+        } else {
+            no_editable
+        };
+
         let isolated = isolated || environment.isolated.value == Some(true);
         let show_resolution = show_resolution || environment.show_resolution.value == Some(true);
         let no_env_file = no_env_file || environment.no_env_file.value == Some(true);
@@ -1731,6 +1745,11 @@ impl SyncSettings {
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
+        let no_editable_config = filesystem
+            .as_ref()
+            .and_then(|filesystem| filesystem.no_editable)
+            .unwrap_or(false);
+
         let settings = ResolverInstallerSettings::combine(
             resolver_installer_options(installer, build),
             filesystem,
@@ -1766,6 +1785,14 @@ impl SyncSettings {
             None,
             Some(environment.no_editable),
         );
+
+        let no_editable = if editable.is_enabled() || no_editable.is_enabled() {
+            no_editable
+        } else if no_editable_config {
+            Flag::from_config("no-editable")
+        } else {
+            no_editable
+        };
 
         Self {
             output_format,
@@ -2540,6 +2567,11 @@ impl ExportSettings {
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
+        let no_editable_config = filesystem
+            .as_ref()
+            .and_then(|filesystem| filesystem.no_editable)
+            .unwrap_or(false);
+
         // Resolve flags from CLI and environment variables.
         let locked = resolve_flag(locked, "locked", environment.locked);
         let frozen = resolve_flag(frozen_cli, "frozen", environment.frozen);
@@ -2563,6 +2595,14 @@ impl ExportSettings {
             None,
             Some(environment.no_editable),
         );
+
+        let no_editable = if editable.is_enabled() || no_editable.is_enabled() {
+            no_editable
+        } else if no_editable_config {
+            Flag::from_config("no-editable")
+        } else {
+            no_editable
+        };
 
         Self {
             format,

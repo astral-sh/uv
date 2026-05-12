@@ -288,6 +288,7 @@ fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
     let Options {
         globals: _,
         top_level: _,
+        no_editable: _,
         install_mirrors: _,
         publish: _,
         add: _,
@@ -427,6 +428,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
                 no_binary_package,
                 torch_backend,
             },
+        no_editable,
         install_mirrors:
             PythonInstallMirrors {
                 python_install_mirror,
@@ -572,6 +574,9 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     }
     if compile_bytecode.is_some() {
         masked_fields.push("compile-bytecode");
+    }
+    if no_editable.is_some() {
+        masked_fields.push("no-editable");
     }
     if no_sources.is_some() {
         masked_fields.push("no-sources");
