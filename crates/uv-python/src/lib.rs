@@ -618,7 +618,7 @@ mod tests {
         });
         assert!(
             matches!(result, Ok(Err(PythonNotFound { .. }))),
-            "With an non-executable Python, no Python installation should be detected; got {result:?}"
+            "With a non-executable Python, no Python installation should be detected; got {result:?}"
         );
 
         Ok(())
