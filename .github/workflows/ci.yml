@@ -340,6 +340,7 @@ jobs:
           download_artifacts: true
           fail_if_no_artifacts: true
           download_path: ./gitlab-artifacts
+          verbose: true
 
       - name: "Load GitLab OIDC tokens from GitLab job artifacts"
         id: load-gitlab-oidc-token
