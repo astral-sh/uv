@@ -13,9 +13,7 @@ use crate::resolver::Request;
 use crate::{
     InMemoryIndex, PythonRequirement, ResolveError, ResolverEnvironment, VersionsResponse,
 };
-use uv_distribution_types::{
-    CompatibleDist, DistributionMetadata, IndexCapabilities, IndexMetadata,
-};
+use uv_distribution_types::{CompatibleDist, Identifier, IndexCapabilities, IndexMetadata};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::MarkerTree;
@@ -315,7 +313,7 @@ impl BatchPrefetcherRunner {
             );
             prefetch_count += 1;
 
-            if self.index.distributions().register(candidate.version_id()) {
+            if self.index.distributions().register(dist.distribution_id()) {
                 let request = Request::from(dist);
                 self.request_sink.blocking_send(request)?;
             }

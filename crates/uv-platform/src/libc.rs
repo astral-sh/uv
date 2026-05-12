@@ -3,7 +3,7 @@
 //! Taken from `glibc_version` (<https://github.com/delta-incubator/glibc-version-rs>),
 //! which used the Apache 2.0 license (but not the MIT license)
 
-use crate::cpuinfo::detect_hardware_floating_point_support;
+use crate::{Arch, cpuinfo::detect_hardware_floating_point_support};
 use fs_err as fs;
 use goblin::elf::Elf;
 use regex::Regex;
@@ -14,6 +14,7 @@ use std::process::{Command, Stdio};
 use std::str::FromStr;
 use std::sync::LazyLock;
 use std::{env, fmt};
+use target_lexicon::Endianness;
 use tracing::trace;
 use uv_fs::Simplified;
 use uv_static::EnvVars;
@@ -301,6 +302,17 @@ fn find_ld_path() -> Result<PathBuf, LibcDetectionError> {
             }
         }
     }
+
+    // If none of the common binaries exist or are parseable, try to find the
+    // dynamic linker directly on the filesystem. This handles minimal container
+    // images (e.g., Chainguard, distroless) that lack standard shell utilities
+    // but still have a dynamic linker installed.
+    //
+    // See: https://github.com/astral-sh/uv/issues/8635
+    if let Some(ld_path) = find_ld_path_from_filesystem() {
+        return Ok(ld_path);
+    }
+
     let attempts_string = attempts.join(", ");
     if !found_anything {
         // Known failure cases here include running the distroless Docker images directly
@@ -309,6 +321,107 @@ fn find_ld_path() -> Result<PathBuf, LibcDetectionError> {
         Err(LibcDetectionError::NoCommonBinariesFound(attempts_string))
     } else {
         Err(LibcDetectionError::CoreBinaryParsing(attempts_string))
+    }
+}
+
+/// Search for a glibc or musl dynamic linker on the filesystem.
+///
+/// We prefer glibc over musl. If none of the expected paths exist, [`None`] is
+/// returned.
+fn find_ld_path_from_filesystem() -> Option<PathBuf> {
+    find_ld_path_from_root_and_arch(Path::new("/"), Arch::from_env())
+}
+
+fn find_ld_path_from_root_and_arch(root: &Path, architecture: Arch) -> Option<PathBuf> {
+    let Some(candidates) = dynamic_linker_candidates(architecture) else {
+        trace!("No known dynamic linker paths for architecture `{architecture}`");
+        return None;
+    };
+
+    let paths = candidates
+        .iter()
+        .map(|candidate| root.join(candidate.trim_start_matches('/')))
+        .collect::<Vec<_>>();
+
+    for path in &paths {
+        if std::fs::exists(path).ok() == Some(true) {
+            trace!(
+                "Found dynamic linker on filesystem: {}",
+                path.user_display()
+            );
+            return Some(path.clone());
+        }
+    }
+
+    trace!(
+        "Could not find dynamic linker in any expected filesystem path for architecture `{}`: {}",
+        architecture,
+        paths
+            .iter()
+            .map(|path| path.user_display().to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    None
+}
+
+/// Return expected dynamic linker paths for the given architecture, in
+/// preference order.
+fn dynamic_linker_candidates(architecture: Arch) -> Option<&'static [&'static str]> {
+    let family = architecture.family();
+
+    match family {
+        target_lexicon::Architecture::X86_64 => {
+            Some(&["/lib64/ld-linux-x86-64.so.2", "/lib/ld-musl-x86_64.so.1"])
+        }
+        target_lexicon::Architecture::X86_32(_) => {
+            Some(&["/lib/ld-linux.so.2", "/lib/ld-musl-i386.so.1"])
+        }
+        target_lexicon::Architecture::Aarch64(_) => match family.endianness().ok()? {
+            Endianness::Little => {
+                Some(&["/lib/ld-linux-aarch64.so.1", "/lib/ld-musl-aarch64.so.1"])
+            }
+            Endianness::Big => Some(&[
+                "/lib/ld-linux-aarch64_be.so.1",
+                "/lib/ld-musl-aarch64_be.so.1",
+            ]),
+        },
+        target_lexicon::Architecture::Arm(_) => match family.endianness().ok()? {
+            Endianness::Little => Some(&[
+                "/lib/ld-linux-armhf.so.3",
+                "/lib/ld-linux.so.3",
+                "/lib/ld-musl-armhf.so.1",
+                "/lib/ld-musl-arm.so.1",
+            ]),
+            Endianness::Big => Some(&[
+                "/lib/ld-linux-armhf.so.3",
+                "/lib/ld-linux.so.3",
+                "/lib/ld-musl-armebhf.so.1",
+                "/lib/ld-musl-armeb.so.1",
+            ]),
+        },
+        target_lexicon::Architecture::Powerpc64 => {
+            Some(&["/lib64/ld64.so.1", "/lib/ld-musl-powerpc64.so.1"])
+        }
+        target_lexicon::Architecture::Powerpc64le => {
+            Some(&["/lib64/ld64.so.2", "/lib/ld-musl-powerpc64le.so.1"])
+        }
+        target_lexicon::Architecture::S390x => Some(&["/lib/ld64.so.1", "/lib/ld-musl-s390x.so.1"]),
+        target_lexicon::Architecture::Riscv64(_) => Some(&[
+            "/lib/ld-linux-riscv64-lp64d.so.1",
+            "/lib/ld-linux-riscv64-lp64.so.1",
+            "/lib/ld-musl-riscv64.so.1",
+            "/lib/ld-musl-riscv64-sp.so.1",
+            "/lib/ld-musl-riscv64-sf.so.1",
+        ]),
+        target_lexicon::Architecture::LoongArch64 => Some(&[
+            "/lib64/ld-linux-loongarch-lp64d.so.1",
+            "/lib64/ld-linux-loongarch-lp64s.so.1",
+            "/lib/ld-musl-loongarch64.so.1",
+            "/lib/ld-musl-loongarch64-sp.so.1",
+            "/lib/ld-musl-loongarch64-sf.so.1",
+        ]),
+        _ => None,
     }
 }
 
@@ -345,6 +458,7 @@ fn find_ld_path_at(path: impl AsRef<Path>) -> Option<PathBuf> {
 mod tests {
     use super::*;
     use indoc::indoc;
+    use tempfile::tempdir;
 
     #[test]
     fn parse_ld_so_output() {
@@ -382,5 +496,61 @@ Usage: /lib/ld-musl-x86_64.so.1 [options] [--] pathname [args]\
     ";
         let got = musl_ld_output_to_version("stderr", output).unwrap();
         assert_eq!(got, LibcVersion::Musllinux { major: 1, minor: 2 });
+    }
+
+    #[test]
+    fn dynamic_linker_candidates_prefer_glibc_before_musl() {
+        assert_eq!(
+            dynamic_linker_candidates(Arch::from_str("x86_64").unwrap()),
+            Some(&["/lib64/ld-linux-x86-64.so.2", "/lib/ld-musl-x86_64.so.1",][..])
+        );
+    }
+
+    #[test]
+    fn find_ld_path_from_root_and_arch_returns_glibc_when_only_glibc_is_present() {
+        let root = tempdir().unwrap();
+        let ld_path = root.path().join("lib64/ld-linux-x86-64.so.2");
+        fs::create_dir_all(ld_path.parent().unwrap()).unwrap();
+        fs::write(&ld_path, "").unwrap();
+
+        let got = find_ld_path_from_root_and_arch(root.path(), Arch::from_str("x86_64").unwrap());
+
+        assert_eq!(got, Some(ld_path));
+    }
+
+    #[test]
+    fn find_ld_path_from_root_and_arch_returns_musl_when_only_musl_is_present() {
+        let root = tempdir().unwrap();
+        let ld_path = root.path().join("lib/ld-musl-x86_64.so.1");
+        fs::create_dir_all(ld_path.parent().unwrap()).unwrap();
+        fs::write(&ld_path, "").unwrap();
+
+        let got = find_ld_path_from_root_and_arch(root.path(), Arch::from_str("x86_64").unwrap());
+
+        assert_eq!(got, Some(ld_path));
+    }
+
+    #[test]
+    fn find_ld_path_from_root_and_arch_returns_glibc_when_both_linkers_are_present() {
+        let root = tempdir().unwrap();
+        let glibc_path = root.path().join("lib64/ld-linux-x86-64.so.2");
+        let musl_path = root.path().join("lib/ld-musl-x86_64.so.1");
+        fs::create_dir_all(glibc_path.parent().unwrap()).unwrap();
+        fs::create_dir_all(musl_path.parent().unwrap()).unwrap();
+        fs::write(&glibc_path, "").unwrap();
+        fs::write(&musl_path, "").unwrap();
+
+        let got = find_ld_path_from_root_and_arch(root.path(), Arch::from_str("x86_64").unwrap());
+
+        assert_eq!(got, Some(glibc_path));
+    }
+
+    #[test]
+    fn find_ld_path_from_root_and_arch_returns_none_when_neither_linker_is_present() {
+        let root = tempdir().unwrap();
+
+        let got = find_ld_path_from_root_and_arch(root.path(), Arch::from_str("x86_64").unwrap());
+
+        assert_eq!(got, None);
     }
 }

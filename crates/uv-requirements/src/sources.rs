@@ -27,11 +27,14 @@ pub enum RequirementsSource {
     SetupCfg(PathBuf),
     /// Dependencies were provided via an unsupported Conda `environment.yml` file (e.g., `pip install -r environment.yml`).
     EnvironmentYml(PathBuf),
+    /// An extensionless file that could be either a PEP 723 script or a requirements.txt file.
+    /// We detect the format when reading the file.
+    Extensionless(PathBuf),
 }
 
 impl RequirementsSource {
     /// Parse a [`RequirementsSource`] from a [`PathBuf`]. The file type is determined by the file
-    /// extension.
+    /// extension and, in some cases, the file contents.
     pub fn from_requirements_file(path: PathBuf) -> Result<Self> {
         if path.ends_with("pyproject.toml") {
             Ok(Self::PyprojectToml(path))
@@ -50,7 +53,6 @@ impl RequirementsSource {
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyw"))
         {
-            // TODO(blueraft): Support scripts without an extension.
             Ok(Self::Pep723Script(path))
         } else if path
             .extension()
@@ -60,6 +62,15 @@ impl RequirementsSource {
                 "`{}` is not a valid PEP 751 filename: expected TOML file to start with `pylock.` and end with `.toml` (e.g., `pylock.toml`, `pylock.dev.toml`)",
                 path.user_display(),
             ))
+        } else if path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("txt") || ext.eq_ignore_ascii_case("in"))
+        {
+            Ok(Self::RequirementsTxt(path))
+        } else if path.extension().is_none() {
+            // If we don't have an extension, mark it as extensionless so we can detect
+            // the format later (either a PEP 723 script or a requirements.txt file).
+            Ok(Self::Extensionless(path))
         } else {
             Ok(Self::RequirementsTxt(path))
         }
@@ -67,6 +78,10 @@ impl RequirementsSource {
 
     /// Parse a [`RequirementsSource`] from a `requirements.txt` file.
     pub fn from_requirements_txt(path: PathBuf) -> Result<Self> {
+        if path == Path::new("-") {
+            return Ok(Self::Extensionless(path));
+        }
+
         for file_name in ["pyproject.toml", "setup.py", "setup.cfg"] {
             if path.ends_with(file_name) {
                 return Err(anyhow::anyhow!(
@@ -99,6 +114,10 @@ impl RequirementsSource {
 
     /// Parse a [`RequirementsSource`] from a `constraints.txt` file.
     pub fn from_constraints_txt(path: PathBuf) -> Result<Self> {
+        if path == Path::new("-") {
+            return Ok(Self::Extensionless(path));
+        }
+
         for file_name in ["pyproject.toml", "setup.py", "setup.cfg"] {
             if path.ends_with(file_name) {
                 return Err(anyhow::anyhow!(
@@ -131,6 +150,10 @@ impl RequirementsSource {
 
     /// Parse a [`RequirementsSource`] from an `overrides.txt` file.
     pub fn from_overrides_txt(path: PathBuf) -> Result<Self> {
+        if path == Path::new("-") {
+            return Ok(Self::Extensionless(path));
+        }
+
         for file_name in ["pyproject.toml", "setup.py", "setup.cfg"] {
             if path.ends_with(file_name) {
                 return Err(anyhow::anyhow!(
@@ -169,7 +192,7 @@ impl RequirementsSource {
     pub fn from_package_argument(name: &str) -> Result<Self> {
         // If the user provided a `requirements.txt` file without `-r` (as in
         // `uv pip install requirements.txt`), prompt them to correct it.
-        #[allow(clippy::case_sensitive_file_extension_comparisons)]
+        #[expect(clippy::case_sensitive_file_extension_comparisons)]
         if (name.ends_with(".txt") || name.ends_with(".in")) && Path::new(&name).is_file() {
             let term = Term::stderr();
             if term.is_term() {
@@ -219,7 +242,7 @@ impl RequirementsSource {
     pub fn from_with_package_argument(name: &str) -> Result<Self> {
         // If the user provided a `requirements.txt` file without `--with-requirements` (as in
         // `uvx --with requirements.txt ruff`), prompt them to correct it.
-        #[allow(clippy::case_sensitive_file_extension_comparisons)]
+        #[expect(clippy::case_sensitive_file_extension_comparisons)]
         if (name.ends_with(".txt") || name.ends_with(".in")) && Path::new(&name).is_file() {
             let term = Term::stderr();
             if term.is_term() {
@@ -302,7 +325,8 @@ impl std::fmt::Display for RequirementsSource {
             | Self::PyprojectToml(path)
             | Self::SetupPy(path)
             | Self::SetupCfg(path)
-            | Self::EnvironmentYml(path) => {
+            | Self::EnvironmentYml(path)
+            | Self::Extensionless(path) => {
                 write!(f, "{}", path.simplified_display())
             }
         }
@@ -310,7 +334,7 @@ impl std::fmt::Display for RequirementsSource {
 }
 
 /// Returns `true` if a file name matches the `pylock.toml` pattern defined in PEP 751.
-#[allow(clippy::case_sensitive_file_extension_comparisons)]
+#[expect(clippy::case_sensitive_file_extension_comparisons)]
 pub fn is_pylock_toml(file_name: &str) -> bool {
     file_name.starts_with("pylock.") && file_name.ends_with(".toml")
 }

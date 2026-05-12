@@ -13,6 +13,7 @@ pub use crate::os::Os;
 
 mod arch;
 mod cpuinfo;
+pub mod host;
 mod libc;
 mod os;
 
@@ -92,7 +93,7 @@ impl Platform {
             return true;
         }
 
-        #[allow(clippy::unnested_or_patterns)]
+        #[expect(clippy::unnested_or_patterns)]
         if self.os.is_windows()
             && matches!(
                 (self.arch.family(), other.arch.family()),

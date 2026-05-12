@@ -30,12 +30,9 @@ impl Os {
 
     /// Whether this OS can run the other OS.
     pub fn supports(&self, other: Self) -> bool {
-        // Emscripten cannot run on Windows, but all other OSes can run Emscripten.
+        // Emscripten can run on any OS
         if other.is_emscripten() {
-            return !self.is_windows();
-        }
-        if self.is_windows() && other.is_emscripten() {
-            return false;
+            return true;
         }
 
         // Otherwise, we require an exact match

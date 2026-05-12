@@ -11,7 +11,7 @@ use uv_pep440::Version;
 ///
 /// Either an already-installed distribution or a distribution that can be installed.
 #[derive(Debug, Clone)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub enum RequestedDist {
     Installed(InstalledDist),
     Installable(Dist),

@@ -74,6 +74,15 @@ macro_rules! warn_user_once {
 /// warning: Failed to create registry entry for Python 3.12
 ///   Caused By: Security policy forbids chaining registry entries
 /// ```
+///
+/// ```text
+/// error: Failed to download Python 3.12
+///  Caused by: Failed to fetch https://example.com/upload/python3.13.tar.zst
+///             Server says: This endpoint only support POST requests.
+///
+///             For downloads, please refer to https://example.com/download/python3.13.tar.zst
+///  Caused by: Caused By: HTTP Error 400
+/// ```
 pub fn write_error_chain(
     err: &dyn Error,
     mut stream: impl std::fmt::Write,
@@ -85,15 +94,65 @@ pub fn write_error_chain(
         "{}{} {}",
         level.as_ref().color(color).bold(),
         ":".bold(),
-        err.to_string().trim()
+        err.to_string().trim().bold()
     )?;
     for source in iter::successors(err.source(), |&err| err.source()) {
-        writeln!(
-            &mut stream,
-            "  {}: {}",
-            "Caused by".color(color).bold(),
-            source.to_string().trim()
-        )?;
+        let msg = source.to_string();
+        let mut lines = msg.lines();
+        if let Some(first) = lines.next() {
+            let padding = "  ";
+            let cause = "Caused by";
+            let child_padding = " ".repeat(padding.len() + cause.len() + 2);
+            writeln!(
+                &mut stream,
+                "{}{}: {}",
+                padding,
+                cause.color(color).bold(),
+                first.trim()
+            )?;
+            for line in lines {
+                let line = line.trim_end();
+                if line.is_empty() {
+                    // Avoid showing indents on empty lines
+                    writeln!(&mut stream)?;
+                } else {
+                    writeln!(&mut stream, "{}{}", child_padding, line.trim_end())?;
+                }
+            }
+        }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::write_error_chain;
+    use anyhow::anyhow;
+    use indoc::indoc;
+    use insta::assert_snapshot;
+    use owo_colors::AnsiColors;
+
+    #[test]
+    fn format_multiline_message() {
+        let err_middle = indoc! {"Failed to fetch https://example.com/upload/python3.13.tar.zst
+        Server says: This endpoint only support POST requests.
+
+        For downloads, please refer to https://example.com/download/python3.13.tar.zst"};
+        let err = anyhow!("Caused By: HTTP Error 400")
+            .context(err_middle)
+            .context("Failed to download Python 3.12");
+
+        let mut rendered = String::new();
+        write_error_chain(err.as_ref(), &mut rendered, "error", AnsiColors::Red).unwrap();
+        let rendered = anstream::adapter::strip_str(&rendered);
+
+        assert_snapshot!(rendered, @"
+        error: Failed to download Python 3.12
+          Caused by: Failed to fetch https://example.com/upload/python3.13.tar.zst
+                     Server says: This endpoint only support POST requests.
+
+                     For downloads, please refer to https://example.com/download/python3.13.tar.zst
+          Caused by: Caused By: HTTP Error 400
+        ");
+    }
 }

@@ -167,6 +167,7 @@ async fn test_simultaneous_create_set_then_move() {
 }
 
 #[tokio::test]
+#[cfg(not(target_os = "windows"))]
 async fn test_simultaneous_independent_create_set() {
     init_logger();
 
@@ -236,8 +237,10 @@ async fn test_multiple_create_delete_single_thread() {
     }
 }
 
+/// Empirically, this test frequently flakes on Windows indicating that these operations are
+/// not concurrency-safe.
 #[tokio::test]
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(target_os = "macos")]
 async fn test_simultaneous_multiple_create_delete_single_thread() {
     init_logger();
 

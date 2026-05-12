@@ -144,7 +144,7 @@ where
     }
 
     /// Deserialize this owned archived value into the original
-    /// `SimpleMetadata`.
+    /// `SimpleDetailMetadata`.
     ///
     /// Note that because this type has a `Deref` impl, this method requires
     /// fully-qualified syntax. So, if `o` is an `OwnedValue`, then use
@@ -163,7 +163,7 @@ where
 
     fn deref(&self) -> &A::Archived {
         // SAFETY: We've validated that our underlying buffer is a valid
-        // archive for SimpleMetadata in the constructor, so we can skip
+        // archive for SimpleDetailMetadata in the constructor, so we can skip
         // validation here. Since we don't mutate the buffer, this conversion
         // is guaranteed to be correct.
         #[allow(unsafe_code)]

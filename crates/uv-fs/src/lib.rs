@@ -1,33 +1,21 @@
-use std::borrow::Cow;
-use std::fmt::Display;
 use std::path::{Path, PathBuf};
 
-use tempfile::NamedTempFile;
-use tracing::{debug, error, info, trace, warn};
+#[cfg(feature = "tokio")]
+use std::io::Read;
 
+#[cfg(feature = "tokio")]
+use encoding_rs_io::DecodeReaderBytes;
+use tempfile::NamedTempFile;
+use tracing::warn;
+
+pub use crate::locked_file::*;
 pub use crate::path::*;
 
 pub mod cachedir;
+pub mod link;
+mod locked_file;
 mod path;
 pub mod which;
-
-/// Append an extension to a [`PathBuf`].
-///
-/// Unlike [`Path::with_extension`], this function does not replace an existing extension.
-///
-/// If there is no file name, the path is returned unchanged.
-///
-/// This mimics the behavior of the unstable [`Path::with_added_extension`] method.
-pub fn with_added_extension<'a>(path: &'a Path, extension: &str) -> Cow<'a, Path> {
-    let Some(name) = path.file_name() else {
-        // If there is no file name, we cannot add an extension.
-        return Cow::Borrowed(path);
-    };
-    let mut name = name.to_os_string();
-    name.push(".");
-    name.push(extension.trim_start_matches('.'));
-    Cow::Owned(path.with_file_name(name))
-}
 
 /// Attempt to check if the two paths refer to the same file.
 ///
@@ -63,19 +51,15 @@ pub fn is_same_file_allow_missing(left: &Path, right: &Path) -> Option<bool> {
 
 /// Reads data from the path and requires that it be valid UTF-8 or UTF-16.
 ///
-/// This uses BOM sniffing to determine if the data should be transcoded
-/// from UTF-16 to Rust's `String` type (which uses UTF-8).
+/// This uses BOM sniffing to determine if the data should be transcoded from UTF-16 to Rust's
+/// `String` type (which uses UTF-8).
 ///
-/// This should generally only be used when one specifically wants to support
-/// reading UTF-16 transparently.
+/// This should generally only be used when one specifically wants to support reading UTF-16
+/// transparently.
 ///
 /// If the file path is `-`, then contents are read from stdin instead.
 #[cfg(feature = "tokio")]
 pub async fn read_to_string_transcode(path: impl AsRef<Path>) -> std::io::Result<String> {
-    use std::io::Read;
-
-    use encoding_rs_io::DecodeReaderBytes;
-
     let path = path.as_ref();
     let raw = if path == Path::new("-") {
         let mut buf = Vec::with_capacity(1024);
@@ -280,12 +264,13 @@ pub fn copy_atomic_sync(from: impl AsRef<Path>, to: impl AsRef<Path>) -> std::io
 fn backoff_file_move() -> backon::ExponentialBackoff {
     use backon::BackoffBuilder;
     // This amounts to 10 total seconds of trying the operation.
-    // We start at 10 milliseconds and try 9 times, doubling each time, so the last try will take
-    // about 10*(2^9) milliseconds ~= 5 seconds. All other attempts combined should equal
-    // the length of the last attempt (because it's a sum of powers of 2), so 10 seconds overall.
+    // We retry 10 times, starting at 10*(2^0) milliseconds for the first retry, doubling with each
+    // retry, so the last (10th) one will take about 10*(2^9) milliseconds ~= 5 seconds. All other
+    // attempts combined should equal the length of the last attempt (because it's a sum of powers
+    // of 2), so 10 seconds overall.
     backon::ExponentialBuilder::default()
         .with_min_delay(std::time::Duration::from_millis(10))
-        .with_max_times(9)
+        .with_max_times(10)
         .build()
 }
 
@@ -328,8 +313,9 @@ pub async fn rename_with_retry(
     }
 }
 
-/// Rename or copy a file, retrying (on Windows) if it fails due to transient operating system
-/// errors, in a synchronous context.
+// TODO(zanieb): Look into reusing this code?
+/// Wrap an arbitrary operation on two files, e.g., copying, with retries on transient operating
+/// system errors.
 #[cfg_attr(not(windows), allow(unused_variables))]
 pub fn with_retry_sync(
     from: impl AsRef<Path>,
@@ -387,7 +373,9 @@ enum PersistRetryError {
     LostState,
 }
 
-/// Persist a `NamedTempFile`, retrying (on Windows) if it fails due to transient operating system errors, in a synchronous context.
+/// Persist a `NamedTempFile`, retrying (on Windows) if it fails due to transient operating system
+/// errors.
+#[cfg(feature = "tokio")]
 pub async fn persist_with_retry(
     from: NamedTempFile,
     to: impl AsRef<Path>,
@@ -482,7 +470,10 @@ pub async fn persist_with_retry(
     }
 }
 
-/// Persist a `NamedTempFile`, retrying (on Windows) if it fails due to transient operating system errors, in a synchronous context.
+/// Persist a `NamedTempFile`, retrying (on Windows) if it fails due to transient operating system
+/// errors.
+///
+/// This is a synchronous implementation of [`persist_with_retry`].
 pub fn persist_with_retry_sync(
     from: NamedTempFile,
     to: impl AsRef<Path>,
@@ -666,218 +657,6 @@ fn is_known_already_locked_error(err: &std::fs::TryLockError) -> bool {
     }
 }
 
-/// A file lock that is automatically released when dropped.
-#[derive(Debug)]
-#[must_use]
-pub struct LockedFile(fs_err::File);
-
-impl LockedFile {
-    /// Inner implementation for [`LockedFile::acquire_blocking`] and [`LockedFile::acquire`].
-    fn lock_file_blocking(file: fs_err::File, resource: &str) -> Result<Self, std::io::Error> {
-        trace!(
-            "Checking lock for `{resource}` at `{}`",
-            file.path().user_display()
-        );
-        match file.file().try_lock() {
-            Ok(()) => {
-                debug!("Acquired lock for `{resource}`");
-                Ok(Self(file))
-            }
-            Err(err) => {
-                // Log error code and enum kind to help debugging more exotic failures.
-                if !is_known_already_locked_error(&err) {
-                    debug!("Try lock error: {err:?}");
-                }
-                info!(
-                    "Waiting to acquire lock for `{resource}` at `{}`",
-                    file.path().user_display(),
-                );
-                file.lock()?;
-                debug!("Acquired lock for `{resource}`");
-                Ok(Self(file))
-            }
-        }
-    }
-
-    /// Inner implementation for [`LockedFile::acquire_no_wait`].
-    fn lock_file_no_wait(file: fs_err::File, resource: &str) -> Option<Self> {
-        trace!(
-            "Checking lock for `{resource}` at `{}`",
-            file.path().user_display()
-        );
-        match file.try_lock() {
-            Ok(()) => {
-                debug!("Acquired lock for `{resource}`");
-                Some(Self(file))
-            }
-            Err(err) => {
-                // Log error code and enum kind to help debugging more exotic failures.
-                if !is_known_already_locked_error(&err) {
-                    debug!("Try lock error: {err:?}");
-                }
-                debug!("Lock is busy for `{resource}`");
-                None
-            }
-        }
-    }
-
-    /// Inner implementation for [`LockedFile::acquire_shared_blocking`] and
-    /// [`LockedFile::acquire_blocking`].
-    fn lock_file_shared_blocking(
-        file: fs_err::File,
-        resource: &str,
-    ) -> Result<Self, std::io::Error> {
-        trace!(
-            "Checking shared lock for `{resource}` at `{}`",
-            file.path().user_display()
-        );
-        match file.try_lock_shared() {
-            Ok(()) => {
-                debug!("Acquired shared lock for `{resource}`");
-                Ok(Self(file))
-            }
-            Err(err) => {
-                // Log error code and enum kind to help debugging more exotic failures.
-                if !is_known_already_locked_error(&err) {
-                    debug!("Try lock error: {err:?}");
-                }
-                info!(
-                    "Waiting to acquire shared lock for `{resource}` at `{}`",
-                    file.path().user_display(),
-                );
-                file.lock_shared()?;
-                debug!("Acquired shared lock for `{resource}`");
-                Ok(Self(file))
-            }
-        }
-    }
-
-    /// The same as [`LockedFile::acquire`], but for synchronous contexts.
-    ///
-    /// Do not use from an async context, as this can block the runtime while waiting for another
-    /// process to release the lock.
-    pub fn acquire_blocking(
-        path: impl AsRef<Path>,
-        resource: impl Display,
-    ) -> Result<Self, std::io::Error> {
-        let file = Self::create(path)?;
-        let resource = resource.to_string();
-        Self::lock_file_blocking(file, &resource)
-    }
-
-    /// The same as [`LockedFile::acquire_blocking`], but for synchronous contexts.
-    ///
-    /// Do not use from an async context, as this can block the runtime while waiting for another
-    /// process to release the lock.
-    pub fn acquire_shared_blocking(
-        path: impl AsRef<Path>,
-        resource: impl Display,
-    ) -> Result<Self, std::io::Error> {
-        let file = Self::create(path)?;
-        let resource = resource.to_string();
-        Self::lock_file_shared_blocking(file, &resource)
-    }
-
-    /// Acquire a cross-process lock for a resource using a file at the provided path.
-    #[cfg(feature = "tokio")]
-    pub async fn acquire(
-        path: impl AsRef<Path>,
-        resource: impl Display,
-    ) -> Result<Self, std::io::Error> {
-        let file = Self::create(path)?;
-        let resource = resource.to_string();
-        tokio::task::spawn_blocking(move || Self::lock_file_blocking(file, &resource)).await?
-    }
-
-    /// Acquire a cross-process read lock for a shared resource using a file at the provided path.
-    #[cfg(feature = "tokio")]
-    pub async fn acquire_shared(
-        path: impl AsRef<Path>,
-        resource: impl Display,
-    ) -> Result<Self, std::io::Error> {
-        let file = Self::create(path)?;
-        let resource = resource.to_string();
-        tokio::task::spawn_blocking(move || Self::lock_file_shared_blocking(file, &resource))
-            .await?
-    }
-
-    /// Acquire a cross-process lock for a resource using a file at the provided path
-    ///
-    /// Unlike [`LockedFile::acquire`] this function will not wait for the lock to become available.
-    ///
-    /// If the lock is not immediately available, [`None`] is returned.
-    pub fn acquire_no_wait(path: impl AsRef<Path>, resource: impl Display) -> Option<Self> {
-        let file = Self::create(path).ok()?;
-        let resource = resource.to_string();
-        Self::lock_file_no_wait(file, &resource)
-    }
-
-    #[cfg(unix)]
-    fn create(path: impl AsRef<Path>) -> Result<fs_err::File, std::io::Error> {
-        use std::os::unix::fs::PermissionsExt;
-
-        // If path already exists, return it.
-        if let Ok(file) = fs_err::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(path.as_ref())
-        {
-            return Ok(file);
-        }
-
-        // Otherwise, create a temporary file with 777 permissions. We must set
-        // permissions _after_ creating the file, to override the `umask`.
-        let file = if let Some(parent) = path.as_ref().parent() {
-            NamedTempFile::new_in(parent)?
-        } else {
-            NamedTempFile::new()?
-        };
-        if let Err(err) = file
-            .as_file()
-            .set_permissions(std::fs::Permissions::from_mode(0o777))
-        {
-            warn!("Failed to set permissions on temporary file: {err}");
-        }
-
-        // Try to move the file to path, but if path exists now, just open path
-        match file.persist_noclobber(path.as_ref()) {
-            Ok(file) => Ok(fs_err::File::from_parts(file, path.as_ref())),
-            Err(err) => {
-                if err.error.kind() == std::io::ErrorKind::AlreadyExists {
-                    fs_err::OpenOptions::new()
-                        .read(true)
-                        .write(true)
-                        .open(path.as_ref())
-                } else {
-                    Err(err.error)
-                }
-            }
-        }
-    }
-
-    #[cfg(not(unix))]
-    fn create(path: impl AsRef<Path>) -> std::io::Result<fs_err::File> {
-        fs_err::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(path.as_ref())
-    }
-}
-
-impl Drop for LockedFile {
-    fn drop(&mut self) {
-        if let Err(err) = self.0.unlock() {
-            error!(
-                "Failed to unlock resource at `{}`; program may be stuck: {err}",
-                self.0.path().display()
-            );
-        } else {
-            debug!("Released lock at `{}`", self.0.path().display());
-        }
-    }
-}
-
 /// An asynchronous reader that reports progress as bytes are read.
 #[cfg(feature = "tokio")]
 pub struct ProgressReader<Reader: tokio::io::AsyncRead + Unpin, Callback: Fn(usize) + Unpin> {
@@ -925,46 +704,4 @@ pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Re
         }
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::path::PathBuf;
-
-    #[test]
-    fn test_with_added_extension() {
-        // Test with simple package name (no dots)
-        let path = PathBuf::from("python");
-        let result = with_added_extension(&path, "exe");
-        assert_eq!(result, PathBuf::from("python.exe"));
-
-        // Test with package name containing single dot
-        let path = PathBuf::from("awslabs.cdk-mcp-server");
-        let result = with_added_extension(&path, "exe");
-        assert_eq!(result, PathBuf::from("awslabs.cdk-mcp-server.exe"));
-
-        // Test with package name containing multiple dots
-        let path = PathBuf::from("org.example.tool");
-        let result = with_added_extension(&path, "exe");
-        assert_eq!(result, PathBuf::from("org.example.tool.exe"));
-
-        // Test with different extensions
-        let path = PathBuf::from("script");
-        let result = with_added_extension(&path, "ps1");
-        assert_eq!(result, PathBuf::from("script.ps1"));
-
-        // Test with path that has directory components
-        let path = PathBuf::from("some/path/to/awslabs.cdk-mcp-server");
-        let result = with_added_extension(&path, "exe");
-        assert_eq!(
-            result,
-            PathBuf::from("some/path/to/awslabs.cdk-mcp-server.exe")
-        );
-
-        // Test with empty path (edge case)
-        let path = PathBuf::new();
-        let result = with_added_extension(&path, "exe");
-        assert_eq!(result, path); // Should return unchanged
-    }
 }

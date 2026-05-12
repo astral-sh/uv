@@ -3,7 +3,8 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
-use uv_configuration::SourceStrategy;
+use uv_auth::CredentialsCache;
+use uv_configuration::NoSources;
 use uv_distribution_types::{GitSourceUrl, IndexLocations, Requirement};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
@@ -89,8 +90,9 @@ impl Metadata {
         install_path: &Path,
         git_source: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
-        sources: SourceStrategy,
+        sources: NoSources,
         cache: &WorkspaceCache,
+        credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         // Lower the requirements.
         let requires_dist = uv_pypi_types::RequiresDist {
@@ -112,6 +114,7 @@ impl Metadata {
             locations,
             sources,
             cache,
+            credentials_cache,
         )
         .await?;
 

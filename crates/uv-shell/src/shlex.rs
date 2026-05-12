@@ -18,13 +18,13 @@ pub fn shlex_posix(executable: impl AsRef<Path>) -> String {
 
 /// Escape a string for being used in single quotes in a POSIX-compatible shell command.
 ///
-/// We want our scripts to support any POSIX shell. There's two kind of quotes in POSIX:
+/// We want our scripts to support any POSIX shell. There are two kinds of quotes in POSIX:
 /// Single and double quotes. In bash, single quotes must not contain another single
 /// quote, you can't even escape it (<https://linux.die.net/man/1/bash> under "QUOTING").
-/// Double quotes have escaping rules different from shell to shell, which we can't do.
+/// Double quotes have escaping rules that differ from shell to shell, which we can't handle.
 /// Bash has `$'\''`, but that's not universal enough.
 ///
-/// As solution, use implicit string concatenations, by putting the single quote into double
+/// As a solution, use implicit string concatenations, by putting the single quote into double
 /// quotes.
 pub fn escape_posix_for_single_quotes(string: &str) -> String {
     string.replace('\'', r#"'"'"'"#)

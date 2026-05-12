@@ -1,0 +1,38 @@
+on:
+  workflow_call:
+    inputs:
+      schema-changed:
+        required: true
+        type: string
+      save-rust-cache:
+        required: false
+        type: string
+        default: "true"
+
+permissions: {}
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  CARGO_TERM_COLOR: always
+  RUSTUP_MAX_RETRIES: 10
+
+jobs:
+  cargo-dev-generate-all:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    name: "cargo dev generate-all"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+      - name: "Generate all"
+        run: cargo dev generate-all --mode dry-run
+      - name: "Check sysconfig mappings"
+        run: cargo dev generate-sysconfig-metadata --mode check
+      - name: "Check JSON schema"
+        if: ${{ inputs.schema-changed == 'true' }}
+        run: cargo dev generate-json-schema --mode check

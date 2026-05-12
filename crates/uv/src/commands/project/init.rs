@@ -4,8 +4,9 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::str::FromStr;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result, anyhow, bail};
 use owo_colors::OwoColorize;
+use toml_edit::{InlineTable, Value};
 use tracing::{debug, trace, warn};
 
 use uv_cache::Cache;
@@ -38,7 +39,7 @@ use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
 
 /// Add one or more packages to the project requirements.
-#[allow(clippy::single_match_else, clippy::fn_params_excessive_bools)]
+#[expect(clippy::single_match_else, clippy::fn_params_excessive_bools)]
 pub(crate) async fn init(
     project_dir: &Path,
     explicit_path: Option<PathBuf>,
@@ -72,6 +73,7 @@ pub(crate) async fn init(
 
             init_script(
                 path,
+                bare,
                 python,
                 install_mirrors,
                 client_builder,
@@ -167,7 +169,7 @@ pub(crate) async fn init(
             .await?;
 
             // Create the `README.md` if it does not already exist.
-            if !no_readme {
+            if !no_readme && !bare {
                 let readme = path.join("README.md");
                 if !readme.exists() {
                     fs_err::write(readme, String::new())?;
@@ -197,9 +199,10 @@ pub(crate) async fn init(
     Ok(ExitStatus::Success)
 }
 
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 async fn init_script(
     script_path: &Path,
+    bare: bool,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     client_builder: &BaseClientBuilder<'_>,
@@ -274,13 +277,13 @@ async fn init_script(
         fs_err::tokio::create_dir_all(parent).await?;
     }
 
-    Pep723Script::create(script_path, requires_python.specifiers(), content).await?;
+    Pep723Script::create(script_path, requires_python.specifiers(), content, bare).await?;
 
     Ok(())
 }
 
 /// Initialize a project (and, implicitly, a workspace root) at the given path.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 async fn init_project(
     path: &Path,
     name: &PackageName,
@@ -308,7 +311,18 @@ async fn init_project(
     // Discover the current workspace, if it exists.
     let workspace_cache = WorkspaceCache::default();
     let workspace = {
-        let parent = path.parent().expect("Project path has no parent");
+        let parent = match path.parent() {
+            Some(parent) => parent,
+            None => {
+                if path.is_dir() {
+                    // Support creating a project in the filesystem root (`/` on Unix).
+                    path
+                } else {
+                    // Not sure how we'd end up here, but we need to handle the case.
+                    bail!("Project directory has no parent directory");
+                }
+            }
+        };
         match Workspace::discover(
             parent,
             &DiscoveryOptions {
@@ -745,7 +759,7 @@ impl InitKind {
 
 impl InitProjectKind {
     /// Initialize this project kind at the target path.
-    #[allow(clippy::fn_params_excessive_bools)]
+    #[expect(clippy::fn_params_excessive_bools)]
     fn init(
         self,
         name: &PackageName,
@@ -791,7 +805,7 @@ impl InitProjectKind {
     }
 
     /// Initialize a Python application at the target path.
-    #[allow(clippy::fn_params_excessive_bools)]
+    #[expect(clippy::fn_params_excessive_bools)]
     fn init_application(
         name: &PackageName,
         path: &Path,
@@ -828,7 +842,7 @@ impl InitProjectKind {
             author.as_ref(),
             description,
             no_description,
-            no_readme,
+            no_readme || bare,
         );
 
         // Include additional project configuration for packaged applications
@@ -874,7 +888,7 @@ impl InitProjectKind {
     }
 
     /// Initialize a library project at the target path.
-    #[allow(clippy::fn_params_excessive_bools)]
+    #[expect(clippy::fn_params_excessive_bools)]
     fn init_library(
         name: &PackageName,
         path: &Path,
@@ -907,7 +921,7 @@ impl InitProjectKind {
             author.as_ref(),
             description,
             no_description,
-            no_readme,
+            no_readme || bare,
         );
 
         // Always include a build system if the project is packaged.
@@ -936,13 +950,22 @@ enum Author {
 
 impl Author {
     fn to_toml_string(&self) -> String {
+        let mut inline = InlineTable::new();
+
         match self {
             Self::NameEmail { name, email } => {
-                format!("{{ name = \"{name}\", email = \"{email}\" }}")
+                inline.insert("name", Value::from(name));
+                inline.insert("email", Value::from(email));
             }
-            Self::Name(name) => format!("{{ name = \"{name}\" }}"),
-            Self::Email(email) => format!("{{ email = \"{email}\" }}"),
+            Self::Name(name) => {
+                inline.insert("name", Value::from(name));
+            }
+            Self::Email(email) => {
+                inline.insert("email", Value::from(email));
+            }
         }
+
+        inline.to_string()
     }
 }
 
@@ -1052,7 +1075,7 @@ fn pyproject_build_system(package: &PackageName, build_backend: ProjectBuildBack
                 cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.{h,c,hpp,cpp}" }, { file = "CMakeLists.txt" }]
 
                 [build-system]
-                requires = ["scikit-build-core>=0.10", "pybind11"]
+                requires = ["scikit-build-core>=0.12", "pybind11>=3"]
                 build-backend = "scikit_build_core.build"
             "#}
         .to_string(),
@@ -1096,7 +1119,7 @@ fn pyproject_build_backend_prerequisites(
                     [dependencies]
                     # "extension-module" tells pyo3 we want to build an extension module (skips linking against libpython.so)
                     # "abi3-py39" tells pyo3 (and maturin) to build using the stable ABI with minimum Python version 3.9
-                    pyo3 = {{ version = "0.27.1", features = ["extension-module", "abi3-py39"] }}
+                    pyo3 = {{ version = "0.28.2", features = ["extension-module", "abi3-py39"] }}
                 "#},
                 )?;
             }
@@ -1108,10 +1131,9 @@ fn pyproject_build_backend_prerequisites(
                 fs_err::write(
                     build_file,
                     indoc::formatdoc! {r"
-                    cmake_minimum_required(VERSION 3.15)
+                    cmake_minimum_required(VERSION 3.15...4.0)
                     project(${{SKBUILD_PROJECT_NAME}} LANGUAGES CXX)
 
-                    set(PYBIND11_FINDPYTHON ON)
                     find_package(pybind11 CONFIG REQUIRED)
 
                     pybind11_add_module(_core MODULE src/main.cpp)
@@ -1412,4 +1434,22 @@ fn get_author_from_git(path: &Path) -> Result<Author> {
     };
 
     Ok(author)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn author_to_toml_string_handles_inline_quotes() {
+        let author = Author::NameEmail {
+            name: "Tony \"Iron Man\" Stark".to_string(),
+            email: "ironman@example.com".to_string(),
+        };
+
+        assert_eq!(
+            author.to_toml_string(),
+            "{ name = 'Tony \"Iron Man\" Stark', email = \"ironman@example.com\" }"
+        );
+    }
 }

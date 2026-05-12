@@ -18,7 +18,9 @@ use tracing::{debug, trace, warn};
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness};
 use uv_cache_info::Timestamp;
 use uv_cache_key::cache_digest;
-use uv_fs::{LockedFile, PythonExt, Simplified, write_atomic_sync};
+use uv_fs::{
+    LockedFile, LockedFileError, LockedFileMode, PythonExt, Simplified, write_atomic_sync,
+};
 use uv_install_wheel::Layout;
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, StringVersion};
@@ -30,15 +32,15 @@ use crate::implementation::LenientImplementationName;
 use crate::managed::ManagedPythonInstallations;
 use crate::pointer_size::PointerSize;
 use crate::{
-    Prefix, PythonInstallationKey, PythonVariant, PythonVersion, Target, VersionRequest,
-    VirtualEnvironment,
+    Prefix, PyVenvConfiguration, PythonInstallationKey, PythonVariant, PythonVersion, Target,
+    VersionRequest, VirtualEnvironment,
 };
 
 #[cfg(windows)]
 use windows::Win32::Foundation::{APPMODEL_ERROR_NO_PACKAGE, ERROR_CANT_ACCESS_FILE, WIN32_ERROR};
 
 /// A Python executable and its associated platform markers.
-#[allow(clippy::struct_excessive_bools)]
+#[expect(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub struct Interpreter {
     platform: Platform,
@@ -173,7 +175,7 @@ impl Interpreter {
             base_executable,
             self.python_major(),
             self.python_minor(),
-            self.variant().suffix(),
+            self.variant().executable_suffix(),
         ) {
             Ok(path) => path,
             Err(err) => {
@@ -253,6 +255,7 @@ impl Interpreter {
                 self.implementation_tuple(),
                 self.manylinux_compatible,
                 self.gil_disabled,
+                false,
             )?;
             self.tags.set(tags).expect("tags should not be set");
         }
@@ -301,8 +304,14 @@ impl Interpreter {
         let Ok(installations) = ManagedPythonInstallations::from_settings(None) else {
             return false;
         };
+        let Ok(root) = installations.absolute_root() else {
+            return false;
+        };
+        let sys_base_prefix = dunce::canonicalize(&self.sys_base_prefix)
+            .unwrap_or_else(|_| self.sys_base_prefix.clone());
+        let root = dunce::canonicalize(&root).unwrap_or(root);
 
-        let Ok(suffix) = self.sys_base_prefix.strip_prefix(installations.root()) else {
+        let Ok(suffix) = sys_base_prefix.strip_prefix(&root) else {
             return false;
         };
 
@@ -666,17 +675,28 @@ impl Interpreter {
     }
 
     /// Grab a file lock for the environment to prevent concurrent writes across processes.
-    pub async fn lock(&self) -> Result<LockedFile, io::Error> {
+    pub async fn lock(&self) -> Result<LockedFile, LockedFileError> {
         if let Some(target) = self.target() {
             // If we're installing into a `--target`, use a target-specific lockfile.
-            LockedFile::acquire(target.root().join(".lock"), target.root().user_display()).await
+            LockedFile::acquire(
+                target.root().join(".lock"),
+                LockedFileMode::Exclusive,
+                target.root().user_display(),
+            )
+            .await
         } else if let Some(prefix) = self.prefix() {
             // Likewise, if we're installing into a `--prefix`, use a prefix-specific lockfile.
-            LockedFile::acquire(prefix.root().join(".lock"), prefix.root().user_display()).await
+            LockedFile::acquire(
+                prefix.root().join(".lock"),
+                LockedFileMode::Exclusive,
+                prefix.root().user_display(),
+            )
+            .await
         } else if self.is_virtualenv() {
             // If the environment a virtualenv, use a virtualenv-specific lockfile.
             LockedFile::acquire(
                 self.sys_prefix.join(".lock"),
+                LockedFileMode::Exclusive,
                 self.sys_prefix.user_display(),
             )
             .await
@@ -684,6 +704,7 @@ impl Interpreter {
             // Otherwise, use a global lockfile.
             LockedFile::acquire(
                 env::temp_dir().join(format!("uv-{}.lock", cache_digest(&self.sys_executable))),
+                LockedFileMode::Exclusive,
                 self.sys_prefix.user_display(),
             )
             .await
@@ -809,7 +830,7 @@ pub enum Error {
     #[error("Failed to query Python interpreter")]
     Io(#[from] io::Error),
     #[error(transparent)]
-    BrokenSymlink(BrokenSymlink),
+    BrokenLink(BrokenLink),
     #[error("Python interpreter not found at `{0}`")]
     NotFound(PathBuf),
     #[error("Failed to query Python interpreter at `{path}`")]
@@ -846,19 +867,30 @@ pub enum Error {
 }
 
 #[derive(Debug, Error)]
-pub struct BrokenSymlink {
+pub struct BrokenLink {
     pub path: PathBuf,
+    /// Whether we have a broken symlink (Unix) or whether the shim returned that the underlying
+    /// Python went away (Windows).
+    pub unix: bool,
     /// Whether the interpreter path looks like a virtual environment.
     pub venv: bool,
 }
 
-impl Display for BrokenSymlink {
+impl Display for BrokenLink {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Broken symlink at `{}`, was the underlying Python interpreter removed?",
-            self.path.user_display()
-        )?;
+        if self.unix {
+            write!(
+                f,
+                "Broken symlink at `{}`, was the underlying Python interpreter removed?",
+                self.path.user_display()
+            )?;
+        } else {
+            write!(
+                f,
+                "Broken Python trampoline at `{}`, was the underlying Python interpreter removed?",
+                self.path.user_display()
+            )?;
+        }
         if self.venv {
             write!(
                 f,
@@ -890,9 +922,9 @@ pub enum InterpreterInfoError {
     BrokenMacVer,
     #[error("Unknown operating system: `{operating_system}`")]
     UnknownOperatingSystem { operating_system: String },
-    #[error("Python {python_version} is not supported. Please use Python 3.8 or newer.")]
+    #[error("Python {python_version} is not supported. Please use Python 3.6 or newer.")]
     UnsupportedPythonVersion { python_version: String },
-    #[error("Python executable does not support `-I` flag. Please use Python 3.8 or newer.")]
+    #[error("Python executable does not support `-I` flag. Please use Python 3.6 or newer.")]
     UnsupportedPython,
     #[error(
         "Python installation is missing `distutils`, which is required for packaging on older Python versions. Your system may package it separately, e.g., as `python{python_major}-distutils` or `python{python_major}.{python_minor}-distutils`."
@@ -905,7 +937,7 @@ pub enum InterpreterInfoError {
     EmscriptenNotPyodide,
 }
 
-#[allow(clippy::struct_excessive_bools)]
+#[expect(clippy::struct_excessive_bools)]
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct InterpreterInfo {
     platform: Platform,
@@ -940,44 +972,69 @@ impl InterpreterInfo {
             r#"import sys; sys.path = ["{}"] + sys.path; from python.get_interpreter_info import main; main()"#,
             tempdir.path().escape_for_python()
         );
-        let output = Command::new(interpreter)
+        let mut command = Command::new(interpreter);
+        command
             .arg("-I") // Isolated mode.
             .arg("-B") // Don't write bytecode.
             .arg("-c")
-            .arg(script)
-            .output()
-            .map_err(|err| {
-                match err.kind() {
-                    io::ErrorKind::NotFound => return Error::NotFound(interpreter.to_path_buf()),
-                    io::ErrorKind::PermissionDenied => {
-                        return Error::PermissionDenied {
-                            path: interpreter.to_path_buf(),
-                            err,
-                        };
-                    }
-                    _ => {}
-                }
-                #[cfg(windows)]
-                if let Some(APPMODEL_ERROR_NO_PACKAGE | ERROR_CANT_ACCESS_FILE) = err
-                    .raw_os_error()
-                    .and_then(|code| u32::try_from(code).ok())
-                    .map(WIN32_ERROR)
-                {
-                    // These error codes are returned if the Python interpreter is a corrupt MSIX
-                    // package, which we want to differentiate from a typical spawn failure.
-                    return Error::CorruptWindowsPackage {
+            .arg(script);
+
+        // Disable Apple's SYSTEM_VERSION_COMPAT shim so that `platform.mac_ver()` reports
+        // the real macOS version instead of "10.16" for interpreters built against older SDKs
+        // (e.g., conda with MACOSX_DEPLOYMENT_TARGET=10.15).
+        //
+        // See:
+        //
+        // - https://github.com/astral-sh/uv/issues/14267
+        // - https://github.com/pypa/packaging/blob/f2bbd4f578644865bc5cb2534768e46563ee7f66/src/packaging/tags.py#L436
+        #[cfg(target_os = "macos")]
+        command.env("SYSTEM_VERSION_COMPAT", "0");
+
+        let output = command.output().map_err(|err| {
+            match err.kind() {
+                io::ErrorKind::NotFound => return Error::NotFound(interpreter.to_path_buf()),
+                io::ErrorKind::PermissionDenied => {
+                    return Error::PermissionDenied {
                         path: interpreter.to_path_buf(),
                         err,
                     };
                 }
-                Error::SpawnFailed {
+                _ => {}
+            }
+            #[cfg(windows)]
+            if let Some(APPMODEL_ERROR_NO_PACKAGE | ERROR_CANT_ACCESS_FILE) = err
+                .raw_os_error()
+                .and_then(|code| u32::try_from(code).ok())
+                .map(WIN32_ERROR)
+            {
+                // These error codes are returned if the Python interpreter is a corrupt MSIX
+                // package, which we want to differentiate from a typical spawn failure.
+                return Error::CorruptWindowsPackage {
                     path: interpreter.to_path_buf(),
                     err,
-                }
-            })?;
+                };
+            }
+            Error::SpawnFailed {
+                path: interpreter.to_path_buf(),
+                err,
+            }
+        })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+
+            // Handle uninstalled CPython interpreters on Windows.
+            //
+            // The IO error from the CPython trampoline is unstructured and localized, so we check
+            // whether the `home` from `pyvenv.cfg` still exists, it's missing if the Python
+            // interpreter was uninstalled.
+            if python_home(interpreter).is_some_and(|home| !home.exists()) {
+                return Err(Error::BrokenLink(BrokenLink {
+                    path: interpreter.to_path_buf(),
+                    unix: false,
+                    venv: uv_fs::is_virtualenv_executable(interpreter),
+                }));
+            }
 
             // If the Python version is too old, we may not even be able to invoke the query script
             if stderr.contains("Unknown option: -I") {
@@ -1077,8 +1134,9 @@ impl InterpreterInfo {
                     .symlink_metadata()
                     .is_ok_and(|metadata| metadata.is_symlink())
                 {
-                    Error::BrokenSymlink(BrokenSymlink {
+                    Error::BrokenLink(BrokenLink {
                         path: executable.to_path_buf(),
+                        unix: true,
                         venv: uv_fs::is_virtualenv_executable(executable),
                     })
                 } else {
@@ -1097,8 +1155,12 @@ impl InterpreterInfo {
             // invalidate the cache (e.g.) on OS upgrades.
             cache_digest(&(
                 ARCH,
-                sys_info::os_type().unwrap_or_default(),
-                sys_info::os_release().unwrap_or_default(),
+                uv_platform::host::OsType::from_env()
+                    .map(|os_type| os_type.to_string())
+                    .unwrap_or_default(),
+                uv_platform::host::OsRelease::from_env()
+                    .map(|os_release| os_release.to_string())
+                    .unwrap_or_default(),
             )),
             // We use the absolute path for the cache entry to avoid cache collisions for relative
             // paths. But we don't want to query the executable with symbolic links resolved because
@@ -1258,6 +1320,13 @@ fn find_base_python(
     }
 }
 
+/// Parse the `home` key from `pyvenv.cfg`, if any.
+fn python_home(interpreter: &Path) -> Option<PathBuf> {
+    let venv_root = interpreter.parent()?.parent()?;
+    let pyvenv_cfg = PyVenvConfiguration::parse(venv_root.join("pyvenv.cfg")).ok()?;
+    pyvenv_cfg.home
+}
+
 #[cfg(unix)]
 #[cfg(test)]
 mod tests {
@@ -1272,8 +1341,8 @@ mod tests {
 
     use crate::Interpreter;
 
-    #[test]
-    fn test_cache_invalidation() {
+    #[tokio::test]
+    async fn test_cache_invalidation() {
         let mock_dir = tempdir().unwrap();
         let mocked_interpreter = mock_dir.path().join("python");
         let json = indoc! {r##"
@@ -1334,7 +1403,7 @@ mod tests {
         }
     "##};
 
-        let cache = Cache::temp().unwrap().init().unwrap();
+        let cache = Cache::temp().unwrap().init().await.unwrap();
 
         fs::write(
             &mocked_interpreter,

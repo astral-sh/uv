@@ -82,13 +82,16 @@ impl SourceDistExtension {
         };
 
         match extension {
+            "gz" if is_tar(path.as_ref()) => Ok(Self::TarGz),
+            // TODO: Remove these other extensions in the future.
+            // NOTE: These get parsed from network sources like PyPI, so we don't
+            // necessarily want to hard-fail, just skip in the future.
             "zip" => Ok(Self::Zip),
             "tar" => Ok(Self::Tar),
             "tgz" => Ok(Self::Tgz),
             "tbz" => Ok(Self::Tbz),
             "txz" => Ok(Self::Txz),
             "tlz" => Ok(Self::Tlz),
-            "gz" if is_tar(path.as_ref()) => Ok(Self::TarGz),
             "bz2" if is_tar(path.as_ref()) => Ok(Self::TarBz2),
             "xz" if is_tar(path.as_ref()) => Ok(Self::TarXz),
             "lz" if is_tar(path.as_ref()) => Ok(Self::TarLz),

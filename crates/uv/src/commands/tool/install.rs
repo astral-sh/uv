@@ -7,28 +7,33 @@ use tracing::{debug, trace};
 
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
-use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, Constraints, DryRun, Reinstall, TargetTriple, Upgrade};
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_configuration::{
+    Concurrency, Constraints, DryRun, GitLfsSetting, Reinstall, TargetTriple, Upgrade,
+};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    ExtraBuildRequires, NameRequirementSpecification, Requirement, RequirementSource,
-    UnresolvedRequirementSpecification,
+    ExtraBuildRequires, IndexCapabilities, NameRequirementSpecification, Requirement,
+    RequirementSource, UnresolvedRequirementSpecification,
 };
+use uv_fs::CWD;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
 use uv_preview::Preview;
 use uv_python::{
-    EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
+    EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
+    PythonPreference, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
 
 use crate::commands::ExitStatus;
+use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::{self, Modifications};
 use crate::commands::pip::{resolution_markers, resolution_tags};
@@ -45,7 +50,7 @@ use crate::printer::Printer;
 use crate::settings::{ResolverInstallerSettings, ResolverSettings};
 
 /// Install a tool.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn install(
     package: String,
     editable: bool,
@@ -56,6 +61,7 @@ pub(crate) async fn install(
     excludes: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
     entrypoints: &[PackageName],
+    lfs: GitLfsSetting,
     python: Option<String>,
     python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
@@ -67,13 +73,38 @@ pub(crate) async fn install(
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
+    no_config: bool,
     cache: Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
+    if settings.resolver.torch_backend.is_some() {
+        warn_user_once!(
+            "The `--torch-backend` option is experimental and may change without warning."
+        );
+    }
+
     let reporter = PythonDownloadReporter::single(printer);
 
-    let python_request = python.as_deref().map(PythonRequest::parse);
+    let (python_request, explicit_python_request) = if let Some(request) = python.as_deref() {
+        (Some(PythonRequest::parse(request)), true)
+    } else {
+        // Discover a global Python version pin, if no request was made
+        (
+            PythonVersionFile::discover(
+                // TODO(zanieb): We don't use the directory, should we expose another interface?
+                // Should `no_local` be implied by `None` here?
+                &*CWD,
+                &VersionFileDiscoveryOptions::default()
+                    .with_no_config(no_config)
+                    .with_no_local(true),
+            )
+            .await?
+            .and_then(PythonVersionFile::into_version),
+            false,
+        )
+    };
 
     // Pre-emptively identify a Python interpreter. We need an interpreter to resolve any unnamed
     // requirements, even if we end up using a different interpreter for the tool install itself.
@@ -95,7 +126,6 @@ pub(crate) async fn install(
 
     // Initialize any shared state.
     let state = PlatformState::default();
-    let workspace_cache = WorkspaceCache::default();
 
     // Parse the input requirement.
     let request = ToolRequest::parse(&package, from.as_deref())?;
@@ -143,11 +173,12 @@ pub(crate) async fn install(
                 &settings,
                 &client_builder,
                 &state,
-                concurrency,
+                &concurrency,
                 &cache,
-                &workspace_cache,
+                workspace_cache,
                 printer,
                 preview,
+                lfs,
             )
             .await?
             .pop()
@@ -222,6 +253,67 @@ pub(crate) async fn install(
         }
     };
 
+    // For `@latest`, fetch the latest version and create a constraint.
+    let latest = if let ToolRequest::Package {
+        target: Target::Latest(_, name, _),
+        ..
+    } = &request
+    {
+        // Build the registry client to fetch the latest version.
+        let client = RegistryClientBuilder::new(
+            client_builder
+                .clone()
+                .keyring(settings.resolver.keyring_provider),
+            cache.clone(),
+        )
+        .index_locations(settings.resolver.index_locations.clone())
+        .index_strategy(settings.resolver.index_strategy)
+        .markers(interpreter.markers())
+        .platform(interpreter.platform())
+        .build();
+
+        // Initialize the capabilities.
+        let capabilities = IndexCapabilities::default();
+        let download_concurrency = concurrency.downloads_semaphore.clone();
+
+        // Initialize the client to fetch the latest version.
+        let latest_client = LatestClient {
+            client: &client,
+            capabilities: &capabilities,
+            prerelease: settings.resolver.prerelease,
+            exclude_newer: &settings.resolver.exclude_newer,
+            tags: None,
+            requires_python: None,
+        };
+
+        // Fetch the latest version.
+        if let Some(dist_filename) = latest_client
+            .find_latest(name, None, &download_concurrency)
+            .await?
+        {
+            let version = dist_filename.version().clone();
+            debug!("Resolved `{name}@latest` to `{name}=={version}`");
+
+            // The constraint pins the version during resolution to prevent backtracking.
+            Some(Requirement {
+                name: name.clone(),
+                extras: vec![].into_boxed_slice(),
+                groups: Box::new([]),
+                marker: MarkerTree::default(),
+                source: RequirementSource::Registry {
+                    specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(version)),
+                    index: None,
+                    conflict: None,
+                },
+                origin: None,
+            })
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     let package_name = &requirement.name;
 
     // If the user passed, e.g., `ruff@latest`, we need to mark it as upgradable.
@@ -237,7 +329,7 @@ pub(crate) async fn install(
         settings
     };
 
-    // If the user passed `--force`, it implies `--reinstall-package <from>`
+    // If the user passed `--force`, it implies `--reinstall-package <from>`.
     let settings = if force {
         ResolverInstallerSettings {
             reinstall: Reinstall::package(package_name.clone()).combine(settings.reinstall),
@@ -269,11 +361,12 @@ pub(crate) async fn install(
                 &settings,
                 &client_builder,
                 &state,
-                concurrency,
+                &concurrency,
                 &cache,
-                &workspace_cache,
+                workspace_cache,
                 printer,
                 preview,
+                lfs,
             )
             .await?,
         );
@@ -281,11 +374,11 @@ pub(crate) async fn install(
     };
 
     // Resolve the constraints.
-    let constraints = spec
+    let constraints: Vec<_> = spec
         .constraints
         .into_iter()
         .map(|constraint| constraint.requirement)
-        .collect::<Vec<_>>();
+        .collect();
 
     // Resolve the overrides.
     let overrides = resolve_names(
@@ -294,13 +387,17 @@ pub(crate) async fn install(
         &settings,
         &client_builder,
         &state,
-        concurrency,
+        &concurrency,
         &cache,
-        &workspace_cache,
+        workspace_cache,
         printer,
         preview,
+        lfs,
     )
     .await?;
+
+    // Resolve the excludes.
+    let excludes = spec.excludes.clone();
 
     // Resolve the build constraints.
     let build_constraints: Vec<Requirement> =
@@ -337,7 +434,10 @@ pub(crate) async fn install(
                             package_name.cyan()
                         );
                     }
-                    Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(err)
+                        if err
+                            .as_io_error()
+                            .is_some_and(|err| err.kind() == std::io::ErrorKind::NotFound) => {}
                     Err(err) => {
                         return Err(err.into());
                     }
@@ -346,26 +446,23 @@ pub(crate) async fn install(
             }
         };
 
-    let existing_environment =
+    let existing_environment = if force {
+        None
+    } else {
         installed_tools
             .get_environment(package_name, &cache)?
             .filter(|environment| {
-                if environment.environment().uses(&interpreter) {
-                    trace!(
-                        "Existing interpreter matches the requested interpreter for `{}`: {}",
-                        package_name,
-                        environment.environment().interpreter().sys_executable().display()
-                    );
-                    true
-                } else {
-                    let _ = writeln!(
-                        printer.stderr(),
-                        "Ignoring existing environment for `{}`: the requested Python interpreter does not match the environment interpreter",
-                        package_name.cyan(),
-                    );
-                    false
-                }
-            });
+                existing_environment_usable(
+                    environment.environment(),
+                    &interpreter,
+                    package_name,
+                    explicit_python_request,
+                    &settings,
+                    existing_tool_receipt.as_ref(),
+                    printer,
+                )
+            })
+    };
 
     // If the requested and receipt requirements are the same...
     if let Some(environment) = existing_environment.as_ref().filter(|_| {
@@ -396,16 +493,26 @@ pub(crate) async fn install(
                 )
                 .into_inner();
 
-                // Determine the markers and tags to use for the resolution.
-                let markers = resolution_markers(None, python_platform.as_ref(), &interpreter);
-                let tags = resolution_tags(None, python_platform.as_ref(), &interpreter)?;
+                // Determine the markers and tags to use for the resolution. We use the existing
+                // environment for markers here — above we filter the environment to `None` if
+                // `existing_environment_usable` is `false`, so we've determined it's valid.
+                let markers = resolution_markers(
+                    None,
+                    python_platform.as_ref(),
+                    environment.environment().interpreter(),
+                );
+                let tags = resolution_tags(
+                    None,
+                    python_platform.as_ref(),
+                    environment.environment().interpreter(),
+                )?;
 
                 // Check if the installed packages meet the requirements.
                 let site_packages = SitePackages::from_environment(environment.environment())?;
                 if matches!(
                     site_packages.satisfies_requirements(
                         requirements.iter(),
-                        constraints.iter(),
+                        constraints.iter().chain(latest.iter()),
                         overrides.iter(),
                         InstallationStrategy::Permissive,
                         &markers,
@@ -447,6 +554,7 @@ pub(crate) async fn install(
         constraints: constraints
             .iter()
             .cloned()
+            .chain(latest.into_iter())
             .map(NameRequirementSpecification::from)
             .collect(),
         overrides: overrides
@@ -475,7 +583,7 @@ pub(crate) async fn install(
             Box::new(DefaultResolveLogger),
             Box::new(DefaultInstallLogger),
             installer_metadata,
-            concurrency,
+            &concurrency,
             &cache,
             workspace_cache,
             DryRun::Disabled,
@@ -516,8 +624,9 @@ pub(crate) async fn install(
             &client_builder,
             &state,
             Box::new(DefaultResolveLogger),
-            concurrency,
+            &concurrency,
             &cache,
+            workspace_cache,
             printer,
             preview,
         )
@@ -571,8 +680,9 @@ pub(crate) async fn install(
                         &client_builder,
                         &state,
                         Box::new(DefaultResolveLogger),
-                        concurrency,
+                        &concurrency,
                         &cache,
+                        workspace_cache,
                         printer,
                         preview,
                     )
@@ -593,7 +703,7 @@ pub(crate) async fn install(
             },
         };
 
-        let environment = installed_tools.create_environment(package_name, interpreter, preview)?;
+        let environment = installed_tools.create_environment(package_name, interpreter)?;
 
         // At this point, we removed any existing environment, so we should remove any of its
         // executables.
@@ -612,7 +722,7 @@ pub(crate) async fn install(
             &state,
             Box::new(DefaultInstallLogger),
             installer_metadata,
-            concurrency,
+            &concurrency,
             &cache,
             printer,
             preview,
@@ -642,13 +752,67 @@ pub(crate) async fn install(
         &installed_tools,
         &options,
         force || invalid_tool_receipt,
-        python_request,
+        // Only persist the Python request if it was explicitly provided
+        if explicit_python_request {
+            python_request
+        } else {
+            None
+        },
         requirements,
         constraints,
         overrides,
+        excludes,
         build_constraints,
         printer,
     )?;
 
     Ok(ExitStatus::Success)
+}
+
+fn existing_environment_usable(
+    environment: &PythonEnvironment,
+    interpreter: &Interpreter,
+    package_name: &PackageName,
+    explicit_python_request: bool,
+    settings: &ResolverInstallerSettings,
+    existing_tool_receipt: Option<&uv_tool::Tool>,
+    printer: Printer,
+) -> bool {
+    // If the environment matches the interpreter, it's usable
+    if environment.uses(interpreter) {
+        trace!(
+            "Existing interpreter matches the requested interpreter for `{}`: {}",
+            package_name,
+            environment.interpreter().sys_executable().display()
+        );
+        return true;
+    }
+
+    // If there was an explicit Python request that does not match, we'll invalidate the
+    // environment.
+    if explicit_python_request {
+        let _ = writeln!(
+            printer.stderr(),
+            "Ignoring existing environment for `{}`: the requested Python interpreter does not match the environment interpreter",
+            package_name.cyan(),
+        );
+        return false;
+    }
+
+    // Otherwise, invalidate the environment when this tool is being reinstalled and its
+    // previous receipt did not pin a Python request. In that case, the reinstall should
+    // follow the newly selected interpreter instead of reusing the old environment.
+    if let Some(tool_receipt) = existing_tool_receipt
+        && settings.reinstall.contains_package(package_name)
+        && tool_receipt.python().is_none()
+    {
+        let _ = writeln!(
+            printer.stderr(),
+            "Ignoring existing environment for `{from}`: the Python interpreter does not match the environment interpreter",
+            from = package_name.cyan(),
+        );
+        return false;
+    }
+
+    true
 }

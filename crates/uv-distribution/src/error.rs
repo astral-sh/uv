@@ -5,12 +5,15 @@ use tokio::task::JoinError;
 use zip::result::ZipError;
 
 use crate::metadata::MetadataError;
+use uv_cache::Error as CacheError;
 use uv_client::WrappedReqwestError;
-use uv_distribution_filename::WheelFilenameError;
+use uv_distribution_filename::{WheelFilename, WheelFilenameError};
 use uv_distribution_types::{InstalledDist, InstalledDistError, IsBuildBackendError};
 use uv_fs::Simplified;
+use uv_git::GitError;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
+use uv_platform_tags::Platform;
 use uv_pypi_types::{HashAlgorithm, HashDigest};
 use uv_redacted::DisplaySafeUrl;
 use uv_types::AnyErrorBuild;
@@ -21,8 +24,6 @@ pub enum Error {
     NoBuild,
 
     // Network error
-    #[error("Expected an absolute path, but received: {}", _0.user_display())]
-    RelativePath(PathBuf),
     #[error(transparent)]
     InvalidUrl(#[from] uv_distribution_types::ToUrlError),
     #[error("Expected a file URL, but received: {0}")]
@@ -39,6 +40,8 @@ pub enum Error {
     CacheRead(#[source] std::io::Error),
     #[error("Failed to write to the distribution cache")]
     CacheWrite(#[source] std::io::Error),
+    #[error("Failed to acquire lock on the distribution cache")]
+    CacheLock(#[source] CacheError),
     #[error("Failed to deserialize cache entry")]
     CacheDecode(#[from] rmp_serde::decode::Error),
     #[error("Failed to serialize cache entry")]
@@ -74,6 +77,35 @@ pub enum Error {
         filename: Version,
         metadata: Version,
     },
+    /// This shouldn't happen, it's a bug in the build backend.
+    #[error(
+        "The built wheel `{}` is not compatible with the current Python {}.{} on {} {}",
+        filename,
+        python_version.0,
+        python_version.1,
+        python_platform.os(),
+        python_platform.arch(),
+    )]
+    BuiltWheelIncompatibleHostPlatform {
+        filename: WheelFilename,
+        python_platform: Platform,
+        python_version: (u8, u8),
+    },
+    /// This may happen when trying to cross-install native dependencies without their build backend
+    /// being aware that the target is a cross-install.
+    #[error(
+        "The built wheel `{}` is not compatible with the target Python {}.{} on {} {}. Consider using `--no-build` to disable building wheels.",
+        filename,
+        python_version.0,
+        python_version.1,
+        python_platform.os(),
+        python_platform.arch(),
+    )]
+    BuiltWheelIncompatibleTargetPlatform {
+        filename: WheelFilename,
+        python_platform: Platform,
+        python_version: (u8, u8),
+    },
     #[error("Failed to parse metadata from built wheel")]
     Metadata(#[from] uv_pypi_types::MetadataError),
     #[error("Failed to read metadata: `{}`", _0.user_display())]
@@ -88,16 +120,14 @@ pub enum Error {
     MissingPkgInfo,
     #[error("The source distribution `{}` has no subdirectory `{}`", _0, _1.display())]
     MissingSubdirectory(DisplaySafeUrl, PathBuf),
+    #[error("The source distribution `{0}` is missing Git LFS artifacts.")]
+    MissingGitLfsArtifacts(DisplaySafeUrl, #[source] GitError),
     #[error("Failed to extract static metadata from `PKG-INFO`")]
     PkgInfo(#[source] uv_pypi_types::MetadataError),
-    #[error("Failed to extract metadata from `requires.txt`")]
-    RequiresTxt(#[source] uv_pypi_types::MetadataError),
     #[error("The source distribution is missing a `pyproject.toml` file")]
     MissingPyprojectToml,
     #[error("Failed to extract static metadata from `pyproject.toml`")]
     PyprojectToml(#[source] uv_pypi_types::MetadataError),
-    #[error("Unsupported scheme in URL: {0}")]
-    UnsupportedScheme(String),
     #[error(transparent)]
     MetadataLowering(#[from] MetadataError),
     #[error("Distribution not found at: {0}")]

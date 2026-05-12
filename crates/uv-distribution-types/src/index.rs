@@ -32,15 +32,18 @@ impl IndexCacheControl {
 
     /// Return the default files cache control headers for the given index URL, if applicable.
     pub fn artifact_cache_control(url: &Url) -> Option<&'static str> {
-        if url
-            .host_str()
-            .is_some_and(|host| host.ends_with("pytorch.org"))
-        {
+        let dominated_by_pytorch_or_nvidia = url.host_str().is_some_and(|host| {
+            host.eq_ignore_ascii_case("download.pytorch.org")
+                || host.eq_ignore_ascii_case("pypi.nvidia.com")
+        });
+        if dominated_by_pytorch_or_nvidia {
             // Some wheels in the PyTorch registry were accidentally uploaded with `no-cache,no-store,must-revalidate`.
             // The PyTorch team plans to correct this in the future, but in the meantime we override
             // the cache control headers to allow caching of static files.
             //
             // See: https://github.com/pytorch/pytorch/pull/149218
+            //
+            // The same issue applies to files hosted on `pypi.nvidia.com`.
             Some("max-age=365000000, immutable, public")
         } else {
             None
@@ -48,7 +51,7 @@ impl IndexCacheControl {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case")]
 pub struct Index {
@@ -344,6 +347,18 @@ impl Index {
         self.url.root()
     }
 
+    /// If credentials are available (via the URL or environment) and [`AuthPolicy`] is
+    /// [`AuthPolicy::Auto`], promote to [`AuthPolicy::Always`] so that future operations
+    /// (e.g., `uv tool upgrade`) know that authentication is required even after the credentials
+    /// are stripped from the stored URL.
+    #[must_use]
+    pub fn with_promoted_auth_policy(mut self) -> Self {
+        if matches!(self.authenticate, AuthPolicy::Auto) && self.credentials().is_some() {
+            self.authenticate = AuthPolicy::Always;
+        }
+        self
+    }
+
     /// Retrieve the credentials for the index, either from the environment, or from the URL itself.
     pub fn credentials(&self) -> Option<Credentials> {
         // If the index is named, and credentials are provided via the environment, prefer those.
@@ -539,6 +554,56 @@ impl<'a> From<&'a IndexUrl> for IndexMetadataRef<'a> {
             url: value,
             format: IndexFormat::Simple,
         }
+    }
+}
+
+/// Wire type for deserializing an [`Index`] with validation.
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct IndexWire {
+    name: Option<IndexName>,
+    url: IndexUrl,
+    #[serde(default)]
+    explicit: bool,
+    #[serde(default)]
+    default: bool,
+    #[serde(default)]
+    format: IndexFormat,
+    publish_url: Option<DisplaySafeUrl>,
+    #[serde(default)]
+    authenticate: AuthPolicy,
+    #[serde(default)]
+    ignore_error_codes: Option<Vec<SerializableStatusCode>>,
+    #[serde(default)]
+    cache_control: Option<IndexCacheControl>,
+}
+
+impl<'de> Deserialize<'de> for Index {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let wire = IndexWire::deserialize(deserializer)?;
+
+        if wire.explicit && wire.name.is_none() {
+            return Err(serde::de::Error::custom(format!(
+                "An index with `explicit = true` requires a `name`: {}",
+                wire.url
+            )));
+        }
+
+        Ok(Self {
+            name: wire.name,
+            url: wire.url,
+            explicit: wire.explicit,
+            default: wire.default,
+            origin: None,
+            format: wire.format,
+            publish_url: wire.publish_url,
+            authenticate: wire.authenticate,
+            ignore_error_codes: wire.ignore_error_codes,
+            cache_control: wire.cache_control,
+        })
     }
 }
 

@@ -14,7 +14,7 @@ use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 
 use crate::cached_client::{CacheControl, CachedClientError};
-use crate::html::SimpleHtml;
+use crate::html::SimpleDetailHTML;
 use crate::{CachedClient, Connectivity, Error, ErrorKind, OwnedArchive};
 
 #[derive(Debug, thiserror::Error)]
@@ -189,13 +189,17 @@ impl<'a> FlatIndexClient<'a> {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
                 // This ensures that we handle redirects and other URL transformations correctly.
-                let url = DisplaySafeUrl::from(response.url().clone());
+                let url = DisplaySafeUrl::from_url(response.url().clone());
 
                 let text = response
                     .text()
                     .await
                     .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
-                let SimpleHtml { base, files } = SimpleHtml::parse(&text, &url)
+                let SimpleDetailHTML {
+                    project_status: _,
+                    base,
+                    files,
+                } = SimpleDetailHTML::parse(&text, &url)
                     .map_err(|err| Error::from_html_err(err, url.clone()))?;
 
                 // Convert to a reference-counted string.
@@ -208,7 +212,7 @@ impl<'a> FlatIndexClient<'a> {
                             Ok(file) => Some(file),
                             Err(err) => {
                                 // Ignore files with unparsable version specifiers.
-                                warn!("Skipping file in {}: {err}", &url);
+                                debug!("Skipping file in {}: {err}", &url);
                                 None
                             }
                         }
@@ -246,7 +250,7 @@ impl<'a> FlatIndexClient<'a> {
                     .collect();
                 Ok(FlatIndexEntries::from_entries(files))
             }
-            Err(CachedClientError::Client { err, .. }) if err.is_offline() => {
+            Err(CachedClientError::Client(err)) if err.is_offline() => {
                 Ok(FlatIndexEntries::offline())
             }
             Err(err) => Err(err.into()),
@@ -259,7 +263,7 @@ impl<'a> FlatIndexClient<'a> {
         flat_index: &IndexUrl,
     ) -> Result<FlatIndexEntries, FindLinksDirectoryError> {
         // The path context is provided by the caller.
-        #[allow(clippy::disallowed_methods)]
+        #[expect(clippy::disallowed_methods)]
         let entries = std::fs::read_dir(path)?;
 
         let mut dists = Vec::new();

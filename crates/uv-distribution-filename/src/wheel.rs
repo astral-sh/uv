@@ -352,62 +352,62 @@ mod tests {
     #[test]
     fn err_not_whl_extension() {
         let err = WheelFilename::from_str("foo.rs").unwrap_err();
-        insta::assert_snapshot!(err, @r###"The wheel filename "foo.rs" is invalid: Must end with .whl"###);
+        insta::assert_snapshot!(err, @r#"The wheel filename "foo.rs" is invalid: Must end with .whl"#);
     }
 
     #[test]
     fn err_1_part_empty() {
         let err = WheelFilename::from_str(".whl").unwrap_err();
-        insta::assert_snapshot!(err, @r###"The wheel filename ".whl" is invalid: Must have a version"###);
+        insta::assert_snapshot!(err, @r#"The wheel filename ".whl" is invalid: Must have a version"#);
     }
 
     #[test]
     fn err_1_part_no_version() {
         let err = WheelFilename::from_str("foo.whl").unwrap_err();
-        insta::assert_snapshot!(err, @r###"The wheel filename "foo.whl" is invalid: Must have a version"###);
+        insta::assert_snapshot!(err, @r#"The wheel filename "foo.whl" is invalid: Must have a version"#);
     }
 
     #[test]
     fn err_2_part_no_pythontag() {
         let err = WheelFilename::from_str("foo-1.2.3.whl").unwrap_err();
-        insta::assert_snapshot!(err, @r###"The wheel filename "foo-1.2.3.whl" is invalid: Must have a Python tag"###);
+        insta::assert_snapshot!(err, @r#"The wheel filename "foo-1.2.3.whl" is invalid: Must have a Python tag"#);
     }
 
     #[test]
     fn err_3_part_no_abitag() {
         let err = WheelFilename::from_str("foo-1.2.3-py3.whl").unwrap_err();
-        insta::assert_snapshot!(err, @r###"The wheel filename "foo-1.2.3-py3.whl" is invalid: Must have an ABI tag"###);
+        insta::assert_snapshot!(err, @r#"The wheel filename "foo-1.2.3-py3.whl" is invalid: Must have an ABI tag"#);
     }
 
     #[test]
     fn err_4_part_no_platformtag() {
         let err = WheelFilename::from_str("foo-1.2.3-py3-none.whl").unwrap_err();
-        insta::assert_snapshot!(err, @r###"The wheel filename "foo-1.2.3-py3-none.whl" is invalid: Must have a platform tag"###);
+        insta::assert_snapshot!(err, @r#"The wheel filename "foo-1.2.3-py3-none.whl" is invalid: Must have a platform tag"#);
     }
 
     #[test]
     fn err_too_many_parts() {
         let err =
             WheelFilename::from_str("foo-1.2.3-202206090410-py3-none-any-whoops.whl").unwrap_err();
-        insta::assert_snapshot!(err, @r###"The wheel filename "foo-1.2.3-202206090410-py3-none-any-whoops.whl" is invalid: Must have 5 or 6 components, but has more"###);
+        insta::assert_snapshot!(err, @r#"The wheel filename "foo-1.2.3-202206090410-py3-none-any-whoops.whl" is invalid: Must have 5 or 6 components, but has more"#);
     }
 
     #[test]
     fn err_invalid_package_name() {
         let err = WheelFilename::from_str("f!oo-1.2.3-py3-none-any.whl").unwrap_err();
-        insta::assert_snapshot!(err, @r###"The wheel filename "f!oo-1.2.3-py3-none-any.whl" has an invalid package name"###);
+        insta::assert_snapshot!(err, @r#"The wheel filename "f!oo-1.2.3-py3-none-any.whl" has an invalid package name"#);
     }
 
     #[test]
     fn err_invalid_version() {
         let err = WheelFilename::from_str("foo-x.y.z-py3-none-any.whl").unwrap_err();
-        insta::assert_snapshot!(err, @r###"The wheel filename "foo-x.y.z-py3-none-any.whl" has an invalid version: expected version to start with a number, but no leading ASCII digits were found"###);
+        insta::assert_snapshot!(err, @r#"The wheel filename "foo-x.y.z-py3-none-any.whl" has an invalid version: expected version to start with a number, but no leading ASCII digits were found"#);
     }
 
     #[test]
     fn err_invalid_build_tag() {
         let err = WheelFilename::from_str("foo-1.2.3-tag-py3-none-any.whl").unwrap_err();
-        insta::assert_snapshot!(err, @r###"The wheel filename "foo-1.2.3-tag-py3-none-any.whl" has an invalid build tag: must start with a digit"###);
+        insta::assert_snapshot!(err, @r#"The wheel filename "foo-1.2.3-tag-py3-none-any.whl" has an invalid build tag: must start with a digit"#);
     }
 
     #[test]
@@ -469,5 +469,21 @@ mod tests {
             "example-1.2.3.4.5.6.7.8.9.0.1.2.3.4.5.6.7.8.9.0.1.2.1.2.3.4.5.6.7.8.9.0.1.1.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
         ).unwrap();
         insta::assert_snapshot!(filename.cache_key(), @"1.2.3.4.5.6.7.8.9.0.1.2.3.4.5.6.7.8.9.0.1.2.1.2-80bf8598e9647cf7");
+    }
+
+    /// Don't drop the freethreading tag when there is a debug tag.
+    #[test]
+    fn freethreading_debug() {
+        let filename = "correctionlib-2.8.0-cp314-cp314t-macosx_26_0_arm64.whl";
+        let parsed = WheelFilename::from_str(filename).unwrap();
+        assert_eq!(filename, parsed.to_string());
+
+        let filename = "correctionlib-2.8.0-cp314-cp314d-macosx_26_0_arm64.whl";
+        let parsed = WheelFilename::from_str(filename).unwrap();
+        assert_eq!(filename, parsed.to_string());
+
+        let filename = "correctionlib-2.8.0-cp314-cp314td-macosx_26_0_arm64.whl";
+        let parsed = WheelFilename::from_str(filename).unwrap();
+        assert_eq!(filename, parsed.to_string());
     }
 }

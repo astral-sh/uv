@@ -3,7 +3,7 @@ use std::io;
 use std::path::Path;
 use std::str::FromStr;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use owo_colors::OwoColorize;
 use tracing::{debug, warn};
 
@@ -22,7 +22,7 @@ use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::DependencyType;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
-use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceCache};
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
@@ -36,14 +36,13 @@ use crate::commands::project::{
 };
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
-use crate::settings::{LockCheck, ResolverInstallerSettings};
+use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
 /// Remove one or more packages from the project requirements.
-#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn remove(
     project_dir: &Path,
     lock_check: LockCheck,
-    frozen: bool,
+    frozen: Option<FrozenSource>,
     active: Option<bool>,
     no_sync: bool,
     packages: Vec<PackageName>,
@@ -75,7 +74,7 @@ pub(crate) async fn remove(
                 "`{lock_check}` is a no-op for Python scripts with inline metadata, which always run in isolation",
             );
         }
-        if frozen {
+        if frozen.is_some() {
             warn_user_once!(
                 "`--frozen` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
@@ -90,16 +89,13 @@ pub(crate) async fn remove(
         // Find the project in the workspace.
         // No workspace caching since `uv remove` changes the workspace definition.
         let project = if let Some(package) = package {
-            VirtualProject::Project(
-                Workspace::discover(
-                    project_dir,
-                    &DiscoveryOptions::default(),
-                    &WorkspaceCache::default(),
-                )
-                .await?
-                .with_current_project(package.clone())
-                .with_context(|| format!("Package `{package}` not found in workspace"))?,
+            VirtualProject::discover_with_package(
+                project_dir,
+                &DiscoveryOptions::default(),
+                &WorkspaceCache::default(),
+                package.clone(),
             )
+            .await?
         } else {
             VirtualProject::discover(
                 project_dir,
@@ -184,7 +180,7 @@ pub(crate) async fn remove(
 
     // If `--frozen`, exit early. There's no reason to lock and sync, since we don't need a `uv.lock`
     // to exist at all.
-    if frozen {
+    if frozen.is_some() {
         return Ok(ExitStatus::Success);
     }
 
@@ -301,19 +297,21 @@ pub(crate) async fn remove(
     let state = UniversalState::default();
 
     // Lock and sync the environment, if necessary.
-    let lock = match project::lock::LockOperation::new(
-        mode,
-        &settings.resolver,
-        &client_builder,
-        &state,
-        Box::new(DefaultResolveLogger),
-        concurrency,
-        cache,
-        &WorkspaceCache::default(),
-        printer,
-        preview,
+    let lock = match Box::pin(
+        project::lock::LockOperation::new(
+            mode,
+            &settings.resolver,
+            &client_builder,
+            &state,
+            Box::new(DefaultResolveLogger),
+            &concurrency,
+            cache,
+            &WorkspaceCache::default(),
+            printer,
+            preview,
+        )
+        .execute((&target).into()),
     )
-    .execute((&target).into())
     .await
     {
         Ok(result) => result.into_lock(),
@@ -364,16 +362,16 @@ pub(crate) async fn remove(
         &state,
         Box::new(DefaultInstallLogger),
         installer_metadata,
-        concurrency,
+        &concurrency,
         cache,
-        WorkspaceCache::default(),
+        &WorkspaceCache::default(),
         DryRun::Disabled,
         printer,
         preview,
     )
     .await
     {
-        Ok(()) => {}
+        Ok(_) => {}
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
                 .report(err)
@@ -387,7 +385,7 @@ pub(crate) async fn remove(
 
 /// Represents the destination where dependencies are added, either to a project or a script.
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 enum RemoveTarget {
     /// A PEP 723 script, with inline metadata.
     Project(VirtualProject),
@@ -424,7 +422,6 @@ impl RemoveTarget {
     }
 
     /// Update the target in-memory to incorporate the new content.
-    #[allow(clippy::result_large_err)]
     fn update(self, content: &str) -> Result<Self, ProjectError> {
         match self {
             Self::Script(mut script) => {
@@ -434,7 +431,7 @@ impl RemoveTarget {
             }
             Self::Project(project) => {
                 let project = project
-                    .with_pyproject_toml(
+                    .update_member(
                         toml::from_str(content).map_err(ProjectError::PyprojectTomlParse)?,
                     )?
                     .ok_or(ProjectError::PyprojectTomlUpdate)?;

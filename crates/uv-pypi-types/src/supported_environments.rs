@@ -28,6 +28,16 @@ impl SupportedEnvironments {
     pub fn iter(&self) -> std::slice::Iter<'_, MarkerTree> {
         self.0.iter()
     }
+
+    /// Returns `true` if there are no supported environments.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Returns the number of supported environments.
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
 }
 
 impl<'a> IntoIterator for &'a SupportedEnvironments {

@@ -12,7 +12,7 @@ use crate::{
 
 /// A built distribution (wheel) that exists in the local cache.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub enum CachedDist {
     /// The distribution exists in a registry, like `PyPI`.
     Registry(CachedRegistryDist),

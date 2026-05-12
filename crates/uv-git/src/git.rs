@@ -1,26 +1,21 @@
 //! Git support is derived from Cargo's implementation.
 //! Cargo is dual-licensed under either Apache 2.0 or MIT, at the user's choice.
 //! Source: <https://github.com/rust-lang/cargo/blob/23eb492cf920ce051abfc56bbaf838514dc8365c/src/cargo/sources/git/utils.rs>
-use std::env;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::str::{self};
 use std::sync::LazyLock;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use cargo_util::{ProcessBuilder, paths};
-use reqwest::StatusCode;
-use reqwest_middleware::ClientWithMiddleware;
-use tracing::{debug, warn};
-use url::Url;
+use owo_colors::OwoColorize;
+use tracing::{debug, instrument, warn};
 
 use uv_fs::Simplified;
-use uv_git_types::{GitHubRepository, GitOid, GitReference};
+use uv_git_types::{GitOid, GitReference};
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
-use uv_version::version;
-
-use crate::rate_limit::{GITHUB_RATE_LIMIT_STATUS, is_github_rate_limited};
+use uv_warnings::warn_user_once;
 
 /// A file indicates that if present, `git reset` has been done and a repo
 /// checkout is ready to go. See [`GitCheckout::reset`] for why we need this.
@@ -30,6 +25,10 @@ const CHECKOUT_READY_LOCK: &str = ".ok";
 pub enum GitError {
     #[error("Git executable not found. Ensure that Git is installed and available.")]
     GitNotFound,
+    #[error("Git LFS extension not found. Ensure that Git LFS is installed and available.")]
+    GitLfsNotFound,
+    #[error("Is Git LFS configured? Run `{}` to initialize Git LFS.", "git lfs install".green())]
+    GitLfsNotConfigured,
     #[error(transparent)]
     Other(#[from] which::Error),
     #[error(
@@ -143,6 +142,8 @@ pub(crate) struct GitRemote {
 pub(crate) struct GitDatabase {
     /// Underlying Git repository instance for this database.
     repo: GitRepository,
+    /// Git LFS artifacts have been initialized (if requested).
+    lfs_ready: Option<bool>,
 }
 
 /// A local checkout of a particular revision from a [`GitRepository`].
@@ -151,6 +152,8 @@ pub(crate) struct GitCheckout {
     revision: GitOid,
     /// Underlying Git repository instance for this checkout.
     repo: GitRepository,
+    /// Git LFS artifacts have been initialized (if requested).
+    lfs_ready: Option<bool>,
 }
 
 /// A local Git repository.
@@ -204,6 +207,43 @@ impl GitRepository {
         result.truncate(result.trim_end().len());
         Ok(result.parse()?)
     }
+
+    /// Verifies LFS artifacts have been initialized for a given `refname`.
+    #[instrument(skip_all, fields(path = %self.path.user_display(), refname = %refname))]
+    fn lfs_fsck_objects(&self, refname: &str) -> bool {
+        let mut cmd = if let Ok(lfs) = GIT_LFS.as_ref() {
+            lfs.clone()
+        } else {
+            warn!("Git LFS is not available, skipping LFS fetch");
+            return false;
+        };
+
+        // Requires Git LFS 3.x (2021 release)
+        let result = cmd
+            .arg("fsck")
+            .arg("--objects")
+            .arg(refname)
+            .cwd(&self.path)
+            .exec_with_output();
+
+        match result {
+            Ok(_) => true,
+            Err(err) => {
+                let lfs_error = err.to_string();
+                if lfs_error.contains("unknown flag: --objects") {
+                    warn_user_once!(
+                        "Skipping Git LFS validation as Git LFS extension is outdated. \
+                        Upgrade to `git-lfs>=3.0.2` or manually verify git-lfs objects were \
+                        properly fetched after the current operation finishes."
+                    );
+                    true
+                } else {
+                    debug!("Git LFS validation failed: {err}");
+                    false
+                }
+            }
+        }
+    }
 }
 
 impl GitRemote {
@@ -235,25 +275,16 @@ impl GitRemote {
         db: Option<GitDatabase>,
         reference: &GitReference,
         locked_rev: Option<GitOid>,
-        client: &ClientWithMiddleware,
         disable_ssl: bool,
         offline: bool,
+        with_lfs: bool,
     ) -> Result<(GitDatabase, GitOid)> {
         let reference = locked_rev
             .map(ReferenceOrOid::Oid)
             .unwrap_or(ReferenceOrOid::Reference(reference));
-        let enable_lfs_fetch = env::var(EnvVars::UV_GIT_LFS).is_ok();
-
         if let Some(mut db) = db {
-            fetch(
-                &mut db.repo,
-                &self.url,
-                reference,
-                client,
-                disable_ssl,
-                offline,
-            )
-            .with_context(|| format!("failed to fetch into: {}", into.user_display()))?;
+            fetch(&mut db.repo, &self.url, reference, disable_ssl, offline)
+                .with_context(|| format!("failed to fetch into: {}", into.user_display()))?;
 
             let resolved_commit_hash = match locked_rev {
                 Some(rev) => db.contains(rev).then_some(rev),
@@ -261,9 +292,10 @@ impl GitRemote {
             };
 
             if let Some(rev) = resolved_commit_hash {
-                if enable_lfs_fetch {
-                    fetch_lfs(&mut db.repo, &self.url, &rev, disable_ssl)
+                if with_lfs {
+                    let lfs_ready = fetch_lfs(&mut db.repo, &self.url, &rev, disable_ssl)
                         .with_context(|| format!("failed to fetch LFS objects at {rev}"))?;
+                    db = db.with_lfs_ready(Some(lfs_ready));
                 }
                 return Ok((db, rev));
             }
@@ -280,32 +312,30 @@ impl GitRemote {
 
         fs_err::create_dir_all(into)?;
         let mut repo = GitRepository::init(into)?;
-        fetch(
-            &mut repo,
-            &self.url,
-            reference,
-            client,
-            disable_ssl,
-            offline,
-        )
-        .with_context(|| format!("failed to clone into: {}", into.user_display()))?;
+        fetch(&mut repo, &self.url, reference, disable_ssl, offline)
+            .with_context(|| format!("failed to clone into: {}", into.user_display()))?;
         let rev = match locked_rev {
             Some(rev) => rev,
             None => reference.resolve(&repo)?,
         };
-        if enable_lfs_fetch {
-            fetch_lfs(&mut repo, &self.url, &rev, disable_ssl)
-                .with_context(|| format!("failed to fetch LFS objects at {rev}"))?;
-        }
+        let lfs_ready = with_lfs
+            .then(|| {
+                fetch_lfs(&mut repo, &self.url, &rev, disable_ssl)
+                    .with_context(|| format!("failed to fetch LFS objects at {rev}"))
+            })
+            .transpose()?;
 
-        Ok((GitDatabase { repo }, rev))
+        Ok((GitDatabase { repo, lfs_ready }, rev))
     }
 
     /// Creates a [`GitDatabase`] of this remote at `db_path`.
-    #[allow(clippy::unused_self)]
+    #[expect(clippy::unused_self)]
     pub(crate) fn db_at(&self, db_path: &Path) -> Result<GitDatabase> {
         let repo = GitRepository::open(db_path)?;
-        Ok(GitDatabase { repo })
+        Ok(GitDatabase {
+            repo,
+            lfs_ready: None,
+        })
     }
 }
 
@@ -321,7 +351,7 @@ impl GitDatabase {
             .map(|repo| GitCheckout::new(rev, repo))
             .filter(GitCheckout::is_fresh)
         {
-            Some(co) => co,
+            Some(co) => co.with_lfs_ready(self.lfs_ready),
             None => GitCheckout::clone_into(destination, self, rev)?,
         };
         Ok(checkout)
@@ -345,6 +375,18 @@ impl GitDatabase {
     pub(crate) fn contains(&self, oid: GitOid) -> bool {
         self.repo.rev_parse(&format!("{oid}^0")).is_ok()
     }
+
+    /// Checks if `oid` contains necessary LFS artifacts in this database.
+    pub(crate) fn contains_lfs_artifacts(&self, oid: GitOid) -> bool {
+        self.repo.lfs_fsck_objects(&format!("{oid}^0"))
+    }
+
+    /// Set the Git LFS validation state (if any).
+    #[must_use]
+    pub(crate) fn with_lfs_ready(mut self, lfs: Option<bool>) -> Self {
+        self.lfs_ready = lfs;
+        self
+    }
 }
 
 impl GitCheckout {
@@ -353,7 +395,11 @@ impl GitCheckout {
     ///
     /// * The `repo` will be the checked out Git repository.
     fn new(revision: GitOid, repo: GitRepository) -> Self {
-        Self { revision, repo }
+        Self {
+            revision,
+            repo,
+            lfs_ready: None,
+        }
     }
 
     /// Clone a repo for a `revision` into a local path from a `database`.
@@ -393,8 +439,8 @@ impl GitCheckout {
 
         let repo = GitRepository::open(into)?;
         let checkout = Self::new(revision, repo);
-        checkout.reset()?;
-        Ok(checkout)
+        let lfs_ready = checkout.reset(database.lfs_ready)?;
+        Ok(checkout.with_lfs_ready(lfs_ready))
     }
 
     /// Checks if the `HEAD` of this checkout points to the expected revision.
@@ -408,22 +454,39 @@ impl GitCheckout {
         }
     }
 
+    /// Indicates Git LFS artifacts have been initialized (when requested).
+    pub(crate) fn lfs_ready(&self) -> Option<bool> {
+        self.lfs_ready
+    }
+
+    /// Set the Git LFS validation state (if any).
+    #[must_use]
+    pub(crate) fn with_lfs_ready(mut self, lfs: Option<bool>) -> Self {
+        self.lfs_ready = lfs;
+        self
+    }
+
     /// This performs `git reset --hard` to the revision of this checkout, with
     /// additional interrupt protection by a dummy file [`CHECKOUT_READY_LOCK`].
     ///
     /// If we're interrupted while performing a `git reset` (e.g., we die
-    /// because of a signal) Cargo needs to be sure to try to check out this
+    /// because of a signal) uv needs to be sure to try to check out this
     /// repo again on the next go-round.
     ///
-    /// To enable this we have a dummy file in our checkout, [`.cargo-ok`],
+    /// To enable this we have a dummy file in our checkout, [`.ok`],
     /// which if present means that the repo has been successfully reset and is
-    /// ready to go. Hence if we start to do a reset, we make sure this file
+    /// ready to go. Hence, if we start to do a reset, we make sure this file
     /// *doesn't* exist, and then once we're done we create the file.
     ///
-    /// [`.cargo-ok`]: CHECKOUT_READY_LOCK
-    fn reset(&self) -> Result<()> {
+    /// [`.ok`]: CHECKOUT_READY_LOCK
+    fn reset(&self, with_lfs: Option<bool>) -> Result<Option<bool>> {
         let ok_file = self.repo.path.join(CHECKOUT_READY_LOCK);
         let _ = paths::remove_file(&ok_file);
+
+        // We want to skip smudge if lfs was disabled for the repository
+        // as smudge filters can trigger on a reset even if lfs artifacts
+        // were not originally "fetched".
+        let lfs_skip_smudge = if with_lfs == Some(true) { "0" } else { "1" };
         debug!("Reset {} to {}", self.repo.path.display(), self.revision);
 
         // Perform the hard reset.
@@ -431,6 +494,7 @@ impl GitCheckout {
             .arg("reset")
             .arg("--hard")
             .arg(self.revision.as_str())
+            .env(EnvVars::GIT_LFS_SKIP_SMUDGE, lfs_skip_smudge)
             .cwd(&self.repo.path)
             .exec_with_output()?;
 
@@ -440,12 +504,27 @@ impl GitCheckout {
             .arg("update")
             .arg("--recursive")
             .arg("--init")
+            .env(EnvVars::GIT_LFS_SKIP_SMUDGE, lfs_skip_smudge)
             .cwd(&self.repo.path)
             .exec_with_output()
             .map(drop)?;
 
-        paths::create(ok_file)?;
-        Ok(())
+        // Validate Git LFS objects (if needed) after the reset.
+        // See `fetch_lfs` why we do this.
+        let lfs_validation = match with_lfs {
+            None => None,
+            Some(false) => Some(false),
+            Some(true) => Some(self.repo.lfs_fsck_objects(self.revision.as_str())),
+        };
+
+        // The .ok file should be written when the reset is successful.
+        // When Git LFS is enabled, the objects must also be fetched and
+        // validated successfully as part of the corresponding db.
+        if with_lfs.is_none() || lfs_validation == Some(true) {
+            paths::create(ok_file)?;
+        }
+
+        Ok(lfs_validation)
     }
 }
 
@@ -459,20 +538,24 @@ impl GitCheckout {
 /// The `remote_url` argument is the git remote URL where we want to fetch from.
 fn fetch(
     repo: &mut GitRepository,
-    remote_url: &Url,
+    remote_url: &DisplaySafeUrl,
     reference: ReferenceOrOid<'_>,
-    client: &ClientWithMiddleware,
     disable_ssl: bool,
     offline: bool,
 ) -> Result<()> {
-    let oid_to_fetch = match github_fast_path(repo, remote_url, reference, client) {
-        Ok(FastPathRev::UpToDate) => return Ok(()),
-        Ok(FastPathRev::NeedsFetch(rev)) => Some(rev),
-        Ok(FastPathRev::Indeterminate) => None,
-        Err(e) => {
-            debug!("Failed to check GitHub {:?}", e);
-            None
+    let oid_to_fetch = if let ReferenceOrOid::Oid(rev) = reference {
+        let local_object = reference.resolve(repo).ok();
+        if let Some(local_object) = local_object {
+            if rev == local_object {
+                return Ok(());
+            }
         }
+
+        // If we know the reference is a full commit hash, we can just return it without
+        // querying GitHub.
+        Some(rev)
+    } else {
+        None
     };
 
     // Translate the reference desired here into an actual list of refspecs
@@ -601,7 +684,7 @@ fn fetch(
 /// Attempts to use `git` CLI installed on the system to fetch a repository.
 fn fetch_with_cli(
     repo: &mut GitRepository,
-    url: &Url,
+    url: &DisplaySafeUrl,
     refspecs: &[String],
     tags: bool,
     disable_ssl: bool,
@@ -660,7 +743,17 @@ fn fetch_with_cli(
 ///
 /// Returns an error if Git LFS isn't available.
 /// Caching the command allows us to only check if LFS is installed once.
-static GIT_LFS: LazyLock<Result<ProcessBuilder>> = LazyLock::new(|| {
+///
+/// We also support a helper private environment variable to allow
+/// controlling the LFS extension from being loaded for testing purposes.
+/// Once installed, Git will always load `git-lfs` as a built-in alias
+/// which takes priority over loading from `PATH` which prevents us
+/// from shadowing the extension with other means.
+pub static GIT_LFS: LazyLock<Result<ProcessBuilder>> = LazyLock::new(|| {
+    if std::env::var_os(EnvVars::UV_INTERNAL__TEST_LFS_DISABLED).is_some() {
+        return Err(anyhow!("Git LFS extension has been forcefully disabled."));
+    }
+
     let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
     cmd.arg("lfs");
 
@@ -672,17 +765,17 @@ static GIT_LFS: LazyLock<Result<ProcessBuilder>> = LazyLock::new(|| {
 /// Attempts to use `git-lfs` CLI to fetch required LFS objects for a given revision.
 fn fetch_lfs(
     repo: &mut GitRepository,
-    url: &Url,
+    url: &DisplaySafeUrl,
     revision: &GitOid,
     disable_ssl: bool,
-) -> Result<()> {
+) -> Result<bool> {
     let mut cmd = if let Ok(lfs) = GIT_LFS.as_ref() {
         debug!("Fetching Git LFS objects");
         lfs.clone()
     } else {
         // Since this feature is opt-in, warn if not available
         warn!("Git LFS is not available, skipping LFS fetch");
-        return Ok(());
+        return Ok(false);
     };
 
     if disable_ssl {
@@ -699,143 +792,23 @@ fn fetch_lfs(
         .env_remove(EnvVars::GIT_INDEX_FILE)
         .env_remove(EnvVars::GIT_OBJECT_DIRECTORY)
         .env_remove(EnvVars::GIT_ALTERNATE_OBJECT_DIRECTORIES)
+        // We should not support requesting LFS artifacts with skip smudge being set.
+        // While this may not be necessary, it's added to avoid any potential future issues.
+        .env_remove(EnvVars::GIT_LFS_SKIP_SMUDGE)
         .cwd(&repo.path);
 
     cmd.exec_with_output()?;
-    Ok(())
-}
 
-/// The result of GitHub fast path check. See [`github_fast_path`] for more.
-enum FastPathRev {
-    /// The local rev (determined by `reference.resolve(repo)`) is already up to
-    /// date with what this rev resolves to on GitHub's server.
-    UpToDate,
-    /// The following SHA must be fetched in order for the local rev to become
-    /// up-to-date.
-    NeedsFetch(GitOid),
-    /// Don't know whether local rev is up-to-date. We'll fetch _all_ branches
-    /// and tags from the server and see what happens.
-    Indeterminate,
-}
+    // We now validate the Git LFS objects explicitly (if supported). This is
+    // needed to avoid issues with Git LFS not being installed or configured
+    // on the system and giving the wrong impression to the user that Git LFS
+    // objects were initialized correctly when installation finishes.
+    // We may want to allow the user to skip validation in the future via
+    // UV_GIT_LFS_NO_VALIDATION environment variable on rare cases where
+    // validation costs outweigh the benefit.
+    let validation_result = repo.lfs_fsck_objects(revision.as_str());
 
-/// Attempts GitHub's special fast path for testing if we've already got an
-/// up-to-date copy of the repository.
-///
-/// Updating the index is done pretty regularly so we want it to be as fast as
-/// possible. For registries hosted on GitHub (like the crates.io index) there's
-/// a fast path available to use[^1] to tell us that there's no updates to be
-/// made.
-///
-/// Note that this function should never cause an actual failure because it's
-/// just a fast path. As a result, a caller should ignore `Err` returned from
-/// this function and move forward on the normal path.
-///
-/// [^1]: <https://developer.github.com/v3/repos/commits/#get-the-sha-1-of-a-commit-reference>
-fn github_fast_path(
-    git: &mut GitRepository,
-    url: &Url,
-    reference: ReferenceOrOid<'_>,
-    client: &ClientWithMiddleware,
-) -> Result<FastPathRev> {
-    let Some(GitHubRepository { owner, repo }) = GitHubRepository::parse(url) else {
-        return Ok(FastPathRev::Indeterminate);
-    };
-
-    let local_object = reference.resolve(git).ok();
-
-    let github_branch_name = match reference {
-        ReferenceOrOid::Reference(GitReference::DefaultBranch) => "HEAD",
-        ReferenceOrOid::Reference(GitReference::Branch(branch)) => branch,
-        ReferenceOrOid::Reference(GitReference::Tag(tag)) => tag,
-        ReferenceOrOid::Reference(GitReference::BranchOrTag(branch_or_tag)) => branch_or_tag,
-        ReferenceOrOid::Reference(GitReference::NamedRef(rev)) => rev,
-        ReferenceOrOid::Reference(GitReference::BranchOrTagOrCommit(rev)) => {
-            // `revparse_single` (used by `resolve`) is the only way to turn
-            // short hash -> long hash, but it also parses other things,
-            // like branch and tag names, which might coincidentally be
-            // valid hex.
-            //
-            // We only return early if `rev` is a prefix of the object found
-            // by `revparse_single`. Don't bother talking to GitHub in that
-            // case, since commit hashes are permanent. If a commit with the
-            // requested hash is already present in the local clone, its
-            // contents must be the same as what is on the server for that
-            // hash.
-            //
-            // If `rev` is not found locally by `revparse_single`, we'll
-            // need GitHub to resolve it and get a hash. If `rev` is found
-            // but is not a short hash of the found object, it's probably a
-            // branch and we also need to get a hash from GitHub, in case
-            // the branch has moved.
-            if let Some(ref local_object) = local_object {
-                if is_short_hash_of(rev, *local_object) {
-                    return Ok(FastPathRev::UpToDate);
-                }
-            }
-            rev
-        }
-        ReferenceOrOid::Oid(rev) => {
-            debug!("Skipping GitHub fast path; full commit hash provided: {rev}");
-
-            if let Some(local_object) = local_object {
-                if rev == local_object {
-                    return Ok(FastPathRev::UpToDate);
-                }
-            }
-
-            // If we know the reference is a full commit hash, we can just return it without
-            // querying GitHub.
-            return Ok(FastPathRev::NeedsFetch(rev));
-        }
-    };
-
-    // Check if we're rate-limited by GitHub before determining the FastPathRev
-    if GITHUB_RATE_LIMIT_STATUS.is_active() {
-        debug!("Skipping GitHub fast path attempt for: {url} (rate-limited)");
-        return Ok(FastPathRev::Indeterminate);
-    }
-
-    let base_url = std::env::var(EnvVars::UV_GITHUB_FAST_PATH_URL)
-        .unwrap_or("https://api.github.com/repos".to_owned());
-    let url = format!("{base_url}/{owner}/{repo}/commits/{github_branch_name}");
-
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()?;
-
-    runtime.block_on(async move {
-        debug!("Attempting GitHub fast path for: {url}");
-        let mut request = client.get(&url);
-        request = request.header("Accept", "application/vnd.github.3.sha");
-        request = request.header(
-            "User-Agent",
-            format!("uv/{} (+https://github.com/astral-sh/uv)", version()),
-        );
-        if let Some(local_object) = local_object {
-            request = request.header("If-None-Match", local_object.to_string());
-        }
-
-        let response = request.send().await?;
-
-        if is_github_rate_limited(&response) {
-            // Mark that we are being rate-limited by GitHub
-            GITHUB_RATE_LIMIT_STATUS.activate();
-        }
-
-        // GitHub returns a 404 if the repository does not exist, and a 422 if it exists but GitHub
-        // is unable to resolve the requested revision.
-        response.error_for_status_ref()?;
-
-        let response_code = response.status();
-        if response_code == StatusCode::NOT_MODIFIED {
-            Ok(FastPathRev::UpToDate)
-        } else if response_code == StatusCode::OK {
-            let oid_to_fetch = response.text().await?.parse()?;
-            Ok(FastPathRev::NeedsFetch(oid_to_fetch))
-        } else {
-            Ok(FastPathRev::Indeterminate)
-        }
-    })
+    Ok(validation_result)
 }
 
 /// Whether `rev` is a shorter hash of `oid`.

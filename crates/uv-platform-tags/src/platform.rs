@@ -11,8 +11,12 @@ pub enum PlatformError {
     IOError(#[from] io::Error),
     #[error("Failed to detect the operating system version: {0}")]
     OsVersionDetectionError(String),
-    #[error("Failed to detect the arch: {0}")]
-    ArchDetectionError(String),
+    #[error("Invalid Android architecture: {0}")]
+    InvalidAndroidArch(Arch),
+    #[error("Invalid iOS simulator architecture: {0}")]
+    InvalidIosSimulatorArch(Arch),
+    #[error("Invalid iOS device architecture: {0}")]
+    InvalidIosDeviceArch(Arch),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
@@ -163,7 +167,8 @@ impl FromStr for Arch {
             "aarch64" => Ok(Self::Aarch64),
             "armv5tel" => Ok(Self::Armv5TEL),
             "armv6l" => Ok(Self::Armv6L),
-            "armv7l" => Ok(Self::Armv7L),
+            // armv8l is 32-bit ARM running on ARMv8 hardware, compatible with armv7l
+            "armv7l" | "armv8l" => Ok(Self::Armv7L),
             "ppc64le" => Ok(Self::Powerpc64Le),
             "ppc64" => Ok(Self::Powerpc64),
             "ppc" => Ok(Self::Powerpc),

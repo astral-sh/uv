@@ -20,7 +20,7 @@ impl<'a> Iterator for MemchrSplitter<'a> {
     type Item = &'a str;
 
     #[inline(always)]
-    #[allow(clippy::inline_always)]
+    #[expect(clippy::inline_always)]
     fn next(&mut self) -> Option<Self::Item> {
         match self.memchr.next() {
             Some(index) => {

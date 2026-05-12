@@ -46,6 +46,16 @@ if hasattr(sys, "implementation"):
             r"\1.\2",
             sys.implementation.cache_tag,
         )
+    elif implementation_name == "pyston":
+        # Pyston reports the CPython version as sys.implementation.version,
+        # so we need to discover the Pyston version from the cache_tag
+        import re
+
+        implementation_version = re.sub(
+            r"pyston-(\d)(\d+)",
+            r"\1.\2",
+            sys.implementation.cache_tag,
+        )
     else:
         implementation_version = format_full_version(sys.implementation.version)
 else:
@@ -434,7 +444,7 @@ def get_operating_system_and_architecture():
         version = None
         architecture = version_arch
 
-    if sys.version_info < (3, 7):
+    if sys.version_info < (3, 6):
         print(
             json.dumps(
                 {
@@ -477,6 +487,8 @@ def get_operating_system_and_architecture():
                 "minor": glibc_version[1],
             }
         elif hasattr(sys, "getandroidapilevel"):
+            # On Python <3.13, Android reports itself as "linux"
+            # See `operation_system == "android"` branch for Python 3.13+ below
             operating_system = {
                 "name": "android",
                 "api_level": sys.getandroidapilevel(),
@@ -512,6 +524,16 @@ def get_operating_system_and_architecture():
             "major": int(version[0]),
             "minor": int(version[1]),
         }
+    elif operating_system == "ios":
+        ios_ver = platform.ios_ver()
+        version = ios_ver.release.split(".")
+        operating_system = {
+            "name": "ios",
+            "major": int(version[0]),
+            "minor": int(version[1]),
+            "simulator": ios_ver.is_simulator,
+        }
+        [_version, architecture, _platform] = version_arch.split("-")
     elif operating_system == "emscripten":
         pyodide_abi_version = sysconfig.get_config_var("PYODIDE_ABI_VERSION")
         if not pyodide_abi_version:
@@ -529,6 +551,26 @@ def get_operating_system_and_architecture():
             "name": "pyodide",
             "major": int(version[0]),
             "minor": int(version[1]),
+        }
+    elif operating_system == "android":
+        # Python 3.13+ supports Android. We map the Android ABIs to our standard architectures.
+        #
+        # See:
+        #
+        # - https://peps.python.org/pep-0738/
+        # - https://packaging.python.org/en/latest/specifications/platform-compatibility-tags/#android
+        # - https://developer.android.com/ndk/guides/abis#sa
+        android_abi_to_arch = {
+            "arm64_v8a": "aarch64",
+            "armeabi_v7a": "armv7l",
+            "x86": "i686",
+            "x86_64": "x86_64",
+        }
+        architecture = android_abi_to_arch.get(architecture, architecture)
+
+        operating_system = {
+            "name": "android",
+            "api_level": sys.getandroidapilevel(),
         }
     elif operating_system in [
         "freebsd",

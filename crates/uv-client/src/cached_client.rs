@@ -1,9 +1,8 @@
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant};
 use std::{borrow::Cow, path::Path};
 
 use futures::FutureExt;
 use reqwest::{Request, Response};
-use reqwest_retry::RetryPolicy;
 use rkyv::util::AlignedVec;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -14,32 +13,13 @@ use uv_fs::write_atomic;
 use uv_redacted::DisplaySafeUrl;
 
 use crate::BaseClient;
-use crate::base_client::is_transient_network_error;
+use crate::base_client::RetryState;
 use crate::error::ProblemDetails;
 use crate::{
     Error, ErrorKind,
     httpcache::{AfterResponse, BeforeRequest, CachePolicy, CachePolicyBuilder},
     rkyvutil::OwnedArchive,
 };
-
-/// Extract problem details from an HTTP response if it has the correct content type
-///
-/// Note: This consumes the response body, so it should only be called when there's an error status.
-async fn extract_problem_details(response: Response) -> Option<ProblemDetails> {
-    match response.bytes().await {
-        Ok(bytes) => match serde_json::from_slice(&bytes) {
-            Ok(details) => Some(details),
-            Err(err) => {
-                warn!("Failed to parse problem details: {err}");
-                None
-            }
-        },
-        Err(err) => {
-            warn!("Failed to read response body for problem details: {err}");
-            None
-        }
-    }
-}
 
 /// A trait the generalizes (de)serialization at a high level.
 ///
@@ -119,51 +99,47 @@ where
     }
 }
 
-/// Dispatch type: Either a cached client error or a (user specified) error from the callback
+/// Dispatch type: Either a cached client error or a (user specified) error from the callback.
+#[derive(Debug)]
 pub enum CachedClientError<CallbackError: std::error::Error + 'static> {
-    Client {
-        retries: Option<u32>,
-        err: Error,
-    },
+    /// The client tracks retries internally.
+    Client(Error),
+    /// Track retries before a callback explicitly, as we can't attach them to the callback error
+    /// type.
     Callback {
-        retries: Option<u32>,
+        retries: u32,
         err: CallbackError,
+        duration: Duration,
     },
 }
 
 impl<CallbackError: std::error::Error + 'static> CachedClientError<CallbackError> {
-    /// Attach the number of retries to the error context.
-    ///
-    /// Adds to existing errors if any, in case different layers retried.
+    /// Attach the combined number of retries to the error context, discarding the previous count.
     fn with_retries(self, retries: u32) -> Self {
         match self {
-            Self::Client {
-                retries: existing_retries,
-                err,
-            } => Self::Client {
-                retries: Some(existing_retries.unwrap_or_default() + retries),
-                err,
-            },
+            Self::Client(err) => Self::Client(err.with_retries(retries)),
             Self::Callback {
-                retries: existing_retries,
+                retries: _,
                 err,
+                duration,
             } => Self::Callback {
-                retries: Some(existing_retries.unwrap_or_default() + retries),
+                retries,
                 err,
+                duration,
             },
         }
     }
 
-    fn retries(&self) -> Option<u32> {
+    fn retries(&self) -> u32 {
         match self {
-            Self::Client { retries, .. } => *retries,
+            Self::Client(err) => err.retries(),
             Self::Callback { retries, .. } => *retries,
         }
     }
 
     fn error(&self) -> &(dyn std::error::Error + 'static) {
         match self {
-            Self::Client { err, .. } => err,
+            Self::Client(err) => err,
             Self::Callback { err, .. } => err,
         }
     }
@@ -171,10 +147,7 @@ impl<CallbackError: std::error::Error + 'static> CachedClientError<CallbackError
 
 impl<CallbackError: std::error::Error + 'static> From<Error> for CachedClientError<CallbackError> {
     fn from(error: Error) -> Self {
-        Self::Client {
-            retries: None,
-            err: error,
-        }
+        Self::Client(error)
     }
 }
 
@@ -182,10 +155,7 @@ impl<CallbackError: std::error::Error + 'static> From<ErrorKind>
     for CachedClientError<CallbackError>
 {
     fn from(error: ErrorKind) -> Self {
-        Self::Client {
-            retries: None,
-            err: error.into(),
-        }
+        Self::Client(error.into())
     }
 }
 
@@ -193,16 +163,12 @@ impl<E: Into<Self> + std::error::Error + 'static> From<CachedClientError<E>> for
     /// Attach retry error context, if there were retries.
     fn from(error: CachedClientError<E>) -> Self {
         match error {
-            CachedClientError::Client {
-                retries: Some(retries),
-                err,
-            } => Self::new(err.into_kind(), retries),
-            CachedClientError::Client { retries: None, err } => err,
+            CachedClientError::Client(error) => error,
             CachedClientError::Callback {
-                retries: Some(retries),
+                retries,
                 err,
-            } => Self::new(err.into().into_kind(), retries),
-            CachedClientError::Callback { retries: None, err } => err.into(),
+                duration,
+            } => Self::new(err.into().into_kind(), retries, duration),
         }
     }
 }
@@ -310,6 +276,7 @@ impl CachedClient {
         response_callback: Callback,
     ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
         let fresh_req = req.try_clone().expect("HTTP request must be cloneable");
+        let start = Instant::now();
         let cached_response = if let Some(cached) = Self::read_cache(cache_entry).await {
             self.send_cached(req, cache_control, cached)
                 .boxed_local()
@@ -388,6 +355,7 @@ impl CachedClient {
                     self.run_response_callback(
                         cache_entry,
                         cache_policy,
+                        start,
                         response,
                         response_callback,
                     )
@@ -409,10 +377,11 @@ impl CachedClient {
         cache_control: CacheControl<'_>,
         response_callback: Callback,
     ) -> Result<Payload, CachedClientError<CallBackError>> {
+        let start = Instant::now();
         let (response, cache_policy) = self.fresh_request(req, cache_control).await?;
 
         let payload = self
-            .run_response_callback(cache_entry, cache_policy, response, async |resp| {
+            .run_response_callback(cache_entry, cache_policy, start, response, async |resp| {
                 let payload = response_callback(resp).await?;
                 Ok(SerdeCacheable { inner: payload })
             })
@@ -433,9 +402,16 @@ impl CachedClient {
         response_callback: Callback,
     ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
         let _ = fs_err::tokio::remove_file(&cache_entry.path()).await;
+        let start = Instant::now();
         let (response, cache_policy) = self.fresh_request(req, cache_control).await?;
-        self.run_response_callback(cache_entry, cache_policy, response, response_callback)
-            .await
+        self.run_response_callback(
+            cache_entry,
+            cache_policy,
+            start,
+            response,
+            response_callback,
+        )
+        .await
     }
 
     async fn run_response_callback<
@@ -446,14 +422,25 @@ impl CachedClient {
         &self,
         cache_entry: &CacheEntry,
         cache_policy: Option<Box<CachePolicy>>,
+        start: Instant,
         response: Response,
         response_callback: Callback,
     ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
         let new_cache = info_span!("new_cache", file = %cache_entry.path().display());
+        // Capture retries from the retry middleware
+        let retries = response
+            .extensions()
+            .get::<reqwest_retry::RetryCount>()
+            .map(|retries| retries.value())
+            .unwrap_or_default();
         let data = response_callback(response)
             .boxed_local()
             .await
-            .map_err(|err| CachedClientError::Callback { retries: None, err })?;
+            .map_err(|err| CachedClientError::Callback {
+                retries,
+                err,
+                duration: start.elapsed(),
+            })?;
         let Some(cache_policy) = cache_policy else {
             return Ok(data.into_target());
         };
@@ -557,29 +544,24 @@ impl CachedClient {
         cached: DataWithCachePolicy,
         new_cache_policy_builder: CachePolicyBuilder,
     ) -> Result<CachedResponse, Error> {
-        let url = DisplaySafeUrl::from(req.url().clone());
+        let url = DisplaySafeUrl::from_url(req.url().clone());
         debug!("Sending revalidation request for: {url}");
+        let start = Instant::now();
         let mut response = self
             .0
             .execute(req)
             .instrument(info_span!("revalidation_request", url = url.as_str()))
             .await
-            .map_err(|err| ErrorKind::from_reqwest_middleware(url.clone(), err))?;
+            .map_err(|err| Error::from_reqwest_middleware(url.clone(), err, start))?;
+        trace!(
+            "Received response for revalidation request with status {} for: {}",
+            response.status(),
+            url
+        );
 
         // Check for HTTP error status and extract problem details if available
         if let Err(status_error) = response.error_for_status_ref() {
-            // Clone the response to extract problem details before the error consumes it
-            let problem_details = if response
-                .headers()
-                .get("content-type")
-                .and_then(|ct| ct.to_str().ok())
-                .map(|ct| ct == "application/problem+json")
-                .unwrap_or(false)
-            {
-                extract_problem_details(response).await
-            } else {
-                None
-            };
+            let problem_details = ProblemDetails::try_from_response(response).await;
             return Err(ErrorKind::from_reqwest_with_problem_details(
                 url.clone(),
                 status_error,
@@ -627,14 +609,20 @@ impl CachedClient {
         req: Request,
         cache_control: CacheControl<'_>,
     ) -> Result<(Response, Option<Box<CachePolicy>>), Error> {
-        let url = DisplaySafeUrl::from(req.url().clone());
-        trace!("Sending fresh {} request for {}", req.method(), url);
+        let url = DisplaySafeUrl::from_url(req.url().clone());
+        debug!("Sending fresh {} request for: {}", req.method(), url);
         let cache_policy_builder = CachePolicyBuilder::new(&req);
+        let start = Instant::now();
         let mut response = self
             .0
             .execute(req)
             .await
-            .map_err(|err| ErrorKind::from_reqwest_middleware(url.clone(), err))?;
+            .map_err(|err| Error::from_reqwest_middleware(url.clone(), err, start))?;
+        trace!(
+            "Received response for fresh request with status {} for: {}",
+            response.status(),
+            url
+        );
 
         // If the user set a custom `Cache-Control` header, override it.
         if let CacheControl::Override(header) = cache_control {
@@ -651,27 +639,12 @@ impl CachedClient {
             .map(|retries| retries.value());
 
         if let Err(status_error) = response.error_for_status_ref() {
-            let problem_details = if response
-                .headers()
-                .get("content-type")
-                .and_then(|ct| ct.to_str().ok())
-                .map(|ct| ct.starts_with("application/problem+json"))
-                .unwrap_or(false)
-            {
-                extract_problem_details(response).await
-            } else {
-                None
-            };
-            return Err(CachedClientError::<Error>::Client {
-                retries: retry_count,
-                err: ErrorKind::from_reqwest_with_problem_details(
-                    url,
-                    status_error,
-                    problem_details,
-                )
-                .into(),
-            }
-            .into());
+            let problem_details = ProblemDetails::try_from_response(response).await;
+            return Err(Error::new(
+                ErrorKind::from_reqwest_with_problem_details(url, status_error, problem_details),
+                retry_count.unwrap_or_default(),
+                start.elapsed(),
+            ));
         }
 
         let cache_policy = cache_policy_builder.build(&response);
@@ -720,49 +693,23 @@ impl CachedClient {
         cache_control: CacheControl<'_>,
         response_callback: Callback,
     ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
-        let mut past_retries = 0;
-        let start_time = SystemTime::now();
-        let retry_policy = self.uncached().retry_policy();
+        let mut retry_state = RetryState::start(self.uncached().retry_policy(), req.url().clone());
         loop {
             let fresh_req = req.try_clone().expect("HTTP request must be cloneable");
             let result = self
                 .get_cacheable(fresh_req, cache_entry, cache_control, &response_callback)
                 .await;
 
-            // Check if the middleware already performed retries
-            let middleware_retries = match &result {
-                Err(err) => err.retries().unwrap_or_default(),
-                Ok(_) => 0,
-            };
-
-            if result
-                .as_ref()
-                .is_err_and(|err| is_transient_network_error(err.error()))
-            {
-                // If middleware already retried, consider that in our retry budget
-                let total_retries = past_retries + middleware_retries;
-                let retry_decision = retry_policy.should_retry(start_time, total_retries);
-                if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
-                    let duration = execute_after
-                        .duration_since(SystemTime::now())
-                        .unwrap_or_else(|_| Duration::default());
-
-                    debug!(
-                        "Transient failure while handling response from {}; retrying after {:.1}s...",
-                        req.url(),
-                        duration.as_secs_f32(),
-                    );
-                    tokio::time::sleep(duration).await;
-                    past_retries += 1;
-                    continue;
+            match result {
+                Ok(ok) => return Ok(ok),
+                Err(err) => {
+                    if let Some(backoff) = retry_state.should_retry(err.error(), err.retries()) {
+                        retry_state.sleep_backoff(backoff).await;
+                        continue;
+                    }
+                    return Err(err.with_retries(retry_state.total_retries()));
                 }
             }
-
-            if past_retries > 0 {
-                return result.map_err(|err| err.with_retries(past_retries));
-            }
-
-            return result;
         }
     }
 
@@ -780,48 +727,23 @@ impl CachedClient {
         cache_control: CacheControl<'_>,
         response_callback: Callback,
     ) -> Result<Payload, CachedClientError<CallBackError>> {
-        let mut past_retries = 0;
-        let start_time = SystemTime::now();
-        let retry_policy = self.uncached().retry_policy();
+        let mut retry_state = RetryState::start(self.uncached().retry_policy(), req.url().clone());
         loop {
             let fresh_req = req.try_clone().expect("HTTP request must be cloneable");
             let result = self
                 .skip_cache(fresh_req, cache_entry, cache_control, &response_callback)
                 .await;
 
-            // Check if the middleware already performed retries
-            let middleware_retries = match &result {
-                Err(err) => err.retries().unwrap_or_default(),
-                _ => 0,
-            };
-
-            if result
-                .as_ref()
-                .err()
-                .is_some_and(|err| is_transient_network_error(err.error()))
-            {
-                let total_retries = past_retries + middleware_retries;
-                let retry_decision = retry_policy.should_retry(start_time, total_retries);
-                if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
-                    let duration = execute_after
-                        .duration_since(SystemTime::now())
-                        .unwrap_or_else(|_| Duration::default());
-                    debug!(
-                        "Transient failure while handling response from {}; retrying after {}s...",
-                        req.url(),
-                        duration.as_secs(),
-                    );
-                    tokio::time::sleep(duration).await;
-                    past_retries += 1;
-                    continue;
+            match result {
+                Ok(ok) => return Ok(ok),
+                Err(err) => {
+                    if let Some(backoff) = retry_state.should_retry(err.error(), err.retries()) {
+                        retry_state.sleep_backoff(backoff).await;
+                        continue;
+                    }
+                    return Err(err.with_retries(retry_state.total_retries()));
                 }
             }
-
-            if past_retries > 0 {
-                return result.map_err(|err| err.with_retries(past_retries));
-            }
-
-            return result;
         }
     }
 }

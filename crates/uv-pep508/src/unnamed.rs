@@ -48,7 +48,7 @@ impl UnnamedRequirementUrl for VerbatimUrl {
     }
 
     fn parse_unnamed_url(given: impl AsRef<str>) -> Result<Self, Self::Err> {
-        Ok(Self::parse_url(given)?)
+        Self::parse_url(given)
     }
 
     fn with_given(self, given: impl AsRef<str>) -> Self {
@@ -253,7 +253,7 @@ fn preprocess_unnamed_url<Url: UnnamedRequirementUrl>(
                 if let Some(working_dir) = working_dir {
                     let url = Url::parse_path(path.as_ref(), working_dir)
                         .map_err(|err| Pep508Error {
-                            message: Pep508ErrorSource::UrlError(err),
+                            message: Pep508ErrorSource::UrlError(Box::new(err)),
                             start,
                             len,
                             input: cursor.to_string(),
@@ -264,7 +264,7 @@ fn preprocess_unnamed_url<Url: UnnamedRequirementUrl>(
 
                 let url = Url::parse_absolute_path(path.as_ref())
                     .map_err(|err| Pep508Error {
-                        message: Pep508ErrorSource::UrlError(err),
+                        message: Pep508ErrorSource::UrlError(Box::new(err)),
                         start,
                         len,
                         input: cursor.to_string(),
@@ -277,7 +277,7 @@ fn preprocess_unnamed_url<Url: UnnamedRequirementUrl>(
                 // Ex) `https://download.pytorch.org/whl/torch_stable.html`
                 let url = Url::parse_unnamed_url(expanded.as_ref())
                     .map_err(|err| Pep508Error {
-                        message: Pep508ErrorSource::UrlError(err),
+                        message: Pep508ErrorSource::UrlError(Box::new(err)),
                         start,
                         len,
                         input: cursor.to_string(),
@@ -291,7 +291,7 @@ fn preprocess_unnamed_url<Url: UnnamedRequirementUrl>(
                 if let Some(working_dir) = working_dir {
                     let url = Url::parse_path(expanded.as_ref(), working_dir)
                         .map_err(|err| Pep508Error {
-                            message: Pep508ErrorSource::UrlError(err),
+                            message: Pep508ErrorSource::UrlError(Box::new(err)),
                             start,
                             len,
                             input: cursor.to_string(),
@@ -302,7 +302,7 @@ fn preprocess_unnamed_url<Url: UnnamedRequirementUrl>(
 
                 let url = Url::parse_absolute_path(expanded.as_ref())
                     .map_err(|err| Pep508Error {
-                        message: Pep508ErrorSource::UrlError(err),
+                        message: Pep508ErrorSource::UrlError(Box::new(err)),
                         start,
                         len,
                         input: cursor.to_string(),
@@ -316,7 +316,7 @@ fn preprocess_unnamed_url<Url: UnnamedRequirementUrl>(
         if let Some(working_dir) = working_dir {
             let url = Url::parse_path(expanded.as_ref(), working_dir)
                 .map_err(|err| Pep508Error {
-                    message: Pep508ErrorSource::UrlError(err),
+                    message: Pep508ErrorSource::UrlError(Box::new(err)),
                     start,
                     len,
                     input: cursor.to_string(),
@@ -327,7 +327,7 @@ fn preprocess_unnamed_url<Url: UnnamedRequirementUrl>(
 
         let url = Url::parse_absolute_path(expanded.as_ref())
             .map_err(|err| Pep508Error {
-                message: Pep508ErrorSource::UrlError(err),
+                message: Pep508ErrorSource::UrlError(Box::new(err)),
                 start,
                 len,
                 input: cursor.to_string(),

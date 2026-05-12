@@ -76,7 +76,6 @@ impl ExtrasSpecification {
     }
 
     /// Create from raw CLI args
-    #[allow(clippy::fn_params_excessive_bools)]
     pub fn from_args(
         extra: Vec<ExtraName>,
         no_extra: Vec<ExtraName>,

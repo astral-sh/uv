@@ -3,44 +3,48 @@ use std::str::FromStr;
 
 use criterion::{Criterion, criterion_group, criterion_main, measurement::WallTime};
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, Connectivity, RegistryClientBuilder};
 use uv_distribution_types::Requirement;
 use uv_python::PythonEnvironment;
 use uv_resolver::Manifest;
 
 fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
-    let run = setup(Manifest::simple(vec![Requirement::from(
+    let manifest = Manifest::simple(vec![Requirement::from(
         uv_pep508::Requirement::from_str("jupyter==1.0.0").unwrap(),
-    )]));
-    c.bench_function("resolve_warm_jupyter", |b| b.iter(|| run(false)));
+    )]);
+    let run = setup(manifest, false);
+    c.bench_function("resolve_warm_jupyter", |b| b.iter(&run));
 }
 
 fn resolve_warm_jupyter_universal(c: &mut Criterion<WallTime>) {
-    let run = setup(Manifest::simple(vec![Requirement::from(
+    let manifest = Manifest::simple(vec![Requirement::from(
         uv_pep508::Requirement::from_str("jupyter==1.0.0").unwrap(),
-    )]));
-    c.bench_function("resolve_warm_jupyter_universal", |b| b.iter(|| run(true)));
+    )]);
+    let run = setup(manifest, true);
+    c.bench_function("resolve_warm_jupyter_universal", |b| b.iter(&run));
 }
 
 fn resolve_warm_airflow(c: &mut Criterion<WallTime>) {
-    let run = setup(Manifest::simple(vec![
+    let manifest = Manifest::simple(vec![
         Requirement::from(uv_pep508::Requirement::from_str("apache-airflow[all]==2.9.3").unwrap()),
         Requirement::from(
             uv_pep508::Requirement::from_str("apache-airflow-providers-apache-beam>3.0.0").unwrap(),
         ),
-    ]));
-    c.bench_function("resolve_warm_airflow", |b| b.iter(|| run(false)));
+    ]);
+    let run = setup(manifest, false);
+    c.bench_function("resolve_warm_airflow", |b| b.iter(&run));
 }
 
 // This takes >5m to run in CodSpeed.
 // fn resolve_warm_airflow_universal(c: &mut Criterion<WallTime>) {
-//     let run = setup(Manifest::simple(vec![
+//     let manifest = Manifest::simple(vec![
 //         Requirement::from(uv_pep508::Requirement::from_str("apache-airflow[all]").unwrap()),
 //         Requirement::from(
 //             uv_pep508::Requirement::from_str("apache-airflow-providers-apache-beam>3.0.0").unwrap(),
 //         ),
-//     ]));
-//     c.bench_function("resolve_warm_airflow_universal", |b| b.iter(|| run(true)));
+//     ]);
+//     let run = setup(manifest, true);
+//     c.bench_function("resolve_warm_airflow_universal", |b| b.iter(&run));
 // }
 
 criterion_group!(
@@ -51,7 +55,7 @@ criterion_group!(
 );
 criterion_main!(uv);
 
-fn setup(manifest: Manifest) -> impl Fn(bool) {
+fn setup(manifest: Manifest, universal: bool) -> impl Fn() {
     let runtime = tokio::runtime::Builder::new_current_thread()
         // CodSpeed limits the total number of threads to 500
         .max_blocking_threads(256)
@@ -59,13 +63,38 @@ fn setup(manifest: Manifest) -> impl Fn(bool) {
         .build()
         .unwrap();
 
-    let cache = Cache::from_path("../../.cache").init().unwrap();
+    let cache = Cache::from_path("../../.cache")
+        .init_no_wait()
+        .expect("No cache contention when running benchmarks")
+        .unwrap();
     let interpreter = PythonEnvironment::from_root("../../.venv", &cache)
         .unwrap()
         .into_interpreter();
     let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache.clone()).build();
 
-    move |universal| {
+    // Prime the cache: First run for performance the network operation, the second run primes
+    // reading from the cache from the first run. If they are already primed, we only lose ~1s for
+    // the large airflow benchmark.
+    for _ in 0..2 {
+        runtime
+            .block_on(resolver::resolve(
+                black_box(manifest.clone()),
+                black_box(cache.clone()),
+                black_box(&client),
+                &interpreter,
+                universal,
+            ))
+            .unwrap();
+    }
+
+    // No matter how long the benchmarks run, never do fresh network requests
+    let client = RegistryClientBuilder::new(
+        BaseClientBuilder::default().connectivity(Connectivity::Offline),
+        cache.clone(),
+    )
+    .build();
+
+    move || {
         runtime
             .block_on(resolver::resolve(
                 black_box(manifest.clone()),
@@ -85,7 +114,7 @@ mod resolver {
 
     use uv_cache::Cache;
     use uv_client::RegistryClient;
-    use uv_configuration::{BuildOptions, Concurrency, Constraints, IndexStrategy, SourceStrategy};
+    use uv_configuration::{BuildOptions, Concurrency, Constraints, IndexStrategy, NoSources};
     use uv_dispatch::{BuildDispatch, SharedState};
     use uv_distribution::DistributionDatabase;
     use uv_distribution_types::{
@@ -131,7 +160,7 @@ mod resolver {
     );
 
     static TAGS: LazyLock<Tags> = LazyLock::new(|| {
-        Tags::from_env(&PLATFORM, (3, 11), "cpython", (3, 11), false, false).unwrap()
+        Tags::from_env(&PLATFORM, (3, 11), "cpython", (3, 11), false, false, false).unwrap()
     });
 
     pub(crate) async fn resolve(
@@ -165,7 +194,7 @@ mod resolver {
         let options = OptionsBuilder::new()
             .exclude_newer(exclude_newer.clone())
             .build();
-        let sources = SourceStrategy::default();
+        let sources = NoSources::default();
         let dependency_metadata = DependencyMetadata::default();
         let conflicts = Conflicts::empty();
         let workspace_cache = WorkspaceCache::default();
@@ -200,7 +229,7 @@ mod resolver {
             exclude_newer,
             sources,
             workspace_cache,
-            concurrency,
+            concurrency.clone(),
             Preview::default(),
         );
 
@@ -223,7 +252,11 @@ mod resolver {
             &hashes,
             &build_context,
             installed_packages,
-            DistributionDatabase::new(client, &build_context, concurrency.downloads),
+            DistributionDatabase::new(
+                client,
+                &build_context,
+                concurrency.downloads_semaphore.clone(),
+            ),
         )?;
 
         Ok(resolver.resolve().await?)

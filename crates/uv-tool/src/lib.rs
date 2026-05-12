@@ -4,18 +4,18 @@ use std::str::FromStr;
 
 use fs_err as fs;
 use fs_err::File;
+use owo_colors::OwoColorize;
 use thiserror::Error;
 use tracing::{debug, warn};
 
 use uv_cache::Cache;
 use uv_dirs::user_executable_directory;
-use uv_fs::{LockedFile, Simplified};
+use uv_fs::{LockedFile, LockedFileError, LockedFileMode, Simplified};
 use uv_install_wheel::read_record_file;
 use uv_installer::SitePackages;
 use uv_normalize::{InvalidNameError, PackageName};
 use uv_pep440::Version;
-use uv_preview::Preview;
-use uv_python::{Interpreter, PythonEnvironment};
+use uv_python::{BrokenLink, Interpreter, PythonEnvironment};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
 use uv_virtualenv::remove_virtualenv;
@@ -65,6 +65,8 @@ impl ToolEnvironment {
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
+    #[error(transparent)]
+    LockedFile(#[from] LockedFileError),
     #[error("Failed to update `uv-receipt.toml` at {0}")]
     ReceiptWrite(PathBuf, #[source] Box<toml_edit::ser::Error>),
     #[error("Failed to read `uv-receipt.toml` at {0}")]
@@ -87,6 +89,27 @@ pub enum Error {
     MissingToolPackage(PackageName),
     #[error("Tool `{0}` environment not found at `{1}`")]
     ToolEnvironmentNotFound(PackageName, PathBuf),
+}
+
+impl Error {
+    pub fn as_io_error(&self) -> Option<&io::Error> {
+        match self {
+            Self::Io(err) => Some(err),
+            Self::LockedFile(err) => err.as_io_error(),
+            Self::VirtualEnvError(uv_virtualenv::Error::Io(err)) => Some(err),
+            Self::ReceiptWrite(_, _)
+            | Self::ReceiptRead(_, _)
+            | Self::VirtualEnvError(_)
+            | Self::EntrypointRead(_)
+            | Self::NoExecutableDirectory
+            | Self::ToolName(_)
+            | Self::EnvironmentError(_)
+            | Self::MissingToolReceipt(_, _)
+            | Self::EnvironmentRead(_, _)
+            | Self::MissingToolPackage(_)
+            | Self::ToolEnvironmentNotFound(_, _) => None,
+        }
+    }
 }
 
 /// A collection of uv-managed tools installed on the current system.
@@ -130,7 +153,7 @@ impl InstalledTools {
     /// included with an error.
     ///
     /// Note it is generally incorrect to use this without [`Self::acquire_lock`].
-    #[allow(clippy::type_complexity)]
+    #[expect(clippy::type_complexity)]
     pub fn tools(&self) -> Result<Vec<(PackageName, Result<Tool, Error>)>, Error> {
         let mut tools = Vec::new();
         for directory in uv_fs::directories(self.root())? {
@@ -179,7 +202,12 @@ impl InstalledTools {
 
     /// Grab a file lock for the tools directory to prevent concurrent access across processes.
     pub async fn lock(&self) -> Result<LockedFile, Error> {
-        Ok(LockedFile::acquire(self.root.join(".lock"), self.root.user_display()).await?)
+        Ok(LockedFile::acquire(
+            self.root.join(".lock"),
+            LockedFileMode::Exclusive,
+            self.root.user_display(),
+        )
+        .await?)
     }
 
     /// Add a receipt for a tool.
@@ -260,15 +288,24 @@ impl InstalledTools {
 
                 Ok(None)
             }
-            Err(uv_python::Error::Query(uv_python::InterpreterError::BrokenSymlink(
-                broken_symlink,
-            ))) => {
-                let target_path = fs_err::read_link(&broken_symlink.path)?;
-                warn!(
-                    "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
-                    broken_symlink.path.user_display(),
-                    target_path.user_display()
-                );
+            Err(uv_python::Error::Query(uv_python::InterpreterError::BrokenLink(BrokenLink {
+                path,
+                unix,
+                venv: _,
+            }))) => {
+                if unix {
+                    let target_path = fs_err::read_link(&path)?;
+                    warn!(
+                        "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
+                        path.user_display().cyan(),
+                        target_path.user_display().cyan(),
+                    );
+                } else {
+                    warn!(
+                        "Ignoring existing virtual environment linked to non-existent Python interpreter: {}",
+                        path.user_display().cyan(),
+                    );
+                }
 
                 Ok(None)
             }
@@ -283,19 +320,18 @@ impl InstalledTools {
         &self,
         name: &PackageName,
         interpreter: Interpreter,
-        preview: Preview,
     ) -> Result<PythonEnvironment, Error> {
         let environment_path = self.tool_dir(name);
 
         // Remove any existing environment.
-        match fs_err::remove_dir_all(&environment_path) {
+        match remove_virtualenv(&environment_path) {
             Ok(()) => {
                 debug!(
                     "Removed existing environment for tool `{name}`: {}",
                     environment_path.user_display()
                 );
             }
-            Err(err) if err.kind() == io::ErrorKind::NotFound => (),
+            Err(uv_virtualenv::Error::Io(err)) if err.kind() == io::ErrorKind::NotFound => (),
             Err(err) => return Err(err.into()),
         }
 
@@ -314,7 +350,6 @@ impl InstalledTools {
             false,
             false,
             false,
-            preview,
         )?;
 
         Ok(venv)

@@ -12,7 +12,7 @@ use uv_pep440::Version;
 use uv_pypi_types::Scheme;
 
 pub use install::install_wheel;
-pub use linker::{LinkMode, Locks};
+pub use linker::{InstallState, LinkMode, link_wheel_files};
 pub use uninstall::{Uninstall, uninstall_egg, uninstall_legacy_editable, uninstall_wheel};
 pub use wheel::{LibKind, WheelFile, read_record_file};
 
@@ -41,14 +41,6 @@ pub struct Layout {
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
-    /// Custom error type to add a path to error reading a file from a zip
-    #[error("Failed to reflink {} to {}", from.user_display(), to.user_display())]
-    Reflink {
-        from: PathBuf,
-        to: PathBuf,
-        #[source]
-        err: io::Error,
-    },
     /// The wheel is broken
     #[error("The wheel is invalid: {0}")]
     InvalidWheel(String),
@@ -85,4 +77,6 @@ pub enum Error {
     LauncherError(#[from] uv_trampoline_builder::Error),
     #[error("Scripts must not use the reserved name {0}")]
     ReservedScriptName(String),
+    #[error(transparent)]
+    Copy(#[from] uv_fs::link::LinkError),
 }

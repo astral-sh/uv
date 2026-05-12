@@ -1,11 +1,11 @@
 #![allow(clippy::disallowed_types)]
 
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 mod conditional_imports {
-    pub(crate) use crate::common::{READ_ONLY_GITHUB_TOKEN, decode_token};
+    pub(crate) use uv_test::{READ_ONLY_GITHUB_TOKEN, decode_token};
 }
 
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 use conditional_imports::*;
 
 use anyhow::Result;
@@ -15,17 +15,19 @@ use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use std::path::Path;
 use url::Url;
-use uv_fs::Simplified;
-use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
+use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method, matchers::path};
 
+#[cfg(feature = "test-git-lfs")]
+use uv_cache_key::{RepositoryUrl, cache_digest};
+use uv_fs::Simplified;
 use uv_static::EnvVars;
 
-use crate::common::{TestContext, packse_index_url, uv_snapshot, venv_bin_path};
+use uv_test::{packse_index_url, uv_snapshot, venv_bin_path};
 
 /// Add a PyPI requirement.
 #[test]
 fn add_registry() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -36,7 +38,7 @@ fn add_registry() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -56,7 +58,7 @@ fn add_registry() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -64,7 +66,7 @@ fn add_registry() -> Result<()> {
         dependencies = [
             "anyio==3.7.0",
         ]
-        "###
+        "#
         );
     });
 
@@ -128,13 +130,13 @@ fn add_registry() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     ");
 
     Ok(())
@@ -142,9 +144,9 @@ fn add_registry() -> Result<()> {
 
 /// Add a Git requirement.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_git() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -155,16 +157,16 @@ fn add_git() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -178,7 +180,7 @@ fn add_git() -> Result<()> {
     ");
 
     // Adding with an ambiguous Git reference should treat it as a revision.
-    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -190,14 +192,14 @@ fn add_git() -> Result<()> {
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
     ");
 
-    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage").arg("--tag=0.0.1"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage").arg("--tag=0.0.1"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -206,7 +208,7 @@ fn add_git() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -218,7 +220,7 @@ fn add_git() -> Result<()> {
 
         [tool.uv.sources]
         uv-public-pypackage = { git = "https://github.com/astral-test/uv-public-pypackage", tag = "0.0.1" }
-        "###
+        "#
         );
     });
 
@@ -291,13 +293,13 @@ fn add_git() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     ");
 
     Ok(())
@@ -306,9 +308,9 @@ fn add_git() -> Result<()> {
 /// Add a Git requirement from a private repository, with credentials. The resolution should
 /// succeed, but the `pyproject.toml` should omit the credentials.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_git_private_source() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -320,7 +322,7 @@ fn add_git_private_source() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg(format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")), @r"
+    uv_snapshot!(context.filters(), context.add().arg(format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -338,7 +340,7 @@ fn add_git_private_source() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -349,7 +351,7 @@ fn add_git_private_source() -> Result<()> {
 
         [tool.uv.sources]
         uv-private-pypackage = { git = "https://github.com/astral-test/uv-private-pypackage" }
-        "###
+        "#
         );
     });
 
@@ -387,13 +389,13 @@ fn add_git_private_source() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     Ok(())
@@ -402,12 +404,11 @@ fn add_git_private_source() -> Result<()> {
 /// Add a Git requirement from a private repository, with credentials. Since `--raw-sources` is
 /// specified, the `pyproject.toml` should retain the credentials.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_git_private_raw() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);
-    let mut filters = context.filters();
-    filters.push((&token, "***"));
+    let context = context.with_filter((&token, "***"));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -418,7 +419,7 @@ fn add_git_private_raw() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(filters, context.add().arg(format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")).arg("--raw-sources"), @r"
+    uv_snapshot!(context.filters(), context.add().arg(format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")).arg("--raw-sources"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -433,7 +434,7 @@ fn add_git_private_raw() -> Result<()> {
     let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
-        filters => filters.clone()
+        filters => context.filters()
     }, {
         assert_snapshot!(
             pyproject_toml, @r#"
@@ -451,7 +452,7 @@ fn add_git_private_raw() -> Result<()> {
     let lock = context.read("uv.lock");
 
     insta::with_settings!({
-        filters => filters.clone(),
+        filters => context.filters(),
     }, {
         assert_snapshot!(
             lock, @r#"
@@ -482,22 +483,22 @@ fn add_git_private_raw() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(filters, context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     Ok(())
 }
 
 #[tokio::test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 async fn add_git_private_rate_limited_by_github_rest_api_403_response() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);
 
     let server = MockServer::start().await;
@@ -519,7 +520,7 @@ async fn add_git_private_rate_limited_by_github_rest_api_403_response() -> Resul
     uv_snapshot!(context.filters(), context
         .add()
         .arg(format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage"))
-        .env(EnvVars::UV_GITHUB_FAST_PATH_URL, server.uri()), @r"
+        .env(EnvVars::UV_GITHUB_FAST_PATH_URL, server.uri()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -535,11 +536,11 @@ async fn add_git_private_rate_limited_by_github_rest_api_403_response() -> Resul
 }
 
 #[tokio::test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 async fn add_git_private_rate_limited_by_github_rest_api_429_response() -> Result<()> {
     use uv_client::DEFAULT_RETRIES;
 
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);
 
     let server = MockServer::start().await;
@@ -562,8 +563,7 @@ async fn add_git_private_rate_limited_by_github_rest_api_429_response() -> Resul
         .add()
         .arg(format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage"))
         .env(EnvVars::UV_GITHUB_FAST_PATH_URL, server.uri())
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
-        .env_remove(EnvVars::UV_HTTP_RETRIES), @r"
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -579,9 +579,9 @@ async fn add_git_private_rate_limited_by_github_rest_api_429_response() -> Resul
 }
 
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_git_error() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -592,51 +592,51 @@ fn add_git_error() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     // Provide a tag without a Git source.
-    uv_snapshot!(context.filters(), context.add().arg("flask").arg("--tag").arg("0.0.1"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("flask").arg("--tag").arg("0.0.1"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: `flask` did not resolve to a Git repository, but a Git reference (`--tag 0.0.1`) was provided.
-    "###);
+    ");
 
     // Provide a tag with a non-Git source.
-    uv_snapshot!(context.filters(), context.add().arg("flask @ https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl").arg("--branch").arg("0.0.1"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("flask @ https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl").arg("--branch").arg("0.0.1"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: `flask` did not resolve to a Git repository, but a Git reference (`--branch 0.0.1`) was provided.
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_git_branch() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -647,7 +647,7 @@ fn add_git_branch() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage").arg("--branch").arg("test-branch"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage").arg("--branch").arg("test-branch"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -662,11 +662,241 @@ fn add_git_branch() -> Result<()> {
     Ok(())
 }
 
+#[test]
+#[cfg(feature = "test-git-lfs")]
+fn add_git_lfs() -> Result<()> {
+    let context = uv_test::test_context!("3.13").with_git_lfs_config();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = []
+    "#})?;
+
+    // Gather cache locations
+    let git_cache = context.cache_dir.child("git-v0");
+    let git_checkouts = git_cache.child("checkouts");
+    let git_db = git_cache.child("db");
+    let repo_url = RepositoryUrl::parse("https://github.com/astral-sh/test-lfs-repo")?;
+    let lfs_db_bucket_objects = git_db
+        .child(cache_digest(&repo_url))
+        .child(".git")
+        .child("lfs");
+    let ok_checkout_file = git_checkouts
+        .child(cache_digest(&repo_url.with_lfs(Some(true))))
+        .child("0fe88f7")
+        .child(".ok");
+
+    uv_snapshot!(context.filters(), context.add()
+        .arg("--no-cache")
+        .arg("test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo")
+        .arg("--rev").arg("0fe88f7c2e2883521bf065c108d9ee8eb115674b")
+        .arg("--lfs"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@0fe88f7c2e2883521bf065c108d9ee8eb115674b#lfs=true)
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = [
+            "test-lfs-repo",
+        ]
+
+        [tool.uv.sources]
+        test-lfs-repo = { git = "https://github.com/astral-sh/test-lfs-repo", rev = "0fe88f7c2e2883521bf065c108d9ee8eb115674b", lfs = true }
+        "#
+        );
+    });
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.13"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "test-lfs-repo" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "test-lfs-repo", git = "https://github.com/astral-sh/test-lfs-repo?lfs=true&rev=0fe88f7c2e2883521bf065c108d9ee8eb115674b" }]
+
+        [[package]]
+        name = "test-lfs-repo"
+        version = "0.1.0"
+        source = { git = "https://github.com/astral-sh/test-lfs-repo?lfs=true&rev=0fe88f7c2e2883521bf065c108d9ee8eb115674b#0fe88f7c2e2883521bf065c108d9ee8eb115674b" }
+        "#
+        );
+    });
+
+    // Change revision as an unnamed requirement
+    uv_snapshot!(context.filters(), context.add()
+        .arg("--no-cache")
+        .arg("git+https://github.com/astral-sh/test-lfs-repo")
+        .arg("--rev").arg("07d2c9c75c8defeebb7c5a0c26cca54b777e3bec")
+        .arg("--lfs"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@0fe88f7c2e2883521bf065c108d9ee8eb115674b#lfs=true)
+     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@07d2c9c75c8defeebb7c5a0c26cca54b777e3bec#lfs=true)
+    ");
+
+    // Test LFS not found scenario resulting in an incomplete fetch cache
+
+    // The filters below will remove any boilerplate before what we actually want to match.
+    // They help handle slightly different output in uv-distribution/src/source/mod.rs between
+    // calls to `git` and `git_metadata` functions which don't have guaranteed execution order.
+    // In addition, we can get different error codes depending on where the failure occurs,
+    // although we know the error code cannot be 0.
+    let context = context
+        .with_filter((r"exit_code: -?[1-9]\d*", "exit_code: [ERROR_CODE]"))
+        .with_filter((
+            "(?s)(----- stderr -----).*?The source distribution `[^`]+` is missing Git LFS artifacts.*",
+            "$1\n[PREFIX]The source distribution `[DISTRIBUTION]` is missing Git LFS artifacts",
+        ));
+
+    uv_snapshot!(context.filters(), context.add()
+        .env(EnvVars::UV_INTERNAL__TEST_LFS_DISABLED, "1")
+        .arg("git+https://github.com/astral-sh/test-lfs-repo")
+        .arg("--rev").arg("0fe88f7c2e2883521bf065c108d9ee8eb115674b")
+        .arg("--lfs"), @"
+    success: false
+    exit_code: [ERROR_CODE]
+    ----- stdout -----
+
+    ----- stderr -----
+    [PREFIX]The source distribution `[DISTRIBUTION]` is missing Git LFS artifacts
+    ");
+
+    // There should be no .ok entry as LFS operations failed
+    assert!(!ok_checkout_file.exists(), "Found unexpected .ok file.");
+
+    // Test LFS recovery from an incomplete fetch cache
+    uv_snapshot!(context.filters(), context.add()
+        .arg("git+https://github.com/astral-sh/test-lfs-repo")
+        .arg("--rev").arg("0fe88f7c2e2883521bf065c108d9ee8eb115674b")
+        .arg("--lfs"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@07d2c9c75c8defeebb7c5a0c26cca54b777e3bec#lfs=true)
+     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@0fe88f7c2e2883521bf065c108d9ee8eb115674b#lfs=true)
+    ");
+
+    // Verify that we can import the module and access LFS content
+    uv_snapshot!(context.filters(), context.python_command()
+        .arg("-c")
+        .arg("import test_lfs_repo.lfs_module"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    // Now let's delete some of the LFS entries from our db...
+    fs_err::remove_file(&ok_checkout_file)?;
+    fs_err::remove_dir_all(&lfs_db_bucket_objects)?;
+
+    // Test LFS recovery from an incomplete db and non-fresh checkout
+    uv_snapshot!(context.filters(), context.add()
+        .arg("git+https://github.com/astral-sh/test-lfs-repo")
+        .arg("--rev").arg("0fe88f7c2e2883521bf065c108d9ee8eb115674b")
+        .arg("--reinstall")
+        .arg("--lfs"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@0fe88f7c2e2883521bf065c108d9ee8eb115674b#lfs=true)
+    ");
+
+    // Verify that we can import the module and access LFS content
+    uv_snapshot!(context.filters(), context.python_command()
+        .arg("-c")
+        .arg("import test_lfs_repo.lfs_module"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    // Verify our db and checkout recovered
+    assert!(ok_checkout_file.exists());
+    assert!(lfs_db_bucket_objects.exists());
+
+    // Exercise the sdist cache
+    uv_snapshot!(context.filters(), context.add()
+        .arg("git+https://github.com/astral-sh/test-lfs-repo")
+        .arg("--rev").arg("0fe88f7c2e2883521bf065c108d9ee8eb115674b")
+        .arg("--lfs"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Checked 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Add a Git requirement using the `--raw-sources` API.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_git_raw() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -677,16 +907,16 @@ fn add_git_raw() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -700,7 +930,7 @@ fn add_git_raw() -> Result<()> {
     ");
 
     // Use an ambiguous tag reference, which would otherwise not resolve.
-    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1").arg("--raw-sources"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1").arg("--raw-sources"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -718,7 +948,7 @@ fn add_git_raw() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -727,7 +957,7 @@ fn add_git_raw() -> Result<()> {
             "anyio==3.7.0",
             "uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1",
         ]
-        "###
+        "#
         );
     });
 
@@ -800,13 +1030,13 @@ fn add_git_raw() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     ");
 
     Ok(())
@@ -814,9 +1044,9 @@ fn add_git_raw() -> Result<()> {
 
 /// Add a Git requirement without the `git+` prefix.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_git_implicit() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -827,16 +1057,16 @@ fn add_git_implicit() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -850,7 +1080,7 @@ fn add_git_implicit() -> Result<()> {
     ");
 
     // Omit the `git+` prefix.
-    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ https://github.com/astral-test/uv-public-pypackage.git"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ https://github.com/astral-test/uv-public-pypackage.git"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -867,9 +1097,9 @@ fn add_git_implicit() -> Result<()> {
 
 /// `--raw-sources` should be considered conflicting with sources-specific arguments, like `--tag`.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_raw_error() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -881,7 +1111,7 @@ fn add_raw_error() -> Result<()> {
     "#})?;
 
     // Provide a tag without a Git source.
-    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage").arg("--tag").arg("0.0.1").arg("--raw-sources"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage").arg("--tag").arg("0.0.1").arg("--raw-sources"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -899,7 +1129,7 @@ fn add_raw_error() -> Result<()> {
 
 #[test]
 fn reinstall_local_source_trees() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let project_1 = context.temp_dir.child("project1");
     project_1.child("pyproject.toml").write_str(indoc! {r#"
@@ -919,7 +1149,7 @@ fn reinstall_local_source_trees() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().current_dir(&project_1).arg("../project2").arg("--editable"), @r"
+    uv_snapshot!(context.filters(), context.add().current_dir(&project_1).arg("../project2").arg("--editable"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -934,7 +1164,7 @@ fn reinstall_local_source_trees() -> Result<()> {
     ");
 
     // Running `uv add` should reinstall the project.
-    uv_snapshot!(context.filters(), context.add().current_dir(&project_1).arg("../project2").arg("--editable"), @r"
+    uv_snapshot!(context.filters(), context.add().current_dir(&project_1).arg("../project2").arg("--editable"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -951,9 +1181,9 @@ fn reinstall_local_source_trees() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_editable_error() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -965,23 +1195,23 @@ fn add_editable_error() -> Result<()> {
     "#})?;
 
     // Provide `--editable` with a non-source tree.
-    uv_snapshot!(context.filters(), context.add().arg("flask @ https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl").arg("--editable"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("flask @ https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl").arg("--editable"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: `flask` did not resolve to a local directory, but the `--editable` flag was provided. Editable installs are only supported for local directories.
-    "###);
+    ");
 
     Ok(())
 }
 
 /// Add an unnamed requirement.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_unnamed() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -992,7 +1222,7 @@ fn add_unnamed() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("git+https://github.com/astral-test/uv-public-pypackage").arg("--tag=0.0.1"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("git+https://github.com/astral-test/uv-public-pypackage").arg("--tag=0.0.1"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1010,7 +1240,7 @@ fn add_unnamed() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -1021,7 +1251,7 @@ fn add_unnamed() -> Result<()> {
 
         [tool.uv.sources]
         uv-public-pypackage = { git = "https://github.com/astral-test/uv-public-pypackage", tag = "0.0.1" }
-        "###
+        "#
         );
     });
 
@@ -1059,13 +1289,13 @@ fn add_unnamed() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     Ok(())
@@ -1074,7 +1304,7 @@ fn add_unnamed() -> Result<()> {
 /// Add and remove a development dependency.
 #[test]
 fn add_remove_dev() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -1085,7 +1315,7 @@ fn add_remove_dev() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--dev"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--dev"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1105,7 +1335,7 @@ fn add_remove_dev() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -1116,7 +1346,7 @@ fn add_remove_dev() -> Result<()> {
         dev = [
             "anyio==3.7.0",
         ]
-        "###
+        "#
         );
     });
 
@@ -1185,17 +1415,17 @@ fn add_remove_dev() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     ");
 
     // This should fail without --dev.
-    uv_snapshot!(context.filters(), context.remove().arg("anyio"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1203,10 +1433,10 @@ fn add_remove_dev() -> Result<()> {
     ----- stderr -----
     hint: `anyio` is in the `dev` group (try: `uv remove anyio --group dev`)
     error: The dependency `anyio` could not be found in `project.dependencies`
-    "###);
+    ");
 
     // Remove the dependency.
-    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--dev"), @r"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--dev"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1225,7 +1455,7 @@ fn add_remove_dev() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -1234,7 +1464,7 @@ fn add_remove_dev() -> Result<()> {
 
         [dependency-groups]
         dev = []
-        "###
+        "#
         );
     });
 
@@ -1266,13 +1496,13 @@ fn add_remove_dev() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     Ok(())
@@ -1281,7 +1511,7 @@ fn add_remove_dev() -> Result<()> {
 /// Add and remove an optional dependency.
 #[test]
 fn add_remove_optional() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -1292,7 +1522,7 @@ fn add_remove_optional() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--optional=io"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--optional=io"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1312,7 +1542,7 @@ fn add_remove_optional() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -1323,7 +1553,7 @@ fn add_remove_optional() -> Result<()> {
         io = [
             "anyio==3.7.0",
         ]
-        "###
+        "#
         );
     });
 
@@ -1392,7 +1622,7 @@ fn add_remove_optional() -> Result<()> {
 
     // Install from the lockfile. At present, this will _uninstall_ the packages since `sync` does
     // not include extras by default.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1402,10 +1632,10 @@ fn add_remove_optional() -> Result<()> {
      - anyio==3.7.0
      - idna==3.6
      - sniffio==1.3.1
-    "###);
+    ");
 
     // This should fail without --optional.
-    uv_snapshot!(context.filters(), context.remove().arg("anyio"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1413,17 +1643,17 @@ fn add_remove_optional() -> Result<()> {
     ----- stderr -----
     hint: `anyio` is an optional dependency (try: `uv remove anyio --optional io`)
     error: The dependency `anyio` could not be found in `project.dependencies`
-    "###);
+    ");
 
     // Remove the dependency.
-    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--optional=io"), @r"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--optional=io"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -1432,7 +1662,7 @@ fn add_remove_optional() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -1441,7 +1671,7 @@ fn add_remove_optional() -> Result<()> {
 
         [project.optional-dependencies]
         io = []
-        "###
+        "#
         );
     });
 
@@ -1471,13 +1701,13 @@ fn add_remove_optional() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     Ok(())
@@ -1485,7 +1715,7 @@ fn add_remove_optional() -> Result<()> {
 
 #[test]
 fn add_remove_inline_optional() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -1499,7 +1729,7 @@ fn add_remove_inline_optional() -> Result<()> {
         ] }
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--optional=types"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--optional=types"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1517,7 +1747,7 @@ fn add_remove_inline_optional() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -1528,11 +1758,11 @@ fn add_remove_inline_optional() -> Result<()> {
         ], types = [
             "typing-extensions>=4.10.0",
         ] }
-        "###
+        "#
         );
     });
 
-    uv_snapshot!(context.filters(), context.remove().arg("typing-extensions").arg("--optional=types"), @r"
+    uv_snapshot!(context.filters(), context.remove().arg("typing-extensions").arg("--optional=types"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1549,7 +1779,7 @@ fn add_remove_inline_optional() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -1558,7 +1788,7 @@ fn add_remove_inline_optional() -> Result<()> {
         optional-dependencies = { io = [
             "anyio==3.7.0",
         ], types = [] }
-        "###
+        "#
         );
     });
 
@@ -1567,8 +1797,9 @@ fn add_remove_inline_optional() -> Result<()> {
 
 /// Add and remove a workspace dependency.
 #[test]
+#[cfg(feature = "test-git")]
 fn add_remove_workspace() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let workspace = context.temp_dir.child("pyproject.toml");
     workspace.write_str(indoc! {r#"
@@ -1624,14 +1855,14 @@ fn add_remove_workspace() -> Result<()> {
         .arg("child1")
         .current_dir(&context.temp_dir);
 
-    uv_snapshot!(context.filters(), add_cmd, @r###"
+    uv_snapshot!(context.filters(), add_cmd, @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Workspace dependency `child2` must refer to local directory, not a Git repository
-    "###);
+    ");
 
     // Workspace packages should be detected automatically.
     let child1 = context.temp_dir.join("child1");
@@ -1642,7 +1873,7 @@ fn add_remove_workspace() -> Result<()> {
         .arg("child1")
         .current_dir(&context.temp_dir);
 
-    uv_snapshot!(context.filters(), add_cmd, @r"
+    uv_snapshot!(context.filters(), add_cmd, @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1721,17 +1952,17 @@ fn add_remove_workspace() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").current_dir(&child1), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").current_dir(&child1), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 2 packages in [TIME]
+    Checked 2 packages in [TIME]
     ");
 
     // Remove the dependency.
-    uv_snapshot!(context.filters(), context.remove().arg("child2").current_dir(&child1), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("child2").current_dir(&child1), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1743,7 +1974,7 @@ fn add_remove_workspace() -> Result<()> {
     Installed 1 package in [TIME]
      ~ child1==0.1.0 (from file://[TEMP_DIR]/child1)
      - child2==0.1.0 (from file://[TEMP_DIR]/child2)
-    "###);
+    ");
 
     let pyproject_toml = fs_err::read_to_string(child1.join("pyproject.toml"))?;
 
@@ -1751,7 +1982,7 @@ fn add_remove_workspace() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "child1"
         version = "0.1.0"
@@ -1761,7 +1992,7 @@ fn add_remove_workspace() -> Result<()> {
         [build-system]
         requires = ["hatchling"]
         build-backend = "hatchling.build"
-        "###
+        "#
         );
     });
 
@@ -1799,14 +2030,14 @@ fn add_remove_workspace() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").current_dir(&child1), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").current_dir(&child1), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
-    "###);
+    Checked 1 package in [TIME]
+    ");
 
     Ok(())
 }
@@ -1815,7 +2046,7 @@ fn add_remove_workspace() -> Result<()> {
 /// dependency already exists in `dev-dependencies`.
 #[test]
 fn update_existing_dev() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -1832,7 +2063,7 @@ fn update_existing_dev() -> Result<()> {
         dev = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--dev"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--dev"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1853,7 +2084,7 @@ fn update_existing_dev() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -1867,7 +2098,7 @@ fn update_existing_dev() -> Result<()> {
 
         [dependency-groups]
         dev = []
-        "###
+        "#
         );
     });
 
@@ -1878,7 +2109,7 @@ fn update_existing_dev() -> Result<()> {
 /// exists.
 #[test]
 fn add_existing_dev() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -1892,7 +2123,7 @@ fn add_existing_dev() -> Result<()> {
         dev-dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--dev"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--dev"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1913,7 +2144,7 @@ fn add_existing_dev() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -1924,7 +2155,7 @@ fn add_existing_dev() -> Result<()> {
         dev-dependencies = [
             "anyio==3.7.0",
         ]
-        "###
+        "#
         );
     });
 
@@ -1935,7 +2166,7 @@ fn add_existing_dev() -> Result<()> {
 /// dependency already exists.
 #[test]
 fn update_existing_dev_group() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -1949,7 +2180,7 @@ fn update_existing_dev_group() -> Result<()> {
         dev-dependencies = ["anyio"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--group").arg("dev"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--group").arg("dev"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1970,7 +2201,7 @@ fn update_existing_dev_group() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -1981,7 +2212,7 @@ fn update_existing_dev_group() -> Result<()> {
         dev-dependencies = [
             "anyio==3.7.0",
         ]
-        "###
+        "#
         );
     });
 
@@ -1991,7 +2222,7 @@ fn update_existing_dev_group() -> Result<()> {
 /// `uv add --group dev` should add to `dependency-groups` even if `dev-dependencies` exists.
 #[test]
 fn add_existing_dev_group() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -2005,7 +2236,7 @@ fn add_existing_dev_group() -> Result<()> {
         dev-dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--group").arg("dev"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--group").arg("dev"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2026,7 +2257,7 @@ fn add_existing_dev_group() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -2040,7 +2271,7 @@ fn add_existing_dev_group() -> Result<()> {
         dev = [
             "anyio==3.7.0",
         ]
-        "###
+        "#
         );
     });
 
@@ -2050,7 +2281,7 @@ fn add_existing_dev_group() -> Result<()> {
 /// `uv remove --dev` should remove from both `dev-dependencies` and `dependency-groups.dev`.
 #[test]
 fn remove_both_dev() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -2067,7 +2298,7 @@ fn remove_both_dev() -> Result<()> {
         dev = ["anyio>=3.7.0"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--dev"), @r"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--dev"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2075,7 +2306,7 @@ fn remove_both_dev() -> Result<()> {
     ----- stderr -----
     warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -2084,7 +2315,7 @@ fn remove_both_dev() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -2096,7 +2327,7 @@ fn remove_both_dev() -> Result<()> {
 
         [dependency-groups]
         dev = []
-        "###
+        "#
         );
     });
 
@@ -2106,7 +2337,7 @@ fn remove_both_dev() -> Result<()> {
 /// Do not allow add for groups in scripts.
 #[test]
 fn disallow_group_script_add() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let script = context.temp_dir.child("main.py");
     script.write_str(indoc! {r#"
@@ -2123,7 +2354,7 @@ fn disallow_group_script_add() -> Result<()> {
         .arg("dev")
         .arg("anyio==3.7.0")
         .arg("--script")
-        .arg("main.py"), @r###"
+        .arg("main.py"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2134,7 +2365,7 @@ fn disallow_group_script_add() -> Result<()> {
     Usage: uv add --cache-dir [CACHE_DIR] --group <GROUP> --exclude-newer <EXCLUDE_NEWER> <PACKAGES|--requirements <REQUIREMENTS>>
 
     For more information, try '--help'.
-    "###);
+    ");
 
     Ok(())
 }
@@ -2142,7 +2373,7 @@ fn disallow_group_script_add() -> Result<()> {
 /// `uv remove --group dev` should remove from both `dev-dependencies` and `dependency-groups.dev`.
 #[test]
 fn remove_both_dev_group() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -2159,7 +2390,7 @@ fn remove_both_dev_group() -> Result<()> {
         dev = ["anyio>=3.7.0"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--group").arg("dev"), @r"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--group").arg("dev"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2167,7 +2398,7 @@ fn remove_both_dev_group() -> Result<()> {
     ----- stderr -----
     warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -2176,7 +2407,7 @@ fn remove_both_dev_group() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -2188,7 +2419,7 @@ fn remove_both_dev_group() -> Result<()> {
 
         [dependency-groups]
         dev = []
-        "###
+        "#
         );
     });
 
@@ -2198,7 +2429,7 @@ fn remove_both_dev_group() -> Result<()> {
 /// Add a workspace dependency as an editable.
 #[test]
 fn add_workspace_editable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let workspace = context.temp_dir.child("pyproject.toml");
     workspace.write_str(indoc! {r#"
@@ -2261,7 +2492,7 @@ fn add_workspace_editable() -> Result<()> {
         .arg("--no-editable")
         .current_dir(&child1);
 
-    uv_snapshot!(context.filters(), add_cmd, @r"
+    uv_snapshot!(context.filters(), add_cmd, @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2303,7 +2534,7 @@ fn add_workspace_editable() -> Result<()> {
     let mut add_cmd = context.add();
     add_cmd.arg("child2").arg("--editable").current_dir(&child1);
 
-    uv_snapshot!(context.filters(), add_cmd, @r"
+    uv_snapshot!(context.filters(), add_cmd, @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2389,13 +2620,13 @@ fn add_workspace_editable() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").current_dir(&child1), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").current_dir(&child1), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 2 packages in [TIME]
+    Checked 2 packages in [TIME]
     ");
 
     Ok(())
@@ -2404,7 +2635,7 @@ fn add_workspace_editable() -> Result<()> {
 /// Add a workspace dependency via its path.
 #[test]
 fn add_workspace_path() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let workspace = context.temp_dir.child("pyproject.toml");
     workspace.write_str(indoc! {r#"
@@ -2438,7 +2669,7 @@ fn add_workspace_path() -> Result<()> {
         .child("__init__.py")
         .touch()?;
 
-    uv_snapshot!(context.filters(), context.add().arg("./child"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("./child"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2456,7 +2687,7 @@ fn add_workspace_path() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "parent"
         version = "0.1.0"
@@ -2470,7 +2701,7 @@ fn add_workspace_path() -> Result<()> {
 
         [tool.uv.sources]
         child = { workspace = true }
-        "###
+        "#
         );
     });
 
@@ -2515,13 +2746,13 @@ fn add_workspace_path() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     Ok(())
@@ -2530,7 +2761,7 @@ fn add_workspace_path() -> Result<()> {
 /// Add a path dependency, which should be implicitly added to the workspace.
 #[test]
 fn add_path_implicit_workspace() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let workspace = context.temp_dir.child("workspace");
     workspace.child("pyproject.toml").write_str(indoc! {r#"
@@ -2561,7 +2792,7 @@ fn add_path_implicit_workspace() -> Result<()> {
         .child("__init__.py")
         .touch()?;
 
-    uv_snapshot!(context.filters(), context.add().arg(Path::new("packages").join("child")).current_dir(workspace.path()), @r"
+    uv_snapshot!(context.filters(), context.add().arg(Path::new("packages").join("child")).current_dir(workspace.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2643,13 +2874,13 @@ fn add_path_implicit_workspace() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").current_dir(workspace.path()), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").current_dir(workspace.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     Ok(())
@@ -2658,7 +2889,7 @@ fn add_path_implicit_workspace() -> Result<()> {
 /// Add a path dependency with `--no-workspace`, which should not be added to the workspace.
 #[test]
 fn add_path_no_workspace() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let workspace = context.temp_dir.child("workspace");
     workspace.child("pyproject.toml").write_str(indoc! {r#"
@@ -2689,7 +2920,7 @@ fn add_path_no_workspace() -> Result<()> {
         .child("__init__.py")
         .touch()?;
 
-    uv_snapshot!(context.filters(), context.add().arg(Path::new("packages").join("child")).current_dir(workspace.path()).arg("--no-workspace"), @r"
+    uv_snapshot!(context.filters(), context.add().arg(Path::new("packages").join("child")).current_dir(workspace.path()).arg("--no-workspace"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2759,13 +2990,13 @@ fn add_path_no_workspace() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").current_dir(workspace.path()), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").current_dir(workspace.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     Ok(())
@@ -2774,7 +3005,7 @@ fn add_path_no_workspace() -> Result<()> {
 /// Add a path dependency in an adjacent directory, which should not be added to the workspace.
 #[test]
 fn add_path_adjacent_directory() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let project = context.temp_dir.child("project");
     project.child("pyproject.toml").write_str(indoc! {r#"
@@ -2803,7 +3034,7 @@ fn add_path_adjacent_directory() -> Result<()> {
         .child("__init__.py")
         .touch()?;
 
-    uv_snapshot!(context.filters(), context.add().arg(dependency.path()).current_dir(project.path()), @r"
+    uv_snapshot!(context.filters(), context.add().arg(dependency.path()).current_dir(project.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2875,11 +3106,206 @@ fn add_path_adjacent_directory() -> Result<()> {
     Ok(())
 }
 
+/// Check relative and absolute path handling with `uv add`.
+///
+/// TODO(tk): Currently `uv add` always relativizes paths in `pyproject.toml`,
+/// this is a bug.
+#[test]
+fn add_relative_and_absolute_paths() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Create a dependency at a relative path (sibling directory).
+    let relative_dep = context.temp_dir.child("relative_dep");
+    relative_dep.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "relative-dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    relative_dep
+        .child("src")
+        .child("relative_dep")
+        .child("__init__.py")
+        .touch()?;
+
+    // Create a dependency at an absolute path (using the full temp_dir path).
+    let absolute_dep = context.temp_dir.child("absolute_dep");
+    absolute_dep.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "absolute-dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    absolute_dep
+        .child("src")
+        .child("absolute_dep")
+        .child("__init__.py")
+        .touch()?;
+
+    // Create a dependency that will be added via a file:// URL.
+    let file_url_dep = context.temp_dir.child("file_url_dep");
+    file_url_dep.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "file-url-dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    file_url_dep
+        .child("src")
+        .child("file_url_dep")
+        .child("__init__.py")
+        .touch()?;
+
+    // Add the relative dependency using a relative path.
+    uv_snapshot!(context.filters(), context.add().arg("../relative_dep").current_dir(project.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + relative-dep==0.1.0 (from file://[TEMP_DIR]/relative_dep)
+    ");
+
+    // Add the absolute dependency using an absolute path.
+    uv_snapshot!(context.filters(), context.add().arg(absolute_dep.path()).current_dir(project.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + absolute-dep==0.1.0 (from file://[TEMP_DIR]/absolute_dep)
+    ");
+
+    // Add a dependency using a file:// URL (also absolute).
+    let file_url = Url::from_file_path(file_url_dep.path()).unwrap();
+    uv_snapshot!(context.filters(), context.add().arg(file_url.as_str()).current_dir(project.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + file-url-dep==0.1.0 (from file://[TEMP_DIR]/file_url_dep)
+    ");
+
+    // Check pyproject.toml.
+    let pyproject_toml = fs_err::read_to_string(project.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "absolute-dep",
+            "file-url-dep",
+            "relative-dep",
+        ]
+
+        [tool.uv.sources]
+        relative-dep = { path = "../relative_dep" }
+        absolute-dep = { path = "../absolute_dep" }
+        file-url-dep = { path = "../file_url_dep" }
+        "#
+        );
+    });
+
+    // Check uv.lock.
+    let lock = fs_err::read_to_string(project.join("uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "absolute-dep"
+        version = "0.1.0"
+        source = { directory = "../absolute_dep" }
+
+        [[package]]
+        name = "file-url-dep"
+        version = "0.1.0"
+        source = { directory = "../file_url_dep" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "absolute-dep" },
+            { name = "file-url-dep" },
+            { name = "relative-dep" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "absolute-dep", directory = "../absolute_dep" },
+            { name = "file-url-dep", directory = "../file_url_dep" },
+            { name = "relative-dep", directory = "../relative_dep" },
+        ]
+
+        [[package]]
+        name = "relative-dep"
+        version = "0.1.0"
+        source = { directory = "../relative_dep" }
+        "#
+        );
+    });
+
+    Ok(())
+}
+
 /// Update a requirement, modifying the source and extras.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn update() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -2890,16 +3316,16 @@ fn update() -> Result<()> {
         dependencies = ["requests==2.31.0"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2915,14 +3341,14 @@ fn update() -> Result<()> {
     ");
 
     // Enable an extra (note the version specifier should be preserved).
-    uv_snapshot!(context.filters(), context.add().arg("requests[security]"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("requests[security]"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Audited 5 packages in [TIME]
+    Checked 5 packages in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -2931,7 +3357,7 @@ fn update() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -2939,12 +3365,12 @@ fn update() -> Result<()> {
         dependencies = [
             "requests[security]==2.31.0",
         ]
-        "###
+        "#
         );
     });
 
     // Enable extras using the CLI flag and add a marker.
-    uv_snapshot!(context.filters(), context.add().arg("requests; python_version > '3.7'").args(["--extra=use_chardet_on_py3", "--extra=socks"]), @r"
+    uv_snapshot!(context.filters(), context.add().arg("requests; python_version > '3.7'").args(["--extra=use_chardet_on_py3", "--extra=socks"]), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2963,7 +3389,7 @@ fn update() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -2972,13 +3398,13 @@ fn update() -> Result<()> {
             "requests[security]==2.31.0",
             "requests[socks,use-chardet-on-py3]>=2.31.0 ; python_full_version >= '3.8'",
         ]
-        "###
+        "#
         );
     });
 
     // Change the source by specifying a version (note the extras, markers, and version should be
     // preserved).
-    uv_snapshot!(context.filters(), context.add().arg("requests @ git+https://github.com/psf/requests").arg("--tag=v2.32.3"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("requests @ git+https://github.com/psf/requests").arg("--tag=v2.32.3"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2998,7 +3424,7 @@ fn update() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -3010,7 +3436,7 @@ fn update() -> Result<()> {
 
         [tool.uv.sources]
         requests = { git = "https://github.com/psf/requests", tag = "v2.32.3" }
-        "###
+        "#
         );
     });
 
@@ -3134,13 +3560,13 @@ fn update() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 7 packages in [TIME]
+    Checked 7 packages in [TIME]
     ");
 
     Ok(())
@@ -3149,7 +3575,7 @@ fn update() -> Result<()> {
 /// Add and update a requirement, with different markers
 #[test]
 fn add_update_marker() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -3159,16 +3585,16 @@ fn add_update_marker() -> Result<()> {
         requires-python = ">=3.8"
         dependencies = ["requests>=2.30; python_version >= '3.11'"]
     "#})?;
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3184,14 +3610,14 @@ fn add_update_marker() -> Result<()> {
     ");
 
     // Restrict the `requests` version for Python <3.11
-    uv_snapshot!(context.filters(), context.add().arg("requests>=2.0,<2.29; python_version < '3.11'"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("requests>=2.0,<2.29; python_version < '3.11'"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    Audited 5 packages in [TIME]
+    Checked 5 packages in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -3201,7 +3627,7 @@ fn add_update_marker() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -3210,19 +3636,19 @@ fn add_update_marker() -> Result<()> {
             "requests>=2.0,<2.29 ; python_full_version < '3.11'",
             "requests>=2.30; python_version >= '3.11'",
         ]
-        "###
+        "#
         );
     });
 
     // Change the restricted `requests` version for Python <3.11
-    uv_snapshot!(context.filters(), context.add().arg("requests>=2.0,<2.20; python_version < '3.11'"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("requests>=2.0,<2.20; python_version < '3.11'"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 10 packages in [TIME]
-    Audited 5 packages in [TIME]
+    Checked 5 packages in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -3232,7 +3658,7 @@ fn add_update_marker() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -3241,19 +3667,19 @@ fn add_update_marker() -> Result<()> {
             "requests>=2.0,<2.20 ; python_full_version < '3.11'",
             "requests>=2.30; python_version >= '3.11'",
         ]
-        "###
+        "#
         );
     });
 
     // Restrict the `requests` version on Windows and Python >3.11
-    uv_snapshot!(context.filters(), context.add().arg("requests>=2.31 ; sys_platform == 'win32' and python_version > '3.11'"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("requests>=2.31 ; sys_platform == 'win32' and python_version > '3.11'"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 10 packages in [TIME]
-    Audited 5 packages in [TIME]
+    Checked 5 packages in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -3263,7 +3689,7 @@ fn add_update_marker() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -3273,19 +3699,19 @@ fn add_update_marker() -> Result<()> {
             "requests>=2.30; python_version >= '3.11'",
             "requests>=2.31 ; python_full_version >= '3.12' and sys_platform == 'win32'",
         ]
-        "###
+        "#
         );
     });
 
     // Restrict the `requests` version on Windows
-    uv_snapshot!(context.filters(), context.add().arg("requests>=2.10 ; sys_platform == 'win32'"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("requests>=2.10 ; sys_platform == 'win32'"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 10 packages in [TIME]
-    Audited 5 packages in [TIME]
+    Checked 5 packages in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -3296,7 +3722,7 @@ fn add_update_marker() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -3307,12 +3733,12 @@ fn add_update_marker() -> Result<()> {
             "requests>=2.30; python_version >= '3.11'",
             "requests>=2.31 ; python_full_version >= '3.12' and sys_platform == 'win32'",
         ]
-        "###
+        "#
         );
     });
 
     // Remove `requests`
-    uv_snapshot!(context.filters(), context.remove().arg("requests"), @r"
+    uv_snapshot!(context.filters(), context.remove().arg("requests"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3334,13 +3760,13 @@ fn add_update_marker() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.8"
         dependencies = []
-        "###
+        "#
         );
     });
 
@@ -3348,9 +3774,9 @@ fn add_update_marker() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn update_source_replace_url() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -3364,7 +3790,7 @@ fn update_source_replace_url() -> Result<()> {
     "#})?;
 
     // Change the source. The existing URL should be removed.
-    uv_snapshot!(context.filters(), context.add().arg("requests @ git+https://github.com/psf/requests").arg("--tag=v2.32.3"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("requests @ git+https://github.com/psf/requests").arg("--tag=v2.32.3"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3386,7 +3812,7 @@ fn update_source_replace_url() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -3397,12 +3823,12 @@ fn update_source_replace_url() -> Result<()> {
 
         [tool.uv.sources]
         requests = { git = "https://github.com/psf/requests", tag = "v2.32.3" }
-        "###
+        "#
         );
     });
 
     // Change the source again. The existing source should be replaced.
-    uv_snapshot!(context.filters(), context.add().arg("requests @ git+https://github.com/psf/requests").arg("--tag=v2.32.2"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("requests @ git+https://github.com/psf/requests").arg("--tag=v2.32.2"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3422,7 +3848,7 @@ fn update_source_replace_url() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -3433,7 +3859,7 @@ fn update_source_replace_url() -> Result<()> {
 
         [tool.uv.sources]
         requests = { git = "https://github.com/psf/requests", tag = "v2.32.2" }
-        "###
+        "#
         );
     });
 
@@ -3443,9 +3869,9 @@ fn update_source_replace_url() -> Result<()> {
 /// If a source defined in `tool.uv.sources` but its name is not normalized, `uv add` should not
 /// add the same source again.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_non_normalized_source() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -3461,7 +3887,7 @@ fn add_non_normalized_source() -> Result<()> {
         uv_public_pypackage = { git = "https://github.com/astral-test/uv-public-pypackage", tag = "0.0.1" }
         "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3479,7 +3905,7 @@ fn add_non_normalized_source() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -3490,7 +3916,7 @@ fn add_non_normalized_source() -> Result<()> {
 
         [tool.uv.sources]
         uv-public-pypackage = { git = "https://github.com/astral-test/uv-public-pypackage", rev = "0.0.1" }
-        "###
+        "#
         );
     });
 
@@ -3500,9 +3926,9 @@ fn add_non_normalized_source() -> Result<()> {
 /// Test updating an existing Git reference with branch/tag/rev options without re- specifying the
 /// URL.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_update_git_reference_project() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -3513,7 +3939,7 @@ fn add_update_git_reference_project() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("https://github.com/astral-test/uv-public-pypackage.git"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("https://github.com/astral-test/uv-public-pypackage.git"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3525,7 +3951,7 @@ fn add_update_git_reference_project() -> Result<()> {
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage.git@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     ");
 
-    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage").arg("--tag=0.0.1"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage").arg("--tag=0.0.1"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3539,7 +3965,7 @@ fn add_update_git_reference_project() -> Result<()> {
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage.git@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
     ");
 
-    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage").arg("--branch=main"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage").arg("--branch=main"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3552,7 +3978,7 @@ fn add_update_git_reference_project() -> Result<()> {
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage.git@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     ");
 
-    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage").arg("--rev=2005223fcad0e2c06daf2e14b93b790604868e1e"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage").arg("--rev=2005223fcad0e2c06daf2e14b93b790604868e1e"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3572,9 +3998,9 @@ fn add_update_git_reference_project() -> Result<()> {
 /// Test updating an existing Git reference with branch/tag/rev options without re-specifying the
 /// URL in a script.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_update_git_reference_script() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! {
         r#"
@@ -3589,14 +4015,14 @@ fn add_update_git_reference_script() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.add().arg("--script=script.py").arg("https://github.com/astral-test/uv-public-pypackage.git"),
-        @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Updated `script.py`
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "
     );
 
     let script_content = context.read("script.py");
@@ -3604,7 +4030,7 @@ fn add_update_git_reference_script() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            script_content, @r##"
+            script_content, @r#"
         # /// script
         # requires-python = ">=3.11"
         # dependencies = [
@@ -3617,19 +4043,19 @@ fn add_update_git_reference_script() -> Result<()> {
 
         import time
         time.sleep(5)
-        "##
+        "#
         );
     });
 
     uv_snapshot!(context.filters(), context.add().arg("--script=script.py").arg("uv-public-pypackage").arg("--branch=test-branch"),
-        @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Updated `script.py`
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "
     );
 
     let script_content = context.read("script.py");
@@ -3637,7 +4063,7 @@ fn add_update_git_reference_script() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            script_content, @r##"
+            script_content, @r#"
         # /// script
         # requires-python = ">=3.11"
         # dependencies = [
@@ -3650,7 +4076,7 @@ fn add_update_git_reference_script() -> Result<()> {
 
         import time
         time.sleep(5)
-        "##
+        "#
         );
     });
 
@@ -3660,9 +4086,9 @@ fn add_update_git_reference_script() -> Result<()> {
 /// If a source defined in `tool.uv.sources` but its name is not normalized, `uv remove` should
 /// remove the source.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn remove_non_normalized_source() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -3678,14 +4104,14 @@ fn remove_non_normalized_source() -> Result<()> {
         uv_public_pypackage = { git = "https://github.com/astral-test/uv-public-pypackage", tag = "0.0.1" }
         "#})?;
 
-    uv_snapshot!(context.filters(), context.remove().arg("uv-public-pypackage"), @r"
+    uv_snapshot!(context.filters(), context.remove().arg("uv-public-pypackage"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -3694,13 +4120,13 @@ fn remove_non_normalized_source() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
-        "###
+        "#
         );
     });
 
@@ -3710,7 +4136,7 @@ fn remove_non_normalized_source() -> Result<()> {
 /// Adding a dependency does not remove untracked dependencies from the environment.
 #[test]
 fn add_inexact() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -3721,16 +4147,16 @@ fn add_inexact() -> Result<()> {
         dependencies = ["anyio == 3.7.0"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3752,7 +4178,7 @@ fn add_inexact() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3770,7 +4196,7 @@ fn add_inexact() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -3778,7 +4204,7 @@ fn add_inexact() -> Result<()> {
         dependencies = [
             "iniconfig==2.0.0",
         ]
-        "###
+        "#
         );
     });
 
@@ -3820,17 +4246,17 @@ fn add_inexact() -> Result<()> {
     });
 
     // Install from the lockfile without removing extraneous packages from the environment.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--inexact"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--inexact"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     // Install from the lockfile, performing an exact sync.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3840,7 +4266,7 @@ fn add_inexact() -> Result<()> {
      - anyio==3.7.0
      - idna==3.6
      - sniffio==1.3.1
-    "###);
+    ");
 
     Ok(())
 }
@@ -3848,7 +4274,7 @@ fn add_inexact() -> Result<()> {
 /// Remove a PyPI requirement.
 #[test]
 fn remove_registry() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -3859,16 +4285,16 @@ fn remove_registry() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3881,7 +4307,7 @@ fn remove_registry() -> Result<()> {
      + sniffio==1.3.1
     ");
 
-    uv_snapshot!(context.filters(), context.remove().arg("anyio"), @r"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3900,13 +4326,13 @@ fn remove_registry() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
-        "###
+        "#
         );
     });
 
@@ -3933,13 +4359,13 @@ fn remove_registry() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     Ok(())
@@ -3947,7 +4373,7 @@ fn remove_registry() -> Result<()> {
 
 #[test]
 fn add_preserves_indentation_in_pyproject_toml() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -3958,7 +4384,7 @@ fn add_preserves_indentation_in_pyproject_toml() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("requests==2.31.0"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("requests==2.31.0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3982,7 +4408,7 @@ fn add_preserves_indentation_in_pyproject_toml() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -3991,7 +4417,7 @@ fn add_preserves_indentation_in_pyproject_toml() -> Result<()> {
             "anyio==3.7.0",
             "requests==2.31.0",
         ]
-        "###
+        "#
         );
     });
     Ok(())
@@ -3999,7 +4425,7 @@ fn add_preserves_indentation_in_pyproject_toml() -> Result<()> {
 
 #[test]
 fn add_puts_default_indentation_in_pyproject_toml_if_not_observed() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -4010,7 +4436,7 @@ fn add_puts_default_indentation_in_pyproject_toml_if_not_observed() -> Result<()
         dependencies = ["anyio==3.7.0"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("requests==2.31.0"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("requests==2.31.0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4034,7 +4460,7 @@ fn add_puts_default_indentation_in_pyproject_toml_if_not_observed() -> Result<()
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -4043,7 +4469,7 @@ fn add_puts_default_indentation_in_pyproject_toml_if_not_observed() -> Result<()
             "anyio==3.7.0",
             "requests==2.31.0",
         ]
-        "###
+        "#
         );
     });
     Ok(())
@@ -4052,7 +4478,7 @@ fn add_puts_default_indentation_in_pyproject_toml_if_not_observed() -> Result<()
 /// Add a requirement without updating the lockfile.
 #[test]
 fn add_frozen() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Remove the virtual environment.
     fs_err::remove_dir_all(&context.venv)?;
@@ -4066,14 +4492,14 @@ fn add_frozen() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    "###);
+    ");
 
     let pyproject_toml = context.read("pyproject.toml");
 
@@ -4081,7 +4507,7 @@ fn add_frozen() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -4089,7 +4515,7 @@ fn add_frozen() -> Result<()> {
         dependencies = [
             "anyio==3.7.0",
         ]
-        "###
+        "#
         );
     });
 
@@ -4102,7 +4528,7 @@ fn add_frozen() -> Result<()> {
 /// Add a requirement without updating the environment.
 #[test]
 fn add_no_sync() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Remove the virtual environment.
     fs_err::remove_dir_all(&context.venv)?;
@@ -4116,7 +4542,7 @@ fn add_no_sync() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--no-sync"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--no-sync"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4124,7 +4550,7 @@ fn add_no_sync() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     let pyproject_toml = context.read("pyproject.toml");
 
@@ -4132,7 +4558,7 @@ fn add_no_sync() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -4140,7 +4566,7 @@ fn add_no_sync() -> Result<()> {
         dependencies = [
             "anyio==3.7.0",
         ]
-        "###
+        "#
         );
     });
 
@@ -4152,7 +4578,7 @@ fn add_no_sync() -> Result<()> {
 
 #[test]
 fn add_reject_multiple_git_ref_flags() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // --tag and --branch
     uv_snapshot!(context.filters(), context
@@ -4161,7 +4587,7 @@ fn add_reject_multiple_git_ref_flags() {
         .arg("--tag")
         .arg("0.0.1")
         .arg("--branch")
-        .arg("test"), @r###"
+        .arg("test"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4172,7 +4598,7 @@ fn add_reject_multiple_git_ref_flags() {
     Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <PACKAGES|--requirements <REQUIREMENTS>>
 
     For more information, try '--help'.
-    "###
+    "
     );
 
     // --tag and --rev
@@ -4182,7 +4608,7 @@ fn add_reject_multiple_git_ref_flags() {
         .arg("--tag")
         .arg("0.0.1")
         .arg("--rev")
-        .arg("326b943"), @r###"
+        .arg("326b943"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4193,7 +4619,7 @@ fn add_reject_multiple_git_ref_flags() {
     Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <PACKAGES|--requirements <REQUIREMENTS>>
 
     For more information, try '--help'.
-    "###
+    "
     );
 
     // --tag and --tag
@@ -4203,7 +4629,7 @@ fn add_reject_multiple_git_ref_flags() {
         .arg("--tag")
         .arg("0.0.1")
         .arg("--tag")
-        .arg("0.0.2"), @r###"
+        .arg("0.0.2"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4214,14 +4640,14 @@ fn add_reject_multiple_git_ref_flags() {
     Usage: uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
     For more information, try '--help'.
-    "###
+    "
     );
 }
 
 /// Avoiding persisting `add` calls when resolution fails.
 #[test]
 fn add_error() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -4232,7 +4658,7 @@ fn add_error() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("xyz"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("xyz"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4241,15 +4667,15 @@ fn add_error() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because there are no versions of xyz and your project depends on xyz, we can conclude that your project's requirements are unsatisfiable.
       help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.add().arg("xyz").arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("xyz").arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    "###);
+    ");
 
     let lock = context.temp_dir.join("uv.lock");
     assert!(!lock.exists());
@@ -4260,7 +4686,7 @@ fn add_error() -> Result<()> {
 /// Emit dedicated error message when adding Conda `environment.yml`
 #[test]
 fn add_environment_yml_error() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -4280,7 +4706,7 @@ fn add_environment_yml_error() -> Result<()> {
           - python>=3.12
     "})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("-r").arg("environment.yml"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("-r").arg("environment.yml"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4295,7 +4721,7 @@ fn add_environment_yml_error() -> Result<()> {
 /// Set a lower bound when adding unconstrained dependencies.
 #[test]
 fn add_lower_bound() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -4307,7 +4733,7 @@ fn add_lower_bound() -> Result<()> {
     "#})?;
 
     // Adding `anyio` should include a lower-bound.
-    uv_snapshot!(context.filters(), context.add().arg("anyio"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4327,7 +4753,7 @@ fn add_lower_bound() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -4335,7 +4761,7 @@ fn add_lower_bound() -> Result<()> {
         dependencies = [
             "anyio>=4.3.0",
         ]
-        "###
+        "#
         );
     });
 
@@ -4345,7 +4771,7 @@ fn add_lower_bound() -> Result<()> {
 /// Avoid setting a lower bound when updating existing dependencies.
 #[test]
 fn add_lower_bound_existing() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -4358,7 +4784,7 @@ fn add_lower_bound_existing() -> Result<()> {
 
     // Adding `anyio` should _not_ set a lower-bound, since it's already present (even if
     // unconstrained).
-    uv_snapshot!(context.filters(), context.add().arg("anyio"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4378,7 +4804,7 @@ fn add_lower_bound_existing() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -4386,7 +4812,7 @@ fn add_lower_bound_existing() -> Result<()> {
         dependencies = [
             "anyio",
         ]
-        "###
+        "#
         );
     });
 
@@ -4396,7 +4822,7 @@ fn add_lower_bound_existing() -> Result<()> {
 /// Avoid setting a lower bound with `--raw`.
 #[test]
 fn add_lower_bound_raw() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -4408,7 +4834,7 @@ fn add_lower_bound_raw() -> Result<()> {
     "#})?;
 
     // Adding `anyio` should _not_ set a lower-bound when using `--raw`.
-    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--raw"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--raw"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4428,7 +4854,7 @@ fn add_lower_bound_raw() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -4436,7 +4862,7 @@ fn add_lower_bound_raw() -> Result<()> {
         dependencies = [
             "anyio",
         ]
-        "###
+        "#
         );
     });
 
@@ -4446,7 +4872,7 @@ fn add_lower_bound_raw() -> Result<()> {
 /// Set a lower bound when adding unconstrained dev dependencies.
 #[test]
 fn add_lower_bound_dev() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -4458,7 +4884,7 @@ fn add_lower_bound_dev() -> Result<()> {
     "#})?;
 
     // Adding `anyio` should include a lower-bound.
-    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--dev"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--dev"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4478,7 +4904,7 @@ fn add_lower_bound_dev() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -4489,7 +4915,7 @@ fn add_lower_bound_dev() -> Result<()> {
         dev = [
             "anyio>=4.3.0",
         ]
-        "###
+        "#
         );
     });
 
@@ -4499,7 +4925,7 @@ fn add_lower_bound_dev() -> Result<()> {
 /// Set a lower bound when adding unconstrained optional dependencies.
 #[test]
 fn add_lower_bound_optional() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -4511,7 +4937,7 @@ fn add_lower_bound_optional() -> Result<()> {
     "#})?;
 
     // Adding `anyio` should include a lower-bound.
-    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--optional=io"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--optional=io"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4531,7 +4957,7 @@ fn add_lower_bound_optional() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -4542,7 +4968,7 @@ fn add_lower_bound_optional() -> Result<()> {
         io = [
             "anyio>=4.3.0",
         ]
-        "###
+        "#
         );
     });
 
@@ -4614,7 +5040,7 @@ fn add_lower_bound_optional() -> Result<()> {
 /// Omit the local segment when adding dependencies (since `>=1.2.3+local` is invalid).
 #[test]
 fn add_lower_bound_local() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -4626,7 +5052,7 @@ fn add_lower_bound_local() -> Result<()> {
     "#})?;
 
     // Adding `torch` should include a lower-bound, but no local segment.
-    uv_snapshot!(context.filters(), context.add().arg("local-simple-a").arg("--index").arg(packse_index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
+    uv_snapshot!(context.filters(), context.add().arg("local-simple-a").arg("--index").arg(packse_index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4644,7 +5070,7 @@ fn add_lower_bound_local() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -4655,7 +5081,7 @@ fn add_lower_bound_local() -> Result<()> {
 
         [[tool.uv.index]]
         url = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/"
-        "###
+        "#
         );
     });
 
@@ -4696,10 +5122,10 @@ fn add_lower_bound_local() -> Result<()> {
     Ok(())
 }
 
-/// Add dependencies to a (legacy) non-project workspace root.
+/// Add dependencies to a non-project workspace root.
 #[test]
 fn add_non_project() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r"
@@ -4709,28 +5135,28 @@ fn add_non_project() -> Result<()> {
 
     // Adding `iniconfig` should fail, since virtual workspace roots don't support production
     // dependencies.
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Project is missing a `[project]` table; add a `[project]` table to use production dependencies, or run `uv add --dev` instead
-    "###);
+    ");
 
     // Adding `iniconfig` as optional should fail, since virtual workspace roots don't support
     // optional dependencies.
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--optional").arg("async"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--optional").arg("async"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Project is missing a `[project]` table; add a `[project]` table to use optional dependencies, or run `uv add --dev` instead
-    "###);
+    ");
 
     // Adding `iniconfig` as a dev dependency should succeed.
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--dev"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--dev"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4741,7 +5167,7 @@ fn add_non_project() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     let pyproject_toml = context.read("pyproject.toml");
 
@@ -4749,7 +5175,7 @@ fn add_non_project() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [tool.uv.workspace]
         members = []
 
@@ -4757,7 +5183,7 @@ fn add_non_project() -> Result<()> {
         dev = [
             "iniconfig>=2.0.0",
         ]
-        "###
+        "#
         );
     });
 
@@ -4798,7 +5224,7 @@ fn add_non_project() -> Result<()> {
 #[test]
 fn add_virtual_empty() -> Result<()> {
     // testing how `uv add` reacts to a pyproject with no `[project]` and nothing useful to it
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -4808,7 +5234,7 @@ fn add_virtual_empty() -> Result<()> {
 
     // Add normal dep (doesn't make sense)
     uv_snapshot!(context.filters(), context.add()
-        .arg("sortedcontainers"), @r"
+        .arg("sortedcontainers"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4833,7 +5259,7 @@ fn add_virtual_empty() -> Result<()> {
     // Add dependency-group (can make sense!)
     uv_snapshot!(context.filters(), context.add()
         .arg("sortedcontainers")
-        .arg("--group").arg("dev"), @r"
+        .arg("--group").arg("dev"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4871,7 +5297,7 @@ fn add_virtual_empty() -> Result<()> {
 fn add_virtual_dependency_group() -> Result<()> {
     // testing basic `uv add --group` functionality
     // when the pyproject.toml is fully virtual (no `[project]`)
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -4884,7 +5310,7 @@ fn add_virtual_dependency_group() -> Result<()> {
     // Add to existing group
     uv_snapshot!(context.filters(), context.add()
         .arg("sortedcontainers")
-        .arg("--group").arg("dev"), @r"
+        .arg("--group").arg("dev"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4919,7 +5345,7 @@ fn add_virtual_dependency_group() -> Result<()> {
     // Add to new group
     uv_snapshot!(context.filters(), context.add()
         .arg("sortedcontainers")
-        .arg("--group").arg("baz"), @r"
+        .arg("--group").arg("baz"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4927,7 +5353,7 @@ fn add_virtual_dependency_group() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 3 packages in [TIME]
-    Audited 2 packages in [TIME]
+    Checked 2 packages in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -4958,7 +5384,7 @@ fn add_virtual_dependency_group() -> Result<()> {
 fn add_empty_requirements_group() -> Result<()> {
     // Test that `uv add -r requirements.txt --group <name>` creates an empty group
     // when the requirements file is empty
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -4974,7 +5400,7 @@ fn add_empty_requirements_group() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.add()
         .arg("-r").arg("requirements.txt")
-        .arg("--group").arg("user"), @r"
+        .arg("--group").arg("user"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4982,7 +5408,7 @@ fn add_empty_requirements_group() -> Result<()> {
     ----- stderr -----
     warning: Requirements file `requirements.txt` does not contain any dependencies
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -4991,7 +5417,7 @@ fn add_empty_requirements_group() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -5000,7 +5426,7 @@ fn add_empty_requirements_group() -> Result<()> {
 
         [dependency-groups]
         user = []
-        "###
+        "#
         );
     });
 
@@ -5011,7 +5437,7 @@ fn add_empty_requirements_group() -> Result<()> {
 fn add_empty_requirements_optional() -> Result<()> {
     // Test that `uv add -r requirements.txt --optional <extra>` creates an empty extra
     // when the requirements file is empty
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -5027,7 +5453,7 @@ fn add_empty_requirements_optional() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.add()
         .arg("-r").arg("requirements.txt")
-        .arg("--optional").arg("extra"), @r"
+        .arg("--optional").arg("extra"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5035,7 +5461,7 @@ fn add_empty_requirements_optional() -> Result<()> {
     ----- stderr -----
     warning: Requirements file `requirements.txt` does not contain any dependencies
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -5044,7 +5470,7 @@ fn add_empty_requirements_optional() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -5053,7 +5479,7 @@ fn add_empty_requirements_optional() -> Result<()> {
 
         [project.optional-dependencies]
         extra = []
-        "###
+        "#
         );
     });
 
@@ -5063,7 +5489,7 @@ fn add_empty_requirements_optional() -> Result<()> {
 #[test]
 fn remove_virtual_empty() -> Result<()> {
     // testing how `uv remove` reacts to a pyproject with no `[project]` and nothing useful to it
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5076,7 +5502,7 @@ fn remove_virtual_empty() -> Result<()> {
 
     // Remove normal dep (doesn't make sense)
     uv_snapshot!(context.filters(), context.remove()
-        .arg("sortedcontainers"), @r"
+        .arg("sortedcontainers"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -5092,6 +5518,7 @@ fn remove_virtual_empty() -> Result<()> {
     }, {
         assert_snapshot!(
             pyproject_toml, @r#"
+
         [tool.mycooltool]
         wow = "someconfig"
         "#
@@ -5101,7 +5528,7 @@ fn remove_virtual_empty() -> Result<()> {
     // Remove dependency-group (can make sense, but nothing there!)
     uv_snapshot!(context.filters(), context.remove()
         .arg("sortedcontainers")
-        .arg("--group").arg("dev"), @r"
+        .arg("--group").arg("dev"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -5117,6 +5544,7 @@ fn remove_virtual_empty() -> Result<()> {
     }, {
         assert_snapshot!(
             pyproject_toml, @r#"
+
         [tool.mycooltool]
         wow = "someconfig"
         "#
@@ -5130,7 +5558,7 @@ fn remove_virtual_empty() -> Result<()> {
 fn remove_virtual_dependency_group() -> Result<()> {
     // testing basic `uv remove --group` functionality
     // when the pyproject.toml is fully virtual (no `[project]`)
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -5143,7 +5571,7 @@ fn remove_virtual_dependency_group() -> Result<()> {
     // Remove from group
     uv_snapshot!(context.filters(), context.remove()
         .arg("sortedcontainers")
-        .arg("--group").arg("foo"), @r"
+        .arg("--group").arg("foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5174,7 +5602,7 @@ fn remove_virtual_dependency_group() -> Result<()> {
     // Remove from non-existent group
     uv_snapshot!(context.filters(), context.remove()
         .arg("sortedcontainers")
-        .arg("--group").arg("baz"), @r"
+        .arg("--group").arg("baz"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -5204,7 +5632,7 @@ fn remove_virtual_dependency_group() -> Result<()> {
 /// Add the same requirement multiple times.
 #[test]
 fn add_repeat() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -5215,7 +5643,7 @@ fn add_repeat() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5235,7 +5663,7 @@ fn add_repeat() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -5243,18 +5671,18 @@ fn add_repeat() -> Result<()> {
         dependencies = [
             "anyio>=4.3.0",
         ]
-        "###
+        "#
         );
     });
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -5263,7 +5691,7 @@ fn add_repeat() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -5271,7 +5699,7 @@ fn add_repeat() -> Result<()> {
         dependencies = [
             "anyio>=4.3.0",
         ]
-        "###
+        "#
         );
     });
 
@@ -5280,9 +5708,9 @@ fn add_repeat() -> Result<()> {
 
 /// Add from requirement file.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_requirements_file() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -5297,7 +5725,7 @@ fn add_requirements_file() -> Result<()> {
     requirements_txt
         .write_str("Flask==2.3.2\nanyio @ git+https://github.com/agronholm/anyio.git@4.4.0")?;
 
-    uv_snapshot!(context.filters(), context.add().arg("-r").arg("requirements.txt"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("-r").arg("requirements.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5324,7 +5752,7 @@ fn add_requirements_file() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -5336,33 +5764,33 @@ fn add_requirements_file() -> Result<()> {
 
         [tool.uv.sources]
         anyio = { git = "https://github.com/agronholm/anyio.git", rev = "4.4.0" }
-        "###
+        "#
         );
     });
 
     // Passing stdin should succeed
-    uv_snapshot!(context.filters(), context.add().arg("-r").arg("-").stdin(std::fs::File::open(requirements_txt)?), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("-r").arg("-").stdin(std::fs::File::open(requirements_txt)?), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    Audited [N] packages in [TIME]
-    "###);
+    Checked [N] packages in [TIME]
+    ");
 
     // Passing a `setup.py` should fail.
-    uv_snapshot!(context.filters(), context.add().arg("-r").arg("setup.py"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("-r").arg("setup.py"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Adding requirements from a `setup.py` is not supported in `uv add`
-    "###);
+    ");
 
     // Passing nothing should fail.
-    uv_snapshot!(context.filters(), context.add(), @r###"
+    uv_snapshot!(context.filters(), context.add(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -5374,7 +5802,224 @@ fn add_requirements_file() -> Result<()> {
     Usage: uv add --cache-dir [CACHE_DIR] --exclude-newer <EXCLUDE_NEWER> <PACKAGES|--requirements <REQUIREMENTS>>
 
     For more information, try '--help'.
-    "###);
+    ");
+
+    Ok(())
+}
+
+/// Add a path dependency from a requirements file, respecting the lack of a `-e` flag.
+#[test]
+fn add_requirements_file_non_editable() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Create a peer package.
+    let child = context.temp_dir.child("packages").child("child");
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    child
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
+
+    // Without `-e`, the package should not be listed as editable.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("./packages/child")?;
+
+    uv_snapshot!(context.filters(), context.add().arg("-r").arg("requirements.txt").arg("--no-workspace"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/packages/child)
+    ");
+
+    let pyproject_toml_content = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml_content, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "child",
+        ]
+
+        [tool.uv.sources]
+        child = { path = "packages/child" }
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+/// Add a path dependency from a requirements file, respecting `-e` for editable.
+#[test]
+fn add_requirements_file_editable() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Create a peer package.
+    let child = context.temp_dir.child("packages").child("child");
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    child
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
+
+    // With `-e`, the package should be listed as editable.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("-e ./packages/child")?;
+
+    uv_snapshot!(context.filters(), context.add().arg("-r").arg("requirements.txt").arg("--no-workspace"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/packages/child)
+    ");
+
+    let pyproject_toml_content = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml_content, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "child",
+        ]
+
+        [tool.uv.sources]
+        child = { path = "packages/child", editable = true }
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+/// Add a path dependency from a requirements file, overriding the `-e` flag.
+#[test]
+fn add_requirements_file_editable_override() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Create a peer package.
+    let child = context.temp_dir.child("packages").child("child");
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    child
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
+
+    // With `-e`, the package should be listed as editable, but the `--no-editable` flag should
+    // override it.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("-e ./packages/child")?;
+
+    uv_snapshot!(context.filters(), context.add().arg("-r").arg("requirements.txt").arg("--no-workspace").arg("--no-editable"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/packages/child)
+    ");
+
+    let pyproject_toml_content = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml_content, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "child",
+        ]
+
+        [tool.uv.sources]
+        child = { path = "packages/child", editable = false }
+        "#
+        );
+    });
 
     Ok(())
 }
@@ -5387,7 +6032,7 @@ fn add_requirements_file() -> Result<()> {
 /// * We only sync the packages applicable under this marker
 #[test]
 fn add_requirements_file_with_marker_flag() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_win_txt = context.temp_dir.child("requirements.win.txt");
     requirements_win_txt.write_str("anyio>=2.31.0\niniconfig>=2; sys_platform != 'fantasy_os'\nnumpy>1.9; sys_platform == 'fantasy_os'")?;
@@ -5403,14 +6048,14 @@ fn add_requirements_file_with_marker_flag() -> Result<()> {
     pyproject_toml.write_str(base_pyproject_toml)?;
 
     // Add dependencies with a marker that does not apply for the current target.
-    uv_snapshot!(context.filters(), context.add().arg("-r").arg("requirements.win.txt").arg("-m").arg("python_version == '3.11'"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("-r").arg("requirements.win.txt").arg("-m").arg("python_version == '3.11'"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
     let edited_pyproject_toml = context.read("pyproject.toml");
 
@@ -5435,7 +6080,7 @@ fn add_requirements_file_with_marker_flag() -> Result<()> {
     fs_err::remove_file(context.temp_dir.join("uv.lock"))?;
 
     // Add dependencies with a marker that applies for the current target.
-    uv_snapshot!(context.filters(), context.add().arg("-r").arg("requirements.win.txt").arg("-m").arg("python_version == '3.12'"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("-r").arg("requirements.win.txt").arg("-m").arg("python_version == '3.12'"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5474,7 +6119,7 @@ fn add_requirements_file_with_marker_flag() -> Result<()> {
 /// or `uv.lock` file.
 #[test]
 fn add_requirements_file_constraints() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -5526,7 +6171,7 @@ fn add_requirements_file_constraints() -> Result<()> {
         "})?;
 
     // Pass the input requirements as constraints.
-    uv_snapshot!(context.filters(), context.add().arg("-r").arg("requirements.in").arg("-c").arg("requirements.txt"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("-r").arg("requirements.in").arg("-c").arg("requirements.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5701,7 +6346,7 @@ fn add_requirements_file_constraints() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5716,7 +6361,7 @@ fn add_requirements_file_constraints() -> Result<()> {
 /// Add a requirement to a dependency group.
 #[test]
 fn add_group() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -5727,7 +6372,7 @@ fn add_group() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--group").arg("test"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--group").arg("test"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5739,25 +6384,25 @@ fn add_group() -> Result<()> {
      + anyio==3.7.0
      + idna==3.6
      + sniffio==1.3.1
-    "###);
+    ");
 
     let pyproject_toml = context.read("pyproject.toml");
 
-    assert_snapshot!(pyproject_toml, @r###"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
+    assert_snapshot!(pyproject_toml, @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = []
 
-        [dependency-groups]
-        test = [
-            "anyio==3.7.0",
-        ]
-        "###
+    [dependency-groups]
+    test = [
+        "anyio==3.7.0",
+    ]
+    "#
     );
 
-    uv_snapshot!(context.filters(), context.add().arg("requests").arg("--group").arg("test"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests").arg("--group").arg("test"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5770,86 +6415,86 @@ fn add_group() -> Result<()> {
      + charset-normalizer==3.3.2
      + requests==2.31.0
      + urllib3==2.2.1
-    "###);
+    ");
 
     let pyproject_toml = context.read("pyproject.toml");
 
-    assert_snapshot!(pyproject_toml, @r###"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
+    assert_snapshot!(pyproject_toml, @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = []
 
-        [dependency-groups]
-        test = [
-            "anyio==3.7.0",
-            "requests>=2.31.0",
-        ]
-        "###
+    [dependency-groups]
+    test = [
+        "anyio==3.7.0",
+        "requests>=2.31.0",
+    ]
+    "#
     );
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--group").arg("second"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--group").arg("second"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    Audited 3 packages in [TIME]
-    "###);
+    Checked 3 packages in [TIME]
+    ");
 
     let pyproject_toml = context.read("pyproject.toml");
 
     assert_snapshot!(pyproject_toml, @r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = []
 
-        [dependency-groups]
-        second = [
-            "anyio==3.7.0",
-        ]
-        test = [
-            "anyio==3.7.0",
-            "requests>=2.31.0",
-        ]
-        "#
+    [dependency-groups]
+    second = [
+        "anyio==3.7.0",
+    ]
+    test = [
+        "anyio==3.7.0",
+        "requests>=2.31.0",
+    ]
+    "#
     );
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--group").arg("alpha"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--group").arg("alpha"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    Audited 3 packages in [TIME]
-    "###);
+    Checked 3 packages in [TIME]
+    ");
 
     let pyproject_toml = context.read("pyproject.toml");
 
     assert_snapshot!(pyproject_toml, @r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = []
 
-        [dependency-groups]
-        alpha = [
-            "anyio==3.7.0",
-        ]
-        second = [
-            "anyio==3.7.0",
-        ]
-        test = [
-            "anyio==3.7.0",
-            "requests>=2.31.0",
-        ]
-        "#
+    [dependency-groups]
+    alpha = [
+        "anyio==3.7.0",
+    ]
+    second = [
+        "anyio==3.7.0",
+    ]
+    test = [
+        "anyio==3.7.0",
+        "requests>=2.31.0",
+    ]
+    "#
     );
 
     assert!(context.temp_dir.join("uv.lock").exists());
@@ -5860,7 +6505,7 @@ fn add_group() -> Result<()> {
 /// Normalize group names when adding or removing.
 #[test]
 fn add_group_normalize() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -5877,7 +6522,7 @@ fn add_group_normalize() -> Result<()> {
     "#})?;
 
     // Add with a non-normalized group name.
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--group").arg("cloud_export_to_parquet"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--group").arg("cloud_export_to_parquet"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5910,7 +6555,7 @@ fn add_group_normalize() -> Result<()> {
     );
 
     // Add with a normalized group name (which doesn't match the `pyproject.toml`).
-    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--group").arg("cloud-export-to-parquet"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--group").arg("cloud-export-to-parquet"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5941,7 +6586,7 @@ fn add_group_normalize() -> Result<()> {
     );
 
     // Remove with a non-normalized group name.
-    uv_snapshot!(context.filters(), context.remove().arg("iniconfig").arg("--group").arg("cloud_export_to_parquet"), @r"
+    uv_snapshot!(context.filters(), context.remove().arg("iniconfig").arg("--group").arg("cloud_export_to_parquet"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5974,14 +6619,14 @@ fn add_group_normalize() -> Result<()> {
     );
 
     // Remove with a normalized group name (which doesn't match the `pyproject.toml`).
-    uv_snapshot!(context.filters(), context.remove().arg("typing-extensions").arg("--group").arg("cloud-export-to-parquet"), @r"
+    uv_snapshot!(context.filters(), context.remove().arg("typing-extensions").arg("--group").arg("cloud-export-to-parquet"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -6006,7 +6651,7 @@ fn add_group_normalize() -> Result<()> {
 /// Add a requirement to a dependency group (sorted before the other groups).
 #[test]
 fn add_group_before_commented_groups() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -6028,7 +6673,7 @@ fn add_group_before_commented_groups() -> Result<()> {
         ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--group").arg("alpha"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--group").arg("alpha"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6047,26 +6692,26 @@ fn add_group_before_commented_groups() -> Result<()> {
     assert!(context.temp_dir.join("uv.lock").exists());
 
     assert_snapshot!(pyproject_toml, @r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = []
 
-        [dependency-groups]
-        alpha = [
-            "anyio==3.7.0",
-        ]
-        # This is our dev group
-        dev = [
-            "anyio==3.7.0",
-        ]
-        # This is our test group
-        test = [
-            "anyio==3.7.0",
-            "requests>=2.31.0",
-        ]
-        "#
+    [dependency-groups]
+    alpha = [
+        "anyio==3.7.0",
+    ]
+    # This is our dev group
+    dev = [
+        "anyio==3.7.0",
+    ]
+    # This is our test group
+    test = [
+        "anyio==3.7.0",
+        "requests>=2.31.0",
+    ]
+    "#
     );
 
     Ok(())
@@ -6075,7 +6720,7 @@ fn add_group_before_commented_groups() -> Result<()> {
 /// Add a requirement to dependency group (sorted between the other groups).
 #[test]
 fn add_group_between_commented_groups() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -6097,7 +6742,7 @@ fn add_group_between_commented_groups() -> Result<()> {
         ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--group").arg("eta"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--group").arg("eta"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6116,26 +6761,26 @@ fn add_group_between_commented_groups() -> Result<()> {
     assert!(context.temp_dir.join("uv.lock").exists());
 
     assert_snapshot!(pyproject_toml, @r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = []
 
-        [dependency-groups]
-        # This is our dev group
-        dev = [
-            "anyio==3.7.0",
-        ]
-        eta = [
-            "anyio==3.7.0",
-        ]
-        # This is our test group
-        test = [
-            "anyio==3.7.0",
-            "requests>=2.31.0",
-        ]
-        "#
+    [dependency-groups]
+    # This is our dev group
+    dev = [
+        "anyio==3.7.0",
+    ]
+    eta = [
+        "anyio==3.7.0",
+    ]
+    # This is our test group
+    test = [
+        "anyio==3.7.0",
+        "requests>=2.31.0",
+    ]
+    "#
     );
 
     Ok(())
@@ -6145,7 +6790,7 @@ fn add_group_between_commented_groups() -> Result<()> {
 /// keys are not sorted.
 #[test]
 fn add_group_to_unsorted() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -6165,7 +6810,7 @@ fn add_group_to_unsorted() -> Result<()> {
         ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--group").arg("alpha"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--group").arg("alpha"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6177,29 +6822,29 @@ fn add_group_to_unsorted() -> Result<()> {
      + anyio==3.7.0
      + idna==3.6
      + sniffio==1.3.1
-    "###);
+    ");
 
     let pyproject_toml = context.read("pyproject.toml");
 
-    assert_snapshot!(pyproject_toml, @r###"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
+    assert_snapshot!(pyproject_toml, @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = []
 
-        [dependency-groups]
-        test = [
-            "anyio==3.7.0",
-            "requests>=2.31.0",
-        ]
-        second = [
-            "anyio==3.7.0",
-        ]
-        alpha = [
-            "anyio==3.7.0",
-        ]
-        "###
+    [dependency-groups]
+    test = [
+        "anyio==3.7.0",
+        "requests>=2.31.0",
+    ]
+    second = [
+        "anyio==3.7.0",
+    ]
+    alpha = [
+        "anyio==3.7.0",
+    ]
+    "#
     );
 
     assert!(context.temp_dir.join("uv.lock").exists());
@@ -6210,7 +6855,7 @@ fn add_group_to_unsorted() -> Result<()> {
 /// Remove a requirement from a dependency group.
 #[test]
 fn remove_group() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -6226,15 +6871,15 @@ fn remove_group() -> Result<()> {
         ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--group").arg("test"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--group").arg("test"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
-    "###);
+    Checked in [TIME]
+    ");
 
     let pyproject_toml = context.read("pyproject.toml");
 
@@ -6242,7 +6887,7 @@ fn remove_group() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -6251,18 +6896,18 @@ fn remove_group() -> Result<()> {
 
         [dependency-groups]
         test = []
-        "###
+        "#
         );
     });
 
-    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--group").arg("test"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--group").arg("test"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: The dependency `anyio` could not be found in `dependency-groups.test`
-    "###);
+    ");
 
     let pyproject_toml = context.read("pyproject.toml");
 
@@ -6270,7 +6915,7 @@ fn remove_group() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -6279,18 +6924,18 @@ fn remove_group() -> Result<()> {
 
         [dependency-groups]
         test = []
-        "###
+        "#
         );
     });
 
-    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--group").arg("test"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--group").arg("test"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: The dependency `anyio` could not be found in `dependency-groups.test`
-    "###);
+    ");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -6301,7 +6946,7 @@ fn remove_group() -> Result<()> {
         dependencies = ["anyio"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--group").arg("test"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--group").arg("test"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -6309,7 +6954,7 @@ fn remove_group() -> Result<()> {
     ----- stderr -----
     hint: `anyio` is a production dependency
     error: The dependency `anyio` could not be found in `dependency-groups.test`
-    "###);
+    ");
 
     Ok(())
 }
@@ -6317,7 +6962,7 @@ fn remove_group() -> Result<()> {
 /// Add to a PEP 732 script.
 #[test]
 fn add_script() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! {r#"
@@ -6337,14 +6982,14 @@ fn add_script() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--script").arg("script.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Updated `script.py`
-    "###);
+    Resolved 11 packages in [TIME]
+    ");
 
     let script_content = context.read("script.py");
 
@@ -6352,11 +6997,11 @@ fn add_script() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            script_content, @r###"
+            script_content, @r#"
         # /// script
         # requires-python = ">=3.11"
         # dependencies = [
-        #   "anyio",
+        #   "anyio>=4.3.0",
         #   "requests<3",
         #   "rich",
         # ]
@@ -6368,7 +7013,52 @@ fn add_script() -> Result<()> {
         resp = requests.get("https://peps.python.org/api/peps.json")
         data = resp.json()
         pprint([(k, v["title"]) for k, v in data.items()][:10])
-        "###
+        "#
+        );
+    });
+
+    // Adding to a script without a lockfile shouldn't create a lockfile.
+    assert!(!context.temp_dir.join("script.py.lock").exists());
+
+    Ok(())
+}
+
+/// Test that `--bounds` is respected when adding to a script without a lockfile.
+#[test]
+fn add_script_bounds() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        print("Hello, world!")
+    "#})?;
+
+    // Add `anyio` with `--bounds minor` to the script.
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--bounds").arg("minor").arg("--script").arg("script.py"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let script_content = context.read("script.py");
+
+    // The script should have bounds with minor version constraint (e.g., `>=4.3.0,<4.4.0`).
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            script_content, @r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = [
+        #     "anyio>=4.3.0,<4.4.0",
+        # ]
+        # ///
+        print("Hello, world!")
+        "#
         );
     });
 
@@ -6380,7 +7070,7 @@ fn add_script() -> Result<()> {
 
 #[test]
 fn add_script_relative_path() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let project = context.temp_dir.child("project");
     project.child("pyproject.toml").write_str(indoc! {r#"
@@ -6396,14 +7086,14 @@ fn add_script_relative_path() -> Result<()> {
         print("Hello, world!")
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("./project").arg("--editable").arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("./project").arg("--editable").arg("--script").arg("script.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Updated `script.py`
-    "###);
+    Resolved 1 package in [TIME]
+    ");
 
     let script_content = context.read("script.py");
 
@@ -6411,7 +7101,7 @@ fn add_script_relative_path() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            script_content, @r###"
+            script_content, @r#"
         # /// script
         # requires-python = ">=3.12"
         # dependencies = [
@@ -6422,7 +7112,7 @@ fn add_script_relative_path() -> Result<()> {
         # project = { path = "project", editable = true }
         # ///
         print("Hello, world!")
-        "###
+        "#
         );
     });
     Ok(())
@@ -6431,7 +7121,7 @@ fn add_script_relative_path() -> Result<()> {
 /// Respect inline settings when adding to a PEP 732 script.
 #[test]
 fn add_script_settings() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! {r#"
@@ -6455,24 +7145,24 @@ fn add_script_settings() -> Result<()> {
     "#})?;
 
     // Lock the script.
-    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     // Add `anyio` to the script.
-    uv_snapshot!(context.filters(), context.add().arg("anyio>=3").arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio>=3").arg("--script").arg("script.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###);
+    ");
 
     let script_content = context.read("script.py");
 
@@ -6480,7 +7170,7 @@ fn add_script_settings() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            script_content, @r###"
+            script_content, @r#"
         # /// script
         # requires-python = ">=3.11"
         # dependencies = [
@@ -6499,7 +7189,7 @@ fn add_script_settings() -> Result<()> {
         resp = requests.get("https://peps.python.org/api/peps.json")
         data = resp.json()
         pprint([(k, v["title"]) for k, v in data.items()][:10])
-        "###
+        "#
         );
     });
 
@@ -6604,7 +7294,7 @@ fn add_script_settings() -> Result<()> {
 
 #[test]
 fn add_script_trailing_comment_lines() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! {r#"
@@ -6626,14 +7316,14 @@ fn add_script_trailing_comment_lines() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--script").arg("script.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Updated `script.py`
-    "###);
+    Resolved 11 packages in [TIME]
+    ");
 
     let script_content = context.read("script.py");
 
@@ -6641,11 +7331,11 @@ fn add_script_trailing_comment_lines() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            script_content, @r##"
+            script_content, @r#"
         # /// script
         # requires-python = ">=3.11"
         # dependencies = [
-        #   "anyio",
+        #   "anyio>=4.3.0",
         #   "requests<3",
         #   "rich",
         # ]
@@ -6659,7 +7349,7 @@ fn add_script_trailing_comment_lines() -> Result<()> {
         resp = requests.get("https://peps.python.org/api/peps.json")
         data = resp.json()
         pprint([(k, v["title"]) for k, v in data.items()][:10])
-        "##
+        "#
         );
     });
 
@@ -6672,7 +7362,7 @@ fn add_script_trailing_comment_lines() -> Result<()> {
 /// Add to a script without an existing metadata table.
 #[test]
 fn add_script_without_metadata_table() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! {r#"
@@ -6684,14 +7374,14 @@ fn add_script_without_metadata_table() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().args(["rich", "requests<3"]).arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.add().args(["rich", "requests<3"]).arg("--script").arg("script.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Updated `script.py`
-    "###);
+    Resolved 9 packages in [TIME]
+    ");
 
     let script_content = context.read("script.py");
 
@@ -6699,12 +7389,12 @@ fn add_script_without_metadata_table() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            script_content, @r###"
+            script_content, @r#"
         # /// script
         # requires-python = ">=3.12"
         # dependencies = [
         #     "requests<3",
-        #     "rich",
+        #     "rich>=13.7.1",
         # ]
         # ///
         import requests
@@ -6713,7 +7403,7 @@ fn add_script_without_metadata_table() -> Result<()> {
         resp = requests.get("https://peps.python.org/api/peps.json")
         data = resp.json()
         pprint([(k, v["title"]) for k, v in data.items()][:10])
-        "###
+        "#
         );
     });
     Ok(())
@@ -6722,7 +7412,7 @@ fn add_script_without_metadata_table() -> Result<()> {
 /// Add to a script without an existing metadata table, but with a shebang.
 #[test]
 fn add_script_without_metadata_table_with_shebang() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! {r#"
@@ -6735,14 +7425,14 @@ fn add_script_without_metadata_table_with_shebang() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().args(["rich", "requests<3"]).arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.add().args(["rich", "requests<3"]).arg("--script").arg("script.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Updated `script.py`
-    "###);
+    Resolved 9 packages in [TIME]
+    ");
 
     let script_content = context.read("script.py");
 
@@ -6750,13 +7440,13 @@ fn add_script_without_metadata_table_with_shebang() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            script_content, @r###"
+            script_content, @r#"
         #!/usr/bin/env python3
         # /// script
         # requires-python = ">=3.12"
         # dependencies = [
         #     "requests<3",
-        #     "rich",
+        #     "rich>=13.7.1",
         # ]
         # ///
         import requests
@@ -6765,7 +7455,7 @@ fn add_script_without_metadata_table_with_shebang() -> Result<()> {
         resp = requests.get("https://peps.python.org/api/peps.json")
         data = resp.json()
         pprint([(k, v["title"]) for k, v in data.items()][:10])
-        "###
+        "#
         );
     });
     Ok(())
@@ -6774,7 +7464,7 @@ fn add_script_without_metadata_table_with_shebang() -> Result<()> {
 /// Add to a script with a metadata table and a shebang.
 #[test]
 fn add_script_with_metadata_table_and_shebang() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! {r#"
@@ -6791,14 +7481,14 @@ fn add_script_with_metadata_table_and_shebang() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().args(["rich", "requests<3"]).arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.add().args(["rich", "requests<3"]).arg("--script").arg("script.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Updated `script.py`
-    "###);
+    Resolved 9 packages in [TIME]
+    ");
 
     let script_content = context.read("script.py");
 
@@ -6806,13 +7496,13 @@ fn add_script_with_metadata_table_and_shebang() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            script_content, @r###"
+            script_content, @r#"
         #!/usr/bin/env python3
         # /// script
         # requires-python = ">=3.12"
         # dependencies = [
         #     "requests<3",
-        #     "rich",
+        #     "rich>=13.7.1",
         # ]
         # ///
         import requests
@@ -6821,7 +7511,7 @@ fn add_script_with_metadata_table_and_shebang() -> Result<()> {
         resp = requests.get("https://peps.python.org/api/peps.json")
         data = resp.json()
         pprint([(k, v["title"]) for k, v in data.items()][:10])
-        "###
+        "#
         );
     });
     Ok(())
@@ -6830,7 +7520,7 @@ fn add_script_with_metadata_table_and_shebang() -> Result<()> {
 /// Add to a script without a metadata table, but with a docstring.
 #[test]
 fn add_script_without_metadata_table_with_docstring() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! {r#"
@@ -6843,14 +7533,14 @@ fn add_script_without_metadata_table_with_docstring() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().args(["rich", "requests<3"]).arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.add().args(["rich", "requests<3"]).arg("--script").arg("script.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Updated `script.py`
-    "###);
+    Resolved 9 packages in [TIME]
+    ");
 
     let script_content = context.read("script.py");
 
@@ -6858,12 +7548,12 @@ fn add_script_without_metadata_table_with_docstring() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            script_content, @r###"
+            script_content, @r#"
         # /// script
         # requires-python = ">=3.12"
         # dependencies = [
         #     "requests<3",
-        #     "rich",
+        #     "rich>=13.7.1",
         # ]
         # ///
         """This is a script."""
@@ -6873,18 +7563,151 @@ fn add_script_without_metadata_table_with_docstring() -> Result<()> {
         resp = requests.get("https://peps.python.org/api/peps.json")
         data = resp.json()
         pprint([(k, v["title"]) for k, v in data.items()][:10])
-        "###
+        "#
         );
     });
+    Ok(())
+}
+
+/// Add to a script without a `.py` extension.
+#[test]
+fn add_extensionless_script() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let script = context.temp_dir.child("script");
+    script.write_str(indoc! {r#"
+        #!/usr/bin/env python3
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+        import requests
+        from rich.pretty import pprint
+
+        resp = requests.get("https://peps.python.org/api/peps.json")
+        data = resp.json()
+        pprint([(k, v["title"]) for k, v in data.items()][:10])
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().args(["rich", "requests<3"]).arg("--script").arg("script"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 9 packages in [TIME]
+    ");
+
+    let script_content = context.read("script");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            script_content, @r#"
+        #!/usr/bin/env python3
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = [
+        #     "requests<3",
+        #     "rich>=13.7.1",
+        # ]
+        # ///
+        import requests
+        from rich.pretty import pprint
+
+        resp = requests.get("https://peps.python.org/api/peps.json")
+        data = resp.json()
+        pprint([(k, v["title"]) for k, v in data.items()][:10])
+        "#
+        );
+    });
+    Ok(())
+}
+
+/// Add from a remote PEP 723 script via `-r`.
+#[tokio::test]
+async fn add_requirements_from_remote_script() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Create a mock server that serves a PEP 723 script.
+    let server = MockServer::start().await;
+    let script_content = indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = [
+        #     "anyio>=4",
+        #     "rich",
+        # ]
+        # ///
+        import anyio
+        from rich.pretty import pprint
+        pprint("Hello, world!")
+    "#};
+
+    Mock::given(method("GET"))
+        .and(path("/script"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(script_content))
+        .mount(&server)
+        .await;
+
+    let script_url = format!("{}/script", server.uri());
+
+    uv_snapshot!(context.filters(), context.add().arg("-r").arg(&script_url), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 7 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + markdown-it-py==3.0.0
+     + mdurl==0.1.2
+     + pygments==2.17.2
+     + rich==13.7.1
+     + sniffio==1.3.1
+    ");
+
+    let pyproject_toml_content = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml_content, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "anyio>=4",
+            "rich>=13.7.1",
+        ]
+        "#
+        );
+    });
+
     Ok(())
 }
 
 /// Remove a dependency that is present in multiple places.
 #[test]
 fn remove_repeated() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
-    let anyio_local = context.workspace_root.join("scripts/packages/anyio_local");
+    let anyio_local = context.workspace_root.join("test/packages/anyio_local");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! {r#"
@@ -6906,7 +7729,7 @@ fn remove_repeated() -> Result<()> {
         anyio_local = anyio_local.portable_display(),
     })?;
 
-    uv_snapshot!(context.filters(), context.remove().arg("anyio"), @r"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6916,7 +7739,7 @@ fn remove_repeated() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
+     + anyio==4.3.0+foo (from file://[WORKSPACE]/test/packages/anyio_local)
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -6925,7 +7748,7 @@ fn remove_repeated() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -6939,12 +7762,12 @@ fn remove_repeated() -> Result<()> {
         dev-dependencies = ["anyio"]
 
         [tool.uv.sources]
-        anyio = { path = "[WORKSPACE]/scripts/packages/anyio_local" }
-        "###
+        anyio = { path = "[WORKSPACE]/test/packages/anyio_local" }
+        "#
         );
     });
 
-    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--optional").arg("foo"), @r"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--optional").arg("foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6952,7 +7775,7 @@ fn remove_repeated() -> Result<()> {
     ----- stderr -----
     warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 2 packages in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -6961,7 +7784,7 @@ fn remove_repeated() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -6975,12 +7798,12 @@ fn remove_repeated() -> Result<()> {
         dev-dependencies = ["anyio"]
 
         [tool.uv.sources]
-        anyio = { path = "[WORKSPACE]/scripts/packages/anyio_local" }
-        "###
+        anyio = { path = "[WORKSPACE]/test/packages/anyio_local" }
+        "#
         );
     });
 
-    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--dev"), @r"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--dev"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6989,7 +7812,7 @@ fn remove_repeated() -> Result<()> {
     warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
-     - anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
+     - anyio==4.3.0+foo (from file://[WORKSPACE]/test/packages/anyio_local)
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -6998,7 +7821,7 @@ fn remove_repeated() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -7010,7 +7833,7 @@ fn remove_repeated() -> Result<()> {
 
         [tool.uv]
         dev-dependencies = []
-        "###
+        "#
         );
     });
     Ok(())
@@ -7019,7 +7842,7 @@ fn remove_repeated() -> Result<()> {
 /// Add to (and remove from) a PEP 732 script with a lockfile.
 #[test]
 fn add_remove_script_lock() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! {r#"
@@ -7040,7 +7863,7 @@ fn add_remove_script_lock() -> Result<()> {
     "#})?;
 
     // Explicitly lock the script.
-    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7197,14 +8020,14 @@ fn add_remove_script_lock() -> Result<()> {
     });
 
     // Adding to a locked script should update the lockfile.
-    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--script").arg("script.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 11 packages in [TIME]
-    "###);
+    ");
 
     let script_content = context.read("script.py");
 
@@ -7212,7 +8035,7 @@ fn add_remove_script_lock() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            script_content, @r###"
+            script_content, @r#"
         # /// script
         # requires-python = ">=3.11"
         # dependencies = [
@@ -7228,7 +8051,7 @@ fn add_remove_script_lock() -> Result<()> {
         resp = requests.get("https://peps.python.org/api/peps.json")
         data = resp.json()
         pprint([(k, v["title"]) for k, v in data.items()][:10])
-        "###
+        "#
         );
     });
 
@@ -7403,14 +8226,14 @@ fn add_remove_script_lock() -> Result<()> {
     });
 
     // Removing from a locked script should update the lockfile.
-    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--script").arg("script.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 9 packages in [TIME]
-    "###);
+    ");
 
     let script_content = context.read("script.py");
 
@@ -7418,7 +8241,7 @@ fn add_remove_script_lock() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            script_content, @r###"
+            script_content, @r#"
         # /// script
         # requires-python = ">=3.11"
         # dependencies = [
@@ -7433,7 +8256,7 @@ fn add_remove_script_lock() -> Result<()> {
         resp = requests.get("https://peps.python.org/api/peps.json")
         data = resp.json()
         pprint([(k, v["title"]) for k, v in data.items()][:10])
-        "###
+        "#
         );
     });
 
@@ -7590,7 +8413,7 @@ fn add_remove_script_lock() -> Result<()> {
 /// Remove from a PEP 723 script.
 #[test]
 fn remove_script() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! {r#"
@@ -7611,14 +8434,14 @@ fn remove_script() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--script").arg("script.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Updated `script.py`
-    "###);
+    ");
 
     let script_content = context.read("script.py");
 
@@ -7626,7 +8449,7 @@ fn remove_script() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            script_content, @r###"
+            script_content, @r#"
         # /// script
         # requires-python = ">=3.11"
         # dependencies = [
@@ -7641,7 +8464,7 @@ fn remove_script() -> Result<()> {
         resp = requests.get("https://peps.python.org/api/peps.json")
         data = resp.json()
         pprint([(k, v["title"]) for k, v in data.items()][:10])
-        "###
+        "#
         );
     });
     Ok(())
@@ -7650,7 +8473,7 @@ fn remove_script() -> Result<()> {
 /// Remove last dependency PEP 723 script
 #[test]
 fn remove_last_dep_script() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! {r#"
@@ -7669,14 +8492,14 @@ fn remove_last_dep_script() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.remove().arg("rich").arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("rich").arg("--script").arg("script.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Updated `script.py`
-    "###);
+    ");
 
     let script_content = context.read("script.py");
 
@@ -7684,7 +8507,7 @@ fn remove_last_dep_script() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            script_content, @r###"
+            script_content, @r#"
         # /// script
         # requires-python = ">=3.11"
         # dependencies = []
@@ -7696,7 +8519,7 @@ fn remove_last_dep_script() -> Result<()> {
         resp = requests.get("https://peps.python.org/api/peps.json")
         data = resp.json()
         pprint([(k, v["title"]) for k, v in data.items()][:10])
-        "###
+        "#
         );
     });
     Ok(())
@@ -7704,9 +8527,9 @@ fn remove_last_dep_script() -> Result<()> {
 
 /// Add a Git requirement to PEP 723 script.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_git_to_script() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! {r#"
@@ -7726,14 +8549,14 @@ fn add_git_to_script() -> Result<()> {
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage")
         .arg("--tag=0.0.1")
         .arg("--script")
-        .arg("script.py"), @r###"
+        .arg("script.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Updated `script.py`
-    "###);
+    Resolved 4 packages in [TIME]
+    ");
 
     let script_content = context.read("script.py");
 
@@ -7741,7 +8564,7 @@ fn add_git_to_script() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            script_content, @r###"
+            script_content, @r#"
         # /// script
         # requires-python = ">=3.11"
         # dependencies = [
@@ -7755,7 +8578,7 @@ fn add_git_to_script() -> Result<()> {
 
         import anyio
         import uv_public_pypackage
-        "###
+        "#
         );
     });
 
@@ -7767,7 +8590,7 @@ fn add_git_to_script() -> Result<()> {
 
 #[test]
 fn add_include_default_groups() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     context
         .temp_dir
@@ -7787,7 +8610,7 @@ fn add_include_default_groups() -> Result<()> {
     "#})?;
 
     // add should install default groups.
-    uv_snapshot!(context.filters(), context.add().arg("typing-extensions"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7833,7 +8656,7 @@ fn add_include_default_groups() -> Result<()> {
 
 #[test]
 fn remove_include_default_groups() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     context
         .temp_dir
@@ -7852,7 +8675,7 @@ fn remove_include_default_groups() -> Result<()> {
     "#})?;
 
     // remove should install default groups.
-    uv_snapshot!(context.filters(), context.remove().arg("typing-extensions"), @r"
+    uv_snapshot!(context.filters(), context.remove().arg("typing-extensions"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7893,7 +8716,7 @@ fn remove_include_default_groups() -> Result<()> {
 /// Revert changes to the `pyproject.toml` and `uv.lock` when the `add` operation fails.
 #[test]
 fn fail_to_add_revert_project() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     context
         .temp_dir
@@ -7960,13 +8783,13 @@ fn fail_to_add_revert_project() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "parent"
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
-        "###
+        "#
         );
     });
 
@@ -7981,7 +8804,7 @@ fn fail_to_add_revert_project() -> Result<()> {
 /// In this case, the project has an existing lockfile.
 #[test]
 fn fail_to_edit_revert_project() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     context
         .temp_dir
@@ -7994,7 +8817,7 @@ fn fail_to_edit_revert_project() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8004,7 +8827,7 @@ fn fail_to_edit_revert_project() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     let before = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
 
@@ -8062,7 +8885,7 @@ fn fail_to_edit_revert_project() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "parent"
         version = "0.1.0"
@@ -8070,7 +8893,7 @@ fn fail_to_edit_revert_project() -> Result<()> {
         dependencies = [
             "iniconfig>=2.0.0",
         ]
-        "###
+        "#
         );
     });
 
@@ -8084,7 +8907,7 @@ fn fail_to_edit_revert_project() -> Result<()> {
 /// Revert changes to the root `pyproject.toml` and `uv.lock` when the `add` operation fails.
 #[test]
 fn fail_to_add_revert_workspace_root() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     context
         .temp_dir
@@ -8194,7 +9017,7 @@ fn fail_to_add_revert_workspace_root() -> Result<()> {
 /// Revert changes to the root `pyproject.toml` and `uv.lock` when the `add` operation fails.
 #[test]
 fn fail_to_add_revert_workspace_member() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     context
         .temp_dir
@@ -8335,7 +9158,7 @@ fn fail_to_add_revert_workspace_member() -> Result<()> {
 /// to the operation.
 #[test]
 fn sorted_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -8349,7 +9172,7 @@ fn sorted_dependencies() -> Result<()> {
     ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().args(["typing-extensions", "anyio"]), @r###"
+    uv_snapshot!(context.filters(), context.add().args(["typing-extensions", "anyio"]), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8370,7 +9193,7 @@ fn sorted_dependencies() -> Result<()> {
      + sniffio==1.3.1
      + typing-extensions==4.10.0
      + urllib3==2.2.1
-    "###);
+    ");
 
     let pyproject_toml = context.read("pyproject.toml");
 
@@ -8378,7 +9201,7 @@ fn sorted_dependencies() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -8389,7 +9212,7 @@ fn sorted_dependencies() -> Result<()> {
             "iniconfig",
             "typing-extensions>=4.10.0",
         ]
-        "###
+        "#
         );
     });
     Ok(())
@@ -8399,7 +9222,7 @@ fn sorted_dependencies() -> Result<()> {
 /// requirement specifier), that added dependencies are sorted in the same way.
 #[test]
 fn naive_sorted_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -8413,7 +9236,7 @@ fn naive_sorted_dependencies() -> Result<()> {
     ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().args(["pytest-randomly"]), @r"
+    uv_snapshot!(context.filters(), context.add().args(["pytest-randomly"]), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8436,7 +9259,7 @@ fn naive_sorted_dependencies() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -8446,7 +9269,7 @@ fn naive_sorted_dependencies() -> Result<()> {
             "pytest-randomly>=3.15.0",
             "pytest>=8.1.1",
         ]
-        "###
+        "#
         );
     });
     Ok(())
@@ -8456,7 +9279,7 @@ fn naive_sorted_dependencies() -> Result<()> {
 /// case sensitive sorted prior to the operation.
 #[test]
 fn case_sensitive_sorted_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -8471,7 +9294,7 @@ fn case_sensitive_sorted_dependencies() -> Result<()> {
     ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().args(["typing-extensions", "anyio"]), @r###"
+    uv_snapshot!(context.filters(), context.add().args(["typing-extensions", "anyio"]), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8493,7 +9316,7 @@ fn case_sensitive_sorted_dependencies() -> Result<()> {
      + sniffio==1.3.1
      + typing-extensions==4.10.0
      + urllib3==2.2.1
-    "###);
+    ");
 
     let pyproject_toml = context.read("pyproject.toml");
 
@@ -8501,7 +9324,7 @@ fn case_sensitive_sorted_dependencies() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -8513,7 +9336,7 @@ fn case_sensitive_sorted_dependencies() -> Result<()> {
             "iniconfig",
             "typing-extensions>=4.10.0",
         ]
-        "###
+        "#
         );
     });
     Ok(())
@@ -8523,7 +9346,7 @@ fn case_sensitive_sorted_dependencies() -> Result<()> {
 /// requirement specifier), that added dependencies are sorted in the same way.
 #[test]
 fn case_sensitive_naive_sorted_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -8538,7 +9361,7 @@ fn case_sensitive_naive_sorted_dependencies() -> Result<()> {
     ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().args(["pytest-randomly"]), @r"
+    uv_snapshot!(context.filters(), context.add().args(["pytest-randomly"]), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8562,7 +9385,7 @@ fn case_sensitive_naive_sorted_dependencies() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -8573,7 +9396,7 @@ fn case_sensitive_naive_sorted_dependencies() -> Result<()> {
             "pytest-randomly>=3.15.0",
             "pytest>=8.1.1",
         ]
-        "###
+        "#
         );
     });
     Ok(())
@@ -8582,7 +9405,7 @@ fn case_sensitive_naive_sorted_dependencies() -> Result<()> {
 /// Ensure that sorting is based on the name, rather than the combined name-and-specifiers.
 #[test]
 fn sorted_dependencies_name_specifiers() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -8596,7 +9419,7 @@ fn sorted_dependencies_name_specifiers() -> Result<()> {
         ]
     "#})?;
 
-    uv_snapshot!(context.filters(), universal_windows_filters=true, context.add().args(["pytest-mock"]), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.add().args(["pytest-mock"]), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8611,7 +9434,7 @@ fn sorted_dependencies_name_specifiers() -> Result<()> {
      + pytest==8.1.1
      + pytest-mock==3.14.0
      + typing-extensions==4.10.0
-    "###);
+    ");
 
     let pyproject_toml = context.read("pyproject.toml");
 
@@ -8619,7 +9442,7 @@ fn sorted_dependencies_name_specifiers() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -8629,11 +9452,11 @@ fn sorted_dependencies_name_specifiers() -> Result<()> {
             "pytest-mock>=3.14.0",
             "typing-extensions>=4.10.0",
         ]
-        "###
+        "#
         );
     });
 
-    uv_snapshot!(context.filters(), universal_windows_filters=true, context.add().args(["pytest-randomly"]), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.add().args(["pytest-randomly"]), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8643,7 +9466,7 @@ fn sorted_dependencies_name_specifiers() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + pytest-randomly==3.15.0
-    "###);
+    ");
 
     let pyproject_toml = context.read("pyproject.toml");
 
@@ -8651,7 +9474,7 @@ fn sorted_dependencies_name_specifiers() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -8662,7 +9485,7 @@ fn sorted_dependencies_name_specifiers() -> Result<()> {
             "pytest-randomly>=3.15.0",
             "typing-extensions>=4.10.0",
         ]
-        "###
+        "#
         );
     });
 
@@ -8671,7 +9494,7 @@ fn sorted_dependencies_name_specifiers() -> Result<()> {
 
 #[test]
 fn sorted_dependencies_with_include_group() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -8691,7 +9514,7 @@ fn sorted_dependencies_with_include_group() -> Result<()> {
     ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().args(["--dev", "pytest-randomly"]), @r"
+    uv_snapshot!(context.filters(), context.add().args(["--dev", "pytest-randomly"]), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8739,7 +9562,7 @@ fn sorted_dependencies_with_include_group() -> Result<()> {
 
 #[test]
 fn sorted_dependencies_new_dependency_after_include_group() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -8757,7 +9580,7 @@ fn sorted_dependencies_new_dependency_after_include_group() -> Result<()> {
     ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().args(["--dev", "pytest"]), @r"
+    uv_snapshot!(context.filters(), context.add().args(["--dev", "pytest"]), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8801,7 +9624,7 @@ fn sorted_dependencies_new_dependency_after_include_group() -> Result<()> {
 
 #[test]
 fn sorted_dependencies_include_group_kept_at_bottom() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -8820,7 +9643,7 @@ fn sorted_dependencies_include_group_kept_at_bottom() -> Result<()> {
     ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().args(["--dev", "pytest-randomly"]), @r"
+    uv_snapshot!(context.filters(), context.add().args(["--dev", "pytest-randomly"]), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8868,7 +9691,7 @@ fn sorted_dependencies_include_group_kept_at_bottom() -> Result<()> {
 /// after adding a package.
 #[test]
 fn custom_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -8885,13 +9708,13 @@ fn custom_dependencies() -> Result<()> {
     ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("pydantic").arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("pydantic").arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    "###);
+    ");
 
     let pyproject_toml = context.read("pyproject.toml");
 
@@ -8899,7 +9722,7 @@ fn custom_dependencies() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -8912,7 +9735,7 @@ fn custom_dependencies() -> Result<()> {
             "sentry-sdk",
             "pydantic",
         ]
-        "###
+        "#
         );
     });
     Ok(())
@@ -8921,7 +9744,7 @@ fn custom_dependencies() -> Result<()> {
 /// Regression test for: <https://github.com/astral-sh/uv/issues/7259>
 #[test]
 fn update_offset() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -8934,7 +9757,7 @@ fn update_offset() -> Result<()> {
         ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().args(["typing-extensions", "iniconfig"]), @r###"
+    uv_snapshot!(context.filters(), context.add().args(["typing-extensions", "iniconfig"]), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8945,7 +9768,7 @@ fn update_offset() -> Result<()> {
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
      + typing-extensions==4.10.0
-    "###);
+    ");
 
     let pyproject_toml = context.read("pyproject.toml");
 
@@ -8953,7 +9776,7 @@ fn update_offset() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -8962,7 +9785,7 @@ fn update_offset() -> Result<()> {
             "iniconfig",
             "typing-extensions>=4.10.0",
         ]
-        "###
+        "#
         );
     });
 
@@ -8973,7 +9796,7 @@ fn update_offset() -> Result<()> {
 /// if there is a broken cyclic dependency on a local package.
 #[test]
 fn add_shadowed_name() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -8985,7 +9808,7 @@ fn add_shadowed_name() -> Result<()> {
     "#})?;
 
     // Pinned constrained, check for a direct dependency loop.
-    uv_snapshot!(context.filters(), context.add().arg("dagster-webserver==1.6.13"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("dagster-webserver==1.6.13"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -8996,10 +9819,10 @@ fn add_shadowed_name() -> Result<()> {
 
           hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
       help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
-    "###);
+    ");
 
     // Constraint with several available versions, check for an indirect dependency loop.
-    uv_snapshot!(context.filters(), context.add().arg("dagster-webserver>=1.6.11,<1.7.0"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("dagster-webserver>=1.6.11,<1.7.0"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -9024,7 +9847,7 @@ fn add_shadowed_name() -> Result<()> {
 /// Warn when a user provides an index via `--index-url` or `--extra-index-url`.
 #[test]
 fn add_warn_index_url() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -9035,7 +9858,7 @@ fn add_warn_index_url() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("idna").arg("--index-url").arg("https://pypi.org/simple"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("idna").arg("--index-url").arg("https://pypi.org/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9054,7 +9877,7 @@ fn add_warn_index_url() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -9062,7 +9885,7 @@ fn add_warn_index_url() -> Result<()> {
         dependencies = [
             "idna>=3.6",
         ]
-        "###
+        "#
         );
     });
 
@@ -9103,7 +9926,7 @@ fn add_warn_index_url() -> Result<()> {
         );
     });
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--extra-index-url").arg("https://test.pypi.org/simple"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--extra-index-url").arg("https://test.pypi.org/simple"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -9123,7 +9946,7 @@ fn add_warn_index_url() -> Result<()> {
 /// Don't warn if the user provides an index via `index-url` in `pyproject.toml`.
 #[test]
 fn add_no_warn_index_url() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -9136,7 +9959,7 @@ fn add_no_warn_index_url() -> Result<()> {
         index-url = "https://test.pypi.org/simple"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9146,7 +9969,7 @@ fn add_no_warn_index_url() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -9154,7 +9977,7 @@ fn add_no_warn_index_url() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -9164,7 +9987,7 @@ fn add_no_warn_index_url() -> Result<()> {
         ]
         [tool.uv]
         index-url = "https://test.pypi.org/simple"
-        "###
+        "#
         );
     });
 
@@ -9211,7 +10034,7 @@ fn add_no_warn_index_url() -> Result<()> {
 /// Add an index provided via `--index`.
 #[test]
 fn add_index() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -9225,7 +10048,7 @@ fn add_index() -> Result<()> {
         constraint-dependencies = ["markupsafe<3"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").arg("--index").arg("https://pypi.org/simple"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").arg("--index").arg("https://pypi.org/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9235,7 +10058,7 @@ fn add_index() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -9243,7 +10066,7 @@ fn add_index() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -9257,7 +10080,7 @@ fn add_index() -> Result<()> {
 
         [[tool.uv.index]]
         url = "https://pypi.org/simple"
-        "###
+        "#
         );
     });
 
@@ -9302,7 +10125,7 @@ fn add_index() -> Result<()> {
     });
 
     // Adding a subsequent index should put it _above_ the existing index.
-    uv_snapshot!(context.filters(), context.add().arg("jinja2").arg("--index").arg("pytorch=https://astral-sh.github.io/pytorch-mirror/whl/cu121"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("jinja2").arg("--index").arg("pytorch=https://astral-sh.github.io/pytorch-mirror/whl/cu121"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9313,7 +10136,7 @@ fn add_index() -> Result<()> {
     Installed 2 packages in [TIME]
      + jinja2==3.1.4
      + markupsafe==2.1.5
-    "###);
+    ");
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -9321,7 +10144,7 @@ fn add_index() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -9343,7 +10166,7 @@ fn add_index() -> Result<()> {
 
         [[tool.uv.index]]
         url = "https://pypi.org/simple"
-        "###
+        "#
         );
     });
 
@@ -9417,15 +10240,15 @@ fn add_index() -> Result<()> {
     });
 
     // Adding a subsequent index with the same name should replace it.
-    uv_snapshot!(context.filters(), context.add().arg("jinja2").arg("--index").arg("pytorch=https://test.pypi.org/simple"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("jinja2").arg("--index").arg("pytorch=https://test.pypi.org/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Audited 3 packages in [TIME]
-    "###);
+    Checked 3 packages in [TIME]
+    ");
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -9433,7 +10256,7 @@ fn add_index() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -9455,7 +10278,7 @@ fn add_index() -> Result<()> {
 
         [[tool.uv.index]]
         url = "https://pypi.org/simple"
-        "###
+        "#
         );
     });
 
@@ -9534,7 +10357,7 @@ fn add_index() -> Result<()> {
     });
 
     // Adding a subsequent index with the same URL should bump it to the top.
-    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--index").arg("https://pypi.org/simple"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--index").arg("https://pypi.org/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9544,7 +10367,7 @@ fn add_index() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + typing-extensions==4.12.2
-    "###);
+    ");
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -9552,7 +10375,7 @@ fn add_index() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -9575,7 +10398,7 @@ fn add_index() -> Result<()> {
         [[tool.uv.index]]
         name = "pytorch"
         url = "https://test.pypi.org/simple"
-        "###
+        "#
         );
     });
 
@@ -9665,15 +10488,15 @@ fn add_index() -> Result<()> {
     });
 
     // Adding a subsequent index with the same URL should bump it to the top, but retain the name.
-    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--index").arg("https://test.pypi.org/simple"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--index").arg("https://test.pypi.org/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Audited 4 packages in [TIME]
-    "###);
+    Checked 4 packages in [TIME]
+    ");
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -9681,7 +10504,7 @@ fn add_index() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -9704,7 +10527,7 @@ fn add_index() -> Result<()> {
 
         [[tool.uv.index]]
         url = "https://pypi.org/simple"
-        "###
+        "#
         );
     });
 
@@ -9799,7 +10622,7 @@ fn add_index() -> Result<()> {
 /// Add an index provided via `--default-index`.
 #[test]
 fn add_default_index_url() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -9810,7 +10633,7 @@ fn add_default_index_url() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--default-index").arg("https://test.pypi.org/simple"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--default-index").arg("https://test.pypi.org/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9820,7 +10643,7 @@ fn add_default_index_url() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -9828,7 +10651,7 @@ fn add_default_index_url() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -9840,7 +10663,7 @@ fn add_default_index_url() -> Result<()> {
         [[tool.uv.index]]
         url = "https://test.pypi.org/simple"
         default = true
-        "###
+        "#
         );
     });
 
@@ -9882,7 +10705,7 @@ fn add_default_index_url() -> Result<()> {
     });
 
     // Adding another `--default-index` replaces the current default.
-    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--default-index").arg("https://pypi.org/simple"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--default-index").arg("https://pypi.org/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9892,7 +10715,7 @@ fn add_default_index_url() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + typing-extensions==4.10.0
-    "###);
+    ");
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -9900,7 +10723,7 @@ fn add_default_index_url() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -9913,7 +10736,7 @@ fn add_default_index_url() -> Result<()> {
         [[tool.uv.index]]
         url = "https://pypi.org/simple"
         default = true
-        "###
+        "#
         );
     });
 
@@ -9970,9 +10793,10 @@ fn add_default_index_url() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn add_index_credentials() -> Result<()> {
-    let context = TestContext::new("3.12");
+#[tokio::test]
+async fn add_index_credentials() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -9984,7 +10808,7 @@ fn add_index_credentials() -> Result<()> {
     "#})?;
 
     // Provide credentials for the index via the environment variable.
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").env(EnvVars::UV_DEFAULT_INDEX, "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").env(EnvVars::UV_DEFAULT_INDEX, proxy.authenticated_url("public", "heron", "/basic-auth/simple")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9994,7 +10818,7 @@ fn add_index_credentials() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -10002,7 +10826,7 @@ fn add_index_credentials() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -10012,9 +10836,9 @@ fn add_index_credentials() -> Result<()> {
         ]
 
         [[tool.uv.index]]
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        url = "http://[LOCALHOST]/basic-auth/simple"
         default = true
-        "###
+        "#
         );
     });
 
@@ -10035,10 +10859,10 @@ fn add_index_credentials() -> Result<()> {
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
-        source = { registry = "https://pypi-proxy.fly.dev/basic-auth/simple" }
-        sdist = { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        source = { registry = "http://[LOCALHOST]/basic-auth/simple" }
+        sdist = { url = "http://[LOCALHOST]/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
-            { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+            { url = "http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
         ]
 
         [[package]]
@@ -10058,12 +10882,14 @@ fn add_index_credentials() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn existing_index_credentials() -> Result<()> {
-    let context = TestContext::new("3.12");
+#[tokio::test]
+async fn existing_index_credentials() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r#"
+    pyproject_toml.write_str(&formatdoc!(
+        r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -10073,12 +10899,14 @@ fn existing_index_credentials() -> Result<()> {
         # Set an internal index as the default, without credentials.
         [[tool.uv.index]]
         name = "internal"
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{proxy_uri}/basic-auth/simple"
         default = true
-    "#})?;
+    "#,
+        proxy_uri = proxy.uri()
+    ))?;
 
     // Provide credentials for the index via the environment variable.
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").env(EnvVars::UV_DEFAULT_INDEX, "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").env(EnvVars::UV_DEFAULT_INDEX, proxy.authenticated_url("public", "heron", "/basic-auth/simple")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10088,7 +10916,7 @@ fn existing_index_credentials() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -10096,7 +10924,7 @@ fn existing_index_credentials() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -10108,9 +10936,9 @@ fn existing_index_credentials() -> Result<()> {
         # Set an internal index as the default, without credentials.
         [[tool.uv.index]]
         name = "internal"
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        url = "http://[LOCALHOST]/basic-auth/simple"
         default = true
-        "###
+        "#
         );
     });
 
@@ -10131,10 +10959,10 @@ fn existing_index_credentials() -> Result<()> {
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
-        source = { registry = "https://pypi-proxy.fly.dev/basic-auth/simple" }
-        sdist = { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        source = { registry = "http://[LOCALHOST]/basic-auth/simple" }
+        sdist = { url = "http://[LOCALHOST]/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
-            { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+            { url = "http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
         ]
 
         [[package]]
@@ -10157,7 +10985,7 @@ fn existing_index_credentials() -> Result<()> {
 /// Add an index with a trailing slash.
 #[test]
 fn add_index_with_trailing_slash() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -10171,7 +10999,7 @@ fn add_index_with_trailing_slash() -> Result<()> {
         constraint-dependencies = ["markupsafe<3"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").arg("--index").arg("https://pypi.org/simple/"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").arg("--index").arg("https://pypi.org/simple/"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10181,7 +11009,7 @@ fn add_index_with_trailing_slash() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -10189,7 +11017,7 @@ fn add_index_with_trailing_slash() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -10203,7 +11031,7 @@ fn add_index_with_trailing_slash() -> Result<()> {
 
         [[tool.uv.index]]
         url = "https://pypi.org/simple/"
-        "###
+        "#
         );
     });
 
@@ -10253,7 +11081,7 @@ fn add_index_with_trailing_slash() -> Result<()> {
 /// Add an index without a trailing slash.
 #[test]
 fn add_index_without_trailing_slash() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -10267,7 +11095,7 @@ fn add_index_without_trailing_slash() -> Result<()> {
         constraint-dependencies = ["markupsafe<3"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").arg("--index").arg("https://pypi.org/simple"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").arg("--index").arg("https://pypi.org/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10277,7 +11105,7 @@ fn add_index_without_trailing_slash() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -10285,7 +11113,7 @@ fn add_index_without_trailing_slash() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -10299,7 +11127,7 @@ fn add_index_without_trailing_slash() -> Result<()> {
 
         [[tool.uv.index]]
         url = "https://pypi.org/simple"
-        "###
+        "#
         );
     });
 
@@ -10349,7 +11177,7 @@ fn add_index_without_trailing_slash() -> Result<()> {
 /// Add an index with an existing relative path.
 #[test]
 fn add_index_with_existing_relative_path_index() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -10366,11 +11194,11 @@ fn add_index_with_existing_relative_path_index() -> Result<()> {
 
     let wheel_src = context
         .workspace_root
-        .join("scripts/links/ok-1.0.0-py3-none-any.whl");
+        .join("test/links/ok-1.0.0-py3-none-any.whl");
     let wheel_dst = packages.child("ok-1.0.0-py3-none-any.whl");
     fs_err::copy(&wheel_src, &wheel_dst)?;
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("./test-index"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("./test-index"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10388,7 +11216,7 @@ fn add_index_with_existing_relative_path_index() -> Result<()> {
 /// Add an index with a non-existent relative path.
 #[test]
 fn add_index_with_non_existent_relative_path() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -10399,7 +11227,7 @@ fn add_index_with_non_existent_relative_path() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("./test-index"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("./test-index"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -10412,12 +11240,14 @@ fn add_index_with_non_existent_relative_path() -> Result<()> {
 }
 
 /// Add an index with a non-existent relative path with the same name as a defined index.
-#[test]
-fn add_index_with_non_existent_relative_path_with_same_name_as_index() -> Result<()> {
-    let context = TestContext::new("3.12");
+#[tokio::test]
+async fn add_index_with_non_existent_relative_path_with_same_name_as_index() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r#"
+    pyproject_toml.write_str(&formatdoc!(
+        r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -10426,10 +11256,12 @@ fn add_index_with_non_existent_relative_path_with_same_name_as_index() -> Result
 
         [[tool.uv.index]]
         name = "test-index"
-        url = "https://pypi-proxy.fly.dev/simple"
-    "#})?;
+        url = "{proxy_uri}/simple"
+    "#,
+        proxy_uri = proxy.uri()
+    ))?;
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("./test-index"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("./test-index"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -10441,12 +11273,14 @@ fn add_index_with_non_existent_relative_path_with_same_name_as_index() -> Result
     Ok(())
 }
 
-#[test]
-fn add_index_empty_directory() -> Result<()> {
-    let context = TestContext::new("3.12");
+#[tokio::test]
+async fn add_index_empty_directory() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r#"
+    pyproject_toml.write_str(&formatdoc!(
+        r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -10455,13 +11289,15 @@ fn add_index_empty_directory() -> Result<()> {
 
         [[tool.uv.index]]
         name = "test-index"
-        url = "https://pypi-proxy.fly.dev/simple"
-    "#})?;
+        url = "{proxy_uri}/simple"
+    "#,
+        proxy_uri = proxy.uri()
+    ))?;
 
     let packages = context.temp_dir.child("test-index");
     packages.create_dir_all()?;
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("./test-index"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("./test-index"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10479,9 +11315,8 @@ fn add_index_empty_directory() -> Result<()> {
 
 #[test]
 fn add_index_with_ambiguous_relative_path() -> Result<()> {
-    let context = TestContext::new("3.12");
-    let mut filters = context.filters();
-    filters.push((r"\./|\.\\\\", r"[PREFIX]"));
+    let context = uv_test::test_context!("3.12");
+    let context = context.with_filter((r"\./|\.\\", r"[PREFIX]"));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -10493,7 +11328,7 @@ fn add_index_with_ambiguous_relative_path() -> Result<()> {
     "#})?;
 
     #[cfg(unix)]
-    uv_snapshot!(filters, context.add().arg("iniconfig").arg("--index").arg("test-index"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("test-index"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -10504,7 +11339,7 @@ fn add_index_with_ambiguous_relative_path() -> Result<()> {
     ");
 
     #[cfg(windows)]
-    uv_snapshot!(filters, context.add().arg("iniconfig").arg("--index").arg("test-index"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("test-index"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -10520,7 +11355,7 @@ fn add_index_with_ambiguous_relative_path() -> Result<()> {
 /// Add a PyPI requirement.
 #[test]
 fn add_group_comment() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -10540,7 +11375,7 @@ fn add_group_comment() -> Result<()> {
         ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("--group").arg("dev").arg("sniffio"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("--group").arg("dev").arg("sniffio"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10551,7 +11386,7 @@ fn add_group_comment() -> Result<()> {
     Installed 2 packages in [TIME]
      + sniffio==1.3.1
      + typing-extensions==4.10.0
-    "###);
+    ");
 
     let pyproject_toml = context.read("pyproject.toml");
 
@@ -10559,7 +11394,7 @@ fn add_group_comment() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "myproject"
         version = "0.1.0"
@@ -10575,7 +11410,7 @@ fn add_group_comment() -> Result<()> {
         test = [
             "iniconfig"
         ]
-        "###
+        "#
         );
     });
 
@@ -10647,21 +11482,21 @@ fn add_group_comment() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 2 packages in [TIME]
-    "###);
+    Checked 2 packages in [TIME]
+    ");
 
     Ok(())
 }
 
 #[test]
 fn add_index_comments() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -10678,7 +11513,7 @@ fn add_index_comments() -> Result<()> {
     "#})?;
 
     // Preserve the comment on the index URL, despite replacing it.
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").env(EnvVars::UV_DEFAULT_INDEX, "https://pypi.org/simple"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").env(EnvVars::UV_DEFAULT_INDEX, "https://pypi.org/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10688,7 +11523,7 @@ fn add_index_comments() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -10696,7 +11531,7 @@ fn add_index_comments() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -10709,7 +11544,7 @@ fn add_index_comments() -> Result<()> {
         name = "internal"
         url = "https://pypi.org/simple"  # This is a test index.
         default = true
-        "###
+        "#
         );
     });
 
@@ -10756,7 +11591,7 @@ fn add_index_comments() -> Result<()> {
 /// Accidentally add a dependency on the project itself.
 #[test]
 fn add_self() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -10767,14 +11602,14 @@ fn add_self() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Requirement name `anyio` matches project name `anyio`, but self-dependencies are not permitted without the `--dev` or `--optional` flags. If your project name (`anyio`) is shadowing that of a third-party dependency, consider renaming the project.
-    "###);
+    ");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -10789,7 +11624,7 @@ fn add_self() -> Result<()> {
     "#})?;
 
     // However, recursive extras are fine.
-    uv_snapshot!(context.filters(), context.add().arg("anyio[types]").arg("--optional").arg("all"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio[types]").arg("--optional").arg("all"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10827,14 +11662,14 @@ fn add_self() -> Result<()> {
     });
 
     // And recursive development dependencies
-    uv_snapshot!(context.filters(), context.add().arg("anyio[types]").arg("--dev"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio[types]").arg("--dev"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -10872,7 +11707,7 @@ fn add_self() -> Result<()> {
 
 #[test]
 fn add_preserves_end_of_line_comments() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -10887,7 +11722,7 @@ fn add_preserves_end_of_line_comments() -> Result<()> {
         ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("requests==2.31.0"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("requests==2.31.0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10911,7 +11746,7 @@ fn add_preserves_end_of_line_comments() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -10922,7 +11757,7 @@ fn add_preserves_end_of_line_comments() -> Result<()> {
             # comment 2
             "requests==2.31.0",
         ]
-        "###
+        "#
         );
     });
     Ok(())
@@ -10930,7 +11765,7 @@ fn add_preserves_end_of_line_comments() -> Result<()> {
 
 #[test]
 fn add_preserves_end_of_line_comment_on_non_last_deps() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -10944,7 +11779,7 @@ fn add_preserves_end_of_line_comment_on_non_last_deps() -> Result<()> {
         ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("requests==2.31.0"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("requests==2.31.0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10968,7 +11803,7 @@ fn add_preserves_end_of_line_comment_on_non_last_deps() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -10978,7 +11813,7 @@ fn add_preserves_end_of_line_comment_on_non_last_deps() -> Result<()> {
             "requests==2.31.0",
             "sniffio==1.3.1",
         ]
-        "###
+        "#
         );
     });
     Ok(())
@@ -10986,7 +11821,7 @@ fn add_preserves_end_of_line_comment_on_non_last_deps() -> Result<()> {
 
 #[test]
 fn add_direct_url_subdirectory() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -10997,7 +11832,7 @@ fn add_direct_url_subdirectory() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("root @ https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz#subdirectory=packages/root"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("root @ https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz#subdirectory=packages/root"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11018,7 +11853,7 @@ fn add_direct_url_subdirectory() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -11029,7 +11864,7 @@ fn add_direct_url_subdirectory() -> Result<()> {
 
         [tool.uv.sources]
         root = { url = "https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz", subdirectory = "packages/root" }
-        "###
+        "#
         );
     });
 
@@ -11105,13 +11940,13 @@ fn add_direct_url_subdirectory() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     ");
 
     Ok(())
@@ -11119,7 +11954,7 @@ fn add_direct_url_subdirectory() -> Result<()> {
 
 #[test]
 fn add_direct_url_subdirectory_raw() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -11130,7 +11965,7 @@ fn add_direct_url_subdirectory_raw() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("root @ https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz#subdirectory=packages/root").arg("--raw-sources"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("root @ https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz#subdirectory=packages/root").arg("--raw-sources"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11151,7 +11986,7 @@ fn add_direct_url_subdirectory_raw() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -11159,7 +11994,7 @@ fn add_direct_url_subdirectory_raw() -> Result<()> {
         dependencies = [
             "root @ https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz#subdirectory=packages/root",
         ]
-        "###
+        "#
         );
     });
 
@@ -11235,13 +12070,13 @@ fn add_direct_url_subdirectory_raw() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 4 packages in [TIME]
+    Checked 4 packages in [TIME]
     ");
 
     Ok(())
@@ -11249,7 +12084,7 @@ fn add_direct_url_subdirectory_raw() -> Result<()> {
 
 #[test]
 fn add_preserves_open_bracket_comment() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -11264,7 +12099,7 @@ fn add_preserves_open_bracket_comment() -> Result<()> {
         ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("requests==2.31.0"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("requests==2.31.0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11288,7 +12123,7 @@ fn add_preserves_open_bracket_comment() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -11299,7 +12134,7 @@ fn add_preserves_open_bracket_comment() -> Result<()> {
             # comment 3
             "requests==2.31.0",
         ]
-        "###
+        "#
         );
     });
     Ok(())
@@ -11307,7 +12142,7 @@ fn add_preserves_open_bracket_comment() -> Result<()> {
 
 #[test]
 fn add_preserves_empty_comment() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -11321,7 +12156,7 @@ fn add_preserves_empty_comment() -> Result<()> {
         ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11360,7 +12195,7 @@ fn add_preserves_empty_comment() -> Result<()> {
 
 #[test]
 fn add_preserves_trailing_comment() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -11376,7 +12211,7 @@ fn add_preserves_trailing_comment() -> Result<()> {
         ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11397,7 +12232,7 @@ fn add_preserves_trailing_comment() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -11405,15 +12240,15 @@ fn add_preserves_trailing_comment() -> Result<()> {
         dependencies = [
             "anyio==3.7.0",
             "idna",
-            "iniconfig", # Use iniconfig.
+            "iniconfig",  # Use iniconfig.
             # First line.
             # Second line.
         ]
-        "###
+        "#
         );
     });
 
-    uv_snapshot!(context.filters(), context.add().arg("typing-extensions"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11431,7 +12266,7 @@ fn add_preserves_trailing_comment() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -11439,12 +12274,12 @@ fn add_preserves_trailing_comment() -> Result<()> {
         dependencies = [
             "anyio==3.7.0",
             "idna",
-            "iniconfig", # Use iniconfig.
+            "iniconfig",  # Use iniconfig.
             # First line.
             # Second line.
             "typing-extensions>=4.10.0",
         ]
-        "###
+        "#
         );
     });
 
@@ -11453,7 +12288,7 @@ fn add_preserves_trailing_comment() -> Result<()> {
 
 #[test]
 fn add_preserves_trailing_depth() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -11469,7 +12304,7 @@ fn add_preserves_trailing_depth() -> Result<()> {
         ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11490,7 +12325,7 @@ fn add_preserves_trailing_depth() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -11498,11 +12333,11 @@ fn add_preserves_trailing_depth() -> Result<()> {
         dependencies = [
           "anyio==3.7.0",
           "idna",
-          "iniconfig", # Use iniconfig.
+          "iniconfig",# Use iniconfig.
           # First line.
           # Second line.
         ]
-        "###
+        "#
         );
     });
 
@@ -11511,7 +12346,7 @@ fn add_preserves_trailing_depth() -> Result<()> {
 
 #[test]
 fn add_preserves_first_own_line_comment() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -11525,7 +12360,7 @@ fn add_preserves_first_own_line_comment() -> Result<()> {
         ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("charset-normalizer"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("charset-normalizer"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11536,7 +12371,7 @@ fn add_preserves_first_own_line_comment() -> Result<()> {
     Installed 2 packages in [TIME]
      + charset-normalizer==3.3.2
      + sniffio==1.3.1
-    "###);
+    ");
 
     let pyproject_toml = context.read("pyproject.toml");
 
@@ -11544,7 +12379,7 @@ fn add_preserves_first_own_line_comment() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -11554,7 +12389,7 @@ fn add_preserves_first_own_line_comment() -> Result<()> {
             # comment
             "sniffio==1.3.1",
         ]
-        "###
+        "#
         );
     });
     Ok(())
@@ -11562,7 +12397,7 @@ fn add_preserves_first_own_line_comment() -> Result<()> {
 
 #[test]
 fn add_preserves_first_line_bracket_comment() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -11575,7 +12410,7 @@ fn add_preserves_first_line_bracket_comment() -> Result<()> {
         ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("charset-normalizer"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("charset-normalizer"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11586,7 +12421,7 @@ fn add_preserves_first_line_bracket_comment() -> Result<()> {
     Installed 2 packages in [TIME]
      + charset-normalizer==3.3.2
      + sniffio==1.3.1
-    "###);
+    ");
 
     let pyproject_toml = context.read("pyproject.toml");
 
@@ -11594,7 +12429,7 @@ fn add_preserves_first_line_bracket_comment() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -11603,7 +12438,7 @@ fn add_preserves_first_line_bracket_comment() -> Result<()> {
             "charset-normalizer>=3.3.2",
             "sniffio==1.3.1",
         ]
-        "###
+        "#
         );
     });
     Ok(())
@@ -11611,7 +12446,7 @@ fn add_preserves_first_line_bracket_comment() -> Result<()> {
 
 #[test]
 fn add_no_indent() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -11624,7 +12459,7 @@ fn add_no_indent() -> Result<()> {
         ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("charset-normalizer"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("charset-normalizer"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11635,7 +12470,7 @@ fn add_no_indent() -> Result<()> {
     Installed 2 packages in [TIME]
      + charset-normalizer==3.3.2
      + sniffio==1.3.1
-    "###);
+    ");
 
     let pyproject_toml = context.read("pyproject.toml");
 
@@ -11643,7 +12478,7 @@ fn add_no_indent() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
                 [project]
                 name = "project"
                 version = "0.1.0"
@@ -11652,7 +12487,7 @@ fn add_no_indent() -> Result<()> {
             "charset-normalizer>=3.3.2",
             "sniffio==1.3.1",
         ]
-        "###
+        "#
         );
     });
     Ok(())
@@ -11661,7 +12496,7 @@ fn add_no_indent() -> Result<()> {
 /// Accept requirements, not just package names, in `uv remove`.
 #[test]
 fn remove_requirement() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -11672,14 +12507,14 @@ fn remove_requirement() -> Result<()> {
         dependencies = ["flask"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.remove().arg("flask[dotenv]"), @r"
+    uv_snapshot!(context.filters(), context.remove().arg("flask[dotenv]"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -11688,13 +12523,13 @@ fn remove_requirement() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
-        "###
+        "#
         );
     });
 
@@ -11704,7 +12539,7 @@ fn remove_requirement() -> Result<()> {
 /// Remove all dependencies with remaining comments
 #[test]
 fn remove_all_with_comments() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -11720,14 +12555,14 @@ fn remove_all_with_comments() -> Result<()> {
         ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.remove().arg("duct").arg("minilog"), @r"
+    uv_snapshot!(context.filters(), context.remove().arg("duct").arg("minilog"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -11736,7 +12571,7 @@ fn remove_all_with_comments() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -11745,7 +12580,116 @@ fn remove_all_with_comments() -> Result<()> {
             # foo
             # bar
         ]
-        "###
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+/// Removing a dependency should preserve end-of-line comments on nearby lines.
+///
+/// See: <https://github.com/astral-sh/uv/issues/18555>
+#[test]
+fn remove_preserves_nearby_end_of_line_comments() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig>=2.0.0", # this comment is clearly essential
+            "typing-extensions>=4.0.0",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.remove().arg("typing-extensions"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig>=2.0.0", # this comment is clearly essential
+        ]
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+/// Removing multiple adjacent matching dependencies should preserve comment order.
+///
+/// See: <https://github.com/astral-sh/uv/issues/18555>
+#[test]
+fn remove_preserves_comment_order_for_multiple_adjacent_matches() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig>=2.0.0", # comment on iniconfig
+            "typing-extensions>=4.0.0 ; python_version < '3.11'", # comment on first typing-extensions
+            "typing-extensions>=4.0.0 ; python_version >= '3.11'",
+            "sniffio>=1.3.0",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.remove().arg("typing-extensions"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig>=2.0.0", # comment on iniconfig
+            # comment on first typing-extensions
+            "sniffio>=1.3.0",
+        ]
+        "#
         );
     });
 
@@ -11758,7 +12702,7 @@ fn remove_all_with_comments() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/14817>
 #[test]
 fn multiple_index_cli() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -11775,7 +12719,7 @@ fn multiple_index_cli() -> Result<()> {
         .arg("--index")
         .arg("https://test.pypi.org/simple")
         .arg("--index")
-        .arg("https://pypi.org/simple"), @r"
+        .arg("https://pypi.org/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11849,14 +12793,14 @@ fn multiple_index_cli() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
-    "###);
+    Checked 1 package in [TIME]
+    ");
 
     Ok(())
 }
@@ -11870,7 +12814,7 @@ fn multiple_index_cli() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/11312>
 #[test]
 fn repeated_index_cli_environment_variable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -11888,7 +12832,7 @@ fn repeated_index_cli_environment_variable() -> Result<()> {
         .arg("--index")
         .arg("https://test.pypi.org/simple")
         // With a trailing slash.
-        .env(EnvVars::UV_DEFAULT_INDEX, "https://test.pypi.org/simple/"), @r###"
+        .env(EnvVars::UV_DEFAULT_INDEX, "https://test.pypi.org/simple/"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11898,7 +12842,7 @@ fn repeated_index_cli_environment_variable() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     let pyproject_toml = context.read("pyproject.toml");
 
@@ -11906,7 +12850,7 @@ fn repeated_index_cli_environment_variable() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -11918,7 +12862,7 @@ fn repeated_index_cli_environment_variable() -> Result<()> {
         [[tool.uv.index]]
         url = "https://test.pypi.org/simple"
         default = true
-        "###
+        "#
         );
     });
 
@@ -11960,14 +12904,14 @@ fn repeated_index_cli_environment_variable() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
-    "###);
+    Checked 1 package in [TIME]
+    ");
 
     Ok(())
 }
@@ -11981,7 +12925,7 @@ fn repeated_index_cli_environment_variable() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/11312>
 #[test]
 fn repeated_index_cli_environment_variable_newline() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -11995,7 +12939,7 @@ fn repeated_index_cli_environment_variable_newline() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .add()
         .env(EnvVars::UV_INDEX, "https://test.pypi.org/simple\nhttps://test.pypi.org/simple/")
-        .arg("iniconfig"), @r###"
+        .arg("iniconfig"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12005,7 +12949,7 @@ fn repeated_index_cli_environment_variable_newline() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     let pyproject_toml = context.read("pyproject.toml");
 
@@ -12013,7 +12957,7 @@ fn repeated_index_cli_environment_variable_newline() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -12024,7 +12968,7 @@ fn repeated_index_cli_environment_variable_newline() -> Result<()> {
 
         [[tool.uv.index]]
         url = "https://test.pypi.org/simple"
-        "###
+        "#
         );
     });
 
@@ -12066,14 +13010,14 @@ fn repeated_index_cli_environment_variable_newline() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
-    "###);
+    Checked 1 package in [TIME]
+    ");
 
     Ok(())
 }
@@ -12086,7 +13030,7 @@ fn repeated_index_cli_environment_variable_newline() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/11312>
 #[test]
 fn repeated_index_cli() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -12105,7 +13049,7 @@ fn repeated_index_cli() -> Result<()> {
         .arg("https://test.pypi.org/simple")
         // With a trailing slash.
         .arg("--index")
-        .arg("https://test.pypi.org/simple/"), @r###"
+        .arg("https://test.pypi.org/simple/"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12115,7 +13059,7 @@ fn repeated_index_cli() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     let pyproject_toml = context.read("pyproject.toml");
 
@@ -12123,7 +13067,7 @@ fn repeated_index_cli() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -12134,7 +13078,7 @@ fn repeated_index_cli() -> Result<()> {
 
         [[tool.uv.index]]
         url = "https://test.pypi.org/simple"
-        "###
+        "#
         );
     });
 
@@ -12176,14 +13120,14 @@ fn repeated_index_cli() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
-    "###);
+    Checked 1 package in [TIME]
+    ");
 
     Ok(())
 }
@@ -12196,7 +13140,7 @@ fn repeated_index_cli() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/11312>
 #[test]
 fn repeated_index_cli_reversed() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -12215,7 +13159,7 @@ fn repeated_index_cli_reversed() -> Result<()> {
         .arg("https://test.pypi.org/simple/")
         // Without a trailing slash.
         .arg("--index")
-        .arg("https://test.pypi.org/simple"), @r###"
+        .arg("https://test.pypi.org/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12225,7 +13169,7 @@ fn repeated_index_cli_reversed() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     let pyproject_toml = context.read("pyproject.toml");
 
@@ -12233,7 +13177,7 @@ fn repeated_index_cli_reversed() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -12244,7 +13188,7 @@ fn repeated_index_cli_reversed() -> Result<()> {
 
         [[tool.uv.index]]
         url = "https://test.pypi.org/simple/"
-        "###
+        "#
         );
     });
 
@@ -12286,21 +13230,21 @@ fn repeated_index_cli_reversed() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
-    "###);
+    Checked 1 package in [TIME]
+    ");
 
     Ok(())
 }
 
 #[test]
 fn add_with_build_constraints() -> Result<()> {
-    let context = TestContext::new("3.9");
+    let context = uv_test::test_context!("3.9");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -12314,7 +13258,7 @@ fn add_with_build_constraints() -> Result<()> {
     build-constraint-dependencies = ["setuptools==1"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("requests==1.2"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests==1.2"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -12325,7 +13269,7 @@ fn add_with_build_constraints() -> Result<()> {
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
       ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
       help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
-    "###);
+    ");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -12339,7 +13283,7 @@ fn add_with_build_constraints() -> Result<()> {
     build-constraint-dependencies = ["setuptools>=40"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("requests==1.2"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests==1.2"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12349,19 +13293,19 @@ fn add_with_build_constraints() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + requests==1.2.0
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_unsupported_git_scheme() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     context.init().arg(".").assert().success();
 
-    uv_snapshot!(context.filters(), context.add().arg("git+fantasy://ferris/dreams/of/urls@7701ffcbae245819b828dc5f885a5201158897ef"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("git+fantasy://ferris/dreams/of/urls@7701ffcbae245819b828dc5f885a5201158897ef"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -12371,12 +13315,12 @@ fn add_unsupported_git_scheme() {
       Caused by: Unsupported Git URL scheme `fantasy:` in `fantasy://ferris/dreams/of/urls` (expected one of `https:`, `ssh:`, or `file:`)
     git+fantasy://ferris/dreams/of/urls@7701ffcbae245819b828dc5f885a5201158897ef
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    "###);
+    ");
 }
 
-#[test]
-fn add_index_url_in_keyring() -> Result<()> {
-    let keyring_context = TestContext::new("3.12");
+#[tokio::test]
+async fn add_index_url_in_keyring() -> Result<()> {
+    let keyring_context = uv_test::test_context!("3.12");
 
     // Install our keyring plugin
     keyring_context
@@ -12384,17 +13328,19 @@ fn add_index_url_in_keyring() -> Result<()> {
         .arg(
             keyring_context
                 .workspace_root
-                .join("scripts")
+                .join("test")
                 .join("packages")
                 .join("keyring_test_plugin"),
         )
         .assert()
         .success();
 
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! { r#"
+    pyproject_toml.write_str(&formatdoc!(
+        r#"
         [project]
         name = "foo"
         version = "1.0.0"
@@ -12404,21 +13350,22 @@ fn add_index_url_in_keyring() -> Result<()> {
         keyring-provider = "subprocess"
         [[tool.uv.index]]
         name = "proxy"
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{proxy_uri}/basic-auth/simple"
         default = true
-        "#
-    })?;
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
 
-    uv_snapshot!(context.add().arg("anyio")
+    uv_snapshot!(context.filters(), context.add().arg("anyio")
         .env(EnvVars::index_username("PROXY"), "public")
-        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"https://pypi-proxy.fly.dev/basic-auth/simple": {"public": "heron"}}"#)
-        .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @r"
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, format!(r#"{{"{}": {{"public": "heron"}}}}"#, proxy.url("/basic-auth/simple")))
+        .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Keyring request for public@https://pypi-proxy.fly.dev/basic-auth/simple
+    Keyring request for public@http://[LOCALHOST]/basic-auth/simple
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -12432,9 +13379,9 @@ fn add_index_url_in_keyring() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn add_full_url_in_keyring() -> Result<()> {
-    let keyring_context = TestContext::new("3.12");
+#[tokio::test]
+async fn add_full_url_in_keyring() -> Result<()> {
+    let keyring_context = uv_test::test_context!("3.12");
 
     // Install our keyring plugin
     keyring_context
@@ -12442,17 +13389,19 @@ fn add_full_url_in_keyring() -> Result<()> {
         .arg(
             keyring_context
                 .workspace_root
-                .join("scripts")
+                .join("test")
                 .join("packages")
                 .join("keyring_test_plugin"),
         )
         .assert()
         .success();
 
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! { r#"
+    pyproject_toml.write_str(&formatdoc!(
+        r#"
         [project]
         name = "foo"
         version = "1.0.0"
@@ -12462,26 +13411,28 @@ fn add_full_url_in_keyring() -> Result<()> {
         keyring-provider = "subprocess"
         [[tool.uv.index]]
         name = "proxy"
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{proxy_uri}/basic-auth/simple"
         default = true
-        "#
-    })?;
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
 
-    uv_snapshot!(context.add().arg("anyio")
+    uv_snapshot!(context.filters(), context.add().arg("anyio")
         .env(EnvVars::index_username("PROXY"), "public")
-        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"https://pypi-proxy.fly.dev/basic-auth/simple/anyio": {"public": "heron"}}"#)
-        .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @r"
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, format!(r#"{{"{}": {{"public": "heron"}}}}"#, proxy.url("/basic-auth/simple/anyio")))
+        .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Keyring request for public@https://pypi-proxy.fly.dev/basic-auth/simple
-    Keyring request for public@pypi-proxy.fly.dev
+    Keyring request for public@http://[LOCALHOST]/basic-auth/simple
+    Keyring request for public@[LOCALHOST]
+    Keyring request for public@http://[LOCALHOST]
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
       help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "
     );
@@ -12490,12 +13441,14 @@ fn add_full_url_in_keyring() -> Result<()> {
 
 /// If uv receives an authentication failure from a configured index, it
 /// should not fall back to the default index.
-#[test]
-fn add_stop_index_search_early_on_auth_failure() -> Result<()> {
-    let context = TestContext::new("3.12");
+#[tokio::test]
+async fn add_stop_index_search_early_on_auth_failure() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! { r#"
+    pyproject_toml.write_str(&formatdoc!(
+        r#"
         [project]
         name = "foo"
         version = "1.0.0"
@@ -12503,11 +13456,12 @@ fn add_stop_index_search_early_on_auth_failure() -> Result<()> {
         dependencies = []
         [[tool.uv.index]]
         name = "my-index"
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
-        "#
-    })?;
+        url = "{proxy_uri}/basic-auth/simple"
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
 
-    uv_snapshot!(context.add().arg("anyio"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -12516,7 +13470,7 @@ fn add_stop_index_search_early_on_auth_failure() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
       help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "
     );
@@ -12525,12 +13479,14 @@ fn add_stop_index_search_early_on_auth_failure() -> Result<()> {
 
 /// uv should continue searching the default index if it receives an
 /// authentication failure that is specified in `ignore-error-codes`.
-#[test]
-fn add_ignore_error_codes() -> Result<()> {
-    let context = TestContext::new("3.12");
+#[tokio::test]
+async fn add_ignore_error_codes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! { r#"
+    pyproject_toml.write_str(&formatdoc!(
+        r#"
         [project]
         name = "foo"
         version = "1.0.0"
@@ -12538,12 +13494,13 @@ fn add_ignore_error_codes() -> Result<()> {
         dependencies = []
         [[tool.uv.index]]
         name = "my-index"
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{proxy_uri}/basic-auth/simple"
         ignore-error-codes = [401, 403]
-        "#
-    })?;
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
 
-    uv_snapshot!(context.add().arg("anyio"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12563,41 +13520,45 @@ fn add_ignore_error_codes() -> Result<()> {
 }
 
 /// uv should only fall through on 404s if an empty list is specified
-/// in `ignore-error-codes`, even for pytorch.
-#[test]
-fn add_empty_ignore_error_codes() -> Result<()> {
-    let context = TestContext::new("3.12");
+/// in `ignore-error-codes`, even for indexes that normally ignore 403s.
+#[tokio::test]
+async fn add_empty_ignore_error_codes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(403))
+        .mount(&server)
+        .await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! { r#"
+    pyproject_toml.write_str(&formatdoc! { r#"
         [project]
         name = "foo"
         version = "1.0.0"
         requires-python = ">=3.11, <4"
         dependencies = []
 
-        [tool.uv.sources]
-        jinja2 = { index = "pytorch" }
-
         [[tool.uv.index]]
-        name = "pytorch"
-        url = "https://download.pytorch.org/whl/cpu"
+        name = "my-index"
+        url = "{server_url}"
         ignore-error-codes = []
-        "#
+        "#,
+        server_url = server.uri(),
     })?;
 
-    // The default behavior of ignoring pytorch 403s has been overridden
-    // by the empty ignore-error-codes list.
-    uv_snapshot!(context.add().arg("flask"), @r"
+    // The empty `ignore-error-codes` list means 403 errors should NOT be ignored.
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because flask was not found in the package registry and your project depends on flask, we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (https://download.pytorch.org/whl/cpu) returned a 403 Forbidden error. This could indicate lack of valid authentication credentials, or the package may not exist on this index.
+          hint: An index URL (http://[LOCALHOST]/) returned a 403 Forbidden error. This could indicate lack of valid authentication credentials, or the package may not exist on this index.
       help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "
     );
@@ -12608,7 +13569,7 @@ fn add_empty_ignore_error_codes() -> Result<()> {
 /// pytorch returns 403s to indicate not found.
 #[test]
 fn add_missing_package_on_pytorch() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -12627,7 +13588,7 @@ fn add_missing_package_on_pytorch() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.add().arg("fakepkg"), @r"
+    uv_snapshot!(context.add().arg("fakepkg"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -12644,7 +13605,7 @@ fn add_missing_package_on_pytorch() -> Result<()> {
 /// Test HTTP errors other than 401s and 403s.
 #[tokio::test]
 async fn add_unexpected_error_code() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let server = MockServer::start().await;
 
@@ -12664,14 +13625,14 @@ async fn add_unexpected_error_code() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--index").arg(server.uri())
-        .env_remove(EnvVars::UV_HTTP_RETRIES)
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+        .env(EnvVars::UV_HTTP_RETRIES, "1"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Request failed after 3 retries
+    error: Request failed after 1 retry in [TIME]
       Caused by: Failed to fetch: `http://[LOCALHOST]/anyio/`
       Caused by: HTTP status server error (503 Service Unavailable) for url (http://[LOCALHOST]/anyio/)
     "
@@ -12681,12 +13642,14 @@ async fn add_unexpected_error_code() -> Result<()> {
 
 /// uv should fail to parse `pyproject.toml` if `ignore-error-codes`
 /// contains an invalid status code number.
-#[test]
-fn add_invalid_ignore_error_code() -> Result<()> {
-    let context = TestContext::new("3.12");
+#[tokio::test]
+async fn add_invalid_ignore_error_code() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! { r#"
+    pyproject_toml.write_str(&formatdoc!(
+        r#"
         [project]
         name = "foo"
         version = "1.0.0"
@@ -12694,12 +13657,13 @@ fn add_invalid_ignore_error_code() -> Result<()> {
         dependencies = []
         [[tool.uv.index]]
         name = "my-index"
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{proxy_uri}/basic-auth/simple"
         ignore-error-codes = [401, 403, 1234]
-        "#
-    })?;
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
 
-    uv_snapshot!(context.add().arg("anyio"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -12728,7 +13692,7 @@ fn add_invalid_ignore_error_code() -> Result<()> {
 /// contains an invalid specifier and try to return a helpful hint.
 #[test]
 fn add_invalid_requires_python() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -12760,12 +13724,14 @@ fn add_invalid_requires_python() -> Result<()> {
 }
 
 /// In authentication "always", the normal authentication flow should still work.
-#[test]
-fn add_auth_policy_always_with_credentials() -> Result<()> {
-    let context = TestContext::new("3.12");
+#[tokio::test]
+async fn add_auth_policy_always_with_credentials() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! { r#"
+    pyproject_toml.write_str(&formatdoc!(
+        r#"
         [project]
         name = "foo"
         version = "1.0.0"
@@ -12774,15 +13740,16 @@ fn add_auth_policy_always_with_credentials() -> Result<()> {
 
         [[tool.uv.index]]
         name = "my-index"
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{proxy_uri}/basic-auth/simple"
         authenticate = "always"
         default = true
-        "#
-    })?;
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
 
-    uv_snapshot!(context.add().arg("anyio")
+    uv_snapshot!(context.filters(), context.add().arg("anyio")
         .env(EnvVars::UV_INDEX_MY_INDEX_USERNAME, "public")
-        .env(EnvVars::UV_INDEX_MY_INDEX_PASSWORD, "heron"), @r"
+        .env(EnvVars::UV_INDEX_MY_INDEX_PASSWORD, "heron"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12805,7 +13772,7 @@ fn add_auth_policy_always_with_credentials() -> Result<()> {
 /// doesn't require credentials will fail.
 #[test]
 fn add_auth_policy_always_without_credentials() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -12823,7 +13790,7 @@ fn add_auth_policy_always_without_credentials() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.add().arg("anyio"), @r"
+    uv_snapshot!(context.add().arg("anyio"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -12834,7 +13801,7 @@ fn add_auth_policy_always_without_credentials() -> Result<()> {
     "
     );
 
-    uv_snapshot!(context.pip_install().arg("black"), @r"
+    uv_snapshot!(context.pip_install().arg("black"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -12851,7 +13818,7 @@ fn add_auth_policy_always_without_credentials() -> Result<()> {
 /// no discoverable password will fail.
 #[test]
 fn add_auth_policy_always_with_username_no_password() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -12869,7 +13836,7 @@ fn add_auth_policy_always_with_username_no_password() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.add().arg("anyio"), @r"
+    uv_snapshot!(context.add().arg("anyio"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -12884,12 +13851,14 @@ fn add_auth_policy_always_with_username_no_password() -> Result<()> {
 
 /// In authentication "never", even if the correct credentials are supplied
 /// in the URL, no authenticated requests will be allowed.
-#[test]
-fn add_auth_policy_never_with_url_credentials() -> Result<()> {
-    let context = TestContext::new("3.12");
+#[tokio::test]
+async fn add_auth_policy_never_with_url_credentials() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! { r#"
+    pyproject_toml.write_str(&formatdoc!(
+        r#"
         [project]
         name = "foo"
         version = "1.0.0"
@@ -12898,20 +13867,21 @@ fn add_auth_policy_never_with_url_credentials() -> Result<()> {
 
         [[tool.uv.index]]
         name = "my-index"
-        url = "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{proxy_auth_uri}/basic-auth/simple"
         authenticate = "never"
         default = true
-        "#
-    })?;
+        "#,
+        proxy_auth_uri = proxy.authenticated_uri("public", "heron")
+    ))?;
 
-    uv_snapshot!(context.add().arg("anyio"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl.metadata`
-      Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl.metadata)
+    error: Failed to fetch: `http://[LOCALHOST]/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl`
+      Caused by: HTTP status client error (401 Unauthorized) for url (http://[LOCALHOST]/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl)
     "
     );
 
@@ -12920,12 +13890,14 @@ fn add_auth_policy_never_with_url_credentials() -> Result<()> {
 
 /// In authentication "never", even if the correct credentials are supplied
 /// via env vars, no authenticated requests will be allowed.
-#[test]
-fn add_auth_policy_never_with_env_var_credentials() -> Result<()> {
-    let context = TestContext::new("3.12");
+#[tokio::test]
+async fn add_auth_policy_never_with_env_var_credentials() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! { r#"
+    pyproject_toml.write_str(&formatdoc!(
+        r#"
         [project]
         name = "foo"
         version = "1.0.0"
@@ -12934,15 +13906,16 @@ fn add_auth_policy_never_with_env_var_credentials() -> Result<()> {
 
         [[tool.uv.index]]
         name = "my-index"
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{proxy_uri}/basic-auth/simple"
         authenticate = "never"
         default = true
-        "#
-    })?;
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
 
-    uv_snapshot!(context.add().arg("anyio")
+    uv_snapshot!(context.filters(), context.add().arg("anyio")
         .env(EnvVars::UV_INDEX_MY_INDEX_USERNAME, "public")
-        .env(EnvVars::UV_INDEX_MY_INDEX_PASSWORD, "heron"), @r"
+        .env(EnvVars::UV_INDEX_MY_INDEX_PASSWORD, "heron"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -12951,7 +13924,7 @@ fn add_auth_policy_never_with_env_var_credentials() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
       help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "
     );
@@ -12963,7 +13936,7 @@ fn add_auth_policy_never_with_env_var_credentials() -> Result<()> {
 /// still work.
 #[test]
 fn add_auth_policy_never_without_credentials() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -12981,7 +13954,7 @@ fn add_auth_policy_never_without_credentials() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.add().arg("anyio"), @r"
+    uv_snapshot!(context.add().arg("anyio"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13005,7 +13978,8 @@ fn add_auth_policy_never_without_credentials() -> Result<()> {
 /// it should fail.
 #[tokio::test]
 async fn add_redirect_cross_origin() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
     let filters = context
         .filters()
         .into_iter()
@@ -13023,10 +13997,11 @@ async fn add_redirect_cross_origin() -> Result<()> {
     })?;
 
     let redirect_server = MockServer::start().await;
+    let proxy_base = proxy.url("/basic-auth/simple/");
 
     Mock::given(method("GET"))
-        .respond_with(|req: &wiremock::Request| {
-            let redirect_url = redirect_url_to_pypi_proxy(req);
+        .respond_with(move |req: &wiremock::Request| {
+            let redirect_url = redirect_url_to_base(req, &proxy_base);
             ResponseTemplate::new(302).insert_header("Location", &redirect_url)
         })
         .mount(&redirect_server)
@@ -13036,7 +14011,7 @@ async fn add_redirect_cross_origin() -> Result<()> {
     let _ = redirect_url.set_username("public");
     let _ = redirect_url.set_password(Some("heron"));
 
-    uv_snapshot!(filters, context.add().arg("--default-index").arg(redirect_url.as_str()).arg("anyio"), @r"
+    uv_snapshot!(filters, context.add().arg("--default-index").arg(redirect_url.as_str()).arg("anyio"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -13057,7 +14032,8 @@ async fn add_redirect_cross_origin() -> Result<()> {
 /// in the location, use those credentials for the redirect request.
 #[tokio::test]
 async fn add_redirect_cross_origin_credentials_in_location() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
     let filters = context
         .filters()
         .into_iter()
@@ -13075,14 +14051,12 @@ async fn add_redirect_cross_origin_credentials_in_location() -> Result<()> {
     })?;
 
     let redirect_server = MockServer::start().await;
+    let proxy_base = proxy.authenticated_url("public", "heron", "/basic-auth/simple/");
 
     Mock::given(method("GET"))
-        .respond_with(|req: &wiremock::Request| {
+        .respond_with(move |req: &wiremock::Request| {
             // Responds with credentials in the location
-            let redirect_url = redirect_url_to_base(
-                req,
-                "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple/",
-            );
+            let redirect_url = redirect_url_to_base(req, &proxy_base);
             ResponseTemplate::new(302).insert_header("Location", &redirect_url)
         })
         .mount(&redirect_server)
@@ -13090,7 +14064,7 @@ async fn add_redirect_cross_origin_credentials_in_location() -> Result<()> {
 
     let redirect_url = Url::parse(&redirect_server.uri())?;
 
-    uv_snapshot!(filters, context.add().arg("--default-index").arg(redirect_url.as_str()).arg("anyio"), @r"
+    uv_snapshot!(filters, context.add().arg("--default-index").arg(redirect_url.as_str()).arg("anyio"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13111,7 +14085,7 @@ async fn add_redirect_cross_origin_credentials_in_location() -> Result<()> {
 /// uv currently fails to look up keyring credentials on a cross-origin redirect.
 #[tokio::test]
 async fn add_redirect_with_keyring_cross_origin() -> Result<()> {
-    let keyring_context = TestContext::new("3.12");
+    let keyring_context = uv_test::test_context!("3.12");
 
     // Install our keyring plugin
     keyring_context
@@ -13119,14 +14093,15 @@ async fn add_redirect_with_keyring_cross_origin() -> Result<()> {
         .arg(
             keyring_context
                 .workspace_root
-                .join("scripts")
+                .join("test")
                 .join("packages")
                 .join("keyring_test_plugin"),
         )
         .assert()
         .success();
 
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
     let filters = context
         .filters()
         .into_iter()
@@ -13147,10 +14122,11 @@ async fn add_redirect_with_keyring_cross_origin() -> Result<()> {
     })?;
 
     let redirect_server = MockServer::start().await;
+    let proxy_base = proxy.url("/basic-auth/simple/");
 
     Mock::given(method("GET"))
-        .respond_with(|req: &wiremock::Request| {
-            let redirect_url = redirect_url_to_pypi_proxy(req);
+        .respond_with(move |req: &wiremock::Request| {
+            let redirect_url = redirect_url_to_base(req, &proxy_base);
             ResponseTemplate::new(302).insert_header("Location", &redirect_url)
         })
         .mount(&redirect_server)
@@ -13162,8 +14138,8 @@ async fn add_redirect_with_keyring_cross_origin() -> Result<()> {
     uv_snapshot!(filters, context.add().arg("--default-index")
         .arg(redirect_url.as_str())
         .arg("anyio")
-        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
-        .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @r"
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, format!(r#"{{"{host}": {{"public": "heron"}}}}"#, host = proxy.host_port()))
+        .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -13171,6 +14147,7 @@ async fn add_redirect_with_keyring_cross_origin() -> Result<()> {
     ----- stderr -----
     Keyring request for public@http://[LOCALHOST]/
     Keyring request for public@[LOCALHOST]
+    Keyring request for public@http://[LOCALHOST]
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
@@ -13186,7 +14163,8 @@ async fn add_redirect_with_keyring_cross_origin() -> Result<()> {
 /// for the new location.
 #[tokio::test]
 async fn pip_install_redirect_with_netrc_cross_origin() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
     let filters = context
         .filters()
         .into_iter()
@@ -13194,13 +14172,17 @@ async fn pip_install_redirect_with_netrc_cross_origin() -> Result<()> {
         .collect::<Vec<_>>();
 
     let netrc = context.temp_dir.child(".netrc");
-    netrc.write_str("machine pypi-proxy.fly.dev login public password heron")?;
+    netrc.write_str(&format!(
+        "machine {} login public password heron",
+        proxy.host()
+    ))?;
 
     let redirect_server = MockServer::start().await;
+    let proxy_base = proxy.url("/basic-auth/simple/");
 
     Mock::given(method("GET"))
-        .respond_with(|req: &wiremock::Request| {
-            let redirect_url = redirect_url_to_pypi_proxy(req);
+        .respond_with(move |req: &wiremock::Request| {
+            let redirect_url = redirect_url_to_base(req, &proxy_base);
             ResponseTemplate::new(302).insert_header("Location", &redirect_url)
         })
         .mount(&redirect_server)
@@ -13214,7 +14196,7 @@ async fn pip_install_redirect_with_netrc_cross_origin() -> Result<()> {
         .arg("--index-url")
         .arg(redirect_url.as_str())
         .env(EnvVars::NETRC, netrc.to_str().unwrap())
-        .arg("--strict"), @r###"
+        .arg("--strict"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13226,7 +14208,7 @@ async fn pip_install_redirect_with_netrc_cross_origin() -> Result<()> {
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
-    "###
+    "
     );
 
     context.assert_command("import anyio").success();
@@ -13234,17 +14216,12 @@ async fn pip_install_redirect_with_netrc_cross_origin() -> Result<()> {
     Ok(())
 }
 
-fn redirect_url_to_pypi_proxy(req: &wiremock::Request) -> String {
-    redirect_url_to_base(req, "https://pypi-proxy.fly.dev/basic-auth/simple/")
-}
-
 fn redirect_url_to_base(req: &wiremock::Request, base: &str) -> String {
     let last_path_segment = req
         .url
         .path_segments()
         .expect("path has segments")
-        .filter(|segment| !segment.is_empty())
-        .next_back()
+        .rfind(|segment| !segment.is_empty())
         .expect("path has a package segment");
     format!("{base}{last_path_segment}/")
 }
@@ -13253,7 +14230,7 @@ fn redirect_url_to_base(req: &wiremock::Request, base: &str) -> String {
 /// `pyproject.toml`.
 #[test]
 fn add_ambiguous() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     context
         .temp_dir
@@ -13271,7 +14248,7 @@ fn add_ambiguous() -> Result<()> {
         bar = ["anyio>=4.1.0", "anyio>=4.2.0"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -13280,9 +14257,9 @@ fn add_ambiguous() -> Result<()> {
     error: Cannot perform ambiguous update; found multiple entries for `anyio`:
     - `anyio>=4.0.0`
     - `anyio>=4.1.0`
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.add().arg("--group").arg("bar").arg("anyio"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("--group").arg("bar").arg("anyio"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -13291,7 +14268,7 @@ fn add_ambiguous() -> Result<()> {
     error: Cannot perform ambiguous update; found multiple entries for `anyio`:
     - `anyio>=4.1.0`
     - `anyio>=4.2.0`
-    "###);
+    ");
 
     Ok(())
 }
@@ -13299,7 +14276,7 @@ fn add_ambiguous() -> Result<()> {
 /// Normalize extra names when adding or removing.
 #[test]
 fn add_optional_normalize() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -13316,7 +14293,7 @@ fn add_optional_normalize() -> Result<()> {
     "#})?;
 
     // Add with a non-normalized group name.
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--optional").arg("cloud_export_to_parquet"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--optional").arg("cloud_export_to_parquet"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13349,7 +14326,7 @@ fn add_optional_normalize() -> Result<()> {
     );
 
     // Add with a normalized group name (which doesn't match the `pyproject.toml`).
-    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--optional").arg("cloud-export-to-parquet"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--optional").arg("cloud-export-to-parquet"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13380,7 +14357,7 @@ fn add_optional_normalize() -> Result<()> {
     );
 
     // Remove with a non-normalized group name.
-    uv_snapshot!(context.filters(), context.remove().arg("iniconfig").arg("--optional").arg("cloud_export_to_parquet"), @r"
+    uv_snapshot!(context.filters(), context.remove().arg("iniconfig").arg("--optional").arg("cloud_export_to_parquet"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13413,14 +14390,14 @@ fn add_optional_normalize() -> Result<()> {
     );
 
     // Remove with a normalized group name (which doesn't match the `pyproject.toml`).
-    uv_snapshot!(context.filters(), context.remove().arg("typing-extensions").arg("--optional").arg("cloud-export-to-parquet"), @r"
+    uv_snapshot!(context.filters(), context.remove().arg("typing-extensions").arg("--optional").arg("cloud-export-to-parquet"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Audited in [TIME]
+    Checked in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -13445,7 +14422,7 @@ fn add_optional_normalize() -> Result<()> {
 /// Test `uv add` with different kinds of bounds and constraints.
 #[test]
 fn add_bounds() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Set bounds in `uv.toml`
     let uv_toml = context.temp_dir.child("uv.toml");
@@ -13460,13 +14437,12 @@ fn add_bounds() -> Result<()> {
         requires-python = ">=3.12"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("idna"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("idna"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `bounds` option is in preview and may change in any future release. Pass `--preview-features add-bounds` to disable this warning.
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -13500,13 +14476,12 @@ fn add_bounds() -> Result<()> {
         add-bounds = "major"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `bounds` option is in preview and may change in any future release. Pass `--preview-features add-bounds` to disable this warning.
     Resolved 4 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -13531,14 +14506,14 @@ fn add_bounds() -> Result<()> {
     );
 
     // Existing constraints take precedence over the bounds option
-    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--bounds").arg("minor").arg("--preview"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--bounds").arg("minor"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -13558,7 +14533,7 @@ fn add_bounds() -> Result<()> {
     );
 
     // Explicit constraints take precedence over the bounds option
-    uv_snapshot!(context.filters(), context.add().arg("anyio==4.2").arg("idna").arg("--bounds").arg("minor").arg("--preview"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==4.2").arg("idna").arg("--bounds").arg("minor"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13589,15 +14564,15 @@ fn add_bounds() -> Result<()> {
     "#
     );
 
-    // Set bounds on the CLI and use `--preview` to silence the warning.
-    uv_snapshot!(context.filters(), context.add().arg("sniffio").arg("--bounds").arg("minor").arg("--preview"), @r"
+    // Set bounds on the CLI.
+    uv_snapshot!(context.filters(), context.add().arg("sniffio").arg("--bounds").arg("minor"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Checked 3 packages in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -13624,7 +14599,7 @@ fn add_bounds() -> Result<()> {
 /// Hint that we're using an explicit bound over the preferred bounds.
 #[test]
 fn add_bounds_requirement_over_bounds_kind() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Set bounds in `uv.toml`
     let uv_toml = context.temp_dir.child("uv.toml");
@@ -13639,7 +14614,7 @@ fn add_bounds_requirement_over_bounds_kind() -> Result<()> {
         requires-python = ">=3.12"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio==4.2").arg("idna").arg("--bounds").arg("minor").arg("--preview"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==4.2").arg("idna").arg("--bounds").arg("minor"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13675,7 +14650,7 @@ fn add_bounds_requirement_over_bounds_kind() -> Result<()> {
 /// contains a workspace definition, so the package should be added to the workspace members.
 #[test]
 fn add_path_with_existing_workspace() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let workspace_toml = context.temp_dir.child("pyproject.toml");
     workspace_toml.write_str(indoc! {r#"
@@ -13719,7 +14694,7 @@ fn add_path_with_existing_workspace() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .add()
         .current_dir(&project_dir)
-        .arg("../dep"), @r"
+        .arg("../dep"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13771,7 +14746,7 @@ fn add_path_with_existing_workspace() -> Result<()> {
 /// contain a workspace definition, so `uv add` should create one.
 #[test]
 fn add_path_with_workspace() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let workspace_toml = context.temp_dir.child("pyproject.toml");
     workspace_toml.write_str(indoc! {r#"
@@ -13798,7 +14773,7 @@ fn add_path_with_workspace() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .add()
         .arg("./dep")
-        .arg("--workspace"), @r"
+        .arg("--workspace"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13839,7 +14814,7 @@ fn add_path_with_workspace() -> Result<()> {
 /// It should automatically be added as a workspace member.
 #[test]
 fn add_path_within_workspace_defaults_to_workspace() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let workspace_toml = context.temp_dir.child("pyproject.toml");
     workspace_toml.write_str(indoc! {r#"
@@ -13866,7 +14841,7 @@ fn add_path_within_workspace_defaults_to_workspace() -> Result<()> {
     // since it's within the workspace directory.
     uv_snapshot!(context.filters(), context
         .add()
-        .arg("./dep"), @r"
+        .arg("./dep"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13907,7 +14882,7 @@ fn add_path_within_workspace_defaults_to_workspace() -> Result<()> {
 /// It should be added as a direct path dependency.
 #[test]
 fn add_path_with_no_workspace() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let workspace_toml = context.temp_dir.child("pyproject.toml");
     workspace_toml.write_str(indoc! {r#"
@@ -13934,7 +14909,7 @@ fn add_path_with_no_workspace() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .add()
         .arg("./dep")
-        .arg("--no-workspace"), @r"
+        .arg("--no-workspace"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13972,7 +14947,7 @@ fn add_path_with_no_workspace() -> Result<()> {
 /// It should be added as a direct path dependency, not a workspace member.
 #[test]
 fn add_path_outside_workspace_no_default() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create a workspace directory
     let workspace_dir = context.temp_dir.child("workspace");
@@ -14005,7 +14980,7 @@ fn add_path_outside_workspace_no_default() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .add()
         .current_dir(&workspace_dir)
-        .arg("../external_dep"), @r"
+        .arg("../external_dep"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14044,7 +15019,7 @@ fn add_path_outside_workspace_no_default() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/14961>
 #[test]
 fn add_multiline_indentation() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -14057,7 +15032,7 @@ fn add_multiline_indentation() -> Result<()> {
         dev = ["ruff", "typing-extensions"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--dev"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--dev"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14099,7 +15074,7 @@ fn add_multiline_indentation() -> Result<()> {
 /// Add a requirement without installing the project.
 #[test]
 fn add_no_install_project() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -14121,7 +15096,7 @@ fn add_no_install_project() -> Result<()> {
         .child("__init__.py")
         .touch()?;
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--no-install-project"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--no-install-project"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14191,6 +15166,66 @@ fn add_no_install_project() -> Result<()> {
         "#
         );
     });
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "test-git-lfs")]
+fn add_git_lfs_error() -> Result<()> {
+    let context = uv_test::test_context!("3.13").with_git_lfs_config();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = []
+    "#})?;
+
+    // Request lfs (via arg) without a Git source.
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--lfs"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `typing-extensions` did not resolve to a Git repository, but a Git extension (`--lfs`) was provided.
+    ");
+
+    // Request lfs (via env var) without a Git source.
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").env(EnvVars::UV_GIT_LFS, "true"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
+    ");
+
+    // Request lfs (both arg and env var) without a Git source.
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").env(EnvVars::UV_GIT_LFS, "true").arg("--lfs"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `typing-extensions` did not resolve to a Git repository, but a Git extension (`--lfs`) was provided.
+    ");
+
+    // Request lfs from arg and disable lfs from env var (should be ignored) without a Git source.
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").env(EnvVars::UV_GIT_LFS, "false").arg("--lfs"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `typing-extensions` did not resolve to a Git repository, but a Git extension (`--lfs`) was provided.
+    ");
 
     Ok(())
 }

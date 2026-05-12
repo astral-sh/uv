@@ -18,7 +18,7 @@ use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
-use uv_distribution_filename::WheelFilename;
+use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
     BuildInfo, BuildableSource, BuiltDist, Dist, File, HashPolicy, Hashed, IndexUrl, InstalledDist,
     Name, SourceDist, ToUrlError,
@@ -29,6 +29,7 @@ use uv_platform_tags::Tags;
 use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml};
 use uv_redacted::DisplaySafeUrl;
 use uv_types::{BuildContext, BuildStack};
+use uv_warnings::warn_user_once;
 
 use crate::archive::Archive;
 use crate::metadata::{ArchiveMetadata, Metadata};
@@ -58,12 +59,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     pub fn new(
         client: &'a RegistryClient,
         build_context: &'a Context,
-        concurrent_downloads: usize,
+        downloads_semaphore: Arc<Semaphore>,
     ) -> Self {
         Self {
             build_context,
             builder: SourceDistributionBuilder::new(build_context),
-            client: ManagedClient::new(client, concurrent_downloads),
+            client: ManagedClient::new(client, downloads_semaphore),
             reporter: None,
         }
     }
@@ -90,11 +91,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     /// Handle a specific `reqwest` error, and convert it to [`io::Error`].
     fn handle_response_errors(&self, err: reqwest::Error) -> io::Error {
         if err.is_timeout() {
+            // Assumption: The connect timeout with the 10s default is not the culprit.
             io::Error::new(
                 io::ErrorKind::TimedOut,
                 format!(
                     "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).",
-                    self.client.unmanaged.timeout().as_secs()
+                    self.client.unmanaged.read_timeout().as_secs()
                 ),
             )
         } else {
@@ -379,11 +381,60 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         tags: &Tags,
         hashes: HashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
+        // Warn if the source distribution isn't PEP 625 compliant.
+        // We do this here instead of in `SourceDistExtension::from_path` to minimize log volume:
+        // a non-compliant distribution isn't a huge problem if it's not actually being
+        // materialized into a wheel. Observe that we also allow no extension, since we expect that
+        // for directory and Git installs.
+        // NOTE: Observe that we also allow `.zip` sdists here, which are not PEP 625 compliant.
+        // This is because they were allowed on PyPI until relatively recently (2020).
+        if let Some(extension) = dist.extension()
+            && !matches!(
+                extension,
+                SourceDistExtension::TarGz | SourceDistExtension::Zip
+            )
+        {
+            if matches!(dist, SourceDist::Registry(_)) {
+                // Observe that we display a slightly different warning when the sdist comes
+                // from a registry, since that suggests that the user has inadvertently
+                // (rather than explicitly) depended on a non-compliant sdist.
+                warn_user_once!(
+                    "{dist} uses a legacy source distribution format ('.{extension}') that is not compliant with PEP 625. A future version of uv will reject this source distribution. Consider upgrading to a newer version of {package}",
+                    package = dist.name(),
+                );
+            } else {
+                warn_user_once!(
+                    "{dist} is not a standards-compliant source distribution: expected '.tar.gz' but found '.{extension}'. A future version of uv will reject source distributions that do not meet the requirements specified in PEP 625",
+                );
+            }
+        }
+
         let built_wheel = self
             .builder
             .download_and_build(&BuildableSource::Dist(dist), tags, hashes, &self.client)
             .boxed_local()
             .await?;
+
+        // Check that the wheel is compatible with its install target.
+        //
+        // When building a build dependency for a cross-install, the build dependency needs
+        // to install and run on the host instead of the target. In this case the `tags` are already
+        // for the host instead of the target, so this check passes.
+        if !built_wheel.filename.is_compatible(tags) {
+            return if tags.is_cross() {
+                Err(Error::BuiltWheelIncompatibleTargetPlatform {
+                    filename: built_wheel.filename,
+                    python_platform: tags.python_platform().clone(),
+                    python_version: tags.python_version(),
+                })
+            } else {
+                Err(Error::BuiltWheelIncompatibleHostPlatform {
+                    filename: built_wheel.filename,
+                    python_platform: tags.python_platform().clone(),
+                    python_version: tags.python_version(),
+                })
+            };
+        }
 
         // Acquire the advisory lock.
         #[cfg(windows)]
@@ -395,7 +446,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     built_wheel.target.file_name().unwrap().to_str().unwrap()
                 ),
             );
-            lock_entry.lock().await.map_err(Error::CacheWrite)?
+            lock_entry.lock().await.map_err(Error::CacheLock)?
         };
 
         // If the wheel was unzipped previously, respect it. Source distributions are
@@ -554,7 +605,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         pyproject_toml: &PyProjectToml,
     ) -> Result<Option<RequiresDist>, Error> {
         self.builder
-            .source_tree_requires_dist(path, pyproject_toml)
+            .source_tree_requires_dist(
+                path,
+                pyproject_toml,
+                self.client.unmanaged.credentials_cache(),
+            )
             .await
     }
 
@@ -574,11 +629,13 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         #[cfg(windows)]
         let _lock = {
             let lock_entry = wheel_entry.with_file(format!("{}.lock", filename.stem()));
-            lock_entry.lock().await.map_err(Error::CacheWrite)?
+            lock_entry.lock().await.map_err(Error::CacheLock)?
         };
 
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
+
+        let query_url = &url.clone();
 
         let download = |response: reqwest::Response| {
             async {
@@ -608,7 +665,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         let mut reader = ProgressReader::new(&mut hasher, progress, &**reporter);
                         match extension {
                             WheelExtension::Whl => {
-                                uv_extract::stream::unzip(&mut reader, temp_dir.path())
+                                uv_extract::stream::unzip(query_url, &mut reader, temp_dir.path())
                                     .await
                                     .map_err(|err| Error::Extract(filename.to_string(), err))?;
                             }
@@ -621,7 +678,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     }
                     None => match extension {
                         WheelExtension::Whl => {
-                            uv_extract::stream::unzip(&mut hasher, temp_dir.path())
+                            uv_extract::stream::unzip(query_url, &mut hasher, temp_dir.path())
                                 .await
                                 .map_err(|err| Error::Extract(filename.to_string(), err))?;
                         }
@@ -696,7 +753,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .await
             .map_err(|err| match err {
                 CachedClientError::Callback { err, .. } => err,
-                CachedClientError::Client { err, .. } => Error::Client(err),
+                CachedClientError::Client(err) => Error::Client(err),
             })?;
 
         // If the archive is missing the required hashes, or has since been removed, force a refresh.
@@ -720,7 +777,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         .await
                         .map_err(|err| match err {
                             CachedClientError::Callback { err, .. } => err,
-                            CachedClientError::Client { err, .. } => Error::Client(err),
+                            CachedClientError::Client(err) => Error::Client(err),
                         })
                 })
                 .await?
@@ -745,11 +802,13 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         #[cfg(windows)]
         let _lock = {
             let lock_entry = wheel_entry.with_file(format!("{}.lock", filename.stem()));
-            lock_entry.lock().await.map_err(Error::CacheWrite)?
+            lock_entry.lock().await.map_err(Error::CacheLock)?
         };
 
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
+
+        let query_url = &url.clone();
 
         let download = |response: reqwest::Response| {
             async {
@@ -830,7 +889,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
                     match extension {
                         WheelExtension::Whl => {
-                            uv_extract::stream::unzip(&mut hasher, temp_dir.path())
+                            uv_extract::stream::unzip(query_url, &mut hasher, temp_dir.path())
                                 .await
                                 .map_err(|err| Error::Extract(filename.to_string(), err))?;
                         }
@@ -901,7 +960,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .await
             .map_err(|err| match err {
                 CachedClientError::Callback { err, .. } => err,
-                CachedClientError::Client { err, .. } => Error::Client(err),
+                CachedClientError::Client(err) => Error::Client(err),
             })?;
 
         // If the archive is missing the required hashes, or has since been removed, force a refresh.
@@ -925,7 +984,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         .await
                         .map_err(|err| match err {
                             CachedClientError::Callback { err, .. } => err,
-                            CachedClientError::Client { err, .. } => Error::Client(err),
+                            CachedClientError::Client(err) => Error::Client(err),
                         })
                 })
                 .await?
@@ -947,7 +1006,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         #[cfg(windows)]
         let _lock = {
             let lock_entry = wheel_entry.with_file(format!("{}.lock", filename.stem()));
-            lock_entry.lock().await.map_err(Error::CacheWrite)?
+            lock_entry.lock().await.map_err(Error::CacheLock)?
         };
 
         // Determine the last-modified time of the wheel.
@@ -1020,7 +1079,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             // Unzip the wheel to a temporary directory.
             match extension {
                 WheelExtension::Whl => {
-                    uv_extract::stream::unzip(&mut hasher, temp_dir.path())
+                    uv_extract::stream::unzip(path.display(), &mut hasher, temp_dir.path())
                         .await
                         .map_err(|err| Error::Extract(filename.to_string(), err))?;
                 }
@@ -1121,15 +1180,15 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 /// A wrapper around `RegistryClient` that manages a concurrency limit.
 pub struct ManagedClient<'a> {
     pub unmanaged: &'a RegistryClient,
-    control: Semaphore,
+    control: Arc<Semaphore>,
 }
 
 impl<'a> ManagedClient<'a> {
-    /// Create a new `ManagedClient` using the given client and concurrency limit.
-    fn new(client: &'a RegistryClient, concurrency: usize) -> Self {
+    /// Create a new `ManagedClient` using the given client and concurrency semaphore.
+    fn new(client: &'a RegistryClient, control: Arc<Semaphore>) -> Self {
         ManagedClient {
             unmanaged: client,
-            control: Semaphore::new(concurrency),
+            control,
         }
     }
 

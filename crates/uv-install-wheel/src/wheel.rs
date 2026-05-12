@@ -373,7 +373,9 @@ pub(crate) fn move_folder_recorded(
                         src.simplified_display()
                     ))
                 })?;
-            entry.path = relative_to(&target, site_packages)?.display().to_string();
+            entry.path = relative_to(&target, site_packages)?
+                .portable_display()
+                .to_string();
         }
     }
     Ok(())
@@ -576,7 +578,7 @@ fn install_script(
         })?;
 
     // Update the entry in the `RECORD`.
-    entry.path = script_relative.simplified_display().to_string();
+    entry.path = script_relative.portable_display().to_string();
     if let Some((size, encoded_hash)) = size_and_encoded_hash {
         entry.size = Some(size);
         entry.hash = Some(encoded_hash);

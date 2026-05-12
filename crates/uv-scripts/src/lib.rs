@@ -7,9 +7,10 @@ use std::sync::LazyLock;
 use memchr::memmem::Finder;
 use serde::Deserialize;
 use thiserror::Error;
+use tracing::instrument;
 use url::Url;
 
-use uv_configuration::SourceStrategy;
+use uv_configuration::NoSources;
 use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
 use uv_pypi_types::VerbatimParsedUrl;
@@ -110,31 +111,31 @@ impl Pep723ItemRef<'_> {
     }
 
     /// Collect any `tool.uv.index` from the script.
-    pub fn indexes(&self, source_strategy: SourceStrategy) -> &[uv_distribution_types::Index] {
+    pub fn indexes(&self, source_strategy: &NoSources) -> &[uv_distribution_types::Index] {
         match source_strategy {
-            SourceStrategy::Enabled => self
+            NoSources::None => self
                 .metadata()
                 .tool
                 .as_ref()
                 .and_then(|tool| tool.uv.as_ref())
                 .and_then(|uv| uv.top_level.index.as_deref())
                 .unwrap_or(&[]),
-            SourceStrategy::Disabled => &[],
+            NoSources::All | NoSources::Packages(_) => &[],
         }
     }
 
     /// Collect any `tool.uv.sources` from the script.
-    pub fn sources(&self, source_strategy: SourceStrategy) -> &BTreeMap<PackageName, Sources> {
+    pub fn sources(&self, source_strategy: &NoSources) -> &BTreeMap<PackageName, Sources> {
         static EMPTY: BTreeMap<PackageName, Sources> = BTreeMap::new();
         match source_strategy {
-            SourceStrategy::Enabled => self
+            NoSources::None => self
                 .metadata()
                 .tool
                 .as_ref()
                 .and_then(|tool| tool.uv.as_ref())
                 .and_then(|uv| uv.sources.as_ref())
                 .unwrap_or(&EMPTY),
-            SourceStrategy::Disabled => &EMPTY,
+            NoSources::All | NoSources::Packages(_) => &EMPTY,
         }
     }
 }
@@ -270,6 +271,7 @@ impl Pep723Script {
         file: impl AsRef<Path>,
         requires_python: &VersionSpecifiers,
         existing_contents: Option<Vec<u8>>,
+        bare: bool,
     ) -> Result<(), Pep723Error> {
         let file = file.as_ref();
 
@@ -305,6 +307,8 @@ impl Pep723Script {
             indoc::formatdoc! {r"
             {shebang}{metadata}
             {contents}" }
+        } else if bare {
+            metadata
         } else {
             indoc::formatdoc! {r#"
             {metadata}
@@ -403,6 +407,7 @@ impl FromStr for Pep723Metadata {
     type Err = toml::de::Error;
 
     /// Parse `Pep723Metadata` from a raw TOML string.
+    #[instrument(name = "toml::from_str PEP 723 metadata", skip_all)]
     fn from_str(raw: &str) -> Result<Self, Self::Err> {
         let metadata = toml::from_str(raw)?;
         Ok(Self {

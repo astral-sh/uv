@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use dashmap::DashMap;
 
-use uv_configuration::{BuildKind, SourceStrategy};
+use uv_configuration::{BuildKind, NoSources};
 use uv_normalize::PackageName;
 use uv_python::PythonEnvironment;
 
@@ -51,7 +51,7 @@ pub struct BuildKey {
     pub base_python: Box<Path>,
     pub source_root: Box<Path>,
     pub subdirectory: Option<Box<Path>>,
-    pub source_strategy: SourceStrategy,
+    pub no_sources: NoSources,
     pub build_kind: BuildKind,
 }
 

@@ -192,6 +192,7 @@ impl IncompatibleDist {
                     let tag = tags?.abi_tag().as_ref().map(ToString::to_string)?;
                     Some(format!("(e.g., `{tag}`)", tag = tag.cyan()))
                 }
+                IncompatibleWheel::Tag(IncompatibleTag::FreethreadedAbi) => None,
                 IncompatibleWheel::Tag(IncompatibleTag::AbiPythonVersion) => {
                     let tag = requires_python?;
                     Some(format!("(e.g., `{tag}`)", tag = tag.cyan()))
@@ -224,6 +225,9 @@ impl Display for IncompatibleDist {
                         f.write_str("no wheels with a matching Python implementation tag")
                     }
                     IncompatibleTag::Abi => f.write_str("no wheels with a matching Python ABI tag"),
+                    IncompatibleTag::FreethreadedAbi => {
+                        f.write_str("no wheels with a free-threading compatible ABI tag")
+                    }
                     IncompatibleTag::AbiPythonVersion => {
                         f.write_str("no wheels with a matching Python version tag")
                     }
@@ -753,7 +757,6 @@ impl IncompatibleSource {
 }
 
 impl IncompatibleWheel {
-    #[allow(clippy::match_like_matches_macro)]
     fn is_more_compatible(&self, other: &Self) -> bool {
         match self {
             Self::ExcludeNewer(timestamp_self) => match other {
@@ -923,6 +926,10 @@ fn implied_platform_markers(filename: &WheelFilename) -> MarkerTree {
 fn implied_python_markers(filename: &WheelFilename) -> MarkerTree {
     let mut marker = MarkerTree::FALSE;
 
+    // If any ABI tag is `abi3` (the stable ABI), the python tag represents a minimum version
+    // rather than an exact version. For example, `cp39-abi3` means "compatible with CPython 3.9+".
+    let is_abi3 = filename.abi_tags().contains(&AbiTag::Abi3);
+
     for python_tag in filename.python_tags() {
         // First, construct the version marker based on the tag
         let mut tree = match python_tag {
@@ -930,13 +937,22 @@ fn implied_python_markers(filename: &WheelFilename) -> MarkerTree {
                 // No Python tag means no Python version requirement.
                 return MarkerTree::TRUE;
             }
-            LanguageTag::Python { major, minor: None } => {
-                MarkerTree::expression(MarkerExpression::Version {
-                    key: uv_pep508::MarkerValueVersion::PythonVersion,
-                    specifier: VersionSpecifier::equals_star_version(Version::new([u64::from(
-                        *major,
-                    )])),
-                })
+            LanguageTag::Python { major, minor: None } | LanguageTag::CPythonMajor { major } => {
+                if is_abi3 {
+                    MarkerTree::expression(MarkerExpression::Version {
+                        key: uv_pep508::MarkerValueVersion::PythonVersion,
+                        specifier: VersionSpecifier::greater_than_equal_version(Version::new([
+                            u64::from(*major),
+                        ])),
+                    })
+                } else {
+                    MarkerTree::expression(MarkerExpression::Version {
+                        key: uv_pep508::MarkerValueVersion::PythonVersion,
+                        specifier: VersionSpecifier::equals_star_version(Version::new([
+                            u64::from(*major),
+                        ])),
+                    })
+                }
             }
             LanguageTag::Python {
                 major,
@@ -953,13 +969,25 @@ fn implied_python_markers(filename: &WheelFilename) -> MarkerTree {
             }
             | LanguageTag::Pyston {
                 python_version: (major, minor),
-            } => MarkerTree::expression(MarkerExpression::Version {
-                key: uv_pep508::MarkerValueVersion::PythonVersion,
-                specifier: VersionSpecifier::equals_star_version(Version::new([
-                    u64::from(*major),
-                    u64::from(*minor),
-                ])),
-            }),
+            } => {
+                if is_abi3 {
+                    MarkerTree::expression(MarkerExpression::Version {
+                        key: uv_pep508::MarkerValueVersion::PythonVersion,
+                        specifier: VersionSpecifier::greater_than_equal_version(Version::new([
+                            u64::from(*major),
+                            u64::from(*minor),
+                        ])),
+                    })
+                } else {
+                    MarkerTree::expression(MarkerExpression::Version {
+                        key: uv_pep508::MarkerValueVersion::PythonVersion,
+                        specifier: VersionSpecifier::equals_star_version(Version::new([
+                            u64::from(*major),
+                            u64::from(*minor),
+                        ])),
+                    })
+                }
+            }
         };
 
         // Then, add implementation markers for implementation-specific tags
@@ -967,7 +995,7 @@ fn implied_python_markers(filename: &WheelFilename) -> MarkerTree {
             LanguageTag::None | LanguageTag::Python { .. } => {
                 // No implementation marker needed
             }
-            LanguageTag::CPython { .. } => {
+            LanguageTag::CPython { .. } | LanguageTag::CPythonMajor { .. } => {
                 tree.and(MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::PlatformPythonImplementation,
                     operator: MarkerOperator::Equal,
@@ -1120,6 +1148,20 @@ mod tests {
             "example-1.0-py311.py312-none-any.whl",
             "python_full_version >= '3.11' and python_full_version < '3.13'",
         );
+
+        // abi3 wheels: the python tag represents a minimum version, not an exact version.
+        assert_python_markers(
+            "example-1.0-cp39-abi3-any.whl",
+            "python_full_version >= '3.9' and platform_python_implementation == 'CPython'",
+        );
+        assert_python_markers(
+            "example-1.0-cp312-abi3-any.whl",
+            "python_full_version >= '3.12' and platform_python_implementation == 'CPython'",
+        );
+        assert_python_markers(
+            "example-1.0-cp3-abi3-any.whl",
+            "python_full_version >= '3' and platform_python_implementation == 'CPython'",
+        );
     }
 
     #[test]
@@ -1143,6 +1185,12 @@ mod tests {
         assert_implied_markers(
             "example-1.0-py3-none-any.whl",
             "python_full_version >= '3' and python_full_version < '4'",
+        );
+
+        // abi3 wheel: cp39-abi3 means CPython >= 3.9, combined with platform markers.
+        assert_implied_markers(
+            "example-1.0-cp39-abi3-manylinux_2_28_x86_64.whl",
+            "python_full_version >= '3.9' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and platform_machine == 'x86_64'",
         );
     }
 }

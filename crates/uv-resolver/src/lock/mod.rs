@@ -12,10 +12,10 @@ use jiff::Timestamp;
 use owo_colors::OwoColorize;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use serde::Serializer;
 use toml_edit::{Array, ArrayOfTables, InlineTable, Item, Table, Value, value};
-use tracing::debug;
+use tracing::{debug, instrument};
 use url::Url;
 
 use uv_cache_key::RepositoryUrl;
@@ -26,17 +26,19 @@ use uv_distribution_filename::{
 };
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
-    Dist, DistributionMetadata, FileLocation, GitSourceDist, IndexLocations, IndexMetadata,
-    IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
+    Dist, FileLocation, GitSourceDist, Identifier, IndexLocations, IndexMetadata, IndexUrl, Name,
+    PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
+    RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
     SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString,
 };
-use uv_fs::{PortablePath, PortablePathBuf, relative_to};
+use uv_fs::{PortablePath, PortablePathBuf, Simplified, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
-use uv_git_types::{GitOid, GitReference, GitUrl, GitUrlParseError};
+use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
-use uv_pep508::{MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError, split_scheme};
+use uv_pep508::{
+    MarkerEnvironment, MarkerTree, Scheme, VerbatimUrl, VerbatimUrlError, split_scheme,
+};
 use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
 };
@@ -44,23 +46,24 @@ use uv_pypi_types::{
     ConflictKind, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes, ParsedArchiveUrl,
     ParsedGitUrl, PyProjectToml,
 };
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
 use uv_types::{BuildContext, HashStrategy};
 use uv_workspace::{Editability, WorkspaceMember};
 
+use crate::exclude_newer::ExcludeNewerSpan;
 use crate::fork_strategy::ForkStrategy;
 pub(crate) use crate::lock::export::PylockTomlPackage;
 pub use crate::lock::export::RequirementsTxtExport;
-pub use crate::lock::export::{PylockToml, PylockTomlErrorKind};
+pub use crate::lock::export::{PylockToml, PylockTomlErrorKind, cyclonedx_json};
 pub use crate::lock::installable::Installable;
 pub use crate::lock::map::PackageMap;
 pub use crate::lock::tree::TreeDisplay;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{
-    ExcludeNewer, ExcludeNewerTimestamp, InMemoryIndex, MetadataResponse, PrereleaseMode,
-    ResolutionMode, ResolverOutput,
+    ExcludeNewer, ExcludeNewerPackage, ExcludeNewerValue, InMemoryIndex, MetadataResponse,
+    PackageExcludeNewer, PrereleaseMode, ResolutionMode, ResolverOutput,
 };
 
 mod export;
@@ -109,6 +112,36 @@ static X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     .unwrap();
     UniversalMarker::new(pep508, ConflictMarker::TRUE)
 });
+static PPC64LE_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("platform_machine == 'ppc64le'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static PPC64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("platform_machine == 'ppc64'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static S390X_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("platform_machine == 's390x'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static RISCV64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("platform_machine == 'riscv64'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static LOONGARCH64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("platform_machine == 'loongarch64'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static ARMV7L_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 =
+        MarkerTree::from_str("platform_machine == 'armv7l' or platform_machine == 'armv8l'")
+            .unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static ARMV6L_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("platform_machine == 'armv6l'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
 static LINUX_ARM_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let mut marker = *LINUX_MARKERS;
     marker.and(*ARM_MARKERS);
@@ -122,6 +155,41 @@ static LINUX_X86_64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
 static LINUX_X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let mut marker = *LINUX_MARKERS;
     marker.and(*X86_MARKERS);
+    marker
+});
+static LINUX_PPC64LE_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*PPC64LE_MARKERS);
+    marker
+});
+static LINUX_PPC64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*PPC64_MARKERS);
+    marker
+});
+static LINUX_S390X_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*S390X_MARKERS);
+    marker
+});
+static LINUX_RISCV64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*RISCV64_MARKERS);
+    marker
+});
+static LINUX_LOONGARCH64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*LOONGARCH64_MARKERS);
+    marker
+});
+static LINUX_ARMV7L_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*ARMV7L_MARKERS);
+    marker
+});
+static LINUX_ARMV6L_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*ARMV6L_MARKERS);
     marker
 });
 static WINDOWS_ARM_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
@@ -169,6 +237,15 @@ static ANDROID_X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     marker.and(*X86_MARKERS);
     marker
 });
+
+/// A distribution with its associated hash.
+///
+/// This pairs a [`Dist`] with the [`HashDigests`] for the specific wheel or
+/// sdist that would be installed.
+pub(crate) struct HashedDist {
+    pub(crate) dist: Dist,
+    pub(crate) hashes: HashDigests,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
 #[serde(try_from = "LockWire")]
@@ -221,9 +298,26 @@ pub struct Lock {
 
 impl Lock {
     /// Initialize a [`Lock`] from a [`ResolverOutput`].
-    pub fn from_resolution(resolution: &ResolverOutput, root: &Path) -> Result<Self, LockError> {
+    pub fn from_resolution(
+        resolution: &ResolverOutput,
+        root: &Path,
+        supported_environments: Vec<MarkerTree>,
+    ) -> Result<Self, LockError> {
         let mut packages = BTreeMap::new();
         let requires_python = resolution.requires_python.clone();
+        let supported_environments = supported_environments
+            .into_iter()
+            .map(|marker| requires_python.complexify_markers(marker))
+            .collect::<Vec<_>>();
+        let supported_environments_marker = if supported_environments.is_empty() {
+            None
+        } else {
+            let mut combined = MarkerTree::FALSE;
+            for marker in &supported_environments {
+                combined.or(*marker);
+            }
+            Some(UniversalMarker::new(combined, ConflictMarker::TRUE))
+        };
 
         // Determine the set of packages included at multiple versions.
         let mut seen = FxHashSet::default();
@@ -251,19 +345,38 @@ impl Lock {
 
             // If there are multiple distributions for the same package, include the markers of all
             // forks that included the current distribution.
+            //
+            // Normalize with a simplify/complexify round-trip through `requires-python` to
+            // match markers deserialized from the lockfile (which get complexified on read).
             let fork_markers = if duplicates.contains(dist.name()) {
                 resolution
                     .fork_markers
                     .iter()
                     .filter(|fork_markers| !fork_markers.is_disjoint(dist.marker))
-                    .copied()
+                    .map(|marker| {
+                        let simplified =
+                            SimplifiedMarkerTree::new(&requires_python, marker.combined());
+                        UniversalMarker::from_combined(simplified.into_marker(&requires_python))
+                    })
                     .collect()
             } else {
                 vec![]
             };
 
             let mut package = Package::from_annotated_dist(dist, fork_markers, root)?;
-            Self::remove_unreachable_wheels(resolution, &requires_python, node_index, &mut package);
+            let mut wheel_marker = dist.marker;
+            if let Some(supported_environments_marker) = supported_environments_marker {
+                wheel_marker.and(supported_environments_marker);
+            }
+            let wheels = &mut package.wheels;
+            wheels.retain(|wheel| {
+                !is_wheel_unreachable_for_marker(
+                    &wheel.filename,
+                    &requires_python,
+                    &wheel_marker,
+                    None,
+                )
+            });
 
             // Add all dependencies
             for edge in resolution.graph.edges(node_index) {
@@ -342,24 +455,25 @@ impl Lock {
         }
 
         let packages = packages.into_values().collect();
-        let (exclude_newer, exclude_newer_package) = {
-            let exclude_newer = &resolution.options.exclude_newer;
-            let global_exclude_newer = exclude_newer.global;
-            let package_exclude_newer = if exclude_newer.package.is_empty() {
-                None
-            } else {
-                Some(exclude_newer.package.clone().into_inner())
-            };
-            (global_exclude_newer, package_exclude_newer)
-        };
 
         let options = ResolverOptions {
             resolution_mode: resolution.options.resolution_mode,
             prerelease_mode: resolution.options.prerelease_mode,
             fork_strategy: resolution.options.fork_strategy,
-            exclude_newer,
-            exclude_newer_package,
+            exclude_newer: resolution.options.exclude_newer.clone().into(),
         };
+        // Normalize fork markers with a simplify/complexify round-trip through
+        // `requires-python`. This ensures markers from the resolver (which don't include
+        // `requires-python` bounds) match markers deserialized from the lockfile (which get
+        // complexified on read).
+        let fork_markers = resolution
+            .fork_markers
+            .iter()
+            .map(|marker| {
+                let simplified = SimplifiedMarkerTree::new(&requires_python, marker.combined());
+                UniversalMarker::from_combined(simplified.into_marker(&requires_python))
+            })
+            .collect();
         let lock = Self::new(
             VERSION,
             REVISION,
@@ -368,179 +482,11 @@ impl Lock {
             options,
             ResolverManifest::default(),
             Conflicts::empty(),
+            supported_environments,
             vec![],
-            vec![],
-            resolution.fork_markers.clone(),
+            fork_markers,
         )?;
         Ok(lock)
-    }
-
-    /// Remove wheels that can't be selected for installation due to environment markers.
-    ///
-    /// For example, a package included under `sys_platform == 'win32'` does not need Linux
-    /// wheels.
-    fn remove_unreachable_wheels(
-        graph: &ResolverOutput,
-        requires_python: &RequiresPython,
-        node_index: NodeIndex,
-        locked_dist: &mut Package,
-    ) {
-        // Remove wheels that don't match `requires-python` and can't be selected for installation.
-        locked_dist
-            .wheels
-            .retain(|wheel| requires_python.matches_wheel_tag(&wheel.filename));
-
-        // Filter by platform tags.
-        locked_dist.wheels.retain(|wheel| {
-            // Naively, we'd check whether `platform_system == 'Linux'` is disjoint, or
-            // `os_name == 'posix'` is disjoint, or `sys_platform == 'linux'` is disjoint (each on its
-            // own sufficient to exclude linux wheels), but due to
-            // `(A ∩ (B ∩ C) = ∅) => ((A ∩ B = ∅) or (A ∩ C = ∅))`
-            // a single disjointness check with the intersection is sufficient, so we have one
-            // constant per platform.
-            let platform_tags = wheel.filename.platform_tags();
-
-            if platform_tags.iter().all(PlatformTag::is_any) {
-                return true;
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_linux) {
-                if platform_tags.iter().all(PlatformTag::is_arm) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*LINUX_ARM_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*LINUX_X86_64_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_x86) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*LINUX_X86_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if graph.graph[node_index].marker().is_disjoint(*LINUX_MARKERS) {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_windows) {
-                if platform_tags.iter().all(PlatformTag::is_arm) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*WINDOWS_ARM_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*WINDOWS_X86_64_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_x86) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*WINDOWS_X86_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if graph.graph[node_index]
-                    .marker()
-                    .is_disjoint(*WINDOWS_MARKERS)
-                {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_macos) {
-                if platform_tags.iter().all(PlatformTag::is_arm) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*MAC_ARM_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*MAC_X86_64_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_x86) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*MAC_X86_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if graph.graph[node_index].marker().is_disjoint(*MAC_MARKERS) {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_android) {
-                if platform_tags.iter().all(PlatformTag::is_arm) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*ANDROID_ARM_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*ANDROID_X86_64_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_x86) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*ANDROID_X86_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if graph.graph[node_index]
-                    .marker()
-                    .is_disjoint(*ANDROID_MARKERS)
-                {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_arm) {
-                if graph.graph[node_index].marker().is_disjoint(*ARM_MARKERS) {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_x86_64) {
-                if graph.graph[node_index]
-                    .marker()
-                    .is_disjoint(*X86_64_MARKERS)
-                {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_x86) {
-                if graph.graph[node_index].marker().is_disjoint(*X86_MARKERS) {
-                    return false;
-                }
-            }
-
-            true
-        });
     }
 
     /// Initialize a [`Lock`] from a list of [`Package`] entries.
@@ -818,7 +764,9 @@ impl Lock {
 
     /// Returns the exclude newer setting used to generate this lock.
     pub fn exclude_newer(&self) -> ExcludeNewer {
-        self.options.exclude_newer()
+        // TODO(zanieb): It'd be nice not to hide this clone here, but I am hesitant to introduce
+        // a whole new `ExcludeNewerRef` type just for this
+        self.options.exclude_newer.clone().into()
     }
 
     /// Returns the conflicting groups that were used to generate this lock.
@@ -1065,18 +1013,44 @@ impl Lock {
                     value(self.options.fork_strategy.to_string()),
                 );
             }
-            let exclude_newer = &self.options.exclude_newer();
+            let exclude_newer = ExcludeNewer::from(self.options.exclude_newer.clone());
             if !exclude_newer.is_empty() {
                 // Always serialize global exclude-newer as a string
-                if let Some(global) = exclude_newer.global {
+                if let Some(global) = &exclude_newer.global {
                     options_table.insert("exclude-newer", value(global.to_string()));
+                    // Serialize the original span if present
+                    if let Some(span) = global.span() {
+                        options_table.insert("exclude-newer-span", value(span.to_string()));
+                    }
                 }
 
                 // Serialize package-specific exclusions as a separate field
                 if !exclude_newer.package.is_empty() {
                     let mut package_table = toml_edit::Table::new();
-                    for (name, timestamp) in &exclude_newer.package {
-                        package_table.insert(name.as_ref(), value(timestamp.to_string()));
+                    for (name, setting) in &exclude_newer.package {
+                        match setting {
+                            PackageExcludeNewer::Enabled(exclude_newer_value) => {
+                                if let Some(span) = exclude_newer_value.span() {
+                                    // Serialize as inline table with timestamp and span
+                                    let mut inline = toml_edit::InlineTable::new();
+                                    inline.insert(
+                                        "timestamp",
+                                        exclude_newer_value.timestamp().to_string().into(),
+                                    );
+                                    inline.insert("span", span.to_string().into());
+                                    package_table.insert(name.as_ref(), Item::Value(inline.into()));
+                                } else {
+                                    // Serialize as simple string
+                                    package_table.insert(
+                                        name.as_ref(),
+                                        value(exclude_newer_value.to_string()),
+                                    );
+                                }
+                            }
+                            PackageExcludeNewer::Disabled => {
+                                package_table.insert(name.as_ref(), value(false));
+                            }
+                        }
                     }
                     options_table.insert("exclude-newer-package", Item::Table(package_table));
                 }
@@ -1365,7 +1339,6 @@ impl Lock {
     }
 
     /// Return a [`SatisfiesResult`] if the given requirements do not match the [`Package`] metadata.
-    #[allow(clippy::unused_self)]
     fn satisfies_requires_dist<'lock>(
         &self,
         requires_dist: Box<[Requirement]>,
@@ -1454,7 +1427,8 @@ impl Lock {
         Ok(SatisfiesResult::Satisfied)
     }
 
-    /// Convert the [`Lock`] to a [`Resolution`] using the given marker environment, tags, and root.
+    /// Check whether the lock matches the project structure, requirements and configuration.
+    #[instrument(skip_all)]
     pub async fn satisfies<Context: BuildContext>(
         &self,
         root: &Path,
@@ -1688,8 +1662,7 @@ impl Lock {
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => None,
                     IndexUrl::Path(url) => {
                         let path = url.to_file_path().ok()?;
-                        let path = relative_to(&path, root)
-                            .or_else(|_| std::path::absolute(path))
+                        let path = try_relative_to_if(&path, root, !url.was_given_absolute())
                             .ok()?
                             .into_boxed_path();
                         Some(path)
@@ -1709,8 +1682,88 @@ impl Lock {
                 return Ok(SatisfiesResult::MissingRoot(root_name.clone()));
             };
 
-            // Add the base package.
-            queue.push_back(root);
+            if seen.insert(&root.id) {
+                queue.push_back(root);
+            }
+        }
+
+        // Add requirements attached directly to the target root (e.g., PEP 723 requirements or
+        // dependency groups in workspaces without a `[project]` table).
+        let root_requirements = requirements
+            .iter()
+            .chain(dependency_groups.values().flatten())
+            .collect::<Vec<_>>();
+
+        for requirement in &root_requirements {
+            if let RequirementSource::Registry {
+                index: Some(index), ..
+            } = &requirement.source
+            {
+                match &index.url {
+                    IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
+                        if let Some(remotes) = remotes.as_mut() {
+                            remotes.insert(UrlString::from(
+                                index.url().without_credentials().as_ref(),
+                            ));
+                        }
+                    }
+                    IndexUrl::Path(url) => {
+                        if let Some(locals) = locals.as_mut() {
+                            if let Some(path) = url.to_file_path().ok().and_then(|path| {
+                                try_relative_to_if(&path, root, !url.was_given_absolute()).ok()
+                            }) {
+                                locals.insert(path.into_boxed_path());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if !root_requirements.is_empty() {
+            let names = root_requirements
+                .iter()
+                .map(|requirement| &requirement.name)
+                .collect::<FxHashSet<_>>();
+
+            let by_name: FxHashMap<_, Vec<_>> = self.packages.iter().fold(
+                FxHashMap::with_capacity_and_hasher(self.packages.len(), FxBuildHasher),
+                |mut by_name, package| {
+                    if names.contains(&package.id.name) {
+                        by_name.entry(&package.id.name).or_default().push(package);
+                    }
+                    by_name
+                },
+            );
+
+            for requirement in root_requirements {
+                for package in by_name.get(&requirement.name).into_iter().flatten() {
+                    if !package.id.source.is_source_tree() {
+                        continue;
+                    }
+
+                    let marker = if package.fork_markers.is_empty() {
+                        requirement.marker
+                    } else {
+                        let mut combined = MarkerTree::FALSE;
+                        for fork_marker in &package.fork_markers {
+                            combined.or(fork_marker.pep508());
+                        }
+                        combined.and(requirement.marker);
+                        combined
+                    };
+                    if marker.is_false() {
+                        continue;
+                    }
+                    if !marker.evaluate(markers, &[]) {
+                        continue;
+                    }
+
+                    if seen.insert(&package.id) {
+                        queue.push_back(package);
+                    }
+                }
+            }
         }
 
         while let Some(package) = queue.pop_front() {
@@ -1752,7 +1805,7 @@ impl Lock {
 
             if let Some(version) = package.id.version.as_ref() {
                 // For a non-dynamic package, fetch the metadata from the distribution database.
-                let dist = package.to_dist(
+                let HashedDist { dist, .. } = package.to_dist(
                     root,
                     TagPolicy::Preferred(tags),
                     &BuildOptions::default(),
@@ -1760,7 +1813,7 @@ impl Lock {
                 )?;
 
                 let metadata = {
-                    let id = dist.version_id();
+                    let id = dist.distribution_id();
                     if let Some(archive) =
                         index
                             .distributions()
@@ -1842,27 +1895,28 @@ impl Lock {
                 // metadata object.
                 let parent = root.join(source_tree);
                 let path = parent.join("pyproject.toml");
-                let metadata =
-                    match fs_err::tokio::read_to_string(&path).await {
-                        Ok(contents) => {
-                            let pyproject_toml = toml::from_str::<PyProjectToml>(&contents)
-                                .map_err(|err| LockErrorKind::InvalidPyprojectToml {
+                let metadata = match fs_err::tokio::read_to_string(&path).await {
+                    Ok(contents) => {
+                        let pyproject_toml =
+                            PyProjectToml::from_toml(&contents, path.user_display()).map_err(
+                                |err| LockErrorKind::InvalidPyprojectToml {
                                     path: path.clone(),
                                     err,
-                                })?;
-                            database
-                                .requires_dist(&parent, &pyproject_toml)
-                                .await
-                                .map_err(|err| LockErrorKind::Resolution {
-                                    id: package.id.clone(),
-                                    err,
-                                })?
-                        }
-                        Err(err) if err.kind() == io::ErrorKind::NotFound => None,
-                        Err(err) => {
-                            return Err(LockErrorKind::UnreadablePyprojectToml { path, err }.into());
-                        }
-                    };
+                                },
+                            )?;
+                        database
+                            .requires_dist(&parent, &pyproject_toml)
+                            .await
+                            .map_err(|err| LockErrorKind::Resolution {
+                                id: package.id.clone(),
+                                err,
+                            })?
+                    }
+                    Err(err) if err.kind() == io::ErrorKind::NotFound => None,
+                    Err(err) => {
+                        return Err(LockErrorKind::UnreadablePyprojectToml { path, err }.into());
+                    }
+                };
 
                 let satisfied = metadata.is_some_and(|metadata| {
                     // Validate that the package is still dynamic.
@@ -1903,7 +1957,7 @@ impl Lock {
                 // exactly. For example, `hatchling` will flatten any recursive (or self-referential)
                 // extras, while `setuptools` will not.
                 if !satisfied {
-                    let dist = package.to_dist(
+                    let HashedDist { dist, .. } = package.to_dist(
                         root,
                         TagPolicy::Preferred(tags),
                         &BuildOptions::default(),
@@ -1911,7 +1965,7 @@ impl Lock {
                     )?;
 
                     let metadata = {
-                        let id = dist.version_id();
+                        let id = dist.distribution_id();
                         if let Some(archive) =
                             index
                                 .distributions()
@@ -1978,7 +2032,12 @@ impl Lock {
             // not be available as top-level configuration (i.e., if they're defined within a
             // workspace member), but we already validated that the dependencies are up-to-date, so
             // we can consider them "available".
-            for requirement in &package.metadata.requires_dist {
+            for requirement in package
+                .metadata
+                .requires_dist
+                .iter()
+                .chain(package.metadata.dependency_groups.values().flatten())
+            {
                 if let RequirementSource::Registry {
                     index: Some(index), ..
                 } = &requirement.source
@@ -1994,9 +2053,7 @@ impl Lock {
                         IndexUrl::Path(url) => {
                             if let Some(locals) = locals.as_mut() {
                                 if let Some(path) = url.to_file_path().ok().and_then(|path| {
-                                    relative_to(&path, root)
-                                        .or_else(|_| std::path::absolute(path))
-                                        .ok()
+                                    try_relative_to_if(&path, root, !url.was_given_absolute()).ok()
                                 }) {
                                     locals.insert(path.into_boxed_path());
                                 }
@@ -2131,24 +2188,43 @@ struct ResolverOptions {
     /// The [`ForkStrategy`] used to generate this lock.
     #[serde(default)]
     fork_strategy: ForkStrategy,
-    /// The global [`ExcludeNewer`] timestamp.
-    exclude_newer: Option<ExcludeNewerTimestamp>,
-    /// Package-specific [`ExcludeNewer`] timestamps.
-    exclude_newer_package: Option<FxHashMap<PackageName, ExcludeNewerTimestamp>>,
+    /// The [`ExcludeNewer`] setting used to generate this lock.
+    #[serde(flatten)]
+    exclude_newer: ExcludeNewerWire,
 }
 
-impl ResolverOptions {
-    /// Get the combined exclude-newer configuration.
-    fn exclude_newer(&self) -> ExcludeNewer {
-        ExcludeNewer::from_args(
-            self.exclude_newer,
-            self.exclude_newer_package
-                .clone()
-                .unwrap_or_default()
-                .into_iter()
-                .map(Into::into)
-                .collect(),
-        )
+#[expect(clippy::struct_field_names)]
+#[derive(Clone, Debug, Default, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+struct ExcludeNewerWire {
+    exclude_newer: Option<Timestamp>,
+    exclude_newer_span: Option<ExcludeNewerSpan>,
+    #[serde(default, skip_serializing_if = "ExcludeNewerPackage::is_empty")]
+    exclude_newer_package: ExcludeNewerPackage,
+}
+
+impl From<ExcludeNewerWire> for ExcludeNewer {
+    fn from(wire: ExcludeNewerWire) -> Self {
+        Self {
+            global: wire
+                .exclude_newer
+                .map(|timestamp| ExcludeNewerValue::new(timestamp, wire.exclude_newer_span)),
+            package: wire.exclude_newer_package,
+        }
+    }
+}
+
+impl From<ExcludeNewer> for ExcludeNewerWire {
+    fn from(exclude_newer: ExcludeNewer) -> Self {
+        let (timestamp, span) = exclude_newer
+            .global
+            .map(ExcludeNewerValue::into_parts)
+            .map_or((None, None), |(t, s)| (Some(t), s));
+        Self {
+            exclude_newer: timestamp,
+            exclude_newer_span: span,
+            exclude_newer_package: exclude_newer.package,
+        }
     }
 }
 
@@ -2546,20 +2622,32 @@ impl Package {
         Ok(())
     }
 
-    /// Convert the [`Package`] to a [`Dist`] that can be used in installation.
+    /// Convert the [`Package`] to a [`Dist`] that can be used in installation, along with its hash.
     fn to_dist(
         &self,
         workspace_root: &Path,
         tag_policy: TagPolicy<'_>,
         build_options: &BuildOptions,
         markers: &MarkerEnvironment,
-    ) -> Result<Dist, LockError> {
+    ) -> Result<HashedDist, LockError> {
         let no_binary = build_options.no_binary_package(&self.id.name);
         let no_build = build_options.no_build_package(&self.id.name);
 
         if !no_binary {
             if let Some(best_wheel_index) = self.find_best_wheel(tag_policy) {
-                return match &self.id.source {
+                let hashes = {
+                    let wheel = &self.wheels[best_wheel_index];
+                    HashDigests::from(
+                        wheel
+                            .hash
+                            .iter()
+                            .chain(wheel.zstd.iter().flat_map(|z| z.hash.iter()))
+                            .map(|h| h.0.clone())
+                            .collect::<Vec<_>>(),
+                    )
+                };
+
+                let dist = match &self.id.source {
                     Source::Registry(source) => {
                         let wheels = self
                             .wheels
@@ -2571,7 +2659,7 @@ impl Package {
                             best_wheel_index,
                             sdist: None,
                         };
-                        Ok(Dist::Built(BuiltDist::Registry(reg_built_dist)))
+                        Dist::Built(BuiltDist::Registry(reg_built_dist))
                     }
                     Source::Path(path) => {
                         let filename: WheelFilename =
@@ -2583,7 +2671,7 @@ impl Package {
                             install_path: absolute_path(workspace_root, path)?.into_boxed_path(),
                         };
                         let built_dist = BuiltDist::Path(path_dist);
-                        Ok(Dist::Built(built_dist))
+                        Dist::Built(built_dist)
                     }
                     Source::Direct(url, direct) => {
                         let filename: WheelFilename =
@@ -2599,29 +2687,39 @@ impl Package {
                             url: VerbatimUrl::from_url(url),
                         };
                         let built_dist = BuiltDist::DirectUrl(direct_dist);
-                        Ok(Dist::Built(built_dist))
+                        Dist::Built(built_dist)
                     }
-                    Source::Git(_, _) => Err(LockErrorKind::InvalidWheelSource {
-                        id: self.id.clone(),
-                        source_type: "Git",
+                    Source::Git(_, _) => {
+                        return Err(LockErrorKind::InvalidWheelSource {
+                            id: self.id.clone(),
+                            source_type: "Git",
+                        }
+                        .into());
                     }
-                    .into()),
-                    Source::Directory(_) => Err(LockErrorKind::InvalidWheelSource {
-                        id: self.id.clone(),
-                        source_type: "directory",
+                    Source::Directory(_) => {
+                        return Err(LockErrorKind::InvalidWheelSource {
+                            id: self.id.clone(),
+                            source_type: "directory",
+                        }
+                        .into());
                     }
-                    .into()),
-                    Source::Editable(_) => Err(LockErrorKind::InvalidWheelSource {
-                        id: self.id.clone(),
-                        source_type: "editable",
+                    Source::Editable(_) => {
+                        return Err(LockErrorKind::InvalidWheelSource {
+                            id: self.id.clone(),
+                            source_type: "editable",
+                        }
+                        .into());
                     }
-                    .into()),
-                    Source::Virtual(_) => Err(LockErrorKind::InvalidWheelSource {
-                        id: self.id.clone(),
-                        source_type: "virtual",
+                    Source::Virtual(_) => {
+                        return Err(LockErrorKind::InvalidWheelSource {
+                            id: self.id.clone(),
+                            source_type: "virtual",
+                        }
+                        .into());
                     }
-                    .into()),
                 };
+
+                return Ok(HashedDist { dist, hashes });
             }
         }
 
@@ -2630,7 +2728,16 @@ impl Package {
             // any local source tree, or at least editable source trees, which we allow in
             // `uv pip`.)
             if !no_build || sdist.is_virtual() {
-                return Ok(Dist::Source(sdist));
+                let hashes = self
+                    .sdist
+                    .as_ref()
+                    .and_then(|s| s.hash())
+                    .map(|hash| HashDigests::from(vec![hash.0.clone()]))
+                    .unwrap_or_else(|| HashDigests::from(vec![]));
+                return Ok(HashedDist {
+                    dist: Dist::Source(sdist),
+                    hashes,
+                });
             }
         }
 
@@ -2707,10 +2814,11 @@ impl Package {
                     return Ok(None);
                 };
                 let install_path = absolute_path(workspace_root, path)?;
+                let given = path.to_str().expect("lock file paths must be UTF-8");
                 let path_dist = PathSourceDist {
                     name: self.id.name.clone(),
                     version: self.id.version.clone(),
-                    url: verbatim_url(&install_path, &self.id)?,
+                    url: verbatim_url(&install_path, &self.id)?.with_given(given),
                     install_path: install_path.into_boxed_path(),
                     ext,
                 };
@@ -2718,9 +2826,10 @@ impl Package {
             }
             Source::Directory(path) => {
                 let install_path = absolute_path(workspace_root, path)?;
+                let given = path.to_str().expect("lock file paths must be UTF-8");
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
-                    url: verbatim_url(&install_path, &self.id)?,
+                    url: verbatim_url(&install_path, &self.id)?.with_given(given),
                     install_path: install_path.into_boxed_path(),
                     editable: Some(false),
                     r#virtual: Some(false),
@@ -2729,9 +2838,10 @@ impl Package {
             }
             Source::Editable(path) => {
                 let install_path = absolute_path(workspace_root, path)?;
+                let given = path.to_str().expect("lock file paths must be UTF-8");
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
-                    url: verbatim_url(&install_path, &self.id)?,
+                    url: verbatim_url(&install_path, &self.id)?.with_given(given),
                     install_path: install_path.into_boxed_path(),
                     editable: Some(true),
                     r#virtual: Some(false),
@@ -2740,9 +2850,10 @@ impl Package {
             }
             Source::Virtual(path) => {
                 let install_path = absolute_path(workspace_root, path)?;
+                let given = path.to_str().expect("lock file paths must be UTF-8");
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
-                    url: verbatim_url(&install_path, &self.id)?,
+                    url: verbatim_url(&install_path, &self.id)?.with_given(given),
                     install_path: install_path.into_boxed_path(),
                     editable: Some(false),
                     r#virtual: Some(true),
@@ -2757,8 +2868,12 @@ impl Package {
                 url.set_query(None);
 
                 // Reconstruct the `GitUrl` from the `GitSource`.
-                let git_url =
-                    GitUrl::from_commit(url, GitReference::from(git.kind.clone()), git.precise)?;
+                let git_url = GitUrl::from_commit(
+                    url,
+                    GitReference::from(git.kind.clone()),
+                    git.precise,
+                    git.lfs,
+                )?;
 
                 // Reconstruct the PEP 508-compatible URL from the `GitSource`.
                 let url = DisplaySafeUrl::from(ParsedGitUrl {
@@ -3561,16 +3676,22 @@ impl Source {
     }
 
     fn from_path_built_dist(path_dist: &PathBuiltDist, root: &Path) -> Result<Self, LockError> {
-        let path = relative_to(&path_dist.install_path, root)
-            .or_else(|_| std::path::absolute(&path_dist.install_path))
-            .map_err(LockErrorKind::DistributionRelativePath)?;
+        let path = try_relative_to_if(
+            &path_dist.install_path,
+            root,
+            !path_dist.url.was_given_absolute(),
+        )
+        .map_err(LockErrorKind::DistributionRelativePath)?;
         Ok(Self::Path(path.into_boxed_path()))
     }
 
     fn from_path_source_dist(path_dist: &PathSourceDist, root: &Path) -> Result<Self, LockError> {
-        let path = relative_to(&path_dist.install_path, root)
-            .or_else(|_| std::path::absolute(&path_dist.install_path))
-            .map_err(LockErrorKind::DistributionRelativePath)?;
+        let path = try_relative_to_if(
+            &path_dist.install_path,
+            root,
+            !path_dist.url.was_given_absolute(),
+        )
+        .map_err(LockErrorKind::DistributionRelativePath)?;
         Ok(Self::Path(path.into_boxed_path()))
     }
 
@@ -3578,9 +3699,12 @@ impl Source {
         directory_dist: &DirectorySourceDist,
         root: &Path,
     ) -> Result<Self, LockError> {
-        let path = relative_to(&directory_dist.install_path, root)
-            .or_else(|_| std::path::absolute(&directory_dist.install_path))
-            .map_err(LockErrorKind::DistributionRelativePath)?;
+        let path = try_relative_to_if(
+            &directory_dist.install_path,
+            root,
+            !directory_dist.url.was_given_absolute(),
+        )
+        .map_err(LockErrorKind::DistributionRelativePath)?;
         if directory_dist.editable.unwrap_or(false) {
             Ok(Self::Editable(path.into_boxed_path()))
         } else if directory_dist.r#virtual.unwrap_or(false) {
@@ -3602,8 +3726,7 @@ impl Source {
                 let path = url
                     .to_file_path()
                     .map_err(|()| LockErrorKind::UrlToPath { url: url.to_url() })?;
-                let path = relative_to(&path, root)
-                    .or_else(|_| std::path::absolute(&path))
+                let path = try_relative_to_if(&path, root, !url.was_given_absolute())
                     .map_err(LockErrorKind::IndexRelativePath)?;
                 let source = RegistrySource::Path(path.into_boxed_path());
                 Ok(Self::Registry(source))
@@ -3620,6 +3743,7 @@ impl Source {
                     panic!("Git distribution is missing a precise hash: {git_dist}")
                 }),
                 subdirectory: git_dist.subdirectory.clone(),
+                lfs: git_dist.git.lfs(),
             },
         )
     }
@@ -3889,7 +4013,7 @@ impl<'de> serde::de::Deserialize<'de> for RegistrySourceWire {
             where
                 E: serde::de::Error,
             {
-                if split_scheme(value).is_some() {
+                if split_scheme(value).is_some_and(|(scheme, _)| Scheme::parse(scheme).is_some()) {
                     Ok(
                         serde::Deserialize::deserialize(serde::de::value::StrDeserializer::new(
                             value,
@@ -3935,6 +4059,7 @@ struct GitSource {
     precise: GitOid,
     subdirectory: Option<Box<Path>>,
     kind: GitSourceKind,
+    lfs: GitLfs,
 }
 
 /// An error that occurs when a source string could not be parsed.
@@ -3950,15 +4075,18 @@ impl GitSource {
     fn from_url(url: &Url) -> Result<Self, GitSourceError> {
         let mut kind = GitSourceKind::DefaultBranch;
         let mut subdirectory = None;
+        let mut lfs = GitLfs::Disabled;
         for (key, val) in url.query_pairs() {
             match &*key {
                 "tag" => kind = GitSourceKind::Tag(val.into_owned()),
                 "branch" => kind = GitSourceKind::Branch(val.into_owned()),
                 "rev" => kind = GitSourceKind::Rev(val.into_owned()),
                 "subdirectory" => subdirectory = Some(PortablePathBuf::from(val.as_ref()).into()),
+                "lfs" => lfs = GitLfs::from(val.eq_ignore_ascii_case("true")),
                 _ => {}
             }
         }
+
         let precise = GitOid::from_str(url.fragment().ok_or(GitSourceError::MissingSha)?)
             .map_err(|_| GitSourceError::InvalidSha)?;
 
@@ -3966,6 +4094,7 @@ impl GitSource {
             precise,
             subdirectory,
             kind,
+            lfs,
         })
     }
 }
@@ -4164,10 +4293,10 @@ impl SourceDist {
                     let reg_dist_path = url
                         .to_file_path()
                         .map_err(|()| LockErrorKind::UrlToPath { url })?;
-                    let path = relative_to(&reg_dist_path, index_path)
-                        .or_else(|_| std::path::absolute(&reg_dist_path))
-                        .map_err(LockErrorKind::DistributionRelativePath)?
-                        .into_boxed_path();
+                    let path =
+                        try_relative_to_if(&reg_dist_path, index_path, !path.was_given_absolute())
+                            .map_err(LockErrorKind::DistributionRelativePath)?
+                            .into_boxed_path();
                     let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
                     let size = reg_dist.file.size;
                     let upload_time = reg_dist
@@ -4354,6 +4483,11 @@ fn locked_git_url(git_dist: &GitSourceDist) -> DisplaySafeUrl {
             .append_pair("subdirectory", &subdirectory);
     }
 
+    // Put lfs=true in the package source git url only when explicitly enabled.
+    if git_dist.git.lfs().enabled() {
+        url.query_pairs_mut().append_pair("lfs", "true");
+    }
+
     // Put the requested reference in the query.
     match git_dist.git.reference() {
         GitReference::Branch(branch) => {
@@ -4507,10 +4641,10 @@ impl Wheel {
                     let wheel_path = wheel_url
                         .to_file_path()
                         .map_err(|()| LockErrorKind::UrlToPath { url: wheel_url })?;
-                    let path = relative_to(&wheel_path, index_path)
-                        .or_else(|_| std::path::absolute(&wheel_path))
-                        .map_err(LockErrorKind::DistributionRelativePath)?
-                        .into_boxed_path();
+                    let path =
+                        try_relative_to_if(&wheel_path, index_path, !path.was_given_absolute())
+                            .map_err(LockErrorKind::DistributionRelativePath)?
+                            .into_boxed_path();
                     WheelWireSource::Path { path }
                 } else {
                     let url = normalize_file_location(&wheel.file.url)
@@ -5104,7 +5238,12 @@ fn normalize_requirement(
                 repository.set_fragment(None);
                 repository.set_query(None);
 
-                GitUrl::from_fields(repository, git.reference().clone(), git.precise())?
+                GitUrl::from_fields(
+                    repository,
+                    git.reference().clone(),
+                    git.precise(),
+                    git.lfs(),
+                )?
             };
 
             // Reconstruct the PEP 508 URL from the underlying data.
@@ -5278,7 +5417,7 @@ where
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[allow(clippy::enum_variant_names)]
+#[expect(clippy::enum_variant_names)]
 enum WheelTagHint {
     /// None of the available wheels for a package have a compatible Python language tag (e.g.,
     /// `cp310` in `cp310-abi3-manylinux_2_17_x86_64.whl`).
@@ -5960,7 +6099,13 @@ enum LockErrorKind {
     InvalidPyprojectToml {
         path: PathBuf,
         #[source]
-        err: toml::de::Error,
+        err: uv_pypi_types::MetadataError,
+    },
+    /// An error that occurs when a workspace member has a non-local source.
+    #[error("Workspace member `{id}` has non-local source", id = id.cyan())]
+    NonLocalWorkspaceMember {
+        /// The ID of the workspace member with an invalid source.
+        id: PackageId,
     },
 }
 
@@ -5974,7 +6119,7 @@ enum SourceParseError {
         given: String,
         /// The URL parse error.
         #[source]
-        err: url::ParseError,
+        err: DisplaySafeUrlError,
     },
     /// An error that occurs when a Git URL is missing a precise commit SHA.
     #[error("Missing SHA in source `{given}`")]
@@ -6065,6 +6210,221 @@ fn simplified_universal_markers(
         .into_iter()
         .filter_map(MarkerTree::try_to_string)
         .collect()
+}
+
+/// Filter out wheels that can't be selected for installation due to environment markers.
+///
+/// For example, a package included under `sys_platform == 'win32'` does not need Linux
+/// wheels.
+///
+/// Returns `true` if the wheel is definitely unreachable, and `false` if it may be reachable,
+/// including if the wheel tag isn't recognized.
+fn is_wheel_unreachable_for_marker(
+    filename: &WheelFilename,
+    requires_python: &RequiresPython,
+    marker: &UniversalMarker,
+    tags: Option<&Tags>,
+) -> bool {
+    if let Some(tags) = tags
+        && !filename.compatibility(tags).is_compatible()
+    {
+        return true;
+    }
+    // Remove wheels that don't match `requires-python` and can't be selected for installation.
+    if !requires_python.matches_wheel_tag(filename) {
+        return true;
+    }
+
+    // Filter by platform tags.
+
+    // Naively, we'd check whether `platform_system == 'Linux'` is disjoint, or
+    // `os_name == 'posix'` is disjoint, or `sys_platform == 'linux'` is disjoint (each on its
+    // own sufficient to exclude linux wheels), but due to
+    // `(A ∩ (B ∩ C) = ∅) => ((A ∩ B = ∅) or (A ∩ C = ∅))`
+    // a single disjointness check with the intersection is sufficient, so we have one
+    // constant per platform.
+    let platform_tags = filename.platform_tags();
+
+    if platform_tags.iter().all(PlatformTag::is_any) {
+        return false;
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_linux) {
+        if platform_tags.iter().all(PlatformTag::is_arm) {
+            if marker.is_disjoint(*LINUX_ARM_MARKERS) {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
+            if marker.is_disjoint(*LINUX_X86_64_MARKERS) {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_x86) {
+            if marker.is_disjoint(*LINUX_X86_MARKERS) {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_ppc64le) {
+            if marker.is_disjoint(*LINUX_PPC64LE_MARKERS) {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_ppc64) {
+            if marker.is_disjoint(*LINUX_PPC64_MARKERS) {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_s390x) {
+            if marker.is_disjoint(*LINUX_S390X_MARKERS) {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_riscv64) {
+            if marker.is_disjoint(*LINUX_RISCV64_MARKERS) {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_loongarch64) {
+            if marker.is_disjoint(*LINUX_LOONGARCH64_MARKERS) {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_armv7l) {
+            if marker.is_disjoint(*LINUX_ARMV7L_MARKERS) {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_armv6l) {
+            if marker.is_disjoint(*LINUX_ARMV6L_MARKERS) {
+                return true;
+            }
+        } else if marker.is_disjoint(*LINUX_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_windows) {
+        if platform_tags.iter().all(PlatformTag::is_arm) {
+            if marker.is_disjoint(*WINDOWS_ARM_MARKERS) {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
+            if marker.is_disjoint(*WINDOWS_X86_64_MARKERS) {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_x86) {
+            if marker.is_disjoint(*WINDOWS_X86_MARKERS) {
+                return true;
+            }
+        } else if marker.is_disjoint(*WINDOWS_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_macos) {
+        if platform_tags.iter().all(PlatformTag::is_arm) {
+            if marker.is_disjoint(*MAC_ARM_MARKERS) {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
+            if marker.is_disjoint(*MAC_X86_64_MARKERS) {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_x86) {
+            if marker.is_disjoint(*MAC_X86_MARKERS) {
+                return true;
+            }
+        } else if marker.is_disjoint(*MAC_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_android) {
+        if platform_tags.iter().all(PlatformTag::is_arm) {
+            if marker.is_disjoint(*ANDROID_ARM_MARKERS) {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
+            if marker.is_disjoint(*ANDROID_X86_64_MARKERS) {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_x86) {
+            if marker.is_disjoint(*ANDROID_X86_MARKERS) {
+                return true;
+            }
+        } else if marker.is_disjoint(*ANDROID_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_arm) {
+        if marker.is_disjoint(*ARM_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_x86_64) {
+        if marker.is_disjoint(*X86_64_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_x86) {
+        if marker.is_disjoint(*X86_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_ppc64le) {
+        if marker.is_disjoint(*PPC64LE_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_ppc64) {
+        if marker.is_disjoint(*PPC64_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_s390x) {
+        if marker.is_disjoint(*S390X_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_riscv64) {
+        if marker.is_disjoint(*RISCV64_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_loongarch64) {
+        if marker.is_disjoint(*LOONGARCH64_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_armv7l) {
+        if marker.is_disjoint(*ARMV7L_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_armv6l) {
+        if marker.is_disjoint(*ARMV6L_MARKERS) {
+            return true;
+        }
+    }
+
+    false
+}
+
+pub(crate) fn is_wheel_unreachable(
+    filename: &WheelFilename,
+    graph: &ResolverOutput,
+    requires_python: &RequiresPython,
+    node_index: NodeIndex,
+    tags: Option<&Tags>,
+) -> bool {
+    is_wheel_unreachable_for_marker(
+        filename,
+        requires_python,
+        graph.graph[node_index].marker(),
+        tags,
+    )
 }
 
 #[cfg(test)]
@@ -6390,5 +6750,30 @@ source = { editable = "path/to/dir" }
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
         insta::assert_debug_snapshot!(result);
+    }
+
+    /// Windows drive letter paths like `C:/...` should be deserialized as local path registry
+    /// sources, not as URLs. The `C:` prefix must not be misinterpreted as a URL scheme.
+    #[test]
+    fn registry_source_windows_drive_letter() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[package]]
+name = "tqdm"
+version = "1000.0.0"
+source = { registry = "C:/Users/user/links" }
+wheels = [
+    { path = "C:/Users/user/links/tqdm-1000.0.0-py3-none-any.whl" },
+]
+"#;
+        let lock: Lock = toml::from_str(data).unwrap();
+        assert_eq!(
+            lock.packages[0].id.source,
+            Source::Registry(RegistrySource::Path(
+                Path::new("C:/Users/user/links").into()
+            ))
+        );
     }
 }

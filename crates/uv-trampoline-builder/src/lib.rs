@@ -1,167 +1,175 @@
-use std::io::{self, Cursor, Read, Seek, Write};
+use std::io;
 use std::path::{Path, PathBuf};
 use std::str::Utf8Error;
 
 use fs_err::File;
 use thiserror::Error;
-use uv_fs::Simplified;
-use zip::ZipWriter;
-use zip::write::SimpleFileOptions;
 
 #[cfg(all(windows, target_arch = "x86"))]
-const LAUNCHER_I686_GUI: &[u8] =
-    include_bytes!("../../uv-trampoline/trampolines/uv-trampoline-i686-gui.exe");
+const LAUNCHER_I686_GUI: &[u8] = include_bytes!("../trampolines/uv-trampoline-i686-gui.exe");
 
 #[cfg(all(windows, target_arch = "x86"))]
 const LAUNCHER_I686_CONSOLE: &[u8] =
-    include_bytes!("../../uv-trampoline/trampolines/uv-trampoline-i686-console.exe");
+    include_bytes!("../trampolines/uv-trampoline-i686-console.exe");
 
 #[cfg(all(windows, target_arch = "x86_64"))]
-const LAUNCHER_X86_64_GUI: &[u8] =
-    include_bytes!("../../uv-trampoline/trampolines/uv-trampoline-x86_64-gui.exe");
+const LAUNCHER_X86_64_GUI: &[u8] = include_bytes!("../trampolines/uv-trampoline-x86_64-gui.exe");
 
 #[cfg(all(windows, target_arch = "x86_64"))]
 const LAUNCHER_X86_64_CONSOLE: &[u8] =
-    include_bytes!("../../uv-trampoline/trampolines/uv-trampoline-x86_64-console.exe");
+    include_bytes!("../trampolines/uv-trampoline-x86_64-console.exe");
 
 #[cfg(all(windows, target_arch = "aarch64"))]
-const LAUNCHER_AARCH64_GUI: &[u8] =
-    include_bytes!("../../uv-trampoline/trampolines/uv-trampoline-aarch64-gui.exe");
+const LAUNCHER_AARCH64_GUI: &[u8] = include_bytes!("../trampolines/uv-trampoline-aarch64-gui.exe");
 
 #[cfg(all(windows, target_arch = "aarch64"))]
 const LAUNCHER_AARCH64_CONSOLE: &[u8] =
-    include_bytes!("../../uv-trampoline/trampolines/uv-trampoline-aarch64-console.exe");
+    include_bytes!("../trampolines/uv-trampoline-aarch64-console.exe");
 
-// See `uv-trampoline::bounce`. These numbers must match.
-const PATH_LENGTH_SIZE: usize = size_of::<u32>();
-const MAX_PATH_LENGTH: u32 = 32 * 1024;
-const MAGIC_NUMBER_SIZE: usize = 4;
+// https://learn.microsoft.com/en-us/windows/win32/menurc/resource-types
+#[cfg(windows)]
+const RT_RCDATA: u16 = 10;
+
+// Resource IDs matching uv-trampoline
+#[cfg(windows)]
+const RESOURCE_TRAMPOLINE_KIND: windows::core::PCWSTR = windows::core::w!("UV_TRAMPOLINE_KIND");
+#[cfg(windows)]
+const RESOURCE_PYTHON_PATH: windows::core::PCWSTR = windows::core::w!("UV_PYTHON_PATH");
+// Note: This does not need to be looked up as a resource, as we rely on `zipimport`
+// to do the loading work. Still, keeping the content under a resource means that it
+// sits nicely under the PE format.
+#[cfg(windows)]
+const RESOURCE_SCRIPT_DATA: windows::core::PCWSTR = windows::core::w!("UV_SCRIPT_DATA");
 
 #[derive(Debug)]
 pub struct Launcher {
     pub kind: LauncherKind,
     pub python_path: PathBuf,
-    payload: Vec<u8>,
+    pub script_data: Option<Vec<u8>>,
 }
 
 impl Launcher {
+    /// Attempt to read [`Launcher`] metadata from a trampoline executable file.
+    ///
+    /// On Unix, this always returns [`None`]. Trampolines are a Windows-specific feature and cannot
+    /// be read on other platforms.
+    #[cfg(not(windows))]
+    pub fn try_from_path(_path: &Path) -> Result<Option<Self>, Error> {
+        Ok(None)
+    }
+
     /// Read [`Launcher`] metadata from a trampoline executable file.
     ///
     /// Returns `Ok(None)` if the file is not a trampoline executable.
     /// Returns `Err` if the file looks like a trampoline executable but is formatted incorrectly.
-    ///
-    /// Expects the following metadata to be at the end of the file:
-    ///
-    /// ```text
-    /// - file path (no greater than 32KB)
-    /// - file path length (u32)
-    /// - magic number(4 bytes)
-    /// ```
-    ///
-    /// This should only be used on Windows, but should just return `Ok(None)` on other platforms.
-    ///
-    /// This is an implementation of [`uv-trampoline::bounce::read_trampoline_metadata`] that
-    /// returns errors instead of panicking. Unlike the utility there, we don't assume that the
-    /// file we are reading is a trampoline.
-    #[allow(clippy::cast_possible_wrap)]
+    #[cfg(windows)]
     pub fn try_from_path(path: &Path) -> Result<Option<Self>, Error> {
-        let mut file = File::open(path)?;
+        use std::os::windows::ffi::OsStrExt;
+        use windows::Win32::System::LibraryLoader::LOAD_LIBRARY_AS_DATAFILE;
+        use windows::Win32::System::LibraryLoader::LoadLibraryExW;
 
-        // Read the magic number
-        let Some(kind) = LauncherKind::try_from_file(&mut file)? else {
+        let path_str = path
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
+
+        // SAFETY: winapi call; null-terminated strings
+        #[allow(unsafe_code)]
+        let Some(module) = (unsafe {
+            LoadLibraryExW(
+                windows::core::PCWSTR(path_str.as_ptr()),
+                None,
+                LOAD_LIBRARY_AS_DATAFILE,
+            )
+            .ok()
+        }) else {
             return Ok(None);
         };
 
-        // Seek to the start of the path length.
-        let path_length_offset = (MAGIC_NUMBER_SIZE + PATH_LENGTH_SIZE) as i64;
-        file.seek(io::SeekFrom::End(-path_length_offset))
-            .map_err(|err| {
-                Error::InvalidLauncherSeek("path length".to_string(), path_length_offset, err)
-            })?;
+        let result = (|| {
+            let Some(kind_data) = read_resource(module, RESOURCE_TRAMPOLINE_KIND) else {
+                return Ok(None);
+            };
+            let Some(kind) = LauncherKind::from_resource_value(kind_data[0]) else {
+                return Err(Error::UnprocessableMetadata);
+            };
 
-        // Read the path length
-        let mut buffer = [0; PATH_LENGTH_SIZE];
-        file.read_exact(&mut buffer)
-            .map_err(|err| Error::InvalidLauncherRead("path length".to_string(), err))?;
+            let Some(path_data) = read_resource(module, RESOURCE_PYTHON_PATH) else {
+                return Ok(None);
+            };
+            let python_path = PathBuf::from(
+                String::from_utf8(path_data).map_err(|err| Error::InvalidPath(err.utf8_error()))?,
+            );
 
-        let path_length = {
-            let raw_length = u32::from_le_bytes(buffer);
+            let script_data = read_resource(module, RESOURCE_SCRIPT_DATA);
 
-            if raw_length > MAX_PATH_LENGTH {
-                return Err(Error::InvalidPathLength(raw_length));
-            }
+            Ok(Some(Self {
+                kind,
+                python_path,
+                script_data,
+            }))
+        })();
 
-            // SAFETY: Above we guarantee the length is less than 32KB
-            raw_length as usize
+        // SAFETY: winapi call; handle is known to be valid.
+        #[allow(unsafe_code)]
+        unsafe {
+            windows::Win32::Foundation::FreeLibrary(module)
+                .map_err(|err| Error::Io(io::Error::from_raw_os_error(err.code().0)))?;
         };
 
-        // Seek to the start of the path
-        let path_offset = (MAGIC_NUMBER_SIZE + PATH_LENGTH_SIZE + path_length) as i64;
-        file.seek(io::SeekFrom::End(-path_offset)).map_err(|err| {
-            Error::InvalidLauncherSeek("executable path".to_string(), path_offset, err)
-        })?;
-
-        // Read the path
-        let mut buffer = vec![0u8; path_length];
-        file.read_exact(&mut buffer)
-            .map_err(|err| Error::InvalidLauncherRead("executable path".to_string(), err))?;
-
-        let path = PathBuf::from(
-            String::from_utf8(buffer).map_err(|err| Error::InvalidPath(err.utf8_error()))?,
-        );
-
-        #[allow(clippy::cast_possible_truncation)]
-        let file_size = {
-            let raw_length = file
-                .seek(io::SeekFrom::End(0))
-                .map_err(|e| Error::InvalidLauncherSeek("size probe".into(), 0, e))?;
-
-            if raw_length > usize::MAX as u64 {
-                return Err(Error::InvalidDataLength(raw_length));
-            }
-
-            // SAFETY: Above we guarantee the length is less than uszie
-            raw_length as usize
-        };
-
-        // Read the payload
-        file.seek(io::SeekFrom::Start(0))
-            .map_err(|e| Error::InvalidLauncherSeek("rewind".into(), 0, e))?;
-        let payload_len =
-            file_size.saturating_sub(MAGIC_NUMBER_SIZE + PATH_LENGTH_SIZE + path_length);
-        let mut buffer = vec![0u8; payload_len];
-        file.read_exact(&mut buffer)
-            .map_err(|err| Error::InvalidLauncherRead("payload".into(), err))?;
-
-        Ok(Some(Self {
-            kind,
-            payload: buffer,
-            python_path: path,
-        }))
+        result
     }
 
-    pub fn write_to_file(self, file: &mut File) -> Result<(), Error> {
+    /// Write this trampoline launcher to a file.
+    ///
+    /// On Unix, this always returns [`Error::NotWindows`]. Trampolines are a Windows-specific
+    /// feature and cannot be written on other platforms.
+    #[cfg(not(windows))]
+    pub fn write_to_file(self, _file: &mut File, _is_gui: bool) -> Result<(), Error> {
+        Err(Error::NotWindows)
+    }
+
+    /// Write this trampoline launcher to a file.
+    #[cfg(windows)]
+    pub fn write_to_file(self, file: &mut File, is_gui: bool) -> Result<(), Error> {
+        use std::io::Write;
+        use uv_fs::Simplified;
+
         let python_path = self.python_path.simplified_display().to_string();
 
-        if python_path.len() > MAX_PATH_LENGTH as usize {
-            return Err(Error::InvalidPathLength(
-                u32::try_from(python_path.len()).expect("path length already checked"),
-            ));
+        // Create temporary file for the base launcher
+        let temp_dir = tempfile::TempDir::new()?;
+        let temp_file = temp_dir
+            .path()
+            .join(format!("uv-trampoline-{}.exe", std::process::id()));
+
+        // Write the launcher binary
+        fs_err::write(&temp_file, get_launcher_bin(is_gui)?)?;
+
+        // Write resources
+        let resources = &[
+            (
+                RESOURCE_TRAMPOLINE_KIND,
+                &[self.kind.to_resource_value()][..],
+            ),
+            (RESOURCE_PYTHON_PATH, python_path.as_bytes()),
+        ];
+        if let Some(script_data) = self.script_data {
+            let mut all_resources = resources.to_vec();
+            all_resources.push((RESOURCE_SCRIPT_DATA, &script_data));
+            write_resources(&temp_file, &all_resources)?;
+        } else {
+            write_resources(&temp_file, resources)?;
         }
 
-        let mut launcher: Vec<u8> = Vec::with_capacity(
-            self.payload.len() + python_path.len() + PATH_LENGTH_SIZE + MAGIC_NUMBER_SIZE,
-        );
-        launcher.extend_from_slice(&self.payload);
-        launcher.extend_from_slice(python_path.as_bytes());
-        launcher.extend_from_slice(
-            &u32::try_from(python_path.len())
-                .expect("file path should be smaller than 4GB")
-                .to_le_bytes(),
-        );
-        launcher.extend_from_slice(self.kind.magic_number());
+        // Read back the complete file
+        let launcher = fs_err::read(&temp_file)?;
+        fs_err::remove_file(&temp_file)?;
 
+        // Then write it to the handle
         file.write_all(&launcher)?;
+
         Ok(())
     }
 
@@ -169,8 +177,8 @@ impl Launcher {
     pub fn with_python_path(self, path: PathBuf) -> Self {
         Self {
             kind: self.kind,
-            payload: self.payload,
             python_path: path,
+            script_data: self.script_data,
         }
     }
 }
@@ -187,45 +195,21 @@ pub enum LauncherKind {
 }
 
 impl LauncherKind {
-    /// Return the magic number for this [`LauncherKind`].
-    const fn magic_number(self) -> &'static [u8; 4] {
+    #[cfg(windows)]
+    fn to_resource_value(self) -> u8 {
         match self {
-            Self::Script => b"UVSC",
-            Self::Python => b"UVPY",
+            Self::Script => 1,
+            Self::Python => 2,
         }
     }
 
-    /// Read a [`LauncherKind`] from 4 byte buffer.
-    ///
-    /// If the buffer does not contain a matching magic number, `None` is returned.
-    fn try_from_bytes(bytes: [u8; MAGIC_NUMBER_SIZE]) -> Option<Self> {
-        if &bytes == Self::Script.magic_number() {
-            return Some(Self::Script);
+    #[cfg(windows)]
+    fn from_resource_value(value: u8) -> Option<Self> {
+        match value {
+            1 => Some(Self::Script),
+            2 => Some(Self::Python),
+            _ => None,
         }
-        if &bytes == Self::Python.magic_number() {
-            return Some(Self::Python);
-        }
-        None
-    }
-
-    /// Read a [`LauncherKind`] from a file handle, based on the magic number.
-    ///
-    /// This will mutate the file handle, seeking to the end of the file.
-    ///
-    /// If the file cannot be read, an [`io::Error`] is returned. If the path is not a launcher,
-    /// `None` is returned.
-    #[allow(clippy::cast_possible_wrap)]
-    pub fn try_from_file(file: &mut File) -> Result<Option<Self>, Error> {
-        // If the file is less than four bytes, it's not a launcher.
-        let Ok(_) = file.seek(io::SeekFrom::End(-(MAGIC_NUMBER_SIZE as i64))) else {
-            return Ok(None);
-        };
-
-        let mut buffer = [0; MAGIC_NUMBER_SIZE];
-        file.read_exact(&mut buffer)
-            .map_err(|err| Error::InvalidLauncherRead("magic number".to_string(), err))?;
-
-        Ok(Self::try_from_bytes(buffer))
     }
 }
 
@@ -234,25 +218,22 @@ impl LauncherKind {
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
-    #[error("Only paths with a length up to 32KB are supported but found a length of {0} bytes")]
-    InvalidPathLength(u32),
-    #[error("Only data with a length up to usize is supported but found a length of {0} bytes")]
-    InvalidDataLength(u64),
     #[error("Failed to parse executable path")]
     InvalidPath(#[source] Utf8Error),
-    #[error("Failed to seek to {0} at offset {1}")]
-    InvalidLauncherSeek(String, i64, #[source] io::Error),
-    #[error("Failed to read launcher {0}")]
-    InvalidLauncherRead(String, #[source] io::Error),
     #[error(
         "Unable to create Windows launcher for: {0} (only x86_64, x86, and arm64 are supported)"
     )]
     UnsupportedWindowsArch(&'static str),
     #[error("Unable to create Windows launcher on non-Windows platform")]
     NotWindows,
+    #[error("Cannot process launcher metadata from resource")]
+    UnprocessableMetadata,
+    #[error("Resources over 2^32 bytes are not supported")]
+    ResourceTooLarge,
 }
 
 #[allow(clippy::unnecessary_wraps, unused_variables)]
+#[cfg(windows)]
 fn get_launcher_bin(gui: bool) -> Result<&'static [u8], Error> {
     Ok(match std::env::consts::ARCH {
         #[cfg(all(windows, target_arch = "x86"))]
@@ -283,26 +264,116 @@ fn get_launcher_bin(gui: bool) -> Result<&'static [u8], Error> {
         arch => {
             return Err(Error::UnsupportedWindowsArch(arch));
         }
-        #[cfg(not(windows))]
-        _ => &[],
     })
 }
 
+/// Helper to write Windows PE resources
+#[cfg(windows)]
+fn write_resources(path: &Path, resources: &[(windows::core::PCWSTR, &[u8])]) -> Result<(), Error> {
+    // SAFETY: winapi calls; null-terminated strings
+    #[allow(unsafe_code)]
+    unsafe {
+        use std::os::windows::ffi::OsStrExt;
+        use windows::Win32::System::LibraryLoader::{
+            BeginUpdateResourceW, EndUpdateResourceW, UpdateResourceW,
+        };
+
+        let path_str = path
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
+        let handle = BeginUpdateResourceW(windows::core::PCWSTR(path_str.as_ptr()), false)
+            .map_err(|err| Error::Io(io::Error::from_raw_os_error(err.code().0)))?;
+
+        for (name, data) in resources {
+            UpdateResourceW(
+                handle,
+                windows::core::PCWSTR(RT_RCDATA as *const _),
+                *name,
+                0,
+                Some(data.as_ptr().cast()),
+                u32::try_from(data.len()).map_err(|_| Error::ResourceTooLarge)?,
+            )
+            .map_err(|err| Error::Io(io::Error::from_raw_os_error(err.code().0)))?;
+        }
+
+        EndUpdateResourceW(handle, false)
+            .map_err(|err| Error::Io(io::Error::from_raw_os_error(err.code().0)))?;
+    }
+
+    Ok(())
+}
+
+/// Safely reads a resource from a PE file
+#[cfg(windows)]
+fn read_resource(
+    handle: windows::Win32::Foundation::HMODULE,
+    name: windows::core::PCWSTR,
+) -> Option<Vec<u8>> {
+    // SAFETY: winapi calls; null-terminated strings; all pointers are checked.
+    #[allow(unsafe_code)]
+    unsafe {
+        use windows::Win32::System::LibraryLoader::{
+            FindResourceW, LoadResource, LockResource, SizeofResource,
+        };
+        // Find the resource
+        let resource = FindResourceW(
+            Some(handle),
+            name,
+            windows::core::PCWSTR(RT_RCDATA as *const _),
+        );
+        if resource.is_invalid() {
+            return None;
+        }
+
+        // Get resource size and data
+        let size = SizeofResource(Some(handle), resource);
+        if size == 0 {
+            return None;
+        }
+        let data = LoadResource(Some(handle), resource).ok()?;
+        let ptr = LockResource(data) as *const u8;
+        if ptr.is_null() {
+            return None;
+        }
+
+        // Copy the resource data into a Vec
+        Some(std::slice::from_raw_parts(ptr, size as usize).to_vec())
+    }
+}
+
+/// Construct a Windows script launcher.
+///
+/// On Unix, this always returns [`Error::NotWindows`]. Trampolines are a Windows-specific feature
+/// and cannot be created on other platforms.
+#[cfg(not(windows))]
+pub fn windows_script_launcher(
+    _launcher_python_script: &str,
+    _is_gui: bool,
+    _python_executable: impl AsRef<Path>,
+) -> Result<Vec<u8>, Error> {
+    Err(Error::NotWindows)
+}
+
+/// Construct a Windows script launcher.
+///
 /// A Windows script is a minimal .exe launcher binary with the python entrypoint script appended as
 /// stored zip file.
 ///
 /// <https://github.com/pypa/pip/blob/fd0ea6bc5e8cb95e518c23d901c26ca14db17f89/src/pip/_vendor/distlib/scripts.py#L248-L262>
-#[allow(unused_variables)]
+#[cfg(windows)]
 pub fn windows_script_launcher(
     launcher_python_script: &str,
     is_gui: bool,
     python_executable: impl AsRef<Path>,
 ) -> Result<Vec<u8>, Error> {
-    // This method should only be called on Windows, but we avoid `#[cfg(windows)]` to retain
-    // compilation on all platforms.
-    if cfg!(not(windows)) {
-        return Err(Error::NotWindows);
-    }
+    use std::io::{Cursor, Write};
+
+    use zip::ZipWriter;
+    use zip::write::SimpleFileOptions;
+
+    use uv_fs::Simplified;
 
     let launcher_bin: &[u8] = get_launcher_bin(is_gui)?;
 
@@ -325,57 +396,94 @@ pub fn windows_script_launcher(
     let python = python_executable.as_ref();
     let python_path = python.simplified_display().to_string();
 
-    let mut launcher: Vec<u8> = Vec::with_capacity(launcher_bin.len() + payload.len());
-    launcher.extend_from_slice(launcher_bin);
-    launcher.extend_from_slice(&payload);
-    launcher.extend_from_slice(python_path.as_bytes());
-    launcher.extend_from_slice(
-        &u32::try_from(python_path.len())
-            .expect("file path should be smaller than 4GB")
-            .to_le_bytes(),
-    );
-    launcher.extend_from_slice(LauncherKind::Script.magic_number());
+    // Start with base launcher binary
+    // Create temporary file for the launcher
+    let temp_dir = tempfile::TempDir::new()?;
+    let temp_file = temp_dir
+        .path()
+        .join(format!("uv-trampoline-{}.exe", std::process::id()));
+    fs_err::write(&temp_file, launcher_bin)?;
+
+    // Write resources
+    let resources = &[
+        (
+            RESOURCE_TRAMPOLINE_KIND,
+            &[LauncherKind::Script.to_resource_value()][..],
+        ),
+        (RESOURCE_PYTHON_PATH, python_path.as_bytes()),
+        (RESOURCE_SCRIPT_DATA, &payload),
+    ];
+    write_resources(&temp_file, resources)?;
+
+    // Read back the complete file
+    // TODO(zanieb): It's weird that we write/read from a temporary file here because in the main
+    // usage at `write_script_entrypoints` we do the same thing again. We should refactor these
+    // to avoid repeated work.
+    let launcher = fs_err::read(&temp_file)?;
+    fs_err::remove_file(temp_file)?;
 
     Ok(launcher)
 }
 
+/// Construct a Windows Python launcher.
+///
+/// On Unix, this always returns [`Error::NotWindows`]. Trampolines are a Windows-specific feature
+/// and cannot be created on other platforms.
+#[cfg(not(windows))]
+pub fn windows_python_launcher(
+    _python_executable: impl AsRef<Path>,
+    _is_gui: bool,
+) -> Result<Vec<u8>, Error> {
+    Err(Error::NotWindows)
+}
+
+/// Construct a Windows Python launcher.
+///
 /// A minimal .exe launcher binary for Python.
 ///
 /// Sort of equivalent to a `python` symlink on Unix.
-#[allow(unused_variables)]
+#[cfg(windows)]
 pub fn windows_python_launcher(
     python_executable: impl AsRef<Path>,
     is_gui: bool,
 ) -> Result<Vec<u8>, Error> {
-    // This method should only be called on Windows, but we avoid `#[cfg(windows)]` to retain
-    // compilation on all platforms.
-    if cfg!(not(windows)) {
-        return Err(Error::NotWindows);
-    }
+    use uv_fs::Simplified;
 
     let launcher_bin: &[u8] = get_launcher_bin(is_gui)?;
 
     let python = python_executable.as_ref();
     let python_path = python.simplified_display().to_string();
 
-    let mut launcher: Vec<u8> = Vec::with_capacity(launcher_bin.len());
-    launcher.extend_from_slice(launcher_bin);
-    launcher.extend_from_slice(python_path.as_bytes());
-    launcher.extend_from_slice(
-        &u32::try_from(python_path.len())
-            .expect("file path should be smaller than 4GB")
-            .to_le_bytes(),
-    );
-    launcher.extend_from_slice(LauncherKind::Python.magic_number());
+    // Create temporary file for the launcher
+    let temp_dir = tempfile::TempDir::new()?;
+    let temp_file = temp_dir
+        .path()
+        .join(format!("uv-trampoline-{}.exe", std::process::id()));
+    fs_err::write(&temp_file, launcher_bin)?;
+
+    // Write resources
+    let resources = &[
+        (
+            RESOURCE_TRAMPOLINE_KIND,
+            &[LauncherKind::Python.to_resource_value()][..],
+        ),
+        (RESOURCE_PYTHON_PATH, python_path.as_bytes()),
+    ];
+    write_resources(&temp_file, resources)?;
+
+    // Read back the complete file
+    let launcher = fs_err::read(&temp_file)?;
+    fs_err::remove_file(temp_file)?;
 
     Ok(launcher)
 }
 
 #[cfg(all(test, windows))]
-#[allow(clippy::print_stdout)]
+#[expect(clippy::print_stdout)]
 mod test {
     use std::io::Write;
     use std::path::Path;
+    use std::path::PathBuf;
     use std::process::Command;
 
     use anyhow::Result;
@@ -390,14 +498,14 @@ mod test {
     #[test]
     #[cfg(all(windows, target_arch = "x86", feature = "production"))]
     fn test_launchers_are_small() {
-        // At time of writing, they are ~45kb.
+        // At time of writing, they are ~40kb.
         assert!(
-            super::LAUNCHER_I686_GUI.len() < 45 * 1024,
+            super::LAUNCHER_I686_GUI.len() < 50 * 1024,
             "GUI launcher: {}",
             super::LAUNCHER_I686_GUI.len()
         );
         assert!(
-            super::LAUNCHER_I686_CONSOLE.len() < 45 * 1024,
+            super::LAUNCHER_I686_CONSOLE.len() < 50 * 1024,
             "CLI launcher: {}",
             super::LAUNCHER_I686_CONSOLE.len()
         );
@@ -408,12 +516,12 @@ mod test {
     fn test_launchers_are_small() {
         // At time of writing, they are ~45kb.
         assert!(
-            super::LAUNCHER_X86_64_GUI.len() < 45 * 1024,
+            super::LAUNCHER_X86_64_GUI.len() < 50 * 1024,
             "GUI launcher: {}",
             super::LAUNCHER_X86_64_GUI.len()
         );
         assert!(
-            super::LAUNCHER_X86_64_CONSOLE.len() < 45 * 1024,
+            super::LAUNCHER_X86_64_CONSOLE.len() < 50 * 1024,
             "CLI launcher: {}",
             super::LAUNCHER_X86_64_CONSOLE.len()
         );
@@ -424,12 +532,12 @@ mod test {
     fn test_launchers_are_small() {
         // At time of writing, they are ~45kb.
         assert!(
-            super::LAUNCHER_AARCH64_GUI.len() < 45 * 1024,
+            super::LAUNCHER_AARCH64_GUI.len() < 50 * 1024,
             "GUI launcher: {}",
             super::LAUNCHER_AARCH64_GUI.len()
         );
         assert!(
-            super::LAUNCHER_AARCH64_CONSOLE.len() < 45 * 1024,
+            super::LAUNCHER_AARCH64_CONSOLE.len() < 50 * 1024,
             "CLI launcher: {}",
             super::LAUNCHER_AARCH64_CONSOLE.len()
         );
@@ -486,6 +594,69 @@ if __name__ == "__main__":
         format!("#!{executable}")
     }
 
+    /// Creates a self-signed certificate and returns its path.
+    fn create_temp_certificate(temp_dir: &tempfile::TempDir) -> Result<(PathBuf, PathBuf)> {
+        use rcgen::{
+            CertificateParams, DnType, ExtendedKeyUsagePurpose, KeyPair, KeyUsagePurpose, SanType,
+        };
+
+        let mut params = CertificateParams::default();
+        params.key_usages.push(KeyUsagePurpose::DigitalSignature);
+        params
+            .extended_key_usages
+            .push(ExtendedKeyUsagePurpose::CodeSigning);
+        params
+            .distinguished_name
+            .push(DnType::OrganizationName, "Astral Software Inc.");
+        params
+            .distinguished_name
+            .push(DnType::CommonName, "uv-test-signer");
+        params
+            .subject_alt_names
+            .push(SanType::DnsName("uv-test-signer".try_into()?));
+
+        let private_key = KeyPair::generate()?;
+        let public_cert = params.self_signed(&private_key)?;
+
+        let public_cert_path = temp_dir.path().join("uv-trampoline-test.crt");
+        let private_key_path = temp_dir.path().join("uv-trampoline-test.key");
+        fs_err::write(public_cert_path.as_path(), public_cert.pem())?;
+        fs_err::write(private_key_path.as_path(), private_key.serialize_pem())?;
+
+        Ok((public_cert_path, private_key_path))
+    }
+
+    /// Signs the given binary using `PowerShell`'s `Set-AuthenticodeSignature` with a temporary certificate.
+    fn sign_authenticode(bin_path: impl AsRef<Path>) {
+        let temp_dir = tempfile::TempDir::new().expect("Failed to create temporary directory");
+        let (public_cert, private_key) =
+            create_temp_certificate(&temp_dir).expect("Failed to create self-signed certificate");
+
+        // Instead of powershell, we rely on pwsh which supports CreateFromPemFile.
+        Command::new("pwsh")
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                &format!(
+                    r"
+                    $ErrorActionPreference = 'Stop'
+                    Import-Module Microsoft.PowerShell.Security
+                    $cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::CreateFromPemFile('{}', '{}')
+                    Set-AuthenticodeSignature -FilePath '{}' -Certificate $cert;
+                    ",
+                    public_cert.display().to_string().replace('\'', "''"),
+                    private_key.display().to_string().replace('\'', "''"),
+                    bin_path.as_ref().display().to_string().replace('\'', "''"),
+                ),
+            ])
+            .env_remove("PSModulePath")
+            .assert()
+            .success();
+
+        println!("Signed binary: {}", bin_path.as_ref().display());
+    }
+
     #[test]
     fn console_script_launcher() -> Result<()> {
         // Create Temp Dirs
@@ -540,6 +711,17 @@ if __name__ == "__main__":
         assert!(launcher.kind == LauncherKind::Script);
         assert!(launcher.python_path == python_executable_path);
 
+        // Now code-sign the launcher and verify that it still works.
+        sign_authenticode(console_bin_path.path());
+
+        let stdout_predicate = "Hello from uv-trampoline-console.exe\r\n";
+        let stderr_predicate = "Hello from uv-trampoline-console.exe\r\n";
+        Command::new(console_bin_path.path())
+            .assert()
+            .success()
+            .stdout(stdout_predicate)
+            .stderr(stderr_predicate);
+
         Ok(())
     }
 
@@ -556,7 +738,9 @@ if __name__ == "__main__":
         let console_launcher = windows_python_launcher(&python_executable_path, false)?;
 
         // Create Launcher
-        File::create(console_bin_path.path())?.write_all(console_launcher.as_ref())?;
+        {
+            File::create(console_bin_path.path())?.write_all(console_launcher.as_ref())?;
+        }
 
         println!(
             "Wrote Python Launcher in {}",
@@ -577,6 +761,15 @@ if __name__ == "__main__":
 
         assert!(launcher.kind == LauncherKind::Python);
         assert!(launcher.python_path == python_executable_path);
+
+        // Now code-sign the launcher and verify that it still works.
+        sign_authenticode(console_bin_path.path());
+        Command::new(console_bin_path.path())
+            .arg("-c")
+            .arg("print('Hello from Python Launcher')")
+            .assert()
+            .success()
+            .stdout("Hello from Python Launcher\r\n");
 
         Ok(())
     }
@@ -600,7 +793,9 @@ if __name__ == "__main__":
             windows_script_launcher(&launcher_gui_script, true, &pythonw_executable_path)?;
 
         // Create Launcher
-        File::create(gui_bin_path.path())?.write_all(gui_launcher.as_ref())?;
+        {
+            File::create(gui_bin_path.path())?.write_all(gui_launcher.as_ref())?;
+        }
 
         println!("Wrote GUI Launcher in {}", gui_bin_path.path().display());
 

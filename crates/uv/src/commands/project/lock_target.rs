@@ -1,9 +1,10 @@
+use itertools::Either;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use tracing::info_span;
 
-use itertools::Either;
-
-use uv_configuration::{DependencyGroupsWithDefaults, SourceStrategy};
+use uv_auth::CredentialsCache;
+use uv_configuration::{DependencyGroupsWithDefaults, NoSources};
 use uv_distribution::LoweredRequirement;
 use uv_distribution_types::{Index, IndexLocations, Requirement, RequiresPython};
 use uv_normalize::{GroupName, PackageName};
@@ -242,7 +243,6 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Return the `Requires-Python` bound for the [`LockTarget`].
-    #[allow(clippy::result_large_err)]
     pub(crate) fn requires_python(self) -> Result<Option<RequiresPython>, ProjectError> {
         match self {
             Self::Workspace(workspace) => {
@@ -287,9 +287,12 @@ impl<'lock> LockTarget<'lock> {
     ///
     /// Returns `Ok(None)` if the lockfile does not exist.
     pub(crate) async fn read(self) -> Result<Option<Lock>, ProjectError> {
-        match fs_err::tokio::read_to_string(self.lock_path()).await {
+        let lock_path = self.lock_path();
+        match fs_err::tokio::read_to_string(&lock_path).await {
             Ok(encoded) => {
-                match toml::from_str::<Lock>(&encoded) {
+                let result = info_span!("toml::from_str lock", path = %lock_path.display())
+                    .in_scope(|| toml::from_str::<Lock>(&encoded));
+                match result {
                     Ok(lock) => {
                         // If the lockfile uses an unsupported version, raise an error.
                         if lock.version() != VERSION {
@@ -342,7 +345,8 @@ impl<'lock> LockTarget<'lock> {
         self,
         requirements: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
         locations: &IndexLocations,
-        sources: SourceStrategy,
+        sources: &NoSources,
+        credentials_cache: &CredentialsCache,
     ) -> Result<Vec<Requirement>, uv_distribution::MetadataError> {
         match self {
             Self::Workspace(workspace) => {
@@ -362,6 +366,7 @@ impl<'lock> LockTarget<'lock> {
                     workspace,
                     locations,
                     sources,
+                    credentials_cache,
                 )?;
 
                 Ok(metadata
@@ -373,48 +378,50 @@ impl<'lock> LockTarget<'lock> {
             Self::Script(script) => {
                 // Collect any `tool.uv.index` from the script.
                 let empty = Vec::default();
-                let indexes = match sources {
-                    SourceStrategy::Enabled => script
-                        .metadata
-                        .tool
-                        .as_ref()
-                        .and_then(|tool| tool.uv.as_ref())
-                        .and_then(|uv| uv.top_level.index.as_deref())
-                        .unwrap_or(&empty),
-                    SourceStrategy::Disabled => &empty,
-                };
+                let indexes = script
+                    .metadata
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|uv| uv.top_level.index.as_deref())
+                    .unwrap_or(&empty);
 
                 // Collect any `tool.uv.sources` from the script.
                 let empty = BTreeMap::default();
-                let sources = match sources {
-                    SourceStrategy::Enabled => script
-                        .metadata
-                        .tool
-                        .as_ref()
-                        .and_then(|tool| tool.uv.as_ref())
-                        .and_then(|uv| uv.sources.as_ref())
-                        .unwrap_or(&empty),
-                    SourceStrategy::Disabled => &empty,
-                };
+                let sources_map = script
+                    .metadata
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|uv| uv.sources.as_ref())
+                    .unwrap_or(&empty);
 
                 Ok(requirements
                     .into_iter()
                     .flat_map(|requirement| {
-                        let requirement_name = requirement.name.clone();
-                        LoweredRequirement::from_non_workspace_requirement(
-                            requirement,
-                            script.path.parent().unwrap(),
-                            sources,
-                            indexes,
-                            locations,
-                        )
-                        .map(move |requirement| match requirement {
-                            Ok(requirement) => Ok(requirement.into_inner()),
-                            Err(err) => Err(uv_distribution::MetadataError::LoweringError(
-                                requirement_name.clone(),
-                                Box::new(err),
-                            )),
-                        })
+                        // Check if sources should be disabled for this specific package
+                        if sources.for_package(&requirement.name) {
+                            vec![Ok(Requirement::from(requirement))].into_iter()
+                        } else {
+                            let requirement_name = requirement.name.clone();
+                            LoweredRequirement::from_non_workspace_requirement(
+                                requirement,
+                                script.path.parent().unwrap(),
+                                sources_map,
+                                indexes,
+                                locations,
+                                credentials_cache,
+                            )
+                            .map(move |requirement| match requirement {
+                                Ok(requirement) => Ok(requirement.into_inner()),
+                                Err(err) => Err(uv_distribution::MetadataError::LoweringError(
+                                    requirement_name.clone(),
+                                    Box::new(err),
+                                )),
+                            })
+                            .collect::<Vec<_>>()
+                            .into_iter()
+                        }
                     })
                     .collect::<Result<_, _>>()?)
             }

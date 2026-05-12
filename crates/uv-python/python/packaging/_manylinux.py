@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import collections
 import contextlib
 import functools
@@ -19,7 +17,7 @@ EF_ARM_ABI_FLOAT_HARD = 0x00000400
 # `os.PathLike` not a generic type until Python 3.9, so sticking with `str`
 # as the type for `path` until then.
 @contextlib.contextmanager
-def _parse_elf(path: str) -> Generator[ELFFile | None, None, None]:
+def _parse_elf(path: str) -> "Generator[ELFFile | None, None, None]":
     try:
         with open(path, "rb") as f:
             yield ELFFile(f)
@@ -74,7 +72,7 @@ def _have_compatible_abi(executable: str, archs: Sequence[str]) -> bool:
 # For now, guess what the highest minor version might be, assume it will
 # be 50 for testing. Once this actually happens, update the dictionary
 # with the actual value.
-_LAST_GLIBC_MINOR: dict[int, int] = collections.defaultdict(lambda: 50)
+_LAST_GLIBC_MINOR: "dict[int, int]" = collections.defaultdict(lambda: 50)
 
 
 class _GLibCVersion(NamedTuple):
@@ -82,7 +80,7 @@ class _GLibCVersion(NamedTuple):
     minor: int
 
 
-def _glibc_version_string_confstr() -> str | None:
+def _glibc_version_string_confstr() -> "str | None":
     """
     Primary implementation of glibc_version_string using os.confstr.
     """
@@ -92,7 +90,7 @@ def _glibc_version_string_confstr() -> str | None:
     # https://github.com/python/cpython/blob/fcf1d003bf4f0100c/Lib/platform.py#L175-L183
     try:
         # Should be a string like "glibc 2.17".
-        version_string: str | None = os.confstr("CS_GNU_LIBC_VERSION")
+        version_string: "str | None" = os.confstr("CS_GNU_LIBC_VERSION")
         assert version_string is not None
         _, version = version_string.rsplit()
     except (AssertionError, AttributeError, OSError, ValueError):
@@ -101,7 +99,7 @@ def _glibc_version_string_confstr() -> str | None:
     return version
 
 
-def _glibc_version_string_ctypes() -> str | None:
+def _glibc_version_string_ctypes() -> "str | None":
     """
     Fallback implementation of glibc_version_string using ctypes.
     """
@@ -145,7 +143,7 @@ def _glibc_version_string_ctypes() -> str | None:
     return version_str
 
 
-def _glibc_version_string() -> str | None:
+def _glibc_version_string() -> "str | None":
     """Returns glibc version string, or None if not using glibc."""
     return _glibc_version_string_confstr() or _glibc_version_string_ctypes()
 
@@ -203,7 +201,7 @@ def _is_compatible(arch: str, version: _GLibCVersion) -> bool:
     return True
 
 
-_LEGACY_MANYLINUX_MAP: dict[_GLibCVersion, str] = {
+_LEGACY_MANYLINUX_MAP: "dict[_GLibCVersion, str]" = {
     # CentOS 7 w/ glibc 2.17 (PEP 599)
     _GLibCVersion(2, 17): "manylinux2014",
     # CentOS 6 w/ glibc 2.12 (PEP 571)

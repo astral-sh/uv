@@ -1,3 +1,5 @@
+cargo-features = ["panic-immediate-abort"]
+
 [package]
 name = "uv-trampoline"
 version = "0.1.0"
@@ -12,7 +14,7 @@ doctest = false
 [profile.dev]
 lto = true
 opt-level = 1
-panic = "abort"
+panic = "immediate-abort"
 debug = true
 
 [profile.test]
@@ -27,7 +29,7 @@ codegen-units = 1
 # Optimize for size.
 opt-level = "z"
 # Abort on panic.
-panic = "abort"
+panic = "immediate-abort"
 # Automatically strip symbols from the binary.
 strip = true
 debug = false
@@ -35,6 +37,9 @@ debug = false
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+uv-static = { path = "../uv-static" }
+uv-windows = { path = "../uv-windows", default-features = false }
+
 windows = { version = "0.61.0", features = [
   "std",
   "Win32_Foundation",
@@ -42,12 +47,16 @@ windows = { version = "0.61.0", features = [
   "Win32_System_Console",
   "Win32_System_Environment",
   "Win32_System_JobObjects",
+  "Win32_System_LibraryLoader",
   "Win32_System_Threading",
   "Win32_UI_WindowsAndMessaging",
+  "Win32_Storage_FileSystem",
 ] }
 ufmt-write = "0.1.0"
 ufmt = { version = "0.2.0", features = ["std"] }
 dunce = { version = "1.0.5" }
 
 [build-dependencies]
+uv-static = { path = "../uv-static" }
+
 embed-manifest = "1.4.0"

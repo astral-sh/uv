@@ -159,7 +159,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
             .fetcher
             .client()
             .manual(|client, semaphore| {
-                client.package_metadata(
+                client.simple_detail(
                     package_name,
                     index.map(IndexMetadataRef::from),
                     self.capabilities,
@@ -200,7 +200,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                     .collect(),
             )),
             Err(err) => match err.kind() {
-                uv_client::ErrorKind::PackageNotFound(_) => {
+                uv_client::ErrorKind::RemotePackageNotFound(_) => {
                     if let Some(flat_index) = flat_index
                         .and_then(|flat_index| flat_index.get(package_name))
                         .cloned()
@@ -248,6 +248,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
             Err(err) => match err {
                 uv_distribution::Error::Client(client) => {
                     let retries = client.retries();
+                    let duration = client.duration();
                     match client.into_kind() {
                         uv_client::ErrorKind::Offline(_) => {
                             Ok(MetadataResponse::Unavailable(MetadataUnavailable::Offline))
@@ -262,7 +263,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                                 MetadataUnavailable::InvalidStructure(Arc::new(err)),
                             ))
                         }
-                        kind => Err(uv_client::Error::new(kind, retries).into()),
+                        kind => Err(uv_client::Error::new(kind, retries, duration).into()),
                     }
                 }
                 uv_distribution::Error::WheelMetadataVersionMismatch { .. } => {

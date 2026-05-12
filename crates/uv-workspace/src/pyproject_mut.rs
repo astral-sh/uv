@@ -65,18 +65,18 @@ pub enum ArrayEdit {
     Add(usize),
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum CommentType {
     /// A comment that appears on its own line.
     OwnLine,
     /// A comment that appears at the end of a line.
-    EndOfLine,
+    EndOfLine { leading_whitespace: String },
 }
 
 #[derive(Debug, Clone)]
 struct Comment {
     text: String,
-    comment_type: CommentType,
+    kind: CommentType,
 }
 
 impl ArrayEdit {
@@ -545,17 +545,17 @@ impl PyProjectTomlMut {
 
         // Set the position to the minimum, if it's not already the first element.
         if let Some(min) = existing.iter().filter_map(Table::position).min() {
-            table.set_position(min);
+            table.set_position(Some(min));
 
             // Increment the position of all existing elements.
             for table in existing.iter_mut() {
                 if let Some(position) = table.position() {
-                    table.set_position(position + 1);
+                    table.set_position(Some(position + 1));
                 }
             }
         } else {
             let position = isize::try_from(size).expect("TOML table size fits in `isize`");
-            table.set_position(position);
+            table.set_position(Some(position));
         }
 
         // Push the item to the table.
@@ -1545,11 +1545,51 @@ fn update_requirement(old: &mut Requirement, new: &Requirement, has_source: bool
 
 /// Removes all occurrences of dependencies with the given name from the given `deps` array.
 fn remove_dependency(name: &PackageName, deps: &mut Array) -> Vec<Requirement> {
-    // Remove matching dependencies.
+    // Remove in reverse to preserve indices. Before each removal, transfer the item's
+    // prefix (which may contain end-of-line comments belonging to the previous line) to
+    // the next item or array trailing so comments are not lost.
+    //
+    // For example, in:
+    // ```toml
+    // dependencies = [
+    //     "numpy>=2.4.3", # essential comment
+    //     "requests>=2.32.5",
+    // ]
+    // ```
+    //
+    // The comment `# essential comment` is stored by `toml_edit` in the prefix of
+    // `requests`. When `requests` is removed, we transfer it so it remains on the
+    // `numpy` line.
     let removed = find_dependencies(name, None, deps)
         .into_iter()
-        .rev() // Reverse to preserve indices as we remove them.
+        .rev()
         .filter_map(|(i, _)| {
+            if let Some(prefix) = deps
+                .get(i)
+                .and_then(|item| item.decor().prefix().and_then(|s| s.as_str()))
+                .filter(|s| !s.is_empty())
+            {
+                let prefix = prefix.to_string();
+                if let Some(next) = deps.get(i + 1)
+                    && let Some(existing) = next.decor().prefix().and_then(|s| s.as_str())
+                {
+                    // Transfer removed item's prefix to the next item's prefix.
+                    let existing = existing.to_string();
+                    deps.get_mut(i + 1)
+                        .unwrap()
+                        .decor_mut()
+                        .set_prefix(format!("{prefix}{existing}"));
+                } else if let Some(next) = deps.get_mut(i + 1) {
+                    // Next item exists but has no prefix; use ours directly.
+                    next.decor_mut().set_prefix(&prefix);
+                } else if let Some(existing) = deps.trailing().as_str() {
+                    // No next item; move comments to the array trailing.
+                    deps.set_trailing(format!("{prefix}{existing}"));
+                } else {
+                    deps.set_trailing(&prefix);
+                }
+            }
+
             deps.remove(i)
                 .as_str()
                 .and_then(|req| Requirement::from_str(req).ok())
@@ -1627,18 +1667,31 @@ fn reformat_array_multiline(deps: &mut Array) {
                 (false, false),
                 |(prev_line_was_empty, prev_line_was_comment), line| {
                     let trimmed_line = line.trim();
-                    if let Some(index) = trimmed_line.find('#') {
-                        let comment_text = trimmed_line[index..].trim().to_string();
-                        let comment_type = if (*prev_line_was_empty) || (*prev_line_was_comment) {
+
+                    if let Some((before, comment)) = line.split_once('#') {
+                        let comment_text = format!("#{}", comment.trim_end());
+
+                        let comment_kind = if (*prev_line_was_empty) || (*prev_line_was_comment) {
                             CommentType::OwnLine
                         } else {
-                            CommentType::EndOfLine
+                            CommentType::EndOfLine {
+                                leading_whitespace: before
+                                    .chars()
+                                    .rev()
+                                    .take_while(|c| c.is_whitespace())
+                                    .collect::<String>()
+                                    .chars()
+                                    .rev()
+                                    .collect(),
+                            }
                         };
+
                         *prev_line_was_empty = trimmed_line.is_empty();
                         *prev_line_was_comment = true;
+
                         Some(Some(Comment {
                             text: comment_text,
-                            comment_type,
+                            kind: comment_kind,
                         }))
                     } else {
                         *prev_line_was_empty = trimmed_line.is_empty();
@@ -1678,12 +1731,12 @@ fn reformat_array_multiline(deps: &mut Array) {
         let mut prefix = String::new();
 
         for comment in find_comments(decor.prefix()).chain(find_comments(decor.suffix())) {
-            match comment.comment_type {
+            match &comment.kind {
                 CommentType::OwnLine => {
                     prefix.push_str(&indentation_prefix_str);
                 }
-                CommentType::EndOfLine => {
-                    prefix.push(' ');
+                CommentType::EndOfLine { leading_whitespace } => {
+                    prefix.push_str(leading_whitespace);
                 }
             }
             prefix.push_str(&comment.text);
@@ -1698,14 +1751,14 @@ fn reformat_array_multiline(deps: &mut Array) {
         let mut rv = String::new();
         if comments.peek().is_some() {
             for comment in comments {
-                match comment.comment_type {
+                match &comment.kind {
                     CommentType::OwnLine => {
                         let indentation_prefix_str =
                             format!("\n{}", indentation_prefix.as_deref().unwrap_or("    "));
                         rv.push_str(&indentation_prefix_str);
                     }
-                    CommentType::EndOfLine => {
-                        rv.push(' ');
+                    CommentType::EndOfLine { leading_whitespace } => {
+                        rv.push_str(leading_whitespace);
                     }
                 }
                 rv.push_str(&comment.text);
@@ -1737,8 +1790,11 @@ fn split_specifiers(req: &str) -> (&str, &str) {
 
 #[cfg(test)]
 mod test {
-    use super::{AddBoundsKind, split_specifiers};
+    use super::{AddBoundsKind, reformat_array_multiline, remove_dependency, split_specifiers};
+    use insta::assert_snapshot;
     use std::str::FromStr;
+    use toml_edit::DocumentMut;
+    use uv_normalize::PackageName;
     use uv_pep440::Version;
 
     #[test]
@@ -1758,6 +1814,56 @@ mod test {
                 "flask",
                 "@ https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl"
             )
+        );
+    }
+
+    #[test]
+    fn reformat_preserves_inline_comment_spacing() {
+        let mut doc: DocumentMut = r#"
+[project]
+dependencies = [
+    "attrs>=25.4.0",     # comment
+]
+"#
+        .parse()
+        .unwrap();
+
+        reformat_array_multiline(
+            doc["project"]["dependencies"]
+                .as_array_mut()
+                .expect("dependencies array"),
+        );
+
+        let serialized = doc.to_string();
+
+        assert!(
+            serialized.contains("\"attrs>=25.4.0\",     # comment"),
+            "inline comment spacing should be preserved:\n{serialized}"
+        );
+    }
+
+    #[test]
+    fn reformat_preserves_inline_comment_without_padding() {
+        let mut doc: DocumentMut = r#"
+[project]
+dependencies = [
+    "attrs>=25.4.0",#comment
+]
+"#
+        .parse()
+        .unwrap();
+
+        reformat_array_multiline(
+            doc["project"]["dependencies"]
+                .as_array_mut()
+                .expect("dependencies array"),
+        );
+
+        let serialized = doc.to_string();
+
+        assert!(
+            serialized.contains("\"attrs>=25.4.0\",#comment"),
+            "inline comment spacing without padding should be preserved:\n{serialized}"
         );
     }
 
@@ -1862,5 +1968,192 @@ mod test {
                 .to_string();
             assert_eq!(actual, expected, "{version}");
         }
+    }
+
+    #[test]
+    fn remove_preserves_end_of_line_comment_on_previous_item() {
+        let toml = r#"
+[project]
+dependencies = [
+    "numpy>=2.4.3", # this comment is clearly essential
+    "requests>=2.32.5",
+]
+"#;
+        let mut doc: DocumentMut = toml.parse().unwrap();
+        let deps = doc["project"]["dependencies"]
+            .as_array_mut()
+            .expect("dependencies array");
+
+        let name = PackageName::from_str("requests").unwrap();
+        remove_dependency(&name, deps);
+
+        assert_snapshot!(
+            doc.to_string(),
+            @r#"
+[project]
+dependencies = [
+    "numpy>=2.4.3", # this comment is clearly essential
+]
+"#
+        );
+    }
+
+    #[test]
+    fn remove_preserves_end_of_line_comment_on_previous_item_middle() {
+        let toml = r#"
+[project]
+dependencies = [
+    "numpy>=2.4.3", # numpy comment
+    "requests>=2.32.5",
+    "flask>=3.0.0",
+]
+"#;
+        let mut doc: DocumentMut = toml.parse().unwrap();
+        let deps = doc["project"]["dependencies"]
+            .as_array_mut()
+            .expect("dependencies array");
+
+        let name = PackageName::from_str("requests").unwrap();
+        remove_dependency(&name, deps);
+
+        assert_snapshot!(
+            doc.to_string(),
+            @r#"
+[project]
+dependencies = [
+    "numpy>=2.4.3", # numpy comment
+    "flask>=3.0.0",
+]
+"#
+        );
+    }
+
+    #[test]
+    fn remove_preserves_own_line_comment_above_removed_item() {
+        let toml = r#"
+[project]
+dependencies = [
+    "numpy>=2.4.3",
+    # This is a comment about requests
+    "requests>=2.32.5",
+]
+"#;
+        let mut doc: DocumentMut = toml.parse().unwrap();
+        let deps = doc["project"]["dependencies"]
+            .as_array_mut()
+            .expect("dependencies array");
+
+        let name = PackageName::from_str("requests").unwrap();
+        remove_dependency(&name, deps);
+
+        assert_snapshot!(
+            doc.to_string(),
+            @r#"
+[project]
+dependencies = [
+    "numpy>=2.4.3",
+    # This is a comment about requests
+]
+"#
+        );
+    }
+
+    #[test]
+    fn remove_item_with_trailing_comment_last() {
+        // When the removed item itself has an end-of-line comment and is the last item,
+        // toml_edit stores the comment in the array trailing. The comment is preserved
+        // (as an own-line comment in the trailing section) but moves position since it
+        // can no longer be on the removed item's line.
+        let toml = r#"
+[project]
+dependencies = [
+    "requests>=2.32.5",
+    "numpy>=2.4.3", # comment on numpy
+]
+"#;
+        let mut doc: DocumentMut = toml.parse().unwrap();
+        let deps = doc["project"]["dependencies"]
+            .as_array_mut()
+            .expect("dependencies array");
+
+        let name = PackageName::from_str("numpy").unwrap();
+        remove_dependency(&name, deps);
+
+        assert_snapshot!(
+            doc.to_string(),
+            @r#"
+[project]
+dependencies = [
+    "requests>=2.32.5",
+    # comment on numpy
+]
+"#
+        );
+    }
+
+    #[test]
+    fn remove_item_with_trailing_comment_middle() {
+        // When the removed item has an end-of-line comment and is in the middle,
+        // toml_edit stores the comment in the next item's prefix. After removal,
+        // reformat_array_multiline repositions it as an own-line comment.
+        let toml = r#"
+[project]
+dependencies = [
+    "requests>=2.32.5",
+    "numpy>=2.4.3", # comment on numpy
+    "flask>=3.0.0",
+]
+"#;
+        let mut doc: DocumentMut = toml.parse().unwrap();
+        let deps = doc["project"]["dependencies"]
+            .as_array_mut()
+            .expect("dependencies array");
+
+        let name = PackageName::from_str("numpy").unwrap();
+        remove_dependency(&name, deps);
+
+        assert_snapshot!(
+            doc.to_string(),
+            @r#"
+[project]
+dependencies = [
+    "requests>=2.32.5",
+    # comment on numpy
+    "flask>=3.0.0",
+]
+"#
+        );
+    }
+
+    #[test]
+    fn remove_multiple_adjacent_matches_preserves_comment_order() {
+        let toml = r#"
+[project]
+dependencies = [
+    "iniconfig>=2.0.0", # comment on iniconfig
+    "typing-extensions>=4.0.0 ; python_version < '3.11'", # comment on first typing-extensions
+    "typing-extensions>=4.0.0 ; python_version >= '3.11'",
+    "sniffio>=1.3.0",
+]
+"#;
+        let mut doc: DocumentMut = toml.parse().unwrap();
+        let deps = doc["project"]["dependencies"]
+            .as_array_mut()
+            .expect("dependencies array");
+
+        let name = PackageName::from_str("typing-extensions").unwrap();
+        remove_dependency(&name, deps);
+
+        assert_snapshot!(
+            doc.to_string(),
+            @r#"
+[project]
+dependencies = [
+    "iniconfig>=2.0.0", # comment on iniconfig
+    # comment on first typing-extensions
+    "sniffio>=1.3.0",
+]
+"#
+        );
     }
 }

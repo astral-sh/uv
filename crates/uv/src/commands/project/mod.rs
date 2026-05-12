@@ -7,13 +7,13 @@ use std::sync::Arc;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, trace, warn};
-
+use uv_auth::CredentialsCache;
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Reinstall,
-    TargetTriple, Upgrade,
+    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
+    GitLfsSetting, Reinstall, TargetTriple, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
@@ -21,18 +21,18 @@ use uv_distribution_types::{
     ExtraBuildRequirement, ExtraBuildRequires, Index, Requirement, RequiresPython, Resolution,
     UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
-use uv_fs::{CWD, LockedFile, Simplified};
+use uv_fs::{CWD, LockedFile, LockedFileError, LockedFileMode, Simplified};
 use uv_git::ResolvedRepositoryReference;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep440::{TildeVersionSpecifier, Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts};
 use uv_python::{
-    EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads, PythonEnvironment,
-    PythonInstallation, PythonPreference, PythonRequest, PythonSource, PythonVariant,
-    PythonVersionFile, VersionFileDiscoveryOptions, VersionRequest, satisfies_python_preference,
+    BrokenLink, EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads,
+    PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, PythonSource,
+    PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions, VersionRequest,
 };
 use uv_requirements::upgrade::{LockedRequirements, read_lock_requirements};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
@@ -43,12 +43,12 @@ use uv_resolver::{
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
+use uv_torch::{TorchSource, TorchStrategy};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_virtualenv::remove_virtualenv;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
-use uv_workspace::pyproject::ExtraBuildDependency;
-use uv_workspace::pyproject::PyProjectToml;
+use uv_workspace::pyproject::{ExtraBuildDependency, PyProjectToml};
 use uv_workspace::{RequiresPythonSources, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
@@ -58,10 +58,12 @@ use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{capitalize, conjunction, pip};
 use crate::printer::Printer;
 use crate::settings::{
-    InstallerSettingsRef, LockCheckSource, ResolverInstallerSettings, ResolverSettings,
+    FrozenSource, InstallerSettingsRef, LockCheckSource, ResolverInstallerSettings,
+    ResolverSettings,
 };
 
 pub(crate) mod add;
+pub(crate) mod audit;
 pub(crate) mod environment;
 pub(crate) mod export;
 pub(crate) mod format;
@@ -75,6 +77,60 @@ pub(crate) mod sync;
 pub(crate) mod tree;
 pub(crate) mod version;
 
+/// The source of a missing lockfile error.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum MissingLockfileSource {
+    /// The `--frozen` flag was provided.
+    Frozen,
+    /// The `UV_FROZEN` environment variable was set.
+    FrozenEnv,
+    /// The `frozen` option was set via workspace configuration.
+    FrozenConfiguration,
+    /// The `--locked` flag was provided.
+    Locked,
+    /// The `UV_LOCKED` environment variable was set.
+    LockedEnv,
+    /// The `locked` option was set via workspace configuration.
+    LockedConfiguration,
+    /// The `--check` flag was provided.
+    Check,
+}
+
+impl std::fmt::Display for MissingLockfileSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Frozen => write!(f, "`--frozen`"),
+            Self::FrozenEnv => write!(f, "`UV_FROZEN=1`"),
+            Self::FrozenConfiguration => write!(f, "`frozen` (workspace configuration)"),
+            Self::Locked => write!(f, "`--locked`"),
+            Self::LockedEnv => write!(f, "`UV_LOCKED=1`"),
+            Self::LockedConfiguration => write!(f, "`locked` (workspace configuration)"),
+            Self::Check => write!(f, "`--check`"),
+        }
+    }
+}
+
+impl From<LockCheckSource> for MissingLockfileSource {
+    fn from(source: LockCheckSource) -> Self {
+        match source {
+            LockCheckSource::LockedCli => Self::Locked,
+            LockCheckSource::LockedEnv => Self::LockedEnv,
+            LockCheckSource::LockedConfiguration => Self::LockedConfiguration,
+            LockCheckSource::Check => Self::Check,
+        }
+    }
+}
+
+impl From<FrozenSource> for MissingLockfileSource {
+    fn from(source: FrozenSource) -> Self {
+        match source {
+            FrozenSource::Cli => Self::Frozen,
+            FrozenSource::Env => Self::FrozenEnv,
+            FrozenSource::Configuration => Self::FrozenConfiguration,
+        }
+    }
+}
+
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum ProjectError {
     #[error(
@@ -83,9 +139,9 @@ pub(crate) enum ProjectError {
     LockMismatch(Option<Box<Lock>>, Box<Lock>, LockCheckSource),
 
     #[error(
-        "Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`."
+        "Unable to find lockfile at `uv.lock`, but {0} was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag."
     )]
-    MissingLockfile,
+    MissingLockfile(MissingLockfileSource),
 
     #[error(
         "The lockfile at `uv.lock` needs to be updated, but `--frozen` was provided: Missing workspace member `{0}`. To update the lockfile, run `uv lock`."
@@ -125,16 +181,16 @@ pub(crate) enum ProjectError {
     RequestedPythonProjectIncompatibility(Version, RequiresPython, RequiresPythonSources, bool),
 
     #[error(
-        "The Python request from `{_0}` resolved to Python {_1}, which is incompatible with the project's Python requirement: `{_2}`{}\nUse `uv python pin` to update the `.python-version` file to a compatible version",
-        format_optional_requires_python_sources(_3, *_4)
+        "The Python request from `{python_request}` resolved to Python {version}, which is incompatible with the project's Python requirement: `{requires_python}`{}\nUse `uv python pin` to update the `.python-version` file to a compatible version",
+        format_optional_requires_python_sources(requires_python_sources, *workspace),
     )]
-    DotPythonVersionProjectIncompatibility(
-        String,
-        Version,
-        RequiresPython,
-        RequiresPythonSources,
-        bool,
-    ),
+    DotPythonVersionProjectIncompatibility {
+        python_request: String,
+        version: Version,
+        requires_python: RequiresPython,
+        requires_python_sources: Box<RequiresPythonSources>,
+        workspace: bool,
+    },
 
     #[error(
         "The resolved Python interpreter (Python {_0}) is incompatible with the project's Python requirement: `{_1}`{}",
@@ -161,7 +217,7 @@ pub(crate) enum ProjectError {
     MissingGroupProject(GroupName),
 
     #[error("Group `{0}` is not defined in any project's `dependency-groups` table")]
-    MissingGroupWorkspace(GroupName),
+    MissingGroupProjects(GroupName),
 
     #[error("PEP 723 scripts do not support dependency groups, but group `{0}` was specified")]
     MissingGroupScript(GroupName),
@@ -175,7 +231,7 @@ pub(crate) enum ProjectError {
     MissingExtraProject(ExtraName),
 
     #[error("Extra `{0}` is not defined in any project's `optional-dependencies` table")]
-    MissingExtraWorkspace(ExtraName),
+    MissingExtraProjects(ExtraName),
 
     #[error("PEP 723 scripts do not support optional dependencies, but extra `{0}` was specified")]
     MissingExtraScript(ExtraName),
@@ -218,6 +274,9 @@ pub(crate) enum ProjectError {
 
     #[error(transparent)]
     DependencyGroup(#[from] DependencyGroupError),
+
+    #[error(transparent)]
+    Client(#[from] uv_client::Error),
 
     #[error(transparent)]
     Python(#[from] uv_python::Error),
@@ -271,10 +330,16 @@ pub(crate) enum ProjectError {
     Fmt(#[from] std::fmt::Error),
 
     #[error(transparent)]
+    CacheInfo(#[from] uv_cache_info::CacheInfoError),
+
+    #[error(transparent)]
     Io(#[from] std::io::Error),
 
     #[error(transparent)]
     RetryParsing(#[from] uv_client::RetryParsingError),
+
+    #[error(transparent)]
+    Accelerator(#[from] uv_torch::AcceleratorError),
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
@@ -426,7 +491,6 @@ impl PlatformState {
 ///
 /// For a [`Workspace`] with multiple packages, the `Requires-Python` bound is the union of the
 /// `Requires-Python` bounds of all the packages.
-#[allow(clippy::result_large_err)]
 pub(crate) fn find_requires_python(
     workspace: &Workspace,
     groups: &DependencyGroupsWithDefaults,
@@ -470,7 +534,6 @@ pub(crate) fn find_requires_python(
 ///
 /// If no [`Workspace`] is provided, the `requires-python` will be validated against the originating
 /// source (e.g., a `.python-version` file or a `--python` command-line argument).
-#[allow(clippy::result_large_err)]
 pub(crate) fn validate_project_requires_python(
     interpreter: &Interpreter,
     workspace: Option<&Workspace>,
@@ -503,13 +566,13 @@ pub(crate) fn validate_project_requires_python(
             ))
         }
         PythonRequestSource::DotPythonVersion(file) => {
-            Err(ProjectError::DotPythonVersionProjectIncompatibility(
-                file.path().user_display().to_string(),
-                interpreter.python_version().clone(),
-                requires_python.clone(),
-                conflicting_requires,
-                workspace_non_trivial,
-            ))
+            Err(ProjectError::DotPythonVersionProjectIncompatibility {
+                python_request: file.path().user_display().to_string(),
+                version: interpreter.python_version().clone(),
+                requires_python: requires_python.clone(),
+                requires_python_sources: Box::new(conflicting_requires),
+                workspace: workspace_non_trivial,
+            })
         }
         PythonRequestSource::RequiresPython => {
             Err(ProjectError::RequiresPythonProjectIncompatibility(
@@ -523,7 +586,6 @@ pub(crate) fn validate_project_requires_python(
 }
 
 /// Returns an error if the [`Interpreter`] does not satisfy script or workspace `requires-python`.
-#[allow(clippy::result_large_err)]
 fn validate_script_requires_python(
     interpreter: &Interpreter,
     requires_python: &RequiresPython,
@@ -557,7 +619,7 @@ fn validate_script_requires_python(
 
 /// An interpreter suitable for a PEP 723 script.
 #[derive(Debug, Clone)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub(crate) enum ScriptInterpreter {
     /// An interpreter to use to create a new script environment.
     Interpreter(Interpreter),
@@ -753,11 +815,12 @@ impl ScriptInterpreter {
     }
 
     /// Grab a file lock for the script to prevent concurrent writes across processes.
-    pub(crate) async fn lock(script: Pep723ItemRef<'_>) -> Result<LockedFile, std::io::Error> {
+    pub(crate) async fn lock(script: Pep723ItemRef<'_>) -> Result<LockedFile, LockedFileError> {
         match script {
             Pep723ItemRef::Script(script) => {
                 LockedFile::acquire(
                     std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(&script.path))),
+                    LockedFileMode::Exclusive,
                     script.path.simplified_display(),
                 )
                 .await
@@ -765,6 +828,7 @@ impl ScriptInterpreter {
             Pep723ItemRef::Remote(.., url) => {
                 LockedFile::acquire(
                     std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(url))),
+                    LockedFileMode::Exclusive,
                     url.to_string(),
                 )
                 .await
@@ -772,6 +836,7 @@ impl ScriptInterpreter {
             Pep723ItemRef::Stdin(metadata) => {
                 LockedFile::acquire(
                     std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(&metadata.raw))),
+                    LockedFileMode::Exclusive,
                     "stdin".to_string(),
                 )
                 .await
@@ -853,11 +918,10 @@ fn environment_is_usable(
         }
     }
 
-    if satisfies_python_preference(
+    if python_preference.allows_installation(&PythonInstallation::new(
         PythonSource::DiscoveredEnvironment,
-        environment.interpreter(),
-        python_preference,
-    ) {
+        environment.interpreter().clone(),
+    )) {
         trace!(
             "The virtual environment's Python interpreter meets the Python preference: `{}`",
             python_preference
@@ -874,7 +938,7 @@ fn environment_is_usable(
 
 /// An interpreter suitable for the project.
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub(crate) enum ProjectInterpreter {
     /// An interpreter from outside the project, to create a new project virtual environment.
     Interpreter(Interpreter),
@@ -970,15 +1034,24 @@ impl ProjectInterpreter {
                 }
             }
             Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(_))) => {}
-            Err(uv_python::Error::Query(uv_python::InterpreterError::BrokenSymlink(
-                broken_symlink,
-            ))) => {
-                let target_path = fs_err::read_link(&broken_symlink.path)?;
-                warn_user!(
-                    "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
-                    broken_symlink.path.user_display().cyan(),
-                    target_path.user_display().cyan(),
-                );
+            Err(uv_python::Error::Query(uv_python::InterpreterError::BrokenLink(BrokenLink {
+                path,
+                unix,
+                venv: _,
+            }))) => {
+                if unix {
+                    let target_path = fs_err::read_link(&path)?;
+                    warn_user!(
+                        "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
+                        path.user_display().cyan(),
+                        target_path.user_display().cyan(),
+                    );
+                } else {
+                    warn_user!(
+                        "Ignoring existing virtual environment linked to non-existent Python interpreter: {}",
+                        path.user_display().cyan(),
+                    );
+                }
             }
             Err(err) => return Err(err.into()),
         }
@@ -1011,7 +1084,7 @@ impl ProjectInterpreter {
                 "Using {} {}{}",
                 implementation.pretty(),
                 interpreter.python_version().cyan(),
-                interpreter.variant().suffix().cyan(),
+                interpreter.variant().display_suffix().cyan(),
             )?;
         } else {
             writeln!(
@@ -1019,7 +1092,7 @@ impl ProjectInterpreter {
                 "Using {} {}{} interpreter at: {}",
                 implementation.pretty(),
                 interpreter.python_version(),
-                interpreter.variant().suffix(),
+                interpreter.variant().display_suffix(),
                 interpreter.sys_executable().user_display().cyan()
             )?;
         }
@@ -1046,12 +1119,13 @@ impl ProjectInterpreter {
     }
 
     /// Grab a file lock for the environment to prevent concurrent writes across processes.
-    pub(crate) async fn lock(workspace: &Workspace) -> Result<LockedFile, std::io::Error> {
+    pub(crate) async fn lock(workspace: &Workspace) -> Result<LockedFile, LockedFileError> {
         LockedFile::acquire(
             std::env::temp_dir().join(format!(
                 "uv-{}.lock",
                 cache_digest(workspace.install_path())
             )),
+            LockedFileMode::Exclusive,
             workspace.install_path().simplified_display(),
         )
         .await
@@ -1131,10 +1205,21 @@ impl WorkspacePython {
                 .with_no_config(no_config),
         )
         .await?
-        {
+        .filter(|file| {
+            // Ignore global version files that are incompatible with requires-python
+            if !file.is_global() {
+                return true;
+            }
+            match (file.version(), requires_python.as_ref()) {
+                (Some(request), Some(requires_python)) => request
+                    .as_pep440_version()
+                    .is_none_or(|version| requires_python.contains(&version)),
+                _ => true,
+            }
+        }) {
             // (2) Request from `.python-version`
             let source = PythonRequestSource::DotPythonVersion(file.clone());
-            let request = file.into_version();
+            let request = file.version().cloned();
             (source, request)
         } else {
             // (3) `requires-python` in `pyproject.toml`
@@ -1181,48 +1266,96 @@ pub(crate) struct ScriptPython {
 }
 
 impl ScriptPython {
-    /// Determine the [`ScriptPython`] for the current [`Workspace`].
+    /// Determine the [`ScriptPython`] for the current [`Pep723Script`].
     pub(crate) async fn from_request(
         python_request: Option<PythonRequest>,
         workspace: Option<&Workspace>,
         script: Pep723ItemRef<'_>,
         no_config: bool,
     ) -> Result<Self, ProjectError> {
-        // First, discover a requirement from the workspace
-        let WorkspacePython {
-            mut source,
-            mut python_request,
-            requires_python,
-        } = WorkspacePython::from_request(
-            python_request,
-            workspace,
-            // Scripts have no groups to hang requires-python settings off of
-            &DependencyGroupsWithDefaults::none(),
-            script.path().and_then(Path::parent).unwrap_or(&**CWD),
-            no_config,
-        )
-        .await?;
+        let script_requires_python = script
+            .metadata()
+            .requires_python
+            .as_ref()
+            .map(RequiresPython::from_specifiers);
 
-        // If the script has a `requires-python` specifier, prefer that over one from the workspace.
-        let requires_python =
-            if let Some(requires_python_specifiers) = script.metadata().requires_python.as_ref() {
-                if python_request.is_none() {
-                    python_request = Some(PythonRequest::Version(VersionRequest::Range(
-                        requires_python_specifiers.clone(),
-                        PythonVariant::Default,
-                    )));
-                    source = PythonRequestSource::RequiresPython;
+        let workspace_requires_python = workspace
+            .map(|workspace| find_requires_python(workspace, &DependencyGroupsWithDefaults::none()))
+            .transpose()?
+            .flatten();
+
+        let workspace_root = workspace.map(Workspace::install_path);
+        let project_dir = script.path().and_then(Path::parent).unwrap_or(&**CWD);
+
+        let (source, python_request) = if let Some(request) = python_request {
+            // (1) Explicit request from user
+            (PythonRequestSource::UserRequest, Some(request))
+        } else if let Some(file) = PythonVersionFile::discover(
+            project_dir,
+            &VersionFileDiscoveryOptions::default()
+                .with_stop_discovery_at(workspace_root.map(PathBuf::as_ref))
+                .with_no_config(no_config),
+        )
+        .await?
+        .filter(|file| {
+            // Ignore version files that are incompatible with the script's `requires-python`
+            match (file.version(), script_requires_python.as_ref()) {
+                (Some(request), Some(requires_python)) => {
+                    request.intersects_requires_python(requires_python)
                 }
-                Some((
-                    RequiresPython::from_specifiers(requires_python_specifiers),
-                    RequiresPythonSource::Script,
-                ))
-            } else {
-                requires_python.map(|requirement| (requirement, RequiresPythonSource::Project))
-            };
+                _ => true,
+            }
+        })
+        .filter(|file| {
+            // Ignore global version files that are incompatible with the workspace `requires-python`
+            if !file.is_global() {
+                return true;
+            }
+            match (file.version(), workspace_requires_python.as_ref()) {
+                (Some(request), Some(requires_python)) => {
+                    request.intersects_requires_python(requires_python)
+                }
+                _ => true,
+            }
+        }) {
+            // (2) Request from `.python-version`
+            (
+                PythonRequestSource::DotPythonVersion(file.clone()),
+                file.version().cloned(),
+            )
+        } else if let Some(specifiers) = script.metadata().requires_python.as_ref() {
+            // (3) `requires-python` from script metadata
+            let request = PythonRequest::Version(VersionRequest::Range(
+                specifiers.clone(),
+                PythonVariant::Default,
+            ));
+            (PythonRequestSource::RequiresPython, Some(request))
+        } else {
+            // (4) `requires-python` from workspace `pyproject.toml`
+            let request = workspace_requires_python
+                .as_ref()
+                .map(RequiresPython::specifiers)
+                .map(|specifiers| {
+                    PythonRequest::Version(VersionRequest::Range(
+                        specifiers.clone(),
+                        PythonVariant::Default,
+                    ))
+                });
+            (PythonRequestSource::RequiresPython, request)
+        };
+
+        let requires_python = if let Some(requires_python) = script_requires_python {
+            Some((requires_python, RequiresPythonSource::Script))
+        } else {
+            workspace_requires_python
+                .map(|requires_python| (requires_python, RequiresPythonSource::Project))
+        };
 
         if let Some(python_request) = python_request.as_ref() {
-            debug!("Using Python request {python_request} from {source}");
+            debug!(
+                "Using Python request `{}` from {source}",
+                python_request.to_canonical_string()
+            );
         }
 
         Ok(Self {
@@ -1286,7 +1419,7 @@ impl ProjectEnvironment {
             })
             .ok();
 
-        let upgradeable = preview.is_enabled(PreviewFeatures::PYTHON_UPGRADE)
+        let upgradeable = preview.is_enabled(PreviewFeature::PythonUpgrade)
             && python
                 .as_ref()
                 .is_none_or(|request| !request.includes_patch());
@@ -1378,7 +1511,6 @@ impl ProjectEnvironment {
                         false,
                         false,
                         upgradeable,
-                        preview,
                     )?;
                     return Ok(if replace {
                         Self::WouldReplace(root, environment, temp_dir)
@@ -1420,7 +1552,6 @@ impl ProjectEnvironment {
                     false,
                     false,
                     upgradeable,
-                    preview,
                 )?;
 
                 if replace {
@@ -1436,7 +1567,6 @@ impl ProjectEnvironment {
     ///
     /// Returns an error if the environment was created in `--dry-run` mode, as dropping the
     /// associated temporary directory could lead to errors downstream.
-    #[allow(clippy::result_large_err)]
     pub(crate) fn into_environment(self) -> Result<PythonEnvironment, ProjectError> {
         match self {
             Self::Existing(environment) => Ok(environment),
@@ -1574,7 +1704,6 @@ impl ScriptEnvironment {
                         false,
                         false,
                         upgradeable,
-                        preview,
                     )?;
                     return Ok(if root.exists() {
                         Self::WouldReplace(root, environment, temp_dir)
@@ -1616,7 +1745,6 @@ impl ScriptEnvironment {
                     false,
                     false,
                     upgradeable,
-                    preview,
                 )?;
 
                 Ok(if replaced {
@@ -1632,7 +1760,6 @@ impl ScriptEnvironment {
     ///
     /// Returns an error if the environment was created in `--dry-run` mode, as dropping the
     /// associated temporary directory could lead to errors downstream.
-    #[allow(clippy::result_large_err)]
     pub(crate) fn into_environment(self) -> Result<PythonEnvironment, ProjectError> {
         match self {
             Self::Existing(environment) => Ok(environment),
@@ -1673,22 +1800,24 @@ pub(crate) async fn resolve_names(
     settings: &ResolverInstallerSettings,
     client_builder: &BaseClientBuilder<'_>,
     state: &SharedState,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
+    lfs: GitLfsSetting,
 ) -> Result<Vec<Requirement>, uv_requirements::Error> {
     // Partition the requirements into named and unnamed requirements.
-    let (mut requirements, unnamed): (Vec<_>, Vec<_>) =
-        requirements
-            .into_iter()
-            .partition_map(|spec| match spec.requirement {
-                UnresolvedRequirement::Named(requirement) => itertools::Either::Left(requirement),
-                UnresolvedRequirement::Unnamed(requirement) => {
-                    itertools::Either::Right(requirement)
-                }
-            });
+    let (mut requirements, unnamed): (Vec<_>, Vec<_>) = requirements
+        .into_iter()
+        .map(|spec| {
+            spec.requirement
+                .augment_requirement(None, None, None, lfs.into(), None)
+        })
+        .partition_map(|requirement| match requirement {
+            UnresolvedRequirement::Named(requirement) => itertools::Either::Left(requirement),
+            UnresolvedRequirement::Unnamed(requirement) => itertools::Either::Right(requirement),
+        });
 
     // Short-circuit if there are no unnamed requirements.
     if unnamed.is_empty() {
@@ -1715,6 +1844,7 @@ pub(crate) async fn resolve_names(
                 prerelease: _,
                 resolution: _,
                 sources,
+                torch_backend,
                 upgrade: _,
             },
         compile_bytecode: _,
@@ -1723,10 +1853,27 @@ pub(crate) async fn resolve_names(
 
     let client_builder = client_builder.clone().keyring(*keyring_provider);
 
+    // Determine the PyTorch backend.
+    let torch_backend = torch_backend
+        .map(|mode| {
+            let source = if uv_auth::PyxTokenStore::from_settings()
+                .is_ok_and(|store| store.has_credentials())
+            {
+                TorchSource::Pyx
+            } else {
+                TorchSource::default()
+            };
+            TorchStrategy::from_mode(mode, source, interpreter.platform().os())
+        })
+        .transpose()
+        .ok()
+        .flatten();
+
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(client_builder, cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
+        .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -1777,9 +1924,9 @@ pub(crate) async fn resolve_names(
         build_options,
         &build_hasher,
         exclude_newer.clone(),
-        *sources,
+        sources.clone(),
         workspace_cache.clone(),
-        concurrency,
+        concurrency.clone(),
         preview,
     );
 
@@ -1788,7 +1935,11 @@ pub(crate) async fn resolve_names(
         NamedRequirementsResolver::new(
             &hasher,
             state.index(),
-            DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
+            DistributionDatabase::new(
+                &client,
+                &build_dispatch,
+                concurrency.downloads_semaphore.clone(),
+            ),
         )
         .with_reporter(Arc::new(ResolverReporter::from(printer)))
         .resolve(unnamed.into_iter())
@@ -1847,8 +1998,9 @@ pub(crate) async fn resolve_environment(
     client_builder: &BaseClientBuilder<'_>,
     state: &PlatformState,
     logger: Box<dyn ResolveLogger>,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
 ) -> Result<ResolverOutput, ProjectError> {
@@ -1872,6 +2024,7 @@ pub(crate) async fn resolve_environment(
         upgrade: _,
         build_options,
         sources,
+        torch_backend,
     } = settings;
 
     // Respect all requirements from the provided sources.
@@ -1892,10 +2045,33 @@ pub(crate) async fn resolve_environment(
     let marker_env = pip::resolution_markers(None, python_platform, interpreter);
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
+    // Determine the PyTorch backend.
+    let torch_backend = torch_backend
+        .map(|mode| {
+            let source = if uv_auth::PyxTokenStore::from_settings()
+                .is_ok_and(|store| store.has_credentials())
+            {
+                TorchSource::Pyx
+            } else {
+                TorchSource::default()
+            };
+            TorchStrategy::from_mode(
+                mode,
+                source,
+                python_platform
+                    .map(|t| t.platform())
+                    .as_ref()
+                    .unwrap_or(interpreter.platform())
+                    .os(),
+            )
+        })
+        .transpose()?;
+
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(client_builder, cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
+        .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -1962,8 +2138,6 @@ pub(crate) async fn resolve_environment(
         FlatIndex::from_entries(entries, Some(&tags), &hasher, build_options)
     };
 
-    let workspace_cache = WorkspaceCache::default();
-
     // Lower the extra build dependencies, if any.
     let extra_build_requires =
         LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
@@ -1989,9 +2163,9 @@ pub(crate) async fn resolve_environment(
         build_options,
         &build_hasher,
         exclude_newer.clone(),
-        *sources,
-        workspace_cache,
-        concurrency,
+        sources.clone(),
+        workspace_cache.clone(),
+        concurrency.clone(),
         preview,
     );
 
@@ -2039,7 +2213,7 @@ pub(crate) async fn sync_environment(
     state: &PlatformState,
     logger: Box<dyn InstallLogger>,
     installer_metadata: bool,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     cache: &Cache,
     printer: Printer,
     preview: Preview,
@@ -2130,7 +2304,7 @@ pub(crate) async fn sync_environment(
         exclude_newer.clone(),
         sources,
         workspace_cache,
-        concurrency,
+        concurrency.clone(),
         preview,
     );
 
@@ -2196,9 +2370,9 @@ pub(crate) async fn update_environment(
     resolve: Box<dyn ResolveLogger>,
     install: Box<dyn InstallLogger>,
     installer_metadata: bool,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     cache: &Cache,
-    workspace_cache: WorkspaceCache,
+    workspace_cache: &WorkspaceCache,
     dry_run: DryRun,
     printer: Printer,
     preview: Preview,
@@ -2224,6 +2398,7 @@ pub(crate) async fn update_environment(
                 prerelease,
                 resolution,
                 sources,
+                torch_backend,
                 upgrade,
             },
         compile_bytecode,
@@ -2294,10 +2469,33 @@ pub(crate) async fn update_environment(
         }
     }
 
+    // Determine the PyTorch backend.
+    let torch_backend = torch_backend
+        .map(|mode| {
+            let source = if uv_auth::PyxTokenStore::from_settings()
+                .is_ok_and(|store| store.has_credentials())
+            {
+                TorchSource::Pyx
+            } else {
+                TorchSource::default()
+            };
+            TorchStrategy::from_mode(
+                mode,
+                source,
+                python_platform
+                    .map(|t| t.platform())
+                    .as_ref()
+                    .unwrap_or(interpreter.platform())
+                    .os(),
+            )
+        })
+        .transpose()?;
+
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(client_builder, cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
+        .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -2360,9 +2558,9 @@ pub(crate) async fn update_environment(
         build_options,
         &build_hasher,
         exclude_newer.clone(),
-        *sources,
-        workspace_cache,
-        concurrency,
+        sources.clone(),
+        workspace_cache.clone(),
+        concurrency.clone(),
         preview,
     );
 
@@ -2492,7 +2690,6 @@ pub(crate) async fn init_script_python_requirement(
 }
 
 /// Returns the default dependency groups from the [`PyProjectToml`].
-#[allow(clippy::result_large_err)]
 pub(crate) fn default_dependency_groups(
     pyproject_toml: &PyProjectToml,
 ) -> Result<DefaultGroups, ProjectError> {
@@ -2520,7 +2717,6 @@ pub(crate) fn default_dependency_groups(
 
 /// Validate that we aren't trying to install extras or groups that
 /// are declared as conflicting.
-#[allow(clippy::result_large_err)]
 pub(crate) fn detect_conflicts(
     target: &InstallTarget,
     extras: &ExtrasSpecification,
@@ -2563,18 +2759,18 @@ pub(crate) fn detect_conflicts(
 }
 
 /// Determine the [`RequirementsSpecification`] for a script.
-#[allow(clippy::result_large_err)]
 pub(crate) fn script_specification(
     script: Pep723ItemRef<'_>,
     settings: &ResolverSettings,
+    credentials_cache: &CredentialsCache,
 ) -> Result<Option<RequirementsSpecification>, ProjectError> {
     let Some(dependencies) = script.metadata().dependencies.as_ref() else {
         return Ok(None);
     };
 
     let script_dir = script.directory()?;
-    let script_indexes = script.indexes(settings.sources);
-    let script_sources = script.sources(settings.sources);
+    let script_indexes = script.indexes(&settings.sources);
+    let script_sources = script.sources(&settings.sources);
 
     let requirements = dependencies
         .iter()
@@ -2586,6 +2782,7 @@ pub(crate) fn script_specification(
                 script_sources,
                 script_indexes,
                 &settings.index_locations,
+                credentials_cache,
             )
             .map_ok(LoweredRequirement::into_inner)
         })
@@ -2606,6 +2803,7 @@ pub(crate) fn script_specification(
                 script_sources,
                 script_indexes,
                 &settings.index_locations,
+                credentials_cache,
             )
             .map_ok(LoweredRequirement::into_inner)
         })
@@ -2626,27 +2824,39 @@ pub(crate) fn script_specification(
                 script_sources,
                 script_indexes,
                 &settings.index_locations,
+                credentials_cache,
             )
             .map_ok(LoweredRequirement::into_inner)
         })
         .collect::<Result<Vec<_>, _>>()?;
+    let excludes = script
+        .metadata()
+        .tool
+        .as_ref()
+        .and_then(|tool| tool.uv.as_ref())
+        .and_then(|uv| uv.exclude_dependencies.as_ref())
+        .into_iter()
+        .flatten()
+        .cloned()
+        .collect::<Vec<_>>();
 
-    Ok(Some(RequirementsSpecification::from_overrides(
+    Ok(Some(RequirementsSpecification::from_excludes(
         requirements,
         constraints,
         overrides,
+        excludes,
     )))
 }
 
 /// Determine the extra build requires for a script.
-#[allow(clippy::result_large_err)]
 pub(crate) fn script_extra_build_requires(
     script: Pep723ItemRef<'_>,
     settings: &ResolverSettings,
+    credentials_cache: &CredentialsCache,
 ) -> Result<LoweredExtraBuildDependencies, ProjectError> {
     let script_dir = script.directory()?;
-    let script_indexes = script.indexes(settings.sources);
-    let script_sources = script.sources(settings.sources);
+    let script_indexes = script.indexes(&settings.sources);
+    let script_sources = script.sources(&settings.sources);
 
     // Collect any `tool.uv.extra-build-dependencies` from the script.
     let empty = BTreeMap::default();
@@ -2675,6 +2885,7 @@ pub(crate) fn script_extra_build_requires(
                         script_sources,
                         script_indexes,
                         &settings.index_locations,
+                        credentials_cache,
                     )
                     .map_ok(move |requirement| ExtraBuildRequirement {
                         requirement: requirement.into_inner(),

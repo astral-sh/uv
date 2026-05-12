@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 use std::path::{Path, PathBuf};
 
 use thiserror::Error;
-use url::{ParseError, Url};
+use url::Url;
 use uv_cache_key::{CacheKey, CacheKeyHasher};
 
 use uv_distribution_filename::{DistExtension, ExtensionError};
@@ -10,7 +10,7 @@ use uv_git_types::{GitUrl, GitUrlParseError};
 use uv_pep508::{
     Pep508Url, UnnamedRequirementUrl, VerbatimUrl, VerbatimUrlError, looks_like_git_repository,
 };
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 
 use crate::{ArchiveInfo, DirInfo, DirectUrl, VcsInfo, VcsKind};
 
@@ -27,7 +27,7 @@ pub enum ParsedUrlError {
     #[error(transparent)]
     GitUrlParse(#[from] GitUrlParseError),
     #[error("Not a valid URL: `{0}`")]
-    UrlParse(String, #[source] ParseError),
+    UrlParse(String, #[source] DisplaySafeUrlError),
     #[error(transparent)]
     VerbatimUrl(#[from] VerbatimUrlError),
     #[error(
@@ -261,6 +261,9 @@ impl ParsedDirectoryUrl {
 
 /// A Git repository URL.
 ///
+/// Explicit `lfs = true` or `--lfs` should be used to enable Git LFS support as
+/// we do not support implicit parsing of the `lfs=true` url fragments for now.
+///
 /// Examples:
 /// * `git+https://git.example.com/MyProject.git`
 /// * `git+https://git.example.com/MyProject.git@v1.0#egg=pkg&subdirectory=pkg_dir`
@@ -485,6 +488,7 @@ impl From<&ParsedGitUrl> for DirectUrl {
                 vcs: VcsKind::Git,
                 commit_id: value.url.precise().as_ref().map(ToString::to_string),
                 requested_revision: value.url.reference().as_str().map(ToString::to_string),
+                git_lfs: value.url.lfs().enabled().then_some(true),
             },
             subdirectory: value.subdirectory.clone(),
         }
@@ -526,10 +530,19 @@ impl From<ParsedArchiveUrl> for DisplaySafeUrl {
 
 impl From<ParsedGitUrl> for DisplaySafeUrl {
     fn from(value: ParsedGitUrl) -> Self {
+        let lfs = value.url.lfs().enabled();
         let mut url = Self::parse(&format!("{}{}", "git+", Self::from(value.url).as_str()))
             .expect("Git URL is invalid");
+        let mut frags: Vec<String> = Vec::new();
         if let Some(subdirectory) = value.subdirectory {
-            url.set_fragment(Some(&format!("subdirectory={}", subdirectory.display())));
+            frags.push(format!("subdirectory={}", subdirectory.display()));
+        }
+        // Displays nicely that lfs is used
+        if lfs {
+            frags.push("lfs=true".to_string());
+        }
+        if !frags.is_empty() {
+            url.set_fragment(Some(&frags.join("&")));
         }
         url
     }
@@ -562,6 +575,13 @@ mod tests {
         )?;
         let actual = DisplaySafeUrl::from(ParsedUrl::try_from(expected.clone())?);
         assert_eq!(expected, actual);
+
+        // We do not support implicit parsing of the `lfs=true` url fragments for now
+        let expected = DisplaySafeUrl::parse(
+            "git+https://github.com/pallets/flask.git#subdirectory=pkg_dir&lfs=true",
+        )?;
+        let actual = DisplaySafeUrl::from(ParsedUrl::try_from(expected.clone())?);
+        assert_ne!(expected, actual);
 
         // TODO(charlie): Preserve other fragments.
         let expected = DisplaySafeUrl::parse(

@@ -6,7 +6,7 @@ use either::Either;
 use path_slash::PathExt;
 
 /// The current working directory.
-#[allow(clippy::exit, clippy::print_stderr)]
+#[expect(clippy::print_stderr)]
 pub static CWD: LazyLock<PathBuf> = LazyLock::new(|| {
     std::env::current_dir().unwrap_or_else(|_e| {
         eprintln!("Current directory does not exist");
@@ -318,6 +318,20 @@ pub fn relative_to(
     Ok(up.join(stripped))
 }
 
+/// Try to compute a path relative to `base` if `should_relativize` is true, otherwise return
+/// the absolute path. Falls back to absolute if relativization fails.
+pub fn try_relative_to_if(
+    path: impl AsRef<Path>,
+    base: impl AsRef<Path>,
+    should_relativize: bool,
+) -> Result<PathBuf, std::io::Error> {
+    if should_relativize {
+        relative_to(&path, &base).or_else(|_| std::path::absolute(path.as_ref()))
+    } else {
+        std::path::absolute(path.as_ref())
+    }
+}
+
 /// A path that can be serialized and deserialized in a portable way by converting Windows-style
 /// backslashes to forward slashes, and using a `.` for an empty path.
 ///
@@ -430,11 +444,11 @@ impl<'de> serde::de::Deserialize<'de> for PortablePathBuf {
     where
         D: serde::de::Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
+        let s = <Cow<'_, str>>::deserialize(deserializer)?;
         if s == "." {
             Ok(Self(PathBuf::new().into_boxed_path()))
         } else {
-            Ok(Self(PathBuf::from(s).into_boxed_path()))
+            Ok(Self(PathBuf::from(s.as_ref()).into_boxed_path()))
         }
     }
 }

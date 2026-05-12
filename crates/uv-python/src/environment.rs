@@ -7,7 +7,7 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_fs::{LockedFile, Simplified};
+use uv_fs::{LockedFile, LockedFileError, Simplified};
 use uv_pep440::Version;
 use uv_preview::Preview;
 
@@ -312,7 +312,7 @@ impl PythonEnvironment {
     }
 
     /// Grab a file lock for the environment to prevent concurrent writes across processes.
-    pub async fn lock(&self) -> Result<LockedFile, std::io::Error> {
+    pub async fn lock(&self) -> Result<LockedFile, LockedFileError> {
         self.0.interpreter.lock().await
     }
 

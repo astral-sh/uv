@@ -1,26 +1,22 @@
-use std::path::Path;
 use std::process::Command;
 
 use assert_fs::prelude::*;
 use uv_static::EnvVars;
 
-use crate::common::{TestContext, uv_snapshot};
+use uv_test::uv_snapshot;
 
 /// Add shared arguments to a command.
 ///
 /// In particular, remove any user-defined environment variables and set any machine-specific
 /// environment variables to static values.
-fn add_shared_args(mut command: Command, cwd: &Path) -> Command {
+fn add_shared_args(mut command: Command) -> Command {
     command
-        .env_clear()
         .env(EnvVars::UV_LINK_MODE, "clone")
         .env(EnvVars::UV_CONCURRENT_DOWNLOADS, "50")
         .env(EnvVars::UV_CONCURRENT_BUILDS, "16")
         .env(EnvVars::UV_CONCURRENT_INSTALLS, "8")
-        // Set an explicit `XDG_CONFIG_DIRS` to avoid loading system configuration.
-        .env(EnvVars::XDG_CONFIG_DIRS, cwd)
-        // Set an explicit `XDG_CONFIG_HOME` to avoid loading user configuration.
-        .env(EnvVars::XDG_CONFIG_HOME, cwd);
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS);
 
     if cfg!(unix) {
         // Avoid locale issues in tests
@@ -36,7 +32,7 @@ fn add_shared_args(mut command: Command, cwd: &Path) -> Command {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn resolve_uv_toml() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Write a `uv.toml` file to the directory.
     let config = context.temp_dir.child("uv.toml");
@@ -51,7 +47,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
     requirements_in.write_str("anyio>3.0.0")?;
 
     // Resolution should use the lowest direct version, and generate hashes.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
     success: true
@@ -64,9 +60,14 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -76,9 +77,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -144,7 +143,9 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                         ),
                         explicit: false,
                         default: true,
-                        origin: None,
+                        origin: Some(
+                            Project,
+                        ),
                         format: Simple,
                         publish_url: None,
                         authenticate: Auto,
@@ -239,11 +240,14 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -253,7 +257,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
     );
 
     // Resolution should use the highest version, and generate hashes.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
         .arg("--resolution=highest"), @r#"
@@ -267,9 +271,14 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -279,9 +288,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -347,7 +354,9 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                         ),
                         explicit: false,
                         default: true,
-                        origin: None,
+                        origin: Some(
+                            Project,
+                        ),
                         format: Simple,
                         publish_url: None,
                         authenticate: Auto,
@@ -442,11 +451,14 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -456,7 +468,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
     );
 
     // Resolution should use the highest version, and omit hashes.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
         .arg("--resolution=highest")
@@ -471,9 +483,14 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -483,9 +500,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -551,7 +566,9 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                         ),
                         explicit: false,
                         default: true,
-                        origin: None,
+                        origin: Some(
+                            Project,
+                        ),
                         format: Simple,
                         publish_url: None,
                         authenticate: Auto,
@@ -646,11 +663,14 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -671,7 +691,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn resolve_pyproject_toml() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Write a `uv.toml` file to the directory.
     let config = context.temp_dir.child("uv.toml");
@@ -694,7 +714,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     requirements_in.write_str("anyio>3.0.0")?;
 
     // Resolution should use the lowest direct version, and generate hashes.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
     success: true
@@ -707,9 +727,14 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -719,9 +744,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -787,7 +810,9 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                         ),
                         explicit: false,
                         default: true,
-                        origin: None,
+                        origin: Some(
+                            Project,
+                        ),
                         format: Simple,
                         publish_url: None,
                         authenticate: Auto,
@@ -882,11 +907,14 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -899,7 +927,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     fs_err::remove_file(config.path())?;
 
     // Resolution should use the highest version, and omit hashes.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
     success: true
@@ -912,9 +940,14 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -924,9 +957,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -1053,11 +1084,14 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -1080,7 +1114,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     "#})?;
 
     // Resolution should use the lowest direct version, and generate hashes.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
     success: true
@@ -1093,9 +1127,14 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -1105,9 +1144,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -1270,11 +1307,14 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -1293,7 +1333,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn resolve_index_url() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Write a `pyproject.toml` file to the directory.
     let pyproject = context.temp_dir.child("pyproject.toml");
@@ -1310,7 +1350,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
     success: true
@@ -1323,9 +1363,14 @@ fn resolve_index_url() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -1335,9 +1380,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -1531,11 +1574,14 @@ fn resolve_index_url() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -1546,7 +1592,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
 
     // Providing an additional index URL on the command-line should be merged with the
     // configuration file.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
         .arg("--extra-index-url")
@@ -1561,9 +1607,14 @@ fn resolve_index_url() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -1573,9 +1624,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -1804,11 +1853,14 @@ fn resolve_index_url() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -1827,7 +1879,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn resolve_find_links() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Write a `pyproject.toml` file to the directory.
     let pyproject = context.temp_dir.child("pyproject.toml");
@@ -1844,7 +1896,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("tqdm")?;
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
     success: true
@@ -1857,9 +1909,14 @@ fn resolve_find_links() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -1869,9 +1926,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -2032,11 +2087,14 @@ fn resolve_find_links() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -2055,7 +2113,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn resolve_top_level() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Write out to the top-level (`tool.uv`, rather than `tool.uv.pip`).
     let pyproject = context.temp_dir.child("pyproject.toml");
@@ -2071,7 +2129,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
     success: true
@@ -2084,9 +2142,14 @@ fn resolve_top_level() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -2096,9 +2159,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -2225,11 +2286,14 @@ fn resolve_top_level() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -2257,7 +2321,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
     success: true
@@ -2270,9 +2334,14 @@ fn resolve_top_level() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -2282,9 +2351,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -2478,11 +2545,14 @@ fn resolve_top_level() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -2492,7 +2562,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
     );
 
     // But the command-line should take precedence over both.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
         .arg("--resolution=lowest-direct"), @r#"
@@ -2506,9 +2576,14 @@ fn resolve_top_level() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -2518,9 +2593,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -2714,11 +2787,14 @@ fn resolve_top_level() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -2745,13 +2821,13 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         resolution = "lowest-direct"
     "#})?;
 
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
     // Resolution should use the lowest direct version.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
         .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r#"
@@ -2765,9 +2841,14 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -2777,9 +2858,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -2906,11 +2985,14 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -2927,7 +3009,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     "})?;
 
     // Resolution should use the lowest direct version and generate hashes.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
         .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r#"
@@ -2941,9 +3023,14 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -2953,9 +3040,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -3082,11 +3167,14 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -3103,7 +3191,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     "#})?;
 
     // Resolution should use the highest version.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
         .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r#"
@@ -3117,9 +3205,14 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -3129,9 +3222,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -3258,11 +3349,14 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -3281,7 +3375,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     "#})?;
 
     // Resolution should use the highest version.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
         .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r#"
@@ -3295,9 +3389,14 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -3307,9 +3406,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -3436,11 +3533,14 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -3468,7 +3568,7 @@ fn resolve_tool() -> anyhow::Result<()> {
         resolution = "lowest-direct"
     "#})?;
 
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Add a local configuration to disable build isolation.
     let config = context.temp_dir.child("uv.toml");
@@ -3478,7 +3578,7 @@ fn resolve_tool() -> anyhow::Result<()> {
 
     // If we're running a user-level command, like `uv tool install`, we should use lowest direct,
     // but retain build isolation (since we ignore the local configuration).
-    uv_snapshot!(context.filters(), add_shared_args(context.tool_install(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.tool_install())
         .arg("--show-settings")
         .arg("requirements.in")
         .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r#"
@@ -3492,9 +3592,14 @@ fn resolve_tool() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -3504,9 +3609,7 @@ fn resolve_tool() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -3530,6 +3633,7 @@ fn resolve_tool() -> anyhow::Result<()> {
         overrides: [],
         excludes: [],
         build_constraints: [],
+        lfs: Disabled,
         python: None,
         python_platform: None,
         refresh: None(
@@ -3564,8 +3668,10 @@ fn resolve_tool() -> anyhow::Result<()> {
             link_mode: Some(
                 Clone,
             ),
+            torch_backend: None,
             compile_bytecode: None,
             no_sources: None,
+            no_sources_package: None,
             upgrade: None,
             reinstall: None,
             no_build: None,
@@ -3612,8 +3718,12 @@ fn resolve_tool() -> anyhow::Result<()> {
                 ),
                 prerelease: IfNecessaryOrExplicit,
                 resolution: LowestDirect,
-                sources: Enabled,
-                upgrade: None,
+                sources: None,
+                torch_backend: None,
+                upgrade: Upgrade {
+                    strategy: None,
+                    constraints: {},
+                },
             },
             compile_bytecode: false,
             reinstall: None,
@@ -3642,7 +3752,7 @@ fn resolve_tool() -> anyhow::Result<()> {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn resolve_poetry_toml() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Write a `uv.toml` file to the directory.
     let config = context.temp_dir.child("pyproject.toml");
@@ -3667,7 +3777,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
     requirements_in.write_str("anyio>3.0.0")?;
 
     // Resolution should use the lowest direct version, and generate hashes.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
     success: true
@@ -3680,9 +3790,14 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -3692,9 +3807,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -3821,11 +3934,14 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -3846,7 +3962,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn resolve_both() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Write a `uv.toml` file to the directory.
     let config = context.temp_dir.child("uv.toml");
@@ -3877,7 +3993,7 @@ fn resolve_both() -> anyhow::Result<()> {
     requirements_in.write_str("anyio>3.0.0")?;
 
     // Resolution should succeed, but warn that the `pip` section in `pyproject.toml` is ignored.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
     success: true
@@ -3890,9 +4006,14 @@ fn resolve_both() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -3902,9 +4023,7 @@ fn resolve_both() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -3970,7 +4089,9 @@ fn resolve_both() -> anyhow::Result<()> {
                         ),
                         explicit: false,
                         default: true,
-                        origin: None,
+                        origin: Some(
+                            Project,
+                        ),
                         format: Simple,
                         publish_url: None,
                         authenticate: Auto,
@@ -4065,11 +4186,14 @@ fn resolve_both() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -4094,7 +4218,7 @@ fn resolve_both() -> anyhow::Result<()> {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn resolve_both_special_fields() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Write a `uv.toml` file to the directory.
     let config = context.temp_dir.child("uv.toml");
@@ -4126,7 +4250,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
     requirements_in.write_str("anyio>3.0.0")?;
 
     // Resolution should succeed, but warn that the `pip` section in `pyproject.toml` is ignored.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
     success: true
@@ -4139,9 +4263,14 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -4151,9 +4280,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -4219,7 +4346,9 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
                         ),
                         explicit: false,
                         default: true,
-                        origin: None,
+                        origin: Some(
+                            Project,
+                        ),
                         format: Simple,
                         publish_url: None,
                         authenticate: Auto,
@@ -4314,11 +4443,14 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -4334,7 +4466,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
 /// Tests that errors when parsing `conflicts` are reported.
 #[test]
 fn invalid_conflicts() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let pyproject = context.temp_dir.child("pyproject.toml");
 
     // Write in `pyproject.toml` schema and test the singleton case.
@@ -4351,7 +4483,7 @@ fn invalid_conflicts() -> anyhow::Result<()> {
     "#})?;
 
     // The file should be rejected for violating the schema.
-    uv_snapshot!(context.filters(), add_shared_args(context.lock(), context.temp_dir.path()), @r###"
+    uv_snapshot!(context.filters(), add_shared_args(context.lock()), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4363,7 +4495,7 @@ fn invalid_conflicts() -> anyhow::Result<()> {
     7 | conflicts = [
       |             ^
     Each set of conflicts must have at least two entries, but found only one
-    "###
+    "
     );
 
     // Now test the empty case.
@@ -4378,7 +4510,7 @@ fn invalid_conflicts() -> anyhow::Result<()> {
     "#})?;
 
     // The file should be rejected for violating the schema.
-    uv_snapshot!(context.filters(), add_shared_args(context.lock(), context.temp_dir.path()), @r###"
+    uv_snapshot!(context.filters(), add_shared_args(context.lock()), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4390,7 +4522,7 @@ fn invalid_conflicts() -> anyhow::Result<()> {
     7 | conflicts = [[]]
       |             ^^^^
     Each set of conflicts must have at least two entries, but found none
-    "###
+    "
     );
 
     Ok(())
@@ -4399,7 +4531,7 @@ fn invalid_conflicts() -> anyhow::Result<()> {
 /// Tests that valid `conflicts` are parsed okay.
 #[test]
 fn valid_conflicts() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let xdg = assert_fs::TempDir::new().expect("Failed to create temp dir");
     let pyproject = context.temp_dir.child("pyproject.toml");
 
@@ -4415,15 +4547,15 @@ fn valid_conflicts() -> anyhow::Result<()> {
             [{extra = "x1"}, {extra = "x2"}],
         ]
     "#})?;
-    uv_snapshot!(context.filters(), add_shared_args(context.lock(), context.temp_dir.path())
-        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
+    uv_snapshot!(context.filters(), add_shared_args(context.lock())
+        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -4436,7 +4568,7 @@ fn valid_conflicts() -> anyhow::Result<()> {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn resolve_config_file() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Write a `uv.toml` to a temporary location. (Use the cache directory for convenience, since
     // it's already obfuscated in the fixtures.)
@@ -4452,7 +4584,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("--config-file")
         .arg(config.path())
@@ -4467,9 +4599,14 @@ fn resolve_config_file() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -4479,9 +4616,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -4642,11 +4777,14 @@ fn resolve_config_file() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -4668,11 +4806,11 @@ fn resolve_config_file() -> anyhow::Result<()> {
     "#})?;
 
     // The file should be rejected for violating the schema.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("--config-file")
         .arg(config.path())
-        .arg("requirements.in"), @r"
+        .arg("requirements.in"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4683,7 +4821,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
       |
     1 | [project]
       |  ^^^^^^^
-    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
+    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
     "
     );
 
@@ -4702,7 +4840,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
     })?;
 
     // The file should be rejected for violating the schema, with a custom warning.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("--config-file")
         .arg(config.path())
@@ -4732,7 +4870,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn resolve_skip_empty() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Set `lowest-direct` in a `uv.toml`.
     let config = context.temp_dir.child("uv.toml");
@@ -4756,7 +4894,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
 
     // Resolution in `child` should use lowest-direct, skipping the `pyproject.toml`, which lacks a
     // `tool.uv`.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
         .current_dir(&child), @r#"
@@ -4770,9 +4908,14 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -4782,9 +4925,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -4911,11 +5052,14 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -4935,7 +5079,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         [tool.uv]
     "#})?;
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
         .current_dir(&child), @r#"
@@ -4949,9 +5093,14 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -4961,9 +5110,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -5090,11 +5237,14 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -5113,7 +5263,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn allow_insecure_host() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let config = context.temp_dir.child("uv.toml");
     config.write_str(indoc::indoc! {r#"
@@ -5123,7 +5273,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
     success: true
@@ -5136,7 +5286,11 @@ fn allow_insecure_host() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [
                 Host {
                     scheme: None,
@@ -5149,7 +5303,8 @@ fn allow_insecure_host() -> anyhow::Result<()> {
                     port: None,
                 },
             ],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -5159,9 +5314,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -5288,11 +5441,14 @@ fn allow_insecure_host() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -5311,7 +5467,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn index_priority() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let config = context.temp_dir.child("uv.toml");
     config.write_str(indoc::indoc! {r#"
@@ -5322,7 +5478,7 @@ fn index_priority() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--index-url")
@@ -5337,9 +5493,14 @@ fn index_priority() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -5349,9 +5510,7 @@ fn index_priority() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -5452,7 +5611,9 @@ fn index_priority() -> anyhow::Result<()> {
                         ),
                         explicit: false,
                         default: false,
-                        origin: None,
+                        origin: Some(
+                            Project,
+                        ),
                         format: Simple,
                         publish_url: None,
                         authenticate: Auto,
@@ -5547,11 +5708,14 @@ fn index_priority() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -5560,7 +5724,7 @@ fn index_priority() -> anyhow::Result<()> {
     "#
     );
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--default-index")
@@ -5575,9 +5739,14 @@ fn index_priority() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -5587,9 +5756,7 @@ fn index_priority() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -5690,7 +5857,9 @@ fn index_priority() -> anyhow::Result<()> {
                         ),
                         explicit: false,
                         default: false,
-                        origin: None,
+                        origin: Some(
+                            Project,
+                        ),
                         format: Simple,
                         publish_url: None,
                         authenticate: Auto,
@@ -5785,11 +5954,14 @@ fn index_priority() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -5804,7 +5976,7 @@ fn index_priority() -> anyhow::Result<()> {
     "#})?;
 
     // Prefer the `--default-index` from the CLI, and treat it as the default.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--default-index")
@@ -5819,9 +5991,14 @@ fn index_priority() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -5831,9 +6008,7 @@ fn index_priority() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -5934,7 +6109,9 @@ fn index_priority() -> anyhow::Result<()> {
                         ),
                         explicit: false,
                         default: true,
-                        origin: None,
+                        origin: Some(
+                            Project,
+                        ),
                         format: Simple,
                         publish_url: None,
                         authenticate: Auto,
@@ -6029,11 +6206,14 @@ fn index_priority() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -6043,7 +6223,7 @@ fn index_priority() -> anyhow::Result<()> {
     );
 
     // Prefer the `--index` from the CLI, but treat the index from the file as the default.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--index")
@@ -6058,9 +6238,14 @@ fn index_priority() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -6070,9 +6255,7 @@ fn index_priority() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -6173,7 +6356,9 @@ fn index_priority() -> anyhow::Result<()> {
                         ),
                         explicit: false,
                         default: true,
-                        origin: None,
+                        origin: Some(
+                            Project,
+                        ),
                         format: Simple,
                         publish_url: None,
                         authenticate: Auto,
@@ -6268,11 +6453,14 @@ fn index_priority() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -6289,7 +6477,7 @@ fn index_priority() -> anyhow::Result<()> {
     "#})?;
 
     // Prefer the `--index-url` from the CLI, and treat it as the default.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--index-url")
@@ -6304,9 +6492,14 @@ fn index_priority() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -6316,9 +6509,7 @@ fn index_priority() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -6419,7 +6610,9 @@ fn index_priority() -> anyhow::Result<()> {
                         ),
                         explicit: false,
                         default: true,
-                        origin: None,
+                        origin: Some(
+                            Project,
+                        ),
                         format: Simple,
                         publish_url: None,
                         authenticate: Auto,
@@ -6514,11 +6707,14 @@ fn index_priority() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -6528,7 +6724,7 @@ fn index_priority() -> anyhow::Result<()> {
     );
 
     // Prefer the `--extra-index-url` from the CLI, but not as the default.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--extra-index-url")
@@ -6543,9 +6739,14 @@ fn index_priority() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -6555,9 +6756,7 @@ fn index_priority() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -6658,7 +6857,9 @@ fn index_priority() -> anyhow::Result<()> {
                         ),
                         explicit: false,
                         default: true,
-                        origin: None,
+                        origin: Some(
+                            Project,
+                        ),
                         format: Simple,
                         publish_url: None,
                         authenticate: Auto,
@@ -6753,11 +6954,14 @@ fn index_priority() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -6776,12 +6980,12 @@ fn index_priority() -> anyhow::Result<()> {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn verify_hashes() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_install(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_install())
         .arg("-r")
         .arg("requirements.in")
         .arg("--show-settings"), @r#"
@@ -6795,9 +6999,14 @@ fn verify_hashes() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -6807,9 +7016,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -6936,11 +7143,14 @@ fn verify_hashes() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -6949,7 +7159,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     "#
     );
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_install(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_install())
         .arg("-r")
         .arg("requirements.in")
         .arg("--no-verify-hashes")
@@ -6964,9 +7174,14 @@ fn verify_hashes() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -6976,9 +7191,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -7105,9 +7318,12 @@ fn verify_hashes() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: None,
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -7116,7 +7332,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     "#
     );
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_install(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_install())
         .arg("-r")
         .arg("requirements.in")
         .arg("--require-hashes")
@@ -7131,9 +7347,14 @@ fn verify_hashes() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -7143,9 +7364,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -7272,11 +7491,14 @@ fn verify_hashes() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Require,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -7285,7 +7507,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     "#
     );
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_install(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_install())
         .arg("-r")
         .arg("requirements.in")
         .arg("--no-require-hashes")
@@ -7300,9 +7522,14 @@ fn verify_hashes() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -7312,9 +7539,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -7441,9 +7666,12 @@ fn verify_hashes() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: None,
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -7452,7 +7680,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     "#
     );
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_install(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_install())
         .arg("-r")
         .arg("requirements.in")
         .env(EnvVars::UV_NO_VERIFY_HASHES, "1")
@@ -7467,9 +7695,14 @@ fn verify_hashes() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -7479,9 +7712,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -7608,9 +7839,12 @@ fn verify_hashes() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: None,
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -7619,7 +7853,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     "#
     );
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_install(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_install())
         .arg("-r")
         .arg("requirements.in")
         .arg("--verify-hashes")
@@ -7635,9 +7869,14 @@ fn verify_hashes() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -7647,9 +7886,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -7776,11 +8013,14 @@ fn verify_hashes() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -7799,12 +8039,12 @@ fn verify_hashes() -> anyhow::Result<()> {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn preview_features() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let cmd = || {
         let mut cmd = context.version();
         cmd.arg("--show-settings");
-        add_shared_args(cmd, context.temp_dir.path())
+        add_shared_args(cmd)
     };
 
     uv_snapshot!(context.filters(), cmd().arg("--preview"), @r#"
@@ -7818,9 +8058,14 @@ fn preview_features() {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -7830,9 +8075,36 @@ fn preview_features() {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                PYTHON_INSTALL_DEFAULT | PYTHON_UPGRADE | JSON_OUTPUT | PYLOCK | ADD_BOUNDS | PACKAGE_CONFLICTS | EXTRA_BUILD_DEPENDENCIES | DETECT_MODULE_CONFLICTS | FORMAT | NATIVE_AUTH | S3_ENDPOINT | CACHE_SIZE,
-            ),
+            flags: [
+                PythonInstallDefault,
+                PythonUpgrade,
+                JsonOutput,
+                Pylock,
+                AddBounds,
+                PackageConflicts,
+                ExtraBuildDependencies,
+                DetectModuleConflicts,
+                Format,
+                NativeAuth,
+                S3Endpoint,
+                CacheSize,
+                InitProjectFlag,
+                WorkspaceMetadata,
+                WorkspaceDir,
+                WorkspaceList,
+                SbomExport,
+                AuthHelper,
+                DirectPublish,
+                TargetWorkspaceDiscovery,
+                MetadataJson,
+                GcsEndpoint,
+                AdjustUlimit,
+                SpecialCondaEnvNames,
+                RelocatableEnvsDefault,
+                PublishRequireNormalized,
+                Audit,
+                ProjectDirectoryMustExist,
+            ],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -7852,7 +8124,7 @@ fn preview_features() {
         output_format: Text,
         dry_run: false,
         lock_check: Disabled,
-        frozen: false,
+        frozen: None,
         active: None,
         no_sync: false,
         package: None,
@@ -7909,8 +8181,12 @@ fn preview_features() {
                 ),
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
-                sources: Enabled,
-                upgrade: None,
+                sources: None,
+                torch_backend: None,
+                upgrade: Upgrade {
+                    strategy: None,
+                    constraints: {},
+                },
             },
             compile_bytecode: false,
             reinstall: None,
@@ -7932,9 +8208,14 @@ fn preview_features() {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -7944,9 +8225,7 @@ fn preview_features() {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -7966,7 +8245,7 @@ fn preview_features() {
         output_format: Text,
         dry_run: false,
         lock_check: Disabled,
-        frozen: false,
+        frozen: None,
         active: None,
         no_sync: false,
         package: None,
@@ -8023,8 +8302,12 @@ fn preview_features() {
                 ),
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
-                sources: Enabled,
-                upgrade: None,
+                sources: None,
+                torch_backend: None,
+                upgrade: Upgrade {
+                    strategy: None,
+                    constraints: {},
+                },
             },
             compile_bytecode: false,
             reinstall: None,
@@ -8046,9 +8329,14 @@ fn preview_features() {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -8058,9 +8346,36 @@ fn preview_features() {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                PYTHON_INSTALL_DEFAULT | PYTHON_UPGRADE | JSON_OUTPUT | PYLOCK | ADD_BOUNDS | PACKAGE_CONFLICTS | EXTRA_BUILD_DEPENDENCIES | DETECT_MODULE_CONFLICTS | FORMAT | NATIVE_AUTH | S3_ENDPOINT | CACHE_SIZE,
-            ),
+            flags: [
+                PythonInstallDefault,
+                PythonUpgrade,
+                JsonOutput,
+                Pylock,
+                AddBounds,
+                PackageConflicts,
+                ExtraBuildDependencies,
+                DetectModuleConflicts,
+                Format,
+                NativeAuth,
+                S3Endpoint,
+                CacheSize,
+                InitProjectFlag,
+                WorkspaceMetadata,
+                WorkspaceDir,
+                WorkspaceList,
+                SbomExport,
+                AuthHelper,
+                DirectPublish,
+                TargetWorkspaceDiscovery,
+                MetadataJson,
+                GcsEndpoint,
+                AdjustUlimit,
+                SpecialCondaEnvNames,
+                RelocatableEnvsDefault,
+                PublishRequireNormalized,
+                Audit,
+                ProjectDirectoryMustExist,
+            ],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -8080,7 +8395,7 @@ fn preview_features() {
         output_format: Text,
         dry_run: false,
         lock_check: Disabled,
-        frozen: false,
+        frozen: None,
         active: None,
         no_sync: false,
         package: None,
@@ -8137,8 +8452,12 @@ fn preview_features() {
                 ),
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
-                sources: Enabled,
-                upgrade: None,
+                sources: None,
+                torch_backend: None,
+                upgrade: Upgrade {
+                    strategy: None,
+                    constraints: {},
+                },
             },
             compile_bytecode: false,
             reinstall: None,
@@ -8160,9 +8479,14 @@ fn preview_features() {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -8172,9 +8496,10 @@ fn preview_features() {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                PYTHON_INSTALL_DEFAULT | PYTHON_UPGRADE,
-            ),
+            flags: [
+                PythonInstallDefault,
+                PythonUpgrade,
+            ],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -8194,7 +8519,7 @@ fn preview_features() {
         output_format: Text,
         dry_run: false,
         lock_check: Disabled,
-        frozen: false,
+        frozen: None,
         active: None,
         no_sync: false,
         package: None,
@@ -8251,8 +8576,12 @@ fn preview_features() {
                 ),
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
-                sources: Enabled,
-                upgrade: None,
+                sources: None,
+                torch_backend: None,
+                upgrade: Upgrade {
+                    strategy: None,
+                    constraints: {},
+                },
             },
             compile_bytecode: false,
             reinstall: None,
@@ -8274,9 +8603,14 @@ fn preview_features() {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -8286,9 +8620,10 @@ fn preview_features() {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                PYTHON_INSTALL_DEFAULT | PYTHON_UPGRADE,
-            ),
+            flags: [
+                PythonInstallDefault,
+                PythonUpgrade,
+            ],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -8308,7 +8643,7 @@ fn preview_features() {
         output_format: Text,
         dry_run: false,
         lock_check: Disabled,
-        frozen: false,
+        frozen: None,
         active: None,
         no_sync: false,
         package: None,
@@ -8365,8 +8700,12 @@ fn preview_features() {
                 ),
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
-                sources: Enabled,
-                upgrade: None,
+                sources: None,
+                torch_backend: None,
+                upgrade: Upgrade {
+                    strategy: None,
+                    constraints: {},
+                },
             },
             compile_bytecode: false,
             reinstall: None,
@@ -8390,9 +8729,14 @@ fn preview_features() {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -8402,9 +8746,7 @@ fn preview_features() {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -8424,7 +8766,7 @@ fn preview_features() {
         output_format: Text,
         dry_run: false,
         lock_check: Disabled,
-        frozen: false,
+        frozen: None,
         active: None,
         no_sync: false,
         package: None,
@@ -8481,8 +8823,12 @@ fn preview_features() {
                 ),
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
-                sources: Enabled,
-                upgrade: None,
+                sources: None,
+                torch_backend: None,
+                upgrade: Upgrade {
+                    strategy: None,
+                    constraints: {},
+                },
             },
             compile_bytecode: false,
             reinstall: None,
@@ -8502,14 +8848,14 @@ fn preview_features() {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
     // `--no-upgrade` overrides `--upgrade-package`.
     // TODO(charlie): This should mark `sniffio` for upgrade, but it doesn't.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--no-upgrade")
         .arg("--upgrade-package")
         .arg("sniffio")
@@ -8525,9 +8871,14 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -8537,9 +8888,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -8666,11 +9015,20 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: Packages(
+                    {
+                        PackageName(
+                            "sniffio",
+                        ),
+                    },
+                ),
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -8687,7 +9045,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
     "})?;
 
     // Despite `upgrade = false` in the configuration file, we should mark `idna` for upgrade.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--upgrade-package")
         .arg("idna")
         .arg("--show-settings")
@@ -8702,9 +9060,14 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -8714,9 +9077,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -8843,34 +9204,14 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: Packages(
-                {
-                    PackageName(
-                        "idna",
-                    ): [
-                        Requirement {
-                            name: PackageName(
-                                "idna",
-                            ),
-                            extras: [],
-                            groups: [],
-                            marker: true,
-                            source: Registry {
-                                specifier: VersionSpecifiers(
-                                    [],
-                                ),
-                                index: None,
-                                conflict: None,
-                            },
-                            origin: None,
-                        },
-                    ],
-                },
-            ),
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -8887,7 +9228,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
     "})?;
 
     // Despite `--upgrade-package idna` in the command line, we should upgrade all packages.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--upgrade-package")
         .arg("idna")
         .arg("--show-settings")
@@ -8902,9 +9243,14 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -8914,9 +9260,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -9043,11 +9387,14 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: All,
+            upgrade: Upgrade {
+                strategy: All,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -9063,7 +9410,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
     "#})?;
 
     // Despite `upgrade-package = ["idna"]` in the configuration file, we should disable upgrades.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--no-upgrade")
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
@@ -9077,9 +9424,14 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -9089,9 +9441,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -9218,11 +9568,20 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: Packages(
+                    {
+                        PackageName(
+                            "idna",
+                        ),
+                    },
+                ),
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -9232,7 +9591,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
     );
 
     // Despite `upgrade-package = ["idna"]` in the configuration file, we should enable all upgrades.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--upgrade")
         .arg("--show-settings")
         .arg("requirements.in"), @r#"
@@ -9246,9 +9605,14 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -9258,9 +9622,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -9387,11 +9749,20 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: All,
+            upgrade: Upgrade {
+                strategy: Packages(
+                    {
+                        PackageName(
+                            "idna",
+                        ),
+                    },
+                ),
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -9401,7 +9772,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
     );
 
     // Mark both `sniffio` and `idna` for upgrade.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--upgrade-package")
         .arg("sniffio")
         .arg("--show-settings")
@@ -9416,9 +9787,14 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -9428,9 +9804,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -9557,54 +9931,23 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: Packages(
-                {
-                    PackageName(
-                        "sniffio",
-                    ): [
-                        Requirement {
-                            name: PackageName(
-                                "sniffio",
-                            ),
-                            extras: [],
-                            groups: [],
-                            marker: true,
-                            source: Registry {
-                                specifier: VersionSpecifiers(
-                                    [],
-                                ),
-                                index: None,
-                                conflict: None,
-                            },
-                            origin: None,
-                        },
-                    ],
-                    PackageName(
-                        "idna",
-                    ): [
-                        Requirement {
-                            name: PackageName(
-                                "idna",
-                            ),
-                            extras: [],
-                            groups: [],
-                            marker: true,
-                            source: Registry {
-                                specifier: VersionSpecifiers(
-                                    [],
-                                ),
-                                index: None,
-                                conflict: None,
-                            },
-                            origin: None,
-                        },
-                    ],
-                },
-            ),
+            upgrade: Upgrade {
+                strategy: Packages(
+                    {
+                        PackageName(
+                            "sniffio",
+                        ),
+                        PackageName(
+                            "idna",
+                        ),
+                    },
+                ),
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -9624,7 +9967,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc::indoc! {r#"
@@ -9636,7 +9979,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
 
     // `--no-upgrade` overrides `--upgrade-package`.
     // TODO(charlie): This should mark `sniffio` for upgrade, but it doesn't.
-    uv_snapshot!(context.filters(), add_shared_args(context.lock(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.lock())
         .arg("--no-upgrade")
         .arg("--upgrade-package")
         .arg("sniffio")
@@ -9651,9 +9994,14 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -9663,9 +10011,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -9680,7 +10026,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     }
     LockSettings {
         lock_check: Disabled,
-        frozen: false,
+        frozen: None,
         dry_run: Disabled,
         script: None,
         python: None,
@@ -9735,8 +10081,18 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             ),
             prerelease: IfNecessaryOrExplicit,
             resolution: Highest,
-            sources: Enabled,
-            upgrade: None,
+            sources: None,
+            torch_backend: None,
+            upgrade: Upgrade {
+                strategy: Packages(
+                    {
+                        PackageName(
+                            "sniffio",
+                        ),
+                    },
+                ),
+                constraints: {},
+            },
         },
     }
 
@@ -9756,7 +10112,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     "#})?;
 
     // Despite `upgrade = false` in the configuration file, we should mark `idna` for upgrade.
-    uv_snapshot!(context.filters(), add_shared_args(context.lock(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.lock())
         .arg("--upgrade-package")
         .arg("idna")
         .arg("--show-settings"), @r#"
@@ -9770,9 +10126,14 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -9782,9 +10143,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -9799,7 +10158,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     }
     LockSettings {
         lock_check: Disabled,
-        frozen: false,
+        frozen: None,
         dry_run: Disabled,
         script: None,
         python: None,
@@ -9854,31 +10213,12 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             ),
             prerelease: IfNecessaryOrExplicit,
             resolution: Highest,
-            sources: Enabled,
-            upgrade: Packages(
-                {
-                    PackageName(
-                        "idna",
-                    ): [
-                        Requirement {
-                            name: PackageName(
-                                "idna",
-                            ),
-                            extras: [],
-                            groups: [],
-                            marker: true,
-                            source: Registry {
-                                specifier: VersionSpecifiers(
-                                    [],
-                                ),
-                                index: None,
-                                conflict: None,
-                            },
-                            origin: None,
-                        },
-                    ],
-                },
-            ),
+            sources: None,
+            torch_backend: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
         },
     }
 
@@ -9898,7 +10238,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     "#})?;
 
     // Despite `--upgrade-package idna` on the CLI, we should upgrade all packages.
-    uv_snapshot!(context.filters(), add_shared_args(context.lock(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.lock())
         .arg("--upgrade-package")
         .arg("idna")
         .arg("--show-settings"), @r#"
@@ -9912,9 +10252,14 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -9924,9 +10269,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -9941,7 +10284,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     }
     LockSettings {
         lock_check: Disabled,
-        frozen: false,
+        frozen: None,
         dry_run: Disabled,
         script: None,
         python: None,
@@ -9996,8 +10339,12 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             ),
             prerelease: IfNecessaryOrExplicit,
             resolution: Highest,
-            sources: Enabled,
-            upgrade: All,
+            sources: None,
+            torch_backend: None,
+            upgrade: Upgrade {
+                strategy: All,
+                constraints: {},
+            },
         },
     }
 
@@ -10016,7 +10363,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     "#})?;
 
     // Despite `upgrade-package = ["idna"]` in the configuration file, we should disable upgrades.
-    uv_snapshot!(context.filters(), add_shared_args(context.lock(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.lock())
         .arg("--no-upgrade")
         .arg("--show-settings"), @r#"
     success: true
@@ -10029,9 +10376,14 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -10041,9 +10393,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -10058,7 +10408,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     }
     LockSettings {
         lock_check: Disabled,
-        frozen: false,
+        frozen: None,
         dry_run: Disabled,
         script: None,
         python: None,
@@ -10113,8 +10463,18 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             ),
             prerelease: IfNecessaryOrExplicit,
             resolution: Highest,
-            sources: Enabled,
-            upgrade: None,
+            sources: None,
+            torch_backend: None,
+            upgrade: Upgrade {
+                strategy: Packages(
+                    {
+                        PackageName(
+                            "idna",
+                        ),
+                    },
+                ),
+                constraints: {},
+            },
         },
     }
 
@@ -10123,7 +10483,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     );
 
     // Despite `upgrade-package = ["idna"]` in the configuration file, we should enable all upgrades.
-    uv_snapshot!(context.filters(), add_shared_args(context.lock(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.lock())
         .arg("--upgrade")
         .arg("--show-settings"), @r#"
     success: true
@@ -10136,9 +10496,14 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -10148,9 +10513,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -10165,7 +10528,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     }
     LockSettings {
         lock_check: Disabled,
-        frozen: false,
+        frozen: None,
         dry_run: Disabled,
         script: None,
         python: None,
@@ -10220,8 +10583,18 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             ),
             prerelease: IfNecessaryOrExplicit,
             resolution: Highest,
-            sources: Enabled,
-            upgrade: All,
+            sources: None,
+            torch_backend: None,
+            upgrade: Upgrade {
+                strategy: Packages(
+                    {
+                        PackageName(
+                            "idna",
+                        ),
+                    },
+                ),
+                constraints: {},
+            },
         },
     }
 
@@ -10230,7 +10603,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     );
 
     // Mark both `sniffio` and `idna` for upgrade.
-    uv_snapshot!(context.filters(), add_shared_args(context.lock(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.lock())
         .arg("--upgrade-package")
         .arg("sniffio")
         .arg("--show-settings"), @r#"
@@ -10244,9 +10617,14 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -10256,9 +10634,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -10273,7 +10649,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     }
     LockSettings {
         lock_check: Disabled,
-        frozen: false,
+        frozen: None,
         dry_run: Disabled,
         script: None,
         python: None,
@@ -10328,51 +10704,21 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             ),
             prerelease: IfNecessaryOrExplicit,
             resolution: Highest,
-            sources: Enabled,
-            upgrade: Packages(
-                {
-                    PackageName(
-                        "sniffio",
-                    ): [
-                        Requirement {
-                            name: PackageName(
-                                "sniffio",
-                            ),
-                            extras: [],
-                            groups: [],
-                            marker: true,
-                            source: Registry {
-                                specifier: VersionSpecifiers(
-                                    [],
-                                ),
-                                index: None,
-                                conflict: None,
-                            },
-                            origin: None,
-                        },
-                    ],
-                    PackageName(
-                        "idna",
-                    ): [
-                        Requirement {
-                            name: PackageName(
-                                "idna",
-                            ),
-                            extras: [],
-                            groups: [],
-                            marker: true,
-                            source: Registry {
-                                specifier: VersionSpecifiers(
-                                    [],
-                                ),
-                                index: None,
-                                conflict: None,
-                            },
-                            origin: None,
-                        },
-                    ],
-                },
-            ),
+            sources: None,
+            torch_backend: None,
+            upgrade: Upgrade {
+                strategy: Packages(
+                    {
+                        PackageName(
+                            "sniffio",
+                        ),
+                        PackageName(
+                            "idna",
+                        ),
+                    },
+                ),
+                constraints: {},
+            },
         },
     }
 
@@ -10391,7 +10737,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn build_isolation_override() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Write a `uv.toml` file to disable build isolation.
     let uv_toml = context.temp_dir.child("uv.toml");
@@ -10402,7 +10748,7 @@ fn build_isolation_override() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("numpy")?;
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
         .arg("--no-build-isolation-package").arg("numpy"), @r#"
@@ -10416,9 +10762,14 @@ fn build_isolation_override() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -10428,9 +10779,7 @@ fn build_isolation_override() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -10557,11 +10906,14 @@ fn build_isolation_override() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }
@@ -10574,7 +10926,7 @@ fn build_isolation_override() -> anyhow::Result<()> {
         no-build-isolation = false
     "})?;
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
         .arg("--no-build-isolation-package").arg("numpy"), @r#"
@@ -10588,9 +10940,14 @@ fn build_isolation_override() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             allow_insecure_host: [],
-            timeout: [TIME],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
             retries: 3,
         },
         concurrency: Concurrency {
@@ -10600,9 +10957,7 @@ fn build_isolation_override() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: PreviewFeatures(
-                0x0,
-            ),
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -10735,11 +11090,14 @@ fn build_isolation_override() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Upgrade {
+                strategy: None,
+                constraints: {},
+            },
             reinstall: None,
         },
     }

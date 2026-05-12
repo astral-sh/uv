@@ -13,7 +13,7 @@ use crate::commands::{ExitStatus, human_readable_bytes};
 use crate::printer::Printer;
 
 /// Clear the cache, removing all entries or those linked to specific packages.
-pub(crate) fn cache_clean(
+pub(crate) async fn cache_clean(
     packages: &[PackageName],
     force: bool,
     cache: Cache,
@@ -39,7 +39,7 @@ pub(crate) fn cache_clean(
                 printer.stderr(),
                 "Cache is currently in-use, waiting for other uv processes to finish (use `--force` to override)"
             )?;
-            cache.with_exclusive_lock()?
+            cache.with_exclusive_lock().await?
         }
     };
 

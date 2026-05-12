@@ -24,7 +24,7 @@ def _detect_virtualenv() -> str:
 
 
 def _run() -> None:
-    uv = os.fsdecode(find_uv_bin())
+    uv = find_uv_bin()
 
     env = os.environ.copy()
     venv = _detect_virtualenv()

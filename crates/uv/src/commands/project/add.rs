@@ -6,33 +6,30 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::{debug, warn};
-use url::Url;
 
 use uv_cache::Cache;
 use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DevMode, DryRun,
-    ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions, SourceStrategy,
+    ExtrasSpecification, ExtrasSpecificationWithDefaults, GitLfsSetting, InstallOptions, NoSources,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
-    Index, IndexName, IndexUrl, IndexUrls, NameRequirementSpecification, Requirement,
-    RequirementSource, UnresolvedRequirement, VersionId,
+    Identifier, Index, IndexName, IndexUrl, IndexUrls, NameRequirementSpecification, Requirement,
+    RequirementSource, UnresolvedRequirement,
 };
-use uv_fs::{LockedFile, Simplified};
+use uv_fs::{LockedFile, LockedFileError, Simplified};
 use uv_git::GIT_STORE;
-use uv_git_types::GitReference;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, ExtraName, PackageName};
-use uv_pep508::{MarkerTree, UnnamedRequirement, VersionOrUrl};
-use uv_preview::{Preview, PreviewFeatures};
-use uv_pypi_types::{ParsedUrl, VerbatimParsedUrl};
+use uv_pep508::{MarkerTree, VersionOrUrl};
+use uv_preview::Preview;
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
@@ -43,7 +40,7 @@ use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{DependencyType, Source, SourceError, Sources, ToolUvSources};
 use uv_workspace::pyproject_mut::{AddBoundsKind, ArrayEdit, DependencyTarget, PyProjectTomlMut};
-use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceCache};
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryResolveLogger,
@@ -59,19 +56,24 @@ use crate::commands::project::{
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{ExitStatus, ScriptPath, diagnostics, project};
 use crate::printer::Printer;
-use crate::settings::{LockCheck, ResolverInstallerSettings};
+use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
 /// Add one or more packages to the project requirements.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn add(
     project_dir: &Path,
     lock_check: LockCheck,
-    frozen: bool,
+    frozen: Option<FrozenSource>,
     active: Option<bool>,
     no_sync: bool,
     no_install_project: bool,
+    only_install_project: bool,
     no_install_workspace: bool,
+    only_install_workspace: bool,
     no_install_local: bool,
+    only_install_local: bool,
+    no_install_package: Vec<PackageName>,
+    only_install_package: Vec<PackageName>,
     requirements: Vec<RequirementsSource>,
     constraints: Vec<RequirementsSource>,
     marker: Option<MarkerTree>,
@@ -83,6 +85,7 @@ pub(crate) async fn add(
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
+    lfs: GitLfsSetting,
     extras_of_dependency: Vec<ExtraName>,
     package: Option<PackageName>,
     python: Option<String>,
@@ -100,22 +103,6 @@ pub(crate) async fn add(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    if bounds.is_some() && !preview.is_enabled(PreviewFeatures::ADD_BOUNDS) {
-        warn_user_once!(
-            "The `bounds` option is in preview and may change in any future release. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeatures::ADD_BOUNDS
-        );
-    }
-
-    if !preview.is_enabled(PreviewFeatures::EXTRA_BUILD_DEPENDENCIES)
-        && !settings.resolver.extra_build_dependencies.is_empty()
-    {
-        warn_user_once!(
-            "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeatures::EXTRA_BUILD_DEPENDENCIES
-        );
-    }
-
     for source in &requirements {
         match source {
             RequirementsSource::PyprojectToml(_) => {
@@ -136,6 +123,7 @@ pub(crate) async fn add(
             RequirementsSource::Package(_)
             | RequirementsSource::Editable(_)
             | RequirementsSource::RequirementsTxt(_)
+            | RequirementsSource::Extensionless(_)
             | RequirementsSource::EnvironmentYml(_) => {}
         }
     }
@@ -182,7 +170,7 @@ pub(crate) async fn add(
                 "`{lock_check}` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
-        if frozen {
+        if frozen.is_some() {
             warn_user_once!(
                 "`--frozen` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
@@ -242,16 +230,13 @@ pub(crate) async fn add(
         // Find the project in the workspace.
         // No workspace caching since `uv add` changes the workspace definition.
         let project = if let Some(package) = package {
-            VirtualProject::Project(
-                Workspace::discover(
-                    project_dir,
-                    &DiscoveryOptions::default(),
-                    &WorkspaceCache::default(),
-                )
-                .await?
-                .with_current_project(package.clone())
-                .with_context(|| format!("Package `{package}` not found in workspace"))?,
+            VirtualProject::discover_with_package(
+                project_dir,
+                &DiscoveryOptions::default(),
+                &WorkspaceCache::default(),
+                package,
             )
+            .await?
         } else {
             VirtualProject::discover(
                 project_dir,
@@ -286,7 +271,7 @@ pub(crate) async fn add(
         defaulted_groups =
             groups.with_defaults(default_dependency_groups(project.pyproject_toml())?);
 
-        if frozen || no_sync {
+        if frozen.is_some() || no_sync {
             // Discover the interpreter.
             let interpreter = ProjectInterpreter::discover(
                 project.workspace(),
@@ -369,11 +354,11 @@ pub(crate) async fn add(
         let (mut requirements, unnamed): (Vec<_>, Vec<_>) = requirements
             .into_iter()
             .map(|spec| {
-                augment_requirement(
-                    spec.requirement,
+                spec.requirement.augment_requirement(
                     rev.as_deref(),
                     tag.as_deref(),
                     branch.as_deref(),
+                    lfs.into(),
                     marker,
                 )
             })
@@ -391,7 +376,7 @@ pub(crate) async fn add(
             let build_constraints = Constraints::default();
             let build_hasher = HashStrategy::default();
             let hasher = HashStrategy::default();
-            let sources = SourceStrategy::Enabled;
+            let sources = NoSources::None;
 
             // Initialize the registry client.
             let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
@@ -437,7 +422,8 @@ pub(crate) async fn add(
                     settings.resolver.extra_build_dependencies.clone(),
                     project.workspace(),
                     &settings.resolver.index_locations,
-                    settings.resolver.sources,
+                    &settings.resolver.sources,
+                    client.credentials_cache(),
                 )?
             } else {
                 LoweredExtraBuildDependencies::from_non_lowered(
@@ -470,7 +456,7 @@ pub(crate) async fn add(
                 sources,
                 // No workspace caching since `uv add` changes the workspace definition.
                 WorkspaceCache::default(),
-                concurrency,
+                concurrency.clone(),
                 preview,
             );
 
@@ -478,7 +464,11 @@ pub(crate) async fn add(
                 NamedRequirementsResolver::new(
                     &hasher,
                     state.index(),
-                    DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
+                    DistributionDatabase::new(
+                        &client,
+                        &build_dispatch,
+                        concurrency.downloads_semaphore.clone(),
+                    ),
                 )
                 .with_reporter(Arc::new(ResolverReporter::from(printer)))
                 .resolve(unnamed.into_iter())
@@ -641,6 +631,7 @@ pub(crate) async fn add(
         rev.as_deref(),
         tag.as_deref(),
         branch.as_deref(),
+        lfs,
         &extras_of_dependency,
         index,
         &mut toml,
@@ -699,21 +690,18 @@ pub(crate) async fn add(
 
     // If `--frozen`, exit early. There's no reason to lock and sync, since we don't need a `uv.lock`
     // to exist at all.
-    if frozen {
+    if frozen.is_some() {
         return Ok(ExitStatus::Success);
     }
 
-    // If we're modifying a script, and lockfile doesn't exist, don't create it.
-    if let AddTarget::Script(ref script, _) = target {
-        if !LockTarget::from(script).lock_path().is_file() {
-            writeln!(
-                printer.stderr(),
-                "Updated `{}`",
-                script.path.user_display().cyan()
-            )?;
-            return Ok(ExitStatus::Success);
-        }
-    }
+    // If we're modifying a script, and lockfile doesn't exist, avoid creating it. We still need
+    // to perform resolution, since we want to use the resolved versions to populate lower bounds
+    // in the script.
+    let dry_run = if let AddTarget::Script(ref script, _) = target {
+        !LockTarget::from(script).lock_path().is_file()
+    } else {
+        false
+    };
 
     // Update the `pypackage.toml` in-memory.
     let target = target.update(&content)?;
@@ -726,7 +714,7 @@ pub(crate) async fn add(
                 let _ = snapshot.revert();
             }
 
-            #[allow(clippy::exit, clippy::cast_possible_wrap)]
+            #[expect(clippy::exit, clippy::cast_possible_wrap)]
             std::process::exit(if cfg!(windows) {
                 0xC000_013A_u32 as i32
             } else {
@@ -747,17 +735,23 @@ pub(crate) async fn add(
         sync_state,
         lock_check,
         no_install_project,
+        only_install_project,
         no_install_workspace,
+        only_install_workspace,
         no_install_local,
+        only_install_local,
+        no_install_package.clone(),
+        only_install_package.clone(),
         &defaulted_extras,
         &defaulted_groups,
         raw,
         bounds,
+        dry_run,
         constraints,
         &settings,
         &client_builder,
         installer_metadata,
-        concurrency,
+        &concurrency,
         cache,
         printer,
         preview,
@@ -788,6 +782,7 @@ fn edits(
     rev: Option<&str>,
     tag: Option<&str>,
     branch: Option<&str>,
+    lfs: GitLfsSetting,
     extras: &[ExtraName],
     index: Option<&IndexName>,
     toml: &mut PyProjectTomlMut,
@@ -818,6 +813,7 @@ fn edits(
                     rev.map(ToString::to_string),
                     tag.map(ToString::to_string),
                     branch.map(ToString::to_string),
+                    lfs,
                     script_dir,
                     existing_sources,
                 )?
@@ -842,6 +838,7 @@ fn edits(
                     rev.map(ToString::to_string),
                     tag.map(ToString::to_string),
                     branch.map(ToString::to_string),
+                    lfs,
                     project.root(),
                     existing_sources,
                 )?
@@ -860,6 +857,7 @@ fn edits(
                 rev,
                 tag,
                 branch,
+                lfs,
                 marker,
                 extra,
                 group,
@@ -878,6 +876,7 @@ fn edits(
                     rev,
                     tag,
                     branch,
+                    lfs,
                     marker,
                     extra,
                     group,
@@ -969,7 +968,7 @@ fn edits(
 }
 
 /// Re-lock and re-sync the project after a series of edits.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 async fn lock_and_sync(
     mut target: AddTarget,
     toml: &mut PyProjectTomlMut,
@@ -978,39 +977,49 @@ async fn lock_and_sync(
     sync_state: PlatformState,
     lock_check: LockCheck,
     no_install_project: bool,
+    only_install_project: bool,
     no_install_workspace: bool,
+    only_install_workspace: bool,
     no_install_local: bool,
+    only_install_local: bool,
+    no_install_package: Vec<PackageName>,
+    only_install_package: Vec<PackageName>,
     extras: &ExtrasSpecificationWithDefaults,
     groups: &DependencyGroupsWithDefaults,
     raw: bool,
     bound_kind: Option<AddBoundsKind>,
+    dry_run: bool,
     constraints: Vec<NameRequirementSpecification>,
     settings: &ResolverInstallerSettings,
     client_builder: &BaseClientBuilder<'_>,
     installer_metadata: bool,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     cache: &Cache,
     printer: Printer,
     preview: Preview,
 ) -> Result<(), ProjectError> {
-    let mut lock = project::lock::LockOperation::new(
-        if let LockCheck::Enabled(lock_check) = lock_check {
-            LockMode::Locked(target.interpreter(), lock_check)
-        } else {
-            LockMode::Write(target.interpreter())
-        },
-        &settings.resolver,
-        client_builder,
-        &lock_state,
-        Box::new(DefaultResolveLogger),
-        concurrency,
-        cache,
-        &WorkspaceCache::default(),
-        printer,
-        preview,
+    let mut lock = Box::pin(
+        project::lock::LockOperation::new(
+            if let LockCheck::Enabled(lock_check) = lock_check {
+                LockMode::Locked(target.interpreter(), lock_check)
+            } else if dry_run {
+                LockMode::DryRun(target.interpreter())
+            } else {
+                LockMode::Write(target.interpreter())
+            },
+            &settings.resolver,
+            client_builder,
+            &lock_state,
+            Box::new(DefaultResolveLogger),
+            concurrency,
+            cache,
+            &WorkspaceCache::default(),
+            printer,
+            preview,
+        )
+        .with_constraints(constraints)
+        .execute((&target).into()),
     )
-    .with_constraints(constraints)
-    .execute((&target).into())
     .await?
     .into_lock();
 
@@ -1105,33 +1114,36 @@ async fn lock_and_sync(
 
             // Invalidate the project metadata.
             if let AddTarget::Project(VirtualProject::Project(ref project), _) = target {
-                let url = Url::from_file_path(project.project_root())
-                    .map(DisplaySafeUrl::from)
+                let url = DisplaySafeUrl::from_file_path(project.project_root())
                     .expect("project root is a valid URL");
-                let version_id = VersionId::from_url(&url);
-                let existing = lock_state.index().distributions().remove(&version_id);
+                let distribution_id = url.distribution_id();
+                let existing = lock_state.index().distributions().remove(&distribution_id);
                 debug_assert!(existing.is_some(), "distribution should exist");
             }
 
             // If the file was modified, we have to lock again, though the only expected change is
             // the addition of the minimum version specifiers.
-            lock = project::lock::LockOperation::new(
-                if let LockCheck::Enabled(lock_check) = lock_check {
-                    LockMode::Locked(target.interpreter(), lock_check)
-                } else {
-                    LockMode::Write(target.interpreter())
-                },
-                &settings.resolver,
-                client_builder,
-                &lock_state,
-                Box::new(SummaryResolveLogger),
-                concurrency,
-                cache,
-                &WorkspaceCache::default(),
-                printer,
-                preview,
+            lock = Box::pin(
+                project::lock::LockOperation::new(
+                    if let LockCheck::Enabled(lock_check) = lock_check {
+                        LockMode::Locked(target.interpreter(), lock_check)
+                    } else if dry_run {
+                        LockMode::DryRun(target.interpreter())
+                    } else {
+                        LockMode::Write(target.interpreter())
+                    },
+                    &settings.resolver,
+                    client_builder,
+                    &lock_state,
+                    Box::new(SummaryResolveLogger),
+                    concurrency,
+                    cache,
+                    &WorkspaceCache::default(),
+                    printer,
+                    preview,
+                )
+                .execute((&target).into()),
             )
-            .execute((&target).into())
             .await?
             .into_lock();
         }
@@ -1168,9 +1180,13 @@ async fn lock_and_sync(
         None,
         InstallOptions::new(
             no_install_project,
+            only_install_project,
             no_install_workspace,
+            only_install_workspace,
             no_install_local,
-            vec![],
+            only_install_local,
+            no_install_package,
+            only_install_package,
         ),
         Modifications::Sufficient,
         None,
@@ -1181,7 +1197,7 @@ async fn lock_and_sync(
         installer_metadata,
         concurrency,
         cache,
-        WorkspaceCache::default(),
+        &WorkspaceCache::default(),
         DryRun::Disabled,
         printer,
         preview,
@@ -1189,83 +1205,6 @@ async fn lock_and_sync(
     .await?;
 
     Ok(())
-}
-
-/// Augment a user-provided requirement by attaching any specification data that was provided
-/// separately from the requirement itself (e.g., `--branch main`).
-fn augment_requirement(
-    requirement: UnresolvedRequirement,
-    rev: Option<&str>,
-    tag: Option<&str>,
-    branch: Option<&str>,
-    marker: Option<MarkerTree>,
-) -> UnresolvedRequirement {
-    match requirement {
-        UnresolvedRequirement::Named(mut requirement) => {
-            UnresolvedRequirement::Named(Requirement {
-                marker: marker
-                    .map(|marker| {
-                        requirement.marker.and(marker);
-                        requirement.marker
-                    })
-                    .unwrap_or(requirement.marker),
-                source: match requirement.source {
-                    RequirementSource::Git {
-                        git,
-                        subdirectory,
-                        url,
-                    } => {
-                        let git = if let Some(rev) = rev {
-                            git.with_reference(GitReference::from_rev(rev.to_string()))
-                        } else if let Some(tag) = tag {
-                            git.with_reference(GitReference::Tag(tag.to_string()))
-                        } else if let Some(branch) = branch {
-                            git.with_reference(GitReference::Branch(branch.to_string()))
-                        } else {
-                            git
-                        };
-                        RequirementSource::Git {
-                            git,
-                            subdirectory,
-                            url,
-                        }
-                    }
-                    _ => requirement.source,
-                },
-                ..requirement
-            })
-        }
-        UnresolvedRequirement::Unnamed(mut requirement) => {
-            UnresolvedRequirement::Unnamed(UnnamedRequirement {
-                marker: marker
-                    .map(|marker| {
-                        requirement.marker.and(marker);
-                        requirement.marker
-                    })
-                    .unwrap_or(requirement.marker),
-                url: match requirement.url.parsed_url {
-                    ParsedUrl::Git(mut git) => {
-                        let reference = if let Some(rev) = rev {
-                            Some(GitReference::from_rev(rev.to_string()))
-                        } else if let Some(tag) = tag {
-                            Some(GitReference::Tag(tag.to_string()))
-                        } else {
-                            branch.map(|branch| GitReference::Branch(branch.to_string()))
-                        };
-                        if let Some(reference) = reference {
-                            git.url = git.url.with_reference(reference);
-                        }
-                        VerbatimParsedUrl {
-                            parsed_url: ParsedUrl::Git(git),
-                            verbatim: requirement.url.verbatim,
-                        }
-                    }
-                    _ => requirement.url,
-                },
-                ..requirement
-            })
-        }
-    }
 }
 
 /// Resolves the source for a requirement and processes it into a PEP 508 compliant format.
@@ -1277,6 +1216,7 @@ fn resolve_requirement(
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
+    lfs: GitLfsSetting,
     root: &Path,
     existing_sources: Option<&BTreeMap<PackageName, Sources>>,
 ) -> Result<(uv_pep508::Requirement, Option<Source>), anyhow::Error> {
@@ -1289,6 +1229,7 @@ fn resolve_requirement(
         rev,
         tag,
         branch,
+        lfs,
         root,
         existing_sources,
     );
@@ -1313,7 +1254,7 @@ fn resolve_requirement(
 
 /// A Python [`Interpreter`] or [`PythonEnvironment`] for a project.
 #[derive(Debug, Clone)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub(super) enum PythonTarget {
     Interpreter(Interpreter),
     Environment(PythonEnvironment),
@@ -1331,7 +1272,7 @@ impl PythonTarget {
 
 /// Represents the destination where dependencies are added, either to a project or a script.
 #[derive(Debug, Clone)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub(super) enum AddTarget {
     /// A PEP 723 script, with inline metadata.
     Script(Pep723Script, Box<Interpreter>),
@@ -1352,7 +1293,7 @@ impl<'lock> From<&'lock AddTarget> for LockTarget<'lock> {
 impl AddTarget {
     /// Acquire a file lock mapped to the underlying interpreter to prevent concurrent
     /// modifications.
-    pub(super) async fn acquire_lock(&self) -> Result<LockedFile, io::Error> {
+    pub(super) async fn acquire_lock(&self) -> Result<LockedFile, LockedFileError> {
         match self {
             Self::Script(_, interpreter) => interpreter.lock().await,
             Self::Project(_, python_target) => python_target.interpreter().lock().await,
@@ -1395,7 +1336,6 @@ impl AddTarget {
     }
 
     /// Update the target in-memory to incorporate the new content.
-    #[allow(clippy::result_large_err)]
     fn update(self, content: &str) -> Result<Self, ProjectError> {
         match self {
             Self::Script(mut script, interpreter) => {
@@ -1405,7 +1345,7 @@ impl AddTarget {
             }
             Self::Project(project, venv) => {
                 let project = project
-                    .with_pyproject_toml(
+                    .update_member(
                         toml::from_str(content).map_err(ProjectError::PyprojectTomlParse)?,
                     )?
                     .ok_or(ProjectError::PyprojectTomlUpdate)?;
@@ -1432,7 +1372,7 @@ impl AddTarget {
 }
 
 #[derive(Debug, Clone)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 enum AddTargetSnapshot {
     Script(Pep723Script, Option<Vec<u8>>),
     Project(VirtualProject, Option<Vec<u8>>),
