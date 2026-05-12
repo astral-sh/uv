@@ -93,14 +93,6 @@ pub enum ValidationError {
         "`project.import-names` and `project.import-namespaces` must not both contain `{name}`"
     )]
     DuplicateImportAcross { name: String },
-    #[error(
-        "`{field}` entry `{name}` requires listing `{missing}` in `project.import-names` or `project.import-namespaces`"
-    )]
-    MissingImportPrefix {
-        field: &'static str,
-        name: String,
-        missing: String,
-    },
     #[error("`{field}` glob `{glob}` did not match any files")]
     LicenseGlobNoMatches { field: String, glob: String },
     #[error("License file `{}` must be UTF-8 encoded", _0)]
@@ -214,11 +206,11 @@ fn parse_import_entry(value: &str, field: &'static str) -> Result<ImportEntry, V
     })
 }
 
-fn ensure_import_prefixes(
+fn warn_missing_import_prefixes(
     entries: &[ImportEntry],
     field: &'static str,
     combined: &BTreeSet<String>,
-) -> Result<(), ValidationError> {
+) {
     for entry in entries {
         let segments: Vec<&str> = entry.base.split('.').collect();
         if segments.len() <= 1 {
@@ -234,15 +226,13 @@ fn ensure_import_prefixes(
                 prefix.push_str(segment);
             }
             if !combined.contains(&prefix) {
-                return Err(ValidationError::MissingImportPrefix {
-                    field,
-                    name: entry.base.clone(),
-                    missing: prefix.clone(),
-                });
+                warn_user_once!(
+                    "`{field}` entry `{}` should also list `{prefix}` in `project.import-names` or `project.import-namespaces`",
+                    entry.base.as_str()
+                );
             }
         }
     }
-    Ok(())
 }
 
 /// The project is not compatible with a direct uv build.
@@ -559,12 +549,12 @@ impl PyProjectToml {
             let mut combined = import_name_set;
             combined.extend(import_namespace_set.iter().cloned());
 
-            ensure_import_prefixes(&import_names_entries, PROJECT_IMPORT_NAMES, &combined)?;
-            ensure_import_prefixes(
+            warn_missing_import_prefixes(&import_names_entries, PROJECT_IMPORT_NAMES, &combined);
+            warn_missing_import_prefixes(
                 &import_namespaces_entries,
                 PROJECT_IMPORT_NAMESPACES,
                 &combined,
-            )?;
+            );
         }
 
         let metadata_import_names = if import_names_provided {
@@ -1586,14 +1576,15 @@ mod tests {
         "#,
         );
         let pyproject_toml: PyProjectToml = toml::from_str(&contents).unwrap();
-        let err = pyproject_toml
-            .to_metadata(temp_dir.path())
-            .map(|_| ())
-            .unwrap_err();
-        assert_snapshot!(format_err(err), @r#"
-        Invalid project metadata
-          Caused by: `project.import-names` entry `spam.eggs` requires listing `spam` in `project.import-names` or `project.import-namespaces`
-        "#);
+        let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
+
+        assert_eq!(metadata.metadata_version, "2.5");
+        assert_snapshot!(metadata.core_metadata_format(), @r###"
+        Metadata-Version: 2.5
+        Name: hello-world
+        Version: 0.1.0
+        Import-Name: spam.eggs
+        "###);
     }
 
     #[test]
