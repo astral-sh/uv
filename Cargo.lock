@@ -321,8 +321,8 @@ dependencies = [
 
 [[package]]
 name = "astral_async_zip"
-version = "0.0.18-rc1"
-source = "git+https://github.com/astral-sh/rs-async-zip.git?branch=charlie%2Frestore-zip-writing#c4051722ee7d527ad008d03ea1b218e0aae5dfa1"
+version = "0.0.18-rc2"
+source = "git+https://github.com/astral-sh/rs-async-zip.git?tag=v0.0.18-rc2#8eb9ed214128e6db76dc753bca43908f71e569a9"
 dependencies = [
  "async-compression",
  "crc32fast",
