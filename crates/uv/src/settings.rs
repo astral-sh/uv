@@ -241,6 +241,34 @@ pub(crate) fn resolve_preview(
     }
 }
 
+pub(crate) fn resolve_no_editable(
+    editable: bool,
+    no_editable: bool,
+    filesystem: Option<&FilesystemOptions>,
+    environment: &EnvironmentOptions,
+) -> Flag {
+    let (editable, no_editable) = resolve_flag_pair(
+        editable,
+        no_editable,
+        "editable",
+        "no-editable",
+        None,
+        Some(environment.no_editable),
+    );
+    let no_editable_config = filesystem
+        .as_ref()
+        .and_then(|filesystem| filesystem.no_editable)
+        .unwrap_or(false);
+
+    if editable.is_enabled() || no_editable.is_enabled() {
+        no_editable
+    } else if no_editable_config {
+        Flag::from_config("no-editable")
+    } else {
+        no_editable
+    }
+}
+
 /// The resolved network settings to use for any invocation of the CLI.
 #[derive(Debug, Clone)]
 pub(crate) struct NetworkSettings {
@@ -667,11 +695,6 @@ impl RunSettings {
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
-        let no_editable_config = filesystem
-            .as_ref()
-            .and_then(|filesystem| filesystem.no_editable)
-            .unwrap_or(false);
-
         // Resolve flags from CLI and environment variables.
         let locked = resolve_flag(locked, "locked", environment.locked);
         let frozen = resolve_flag(frozen, "frozen", environment.frozen);
@@ -689,22 +712,8 @@ impl RunSettings {
             Some(environment.no_dev),
         );
 
-        let (editable, no_editable) = resolve_flag_pair(
-            editable,
-            no_editable,
-            "editable",
-            "no-editable",
-            None,
-            Some(environment.no_editable),
-        );
-
-        let no_editable = if editable.is_enabled() || no_editable.is_enabled() {
-            no_editable
-        } else if no_editable_config {
-            Flag::from_config("no-editable")
-        } else {
-            no_editable
-        };
+        let no_editable =
+            resolve_no_editable(editable, no_editable, filesystem.as_ref(), &environment);
 
         let isolated = isolated || environment.isolated.value == Some(true);
         let show_resolution = show_resolution || environment.show_resolution.value == Some(true);
@@ -1745,10 +1754,8 @@ impl SyncSettings {
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
-        let no_editable_config = filesystem
-            .as_ref()
-            .and_then(|filesystem| filesystem.no_editable)
-            .unwrap_or(false);
+        let no_editable =
+            resolve_no_editable(editable, no_editable, filesystem.as_ref(), &environment);
 
         let settings = ResolverInstallerSettings::combine(
             resolver_installer_options(installer, build),
@@ -1777,22 +1784,6 @@ impl SyncSettings {
             Some(environment.dev),
             Some(environment.no_dev),
         );
-        let (editable, no_editable) = resolve_flag_pair(
-            editable,
-            no_editable,
-            "editable",
-            "no-editable",
-            None,
-            Some(environment.no_editable),
-        );
-
-        let no_editable = if editable.is_enabled() || no_editable.is_enabled() {
-            no_editable
-        } else if no_editable_config {
-            Flag::from_config("no-editable")
-        } else {
-            no_editable
-        };
 
         Self {
             output_format,
@@ -2567,11 +2558,6 @@ impl ExportSettings {
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
-        let no_editable_config = filesystem
-            .as_ref()
-            .and_then(|filesystem| filesystem.no_editable)
-            .unwrap_or(false);
-
         // Resolve flags from CLI and environment variables.
         let locked = resolve_flag(locked, "locked", environment.locked);
         let frozen = resolve_flag(frozen_cli, "frozen", environment.frozen);
@@ -2587,22 +2573,9 @@ impl ExportSettings {
             Some(environment.dev),
             Some(environment.no_dev),
         );
-        let (editable, no_editable) = resolve_flag_pair(
-            editable,
-            no_editable,
-            "editable",
-            "no-editable",
-            None,
-            Some(environment.no_editable),
-        );
 
-        let no_editable = if editable.is_enabled() || no_editable.is_enabled() {
-            no_editable
-        } else if no_editable_config {
-            Flag::from_config("no-editable")
-        } else {
-            no_editable
-        };
+        let no_editable =
+            resolve_no_editable(editable, no_editable, filesystem.as_ref(), &environment);
 
         Self {
             format,
