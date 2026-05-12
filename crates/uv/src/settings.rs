@@ -246,7 +246,7 @@ pub(crate) fn resolve_no_editable(
     no_editable: bool,
     filesystem: Option<&FilesystemOptions>,
     environment: &EnvironmentOptions,
-) -> Flag {
+) -> Option<EditableMode> {
     let (editable, no_editable) = resolve_flag_pair(
         editable,
         no_editable,
@@ -260,13 +260,15 @@ pub(crate) fn resolve_no_editable(
         .and_then(|filesystem| filesystem.no_editable)
         .unwrap_or(false);
 
-    if editable.is_enabled() || no_editable.is_enabled() {
+    let no_editable = if editable.is_enabled() || no_editable.is_enabled() {
         no_editable
     } else if no_editable_config {
         Flag::from_config("no-editable")
     } else {
         no_editable
-    }
+    };
+
+    flag(editable.into(), no_editable.into(), "editable").map(EditableMode::from)
 }
 
 /// The resolved network settings to use for any invocation of the CLI.
@@ -712,7 +714,7 @@ impl RunSettings {
             Some(environment.no_dev),
         );
 
-        let no_editable =
+        let editable =
             resolve_no_editable(editable, no_editable, filesystem.as_ref(), &environment);
 
         let isolated = isolated || environment.isolated.value == Some(true);
@@ -741,7 +743,7 @@ impl RunSettings {
                 only_group,
                 all_groups,
             ),
-            editable: flag(editable.into(), no_editable.into(), "editable").map(EditableMode::from),
+            editable,
             modifications: if flag(exact, inexact, "inexact").unwrap_or(false) {
                 Modifications::Exact
             } else {
@@ -1754,7 +1756,7 @@ impl SyncSettings {
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
-        let no_editable =
+        let editable =
             resolve_no_editable(editable, no_editable, filesystem.as_ref(), &environment);
 
         let settings = ResolverInstallerSettings::combine(
@@ -1811,7 +1813,7 @@ impl SyncSettings {
                 only_group,
                 all_groups,
             ),
-            editable: flag(editable.into(), no_editable.into(), "editable").map(EditableMode::from),
+            editable,
             install_options: InstallOptions::new(
                 no_install_project,
                 only_install_project,
@@ -2574,7 +2576,7 @@ impl ExportSettings {
             Some(environment.no_dev),
         );
 
-        let no_editable =
+        let editable =
             resolve_no_editable(editable, no_editable, filesystem.as_ref(), &environment);
 
         Self {
@@ -2601,7 +2603,7 @@ impl ExportSettings {
                 only_group,
                 all_groups,
             ),
-            editable: flag(editable.into(), no_editable.into(), "editable").map(EditableMode::from),
+            editable,
             hashes: flag(hashes, no_hashes, "hashes").unwrap_or(true),
             install_options: InstallOptions::new(
                 no_emit_project,
