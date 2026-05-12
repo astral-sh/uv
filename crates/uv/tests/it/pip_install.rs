@@ -1,4 +1,3 @@
-use std::io;
 use std::io::Cursor;
 use std::path::PathBuf;
 use std::process::Command;
@@ -6,9 +5,12 @@ use std::process::Command;
 use anyhow::{Result, anyhow};
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
+use async_zip::base::write::ZipFileWriter;
+use async_zip::{Compression, ZipEntryBuilder};
 use flate2::write::GzEncoder;
 use fs_err as fs;
 use fs_err::File;
+use futures::executor::block_on;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
@@ -18,8 +20,6 @@ use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{basic_auth, method, path},
 };
-use zip::write::SimpleFileOptions;
-use zip::{ZipArchive, ZipWriter};
 
 use uv_fs::{PortablePath, Simplified};
 use uv_static::EnvVars;
@@ -15424,7 +15424,7 @@ fn handle_record_mismatches() -> Result<()> {
     context.build().arg("--wheel").arg("foo").assert().success();
     let built_wheel = context.temp_dir.join("foo/dist/foo-0.1.0-py3-none-any.whl");
     let unpacked = context.temp_dir.join("foo-unpacked");
-    ZipArchive::new(File::open(built_wheel)?)?.extract(&unpacked)?;
+    uv_extract::unzip(File::open(&built_wheel)?, &unpacked)?;
 
     // Snapshot the current (correct) RECORD.
     let record = unpacked.join("foo-0.1.0.dist-info/RECORD");
@@ -15451,8 +15451,7 @@ fn handle_record_mismatches() -> Result<()> {
 
     // Repack the wheel.
     let repacked_wheel = context.temp_dir.join("foo-0.1.0-py3-none-any.whl");
-    let mut writer = ZipWriter::new(File::create(&repacked_wheel)?);
-    let options = SimpleFileOptions::default();
+    let mut writer = ZipFileWriter::new(Vec::new());
     for entry in WalkDir::new(&unpacked) {
         let entry = entry?;
         let path = entry.path();
@@ -15461,15 +15460,17 @@ fn handle_record_mismatches() -> Result<()> {
             continue;
         }
         // Zip entries must use forward slashes, even on Windows.
-        let name = PortablePath::from(name).to_string();
+        let mut name = PortablePath::from(name).to_string();
         if path.is_dir() {
-            writer.add_directory(&name, options)?;
+            name.push('/');
+            let entry = ZipEntryBuilder::new(name.into(), Compression::Stored);
+            block_on(writer.write_entry_whole(entry, &[]))?;
         } else {
-            writer.start_file(&name, options)?;
-            io::copy(&mut File::open(path)?, &mut writer)?;
+            let entry = ZipEntryBuilder::new(name.into(), Compression::Stored);
+            block_on(writer.write_entry_whole(entry, &fs_err::read(path)?))?;
         }
     }
-    writer.finish()?;
+    fs_err::write(&repacked_wheel, block_on(writer.close())?)?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--find-links")

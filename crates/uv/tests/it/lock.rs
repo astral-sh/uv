@@ -3,7 +3,6 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
-use std::io::BufReader;
 use url::Url;
 
 use uv_fs::Simplified;
@@ -13646,8 +13645,7 @@ fn lock_sources_source_tree() -> Result<()> {
 
     // Unzip the file.
     let file = fs_err::File::open(&*workspace_archive)?;
-    let mut archive = zip::ZipArchive::new(BufReader::new(file))?;
-    archive.extract(&context.temp_dir)?;
+    uv_extract::unzip(file, &context.temp_dir)?;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! {

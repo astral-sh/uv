@@ -439,14 +439,16 @@ pub(crate) fn error_on_venv(file_name: &OsStr, path: &Path) -> Result<(), Error>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_zip::base::read::mem::ZipFileReader;
     use flate2::bufread::GzDecoder;
     use fs_err::File;
+    use futures_lite::future::block_on;
     use indoc::indoc;
     use insta::assert_snapshot;
     use itertools::Itertools;
     use regex::Regex;
     use sha2::Digest;
-    use std::io::{BufReader, Read};
+    use std::io::BufReader;
     use std::iter;
     use tempfile::TempDir;
     use uv_distribution_filename::{SourceDistFilename, WheelFilename};
@@ -582,13 +584,55 @@ mod tests {
     }
 
     fn wheel_contents(direct_output_dir: &Path) -> Vec<String> {
-        let wheel = zip::ZipArchive::new(File::open(direct_output_dir).unwrap()).unwrap();
+        let wheel = block_on(read_wheel(direct_output_dir));
         let mut wheel_contents: Vec<_> = wheel
-            .file_names()
-            .map(|path| path.replace('\\', "/"))
+            .file()
+            .entries()
+            .iter()
+            .map(|entry| {
+                entry
+                    .filename()
+                    .as_str()
+                    .expect("wheel filenames should be UTF-8")
+                    .replace('\\', "/")
+            })
             .collect();
         wheel_contents.sort_unstable();
         wheel_contents
+    }
+
+    fn wheel_entry(wheel_path: &Path, filename: &str) -> String {
+        block_on(async {
+            let wheel = read_wheel(wheel_path).await;
+            let index = wheel
+                .file()
+                .entries()
+                .iter()
+                .position(|entry| {
+                    entry
+                        .filename()
+                        .as_str()
+                        .is_ok_and(|entry_filename| entry_filename == filename)
+                })
+                .expect("wheel entry should exist");
+
+            let mut reader = wheel
+                .reader_with_entry(index)
+                .await
+                .expect("wheel entry should be readable");
+            let mut contents = String::new();
+            reader
+                .read_to_string_checked(&mut contents)
+                .await
+                .expect("wheel entry should be valid UTF-8");
+            contents
+        })
+    }
+
+    async fn read_wheel(wheel_path: &Path) -> ZipFileReader {
+        ZipFileReader::new(fs_err::read(wheel_path).expect("wheel should be readable"))
+            .await
+            .expect("wheel should be valid")
     }
 
     fn format_file_list(file_list: FileList, src: &Path) -> String {
@@ -779,13 +823,7 @@ mod tests {
         built_by_uv-0.1.0.dist-info/METADATA (generated)
         ");
 
-        let mut wheel = zip::ZipArchive::new(File::open(wheel_path).unwrap()).unwrap();
-        let mut record = String::new();
-        wheel
-            .by_name("built_by_uv-0.1.0.dist-info/RECORD")
-            .unwrap()
-            .read_to_string(&mut record)
-            .unwrap();
+        let record = wheel_entry(&wheel_path, "built_by_uv-0.1.0.dist-info/RECORD");
         assert_snapshot!(record, @"
         built_by_uv/__init__.py,sha256=AJ7XpTNWxYktP97ydb81UpnNqoebH7K4sHRakAMQKG4,44
         built_by_uv/arithmetic/__init__.py,sha256=x2agwFbJAafc9Z6TdJ0K6b6bLMApQdvRSQjP4iy7IEI,67
@@ -860,14 +898,7 @@ mod tests {
         let wheel = output_dir
             .path()
             .join("pep_pep639_license-1.0.0-py3-none-any.whl");
-        let mut wheel = zip::ZipArchive::new(File::open(wheel).unwrap()).unwrap();
-
-        let mut metadata = String::new();
-        wheel
-            .by_name("pep_pep639_license-1.0.0.dist-info/METADATA")
-            .unwrap()
-            .read_to_string(&mut metadata)
-            .unwrap();
+        let metadata = wheel_entry(&wheel, "pep_pep639_license-1.0.0.dist-info/METADATA");
 
         assert_snapshot!(metadata, @"
         Metadata-Version: 2.3
@@ -934,14 +965,7 @@ mod tests {
         let wheel = output_dir
             .path()
             .join("two_step_build-1.0.0-py3-none-any.whl");
-        let mut wheel = zip::ZipArchive::new(File::open(wheel).unwrap()).unwrap();
-
-        let mut metadata_wheel = String::new();
-        wheel
-            .by_name("two_step_build-1.0.0.dist-info/METADATA")
-            .unwrap()
-            .read_to_string(&mut metadata_wheel)
-            .unwrap();
+        let metadata_wheel = wheel_entry(&wheel, "two_step_build-1.0.0.dist-info/METADATA");
 
         assert_eq!(metadata_prepared, metadata_wheel);
 

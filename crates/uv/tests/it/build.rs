@@ -1,11 +1,13 @@
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
-use fs_err::File;
+use async_zip::base::read::mem::ZipFileReader;
+use futures::executor::block_on;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use std::env::current_dir;
+use std::path::Path;
 use url::Url;
 use uv_static::EnvVars;
 use uv_test::{DEFAULT_PYTHON_VERSION, apply_filters, uv_snapshot};
@@ -13,7 +15,20 @@ use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{method, path as url_path},
 };
-use zip::ZipArchive;
+
+fn zip_file_names(path: &Path) -> Result<Vec<String>> {
+    block_on(async {
+        let wheel = ZipFileReader::new(fs_err::read(path)?).await?;
+        let mut files: Vec<_> = wheel
+            .file()
+            .entries()
+            .iter()
+            .map(|entry| Ok(entry.filename().as_str()?.to_string()))
+            .collect::<async_zip::error::Result<_>>()?;
+        files.sort();
+        Ok(files)
+    })
+}
 
 #[test]
 fn build_basic() -> Result<()> {
@@ -1836,12 +1851,7 @@ fn build_git_boundary_in_dist_build() -> Result<()> {
     ");
 
     // Check that the source file is included
-    let reader = File::open(project.join("dist/demo-0.1.0-py3-none-any.whl"))?;
-    let mut files: Vec<_> = ZipArchive::new(reader)?
-        .file_names()
-        .map(ToString::to_string)
-        .collect();
-    files.sort();
+    let files = zip_file_names(&project.join("dist/demo-0.1.0-py3-none-any.whl"))?;
     assert_snapshot!(files.join("\n"), @"
     demo-0.1.0.dist-info/METADATA
     demo-0.1.0.dist-info/RECORD

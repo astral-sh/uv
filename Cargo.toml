@@ -308,13 +308,6 @@ wiremock = { version = "0.6.4" }
 wmi = { version = "0.18.3", default-features = false }
 xz2 = { version = "0.1.7", features = ["static"] }
 zeroize = { version = "1.8.1" }
-zip = { version = "8.1.0", default-features = false, features = [
-  "deflate",
-  "zstd",
-  "bzip2",
-  "lzma",
-  "xz",
-] }
 
 # dev-dependencies
 assert_cmd = { version = "2.0.16" }

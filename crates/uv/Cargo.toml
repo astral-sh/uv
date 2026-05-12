@@ -151,7 +151,6 @@ tempfile = { workspace = true }
 tokio-stream = { workspace = true }
 tokio-util = { workspace = true }
 wiremock = { workspace = true }
-zip = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true }
