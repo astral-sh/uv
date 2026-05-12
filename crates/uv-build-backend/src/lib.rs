@@ -735,7 +735,7 @@ mod tests {
         // Check that the wheel is reproducible across platforms.
         assert_snapshot!(
             format!("{:x}", sha2::Sha256::digest(fs_err::read(&wheel_path).unwrap())),
-            @"cf5d6cdd49691afa93417491dd3376abc1211894b57cdbdc9d62d47658688cc5"
+            @"0affdf7d3fda7e0a27007f6bf61524cd58bf3fce8e456bafb58b4a22faf0d6d0"
         );
         assert_snapshot!(build.wheel_contents.join("\n"), @"
         built_by_uv-0.1.0.data/data/

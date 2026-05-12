@@ -13,6 +13,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+// Chosen from extraction benchmarks to reduce read calls without adding too
+// much per-clone buffering.
 const BUFFER_SIZE: usize = 64 * 1024;
 
 /// A trait to represent some reader which has a total length known in
