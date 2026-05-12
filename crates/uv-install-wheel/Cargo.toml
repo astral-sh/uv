@@ -47,6 +47,9 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 walkdir = { workspace = true }
 
+[target.'cfg(unix)'.dependencies]
+uv-unix = { workspace = true }
+
 [target.'cfg(target_os = "windows")'.dependencies]
 same-file = { workspace = true }
 self-replace = { workspace = true }
