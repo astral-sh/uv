@@ -329,45 +329,6 @@ jobs:
           repository-url: "https://test.pypi.org/legacy/"
           packages-dir: "astral-test-pypa-gh-action/dist"
 
-      - name: "Request GitLab OIDC tokens for impersonation"
-        uses: digital-blueprint/gitlab-pipeline-trigger-action@c59b56e9d2688ab42c1304322ac8831a4ef6f7d2 # v1.4.0
-        with:
-          host: gitlab.com
-          id: astral-test-publish/astral-test-gitlab-pypi-tp
-          ref: main
-          trigger_token: ${{ secrets.GITLAB_TEST_PUBLISH_TRIGGER_TOKEN }}
-          access_token: ${{ secrets.GITLAB_TEST_PUBLISH_ACCESS_TOKEN }}
-          download_artifacts: true
-          fail_if_no_artifacts: true
-          download_path: ./gitlab-artifacts
-          verbose: true
-
-      - name: "Load GitLab OIDC tokens from GitLab job artifacts"
-        id: load-gitlab-oidc-token
-        run: |
-          # we expect ./gitlab-artifacts/*/artifacts/pypi-id-token to exist
-          pypi_id_token_file=$(find ./gitlab-artifacts -type f -name pypi-id-token | head -n 1)
-          if [ -z "${pypi_id_token_file}" ]; then
-            echo "No pypi-id-token file found in GitLab artifacts"
-            exit 1
-          fi
-          GITLAB_PYPI_OIDC_TOKEN=$(cat "${pypi_id_token_file}")
-
-          # we expect ./gitlab-artifacts/*/artifacts/pyx-id-token to exist
-          pyx_id_token_file=$(find ./gitlab-artifacts -type f -name pyx-id-token | head -n 1)
-          if [ -z "${pyx_id_token_file}" ]; then
-            echo "No pyx-id-token file found in GitLab artifacts"
-            exit 1
-          fi
-          GITLAB_PYX_OIDC_TOKEN=$(cat "${pyx_id_token_file}")
-
-          # Add secret masks for the tokens.
-          echo "::add-mask::$GITLAB_PYPI_OIDC_TOKEN"
-          echo "::add-mask::$GITLAB_PYX_OIDC_TOKEN"
-
-          echo "GITLAB_PYPI_OIDC_TOKEN=${GITLAB_PYPI_OIDC_TOKEN}" >> "${GITHUB_OUTPUT}"
-          echo "GITLAB_PYX_OIDC_TOKEN=${GITLAB_PYX_OIDC_TOKEN}" >> "${GITHUB_OUTPUT}"
-
       - name: "Add password to keyring"
         run: |
           # `keyrings.alt` contains the plaintext keyring
@@ -394,8 +355,6 @@ jobs:
           UV_TEST_PUBLISH_CLOUDSMITH_TOKEN: ${{ secrets.UV_TEST_PUBLISH_CLOUDSMITH_TOKEN }}
           UV_TEST_PUBLISH_PYX_TOKEN: ${{ secrets.UV_TEST_PUBLISH_PYX_TOKEN }}
           UV_TEST_PUBLISH_PYTHON_VERSION: ${{ env.PYTHON_VERSION }}
-          UV_TEST_PUBLISH_GITLAB_PYPI_OIDC_TOKEN: ${{ steps.load-gitlab-oidc-token.outputs.GITLAB_PYPI_OIDC_TOKEN }}
-          UV_TEST_PUBLISH_GITLAB_PYX_OIDC_TOKEN: ${{ steps.load-gitlab-oidc-token.outputs.GITLAB_PYX_OIDC_TOKEN }}
 
   required-checks-passed:
     name: "all required jobs passed"

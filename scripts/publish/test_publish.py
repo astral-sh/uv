@@ -260,6 +260,9 @@ all_targets: dict[str, TargetConfiguration] = local_targets | {
 
 # Temporarily disable codeberg on CI due to unreliability.
 all_targets.pop("codeberg", None)
+# Temporarily disable Trusted Publishing tests on GitLab due to unreliability.
+all_targets.pop("pypi-trusted-publishing-gitlab", None)
+all_targets.pop("pyx-trusted-publishing-gitlab", None)
 
 
 def collect_versions(url: str, client: httpx.Client) -> set[Version]:
