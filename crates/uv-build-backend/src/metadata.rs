@@ -70,6 +70,8 @@ pub enum ValidationError {
     ReservedGuiScripts,
     #[error("`project.license` is not a valid SPDX expression: {0}")]
     InvalidSpdx(String, #[source] spdx::error::ParseError),
+    #[error("`{field}` must not be an empty array")]
+    EmptyImportArray { field: &'static str },
     #[error("`{field}` must not contain empty strings")]
     EmptyImportName { field: &'static str },
     #[error("`{field}` entry `{value}` must end with `; private` or nothing, found `{suffix}`")]
@@ -132,6 +134,9 @@ fn parse_optional_import_entries(
         return Ok((Vec::new(), false, false));
     };
     if entries.is_empty() {
+        if !allow_explicit_empty {
+            return Err(ValidationError::EmptyImportArray { field });
+        }
         return Ok((Vec::new(), true, allow_explicit_empty));
     }
 
@@ -1512,6 +1517,25 @@ mod tests {
         Version: 0.1.0
         Import-Name:
         "###);
+    }
+
+    #[test]
+    fn import_namespaces_empty_list() {
+        let temp_dir = TempDir::new().unwrap();
+        let contents = extend_project(
+            r"
+            import-namespaces = []
+        ",
+        );
+        let pyproject_toml: PyProjectToml = toml::from_str(&contents).unwrap();
+        let err = pyproject_toml
+            .to_metadata(temp_dir.path())
+            .map(|_| ())
+            .unwrap_err();
+        assert_snapshot!(format_err(err), @r#"
+        Invalid project metadata
+          Caused by: `project.import-namespaces` must not be an empty array
+        "#);
     }
 
     #[test]
