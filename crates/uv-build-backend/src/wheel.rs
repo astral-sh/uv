@@ -1,14 +1,14 @@
-use async_zip::base::write::{EntryStreamWriter, ZipFileWriter};
+use async_zip::base::write::{EntrySeekableWriter, ZipFileWriter};
 use async_zip::{Compression, ZipEntryBuilder};
 use base64::{Engine, prelude::BASE64_URL_SAFE_NO_PAD as base64};
 use fs_err::File;
 use futures_lite::future::block_on;
-use futures_lite::io::{AsyncWrite, AsyncWriteExt};
+use futures_lite::io::{AsyncSeek, AsyncWrite, AsyncWriteExt};
 use globset::{GlobSet, GlobSetBuilder};
 use rustc_hash::FxHashSet;
 use sha2::{Digest, Sha256};
 use std::fmt::{Display, Formatter};
-use std::io::{BufReader, Read, Write};
+use std::io::{BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Component, Path, PathBuf};
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -28,6 +28,16 @@ use crate::{
     BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
     error_on_venv, find_roots,
 };
+
+// Files at or below this size are buffered and written with `write_entry_whole`,
+// which was fastest in wheel-writer benchmarks because it can write final ZIP
+// headers without per-chunk async writes. The 16 MiB limit keeps typical source
+// files on that fast path without buffering very large data files wholesale.
+const WHOLE_FILE_ZIP_ENTRY_LIMIT: u64 = 16 * 1024 * 1024;
+// Buffer size for the large-file streaming fallback. 128 KiB was enough to cut
+// down read/write loop overhead compared to the 8 KiB default while remaining a
+// small fixed allocation for entries that are too large for `write_entry_whole`.
+const ZIP_STREAM_BUFFER_SIZE: usize = 128 * 1024;
 
 /// Build a wheel from the source tree and place it in the output directory.
 pub fn build_wheel(
@@ -439,8 +449,7 @@ fn write_hashed(
 ) -> Result<RecordEntry, io::Error> {
     let mut hasher = Sha256::new();
     let mut size: u64 = 0;
-    // 8KB is the default defined in `std::sys_common::io`.
-    let mut buffer = vec![0; 8 * 1024];
+    let mut buffer = vec![0; ZIP_STREAM_BUFFER_SIZE];
     loop {
         let read = match reader.read(&mut buffer) {
             Ok(read) => read,
@@ -703,14 +712,14 @@ impl Display for WheelInfo {
 }
 
 /// ZIP archive (wheel) writer.
-struct ZipDirectoryWriter<W: AsyncWrite + Unpin> {
+struct ZipDirectoryWriter<W: AsyncWrite + AsyncSeek + Unpin> {
     writer: ZipFileWriter<W>,
     compression: Compression,
     /// The entries in the `RECORD` file.
     record: Vec<RecordEntry>,
 }
 
-impl<W: AsyncWrite + Unpin> ZipDirectoryWriter<W> {
+impl<W: AsyncWrite + AsyncSeek + Unpin> ZipDirectoryWriter<W> {
     // Include the Unix file type bits because `async_zip` writes this mode
     // directly to the ZIP external attributes. The sync `zip` crate adds
     // those bits internally when starting file and directory entries.
@@ -735,7 +744,7 @@ impl<W: AsyncWrite + Unpin> ZipDirectoryWriter<W> {
             Self::REGULAR_FILE_MODE
         };
         let entry = Self::entry(path, self.compression, mode);
-        let writer = block_on(self.writer.write_entry_stream(entry))?;
+        let writer = block_on(self.writer.write_entry_seekable(entry))?;
         Ok(EntryWriter::new(writer))
     }
 }
@@ -768,7 +777,17 @@ impl<W: Write + Unpin> AsyncWrite for SyncWriter<W> {
     }
 }
 
-impl<W: Write + Unpin> ZipDirectoryWriter<SyncWriter<W>> {
+impl<W: Seek + Unpin> AsyncSeek for SyncWriter<W> {
+    fn poll_seek(
+        self: Pin<&mut Self>,
+        _context: &mut Context<'_>,
+        position: SeekFrom,
+    ) -> Poll<io::Result<u64>> {
+        Poll::Ready(self.get_mut().writer.seek(position))
+    }
+}
+
+impl<W: Write + Seek + Unpin> ZipDirectoryWriter<SyncWriter<W>> {
     /// A wheel writer with deflate compression.
     fn new_wheel(writer: W) -> Self {
         Self {
@@ -791,12 +810,12 @@ impl<W: Write + Unpin> ZipDirectoryWriter<SyncWriter<W>> {
     }
 }
 
-struct EntryWriter<'writer, W: AsyncWrite + Unpin> {
-    writer: Option<EntryStreamWriter<'writer, W>>,
+struct EntryWriter<'writer, W: AsyncWrite + AsyncSeek + Unpin> {
+    writer: Option<EntrySeekableWriter<'writer, W>>,
 }
 
-impl<'writer, W: AsyncWrite + Unpin> EntryWriter<'writer, W> {
-    fn new(writer: EntryStreamWriter<'writer, W>) -> Self {
+impl<'writer, W: AsyncWrite + AsyncSeek + Unpin> EntryWriter<'writer, W> {
+    fn new(writer: EntrySeekableWriter<'writer, W>) -> Self {
         Self {
             writer: Some(writer),
         }
@@ -811,7 +830,7 @@ impl<'writer, W: AsyncWrite + Unpin> EntryWriter<'writer, W> {
     }
 }
 
-impl<W: AsyncWrite + Unpin> Write for EntryWriter<'_, W> {
+impl<W: AsyncWrite + AsyncSeek + Unpin> Write for EntryWriter<'_, W> {
     fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
         let Some(writer) = self.writer.as_mut() else {
             return Err(io::Error::other(
@@ -829,7 +848,7 @@ impl<W: AsyncWrite + Unpin> Write for EntryWriter<'_, W> {
     }
 }
 
-impl<W: AsyncWrite + Unpin> DirectoryWriter for ZipDirectoryWriter<W> {
+impl<W: AsyncWrite + AsyncSeek + Unpin> DirectoryWriter for ZipDirectoryWriter<W> {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
         trace!("Adding {}", path);
         // Set appropriate permissions for metadata files (644 = rw-r--r--)
@@ -848,20 +867,40 @@ impl<W: AsyncWrite + Unpin> DirectoryWriter for ZipDirectoryWriter<W> {
 
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
         trace!("Adding {} from {}", path, file.user_display());
-        let mut reader = BufReader::new(File::open(file)?);
+        let metadata = file.metadata()?;
         // Preserve the executable bit, especially for scripts
         #[cfg(unix)]
         let executable_bit = {
             use std::os::unix::fs::PermissionsExt;
-            file.metadata()?.permissions().mode() & 0o111 != 0
+            metadata.permissions().mode() & 0o111 != 0
         };
         // Windows has no executable bit
         #[cfg(not(unix))]
         let executable_bit = false;
-        let mut writer = self.new_writer(path, executable_bit)?;
-        let record = write_hashed(path, &mut reader, &mut writer)?;
-        writer.close()?;
-        self.record.push(record);
+        let mode = if executable_bit {
+            Self::EXECUTABLE_FILE_MODE
+        } else {
+            Self::REGULAR_FILE_MODE
+        };
+
+        if metadata.len() <= WHOLE_FILE_ZIP_ENTRY_LIMIT {
+            let bytes = fs_err::read(file)?;
+            let entry = Self::entry(path, self.compression, mode);
+            block_on(self.writer.write_entry_whole(entry, &bytes))?;
+
+            let hash = base64.encode(Sha256::new().chain_update(&bytes).finalize());
+            self.record.push(RecordEntry {
+                path: path.to_string(),
+                hash,
+                size: bytes.len() as u64,
+            });
+        } else {
+            let mut reader = BufReader::new(File::open(file)?);
+            let mut writer = self.new_writer(path, executable_bit)?;
+            let record = write_hashed(path, &mut reader, &mut writer)?;
+            writer.close()?;
+            self.record.push(record);
+        }
         Ok(())
     }
 
