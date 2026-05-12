@@ -2,7 +2,6 @@
 //! Cargo is dual-licensed under either Apache 2.0 or MIT, at the user's choice.
 //! Source: <https://github.com/rust-lang/cargo/blob/23eb492cf920ce051abfc56bbaf838514dc8365c/src/cargo/sources/git/source.rs>
 
-use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -60,6 +59,25 @@ impl GitSource {
         }
     }
 
+    /// Resolve the OID of a reference or a revision from the Git repository.
+    #[instrument(skip(self), fields(repository = %self.git.repository(), rev = ?self.git.precise()))]
+    pub fn ls_remote(&self) -> Result<Option<GitOid>> {
+        // Authenticate the URL, if necessary.
+        let remote = if let Some(credentials) = GIT_STORE.get(self.git.repository()) {
+            credentials.apply(self.git.url().clone())
+        } else {
+            self.git.url().clone()
+        };
+
+        let git_remote = GitRemote::new(&remote);
+        git_remote.ls(
+            self.git.reference(),
+            self.git.precise(),
+            self.disable_ssl,
+            self.offline,
+        )
+    }
+
     /// Fetch the underlying Git repository at the given revision.
     #[instrument(skip(self), fields(repository = %self.git.url(), rev = ?self.git.precise()))]
     pub fn fetch(self) -> Result<Fetch> {
@@ -71,9 +89,9 @@ impl GitSource {
 
         // Authenticate the URL, if necessary.
         let remote = if let Some(credentials) = GIT_STORE.get(self.git.repository()) {
-            Cow::Owned(credentials.apply(self.git.url().clone()))
+            credentials.apply(self.git.url().clone())
         } else {
-            Cow::Borrowed(self.git.url())
+            self.git.url().clone()
         };
 
         // Fetch the commit, if we don't already have it. Wrapping this section in a closure makes
@@ -170,7 +188,7 @@ impl GitSource {
         // Report the checkout operation to the reporter.
         if let Some(task) = maybe_task {
             if let Some(reporter) = self.reporter.as_ref() {
-                reporter.on_checkout_complete(remote.as_ref(), actual_rev.as_str(), task);
+                reporter.on_checkout_complete(&remote, actual_rev.as_str(), task);
             }
         }
 
