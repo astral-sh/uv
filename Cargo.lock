@@ -6498,6 +6498,7 @@ dependencies = [
  "astral_async_zip",
  "async-compression",
  "blake2",
+ "flate2",
  "fs-err",
  "futures",
  "md-5",
