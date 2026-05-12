@@ -3,6 +3,25 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.11.14
+
+Released on 2026-05-12.
+
+### Enhancements
+
+- Add Astral mirror URL override ([#19206](https://github.com/astral-sh/uv/pull/19206))
+- Ignore `top_level.txt` entries in uninstall that are not valid Python identifiers ([#19340](https://github.com/astral-sh/uv/pull/19340))
+
+### Bug fixes
+
+- Avoid applying `.env` files in parent process ([#19343](https://github.com/astral-sh/uv/pull/19343))
+- Filter ANSI codes in logging output ([#19311](https://github.com/astral-sh/uv/pull/19311))
+- Fix `uv tree` showing extra-conditional deps for packages required without extras ([#19332](https://github.com/astral-sh/uv/pull/19332))
+
+### Other changes
+
+- Ensure publish to crates.io is idempotent ([#19361](https://github.com/astral-sh/uv/pull/19361))
+
 ## 0.11.13
 
 Released on 2026-05-10.
