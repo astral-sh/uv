@@ -7,9 +7,14 @@ use uv_pep440::Version;
 use uv_static::EnvVars;
 
 #[cfg(windows)]
-use serde::Deserialize;
-#[cfg(windows)]
-use wmi::WMIConnection;
+use windows_registry::LOCAL_MACHINE;
+
+// Constants used for PCI device detection.
+const PCI_BASE_CLASS_MASK: u32 = 0x00ff_0000;
+const PCI_BASE_CLASS_DISPLAY: u32 = 0x0003_0000;
+const PCI_VENDOR_ID_INTEL: u32 = 0x8086;
+#[cfg(any(windows, test))]
+const WINDOWS_DISPLAY_ADAPTER_CLASS_GUID: &str = "{4d36e968-e325-11ce-bfc1-08002be10318}";
 
 #[derive(Debug, thiserror::Error)]
 pub enum AcceleratorError {
@@ -65,13 +70,8 @@ impl Accelerator {
     /// 5. `nvidia-smi --query-gpu=driver_version --format=csv,noheader`.
     /// 6. `rocm_agent_enumerator`, which lists the AMD GPU architectures.
     /// 7. `/sys/bus/pci/devices`, filtering for the Intel GPU via PCI.
-    /// 8. Windows Managmeent Instrumentation (WMI), filtering for the Intel GPU via PCI.
+    /// 8. The Windows registry, filtering for the Intel GPU via PCI.
     pub fn detect() -> Result<Option<Self>, AcceleratorError> {
-        // Constants used for PCI device detection.
-        const PCI_BASE_CLASS_MASK: u32 = 0x00ff_0000;
-        const PCI_BASE_CLASS_DISPLAY: u32 = 0x0003_0000;
-        const PCI_VENDOR_ID_INTEL: u32 = 0x8086;
-
         // Read from `UV_CUDA_DRIVER_VERSION`.
         if let Ok(driver_version) = std::env::var(EnvVars::UV_CUDA_DRIVER_VERSION) {
             let driver_version = Version::from_str(&driver_version)?;
@@ -196,42 +196,10 @@ impl Accelerator {
             Err(e) => return Err(e.into()),
         }
 
-        // Detect Intel GPU via WMI on Windows
+        // Detect Intel GPU via the Windows registry.
         #[cfg(windows)]
-        {
-            #[derive(Deserialize, Debug)]
-            #[serde(rename = "Win32_VideoController")]
-            #[serde(rename_all = "PascalCase")]
-            struct VideoController {
-                #[serde(rename = "PNPDeviceID")]
-                pnp_device_id: Option<String>,
-                name: Option<String>,
-            }
-
-            match WMIConnection::new() {
-                Ok(wmi_connection) => match wmi_connection.query::<VideoController>() {
-                    Ok(gpu_controllers) => {
-                        for gpu_controller in gpu_controllers {
-                            if let Some(pnp_device_id) = &gpu_controller.pnp_device_id {
-                                if pnp_device_id.contains(&format!("VEN_{PCI_VENDOR_ID_INTEL:04X}"))
-                                {
-                                    debug!(
-                                        "Detected Intel GPU from WMI: PNPDeviceID={}, Name={:?}",
-                                        pnp_device_id, gpu_controller.name
-                                    );
-                                    return Ok(Some(Self::Xpu));
-                                }
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        debug!("Failed to query WMI for video controllers: {e}");
-                    }
-                },
-                Err(e) => {
-                    debug!("Failed to create WMI connection: {e}");
-                }
-            }
+        if detect_intel_gpu_from_windows_registry() {
+            return Ok(Some(Self::Xpu));
         }
 
         debug!("Failed to detect GPU driver version");
@@ -278,6 +246,88 @@ fn parse_pci_device_ids(device_path: &Path) -> Result<(u32, u32), AcceleratorErr
     let pci_vendor = u32::from_str_radix(vendor_content.trim().trim_start_matches("0x"), 16)?;
 
     Ok((pci_class, pci_vendor))
+}
+
+#[cfg(windows)]
+fn detect_intel_gpu_from_windows_registry() -> bool {
+    let pci_devices = match LOCAL_MACHINE.open(r"SYSTEM\CurrentControlSet\Enum\PCI") {
+        Ok(pci_devices) => pci_devices,
+        Err(err) => {
+            debug!("Failed to open Windows PCI registry key: {err}");
+            return false;
+        }
+    };
+
+    let device_ids = match pci_devices.keys() {
+        Ok(device_ids) => device_ids,
+        Err(err) => {
+            debug!("Failed to enumerate Windows PCI registry devices: {err}");
+            return false;
+        }
+    };
+
+    for device_id in device_ids {
+        if !contains_intel_vendor_id(&device_id) {
+            continue;
+        }
+
+        let device = match pci_devices.open(&device_id) {
+            Ok(device) => device,
+            Err(err) => {
+                debug!("Failed to open Windows PCI registry device `{device_id}`: {err}");
+                continue;
+            }
+        };
+
+        let instance_ids = match device.keys() {
+            Ok(instance_ids) => instance_ids,
+            Err(err) => {
+                debug!(
+                    "Failed to enumerate Windows PCI registry instances for `{device_id}`: {err}"
+                );
+                continue;
+            }
+        };
+
+        for instance_id in instance_ids {
+            let instance = match device.open(&instance_id) {
+                Ok(instance) => instance,
+                Err(err) => {
+                    debug!(
+                        "Failed to open Windows PCI registry instance `{device_id}\\{instance_id}`: {err}"
+                    );
+                    continue;
+                }
+            };
+
+            let class = instance.get_string("Class").ok();
+            let class_guid = instance.get_string("ClassGUID").ok();
+            if is_windows_display_adapter(class.as_deref(), class_guid.as_deref()) {
+                let name = instance.get_string("DeviceDesc").ok();
+                debug!(
+                    "Detected Intel GPU from Windows registry: DeviceID={device_id}, InstanceID={instance_id}, Name={name:?}"
+                );
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
+#[cfg(any(windows, test))]
+fn contains_intel_vendor_id(pnp_device_id: &str) -> bool {
+    pnp_device_id
+        .split(['\\', '&'])
+        .any(|segment| segment.eq_ignore_ascii_case("VEN_8086"))
+}
+
+#[cfg(any(windows, test))]
+fn is_windows_display_adapter(class: Option<&str>, class_guid: Option<&str>) -> bool {
+    class.is_some_and(|class| class.eq_ignore_ascii_case("Display"))
+        || class_guid.is_some_and(|class_guid| {
+            class_guid.eq_ignore_ascii_case(WINDOWS_DISPLAY_ADAPTER_CLASS_GUID)
+        })
 }
 
 /// A GPU architecture for AMD GPUs.
@@ -375,5 +425,33 @@ mod tests {
             let version = Version::from_str(first_line.trim()).unwrap();
             assert_eq!(version, Version::from_str("572.60").unwrap());
         }
+    }
+
+    #[test]
+    fn intel_vendor_id_from_pnp_device_id() {
+        assert!(contains_intel_vendor_id(
+            r"PCI\VEN_8086&DEV_9A49&SUBSYS_00000000"
+        ));
+        assert!(contains_intel_vendor_id(
+            r"pci\ven_8086&dev_9a49&subsys_00000000"
+        ));
+        assert!(!contains_intel_vendor_id(
+            r"PCI\VEN_10DE&DEV_2504&SUBSYS_00000000"
+        ));
+        assert!(!contains_intel_vendor_id(r"PCI\DEV_8086&SUBSYS_00000000"));
+    }
+
+    #[test]
+    fn windows_display_adapter_registry_class() {
+        assert!(is_windows_display_adapter(Some("Display"), None));
+        assert!(is_windows_display_adapter(Some("display"), None));
+        assert!(is_windows_display_adapter(
+            None,
+            Some("{4D36E968-E325-11CE-BFC1-08002BE10318}")
+        ));
+        assert!(!is_windows_display_adapter(
+            Some("Net"),
+            Some("{4d36e972-e325-11ce-bfc1-08002be10318}")
+        ));
     }
 }
