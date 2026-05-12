@@ -106,6 +106,9 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         environments: SupportedEnvironments(
             [],
         ),
+        required_environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -317,6 +320,9 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
+            [],
+        ),
+        required_environments: SupportedEnvironments(
             [],
         ),
         refresh: None(
@@ -531,6 +537,9 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
+            [],
+        ),
+        required_environments: SupportedEnvironments(
             [],
         ),
         refresh: None(
@@ -779,6 +788,9 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         environments: SupportedEnvironments(
             [],
         ),
+        required_environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -994,6 +1006,9 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         environments: SupportedEnvironments(
             [],
         ),
+        required_environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -1179,6 +1194,9 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
+            [],
+        ),
+        required_environments: SupportedEnvironments(
             [],
         ),
         refresh: None(
@@ -1417,6 +1435,9 @@ fn resolve_index_url() -> anyhow::Result<()> {
         excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
+            [],
+        ),
+        required_environments: SupportedEnvironments(
             [],
         ),
         refresh: None(
@@ -1665,6 +1686,9 @@ fn resolve_index_url() -> anyhow::Result<()> {
         excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
+            [],
+        ),
+        required_environments: SupportedEnvironments(
             [],
         ),
         refresh: None(
@@ -1975,6 +1999,9 @@ fn resolve_find_links() -> anyhow::Result<()> {
         environments: SupportedEnvironments(
             [],
         ),
+        required_environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -2210,6 +2237,9 @@ fn resolve_top_level() -> anyhow::Result<()> {
         environments: SupportedEnvironments(
             [],
         ),
+        required_environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -2400,6 +2430,9 @@ fn resolve_top_level() -> anyhow::Result<()> {
         excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
+            [],
+        ),
+        required_environments: SupportedEnvironments(
             [],
         ),
         refresh: None(
@@ -2646,6 +2679,9 @@ fn resolve_top_level() -> anyhow::Result<()> {
         excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
+            [],
+        ),
+        required_environments: SupportedEnvironments(
             [],
         ),
         refresh: None(
@@ -2917,6 +2953,9 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         environments: SupportedEnvironments(
             [],
         ),
+        required_environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -3097,6 +3136,9 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
+            [],
+        ),
+        required_environments: SupportedEnvironments(
             [],
         ),
         refresh: None(
@@ -3281,6 +3323,9 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         environments: SupportedEnvironments(
             [],
         ),
+        required_environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -3463,6 +3508,9 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
+            [],
+        ),
+        required_environments: SupportedEnvironments(
             [],
         ),
         refresh: None(
@@ -3866,6 +3914,9 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
         environments: SupportedEnvironments(
             [],
         ),
+        required_environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -4080,6 +4131,9 @@ fn resolve_both() -> anyhow::Result<()> {
         excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
+            [],
+        ),
+        required_environments: SupportedEnvironments(
             [],
         ),
         refresh: None(
@@ -4339,6 +4393,9 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
         excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
+            [],
+        ),
+        required_environments: SupportedEnvironments(
             [],
         ),
         refresh: None(
@@ -4679,6 +4736,9 @@ fn resolve_config_file() -> anyhow::Result<()> {
         environments: SupportedEnvironments(
             [],
         ),
+        required_environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -4990,6 +5050,9 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         environments: SupportedEnvironments(
             [],
         ),
+        required_environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -5173,6 +5236,9 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
+            [],
+        ),
+        required_environments: SupportedEnvironments(
             [],
         ),
         refresh: None(
@@ -5379,6 +5445,9 @@ fn allow_insecure_host() -> anyhow::Result<()> {
         environments: SupportedEnvironments(
             [],
         ),
+        required_environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -5573,6 +5642,9 @@ fn index_priority() -> anyhow::Result<()> {
         excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
+            [],
+        ),
+        required_environments: SupportedEnvironments(
             [],
         ),
         refresh: None(
@@ -5823,6 +5895,9 @@ fn index_priority() -> anyhow::Result<()> {
         excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
+            [],
+        ),
+        required_environments: SupportedEnvironments(
             [],
         ),
         refresh: None(
@@ -6081,6 +6156,9 @@ fn index_priority() -> anyhow::Result<()> {
         environments: SupportedEnvironments(
             [],
         ),
+        required_environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -6330,6 +6408,9 @@ fn index_priority() -> anyhow::Result<()> {
         excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
+            [],
+        ),
+        required_environments: SupportedEnvironments(
             [],
         ),
         refresh: None(
@@ -6590,6 +6671,9 @@ fn index_priority() -> anyhow::Result<()> {
         environments: SupportedEnvironments(
             [],
         ),
+        required_environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -6839,6 +6923,9 @@ fn index_priority() -> anyhow::Result<()> {
         excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
+            [],
+        ),
+        required_environments: SupportedEnvironments(
             [],
         ),
         refresh: None(
@@ -9508,6 +9595,9 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         environments: SupportedEnvironments(
             [],
         ),
+        required_environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -9698,6 +9788,9 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         environments: SupportedEnvironments(
             [],
         ),
+        required_environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -9881,6 +9974,9 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         environments: SupportedEnvironments(
             [],
         ),
+        required_environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -10060,6 +10156,9 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
+            [],
+        ),
+        required_environments: SupportedEnvironments(
             [],
         ),
         refresh: None(
@@ -10244,6 +10343,9 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         environments: SupportedEnvironments(
             [],
         ),
+        required_environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -10425,6 +10527,9 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
+            [],
+        ),
+        required_environments: SupportedEnvironments(
             [],
         ),
         refresh: None(
@@ -11407,6 +11512,9 @@ fn build_isolation_override() -> anyhow::Result<()> {
         environments: SupportedEnvironments(
             [],
         ),
+        required_environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -11583,6 +11691,9 @@ fn build_isolation_override() -> anyhow::Result<()> {
         excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
+            [],
+        ),
+        required_environments: SupportedEnvironments(
             [],
         ),
         refresh: None(

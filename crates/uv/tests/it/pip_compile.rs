@@ -14369,6 +14369,59 @@ fn universal_constrained_environment() -> Result<()> {
     Ok(())
 }
 
+/// Resolve with `--universal`, requiring artifact coverage for user-provided environments.
+#[test]
+fn universal_required_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&indoc::formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["no-sdist-no-wheels-with-matching-platform-a"]
+
+        [tool.uv]
+        required-environments = ["platform_machine == 'arm64'"]
+
+        [[tool.uv.index]]
+        name = "packse"
+        url = "{}"
+        default = true
+        "#,
+        packse_index_url()
+    })?;
+
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([(
+            // This hint is only shown when the current platform doesn't match the target.
+            r"\n\n\s+hint: The resolution failed for an environment that is not the current one[^\n]*",
+            "",
+        )])
+        .collect();
+
+    uv_snapshot!(filters, context.pip_compile()
+        .arg("pyproject.toml")
+        .arg("--universal")
+        .arg("--exclude-newer-package")
+        .arg("no-sdist-no-wheels-with-matching-platform-a=false")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies for split (markers: platform_machine == 'arm64'):
+      ╰─▶ Because only no-sdist-no-wheels-with-matching-platform-a==1.0.0 is available and no-sdist-no-wheels-with-matching-platform-a==1.0.0 has no `platform_machine == 'arm64'`-compatible wheels, we can conclude that all versions of no-sdist-no-wheels-with-matching-platform-a cannot be used.
+          And because project depends on no-sdist-no-wheels-with-matching-platform-a, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    Ok(())
+}
+
 /// Resolve a package that has no versions that satisfy the current Python version.
 #[test]
 fn compile_enumerate_no_versions() -> Result<()> {

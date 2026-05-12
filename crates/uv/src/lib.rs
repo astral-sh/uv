@@ -657,6 +657,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.excludes_from_workspace,
                 args.build_constraints_from_workspace,
                 args.environments,
+                args.required_environments,
                 args.settings.extras,
                 groups,
                 args.settings.output_file.as_deref(),

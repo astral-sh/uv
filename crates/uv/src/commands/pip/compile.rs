@@ -72,6 +72,7 @@ pub(crate) async fn pip_compile(
     excludes_from_workspace: Vec<uv_normalize::PackageName>,
     build_constraints_from_workspace: Vec<Requirement>,
     environments: SupportedEnvironments,
+    required_environments: SupportedEnvironments,
     extras: ExtrasSpecification,
     groups: GroupsSpecification,
     output_file: Option<&Path>,
@@ -385,7 +386,13 @@ pub(crate) async fn pip_compile(
     };
 
     let artifact_environments = if universal {
-        environments.clone()
+        SupportedEnvironments::from_markers(
+            environments
+                .iter()
+                .chain(required_environments.iter())
+                .copied()
+                .collect(),
+        )
     } else {
         SupportedEnvironments::default()
     };
