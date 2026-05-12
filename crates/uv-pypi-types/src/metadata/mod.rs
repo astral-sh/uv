@@ -52,6 +52,8 @@ pub enum MetadataError {
     InvalidName(#[from] InvalidNameError),
     #[error("Invalid `Metadata-Version` field: {0}")]
     InvalidMetadataVersion(String),
+    #[error("`Import-Name` and `Import-Namespace` must not both contain `{0}`")]
+    DuplicateImportName(String),
     #[error("Reading metadata from `PKG-INFO` requires Metadata 2.2 or later (found: {0})")]
     UnsupportedMetadataVersion(String),
     #[error("The following field was marked as dynamic: {0}")]
