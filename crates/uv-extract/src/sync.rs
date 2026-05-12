@@ -69,11 +69,7 @@ pub fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf, u64)>,
             // Create necessary parent directories.
             let path = target.join(&enclosed_name);
             if entry.dir()? {
-                let mut directories = directories.lock().map_err(|_| {
-                    Error::Io(std::io::Error::other(
-                        "ZIP extraction directory tracker mutex was poisoned",
-                    ))
-                })?;
+                let mut directories = directories.lock().unwrap();
                 if directories.insert(path.clone()) {
                     fs_err::create_dir_all(path).map_err(Error::Io)?;
                 }
@@ -81,11 +77,7 @@ pub fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf, u64)>,
             }
 
             if let Some(parent) = path.parent() {
-                let mut directories = directories.lock().map_err(|_| {
-                    Error::Io(std::io::Error::other(
-                        "ZIP extraction directory tracker mutex was poisoned",
-                    ))
-                })?;
+                let mut directories = directories.lock().unwrap();
                 if directories.insert(parent.to_path_buf()) {
                     fs_err::create_dir_all(parent).map_err(Error::Io)?;
                 }

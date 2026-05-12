@@ -711,6 +711,9 @@ struct ZipDirectoryWriter<W: AsyncWrite + Unpin> {
 }
 
 impl<W: AsyncWrite + Unpin> ZipDirectoryWriter<W> {
+    // Include the Unix file type bits because `async_zip` writes this mode
+    // directly to the ZIP external attributes. The sync `zip` crate adds
+    // those bits internally when starting file and directory entries.
     const REGULAR_FILE_MODE: u16 = 0o100_644;
     const EXECUTABLE_FILE_MODE: u16 = 0o100_755;
     const DIRECTORY_MODE: u16 = 0o040_755;

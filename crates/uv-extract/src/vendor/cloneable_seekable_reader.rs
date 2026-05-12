@@ -70,11 +70,7 @@ impl<R: Read + Seek + HasLength> CloneableSeekableReader<R> {
     /// Determine the length of the underlying stream.
     fn ascertain_file_length(&mut self) -> u64 {
         self.file_length.unwrap_or_else(|| {
-            let len = self
-                .file
-                .lock()
-                .expect("cloneable seekable reader mutex should not be poisoned")
-                .len();
+            let len = self.file.lock().unwrap().len();
             self.file_length = Some(len);
             len
         })
@@ -111,10 +107,7 @@ impl<R: Read + Seek + HasLength> Read for CloneableSeekableReader<R> {
             return Ok(amount);
         }
 
-        let mut underlying_file = self
-            .file
-            .lock()
-            .map_err(|_| std::io::Error::other("cloneable seekable reader mutex was poisoned"))?;
+        let mut underlying_file = self.file.lock().unwrap();
         // TODO share an object which knows current position to avoid unnecessary
         // seeks
         underlying_file.seek(SeekFrom::Start(self.pos))?;
@@ -160,9 +153,7 @@ impl<R: Read + Seek + HasLength> Seek for CloneableSeekableReader<R> {
 impl<R: Read + Seek + HasLength> BufRead for CloneableSeekableReader<R> {
     fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
         if self.buffered_len() == 0 {
-            let mut underlying_file = self.file.lock().map_err(|_| {
-                std::io::Error::other("cloneable seekable reader mutex was poisoned")
-            })?;
+            let mut underlying_file = self.file.lock().unwrap();
             underlying_file.seek(SeekFrom::Start(self.pos))?;
             self.buffer_length = underlying_file.read(&mut *self.buffer)?;
             self.buffer_position = 0;
