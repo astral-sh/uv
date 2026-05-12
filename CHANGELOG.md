@@ -17,10 +17,7 @@ Released on 2026-05-12.
 - Avoid applying `.env` files in parent process ([#19343](https://github.com/astral-sh/uv/pull/19343))
 - Filter ANSI codes in logging output ([#19311](https://github.com/astral-sh/uv/pull/19311))
 - Fix `uv tree` showing extra-conditional deps for packages required without extras ([#19332](https://github.com/astral-sh/uv/pull/19332))
-
-### Other changes
-
-- Ensure publish to crates.io is idempotent ([#19361](https://github.com/astral-sh/uv/pull/19361))
+- Respect build options (e.g., `--no-build`) during lock validation ([#19366](https://github.com/astral-sh/uv/pull/19366))
 
 ## 0.11.13
 
@@ -32,6 +29,8 @@ Released on 2026-05-10.
 - Respect `--require-hashes` when installing from `pylock.toml` files ([#19334](https://github.com/astral-sh/uv/pull/19334))
 
 ### Python
+### Python
+
 - Add CPython 3.14.5
 
 ## 0.11.12
