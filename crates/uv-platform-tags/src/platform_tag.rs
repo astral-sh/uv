@@ -28,7 +28,9 @@ impl FromStr for ReleaseArch {
     type Err = ParseReleaseArchError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.bytes().all(is_platform_tag_byte) {
+        if s.bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+        {
             Ok(Self(SmallString::from(s)))
         } else {
             Err(ParseReleaseArchError)
@@ -724,7 +726,9 @@ impl FromStr for PlatformTag {
                 });
             }
             return Ok(Self::FreeBsd {
-                release_arch: parse_release_arch(rest, s)?,
+                release_arch: rest
+                    .parse::<ReleaseArch>()
+                    .map_err(|_| ParsePlatformTagError::InvalidCharacters { tag: s.to_string() })?,
             });
         }
 
@@ -737,7 +741,9 @@ impl FromStr for PlatformTag {
                 });
             }
             return Ok(Self::NetBsd {
-                release_arch: parse_release_arch(rest, s)?,
+                release_arch: rest
+                    .parse::<ReleaseArch>()
+                    .map_err(|_| ParsePlatformTagError::InvalidCharacters { tag: s.to_string() })?,
             });
         }
 
@@ -750,7 +756,9 @@ impl FromStr for PlatformTag {
                 });
             }
             return Ok(Self::OpenBsd {
-                release_arch: parse_release_arch(rest, s)?,
+                release_arch: rest
+                    .parse::<ReleaseArch>()
+                    .map_err(|_| ParsePlatformTagError::InvalidCharacters { tag: s.to_string() })?,
             });
         }
 
@@ -763,7 +771,9 @@ impl FromStr for PlatformTag {
                 });
             }
             return Ok(Self::Dragonfly {
-                release_arch: parse_release_arch(rest, s)?,
+                release_arch: rest
+                    .parse::<ReleaseArch>()
+                    .map_err(|_| ParsePlatformTagError::InvalidCharacters { tag: s.to_string() })?,
             });
         }
 
@@ -776,7 +786,9 @@ impl FromStr for PlatformTag {
                 });
             }
             return Ok(Self::Haiku {
-                release_arch: parse_release_arch(rest, s)?,
+                release_arch: rest
+                    .parse::<ReleaseArch>()
+                    .map_err(|_| ParsePlatformTagError::InvalidCharacters { tag: s.to_string() })?,
             });
         }
 
@@ -789,7 +801,9 @@ impl FromStr for PlatformTag {
                 });
             }
             return Ok(Self::Illumos {
-                release_arch: parse_release_arch(rest, s)?,
+                release_arch: rest
+                    .parse::<ReleaseArch>()
+                    .map_err(|_| ParsePlatformTagError::InvalidCharacters { tag: s.to_string() })?,
             });
         }
 
@@ -805,7 +819,9 @@ impl FromStr for PlatformTag {
             if let Some(release_arch) = rest.strip_suffix("_64bit") {
                 if !release_arch.is_empty() {
                     return Ok(Self::Solaris {
-                        release_arch: parse_release_arch(release_arch, s)?,
+                        release_arch: release_arch.parse::<ReleaseArch>().map_err(|_| {
+                            ParsePlatformTagError::InvalidCharacters { tag: s.to_string() }
+                        })?,
                     });
                 }
             }
@@ -899,18 +915,6 @@ impl FromStr for PlatformTag {
 
         Err(ParsePlatformTagError::UnknownFormat(s.to_string()))
     }
-}
-
-fn is_platform_tag_byte(byte: u8) -> bool {
-    byte.is_ascii_alphanumeric() || byte == b'_'
-}
-
-fn parse_release_arch(release_arch: &str, tag: &str) -> Result<ReleaseArch, ParsePlatformTagError> {
-    release_arch
-        .parse()
-        .map_err(|_| ParsePlatformTagError::InvalidCharacters {
-            tag: tag.to_string(),
-        })
 }
 
 #[derive(Debug, Clone, Copy, thiserror::Error, PartialEq, Eq)]
