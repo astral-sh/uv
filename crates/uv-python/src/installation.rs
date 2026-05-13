@@ -66,10 +66,25 @@ impl PythonInstallation {
         cache: &Cache,
         preview: Preview,
     ) -> Result<Self, Error> {
-        let installation =
-            find_python_installation(request, environments, preference, cache, preview)??;
+        let installation = Self::find_existing(request, environments, preference, cache, preview)?;
         installation.warn_if_outdated_prerelease(request, download_list);
         Ok(installation)
+    }
+
+    fn find_existing(
+        request: &PythonRequest,
+        environments: EnvironmentPreference,
+        preference: PythonPreference,
+        cache: &Cache,
+        preview: Preview,
+    ) -> Result<Self, Error> {
+        Ok(find_python_installation(
+            request,
+            environments,
+            preference,
+            cache,
+            preview,
+        )??)
     }
 
     /// Find or download a [`PythonInstallation`] that satisfies a requested version, if the request
@@ -131,25 +146,31 @@ impl PythonInstallation {
     ) -> Result<Self, Error> {
         let request = request.unwrap_or(&PythonRequest::Default);
 
+        let err = match Self::find_existing(request, environments, preference, cache, preview) {
+            Ok(installation) => {
+                if installation
+                    .outdated_prerelease_download_request(request)
+                    .is_some()
+                {
+                    // Python downloads are performing their own retries to catch stream errors,
+                    // disable the default retries to avoid the middleware performing uncontrolled
+                    // retries.
+                    let client = client_builder.clone().retries(0).build()?;
+                    let download_list =
+                        ManagedPythonDownloadList::new(&client, python_downloads_json_url).await?;
+                    installation.warn_if_outdated_prerelease(request, &download_list);
+                }
+                return Ok(installation);
+            }
+            Err(err) => err,
+        };
+
         // Python downloads are performing their own retries to catch stream errors, disable the
         // default retries to avoid the middleware performing uncontrolled retries.
         let retry_policy = client_builder.retry_policy();
         let client = client_builder.clone().retries(0).build()?;
         let download_list =
             ManagedPythonDownloadList::new(&client, python_downloads_json_url).await?;
-
-        // Search for the installation
-        let err = match Self::find(
-            request,
-            environments,
-            preference,
-            &download_list,
-            cache,
-            preview,
-        ) {
-            Ok(installation) => return Ok(installation),
-            Err(err) => err,
-        };
 
         match err {
             // If Python is missing, we should attempt a download
@@ -400,26 +421,22 @@ impl PythonInstallation {
         self.interpreter
     }
 
-    /// Emit a warning when the interpreter is a managed prerelease and a matching stable
-    /// build can be installed via `uv python upgrade`.
-    pub(crate) fn warn_if_outdated_prerelease(
+    fn outdated_prerelease_download_request(
         &self,
         request: &PythonRequest,
-        download_list: &ManagedPythonDownloadList,
-    ) {
+    ) -> Option<PythonDownloadRequest> {
         if request.allows_prereleases() {
-            return;
+            return None;
         }
 
         let interpreter = self.interpreter();
-        let version = interpreter.python_version();
 
-        if version.pre().is_none() {
-            return;
+        if interpreter.python_version().pre().is_none() {
+            return None;
         }
 
         if !interpreter.is_managed() {
-            return;
+            return None;
         }
 
         // Transparent upgrades only exist for CPython, so skip the warning for other
@@ -430,16 +447,31 @@ impl PythonInstallation {
             .implementation_name()
             .eq_ignore_ascii_case("cpython")
         {
-            return;
+            return None;
         }
+
+        Some(
+            PythonDownloadRequest::try_from(&interpreter.key())
+                .ok()?
+                .with_prereleases(false),
+        )
+    }
+
+    /// Emit a warning when the interpreter is a managed prerelease and a matching stable
+    /// build can be installed via `uv python upgrade`.
+    pub(crate) fn warn_if_outdated_prerelease(
+        &self,
+        request: &PythonRequest,
+        download_list: &ManagedPythonDownloadList,
+    ) {
+        let interpreter = self.interpreter();
+        let version = interpreter.python_version();
 
         let release = version.only_release();
 
-        let Ok(download_request) = PythonDownloadRequest::try_from(&interpreter.key()) else {
+        let Some(download_request) = self.outdated_prerelease_download_request(request) else {
             return;
         };
-
-        let download_request = download_request.with_prereleases(false);
 
         let has_stable_download = {
             let mut downloads = download_list.iter_matching(&download_request);
