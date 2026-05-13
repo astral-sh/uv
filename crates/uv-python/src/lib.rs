@@ -656,6 +656,8 @@ mod tests {
     fn find_or_download_skips_download_metadata_when_python_is_found() -> Result<()> {
         let mut context = TestContext::new()?;
         context.add_python_versions(&["3.12.1"])?;
+        // Pass a missing metadata file to assert that an already-installed Python can
+        // be returned without reading the download list.
         let missing_downloads = context.tempdir.child("missing-downloads.json");
 
         let interpreter = context.run(|| {
