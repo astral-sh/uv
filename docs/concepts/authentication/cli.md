@@ -87,36 +87,8 @@ If no credentials are found, uv will return an empty set of headers:
     `uv auth helper` is experimental. Use `--preview-features auth-helper` or
     `UV_PREVIEW_FEATURES=auth-helper` to disable the warning.
 
-### Bazel
-
-Bazel 7 and newer supports credential helpers via the `--credential_helper` option. First,
-authenticate uv with the service that hosts the files Bazel needs to fetch:
-
-```console
-$ uv auth login https://packages.example.com
-```
-
-Then, configure Bazel to invoke uv for matching hosts:
-
-```text title=".bazelrc"
-common --credential_helper=packages.example.com=%workspace%/bazel/uv-auth-helper
-common --credential_helper=files.example.com=%workspace%/bazel/uv-auth-helper
-```
-
-Replace the host patterns with the hosts that serve the index and files Bazel will fetch.
-
-Finally, add the wrapper script referenced by `.bazelrc`:
-
-```bash title="bazel/uv-auth-helper"
-#!/usr/bin/env bash
-exec uv --preview-features auth-helper auth helper --protocol=bazel "$@"
-```
-
-The script must be executable:
-
-```console
-$ chmod +x bazel/uv-auth-helper
-```
+The [Bazel integration guide](../../guides/integration/bazel.md) explains how to use this command
+with Bazel.
 
 ## Configuring the storage backend
 
