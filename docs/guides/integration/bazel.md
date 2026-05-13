@@ -21,7 +21,9 @@ files Bazel needs to fetch:
 $ uv auth login https://packages.example.com
 ```
 
-Then, configure Bazel to invoke `uv auth helper` for matching hosts:
+Then, configure Bazel to invoke
+[`uv auth helper`](../../concepts/authentication/cli.md#using-credentials-with-external-tools) for
+matching hosts:
 
 ```text title=".bazelrc"
 common --credential_helper=packages.example.com=%workspace%/bazel/uv-auth-helper
