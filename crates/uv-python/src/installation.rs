@@ -148,18 +148,13 @@ impl PythonInstallation {
 
         let err = match Self::find_existing(request, environments, preference, cache, preview) {
             Ok(installation) => {
-                if installation
-                    .outdated_prerelease_download_request(request)
-                    .is_some()
-                {
-                    // Python downloads are performing their own retries to catch stream errors,
-                    // disable the default retries to avoid the middleware performing uncontrolled
-                    // retries.
-                    let client = client_builder.clone().retries(0).build()?;
-                    let download_list =
-                        ManagedPythonDownloadList::new(&client, python_downloads_json_url).await?;
-                    installation.warn_if_outdated_prerelease(request, &download_list);
-                }
+                installation
+                    .warn_if_outdated_prerelease_if_needed(
+                        request,
+                        client_builder,
+                        python_downloads_json_url,
+                    )
+                    .await?;
                 return Ok(installation);
             }
             Err(err) => err,
@@ -421,6 +416,8 @@ impl PythonInstallation {
         self.interpreter
     }
 
+    /// Return the stable-download request used to check whether an installed managed prerelease
+    /// should emit an upgrade warning.
     fn outdated_prerelease_download_request(
         &self,
         request: &PythonRequest,
@@ -464,14 +461,44 @@ impl PythonInstallation {
         request: &PythonRequest,
         download_list: &ManagedPythonDownloadList,
     ) {
+        let Some(download_request) = self.outdated_prerelease_download_request(request) else {
+            return;
+        };
+
+        self.warn_if_outdated_prerelease_download(download_request, download_list);
+    }
+
+    /// Load download metadata only when a managed prerelease may need an upgrade warning.
+    async fn warn_if_outdated_prerelease_if_needed(
+        &self,
+        request: &PythonRequest,
+        client_builder: &BaseClientBuilder<'_>,
+        python_downloads_json_url: Option<&str>,
+    ) -> Result<(), Error> {
+        let Some(download_request) = self.outdated_prerelease_download_request(request) else {
+            return Ok(());
+        };
+
+        // Python downloads are performing their own retries to catch stream errors, disable the
+        // default retries to avoid the middleware performing uncontrolled retries.
+        let client = client_builder.clone().retries(0).build()?;
+        let download_list =
+            ManagedPythonDownloadList::new(&client, python_downloads_json_url).await?;
+        self.warn_if_outdated_prerelease_download(download_request, &download_list);
+
+        Ok(())
+    }
+
+    /// Emit the managed-prerelease warning when the provided download request has a stable match.
+    fn warn_if_outdated_prerelease_download(
+        &self,
+        download_request: PythonDownloadRequest,
+        download_list: &ManagedPythonDownloadList,
+    ) {
         let interpreter = self.interpreter();
         let version = interpreter.python_version();
 
         let release = version.only_release();
-
-        let Some(download_request) = self.outdated_prerelease_download_request(request) else {
-            return;
-        };
 
         let has_stable_download = {
             let mut downloads = download_list.iter_matching(&download_request);
