@@ -1,14 +1,12 @@
 ---
 title: Using uv with Bazel
-description:
-  Using uv to power package resolution with Bazel
+description: Using uv to power package resolution with Bazel
 ---
 
 # Using uv with Bazel
 
 For broader Bazel workflows with uv, see the
-[`rules_py` uv guide](https://github.com/aspect-build/rules_py#dependency-resolution-with-uv)
-or the
+[`rules_py` uv guide](https://github.com/aspect-build/rules_py#dependency-resolution-with-uv) or the
 [`rules_python` uv guide](https://rules-python.readthedocs.io/en/latest/pypi/lock.html#uv-pip-compile-bzlmod-only).
 
 ## Authentication
