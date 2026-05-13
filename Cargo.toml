@@ -286,6 +286,7 @@ webpki-root-certs = { version = "1" }
 which = { version = "8.0.0", features = ["regex"] }
 windows = { version = "0.61.0", features = [
   "std",
+  "Win32_Devices_DeviceAndDriverInstallation",
   "Win32_Foundation",
   "Win32_Globalization",
   "Win32_Security",

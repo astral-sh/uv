@@ -7311,7 +7311,7 @@ dependencies = [
  "uv-pep440",
  "uv-platform-tags",
  "uv-static",
- "windows-registry",
+ "windows",
 ]
 
 [[package]]
