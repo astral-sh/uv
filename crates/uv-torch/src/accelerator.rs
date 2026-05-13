@@ -265,7 +265,7 @@ fn detect_intel_gpu_from_windows_devices() -> bool {
     // valid out pointer, and Configuration Manager writes only that scalar result here.
     let result = unsafe {
         CM_Get_Device_ID_List_SizeW(
-            &mut device_ids_len,
+            &raw mut device_ids_len,
             WINDOWS_DISPLAY_ADAPTER_CLASS_GUID,
             FLAGS,
         )
