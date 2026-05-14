@@ -96,9 +96,9 @@ pub(crate) async fn pin(
             for pin in file.versions() {
                 writeln!(printer.stdout(), "{}", pin.to_canonical_string())?;
                 if let Some(virtual_project) = &virtual_project {
-                    let client = client_builder.clone().retries(0).build()?;
+                    let download_list_client = client_builder.build()?;
                     let download_list = ManagedPythonDownloadList::new(
-                        &client,
+                        &download_list_client,
                         install_mirrors.python_downloads_json_url.as_deref(),
                     )
                     .await?;
@@ -268,8 +268,8 @@ fn warn_if_existing_pin_incompatible_with_project(
         }
     }
 
-    // If there is not a version in the pinned request, attempt to resolve the pin into an
-    // interpreter to check for compatibility on the current system.
+    // If the request itself didn't prove an incompatibility, resolve the pin into an
+    // interpreter to check the concrete version on the current system.
     match PythonInstallation::find(
         pin,
         EnvironmentPreference::OnlySystem,

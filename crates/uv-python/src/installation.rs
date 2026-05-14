@@ -71,6 +71,7 @@ impl PythonInstallation {
         Ok(installation)
     }
 
+    /// Find an existing [`PythonInstallation`].
     fn find_existing(
         request: &PythonRequest,
         environments: EnvironmentPreference,
@@ -148,26 +149,20 @@ impl PythonInstallation {
 
         let err = match Self::find_existing(request, environments, preference, cache, preview) {
             Ok(installation) => {
+                // Avoid parsing the download list unless we need it to surface a warning.
                 if installation.should_check_outdated_prerelease_warning(request) {
-                    // Python downloads are performing their own retries to catch stream errors,
-                    // disable the default retries to avoid the middleware performing uncontrolled
-                    // retries.
-                    let client = client_builder.clone().retries(0).build()?;
-                    let download_list =
-                        ManagedPythonDownloadList::new(&client, python_downloads_json_url).await?;
+                    let download_list_client = client_builder.build()?;
+                    let download_list = ManagedPythonDownloadList::new(
+                        &download_list_client,
+                        python_downloads_json_url,
+                    )
+                    .await?;
                     installation.warn_if_outdated_prerelease(request, &download_list);
                 }
                 return Ok(installation);
             }
             Err(err) => err,
         };
-
-        // Python downloads are performing their own retries to catch stream errors, disable the
-        // default retries to avoid the middleware performing uncontrolled retries.
-        let retry_policy = client_builder.retry_policy();
-        let client = client_builder.clone().retries(0).build()?;
-        let download_list =
-            ManagedPythonDownloadList::new(&client, python_downloads_json_url).await?;
 
         match err {
             // If Python is missing, we should attempt a download
@@ -182,6 +177,11 @@ impl PythonInstallation {
         let Some(download_request) = PythonDownloadRequest::from_request(request) else {
             return Err(err);
         };
+
+        let download_list_client = client_builder.build()?;
+        let download_list =
+            ManagedPythonDownloadList::new(&download_list_client, python_downloads_json_url)
+                .await?;
 
         let downloads_enabled = preference.allows_managed()
             && python_downloads.is_automatic()
@@ -269,9 +269,14 @@ impl PythonInstallation {
             return Err(err);
         }
 
+        // Python downloads are performing their own retries to catch stream errors, disable the
+        // default retries to avoid the middleware performing uncontrolled retries.
+        let retry_policy = client_builder.retry_policy();
+        let download_client = client_builder.clone().retries(0).build()?;
+
         let installation = Self::fetch(
             download,
-            &client,
+            &download_client,
             &retry_policy,
             cache,
             reporter,

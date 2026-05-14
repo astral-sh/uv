@@ -78,8 +78,9 @@ pub(crate) async fn find(
     )
     .await?;
 
-    let client = client_builder.clone().retries(0).build()?;
-    let download_list = ManagedPythonDownloadList::new(&client, python_downloads_json_url).await?;
+    let download_list_client = client_builder.build()?;
+    let download_list =
+        ManagedPythonDownloadList::new(&download_list_client, python_downloads_json_url).await?;
 
     let python = PythonInstallation::find(
         &python_request.unwrap_or_default(),
