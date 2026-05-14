@@ -1709,8 +1709,16 @@ where
         time: Some(toml_edit::Time {
             hour: u8::try_from(timestamp.hour()).map_err(serde::ser::Error::custom)?,
             minute: u8::try_from(timestamp.minute()).map_err(serde::ser::Error::custom)?,
-            second: u8::try_from(timestamp.second()).map_err(serde::ser::Error::custom)?,
-            nanosecond: u32::try_from(timestamp.nanosecond()).map_err(serde::ser::Error::custom)?,
+            second: Some(u8::try_from(timestamp.second()).map_err(serde::ser::Error::custom)?),
+            nanosecond: {
+                let nanosecond =
+                    u32::try_from(timestamp.nanosecond()).map_err(serde::ser::Error::custom)?;
+                if nanosecond == 0 {
+                    None
+                } else {
+                    Some(nanosecond)
+                }
+            },
         }),
         offset: Some(toml_edit::Offset::Z),
     };
@@ -1753,8 +1761,10 @@ where
     let time = if let Some(time) = datetime.time {
         let hour = i8::try_from(time.hour).map_err(serde::de::Error::custom)?;
         let minute = i8::try_from(time.minute).map_err(serde::de::Error::custom)?;
-        let second = i8::try_from(time.second).map_err(serde::de::Error::custom)?;
-        let nanosecond = i32::try_from(time.nanosecond).map_err(serde::de::Error::custom)?;
+        let second =
+            i8::try_from(time.second.unwrap_or_default()).map_err(serde::de::Error::custom)?;
+        let nanosecond =
+            i32::try_from(time.nanosecond.unwrap_or_default()).map_err(serde::de::Error::custom)?;
         Time::new(hour, minute, second, nanosecond).map_err(serde::de::Error::custom)?
     } else {
         Time::midnight()

@@ -153,7 +153,7 @@ jobs:
       - name: "Install cargo shear"
         uses: taiki-e/install-action@db5fb34fa772531a3ece57ca434f579eb334e0fb # v2.75.30
         with:
-          tool: cargo-shear
+          tool: cargo-shear@1.11.2
       - run: cargo shear --deny-warnings
 
   typos:
