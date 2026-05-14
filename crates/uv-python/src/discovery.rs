@@ -1,7 +1,6 @@
 use itertools::{Either, Itertools};
 use owo_colors::AnsiColors;
 use regex::Regex;
-use reqwest_retry::policies::ExponentialBackoff;
 use rustc_hash::{FxBuildHasher, FxHashSet};
 use same_file::is_same_file;
 use std::borrow::Cow;
@@ -12,7 +11,7 @@ use std::{path::Path, path::PathBuf, str::FromStr};
 use thiserror::Error;
 use tracing::{debug, instrument, trace};
 use uv_cache::Cache;
-use uv_client::BaseClient;
+use uv_client::BaseClientBuilder;
 use uv_distribution_types::RequiresPython;
 use uv_fs::Simplified;
 use uv_fs::which::is_executable;
@@ -1391,19 +1390,19 @@ pub(crate) async fn find_best_python_installation(
     environments: EnvironmentPreference,
     preference: PythonPreference,
     downloads_enabled: bool,
-    download_list: &ManagedPythonDownloadList,
-    client: &BaseClient,
-    retry_policy: &ExponentialBackoff,
+    client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
     reporter: Option<&dyn crate::downloads::Reporter>,
     python_install_mirror: Option<&str>,
     pypy_install_mirror: Option<&str>,
+    python_downloads_json_url: Option<&str>,
     preview: Preview,
 ) -> Result<PythonInstallation, crate::Error> {
     debug!("Starting Python discovery for {request}");
     let original_request = request;
 
     let mut previous_fetch_failed = false;
+    let mut download_state = None;
 
     let request_without_patch = match request {
         PythonRequest::Version(version) => {
@@ -1449,6 +1448,24 @@ pub(crate) async fn find_best_python_installation(
             && !previous_fetch_failed
             && let Some(download_request) = PythonDownloadRequest::from_request(request)
         {
+            let (client, retry_policy, download_list) =
+                if let Some(download_state) = &mut download_state {
+                    download_state
+                } else {
+                    let download_list_client = client_builder.build()?;
+                    let download_list = ManagedPythonDownloadList::new(
+                        &download_list_client,
+                        python_downloads_json_url,
+                    )
+                    .await?;
+                    let retry_policy = client_builder.retry_policy();
+
+                    // Python downloads are performing their own retries to catch stream errors, disable
+                    // the default retries to avoid the middleware performing uncontrolled retries.
+                    let client = client_builder.clone().retries(0).build()?;
+                    download_state.insert((client, retry_policy, download_list))
+                };
+
             let download = download_request
                 .clone()
                 .fill()

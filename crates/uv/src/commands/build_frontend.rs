@@ -382,7 +382,7 @@ async fn build_impl(
             preview,
         );
         async {
-            let result = future.await;
+            let result = Box::pin(future).await;
             (source, result)
         }
     }))

@@ -7,9 +7,19 @@ use uv_pep440::Version;
 use uv_static::EnvVars;
 
 #[cfg(windows)]
-use serde::Deserialize;
+use windows::Win32::Devices::DeviceAndDriverInstallation::{
+    CM_GETIDLIST_FILTER_CLASS, CM_GETIDLIST_FILTER_PRESENT, CM_Get_Device_ID_List_SizeW,
+    CM_Get_Device_ID_ListW, CR_SUCCESS,
+};
+
+// Constants used for PCI device detection.
+const PCI_BASE_CLASS_MASK: u32 = 0x00ff_0000;
+const PCI_BASE_CLASS_DISPLAY: u32 = 0x0003_0000;
+const PCI_VENDOR_ID_INTEL: u32 = 0x8086;
+// https://learn.microsoft.com/en-us/windows-hardware/drivers/install/system-defined-device-setup-classes-available-to-vendors
 #[cfg(windows)]
-use wmi::WMIConnection;
+const WINDOWS_DISPLAY_ADAPTER_CLASS_GUID: windows::core::PCWSTR =
+    windows::core::w!("{4d36e968-e325-11ce-bfc1-08002be10318}");
 
 #[derive(Debug, thiserror::Error)]
 pub enum AcceleratorError {
@@ -65,13 +75,8 @@ impl Accelerator {
     /// 5. `nvidia-smi --query-gpu=driver_version --format=csv,noheader`.
     /// 6. `rocm_agent_enumerator`, which lists the AMD GPU architectures.
     /// 7. `/sys/bus/pci/devices`, filtering for the Intel GPU via PCI.
-    /// 8. Windows Managmeent Instrumentation (WMI), filtering for the Intel GPU via PCI.
+    /// 8. The Windows device tree, filtering for present Intel display adapters via PCI.
     pub fn detect() -> Result<Option<Self>, AcceleratorError> {
-        // Constants used for PCI device detection.
-        const PCI_BASE_CLASS_MASK: u32 = 0x00ff_0000;
-        const PCI_BASE_CLASS_DISPLAY: u32 = 0x0003_0000;
-        const PCI_VENDOR_ID_INTEL: u32 = 0x8086;
-
         // Read from `UV_CUDA_DRIVER_VERSION`.
         if let Ok(driver_version) = std::env::var(EnvVars::UV_CUDA_DRIVER_VERSION) {
             let driver_version = Version::from_str(&driver_version)?;
@@ -196,42 +201,12 @@ impl Accelerator {
             Err(e) => return Err(e.into()),
         }
 
-        // Detect Intel GPU via WMI on Windows
+        // Detect Intel GPU via present Windows display adapters.
+        // TODO: Consider rejecting display adapters with disabled/problem devnode status.
+        // See: `CM_Locate_DevNodeW` + `CM_Get_DevNode_Status`
         #[cfg(windows)]
-        {
-            #[derive(Deserialize, Debug)]
-            #[serde(rename = "Win32_VideoController")]
-            #[serde(rename_all = "PascalCase")]
-            struct VideoController {
-                #[serde(rename = "PNPDeviceID")]
-                pnp_device_id: Option<String>,
-                name: Option<String>,
-            }
-
-            match WMIConnection::new() {
-                Ok(wmi_connection) => match wmi_connection.query::<VideoController>() {
-                    Ok(gpu_controllers) => {
-                        for gpu_controller in gpu_controllers {
-                            if let Some(pnp_device_id) = &gpu_controller.pnp_device_id {
-                                if pnp_device_id.contains(&format!("VEN_{PCI_VENDOR_ID_INTEL:04X}"))
-                                {
-                                    debug!(
-                                        "Detected Intel GPU from WMI: PNPDeviceID={}, Name={:?}",
-                                        pnp_device_id, gpu_controller.name
-                                    );
-                                    return Ok(Some(Self::Xpu));
-                                }
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        debug!("Failed to query WMI for video controllers: {e}");
-                    }
-                },
-                Err(e) => {
-                    debug!("Failed to create WMI connection: {e}");
-                }
-            }
+        if detect_intel_gpu_from_windows_devices() {
+            return Ok(Some(Self::Xpu));
         }
 
         debug!("Failed to detect GPU driver version");
@@ -278,6 +253,77 @@ fn parse_pci_device_ids(device_path: &Path) -> Result<(u32, u32), AcceleratorErr
     let pci_vendor = u32::from_str_radix(vendor_content.trim().trim_start_matches("0x"), 16)?;
 
     Ok((pci_class, pci_vendor))
+}
+
+#[cfg(windows)]
+#[allow(unsafe_code)]
+fn detect_intel_gpu_from_windows_devices() -> bool {
+    const FLAGS: u32 = CM_GETIDLIST_FILTER_CLASS | CM_GETIDLIST_FILTER_PRESENT;
+
+    let mut device_ids_len = 0;
+    // SAFETY: The class GUID is a static null-terminated UTF-16 string, `device_ids_len` is a
+    // valid out pointer, and Configuration Manager writes only that scalar result here.
+    let result = unsafe {
+        CM_Get_Device_ID_List_SizeW(
+            &raw mut device_ids_len,
+            WINDOWS_DISPLAY_ADAPTER_CLASS_GUID,
+            FLAGS,
+        )
+    };
+    if result != CR_SUCCESS {
+        debug!("Failed to query Windows display adapter device list length: {result:?}");
+        return false;
+    }
+
+    let Ok(device_ids_len) = usize::try_from(device_ids_len) else {
+        debug!("Windows display adapter device list length does not fit in memory");
+        return false;
+    };
+    let mut encoded_device_ids = vec![0; device_ids_len];
+
+    // SAFETY: The class GUID is a static null-terminated UTF-16 string, and the writable buffer
+    // length matches the size returned by `CM_Get_Device_ID_List_SizeW` for the same filter.
+    let result = unsafe {
+        CM_Get_Device_ID_ListW(
+            WINDOWS_DISPLAY_ADAPTER_CLASS_GUID,
+            &mut encoded_device_ids,
+            FLAGS,
+        )
+    };
+    if result != CR_SUCCESS {
+        debug!("Failed to query present Windows display adapters: {result:?}");
+        return false;
+    }
+
+    for device_id in windows_device_ids(&encoded_device_ids) {
+        if contains_intel_vendor_id(&device_id) {
+            debug!("Detected Intel GPU from present Windows display adapter: {device_id}");
+            return true;
+        }
+    }
+
+    false
+}
+
+#[cfg(any(windows, test))]
+fn contains_intel_vendor_id(pnp_device_id: &str) -> bool {
+    pnp_device_id
+        .split(['\\', '&'])
+        .any(|segment| segment.eq_ignore_ascii_case("VEN_8086"))
+}
+
+#[cfg(any(windows, test))]
+fn windows_device_ids(encoded_device_ids: &[u16]) -> impl Iterator<Item = String> + '_ {
+    encoded_device_ids
+        .split(|code_unit| *code_unit == 0)
+        .filter(|device_id| !device_id.is_empty())
+        .filter_map(|device_id| match String::from_utf16(device_id) {
+            Ok(device_id) => Some(device_id),
+            Err(err) => {
+                debug!("Failed to decode Windows device instance ID: {err}");
+                None
+            }
+        })
 }
 
 /// A GPU architecture for AMD GPUs.
@@ -375,5 +421,36 @@ mod tests {
             let version = Version::from_str(first_line.trim()).unwrap();
             assert_eq!(version, Version::from_str("572.60").unwrap());
         }
+    }
+
+    #[test]
+    fn intel_vendor_id_from_pnp_device_id() {
+        assert!(contains_intel_vendor_id(
+            r"PCI\VEN_8086&DEV_9A49&SUBSYS_00000000"
+        ));
+        assert!(contains_intel_vendor_id(
+            r"pci\ven_8086&dev_9a49&subsys_00000000"
+        ));
+        assert!(!contains_intel_vendor_id(
+            r"PCI\VEN_10DE&DEV_2504&SUBSYS_00000000"
+        ));
+        assert!(!contains_intel_vendor_id(r"PCI\DEV_8086&SUBSYS_00000000"));
+    }
+
+    #[test]
+    fn windows_device_instance_ids() {
+        let intel_gpu = r"PCI\VEN_8086&DEV_9A49&SUBSYS_00000000\3&11583659&0&10";
+        let nvidia_gpu = r"PCI\VEN_10DE&DEV_2504&SUBSYS_00000000\4&12AB34CD&0&0008";
+
+        let mut encoded_device_ids = Vec::new();
+        encoded_device_ids.extend(intel_gpu.encode_utf16());
+        encoded_device_ids.push(0);
+        encoded_device_ids.extend(nvidia_gpu.encode_utf16());
+        encoded_device_ids.extend([0, 0]);
+
+        assert_eq!(
+            windows_device_ids(&encoded_device_ids).collect::<Vec<_>>(),
+            vec![intel_gpu.to_string(), nvidia_gpu.to_string()]
+        );
     }
 }

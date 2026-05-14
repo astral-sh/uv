@@ -5416,8 +5416,7 @@ fn cyclonedx_export_basic() -> Result<()> {
           ]
         },
         {
-          "ref": "urllib3-2@2.2.0",
-          "dependsOn": []
+          "ref": "urllib3-2@2.2.0"
         }
       ]
     }
@@ -5492,8 +5491,7 @@ fn cyclonedx_export_direct_url() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "idna-2@3.6",
-          "dependsOn": []
+          "ref": "idna-2@3.6"
         },
         {
           "ref": "project-1@0.1.0",
@@ -5581,8 +5579,7 @@ fn cyclonedx_export_git_dependency() -> Result<()> {
           ]
         },
         {
-          "ref": "urllib3-2@2.2.0",
-          "dependsOn": []
+          "ref": "urllib3-2@2.2.0"
         }
       ]
     }
@@ -5649,8 +5646,7 @@ fn cyclonedx_export_no_dependencies() -> Result<()> {
       "components": [],
       "dependencies": [
         {
-          "ref": "standalone-project-1@1.0.0",
-          "dependsOn": []
+          "ref": "standalone-project-1@1.0.0"
         }
       ]
     }
@@ -5744,12 +5740,10 @@ fn cyclonedx_export_mixed_source_types() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "idna-2@3.6",
-          "dependsOn": []
+          "ref": "idna-2@3.6"
         },
         {
-          "ref": "iniconfig-3@2.0.0",
-          "dependsOn": []
+          "ref": "iniconfig-3@2.0.0"
         },
         {
           "ref": "mixed-project-1@0.1.0",
@@ -5760,8 +5754,7 @@ fn cyclonedx_export_mixed_source_types() -> Result<()> {
           ]
         },
         {
-          "ref": "urllib3-4@2.2.0",
-          "dependsOn": []
+          "ref": "urllib3-4@2.2.0"
         }
       ]
     }
@@ -5846,8 +5839,7 @@ fn cyclonedx_export_project_extra() -> Result<()> {
           ]
         },
         {
-          "ref": "typing-extensions-2@4.10.0",
-          "dependsOn": []
+          "ref": "typing-extensions-2@4.10.0"
         }
       ]
     }
@@ -5940,8 +5932,7 @@ fn cyclonedx_export_project_extra_with_optional_flag() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "iniconfig-2@2.0.0",
-          "dependsOn": []
+          "ref": "iniconfig-2@2.0.0"
         },
         {
           "ref": "project-1@0.1.0",
@@ -5952,12 +5943,10 @@ fn cyclonedx_export_project_extra_with_optional_flag() -> Result<()> {
           ]
         },
         {
-          "ref": "typing-extensions-3@4.10.0",
-          "dependsOn": []
+          "ref": "typing-extensions-3@4.10.0"
         },
         {
-          "ref": "urllib3-4@2.2.0",
-          "dependsOn": []
+          "ref": "urllib3-4@2.2.0"
         }
       ]
     }
@@ -6106,12 +6095,10 @@ fn cyclonedx_export_with_workspace_member() -> Result<()> {
           ]
         },
         {
-          "ref": "child2-3@0.2.9",
-          "dependsOn": []
+          "ref": "child2-3@0.2.9"
         },
         {
-          "ref": "iniconfig-4@2.0.0",
-          "dependsOn": []
+          "ref": "iniconfig-4@2.0.0"
         },
         {
           "ref": "project-1@0.1.0",
@@ -6122,8 +6109,7 @@ fn cyclonedx_export_with_workspace_member() -> Result<()> {
           ]
         },
         {
-          "ref": "urllib3-5@2.2.0",
-          "dependsOn": []
+          "ref": "urllib3-5@2.2.0"
         }
       ]
     }
@@ -6225,8 +6211,7 @@ fn cyclonedx_export_workspace_non_root() -> Result<()> {
           ]
         },
         {
-          "ref": "iniconfig-2@2.0.0",
-          "dependsOn": []
+          "ref": "iniconfig-2@2.0.0"
         }
       ]
     }
@@ -6350,8 +6335,7 @@ fn cyclonedx_export_workspace_with_extras() -> Result<()> {
           ]
         },
         {
-          "ref": "typing-extensions-3@4.10.0",
-          "dependsOn": []
+          "ref": "typing-extensions-3@4.10.0"
         }
       ]
     }
@@ -6434,8 +6418,7 @@ fn cyclonedx_export_workspace_with_extras() -> Result<()> {
           ]
         },
         {
-          "ref": "iniconfig-3@2.0.0",
-          "dependsOn": []
+          "ref": "iniconfig-3@2.0.0"
         },
         {
           "ref": "project-1@0.1.0",
@@ -6446,12 +6429,10 @@ fn cyclonedx_export_workspace_with_extras() -> Result<()> {
           ]
         },
         {
-          "ref": "typing-extensions-4@4.10.0",
-          "dependsOn": []
+          "ref": "typing-extensions-4@4.10.0"
         },
         {
-          "ref": "urllib3-5@2.2.0",
-          "dependsOn": []
+          "ref": "urllib3-5@2.2.0"
         }
       ]
     }
@@ -6597,8 +6578,7 @@ fn cyclonedx_export_workspace_frozen() -> Result<()> {
           ]
         },
         {
-          "ref": "iniconfig-3@2.0.0",
-          "dependsOn": []
+          "ref": "iniconfig-3@2.0.0"
         },
         {
           "ref": "project-1@0.1.0",
@@ -6608,8 +6588,7 @@ fn cyclonedx_export_workspace_frozen() -> Result<()> {
           ]
         },
         {
-          "ref": "urllib3-4@2.2.0",
-          "dependsOn": []
+          "ref": "urllib3-4@2.2.0"
         },
         {
           "ref": "project-5",
@@ -6784,8 +6763,7 @@ fn cyclonedx_export_workspace_all_packages() -> Result<()> {
           ]
         },
         {
-          "ref": "iniconfig-4@2.0.0",
-          "dependsOn": []
+          "ref": "iniconfig-4@2.0.0"
         },
         {
           "ref": "project-1@0.1.0",
@@ -6794,12 +6772,10 @@ fn cyclonedx_export_workspace_all_packages() -> Result<()> {
           ]
         },
         {
-          "ref": "sniffio-5@1.3.1",
-          "dependsOn": []
+          "ref": "sniffio-5@1.3.1"
         },
         {
-          "ref": "urllib3-6@2.2.0",
-          "dependsOn": []
+          "ref": "urllib3-6@2.2.0"
         },
         {
           "ref": "project-7",
@@ -6899,8 +6875,7 @@ fn cyclonedx_export_all_packages_non_workspace_root_dependency() -> Result<()> {
           ]
         },
         {
-          "ref": "urllib3-2@2.2.0",
-          "dependsOn": []
+          "ref": "urllib3-2@2.2.0"
         },
         {
           "ref": "my-project-3",
@@ -7072,8 +7047,7 @@ fn cyclonedx_export_workspace_mixed_dependencies() -> Result<()> {
           ]
         },
         {
-          "ref": "iniconfig-4@2.0.0",
-          "dependsOn": []
+          "ref": "iniconfig-4@2.0.0"
         },
         {
           "ref": "project-1@0.1.0",
@@ -7083,12 +7057,10 @@ fn cyclonedx_export_workspace_mixed_dependencies() -> Result<()> {
           ]
         },
         {
-          "ref": "sniffio-5@1.3.1",
-          "dependsOn": []
+          "ref": "sniffio-5@1.3.1"
         },
         {
-          "ref": "urllib3-6@2.2.0",
-          "dependsOn": []
+          "ref": "urllib3-6@2.2.0"
         }
       ]
     }
@@ -7179,8 +7151,7 @@ fn cyclonedx_export_dependency_marker() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "iniconfig-2@2.0.0",
-          "dependsOn": []
+          "ref": "iniconfig-2@2.0.0"
         },
         {
           "ref": "project-1@0.1.0",
@@ -7190,8 +7161,7 @@ fn cyclonedx_export_dependency_marker() -> Result<()> {
           ]
         },
         {
-          "ref": "urllib3-3@2.2.1",
-          "dependsOn": []
+          "ref": "urllib3-3@2.2.1"
         }
       ]
     }
@@ -7319,8 +7289,7 @@ fn cyclonedx_export_multiple_dependency_markers() -> Result<()> {
           ]
         },
         {
-          "ref": "pycparser-4@2.21",
-          "dependsOn": []
+          "ref": "pycparser-4@2.21"
         }
       ]
     }
@@ -7428,8 +7397,7 @@ fn cyclonedx_export_dependency_extra() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "bcrypt-2@4.1.2",
-          "dependsOn": []
+          "ref": "bcrypt-2@4.1.2"
         },
         {
           "ref": "cffi-3@1.16.0",
@@ -7451,8 +7419,7 @@ fn cyclonedx_export_dependency_extra() -> Result<()> {
           ]
         },
         {
-          "ref": "pycparser-5@2.21",
-          "dependsOn": []
+          "ref": "pycparser-5@2.21"
         }
       ]
     }
@@ -7614,8 +7581,7 @@ fn cyclonedx_export_prune() -> Result<()> {
           ]
         },
         {
-          "ref": "pycparser-4@2.21",
-          "dependsOn": []
+          "ref": "pycparser-4@2.21"
         },
         {
           "ref": "python-dateutil-5@2.9.0.post0",
@@ -7630,16 +7596,13 @@ fn cyclonedx_export_prune() -> Result<()> {
           ]
         },
         {
-          "ref": "six-7@1.16.0",
-          "dependsOn": []
+          "ref": "six-7@1.16.0"
         },
         {
-          "ref": "tornado-8@6.4",
-          "dependsOn": []
+          "ref": "tornado-8@6.4"
         },
         {
-          "ref": "traitlets-9@5.14.2",
-          "dependsOn": []
+          "ref": "traitlets-9@5.14.2"
         }
       ]
     }
@@ -7731,12 +7694,10 @@ fn cyclonedx_export_group() -> Result<()> {
           ]
         },
         {
-          "ref": "sniffio-2@1.3.1",
-          "dependsOn": []
+          "ref": "sniffio-2@1.3.1"
         },
         {
-          "ref": "typing-extensions-3@4.10.0",
-          "dependsOn": []
+          "ref": "typing-extensions-3@4.10.0"
         }
       ]
     }
@@ -7788,8 +7749,7 @@ fn cyclonedx_export_group() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "iniconfig-2@2.0.0",
-          "dependsOn": []
+          "ref": "iniconfig-2@2.0.0"
         }
       ]
     }
@@ -7869,16 +7829,13 @@ fn cyclonedx_export_group() -> Result<()> {
           ]
         },
         {
-          "ref": "sniffio-2@1.3.1",
-          "dependsOn": []
+          "ref": "sniffio-2@1.3.1"
         },
         {
-          "ref": "typing-extensions-3@4.10.0",
-          "dependsOn": []
+          "ref": "typing-extensions-3@4.10.0"
         },
         {
-          "ref": "urllib3-4@2.2.1",
-          "dependsOn": []
+          "ref": "urllib3-4@2.2.1"
         }
       ]
     }
@@ -7941,8 +7898,7 @@ fn cyclonedx_export_non_project() -> Result<()> {
       "components": [],
       "dependencies": [
         {
-          "ref": "uv-workspace-1",
-          "dependsOn": []
+          "ref": "uv-workspace-1"
         }
       ]
     }
@@ -7994,12 +7950,10 @@ fn cyclonedx_export_non_project() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "urllib3-1@2.2.1",
-          "dependsOn": []
+          "ref": "urllib3-1@2.2.1"
         },
         {
-          "ref": "uv-workspace-2",
-          "dependsOn": []
+          "ref": "uv-workspace-2"
         }
       ]
     }
@@ -8115,8 +8069,7 @@ fn cyclonedx_export_no_emit() -> Result<()> {
           ]
         },
         {
-          "ref": "iniconfig-3@2.0.0",
-          "dependsOn": []
+          "ref": "iniconfig-3@2.0.0"
         },
         {
           "ref": "project-1@0.1.0",
@@ -8199,12 +8152,10 @@ fn cyclonedx_export_no_emit() -> Result<()> {
           ]
         },
         {
-          "ref": "iniconfig-3@2.0.0",
-          "dependsOn": []
+          "ref": "iniconfig-3@2.0.0"
         },
         {
-          "ref": "urllib3-4@2.2.0",
-          "dependsOn": []
+          "ref": "urllib3-4@2.2.0"
         }
       ]
     }
@@ -8309,8 +8260,7 @@ fn cyclonedx_export_relative_path() -> Result<()> {
           ]
         },
         {
-          "ref": "iniconfig-3@2.0.0",
-          "dependsOn": []
+          "ref": "iniconfig-3@2.0.0"
         },
         {
           "ref": "project-1@0.1.0",
@@ -8454,12 +8404,10 @@ fn cyclonedx_export_cyclic_dependencies() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "argparse-2@1.4.0",
-          "dependsOn": []
+          "ref": "argparse-2@1.4.0"
         },
         {
-          "ref": "extras-3@1.0.0",
-          "dependsOn": []
+          "ref": "extras-3@1.0.0"
         },
         {
           "ref": "fixtures-4@3.0.0",
@@ -8470,12 +8418,10 @@ fn cyclonedx_export_cyclic_dependencies() -> Result<()> {
           ]
         },
         {
-          "ref": "linecache2-5@1.0.0",
-          "dependsOn": []
+          "ref": "linecache2-5@1.0.0"
         },
         {
-          "ref": "pbr-6@6.0.0",
-          "dependsOn": []
+          "ref": "pbr-6@6.0.0"
         },
         {
           "ref": "project-1@0.1.0",
@@ -8485,12 +8431,10 @@ fn cyclonedx_export_cyclic_dependencies() -> Result<()> {
           ]
         },
         {
-          "ref": "python-mimeparse-7@1.6.0",
-          "dependsOn": []
+          "ref": "python-mimeparse-7@1.6.0"
         },
         {
-          "ref": "six-8@1.16.0",
-          "dependsOn": []
+          "ref": "six-8@1.16.0"
         },
         {
           "ref": "testtools-9@2.3.0",
@@ -8609,12 +8553,10 @@ fn cyclonedx_export_dev_dependencies() -> Result<()> {
           ]
         },
         {
-          "ref": "typing-extensions-2@4.10.0",
-          "dependsOn": []
+          "ref": "typing-extensions-2@4.10.0"
         },
         {
-          "ref": "urllib3-3@2.2.1",
-          "dependsOn": []
+          "ref": "urllib3-3@2.2.1"
         }
       ]
     }
@@ -8673,8 +8615,7 @@ fn cyclonedx_export_dev_dependencies() -> Result<()> {
           ]
         },
         {
-          "ref": "typing-extensions-2@4.10.0",
-          "dependsOn": []
+          "ref": "typing-extensions-2@4.10.0"
         }
       ]
     }
@@ -8727,8 +8668,7 @@ fn cyclonedx_export_dev_dependencies() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "urllib3-2@2.2.1",
-          "dependsOn": []
+          "ref": "urllib3-2@2.2.1"
         }
       ]
     }
@@ -8873,12 +8813,10 @@ fn cyclonedx_export_all_packages_conflicting_workspace_members() -> Result<()> {
           ]
         },
         {
-          "ref": "sortedcontainers-3@2.3.0",
-          "dependsOn": []
+          "ref": "sortedcontainers-3@2.3.0"
         },
         {
-          "ref": "sortedcontainers-4@2.4.0",
-          "dependsOn": []
+          "ref": "sortedcontainers-4@2.4.0"
         },
         {
           "ref": "project-5",
@@ -9481,12 +9419,10 @@ fn cyclonedx_export_alternative_registry() -> Result<()> {
       ],
       "dependencies": [
         {
-          "ref": "filelock-2@3.13.1",
-          "dependsOn": []
+          "ref": "filelock-2@3.13.1"
         },
         {
-          "ref": "fsspec-3@2024.6.1",
-          "dependsOn": []
+          "ref": "fsspec-3@2024.6.1"
         },
         {
           "ref": "jinja2-4@3.1.4",
@@ -9495,16 +9431,13 @@ fn cyclonedx_export_alternative_registry() -> Result<()> {
           ]
         },
         {
-          "ref": "markupsafe-5@3.0.2",
-          "dependsOn": []
+          "ref": "markupsafe-5@3.0.2"
         },
         {
-          "ref": "mpmath-6@1.3.0",
-          "dependsOn": []
+          "ref": "mpmath-6@1.3.0"
         },
         {
-          "ref": "networkx-7@3.3",
-          "dependsOn": []
+          "ref": "networkx-7@3.3"
         },
         {
           "ref": "project-1@0.1.0",
@@ -9514,8 +9447,7 @@ fn cyclonedx_export_alternative_registry() -> Result<()> {
           ]
         },
         {
-          "ref": "setuptools-8@70.2.0",
-          "dependsOn": []
+          "ref": "setuptools-8@70.2.0"
         },
         {
           "ref": "sympy-9@1.13.1",
@@ -9548,8 +9480,7 @@ fn cyclonedx_export_alternative_registry() -> Result<()> {
           ]
         },
         {
-          "ref": "typing-extensions-12@4.12.2",
-          "dependsOn": []
+          "ref": "typing-extensions-12@4.12.2"
         }
       ]
     }
@@ -9697,12 +9628,10 @@ fn cyclonedx_export_virtual_workspace_fixture() -> Result<()> {
           ]
         },
         {
-          "ref": "idna-4@3.6",
-          "dependsOn": []
+          "ref": "idna-4@3.6"
         },
         {
-          "ref": "iniconfig-5@2.0.0",
-          "dependsOn": []
+          "ref": "iniconfig-5@2.0.0"
         },
         {
           "ref": "seeds-6@1.0.0",
@@ -9711,8 +9640,7 @@ fn cyclonedx_export_virtual_workspace_fixture() -> Result<()> {
           ]
         },
         {
-          "ref": "sniffio-7@1.3.1",
-          "dependsOn": []
+          "ref": "sniffio-7@1.3.1"
         },
         {
           "ref": "uv-workspace-8",

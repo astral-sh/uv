@@ -159,7 +159,8 @@ pub fn uninstall_wheel(
     })
 }
 
-static WARNED_FOR_PACKAGE: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+static WARNED_FOR_RECORD_ENTRY_PACKAGE: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+static WARNED_FOR_EGG_TOP_LEVEL_PACKAGE: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 
 /// Check if the path is inside the venv or a system interpreter path, and warn if it isn't.
 ///
@@ -194,7 +195,7 @@ fn is_path_in_scheme(
     } else {
         // A package that does this is malformed to the point of being a risk to the user, be
         // annoying about it, but only once per package.
-        if WARNED_FOR_PACKAGE
+        if WARNED_FOR_RECORD_ENTRY_PACKAGE
             .get_or_init(|| Mutex::new(HashSet::new()))
             .lock()
             .expect("The mutex is broken, did some other thread panic?")
@@ -210,14 +211,39 @@ fn is_path_in_scheme(
     }
 }
 
+/// Check that a `top_level.txt` entry names a single top-level module or package.
+///
+/// Unlike wheel `RECORD` entries, egg `top_level.txt` entries refer to direct children of the
+/// egg's base location, not arbitrary paths. Treating them as paths can make uninstall delete
+/// directories outside `site-packages`.
+fn is_valid_top_level_entry(entry: &str, distribution: impl Display) -> bool {
+    if is_safe_top_level_entry(entry) {
+        true
+    } else {
+        if WARNED_FOR_EGG_TOP_LEVEL_PACKAGE
+            .get_or_init(|| Mutex::new(HashSet::new()))
+            .lock()
+            .expect("The mutex is broken, did some other thread panic?")
+            .insert(distribution.to_string())
+        {
+            warn_user!(
+                "Invalid `top_level.txt` entry in {} that is not a top-level module or package, skipping: {}",
+                distribution,
+                entry
+            );
+        }
+        false
+    }
+}
+
+fn is_safe_top_level_entry(entry: &str) -> bool {
+    !entry.is_empty() && entry != "." && entry != ".." && !entry.contains(['/', '\\'])
+}
+
 /// Uninstall the egg represented by the `.egg-info` directory.
 ///
 /// See: <https://github.com/pypa/pip/blob/41587f5e0017bcd849f42b314dc8a34a7db75621/src/pip/_internal/req/req_uninstall.py#L483>
-pub fn uninstall_egg(
-    egg_info: &Path,
-    distribution: impl Display,
-    layout: &Layout,
-) -> Result<Uninstall, Error> {
+pub fn uninstall_egg(egg_info: &Path, distribution: impl Display) -> Result<Uninstall, Error> {
     let mut file_count = 0usize;
     let mut dir_count = 0usize;
 
@@ -268,11 +294,11 @@ pub fn uninstall_egg(
 
     // Remove everything in `top_level.txt`.
     for entry in top_level {
-        let path = dist_location.join(&entry);
-
-        if !is_path_in_scheme(&entry, dist_location, &distribution, layout) {
+        if !is_valid_top_level_entry(&entry, &distribution) {
             continue;
         }
+
+        let path = dist_location.join(&entry);
 
         // Remove as a directory.
         match fs_err::remove_dir_all(&path) {
@@ -435,7 +461,19 @@ mod tests {
     use uv_pypi_types::Scheme;
 
     use crate::Layout;
-    use crate::uninstall::{uninstall_egg, uninstall_wheel};
+    use crate::uninstall::{is_safe_top_level_entry, uninstall_egg, uninstall_wheel};
+
+    #[test]
+    fn test_top_level_entry_safe_name() {
+        assert!(is_safe_top_level_entry("package"));
+
+        assert!(!is_safe_top_level_entry(""));
+        assert!(!is_safe_top_level_entry("."));
+        assert!(!is_safe_top_level_entry(".."));
+        assert!(!is_safe_top_level_entry("../package"));
+        assert!(!is_safe_top_level_entry("package/name"));
+        assert!(!is_safe_top_level_entry(r"package\name"));
+    }
 
     /// Uninstall must not remove files outside the install scheme.
     #[test]
@@ -473,7 +511,7 @@ mod tests {
         let metadata = dist_info.child("METADATA");
         metadata.touch().unwrap();
 
-        // Something that looks sufficiently like a Unix venv.
+        // Something that looks sufficiently like a Unix environment.
         let layout = Layout {
             sys_executable: venv.path().join("bin/python"),
             python_version: (3, 13),
@@ -500,20 +538,20 @@ mod tests {
     fn test_uninstall_egg_info_path_traversal() {
         let venv = assert_fs::TempDir::new().unwrap();
         let site_packages = venv.child("lib/python3.12/site-packages");
-        let outside_dir = assert_fs::TempDir::new().unwrap();
 
-        // Create a directory outside site-packages that a malicious top_level.txt might target.
-        let target_dir = outside_dir.child("traversal_target");
+        // Create directories outside site-packages, but inside the environment. Egg uninstall should
+        // still reject them, even though wheel RECORD entries may target other install-scheme
+        // directories.
+        let target_dir = venv.child("traversal_target");
         let target_file = target_dir.child("secret.txt");
         target_file.write_str("I should not be deleted").unwrap();
-
         // Build a relative traversal path from site-packages to the target directory.
         let egg_info = site_packages.child("evilpkg-0.1.0.egg-info");
         egg_info.create_dir_all().unwrap();
         let target_path = pathdiff::diff_paths(target_dir.path(), site_packages.path()).unwrap();
         assert!(site_packages.join(&target_path).exists());
 
-        // Create a fake egg-info directory with a top_level.txt containing a path traversal entry.
+        // Create a fake egg-info directory with a path traversal entry in `top_level.txt`.
         egg_info
             .child("top_level.txt")
             .write_str(&format!("evilpkg\n{}\n", target_path.display()))
@@ -523,23 +561,10 @@ mod tests {
         let init_py = site_packages.child("evilpkg").child("__init__.py");
         init_py.touch().unwrap();
 
-        // Something that looks sufficiently like a Unix venv.
-        let layout = Layout {
-            sys_executable: venv.path().join("bin/python"),
-            python_version: (3, 13),
-            os_name: "posix".to_string(),
-            scheme: Scheme {
-                purelib: site_packages.to_path_buf(),
-                platlib: site_packages.to_path_buf(),
-                scripts: venv.path().join("bin"),
-                data: venv.path().to_path_buf(),
-                include: venv.path().join("include/python3.12"),
-            },
-        };
+        uninstall_egg(egg_info.path(), "evilpkg 0.1.0").unwrap();
 
-        uninstall_egg(egg_info.path(), "evilpkg 0.1.0", &layout).unwrap();
-
-        // The regular package directory has been removed, while the directory outside the scheme still exists.
+        // The regular package directory has been removed, while the directory outside
+        // site-packages still exists.
         assert!(target_dir.exists());
         assert!(target_file.exists());
         assert!(!init_py.exists());
@@ -571,20 +596,7 @@ mod tests {
         egg_info.create_dir_all().unwrap();
         egg_info.child("top_level.txt").write_str("\n").unwrap();
 
-        let layout = Layout {
-            sys_executable: venv.path().join("bin/python"),
-            python_version: (3, 13),
-            os_name: "posix".to_string(),
-            scheme: Scheme {
-                purelib: site_packages.to_path_buf(),
-                platlib: site_packages.to_path_buf(),
-                scripts: venv.path().join("bin"),
-                data: venv.path().to_path_buf(),
-                include: venv.path().join("include/python3.12"),
-            },
-        };
-
-        uninstall_egg(egg_info.path(), "emptypkg 0.1.0", &layout).unwrap();
+        uninstall_egg(egg_info.path(), "emptypkg 0.1.0").unwrap();
 
         // The egg-info is gone, but the rest of site-packages (including the sibling
         // package) survives.
@@ -628,20 +640,7 @@ mod tests {
             .write_str("\npkg_a\n   \r\npkg_b\n\n")
             .unwrap();
 
-        let layout = Layout {
-            sys_executable: venv.path().join("bin/python"),
-            python_version: (3, 13),
-            os_name: "posix".to_string(),
-            scheme: Scheme {
-                purelib: site_packages.to_path_buf(),
-                platlib: site_packages.to_path_buf(),
-                scripts: venv.path().join("bin"),
-                data: venv.path().to_path_buf(),
-                include: venv.path().join("include/python3.12"),
-            },
-        };
-
-        uninstall_egg(egg_info.path(), "mixedpkg 0.1.0", &layout).unwrap();
+        uninstall_egg(egg_info.path(), "mixedpkg 0.1.0").unwrap();
 
         // The two named packages are gone, the egg-info is gone, and site-packages plus
         // the sibling survive.

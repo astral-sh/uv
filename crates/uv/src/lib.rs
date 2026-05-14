@@ -646,7 +646,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 groups: args.settings.groups,
             };
 
-            commands::pip_compile(
+            Box::pin(commands::pip_compile(
                 &requirements,
                 &constraints,
                 &overrides,
@@ -657,6 +657,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.excludes_from_workspace,
                 args.build_constraints_from_workspace,
                 args.environments,
+                args.required_environments,
                 args.settings.extras,
                 groups,
                 args.settings.output_file.as_deref(),
@@ -708,7 +709,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 workspace_cache,
                 printer,
                 globals.preview,
-            )
+            ))
             .await
         }
         Commands::Pip(PipNamespace {
@@ -752,7 +753,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 groups: args.settings.groups,
             };
 
-            commands::pip_sync(
+            Box::pin(commands::pip_sync(
                 &requirements,
                 &constraints,
                 &build_constraints,
@@ -795,7 +796,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.dry_run,
                 printer,
                 globals.preview,
-            )
+            ))
             .await
         }
         Commands::Pip(PipNamespace {
@@ -1263,7 +1264,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.no_clear,
             );
 
-            commands::venv(
+            Box::pin(commands::venv(
                 &project_dir,
                 args.path,
                 python_request,
@@ -1293,7 +1294,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                         .is_enabled(PreviewFeature::RelocatableEnvsDefault)
                         && !args.no_relocatable),
                 globals.preview,
-            )
+            ))
             .await
         }
         Commands::Project(project) => {
@@ -1835,7 +1836,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             // Initialize the cache.
             let cache = cache.init().await?;
 
-            commands::python_pin(
+            Box::pin(commands::python_pin(
                 &project_dir,
                 args.request,
                 args.resolved,
@@ -1850,7 +1851,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &workspace_cache,
                 printer,
                 globals.preview,
-            )
+            ))
             .await
         }
         Commands::Python(PythonNamespace {
@@ -2112,7 +2113,7 @@ async fn run_project(
             // Initialize the cache.
             let cache = cache.init().await?;
 
-            commands::init(
+            Box::pin(commands::init(
                 project_dir,
                 args.path,
                 args.name,
@@ -2136,7 +2137,7 @@ async fn run_project(
                 &cache,
                 printer,
                 globals.preview,
-            )
+            ))
             .await
         }
         ProjectCommand::Run(args) => {

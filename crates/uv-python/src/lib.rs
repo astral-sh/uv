@@ -145,10 +145,9 @@ mod tests {
     use uv_cache::Cache;
 
     use crate::{
-        PythonNotFound, PythonRequest, PythonSource, PythonVersion,
-        downloads::ManagedPythonDownloadList, implementation::ImplementationName,
-        installation::PythonInstallation, managed::ManagedPythonInstallations,
-        virtualenv::virtualenv_python_executable,
+        PythonDownloads, PythonNotFound, PythonRequest, PythonSource, PythonVersion,
+        implementation::ImplementationName, installation::PythonInstallation,
+        managed::ManagedPythonInstallations, virtualenv::virtualenv_python_executable,
     };
     use crate::{
         PythonPreference,
@@ -618,7 +617,7 @@ mod tests {
         });
         assert!(
             matches!(result, Ok(Err(PythonNotFound { .. }))),
-            "With an non-executable Python, no Python installation should be detected; got {result:?}"
+            "With a non-executable Python, no Python installation should be detected; got {result:?}"
         );
 
         Ok(())
@@ -647,6 +646,54 @@ mod tests {
                 }
             ),
             "We should find the valid executable; got {interpreter:?}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn find_or_download_skips_download_metadata_when_python_is_found() -> Result<()> {
+        let mut context = TestContext::new()?;
+        context.add_python_versions(&["3.12.1"])?;
+        // Pass a missing metadata file to assert that an already-installed Python can
+        // be returned without reading the download list.
+        let missing_downloads = context.tempdir.child("missing-downloads.json");
+
+        let interpreter = context.run(|| {
+            let client_builder = BaseClientBuilder::default();
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("Failed to build runtime")
+                .block_on(PythonInstallation::find_or_download(
+                    None,
+                    EnvironmentPreference::OnlySystem,
+                    PythonPreference::OnlySystem,
+                    PythonDownloads::Never,
+                    &client_builder,
+                    &context.cache,
+                    None,
+                    None,
+                    None,
+                    missing_downloads.path().to_str(),
+                    Preview::default(),
+                ))
+        })?;
+
+        assert!(
+            matches!(
+                interpreter,
+                PythonInstallation {
+                    source: PythonSource::SearchPathFirst,
+                    interpreter: _
+                }
+            ),
+            "We should find the local Python without reading download metadata; got {interpreter:?}"
+        );
+        assert_eq!(
+            &interpreter.interpreter().python_full_version().to_string(),
+            "3.12.1",
+            "We should find the local interpreter"
         );
 
         Ok(())
@@ -1004,12 +1051,6 @@ mod tests {
         preview: Preview,
     ) -> Result<PythonInstallation, crate::Error> {
         let client_builder = BaseClientBuilder::default();
-        let download_list = ManagedPythonDownloadList::new_only_embedded()?;
-        let client = client_builder
-            .clone()
-            .retries(0)
-            .build()
-            .expect("failed to build base client");
         tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -1019,10 +1060,9 @@ mod tests {
                 environments,
                 preference,
                 false,
-                &download_list,
-                &client,
-                &client_builder.retry_policy(),
+                &client_builder,
                 cache,
+                None,
                 None,
                 None,
                 None,

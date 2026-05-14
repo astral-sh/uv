@@ -152,6 +152,7 @@ jobs:
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
+          cache-bin: false
       - name: "Build"
         run: cargo build --profile no-debug --bin uv --bin uvx
 
@@ -176,6 +177,7 @@ jobs:
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
+          cache-bin: false
       - name: "Build"
         run: cargo build --profile no-debug --bin uv --bin uvx
 

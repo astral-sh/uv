@@ -23,7 +23,7 @@ use uv_configuration::{
     BuildOptions, Constraints, DependencyGroupsWithDefaults, ExtrasSpecificationWithDefaults,
     InstallTarget,
 };
-use uv_distribution::{DistributionDatabase, FlatRequiresDist};
+use uv_distribution::{DistributionDatabase, FlatRequiresDist, RequiresDist};
 use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, WheelFilename,
 };
@@ -1630,6 +1630,7 @@ impl Lock {
         indexes: Option<&IndexLocations>,
         tags: &Tags,
         markers: &MarkerEnvironment,
+        build_options: &BuildOptions,
         hasher: &HashStrategy,
         index: &InMemoryIndex,
         database: &DistributionDatabase<'_, Context>,
@@ -1989,84 +1990,135 @@ impl Lock {
             }
 
             if let Some(version) = package.id.version.as_ref() {
-                // For a non-dynamic package, fetch the metadata from the distribution database.
-                let HashedDist { dist, .. } = package.to_dist(
-                    root,
-                    TagPolicy::Preferred(tags),
-                    &BuildOptions::default(),
-                    markers,
-                )?;
-
-                let metadata = {
-                    let id = dist.distribution_id();
-                    if let Some(archive) =
-                        index
-                            .distributions()
-                            .get(&id)
-                            .as_deref()
-                            .and_then(|response| {
-                                if let MetadataResponse::Found(archive, ..) = response {
-                                    Some(archive)
-                                } else {
-                                    None
-                                }
-                            })
-                    {
-                        // If the metadata is already in the index, return it.
-                        archive.metadata.clone()
-                    } else {
-                        // Run the PEP 517 build process to extract metadata from the source distribution.
-                        let archive = database
-                            .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
-                            .await
-                            .map_err(|err| LockErrorKind::Resolution {
-                                id: package.id.clone(),
-                                err,
-                            })?;
-
-                        let metadata = archive.metadata.clone();
-
-                        // Insert the metadata into the index.
-                        index
-                            .distributions()
-                            .done(id, Arc::new(MetadataResponse::Found(archive)));
-
-                        metadata
-                    }
-                };
-
-                // If this is a local package, validate that it hasn't become dynamic (in which
-                // case, we'd expect the version to be omitted).
-                if package.id.source.is_source_tree() {
+                // If the distribution is a source tree, attempt to validate it from statically
+                // available `pyproject.toml` metadata before converting it to an installable
+                // distribution. This avoids requiring build permission for static local packages.
+                let statically_satisfied = if let Some(source_tree) =
+                    package.id.source.as_source_tree()
+                    && let Some(SourceTreeRequiresDist {
+                        version: static_version,
+                        metadata,
+                    }) = Self::source_tree_requires_dist(source_tree, root, package, database)
+                        .await?
+                {
+                    // If this local package has become dynamic, the locked package should
+                    // no longer contain a version.
                     if metadata.dynamic {
                         return Ok(SatisfiesResult::MismatchedDynamic(&package.id.name, false));
                     }
-                }
 
-                // Validate the `version` metadata.
-                if metadata.version != *version {
-                    return Ok(SatisfiesResult::MismatchedVersion(
-                        &package.id.name,
-                        version.clone(),
-                        Some(metadata.version.clone()),
-                    ));
-                }
+                    if let Some(static_version) = static_version {
+                        // Validate the static `version` metadata.
+                        if static_version != *version {
+                            return Ok(SatisfiesResult::MismatchedVersion(
+                                &package.id.name,
+                                version.clone(),
+                                Some(static_version),
+                            ));
+                        }
 
-                // Validate the `provides-extras` metadata.
-                match self.satisfies_provides_extra(metadata.provides_extra, package) {
-                    SatisfiesResult::Satisfied => {}
-                    result => return Ok(result),
-                }
+                        // Validate the static `provides-extras` metadata.
+                        match self.satisfies_provides_extra(metadata.provides_extra, package) {
+                            SatisfiesResult::Satisfied => {}
+                            result => return Ok(result),
+                        }
 
-                // Validate that the requirements are unchanged.
-                match self.satisfies_requires_dist(
-                    metadata.requires_dist,
-                    metadata.dependency_groups,
-                    package,
-                    root,
-                )? {
-                    SatisfiesResult::Satisfied => {}
-                    result => return Ok(result),
+                        // Validate that the static requirements are unchanged.
+                        match self.satisfies_requires_dist(
+                            metadata.requires_dist,
+                            metadata.dependency_groups,
+                            package,
+                            root,
+                        )? {
+                            SatisfiesResult::Satisfied => true,
+                            result => return Ok(result),
+                        }
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                };
+
+                if !statically_satisfied {
+                    // For a non-dynamic package without usable static metadata, fetch the metadata
+                    // from the distribution database.
+                    let HashedDist { dist, .. } = package.to_dist(
+                        root,
+                        TagPolicy::Preferred(tags),
+                        build_options,
+                        markers,
+                    )?;
+
+                    let metadata = {
+                        let id = dist.distribution_id();
+                        if let Some(archive) =
+                            index
+                                .distributions()
+                                .get(&id)
+                                .as_deref()
+                                .and_then(|response| {
+                                    if let MetadataResponse::Found(archive, ..) = response {
+                                        Some(archive)
+                                    } else {
+                                        None
+                                    }
+                                })
+                        {
+                            // If the metadata is already in the index, return it.
+                            archive.metadata.clone()
+                        } else {
+                            // Run the PEP 517 build process to extract metadata from the source distribution.
+                            let archive = database
+                                .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
+                                .await
+                                .map_err(|err| LockErrorKind::Resolution {
+                                    id: package.id.clone(),
+                                    err,
+                                })?;
+
+                            let metadata = archive.metadata.clone();
+
+                            // Insert the metadata into the index.
+                            index
+                                .distributions()
+                                .done(id, Arc::new(MetadataResponse::Found(archive)));
+
+                            metadata
+                        }
+                    };
+
+                    // If this is a local package, validate that it hasn't become dynamic (in which
+                    // case, we'd expect the version to be omitted).
+                    if package.id.source.is_source_tree() && metadata.dynamic {
+                        return Ok(SatisfiesResult::MismatchedDynamic(&package.id.name, false));
+                    }
+
+                    // Validate the `version` metadata.
+                    if metadata.version != *version {
+                        return Ok(SatisfiesResult::MismatchedVersion(
+                            &package.id.name,
+                            version.clone(),
+                            Some(metadata.version.clone()),
+                        ));
+                    }
+
+                    // Validate the `provides-extras` metadata.
+                    match self.satisfies_provides_extra(metadata.provides_extra, package) {
+                        SatisfiesResult::Satisfied => {}
+                        result => return Ok(result),
+                    }
+
+                    // Validate that the requirements are unchanged.
+                    match self.satisfies_requires_dist(
+                        metadata.requires_dist,
+                        metadata.dependency_groups,
+                        package,
+                        root,
+                    )? {
+                        SatisfiesResult::Satisfied => {}
+                        result => return Ok(result),
+                    }
                 }
             } else if let Some(source_tree) = package.id.source.as_source_tree() {
                 // For dynamic packages, we don't need the version. We only need to know that the
@@ -2078,30 +2130,10 @@ impl Lock {
                 // even if the version is dynamic, we can still extract the requirements without
                 // performing a build, unlike in the database where we typically construct a "complete"
                 // metadata object.
-                let parent = root.join(source_tree);
-                let path = parent.join("pyproject.toml");
-                let metadata = match fs_err::tokio::read_to_string(&path).await {
-                    Ok(contents) => {
-                        let pyproject_toml =
-                            PyProjectToml::from_toml(&contents, path.user_display()).map_err(
-                                |err| LockErrorKind::InvalidPyprojectToml {
-                                    path: path.clone(),
-                                    err,
-                                },
-                            )?;
-                        database
-                            .requires_dist(&parent, &pyproject_toml)
-                            .await
-                            .map_err(|err| LockErrorKind::Resolution {
-                                id: package.id.clone(),
-                                err,
-                            })?
-                    }
-                    Err(err) if err.kind() == io::ErrorKind::NotFound => None,
-                    Err(err) => {
-                        return Err(LockErrorKind::UnreadablePyprojectToml { path, err }.into());
-                    }
-                };
+                let metadata =
+                    Self::source_tree_requires_dist(source_tree, root, package, database)
+                        .await?
+                        .map(|metadata| metadata.metadata);
 
                 let satisfied = metadata.is_some_and(|metadata| {
                     // Validate that the package is still dynamic.
@@ -2145,7 +2177,7 @@ impl Lock {
                     let HashedDist { dist, .. } = package.to_dist(
                         root,
                         TagPolicy::Preferred(tags),
-                        &BuildOptions::default(),
+                        build_options,
                         markers,
                     )?;
 
@@ -2277,6 +2309,39 @@ impl Lock {
 
         Ok(SatisfiesResult::Satisfied)
     }
+
+    async fn source_tree_requires_dist<Context: BuildContext>(
+        source_tree: &Path,
+        root: &Path,
+        package: &Package,
+        database: &DistributionDatabase<'_, Context>,
+    ) -> Result<Option<SourceTreeRequiresDist>, LockError> {
+        let parent = root.join(source_tree);
+        let path = parent.join("pyproject.toml");
+        match fs_err::tokio::read_to_string(&path).await {
+            Ok(contents) => {
+                let pyproject_toml = PyProjectToml::from_toml(&contents, path.user_display())
+                    .map_err(|err| LockErrorKind::InvalidPyprojectToml {
+                        path: path.clone(),
+                        err,
+                    })?;
+                let version = pyproject_toml
+                    .project
+                    .as_ref()
+                    .and_then(|project| project.version.clone());
+                let metadata = database
+                    .requires_dist(&parent, &pyproject_toml)
+                    .await
+                    .map_err(|err| LockErrorKind::Resolution {
+                        id: package.id.clone(),
+                        err,
+                    })?;
+                Ok(metadata.map(|metadata| SourceTreeRequiresDist { version, metadata }))
+            }
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(err) => Err(LockErrorKind::UnreadablePyprojectToml { path, err }.into()),
+        }
+    }
 }
 
 /// The set of lockfile packages that should be audited, materialized from a
@@ -2290,6 +2355,11 @@ impl Lock {
 pub struct Auditable<'lock> {
     /// Packages deduplicated by `(name, version)` and sorted by the same key.
     packages: Vec<(&'lock Package, &'lock Version)>,
+}
+
+struct SourceTreeRequiresDist {
+    version: Option<Version>,
+    metadata: RequiresDist,
 }
 
 impl<'lock> Auditable<'lock> {
@@ -5658,6 +5728,14 @@ impl LockError {
     /// Returns true if the [`LockError`] is a resolver error.
     pub fn is_resolution(&self) -> bool {
         matches!(&*self.kind, LockErrorKind::Resolution { .. })
+    }
+
+    /// Returns true if the [`LockError`] is caused by disabled builds.
+    pub fn is_no_build(&self) -> bool {
+        matches!(
+            &*self.kind,
+            LockErrorKind::NoBuild { .. } | LockErrorKind::NoBinaryNoBuild { .. }
+        )
     }
 }
 

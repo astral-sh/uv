@@ -118,6 +118,7 @@ plugins:
           - guides/integration/pre-commit.md
           - guides/integration/pytorch.md
           - guides/integration/fastapi.md
+          - guides/integration/bazel.md
           - guides/integration/azure.md
           - guides/integration/google.md
           - guides/integration/aws.md
@@ -203,6 +204,7 @@ nav:
           - Pre-commit: guides/integration/pre-commit.md
           - PyTorch: guides/integration/pytorch.md
           - FastAPI: guides/integration/fastapi.md
+          - Bazel: guides/integration/bazel.md
           - Azure Artifacts: guides/integration/azure.md
           - Google Artifact Registry: guides/integration/google.md
           - AWS CodeArtifact: guides/integration/aws.md

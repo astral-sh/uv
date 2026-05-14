@@ -5,12 +5,20 @@ use std::{fmt, io};
 
 use thiserror::Error;
 
+use crate::ParseReleaseArchError;
+
 #[derive(Error, Debug)]
 pub enum PlatformError {
     #[error(transparent)]
     IOError(#[from] io::Error),
     #[error("Failed to detect the operating system version: {0}")]
     OsVersionDetectionError(String),
+    #[error("Invalid platform release and architecture `{release_arch}`: {error}")]
+    InvalidReleaseArch {
+        release_arch: String,
+        #[source]
+        error: ParseReleaseArchError,
+    },
     #[error("Invalid Android architecture: {0}")]
     InvalidAndroidArch(Arch),
     #[error("Invalid iOS simulator architecture: {0}")]

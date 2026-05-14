@@ -230,6 +230,9 @@ pub enum Error {
     NotWindows,
     #[error("Cannot process launcher metadata from resource")]
     UnprocessableMetadata,
+    #[cfg(windows)]
+    #[error("Failed to write Windows launcher ZIP payload")]
+    AsyncZip(#[from] async_zip::error::ZipError),
     #[error("Resources over 2^32 bytes are not supported")]
     ResourceTooLarge,
     #[error("Failed to update Windows PE resources: {}", path.user_display())]
@@ -380,30 +383,22 @@ pub fn windows_script_launcher(
     is_gui: bool,
     python_executable: impl AsRef<Path>,
 ) -> Result<Vec<u8>, Error> {
-    use std::io::{Cursor, Write};
-
-    use zip::ZipWriter;
-    use zip::write::SimpleFileOptions;
+    use async_zip::base::write::ZipFileWriter;
+    use async_zip::{Compression, ZipEntryBuilder};
+    use futures_lite::future::block_on;
+    use futures_lite::io::Cursor;
 
     use uv_fs::Simplified;
 
     let launcher_bin: &[u8] = get_launcher_bin(is_gui)?;
 
-    let mut payload: Vec<u8> = Vec::new();
-    {
-        // We're using the zip writer, but with stored compression
-        // https://github.com/njsmith/posy/blob/04927e657ca97a5e35bb2252d168125de9a3a025/src/trampolines/mod.rs#L75-L82
-        // https://github.com/pypa/distlib/blob/8ed03aab48add854f377ce392efffb79bb4d6091/PC/launcher.c#L259-L271
-        let stored =
-            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
-        let mut archive = ZipWriter::new(Cursor::new(&mut payload));
-        let error_msg = "Writing to Vec<u8> should never fail";
-        archive.start_file("__main__.py", stored).expect(error_msg);
-        archive
-            .write_all(launcher_python_script.as_bytes())
-            .expect(error_msg);
-        archive.finish().expect(error_msg);
-    }
+    // Store the launcher script without compression.
+    // https://github.com/njsmith/posy/blob/04927e657ca97a5e35bb2252d168125de9a3a025/src/trampolines/mod.rs#L75-L82
+    // https://github.com/pypa/distlib/blob/8ed03aab48add854f377ce392efffb79bb4d6091/PC/launcher.c#L259-L271
+    let mut archive = ZipFileWriter::new(Cursor::new(Vec::new()));
+    let entry = ZipEntryBuilder::new("__main__.py".to_string().into(), Compression::Stored);
+    block_on(archive.write_entry_whole(entry, launcher_python_script.as_bytes()))?;
+    let payload = block_on(archive.close())?.into_inner();
 
     let python = python_executable.as_ref();
     let python_path = python.simplified_display().to_string();

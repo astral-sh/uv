@@ -853,9 +853,13 @@ async fn do_lock(
         .await
         {
             Ok(result) => Some(result),
-            Err(ProjectError::Lock(err)) if err.is_resolution() => {
+            Err(ProjectError::Lock(err)) if err.is_resolution() || err.is_no_build() => {
                 // Resolver errors are not recoverable, as such errors can leave the resolver in a
                 // broken state. Specifically, tasks that fail with an error can be left as pending.
+                //
+                // Disabled builds are user policy errors. Static local projects are validated
+                // before this point, so reaching this case means validation genuinely needs
+                // metadata that cannot be obtained under `--no-build`.
                 return Err(ProjectError::Lock(err));
             }
             Err(err) => {
@@ -1259,6 +1263,7 @@ impl ValidatedLock {
                 indexes,
                 interpreter.tags()?,
                 interpreter.markers(),
+                &options.build_options,
                 hasher,
                 index,
                 database,

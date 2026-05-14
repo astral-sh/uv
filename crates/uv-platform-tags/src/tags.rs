@@ -6,10 +6,8 @@ use std::{cmp, num::NonZeroU32};
 
 use rustc_hash::FxHashMap;
 
-use uv_small_str::SmallString;
-
 use crate::abi_tag::CPythonAbiVariants;
-use crate::{AbiTag, Arch, LanguageTag, Os, Platform, PlatformError, PlatformTag};
+use crate::{AbiTag, Arch, LanguageTag, Os, Platform, PlatformError, PlatformTag, ReleaseArch};
 
 #[derive(Debug, thiserror::Error)]
 pub enum TagsError {
@@ -680,7 +678,12 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
             let arch_tag = arch.machine();
             let release_arch = format!("{release_tag}_{arch_tag}");
             vec![PlatformTag::FreeBsd {
-                release_arch: SmallString::from(release_arch),
+                release_arch: release_arch.parse::<ReleaseArch>().map_err(|error| {
+                    PlatformError::InvalidReleaseArch {
+                        release_arch,
+                        error,
+                    }
+                })?,
             }]
         }
         (Os::NetBsd { release }, arch) => {
@@ -688,7 +691,12 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
             let arch_tag = arch.machine();
             let release_arch = format!("{release_tag}_{arch_tag}");
             vec![PlatformTag::NetBsd {
-                release_arch: SmallString::from(release_arch),
+                release_arch: release_arch.parse::<ReleaseArch>().map_err(|error| {
+                    PlatformError::InvalidReleaseArch {
+                        release_arch,
+                        error,
+                    }
+                })?,
             }]
         }
         (Os::OpenBsd { release }, arch) => {
@@ -696,21 +704,36 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
             let arch_tag = arch.machine();
             let release_arch = format!("{release_tag}_{arch_tag}");
             vec![PlatformTag::OpenBsd {
-                release_arch: SmallString::from(release_arch),
+                release_arch: release_arch.parse::<ReleaseArch>().map_err(|error| {
+                    PlatformError::InvalidReleaseArch {
+                        release_arch,
+                        error,
+                    }
+                })?,
             }]
         }
         (Os::Dragonfly { release }, arch) => {
             let release = release.replace(['.', '-'], "_");
             let release_arch = format!("{release}_{arch}");
             vec![PlatformTag::Dragonfly {
-                release_arch: SmallString::from(release_arch),
+                release_arch: release_arch.parse::<ReleaseArch>().map_err(|error| {
+                    PlatformError::InvalidReleaseArch {
+                        release_arch,
+                        error,
+                    }
+                })?,
             }]
         }
         (Os::Haiku { release }, arch) => {
             let release = release.replace(['.', '-'], "_");
             let release_arch = format!("{release}_{arch}");
             vec![PlatformTag::Haiku {
-                release_arch: SmallString::from(release_arch),
+                release_arch: release_arch.parse::<ReleaseArch>().map_err(|error| {
+                    PlatformError::InvalidReleaseArch {
+                        release_arch,
+                        error,
+                    }
+                })?,
             }]
         }
         (Os::Illumos { release, arch }, _) => {
@@ -727,14 +750,24 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
                     let arch = format!("{arch}_64bit");
                     let release_arch = format!("{release}_{arch}");
                     return Ok(vec![PlatformTag::Solaris {
-                        release_arch: SmallString::from(release_arch),
+                        release_arch: release_arch.parse::<ReleaseArch>().map_err(|error| {
+                            PlatformError::InvalidReleaseArch {
+                                release_arch,
+                                error,
+                            }
+                        })?,
                     }]);
                 }
             }
 
             let release_arch = format!("{release}_{arch}");
             vec![PlatformTag::Illumos {
-                release_arch: SmallString::from(release_arch),
+                release_arch: release_arch.parse::<ReleaseArch>().map_err(|error| {
+                    PlatformError::InvalidReleaseArch {
+                        release_arch,
+                        error,
+                    }
+                })?,
             }]
         }
         (Os::Android { api_level }, arch) => {
@@ -1452,6 +1485,24 @@ mod tests {
         ]
         "#
         );
+    }
+
+    #[test]
+    fn test_platform_tags_invalid_release_arch() {
+        let error = compatible_tags(&Platform::new(
+            Os::FreeBsd {
+                release: "13/14".to_string(),
+            },
+            Arch::X86_64,
+        ))
+        .unwrap_err();
+
+        assert_debug_snapshot!(error, @r#"
+        InvalidReleaseArch {
+            release_arch: "13/14_amd64",
+            error: ParseReleaseArchError,
+        }
+        "#);
     }
 
     #[test]

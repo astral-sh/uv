@@ -3,8 +3,9 @@
 //! This module reads all fields exhaustively. The fields are defined in the [Core metadata
 //! specification](https://packaging.python.org/en/latest/specifications/core-metadata/).
 
+use futures::executor::block_on;
+use futures::io::AllowStdIo;
 use std::io;
-use std::io::{Read, Seek};
 use std::path::Path;
 use thiserror::Error;
 use tokio::io::AsyncReadExt;
@@ -12,7 +13,6 @@ use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use uv_distribution_filename::WheelFilename;
 use uv_normalize::{DistInfoName, InvalidNameError};
 use uv_pypi_types::ResolutionMetadata;
-use zip::ZipArchive;
 
 /// The caller is responsible for attaching the path or url we failed to read.
 #[derive(Debug, Error)]
@@ -39,8 +39,6 @@ pub enum Error {
         computed: u32,
         expected: u32,
     },
-    #[error("Failed to read from zip file")]
-    Zip(#[from] zip::result::ZipError),
     #[error("Failed to read from zip file")]
     AsyncZip(#[from] async_zip::error::ZipError),
     // No `#[from]` to enforce manual review of `io::Error` sources.
@@ -133,18 +131,31 @@ pub fn is_metadata_entry(path: &str, filename: &WheelFilename) -> Result<bool, E
 /// Given an archive, read the `METADATA` from the `.dist-info` directory.
 pub fn read_archive_metadata(
     filename: &WheelFilename,
-    archive: &mut ZipArchive<impl Read + Seek + Sized>,
+    reader: impl std::io::BufRead + std::io::Seek + Unpin,
 ) -> Result<Vec<u8>, Error> {
-    let dist_info_prefix =
-        find_archive_dist_info(filename, archive.file_names().map(|name| (name, name)))?.1;
+    block_on(async {
+        let mut zip_reader =
+            async_zip::base::read::seek::ZipFileReader::new(AllowStdIo::new(reader)).await?;
 
-    let mut file = archive.by_name(&format!("{dist_info_prefix}.dist-info/METADATA"))?;
+        let (metadata_index, _dist_info_prefix) = find_archive_dist_info(
+            filename,
+            zip_reader
+                .file()
+                .entries()
+                .iter()
+                .enumerate()
+                .filter_map(|(index, entry)| Some((index, entry.filename().as_str().ok()?))),
+        )?;
 
-    #[expect(clippy::cast_possible_truncation)]
-    let mut buffer = Vec::with_capacity(file.size() as usize);
-    file.read_to_end(&mut buffer).map_err(Error::Io)?;
+        let mut buffer = Vec::new();
+        zip_reader
+            .reader_with_entry(metadata_index)
+            .await?
+            .read_to_end_checked(&mut buffer)
+            .await?;
 
-    Ok(buffer)
+        Ok(buffer)
+    })
 }
 
 /// Find the `.dist-info` directory in an unzipped wheel.

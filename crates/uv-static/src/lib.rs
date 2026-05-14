@@ -2,7 +2,35 @@ pub use env_vars::*;
 
 mod env_vars;
 
+use std::borrow::Cow;
+
 use thiserror::Error;
+
+/// The base URL for the default Astral mirror.
+pub const ASTRAL_MIRROR_BASE_URL: &str = "https://releases.astral.sh";
+
+/// Read the user-configured Astral mirror URL from the environment, if set.
+pub fn astral_mirror_url_from_env() -> Option<String> {
+    std::env::var_os(EnvVars::UV_ASTRAL_MIRROR_URL).and_then(|url| {
+        if url.as_os_str().is_empty() {
+            None
+        } else {
+            Some(url.to_string_lossy().into_owned())
+        }
+    })
+}
+
+/// Return the effective Astral mirror base URL, using the default mirror when unset.
+pub fn astral_mirror_base_url(astral_mirror_url: Option<&str>) -> Cow<'_, str> {
+    custom_astral_mirror_url(astral_mirror_url)
+        .map(|url| Cow::Owned(url.trim_end_matches('/').to_string()))
+        .unwrap_or(Cow::Borrowed(ASTRAL_MIRROR_BASE_URL))
+}
+
+/// Return a user-configured Astral mirror URL, treating empty values as unset.
+pub fn custom_astral_mirror_url(astral_mirror_url: Option<&str>) -> Option<&str> {
+    astral_mirror_url.filter(|url| !url.is_empty())
+}
 
 #[derive(Debug, Error)]
 #[error("Failed to parse environment variable `{name}` with invalid value `{value}`: {err}")]

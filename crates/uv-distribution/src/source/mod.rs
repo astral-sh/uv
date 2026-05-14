@@ -20,7 +20,6 @@ use reqwest::{Response, StatusCode};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{Instrument, debug, info_span, instrument, warn};
 use url::Url;
-use zip::ZipArchive;
 
 use uv_auth::CredentialsCache;
 use uv_cache::{Cache, CacheBucket, CacheEntry, CacheShard, Removal, WheelCache};
@@ -2616,6 +2615,22 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     ) -> Result<Option<ResolutionMetadata>, Error> {
         debug!("Preparing metadata for: {source}");
 
+        let source_name = source.name();
+        if self
+            .build_context
+            .build_options()
+            .no_build_requirement(source_name)
+            // Editable requirements without a known name need metadata to apply
+            // package-specific build settings; named editables must respect `--no-build`.
+            && !(source_name.is_none() && source.is_editable())
+        {
+            return if let Some(name) = source_name {
+                Err(Error::NoBuildPackage(name.clone()))
+            } else {
+                Err(Error::NoBuild)
+            };
+        }
+
         // Ensure that the _installed_ Python version is compatible with the `requires-python`
         // specifier.
         if let Some(requires_python) = source.requires_python() {
@@ -3145,8 +3160,7 @@ fn read_wheel_metadata(
 ) -> Result<ResolutionMetadata, Error> {
     let file = fs_err::File::open(wheel).map_err(Error::CacheRead)?;
     let reader = std::io::BufReader::new(file);
-    let mut archive = ZipArchive::new(reader)?;
-    let dist_info = read_archive_metadata(filename, &mut archive)
+    let dist_info = read_archive_metadata(filename, reader)
         .map_err(|err| Error::WheelMetadata(wheel.to_path_buf(), Box::new(err)))?;
     Ok(ResolutionMetadata::parse_metadata(&dist_info)?)
 }

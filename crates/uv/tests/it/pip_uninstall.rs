@@ -535,7 +535,7 @@ fn uninstall_record_path_traversal() -> Result<()> {
 
     // Build the relative traversal path from site-packages to a target file outside
     // site-packages but inside the test temp dir. RECORD uses forward slashes, even on
-    // Windows, and the venv layout (and thus the traversal depth) differs by platform,
+    // Windows, and the environment layout (and thus the traversal depth) differs by platform,
     // so we construct the path manually and filter the leading `../` sequence out of the
     // snapshot above.
     let target_file = context.temp_dir.child("traversal_target.txt");
@@ -576,6 +576,62 @@ fn uninstall_record_path_traversal() -> Result<()> {
     // The regular package files have been removed, while the file outside the scheme still exists.
     assert!(target_file.exists());
     assert!(!init_py.exists());
+
+    Ok(())
+}
+
+/// Egg `top_level.txt` entries must be top-level names, not paths.
+#[test]
+fn uninstall_egg_info_top_level_path_traversal() -> Result<()> {
+    // The traversal-depth count differs between Unix (`.venv/lib/pythonX.Y/site-packages`)
+    // and Windows (`.venv/Lib/site-packages`), so normalize the `../` sequence in the warning.
+    let context = uv_test::test_context!("3.12")
+        .with_filter((r"(\.\./)+traversal_target", "[..]/traversal_target"));
+
+    let site_packages = ChildPath::new(context.site_packages());
+
+    // Manually create a `name-version.egg-info` directory, which is recognized by the shared egg
+    // filename parser.
+    let egg_info = site_packages.child("evilpkg-0.1.0.egg-info");
+    egg_info.create_dir_all()?;
+
+    // The traversal target is outside site-packages but inside the environment, so a wheel RECORD entry
+    // could validly target this scheme area. An egg `top_level.txt` entry must not.
+    let target_dir = context.venv.child("traversal_target");
+    let target_file = target_dir.child("secret.txt");
+    target_file.write_str("I should not be deleted")?;
+
+    let depth = context
+        .site_packages()
+        .strip_prefix(context.venv.path())?
+        .components()
+        .count();
+    let traversal_entry = format!("{}traversal_target", "../".repeat(depth));
+    assert!(context.site_packages().join(&traversal_entry).exists());
+
+    egg_info
+        .child("top_level.txt")
+        .write_str(&format!("evilpkg\n{traversal_entry}\n"))?;
+
+    let init_py = site_packages.child("evilpkg").child("__init__.py");
+    init_py.touch()?;
+
+    uv_snapshot!(context.filters(), context.pip_uninstall()
+        .arg("evilpkg"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Invalid `top_level.txt` entry in evilpkg==0.1.0 that is not a top-level module or package, skipping: [..]/traversal_target
+    Uninstalled 1 package in [TIME]
+     - evilpkg==0.1.0
+    ");
+
+    assert!(target_dir.exists());
+    assert!(target_file.exists());
+    assert!(!init_py.exists());
+    assert!(!egg_info.exists());
 
     Ok(())
 }

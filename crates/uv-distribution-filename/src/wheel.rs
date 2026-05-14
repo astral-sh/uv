@@ -15,7 +15,7 @@ use uv_platform_tags::{
 };
 
 use crate::splitter::MemchrSplitter;
-use crate::wheel_tag::{WheelTag, WheelTagLarge, WheelTagSmall};
+use crate::wheel_tag::{TagSet, WheelTag, WheelTagLarge, WheelTagSmall};
 use crate::{BuildTag, BuildTagError};
 
 #[derive(
@@ -262,18 +262,9 @@ impl WheelFilename {
             WheelTag::Large {
                 large: Box::new(WheelTagLarge {
                     build_tag,
-                    python_tag: MemchrSplitter::split(python_tag, b'.')
-                        .map(LanguageTag::from_str)
-                        .filter_map(Result::ok)
-                        .collect(),
-                    abi_tag: MemchrSplitter::split(abi_tag, b'.')
-                        .map(AbiTag::from_str)
-                        .filter_map(Result::ok)
-                        .collect(),
-                    platform_tag: MemchrSplitter::split(platform_tag, b'.')
-                        .map(PlatformTag::from_str)
-                        .filter_map(Result::ok)
-                        .collect(),
+                    python_tag: parse_large_tag_component::<LanguageTag>(python_tag, filename)?,
+                    abi_tag: parse_large_tag_component::<AbiTag>(abi_tag, filename)?,
+                    platform_tag: parse_large_tag_component::<PlatformTag>(platform_tag, filename)?,
                     repr: repr.into(),
                 }),
             }
@@ -285,6 +276,39 @@ impl WheelFilename {
             tags,
         })
     }
+}
+
+fn parse_large_tag_component<T: FromStr>(
+    component: &str,
+    filename: &str,
+) -> Result<TagSet<T>, WheelFilenameError> {
+    if component.is_empty() {
+        return Err(invalid_tag_component(filename));
+    }
+
+    let mut tags = TagSet::new();
+    for tag in MemchrSplitter::split(component, b'.') {
+        if tag.is_empty() || !tag.bytes().all(is_tag_atom_byte) {
+            return Err(invalid_tag_component(filename));
+        }
+        if let Ok(tag) = T::from_str(tag) {
+            tags.push(tag);
+        }
+    }
+
+    Ok(tags)
+}
+
+fn invalid_tag_component(filename: &str) -> WheelFilenameError {
+    WheelFilenameError::InvalidWheelFileName(
+        filename.to_string(),
+        "Tag components must contain only ASCII letters, digits, underscores, and periods"
+            .to_string(),
+    )
+}
+
+fn is_tag_atom_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || byte == b'_'
 }
 
 impl<'de> Deserialize<'de> for WheelFilename {
@@ -408,6 +432,33 @@ mod tests {
     fn err_invalid_build_tag() {
         let err = WheelFilename::from_str("foo-1.2.3-tag-py3-none-any.whl").unwrap_err();
         insta::assert_snapshot!(err, @r#"The wheel filename "foo-1.2.3-tag-py3-none-any.whl" has an invalid build tag: must start with a digit"#);
+
+        let err = WheelFilename::from_str("foo-1.2.3-1/../../target-py3-none-any.whl").unwrap_err();
+        insta::assert_snapshot!(err, @r#"The wheel filename "foo-1.2.3-1/../../target-py3-none-any.whl" has an invalid build tag: must contain only ASCII letters, digits, underscores, and periods"#);
+    }
+
+    #[test]
+    fn err_invalid_tag_component() {
+        let err = WheelFilename::from_str("foo-1.2.3-py3-none-../target.whl").unwrap_err();
+        insta::assert_snapshot!(err, @r#"The wheel filename "foo-1.2.3-py3-none-../target.whl" is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods"#);
+
+        let err = WheelFilename::from_str(r"foo-1.2.3-py3-none-..\target.whl").unwrap_err();
+        insta::assert_snapshot!(err, @r#"The wheel filename "foo-1.2.3-py3-none-..\target.whl" is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods"#);
+
+        let err = WheelFilename::from_str("foo-1.2.3-py3-none-target:stream.whl").unwrap_err();
+        insta::assert_snapshot!(err, @r#"The wheel filename "foo-1.2.3-py3-none-target:stream.whl" is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods"#);
+
+        let err = WheelFilename::from_str("foo-1.2.3-py3-none-freebsd_13_x86/64.whl").unwrap_err();
+        insta::assert_snapshot!(err, @r#"The wheel filename "foo-1.2.3-py3-none-freebsd_13_x86/64.whl" is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods"#);
+
+        let err = WheelFilename::from_str("foo-1.2.3-py3-none-unknown tag.whl").unwrap_err();
+        insta::assert_snapshot!(err, @r#"The wheel filename "foo-1.2.3-py3-none-unknown tag.whl" is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods"#);
+
+        let err = WheelFilename::from_str("foo-1.2.3-py3-none-unknown\u{e9}.whl").unwrap_err();
+        insta::assert_snapshot!(err, @"The wheel filename \"foo-1.2.3-py3-none-unknown\u{e9}.whl\" is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods");
+
+        let err = WheelFilename::from_str("foo-1.2.3-py3-none-unknown..tag.whl").unwrap_err();
+        insta::assert_snapshot!(err, @r#"The wheel filename "foo-1.2.3-py3-none-unknown..tag.whl" is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods"#);
     }
 
     #[test]

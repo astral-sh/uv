@@ -7,6 +7,43 @@ use crate::tags::AndroidAbi;
 use crate::tags::IosMultiarch;
 use crate::{Arch, BinaryFormat};
 
+/// Opaque release-and-architecture suffix used by [`PlatformTag`] variants that preserve a native
+/// platform-specific suffix.
+#[derive(
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
+#[rkyv(derive(Debug))]
+pub struct ReleaseArch(SmallString);
+
+impl FromStr for ReleaseArch {
+    type Err = ParseReleaseArchError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+        {
+            Ok(Self(SmallString::from(s)))
+        } else {
+            Err(ParseReleaseArchError)
+        }
+    }
+}
+
+impl std::fmt::Display for ReleaseArch {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 /// A tag to represent the platform compatibility of a Python distribution.
 ///
 /// This is the third segment in the wheel filename, following the language and ABI tags. For
@@ -60,19 +97,19 @@ pub enum PlatformTag {
     /// Ex) `android_21_x86_64`
     Android { api_level: u16, abi: AndroidAbi },
     /// Ex) `freebsd_12_x86_64`
-    FreeBsd { release_arch: SmallString },
+    FreeBsd { release_arch: ReleaseArch },
     /// Ex) `netbsd_9_x86_64`
-    NetBsd { release_arch: SmallString },
+    NetBsd { release_arch: ReleaseArch },
     /// Ex) `openbsd_6_x86_64`
-    OpenBsd { release_arch: SmallString },
+    OpenBsd { release_arch: ReleaseArch },
     /// Ex) `dragonfly_6_x86_64`
-    Dragonfly { release_arch: SmallString },
+    Dragonfly { release_arch: ReleaseArch },
     /// Ex) `haiku_1_x86_64`
-    Haiku { release_arch: SmallString },
+    Haiku { release_arch: ReleaseArch },
     /// Ex) `illumos_5_11_x86_64`
-    Illumos { release_arch: SmallString },
+    Illumos { release_arch: ReleaseArch },
     /// Ex) `solaris_11_4_x86_64`
-    Solaris { release_arch: SmallString },
+    Solaris { release_arch: ReleaseArch },
     /// Ex) `pyodide_2024_0_wasm32`
     Pyodide { major: u16, minor: u16 },
     /// Ex) `ios_13_0_arm64_iphoneos` / `ios_13_0_arm64_iphonesimulator`
@@ -688,9 +725,10 @@ impl FromStr for PlatformTag {
                     tag: s.to_string(),
                 });
             }
-
             return Ok(Self::FreeBsd {
-                release_arch: SmallString::from(rest),
+                release_arch: rest
+                    .parse::<ReleaseArch>()
+                    .map_err(|_| ParsePlatformTagError::InvalidCharacters { tag: s.to_string() })?,
             });
         }
 
@@ -702,9 +740,10 @@ impl FromStr for PlatformTag {
                     tag: s.to_string(),
                 });
             }
-
             return Ok(Self::NetBsd {
-                release_arch: SmallString::from(rest),
+                release_arch: rest
+                    .parse::<ReleaseArch>()
+                    .map_err(|_| ParsePlatformTagError::InvalidCharacters { tag: s.to_string() })?,
             });
         }
 
@@ -716,9 +755,10 @@ impl FromStr for PlatformTag {
                     tag: s.to_string(),
                 });
             }
-
             return Ok(Self::OpenBsd {
-                release_arch: SmallString::from(rest),
+                release_arch: rest
+                    .parse::<ReleaseArch>()
+                    .map_err(|_| ParsePlatformTagError::InvalidCharacters { tag: s.to_string() })?,
             });
         }
 
@@ -730,9 +770,10 @@ impl FromStr for PlatformTag {
                     tag: s.to_string(),
                 });
             }
-
             return Ok(Self::Dragonfly {
-                release_arch: SmallString::from(rest),
+                release_arch: rest
+                    .parse::<ReleaseArch>()
+                    .map_err(|_| ParsePlatformTagError::InvalidCharacters { tag: s.to_string() })?,
             });
         }
 
@@ -744,9 +785,10 @@ impl FromStr for PlatformTag {
                     tag: s.to_string(),
                 });
             }
-
             return Ok(Self::Haiku {
-                release_arch: SmallString::from(rest),
+                release_arch: rest
+                    .parse::<ReleaseArch>()
+                    .map_err(|_| ParsePlatformTagError::InvalidCharacters { tag: s.to_string() })?,
             });
         }
 
@@ -758,9 +800,10 @@ impl FromStr for PlatformTag {
                     tag: s.to_string(),
                 });
             }
-
             return Ok(Self::Illumos {
-                release_arch: SmallString::from(rest),
+                release_arch: rest
+                    .parse::<ReleaseArch>()
+                    .map_err(|_| ParsePlatformTagError::InvalidCharacters { tag: s.to_string() })?,
             });
         }
 
@@ -776,7 +819,9 @@ impl FromStr for PlatformTag {
             if let Some(release_arch) = rest.strip_suffix("_64bit") {
                 if !release_arch.is_empty() {
                     return Ok(Self::Solaris {
-                        release_arch: SmallString::from(release_arch),
+                        release_arch: release_arch.parse::<ReleaseArch>().map_err(|_| {
+                            ParsePlatformTagError::InvalidCharacters { tag: s.to_string() }
+                        })?,
                     });
                 }
             }
@@ -872,6 +917,10 @@ impl FromStr for PlatformTag {
     }
 }
 
+#[derive(Debug, Clone, Copy, thiserror::Error, PartialEq, Eq)]
+#[error("release and architecture must contain only ASCII letters, digits, and underscores")]
+pub struct ParseReleaseArchError;
+
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum ParsePlatformTagError {
     #[error("Unknown platform tag format: {0}")]
@@ -886,13 +935,17 @@ pub enum ParsePlatformTagError {
     InvalidArch { platform: &'static str, tag: String },
     #[error("Invalid API level in {platform} platform tag: {tag}")]
     InvalidApiLevel { platform: &'static str, tag: String },
+    #[error("Platform tag must contain only ASCII letters, digits, and underscores: {tag}")]
+    InvalidCharacters { tag: String },
 }
 
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
 
-    use crate::platform_tag::{ParsePlatformTagError, PlatformTag};
+    use crate::platform_tag::{
+        ParsePlatformTagError, ParseReleaseArchError, PlatformTag, ReleaseArch,
+    };
     use crate::tags::AndroidAbi;
     use crate::tags::IosMultiarch;
     use crate::{Arch, BinaryFormat};
@@ -1111,45 +1164,91 @@ mod tests {
     }
 
     #[test]
-    fn freebsd_platform() {
-        let tag = PlatformTag::FreeBsd {
-            release_arch: "13_14_x86_64".into(),
-        };
+    fn release_arch() {
         assert_eq!(
-            PlatformTag::from_str("freebsd_13_14_x86_64").as_ref(),
-            Ok(&tag)
+            ReleaseArch::from_str("13_14_x86_64").map(|release_arch| release_arch.to_string()),
+            Ok("13_14_x86_64".to_string())
         );
-        assert_eq!(tag.to_string(), "freebsd_13_14_x86_64");
+        assert_eq!(
+            ReleaseArch::from_str("13_x86/64"),
+            Err(ParseReleaseArchError)
+        );
+    }
+
+    #[test]
+    fn freebsd_platform() {
+        assert_eq!(
+            PlatformTag::from_str("freebsd_13_14_x86_64")
+                .as_ref()
+                .map(ToString::to_string),
+            Ok("freebsd_13_14_x86_64".to_string())
+        );
     }
 
     #[test]
     fn illumos_platform() {
-        let tag = PlatformTag::Illumos {
-            release_arch: "5_11_x86_64".into(),
-        };
         assert_eq!(
-            PlatformTag::from_str("illumos_5_11_x86_64").as_ref(),
-            Ok(&tag)
+            PlatformTag::from_str("illumos_5_11_x86_64")
+                .as_ref()
+                .map(ToString::to_string),
+            Ok("illumos_5_11_x86_64".to_string())
         );
-        assert_eq!(tag.to_string(), "illumos_5_11_x86_64");
     }
 
     #[test]
     fn solaris_platform() {
-        let tag = PlatformTag::Solaris {
-            release_arch: "11_4_x86_64".into(),
-        };
         assert_eq!(
-            PlatformTag::from_str("solaris_11_4_x86_64_64bit").as_ref(),
-            Ok(&tag)
+            PlatformTag::from_str("solaris_11_4_x86_64_64bit")
+                .as_ref()
+                .map(ToString::to_string),
+            Ok("solaris_11_4_x86_64_64bit".to_string())
         );
-        assert_eq!(tag.to_string(), "solaris_11_4_x86_64_64bit");
 
         assert_eq!(
             PlatformTag::from_str("solaris_11_4_x86_64"),
             Err(ParsePlatformTagError::InvalidArch {
                 platform: "solaris",
                 tag: "solaris_11_4_x86_64".to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn invalid_characters_platform() {
+        assert_eq!(
+            PlatformTag::from_str("freebsd_13_x86/64"),
+            Err(ParsePlatformTagError::InvalidCharacters {
+                tag: "freebsd_13_x86/64".to_string()
+            })
+        );
+        assert_eq!(
+            PlatformTag::from_str(r"netbsd_9_x86\64"),
+            Err(ParsePlatformTagError::InvalidCharacters {
+                tag: r"netbsd_9_x86\64".to_string()
+            })
+        );
+        assert_eq!(
+            PlatformTag::from_str("solaris_11_4_x86:64_64bit"),
+            Err(ParsePlatformTagError::InvalidCharacters {
+                tag: "solaris_11_4_x86:64_64bit".to_string()
+            })
+        );
+        assert_eq!(
+            PlatformTag::from_str("freebsd_13.14_x86_64"),
+            Err(ParsePlatformTagError::InvalidCharacters {
+                tag: "freebsd_13.14_x86_64".to_string()
+            })
+        );
+        assert_eq!(
+            PlatformTag::from_str("freebsd_13 x86_64"),
+            Err(ParsePlatformTagError::InvalidCharacters {
+                tag: "freebsd_13 x86_64".to_string()
+            })
+        );
+        assert_eq!(
+            PlatformTag::from_str("freebsd_13_x86\u{e9}"),
+            Err(ParsePlatformTagError::InvalidCharacters {
+                tag: "freebsd_13_x86\u{e9}".to_string()
             })
         );
     }

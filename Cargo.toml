@@ -16,78 +16,78 @@ authors = ["uv"]
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
-uv-audit = { version = "0.0.46", path = "crates/uv-audit" }
-uv-auth = { version = "0.0.46", path = "crates/uv-auth" }
-uv-bin-install = { version = "0.0.46", path = "crates/uv-bin-install" }
-uv-build-backend = { version = "0.0.46", path = "crates/uv-build-backend" }
-uv-build-frontend = { version = "0.0.46", path = "crates/uv-build-frontend" }
-uv-cache = { version = "0.0.46", path = "crates/uv-cache" }
-uv-cache-info = { version = "0.0.46", path = "crates/uv-cache-info" }
-uv-cache-key = { version = "0.0.46", path = "crates/uv-cache-key" }
-uv-cli = { version = "0.0.46", path = "crates/uv-cli" }
-uv-client = { version = "0.0.46", path = "crates/uv-client" }
-uv-configuration = { version = "0.0.46", path = "crates/uv-configuration" }
-uv-console = { version = "0.0.46", path = "crates/uv-console" }
-uv-dirs = { version = "0.0.46", path = "crates/uv-dirs" }
-uv-dispatch = { version = "0.0.46", path = "crates/uv-dispatch" }
-uv-distribution = { version = "0.0.46", path = "crates/uv-distribution" }
-uv-distribution-filename = { version = "0.0.46", path = "crates/uv-distribution-filename" }
-uv-distribution-types = { version = "0.0.46", path = "crates/uv-distribution-types" }
-uv-extract = { version = "0.0.46", path = "crates/uv-extract" }
-uv-fastid = { version = "0.0.46", path = "crates/uv-fastid" }
-uv-flags = { version = "0.0.46", path = "crates/uv-flags" }
-uv-fs = { version = "0.0.46", path = "crates/uv-fs", features = [
+uv-audit = { version = "0.0.47", path = "crates/uv-audit" }
+uv-auth = { version = "0.0.47", path = "crates/uv-auth" }
+uv-bin-install = { version = "0.0.47", path = "crates/uv-bin-install" }
+uv-build-backend = { version = "0.0.47", path = "crates/uv-build-backend" }
+uv-build-frontend = { version = "0.0.47", path = "crates/uv-build-frontend" }
+uv-cache = { version = "0.0.47", path = "crates/uv-cache" }
+uv-cache-info = { version = "0.0.47", path = "crates/uv-cache-info" }
+uv-cache-key = { version = "0.0.47", path = "crates/uv-cache-key" }
+uv-cli = { version = "0.0.47", path = "crates/uv-cli" }
+uv-client = { version = "0.0.47", path = "crates/uv-client" }
+uv-configuration = { version = "0.0.47", path = "crates/uv-configuration" }
+uv-console = { version = "0.0.47", path = "crates/uv-console" }
+uv-dirs = { version = "0.0.47", path = "crates/uv-dirs" }
+uv-dispatch = { version = "0.0.47", path = "crates/uv-dispatch" }
+uv-distribution = { version = "0.0.47", path = "crates/uv-distribution" }
+uv-distribution-filename = { version = "0.0.47", path = "crates/uv-distribution-filename" }
+uv-distribution-types = { version = "0.0.47", path = "crates/uv-distribution-types" }
+uv-extract = { version = "0.0.47", path = "crates/uv-extract" }
+uv-fastid = { version = "0.0.47", path = "crates/uv-fastid" }
+uv-flags = { version = "0.0.47", path = "crates/uv-flags" }
+uv-fs = { version = "0.0.47", path = "crates/uv-fs", features = [
   "serde",
   "tokio",
 ] }
-uv-git = { version = "0.0.46", path = "crates/uv-git" }
-uv-git-types = { version = "0.0.46", path = "crates/uv-git-types" }
-uv-globfilter = { version = "0.0.46", path = "crates/uv-globfilter" }
-uv-install-wheel = { version = "0.0.46", path = "crates/uv-install-wheel", default-features = false }
-uv-installer = { version = "0.0.46", path = "crates/uv-installer" }
-uv-keyring = { version = "0.0.46", path = "crates/uv-keyring" }
-uv-logging = { version = "0.0.46", path = "crates/uv-logging" }
-uv-macros = { version = "0.0.46", path = "crates/uv-macros" }
-uv-metadata = { version = "0.0.46", path = "crates/uv-metadata" }
-uv-normalize = { version = "0.0.46", path = "crates/uv-normalize" }
-uv-once-map = { version = "0.0.46", path = "crates/uv-once-map" }
-uv-options-metadata = { version = "0.0.46", path = "crates/uv-options-metadata" }
-uv-performance-memory-allocator = { version = "0.0.46", path = "crates/uv-performance-memory-allocator" }
-uv-pep440 = { version = "0.0.46", path = "crates/uv-pep440", features = [
+uv-git = { version = "0.0.47", path = "crates/uv-git" }
+uv-git-types = { version = "0.0.47", path = "crates/uv-git-types" }
+uv-globfilter = { version = "0.0.47", path = "crates/uv-globfilter" }
+uv-install-wheel = { version = "0.0.47", path = "crates/uv-install-wheel", default-features = false }
+uv-installer = { version = "0.0.47", path = "crates/uv-installer" }
+uv-keyring = { version = "0.0.47", path = "crates/uv-keyring" }
+uv-logging = { version = "0.0.47", path = "crates/uv-logging" }
+uv-macros = { version = "0.0.47", path = "crates/uv-macros" }
+uv-metadata = { version = "0.0.47", path = "crates/uv-metadata" }
+uv-normalize = { version = "0.0.47", path = "crates/uv-normalize" }
+uv-once-map = { version = "0.0.47", path = "crates/uv-once-map" }
+uv-options-metadata = { version = "0.0.47", path = "crates/uv-options-metadata" }
+uv-performance-memory-allocator = { version = "0.0.47", path = "crates/uv-performance-memory-allocator" }
+uv-pep440 = { version = "0.0.47", path = "crates/uv-pep440", features = [
   "tracing",
   "rkyv",
   "version-ranges",
 ] }
-uv-pep508 = { version = "0.0.46", path = "crates/uv-pep508", features = [
+uv-pep508 = { version = "0.0.47", path = "crates/uv-pep508", features = [
   "non-pep508-extensions",
 ] }
-uv-platform = { version = "0.0.46", path = "crates/uv-platform" }
-uv-platform-tags = { version = "0.0.46", path = "crates/uv-platform-tags" }
-uv-preview = { version = "0.0.46", path = "crates/uv-preview" }
-uv-publish = { version = "0.0.46", path = "crates/uv-publish" }
-uv-pypi-types = { version = "0.0.46", path = "crates/uv-pypi-types" }
-uv-python = { version = "0.0.46", path = "crates/uv-python" }
-uv-redacted = { version = "0.0.46", path = "crates/uv-redacted" }
-uv-requirements = { version = "0.0.46", path = "crates/uv-requirements" }
-uv-requirements-txt = { version = "0.0.46", path = "crates/uv-requirements-txt" }
-uv-resolver = { version = "0.0.46", path = "crates/uv-resolver" }
-uv-scripts = { version = "0.0.46", path = "crates/uv-scripts" }
-uv-settings = { version = "0.0.46", path = "crates/uv-settings" }
-uv-shell = { version = "0.0.46", path = "crates/uv-shell" }
-uv-small-str = { version = "0.0.46", path = "crates/uv-small-str" }
-uv-state = { version = "0.0.46", path = "crates/uv-state" }
-uv-static = { version = "0.0.46", path = "crates/uv-static" }
-uv-test = { version = "0.0.46", path = "crates/uv-test" }
-uv-tool = { version = "0.0.46", path = "crates/uv-tool" }
-uv-torch = { version = "0.0.46", path = "crates/uv-torch" }
-uv-trampoline-builder = { version = "0.0.46", path = "crates/uv-trampoline-builder" }
-uv-types = { version = "0.0.46", path = "crates/uv-types" }
-uv-unix = { version = "0.0.46", path = "crates/uv-unix" }
-uv-version = { version = "0.11.13", path = "crates/uv-version" }
-uv-virtualenv = { version = "0.0.46", path = "crates/uv-virtualenv" }
-uv-warnings = { version = "0.0.46", path = "crates/uv-warnings" }
-uv-windows = { version = "0.0.46", path = "crates/uv-windows" }
-uv-workspace = { version = "0.0.46", path = "crates/uv-workspace" }
+uv-platform = { version = "0.0.47", path = "crates/uv-platform" }
+uv-platform-tags = { version = "0.0.47", path = "crates/uv-platform-tags" }
+uv-preview = { version = "0.0.47", path = "crates/uv-preview" }
+uv-publish = { version = "0.0.47", path = "crates/uv-publish" }
+uv-pypi-types = { version = "0.0.47", path = "crates/uv-pypi-types" }
+uv-python = { version = "0.0.47", path = "crates/uv-python" }
+uv-redacted = { version = "0.0.47", path = "crates/uv-redacted" }
+uv-requirements = { version = "0.0.47", path = "crates/uv-requirements" }
+uv-requirements-txt = { version = "0.0.47", path = "crates/uv-requirements-txt" }
+uv-resolver = { version = "0.0.47", path = "crates/uv-resolver" }
+uv-scripts = { version = "0.0.47", path = "crates/uv-scripts" }
+uv-settings = { version = "0.0.47", path = "crates/uv-settings" }
+uv-shell = { version = "0.0.47", path = "crates/uv-shell" }
+uv-small-str = { version = "0.0.47", path = "crates/uv-small-str" }
+uv-state = { version = "0.0.47", path = "crates/uv-state" }
+uv-static = { version = "0.0.47", path = "crates/uv-static" }
+uv-test = { version = "0.0.47", path = "crates/uv-test" }
+uv-tool = { version = "0.0.47", path = "crates/uv-tool" }
+uv-torch = { version = "0.0.47", path = "crates/uv-torch" }
+uv-trampoline-builder = { version = "0.0.47", path = "crates/uv-trampoline-builder" }
+uv-types = { version = "0.0.47", path = "crates/uv-types" }
+uv-unix = { version = "0.0.47", path = "crates/uv-unix" }
+uv-version = { version = "0.11.14", path = "crates/uv-version" }
+uv-virtualenv = { version = "0.0.47", path = "crates/uv-virtualenv" }
+uv-warnings = { version = "0.0.47", path = "crates/uv-warnings" }
+uv-windows = { version = "0.0.47", path = "crates/uv-windows" }
+uv-workspace = { version = "0.0.47", path = "crates/uv-workspace" }
 
 ambient-id = { version = "0.0.11", default-features = false, features = [
   "reqwest-middleware",
@@ -106,7 +106,7 @@ async-compression = { version = "0.4.12", features = [
 ] }
 async-trait = { version = "0.1.82" }
 async_http_range_reader = { version = "0.11.0", package = "astral_async_http_range_reader" }
-async_zip = { version = "0.0.17", package = "astral_async_zip", features = [
+async_zip = { version = "0.0.18-rc4", package = "astral_async_zip", features = [
   "bzip2",
   "deflate",
   "lzma",
@@ -133,7 +133,7 @@ configparser = { version = "3.1.0" }
 console = { version = "0.16.0", default-features = false, features = ["std"] }
 csv = { version = "1.3.0" }
 ctrlc = { version = "3.4.5" }
-cyclonedx-bom = { version = "0.8.0" }
+cyclonedx-bom = { version = "0.8.1" }
 dashmap = { version = "6.1.0" }
 data-encoding = { version = "2.6.0" }
 diskus = { version = "0.9.0", default-features = false }
@@ -150,6 +150,7 @@ flate2 = { version = "1.0.33", default-features = false, features = [
 ] }
 fs-err = { version = "3.2.2", features = ["tokio"] }
 futures = { version = "0.3.30" }
+futures-lite = { version = "2.6.1" }
 glob = { version = "0.3.1" }
 globset = { version = "0.4.15" }
 globwalk = { version = "0.9.1" }
@@ -285,6 +286,7 @@ webpki-root-certs = { version = "1" }
 which = { version = "8.0.0", features = ["regex"] }
 windows = { version = "0.61.0", features = [
   "std",
+  "Win32_Devices_DeviceAndDriverInstallation",
   "Win32_Foundation",
   "Win32_Globalization",
   "Win32_Security",
@@ -304,16 +306,8 @@ windows = { version = "0.61.0", features = [
 windows-registry = { version = "0.5.0" }
 windows-version = { version = "0.1.6" }
 wiremock = { version = "0.6.4" }
-wmi = { version = "0.18.3", default-features = false }
 xz2 = { version = "0.1.7", features = ["static"] }
 zeroize = { version = "1.8.1" }
-zip = { version = "8.1.0", default-features = false, features = [
-  "deflate",
-  "zstd",
-  "bzip2",
-  "lzma",
-  "xz",
-] }
 
 # dev-dependencies
 assert_cmd = { version = "2.0.16" }

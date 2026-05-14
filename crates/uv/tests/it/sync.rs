@@ -6119,6 +6119,68 @@ fn no_install_project_no_build() -> Result<()> {
     Ok(())
 }
 
+/// Ensure that lock validation respects `--no-build` when the project itself won't be installed.
+#[test]
+fn no_install_project_no_build_locked_dynamic_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dynamic = ["dependencies"]
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+
+    let build_backend = context.temp_dir.child("build_backend.py");
+    build_backend.write_str(indoc! {r#"
+        import pathlib
+
+        def prepare_metadata_for_build_editable(metadata_directory, config_settings=None):
+            pathlib.Path("validation-hook-called").write_text("called")
+            dist_info = pathlib.Path(metadata_directory, "project-0.1.0.dist-info")
+            dist_info.mkdir()
+            dist_info.joinpath("METADATA").write_text(
+                "Metadata-Version: 2.1\n"
+                "Name: project\n"
+                "Version: 0.1.0\n"
+                "Requires-Dist: anyio==3.7.0\n"
+            )
+            return dist_info.name
+    "#})?;
+
+    // Generate a lockfile, then remove the cached metadata so validation would need to invoke the
+    // build backend again if it ignored `--no-build`.
+    context.lock().assert().success();
+
+    let marker = context.temp_dir.child("validation-hook-called");
+    assert!(marker.exists());
+    fs_err::remove_file(marker.path())?;
+    fs_err::remove_dir_all(&context.cache_dir)?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--no-install-project")
+        .arg("--no-build")
+        .arg("--locked"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Distribution `project==0.1.0 @ editable+.` can't be installed because it is marked as `--no-build` but has no binary distribution
+    ");
+
+    assert!(!marker.exists());
+
+    Ok(())
+}
+
 #[test]
 fn sync_extra_build_dependencies_script() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_counts();

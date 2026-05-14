@@ -16,6 +16,26 @@ use crate::{CompressionMethod, Error, insecure_no_validate, validate_archive_mem
 
 const DEFAULT_BUF_SIZE: usize = 128 * 1024;
 
+/// Ensure the file path is safe to use as a [`Path`].
+///
+/// See: <https://docs.rs/zip/latest/zip/read/struct.ZipFile.html#method.enclosed_name>
+pub(crate) fn enclosed_name(file_name: &str) -> Option<PathBuf> {
+    if file_name.contains('\0') {
+        return None;
+    }
+    let path = PathBuf::from(file_name);
+    let mut depth = 0usize;
+    for component in path.components() {
+        match component {
+            Component::Prefix(_) | Component::RootDir => return None,
+            Component::ParentDir => depth = depth.checked_sub(1)?,
+            Component::Normal(_) => depth += 1,
+            Component::CurDir => (),
+        }
+    }
+    Some(path)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct LocalHeaderEntry {
     /// The relative path of the entry, as computed from the local file header.
@@ -55,26 +75,6 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<Vec<(PathBuf, u64)>, Error> {
-    /// Ensure the file path is safe to use as a [`Path`].
-    ///
-    /// See: <https://docs.rs/zip/latest/zip/read/struct.ZipFile.html#method.enclosed_name>
-    pub(crate) fn enclosed_name(file_name: &str) -> Option<PathBuf> {
-        if file_name.contains('\0') {
-            return None;
-        }
-        let path = PathBuf::from(file_name);
-        let mut depth = 0usize;
-        for component in path.components() {
-            match component {
-                Component::Prefix(_) | Component::RootDir => return None,
-                Component::ParentDir => depth = depth.checked_sub(1)?,
-                Component::Normal(_) => depth += 1,
-                Component::CurDir => (),
-            }
-        }
-        Some(path)
-    }
-
     // Determine whether ZIP validation is disabled.
     let skip_validation = insecure_no_validate();
 
