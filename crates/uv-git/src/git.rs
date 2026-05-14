@@ -588,6 +588,13 @@ impl GitCheckout {
     }
 }
 
+/// Return command-local Git configuration for updating submodules in a checkout.
+///
+/// Relative submodule URLs are resolved from `remote.origin.url`, but writing the original remote
+/// URL into checkout configuration can persist credentials in the parent repository or submodule
+/// remotes. Instead, callers pass these values via `git -c`, using a credential-stripped origin URL
+/// for resolution and a transient `url.*.insteadOf` rewrite when credentials are needed for
+/// transport.
 fn submodule_update_config(original_remote_url: &DisplaySafeUrl) -> Vec<String> {
     let remote_url = original_remote_url.without_credentials();
     let mut config = vec![format!("remote.origin.url={}", remote_url.as_str())];
@@ -608,6 +615,11 @@ fn submodule_update_config(original_remote_url: &DisplaySafeUrl) -> Vec<String> 
     config
 }
 
+/// Return the scheme, authority, and root path of a remote URL.
+///
+/// This is used as the rewrite prefix for `url.*.insteadOf`, so a credentialed parent URL can
+/// authenticate sibling submodule URLs without making the credentials part of any persisted
+/// submodule URL.
 fn remote_url_root(url: &Url) -> Url {
     let mut root = url.clone();
     root.set_path("/");
