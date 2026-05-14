@@ -8,7 +8,6 @@ use base64::prelude::BASE64_STANDARD;
 use base64::read::DecoderReader;
 use base64::write::EncoderWriter;
 use http::Uri;
-use netrc::Netrc;
 use reqsign::aws::DefaultSigner as AwsDefaultSigner;
 use reqsign::google::DefaultSigner as GcsDefaultSigner;
 use reqwest::Request;
@@ -16,6 +15,7 @@ use reqwest::header::HeaderValue;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
+use uv_netrc::Netrc;
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 

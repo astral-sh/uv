@@ -1,18 +1,16 @@
 /*!
-The `netrc` crate provides a parser for the netrc file.
-
-The `reqwest-netrc` crate adds the support of netrc to the `reqwest` crate via the `reqwest-middleware` wrapper.
+The `uv-netrc` crate provides a parser for the netrc file.
 
 # Setup
 
 ```text
-$ crago add rust-netrc
+$ cargo add uv-netrc
 ```
 
 # Example
 
 ```no_run
-use netrc::Netrc;
+use uv_netrc::Netrc;
 
 // ...
 
@@ -75,7 +73,7 @@ impl Netrc {
     /// Create a new `Netrc` object from a file.
     #[expect(
         clippy::disallowed_methods,
-        reason = "Preserve the upstream rust-netrc I/O error surface."
+        reason = "Preserve the upstream I/O error surface."
     )]
     pub fn from_file(file: &Path) -> Result<Self> {
         String::from_utf8_lossy(&fs::read(file)?)

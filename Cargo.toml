@@ -230,7 +230,6 @@ reqwest-retry = { version = "0.9.1", package = "astral-reqwest-retry", features 
 ] }
 rkyv = { version = "0.8.14", features = ["bytecheck"] }
 rmp-serde = { version = "1.3.0" }
-rust-netrc = { version = "0.1.2" }
 rustc-hash = { version = "2.0.0" }
 rustls-native-certs = { version = "0.8.3" }
 rustls-pki-types = { version = "1.14.0" }

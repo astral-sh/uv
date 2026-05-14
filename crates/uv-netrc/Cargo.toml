@@ -10,7 +10,7 @@ authors = { workspace = true }
 license = "MIT"
 
 [lib]
-name = "netrc"
+name = "uv_netrc"
 doctest = false
 
 [lints]

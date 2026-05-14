@@ -2,12 +2,12 @@ use std::sync::{Arc, LazyLock};
 
 use anyhow::{anyhow, format_err};
 use http::{Extensions, StatusCode};
-use netrc::Netrc;
 use reqwest::{Request, Response};
 use reqwest_middleware::{ClientWithMiddleware, Error, Middleware, Next};
 use tokio::sync::Mutex;
 use tracing::{debug, trace, warn};
 
+use uv_netrc::Netrc;
 use uv_preview::{Preview, PreviewFeature};
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
@@ -40,7 +40,7 @@ impl Default for NetrcMode {
     fn default() -> Self {
         Self::Automatic(LazyLock::new(|| match Netrc::new() {
             Ok(netrc) => Some(netrc),
-            Err(netrc::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+            Err(uv_netrc::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
                 debug!("No netrc file found");
                 None
             }
