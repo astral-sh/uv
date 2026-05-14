@@ -160,9 +160,6 @@ password hY5>yKqU&$vq&0
     }
 
     #[test]
-    fn test_new_default() {}
-
-    #[test]
     fn test_from_file_failed() {
         let err = Netrc::from_file(Path::new("/netrc/file/not/exists/on/no/netrc")).unwrap_err();
         assert!(
