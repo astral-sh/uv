@@ -550,12 +550,33 @@ impl GitCheckout {
             .cwd(&self.repo.path)
             .exec_with_output()?;
 
-        // Use the original remote URL for this command so Git can resolve relative submodule URLs,
-        // but don't write it to `remote.origin.url`. Git persists resolved submodule URLs during
-        // initialization, so writing a credentialed parent remote can leak credentials into checkout
-        // configuration.
+        // Initialize direct submodules using the original remote URL so Git can resolve relative
+        // submodule URLs, but don't write it to `remote.origin.url`. Git persists resolved submodule
+        // URLs during initialization, so writing a credentialed parent remote can leak credentials
+        // into checkout configuration.
+        //
+        // Do not use `--recursive` here: command-local `remote.origin.url` config is inherited by
+        // Git commands run inside submodules, which would make nested relative URLs resolve against
+        // the top-level remote instead of their immediate parent submodule.
         let mut submodule_update = GIT.as_ref().cloned()?;
         for config in submodule_update_config(original_remote_url) {
+            submodule_update.arg("-c").arg(config);
+        }
+
+        submodule_update
+            .arg("submodule")
+            .arg("update")
+            .arg("--init")
+            .env(EnvVars::GIT_LFS_SKIP_SMUDGE, lfs_skip_smudge)
+            .cwd(&self.repo.path)
+            .exec_with_output()
+            .map(drop)?;
+
+        // Recursively update nested submodules without overriding `remote.origin.url`, so each
+        // nested relative URL resolves against its immediate parent submodule. The transient
+        // credential rewrite is still safe to inherit because it only affects transport.
+        let mut submodule_update = GIT.as_ref().cloned()?;
+        for config in submodule_auth_config(original_remote_url) {
             submodule_update.arg("-c").arg(config);
         }
 
@@ -588,7 +609,7 @@ impl GitCheckout {
     }
 }
 
-/// Return command-local Git configuration for updating submodules in a checkout.
+/// Return command-local Git configuration for initializing direct submodules in a checkout.
 ///
 /// Relative submodule URLs are resolved from `remote.origin.url`, but writing the original remote
 /// URL into checkout configuration can persist credentials in the parent repository or submodule
@@ -598,6 +619,19 @@ impl GitCheckout {
 fn submodule_update_config(original_remote_url: &DisplaySafeUrl) -> Vec<String> {
     let remote_url = original_remote_url.without_credentials();
     let mut config = vec![format!("remote.origin.url={}", remote_url.as_str())];
+
+    config.extend(submodule_auth_config(original_remote_url));
+    config
+}
+
+/// Return command-local Git authentication configuration for updating submodules.
+///
+/// Unlike `remote.origin.url`, these rewrites are safe to inherit during recursive submodule
+/// updates: they rewrite transport URLs for authentication, but do not change the base URL that Git
+/// uses to resolve nested relative submodule URLs.
+fn submodule_auth_config(original_remote_url: &DisplaySafeUrl) -> Vec<String> {
+    let remote_url = original_remote_url.without_credentials();
+    let mut config = Vec::new();
 
     if remote_url.as_str() != original_remote_url.as_str() {
         let safe_root = remote_url_root(remote_url.as_ref());

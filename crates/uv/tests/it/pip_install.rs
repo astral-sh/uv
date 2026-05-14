@@ -11801,6 +11801,49 @@ fn test_git_submodule_relative_url() -> Result<()> {
         .child("helper.py")
         .write_str("def help():\n    return 'I am a helper'")?;
 
+    // Create a nested dependency of the helper repository. This lives outside the parent
+    // repository so the helper must resolve it through its own relative submodule URL.
+    let grandchild_dir = temp_dir.child("grandchild");
+    grandchild_dir.create_dir_all()?;
+
+    Command::new("git")
+        .args(["init"])
+        .current_dir(grandchild_dir.path())
+        .output()?;
+
+    grandchild_dir
+        .child("grandchild.py")
+        .write_str("def help():\n    return 'I am a nested helper'")?;
+
+    Command::new("git")
+        .args(["add", "."])
+        .current_dir(grandchild_dir.path())
+        .output()?;
+
+    Command::new("git")
+        .args(["commit", "-m", "Initial nested helpers commit"])
+        .current_dir(grandchild_dir.path())
+        .env("GIT_AUTHOR_NAME", "Test")
+        .env("GIT_AUTHOR_EMAIL", "test@example.com")
+        .env("GIT_COMMITTER_NAME", "Test")
+        .env("GIT_COMMITTER_EMAIL", "test@example.com")
+        .output()?;
+
+    Command::new("git")
+        .args(["submodule", "add", "../../grandchild", "nested/grandchild"])
+        .env("GIT_ALLOW_PROTOCOL", "file:ext:http:https:ssh")
+        .current_dir(helpers_dir.path())
+        .assert()
+        .success();
+    helpers_dir
+        .child(".gitmodules")
+        .assert(predicate::path::is_file());
+    helpers_dir
+        .child("nested")
+        .child("grandchild")
+        .child("grandchild.py")
+        .assert(predicate::path::is_file());
+
     // Add and commit in helpers
     Command::new("git")
         .args(["add", "."])
