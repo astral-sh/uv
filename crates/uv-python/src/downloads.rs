@@ -2506,4 +2506,16 @@ mod tests {
             let _ = VersionRequest::from(version);
         }
     }
+
+    #[test]
+    fn embedded_downloads_only_target_macos_arm64() {
+        let downloads = ManagedPythonDownloadList::new_only_embedded()
+            .expect("embedded download metadata should load");
+        let macos_arm64 = Platform::from_str("macos-aarch64-none")
+            .expect("macOS arm64 should parse as a platform");
+
+        for download in downloads.iter_all() {
+            assert_eq!(download.key().platform(), &macos_arm64);
+        }
+    }
 }
