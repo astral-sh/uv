@@ -68,6 +68,16 @@ pub enum AdverseStatus {
     Deprecated,
 }
 
+impl std::fmt::Display for AdverseStatus {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Archived => "archived",
+            Self::Quarantined => "quarantined",
+            Self::Deprecated => "deprecated",
+        })
+    }
+}
+
 /// A vulnerability within a dependency.
 #[derive(Debug)]
 pub struct Vulnerability {

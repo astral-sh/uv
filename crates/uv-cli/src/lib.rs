@@ -68,6 +68,15 @@ pub enum SyncFormat {
     Json,
 }
 
+#[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
+pub enum AuditOutputFormat {
+    /// Display the result in a human-readable format.
+    #[default]
+    Text,
+    /// Display the result in JSON format.
+    Json,
+}
+
 #[derive(Debug, Default, Clone, clap::ValueEnum)]
 pub enum ListFormat {
     /// Display the list of packages in a human-readable table.
@@ -5218,6 +5227,10 @@ pub struct AuditArgs {
     /// If the lockfile is missing, uv will exit with an error.
     #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"])]
     pub frozen: bool,
+
+    /// Select the output format.
+    #[arg(long, value_enum, default_value_t = AuditOutputFormat::default())]
+    pub output_format: AuditOutputFormat,
 
     #[command(flatten)]
     pub build: BuildOptionsArgs,
